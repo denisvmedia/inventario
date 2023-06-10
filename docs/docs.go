@@ -23,60 +23,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/clusters/{id}": {
-            "put": {
-                "description": "Update by location data",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "locations"
-                ],
-                "summary": "Update a location",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Location object",
-                        "name": "location",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.LocationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.LocationResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Location not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "User-side request problem",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
-        "/location": {
+        "/locations": {
             "get": {
                 "description": "get locations",
                 "consumes": [
@@ -97,9 +44,7 @@ const docTemplate = `{
                         }
                     }
                 }
-            }
-        },
-        "/locations": {
+            },
             "post": {
                 "description": "add by location data",
                 "consumes": [
@@ -172,6 +117,57 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.LocationResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update by location data",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "locations"
+                ],
+                "summary": "Update a location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Location ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Location object",
+                        "name": "location",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Location not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }

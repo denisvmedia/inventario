@@ -66,42 +66,7 @@ info:
   title: Inventario API
   version: "1.0"
 paths:
-  /clusters/{id}:
-    put:
-      consumes:
-      - application/vnd.api+json
-      description: Update by location data
-      parameters:
-      - description: Location ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Location object
-        in: body
-        name: location
-        required: true
-        schema:
-          $ref: '#/definitions/jsonapi.LocationRequest'
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.LocationResponse'
-        "404":
-          description: Location not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "422":
-          description: User-side request problem
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Update a location
-      tags:
-      - locations
-  /location:
+  /locations:
     get:
       consumes:
       - application/vnd.api+json
@@ -116,7 +81,6 @@ paths:
       summary: List locations
       tags:
       - locations
-  /locations:
     post:
       consumes:
       - application/vnd.api+json
@@ -187,6 +151,40 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.LocationResponse'
       summary: Get a location
+      tags:
+      - locations
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: Update by location data
+      parameters:
+      - description: Location ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Location object
+        in: body
+        name: location
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.LocationRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a location
       tags:
       - locations
 swagger: "2.0"

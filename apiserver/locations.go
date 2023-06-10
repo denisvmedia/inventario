@@ -34,7 +34,7 @@ type locationsAPI struct {
 // @Accept json-api
 // @Produce json-api
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
-// @Router /location [get]
+// @Router /locations [get]
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 	locations, _ := api.locationsRegistry.List()
 
@@ -130,7 +130,7 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 // @Success 200 {object} jsonapi.LocationResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /clusters/{id} [put]
+// @Router /locations/{id} [put]
 func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) {
 	location := locationFromContext(r.Context())
 	if location == nil {

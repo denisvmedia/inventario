@@ -7,7 +7,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	swagger "github.com/swaggo/http-swagger"
 
+	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -50,10 +52,16 @@ func APIServer(params Params) http.Handler {
 	// through ctx.Done() that the request has timed out and further
 	// processing should be stopped.
 	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(middleware.Logger)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("hi"))
 	})
+
+	// RESTy routes for "swagger" resource
+	r.Mount("/swagger", swagger.Handler(
+		swagger.URL("/swagger/doc.json"),
+	))
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Middleware to set default content type if not provided
