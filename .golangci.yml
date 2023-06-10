@@ -1,0 +1,130 @@
+linters:
+  disable-all: true
+  enable:
+    - funlen
+    - gci
+    - gocognit
+    - gocritic
+    - gocyclo
+    - gofmt
+    - govet
+    - importas
+    - ineffassign
+    - lll
+    - nakedret
+    - revive
+    - staticcheck
+    - whitespace
+
+linters-settings:
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/denisvmedia/inventario)
+  funlen:
+    lines: 240
+    statements: 160
+  lll:
+    line-length: 240
+  gocognit:
+    # minimal code complexity to report, 30 by default (but we recommend 10-20)
+    # starting with 60 and will work our way down to 20
+    min-complexity: 30
+  gocyclo:
+    min-complexity: 20
+  importas:
+    no-unaliased: true
+    alias:
+      - pkg: errors
+        alias: ""
+      - pkg: github.com/frankban/quicktest
+        alias: qt
+      - pkg: github.com/goextras/errors
+        alias: errkit
+  revive:
+    severity: error
+    rules:
+      - name: atomic
+        disabled: false
+      - name: blank-imports
+        disabled: false
+      - name: bool-literal-in-expr
+        disabled: false
+      - name: confusing-results
+        disabled: false
+      - name: context-keys-type
+        disabled: false
+      - name: datarace
+        disabled: false
+      - name: defer
+        disabled: false
+      - name: dot-imports
+        disabled: false
+      - name: duplicated-imports
+        disabled: false
+      - name: early-return
+        disabled: false
+      - name: empty-lines
+        disabled: false
+      - name: error-naming
+        disabled: false
+      - name: error-return
+        disabled: false
+      - name: flag-parameter
+        disabled: false
+      - name: get-return
+        disabled: false
+      - name: identical-branches
+        disabled: false
+      - name: indent-error-flow
+        disabled: false
+      - name: imports-blacklist
+        severity: warning
+        disabled: false
+        arguments:
+          - "github.com/pkg/errors"
+      - name: import-shadowing
+        disabled: false
+      - name: optimize-operands-order
+        disabled: false
+      - name: range-val-in-closure
+        disabled: false
+      - name: redefines-builtin-id
+        disabled: false
+      - name: receiver-naming
+        disabled: false
+      - name: string-of-int
+        disabled: false
+      - name: struct-tag
+        disabled: false
+      - name: superfluous-else
+        disabled: false
+      - name: unconditional-recursion
+        disabled: false
+      - name: unexported-return
+        disabled: false
+      - name: unnecessary-stmt
+        disabled: false
+      - name: unreachable-code
+        disabled: false
+      - name: use-any
+        disabled: false
+      - name: useless-break
+        disabled: false
+      - name: var-naming
+        disabled: false
+      - name: waitgroup-by-value
+        disabled: false
+  staticcheck:
+    checks: [ "all", "-ST1000", "-ST1003", "-ST1016" ]
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude:
+    - "struct-tag: unknown option 'inline' in JSON tag"
+
+run:
+  concurrency: 8
+  go: '1.19'
