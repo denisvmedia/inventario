@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
 
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -36,11 +37,13 @@ func paginate(next http.Handler) http.Handler {
 	})
 }
 
-type APIServerParams struct {
+type Params struct {
 	LocationRegistry registry.LocationRegistry
 }
 
-func APIServer(params APIServerParams) http.Handler {
+func APIServer(params Params) http.Handler {
+	render.Decode = JSONAPIAwareDecoder
+
 	r := chi.NewRouter()
 
 	// Set a timeout value on the request context (ctx), that will signal
@@ -55,8 +58,8 @@ func APIServer(params APIServerParams) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Middleware to set default content type if not provided
 		r.Use(
-			defaultRequestContentType("application/json"),
-			middleware.AllowContentType("application/json"),
+			defaultRequestContentType("application/vnd.api+json"),
+			middleware.AllowContentType("application/json", "application/vnd.api+json"),
 		)
 
 		// RESTy routes for "locations" resource

@@ -9,6 +9,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
+// LocationResponse is an object that holds location information.
 type LocationResponse struct {
 	HTTPStatusCode int `json:"-"` // http response status code
 
@@ -36,10 +37,12 @@ func (rd *LocationResponse) Render(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
+// LocationsMeta is a meta information for LocationsResponse.
 type LocationsMeta struct {
 	Locations int `json:"locations" example:"1" format:"int64"`
 }
 
+// LocationsResponse is an object that holds location list information.
 type LocationsResponse struct {
 	Data []models.Location `json:"data"`
 	Meta LocationsMeta     `json:"meta"`

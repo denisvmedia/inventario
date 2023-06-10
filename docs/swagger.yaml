@@ -1,0 +1,192 @@
+basePath: /api/v1
+definitions:
+  jsonapi.Error:
+    properties:
+      status:
+        description: user-level status message
+        type: string
+    type: object
+  jsonapi.Errors:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/jsonapi.Error'
+        type: array
+    type: object
+  jsonapi.LocationRequest:
+    properties:
+      data:
+        $ref: '#/definitions/models.Location'
+    type: object
+  jsonapi.LocationResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Location'
+      id:
+        type: string
+      type:
+        enum:
+        - locations
+        example: locations
+        type: string
+    type: object
+  jsonapi.LocationsMeta:
+    properties:
+      locations:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.LocationsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.Location'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.LocationsMeta'
+    type: object
+  models.Location:
+    properties:
+      address:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+info:
+  contact:
+    email: ask@artprima.cz
+    name: API Support
+    url: https://github.com/denisvmedia/inventario/issues
+  description: This is an Inventario daemon.
+  license:
+    name: MIT
+  title: Inventario API
+  version: "1.0"
+paths:
+  /clusters/{id}:
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: Update by location data
+      parameters:
+      - description: Location ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Location object
+        in: body
+        name: location
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.LocationRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a location
+      tags:
+      - locations
+  /location:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get locations
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationsResponse'
+      summary: List locations
+      tags:
+      - locations
+  /locations:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: add by location data
+      parameters:
+      - description: Location object
+        in: body
+        name: location
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.LocationRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Location created
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new location
+      tags:
+      - locations
+  /locations/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete by location ID
+      parameters:
+      - description: Location ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a location
+      tags:
+      - locations
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get location by ID
+      parameters:
+      - description: Location ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+      summary: Get a location
+      tags:
+      - locations
+swagger: "2.0"

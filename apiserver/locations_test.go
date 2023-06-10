@@ -20,7 +20,7 @@ import (
 func TestLocationsDelete(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 	locations := must.Must(params.LocationRegistry.List())
@@ -58,7 +58,7 @@ func TestLocationsCreate(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	rr := httptest.NewRecorder()
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 	expectedCount := must.Must(params.LocationRegistry.Count()) + 1
@@ -81,7 +81,7 @@ func TestLocationsCreate(t *testing.T) {
 func TestLocationsGet(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 	locations := must.Must(params.LocationRegistry.List())
@@ -106,7 +106,7 @@ func TestLocationsGet(t *testing.T) {
 func TestLocationsList(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 	expectedLocations := must.Must(params.LocationRegistry.List())
@@ -134,7 +134,7 @@ func TestLocationsList(t *testing.T) {
 func TestLocationsUpdate(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 	locations := must.Must(params.LocationRegistry.List())
@@ -169,7 +169,7 @@ func TestLocationsUpdate(t *testing.T) {
 func TestLocationsList_EmptyRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: registry.NewMemoryLocationRegistry(), // Empty registry
 	}
 
@@ -190,7 +190,7 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 func TestLocationsGet_InvalidID(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 
@@ -210,7 +210,7 @@ func TestLocationsGet_InvalidID(t *testing.T) {
 func TestLocationsUpdate_PartialData(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 	locations := must.Must(params.LocationRegistry.List())
@@ -249,7 +249,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 	locations := must.Must(params.LocationRegistry.List())
@@ -280,7 +280,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 
@@ -310,7 +310,7 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 func TestLocationsDelete_MissingLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 
@@ -330,7 +330,7 @@ func TestLocationsDelete_MissingLocation(t *testing.T) {
 func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.APIServerParams{
+	params := apiserver.Params{
 		LocationRegistry: newLocationRegistry(),
 	}
 

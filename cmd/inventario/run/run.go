@@ -43,7 +43,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	srv := &httpserver.APIServer{}
 	bindAddr := runFlags[addrFlag].GetString()
 	log.WithField(addrFlag, bindAddr).Info("Starting server")
-	srv.Run(bindAddr, apiserver.APIServer(apiserver.APIServerParams{
+	srv.Run(bindAddr, apiserver.APIServer(apiserver.Params{
 		LocationRegistry: registry.NewMemoryLocationRegistry(),
 	}))
 
