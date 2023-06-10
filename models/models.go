@@ -13,10 +13,26 @@ type Location struct {
 	Address string `json:"address"`
 }
 
+func (a *Location) GetID() string {
+	return a.ID
+}
+
+func (a *Location) SetID(id string) {
+	a.ID = id
+}
+
 type Area struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	LocationID string `json:"location_id"`
+}
+
+func (a *Area) GetID() string {
+	return a.ID
+}
+
+func (a *Area) SetID(id string) {
+	a.ID = id
 }
 
 type CommodityType string

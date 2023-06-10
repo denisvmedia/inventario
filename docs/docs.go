@@ -23,6 +23,189 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/areas": {
+            "get": {
+                "description": "get areas",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "List areas",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreasResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "add by area data",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "Create a new area",
+                "parameters": [
+                    {
+                        "description": "Area object",
+                        "name": "area",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Area created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Area not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/areas/{id}": {
+            "get": {
+                "description": "get area by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "Get a area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Area ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update by area data",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "Update a area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Area ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Area object",
+                        "name": "area",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AreaResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Area not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete by area ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "areas"
+                ],
+                "summary": "Delete a area",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Area ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Area not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/locations": {
             "get": {
                 "description": "get locations",
@@ -208,6 +391,56 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "jsonapi.AreaRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/models.Area"
+                }
+            }
+        },
+        "jsonapi.AreaResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Area"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "areas"
+                    ],
+                    "example": "areas"
+                }
+            }
+        },
+        "jsonapi.AreasMeta": {
+            "type": "object",
+            "properties": {
+                "areas": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.AreasResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Area"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.AreasMeta"
+                }
+            }
+        },
         "jsonapi.Error": {
             "type": "object",
             "properties": {
@@ -275,6 +508,20 @@ const docTemplate = `{
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.LocationsMeta"
+                }
+            }
+        },
+        "models.Area": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "location_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },

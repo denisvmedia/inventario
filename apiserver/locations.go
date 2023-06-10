@@ -39,7 +39,7 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 	locations, _ := api.locationsRegistry.List()
 
 	if err := render.Render(w, r, jsonapi.NewLocationsResponse(locations, len(locations))); err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+		internalServerError(w, r, err)
 		return
 	}
 }
@@ -56,11 +56,11 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) {
 	location := locationFromContext(r.Context())
 	if location == nil {
-		render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(nil)))
+		unprocessableEntityError(w, r, nil)
 		return
 	}
 	if err := render.Render(w, r, jsonapi.NewLocationResponse(location)); err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+		internalServerError(w, r, err)
 		return
 	}
 }
@@ -79,17 +79,17 @@ func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) {
 func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.LocationRequest
 	if err := render.Bind(r, &input); err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(err)))
+		unprocessableEntityError(w, r, err)
 		return
 	}
 	location, err := api.locationsRegistry.Create(*input.Data)
 	if err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+		internalServerError(w, r, err)
 		return
 	}
 	resp := jsonapi.NewLocationResponse(location).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+		internalServerError(w, r, err)
 		return
 	}
 }
@@ -107,13 +107,13 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) {
 	location := locationFromContext(r.Context())
 	if location == nil {
-		render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(nil)))
+		unprocessableEntityError(w, r, nil)
 		return
 	}
 
 	err := api.locationsRegistry.Delete(location.ID)
 	if err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+		internalServerError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -134,29 +134,29 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) {
 	location := locationFromContext(r.Context())
 	if location == nil {
-		render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(nil)))
+		unprocessableEntityError(w, r, nil)
 		return
 	}
 
 	var input jsonapi.LocationRequest
 	if err := render.Bind(r, &input); err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(err)))
+		unprocessableEntityError(w, r, err)
 		return
 	}
 
 	if location.ID != input.Data.ID {
-		render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(nil)))
+		unprocessableEntityError(w, r, nil)
 		return
 	}
 
 	newLocation, err := api.locationsRegistry.Update(*input.Data)
 	if err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+		internalServerError(w, r, err)
 		return
 	}
 	resp := jsonapi.NewLocationResponse(newLocation).WithStatusCode(http.StatusOK)
 	if err := render.Render(w, r, resp); err != nil {
-		render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+		internalServerError(w, r, err)
 		return
 	}
 }
@@ -168,10 +168,10 @@ func (api *locationsAPI) locationCtx(next http.Handler) http.Handler {
 		switch {
 		case err == nil:
 		case errors.Is(err, registry.ErrNotFound):
-			render.Render(w, r, jsonapi.NewErrors(NewNotFoundError(err)))
+			notFoundError(w, r, err)
 			return
 		default:
-			render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+			internalServerError(w, r, err)
 			return
 		}
 		ctx := context.WithValue(r.Context(), locationCtxKey, location)

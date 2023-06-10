@@ -5,6 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jellydator/validation"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
@@ -43,9 +44,17 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	srv := &httpserver.APIServer{}
 	bindAddr := runFlags[addrFlag].GetString()
 	log.WithField(addrFlag, bindAddr).Info("Starting server")
-	srv.Run(bindAddr, apiserver.APIServer(apiserver.Params{
+
+	params := apiserver.Params{
 		LocationRegistry: registry.NewMemoryLocationRegistry(),
-	}))
+		AreaRegistry:     registry.NewMemoryAreaRegistry(),
+	}
+	err := validation.Validate(params)
+	if err != nil {
+		log.WithError(err).Error("Invalid server parameters")
+		return err
+	}
+	srv.Run(bindAddr, apiserver.APIServer(params))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)
 	c := make(chan os.Signal, 1)
@@ -53,7 +62,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	<-c
 
 	log.Info("Shutting down server")
-	err := srv.Shutdown()
+	err = srv.Shutdown()
 	if err != nil {
 		log.WithError(err).Error("Failure during server shutdown")
 	}

@@ -7,13 +7,27 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	"github.com/jellydator/validation"
 	swagger "github.com/swaggo/http-swagger"
 
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
+	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
 )
 
 type ctxValueKey string
+
+func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
+	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+}
+
+func notFoundError(w http.ResponseWriter, r *http.Request, err error) error {
+	return render.Render(w, r, jsonapi.NewErrors(NewNotFoundError(err)))
+}
+
+func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error) error {
+	return render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(err)))
+}
 
 func defaultRequestContentType(contentType string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -41,6 +55,18 @@ func paginate(next http.Handler) http.Handler {
 
 type Params struct {
 	LocationRegistry registry.LocationRegistry
+	AreaRegistry     registry.AreaRegistry
+}
+
+func (p *Params) Validate() error {
+	fields := make([]*validation.FieldRules, 0)
+
+	fields = append(fields,
+		validation.Field(&p.LocationRegistry, validation.Required),
+		validation.Field(&p.AreaRegistry, validation.Required),
+	)
+
+	return validation.ValidateStruct(p, fields...)
 }
 
 func APIServer(params Params) http.Handler {
@@ -70,8 +96,8 @@ func APIServer(params Params) http.Handler {
 			middleware.AllowContentType("application/json", "application/vnd.api+json"),
 		)
 
-		// RESTy routes for "locations" resource
 		r.Route("/locations", Locations(params.LocationRegistry))
+		r.Route("/areas", Areas(params.AreaRegistry))
 	})
 
 	return r

@@ -1,5 +1,38 @@
 basePath: /api/v1
 definitions:
+  jsonapi.AreaRequest:
+    properties:
+      data:
+        $ref: '#/definitions/models.Area'
+    type: object
+  jsonapi.AreaResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Area'
+      id:
+        type: string
+      type:
+        enum:
+        - areas
+        example: areas
+        type: string
+    type: object
+  jsonapi.AreasMeta:
+    properties:
+      areas:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.AreasResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.Area'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.AreasMeta'
+    type: object
   jsonapi.Error:
     properties:
       status:
@@ -46,6 +79,15 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.LocationsMeta'
     type: object
+  models.Area:
+    properties:
+      id:
+        type: string
+      location_id:
+        type: string
+      name:
+        type: string
+    type: object
   models.Location:
     properties:
       address:
@@ -66,6 +108,127 @@ info:
   title: Inventario API
   version: "1.0"
 paths:
+  /areas:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get areas
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreasResponse'
+      summary: List areas
+      tags:
+      - areas
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: add by area data
+      parameters:
+      - description: Area object
+        in: body
+        name: area
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.AreaRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Area created
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new area
+      tags:
+      - areas
+  /areas/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete by area ID
+      parameters:
+      - description: Area ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a area
+      tags:
+      - areas
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get area by ID
+      parameters:
+      - description: Area ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+      summary: Get a area
+      tags:
+      - areas
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: Update by area data
+      parameters:
+      - description: Area ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Area object
+        in: body
+        name: area
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.AreaRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a area
+      tags:
+      - areas
   /locations:
     get:
       consumes:
