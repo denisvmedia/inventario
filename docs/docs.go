@@ -441,7 +441,7 @@ const docTemplate = `{
                 }
             }
         },
-        "jsonapi.Error": {
+        "jsonapi.UserError": {
             "type": "object",
             "properties": {
                 "status": {
@@ -456,7 +456,7 @@ const docTemplate = `{
                 "errors": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/jsonapi.Error"
+                        "$ref": "#/definitions/jsonapi.UserError"
                     }
                 }
             }

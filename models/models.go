@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/url"
 
+	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 )
 
@@ -33,6 +34,17 @@ func (a *Area) GetID() string {
 
 func (a *Area) SetID(id string) {
 	a.ID = id
+}
+
+func (a *Area) Validate() error {
+	fields := make([]*validation.FieldRules, 0)
+
+	fields = append(fields,
+		validation.Field(&a.LocationID, validation.Required),
+		validation.Field(&a.Name, validation.Required),
+	)
+
+	return validation.ValidateStruct(a, fields...)
 }
 
 type CommodityType string

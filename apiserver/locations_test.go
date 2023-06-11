@@ -81,9 +81,9 @@ func TestLocationsCreate(t *testing.T) {
 func TestLocationsGet(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.Params{
-		LocationRegistry: newLocationRegistry(),
-	}
+	params := apiserver.Params{}
+	params.LocationRegistry = newLocationRegistry()
+	params.AreaRegistry = newAreaRegistry(params.LocationRegistry)
 	locations := must.Must(params.LocationRegistry.List())
 	location := locations[0]
 
@@ -97,10 +97,16 @@ func TestLocationsGet(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
+
 	c.Assert(body, checkers.JSONPathEquals("$.type"), "locations")
 	c.Assert(body, checkers.JSONPathEquals("$.id"), location.ID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), location.Name)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.address"), location.Address)
+
+	areas := params.LocationRegistry.GetAreas(location.ID)
+	c.Assert(body, checkers.JSONPathMatches("$.attributes.areas", qt.HasLen), len(areas))
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.areas[0]"), areas[0])
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.areas[1]"), areas[1])
 }
 
 func TestLocationsList(t *testing.T) {
@@ -347,22 +353,4 @@ func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
-}
-
-func newLocationRegistry() registry.LocationRegistry {
-	var locationsRegistry = registry.NewMemoryLocationRegistry()
-
-	must.Must(locationsRegistry.Create(models.Location{
-		ID:      "1",
-		Name:    "LocationResponse 1",
-		Address: "Address 1",
-	}))
-
-	must.Must(locationsRegistry.Create(models.Location{
-		ID:      "1",
-		Name:    "LocationResponse 2",
-		Address: "Address 2",
-	}))
-
-	return locationsRegistry
 }

@@ -11,23 +11,10 @@ import (
 	swagger "github.com/swaggo/http-swagger"
 
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
-	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
 )
 
 type ctxValueKey string
-
-func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
-	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
-}
-
-func notFoundError(w http.ResponseWriter, r *http.Request, err error) error {
-	return render.Render(w, r, jsonapi.NewErrors(NewNotFoundError(err)))
-}
-
-func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error) error {
-	return render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(err)))
-}
 
 func defaultRequestContentType(contentType string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -78,7 +65,9 @@ func APIServer(params Params) http.Handler {
 	// through ctx.Done() that the request has timed out and further
 	// processing should be stopped.
 	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("hi"))

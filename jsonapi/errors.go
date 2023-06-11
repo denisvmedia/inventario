@@ -1,6 +1,7 @@
 package jsonapi
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -15,7 +16,8 @@ type Error struct {
 	Err            error `json:"-"` // low-level runtime error
 	HTTPStatusCode int   `json:"-"` // http response status code
 
-	StatusText string `json:"status"` // user-level status message
+	StatusText string          `json:"status"`          // user-level status message
+	UserError  json.RawMessage `json:"error,omitempty"` // user-level error message
 	// AppCode    int64  `json:"code,omitempty"`  // application-specific error code
 	// ErrorText string `json:"error,omitempty"` // application-level error message, for debugging
 }
@@ -36,6 +38,7 @@ func (e *Errors) Render(w http.ResponseWriter, r *http.Request) error {
 	if e.HTTPStatusCode == 0 && len(e.Errors) != 0 {
 		statusCode = e.Errors[0].HTTPStatusCode
 	}
+
 	render.Status(r, statusCodeDef(statusCode, http.StatusInternalServerError))
 	return nil
 }

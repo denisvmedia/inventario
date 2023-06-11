@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -59,7 +58,13 @@ func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
-	if err := render.Render(w, r, jsonapi.NewLocationResponse(location)); err != nil {
+
+	respLocation := &jsonapi.Location{
+		Location: location,
+		Areas:    api.locationsRegistry.GetAreas(location.ID),
+	}
+
+	if err := render.Render(w, r, jsonapi.NewLocationResponse(respLocation)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -84,10 +89,16 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 	}
 	location, err := api.locationsRegistry.Create(*input.Data)
 	if err != nil {
-		internalServerError(w, r, err)
+		renderEntityError(w, r, err)
 		return
 	}
-	resp := jsonapi.NewLocationResponse(location).WithStatusCode(http.StatusCreated)
+
+	respLocation := &jsonapi.Location{
+		Location: location,
+		Areas:    api.locationsRegistry.GetAreas(location.ID),
+	}
+
+	resp := jsonapi.NewLocationResponse(respLocation).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -113,7 +124,7 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 
 	err := api.locationsRegistry.Delete(location.ID)
 	if err != nil {
-		internalServerError(w, r, err)
+		renderEntityError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -151,10 +162,16 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 
 	newLocation, err := api.locationsRegistry.Update(*input.Data)
 	if err != nil {
-		internalServerError(w, r, err)
+		renderEntityError(w, r, err)
 		return
 	}
-	resp := jsonapi.NewLocationResponse(newLocation).WithStatusCode(http.StatusOK)
+
+	respLocation := &jsonapi.Location{
+		Location: newLocation,
+		Areas:    api.locationsRegistry.GetAreas(location.ID),
+	}
+
+	resp := jsonapi.NewLocationResponse(respLocation).WithStatusCode(http.StatusOK)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -165,13 +182,8 @@ func (api *locationsAPI) locationCtx(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		locationID := chi.URLParam(r, "locationID")
 		location, err := api.locationsRegistry.Get(locationID)
-		switch {
-		case err == nil:
-		case errors.Is(err, registry.ErrNotFound):
-			notFoundError(w, r, err)
-			return
-		default:
-			internalServerError(w, r, err)
+		if err != nil {
+			renderEntityError(w, r, err)
 			return
 		}
 		ctx := context.WithValue(r.Context(), locationCtxKey, location)

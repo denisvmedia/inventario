@@ -1,0 +1,3 @@
+- [ ] Check if incoming request is a valid JSON
+- [ ] Check if incoming request JSON matches JSON schema
+  - [ ] Introduce JSON schema support

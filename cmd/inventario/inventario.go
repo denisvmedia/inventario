@@ -29,7 +29,7 @@ func Execute(args ...string) {
 	rootCmd.AddCommand(run.NewRunCommand())
 	err := rootCmd.Execute()
 	if err != nil {
-		// log.WithError(err).Error("Failed to execute root command")
+		// log.WithError(err).UserError("Failed to execute root command")
 		os.Exit(1)
 	}
 }

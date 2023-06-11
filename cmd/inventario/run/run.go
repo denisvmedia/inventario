@@ -45,10 +45,10 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	bindAddr := runFlags[addrFlag].GetString()
 	log.WithField(addrFlag, bindAddr).Info("Starting server")
 
-	params := apiserver.Params{
-		LocationRegistry: registry.NewMemoryLocationRegistry(),
-		AreaRegistry:     registry.NewMemoryAreaRegistry(),
-	}
+	params := apiserver.Params{}
+	params.LocationRegistry = registry.NewMemoryLocationRegistry()
+	params.AreaRegistry = registry.NewMemoryAreaRegistry(params.LocationRegistry)
+
 	err := validation.Validate(params)
 	if err != nil {
 		log.WithError(err).Error("Invalid server parameters")

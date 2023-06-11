@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -44,8 +43,8 @@ func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// getArea gets a area by ID.
-// @Summary Get a area
+// getArea gets an area by ID.
+// @Summary Get an area
 // @Description get area by ID
 // @Tags areas
 // @Accept  json-api
@@ -84,7 +83,7 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 	}
 	area, err := api.areasRegistry.Create(*input.Data)
 	if err != nil {
-		internalServerError(w, r, err)
+		renderEntityError(w, r, err)
 		return
 	}
 	resp := jsonapi.NewAreaResponse(area).WithStatusCode(http.StatusCreated)
@@ -94,8 +93,8 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// deleteArea deletes a area by ID.
-// @Summary Delete a area
+// deleteArea deletes an area by ID.
+// @Summary Delete an area
 // @Description Delete by area ID
 // @Tags areas
 // @Accept  json-api
@@ -113,7 +112,7 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 
 	err := api.areasRegistry.Delete(area.ID)
 	if err != nil {
-		internalServerError(w, r, err)
+		renderEntityError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -151,7 +150,7 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 
 	newArea, err := api.areasRegistry.Update(*input.Data)
 	if err != nil {
-		internalServerError(w, r, err)
+		renderEntityError(w, r, err)
 		return
 	}
 	resp := jsonapi.NewAreaResponse(newArea).WithStatusCode(http.StatusOK)
@@ -165,13 +164,8 @@ func (api *areasAPI) areaCtx(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		areaID := chi.URLParam(r, "areaID")
 		area, err := api.areasRegistry.Get(areaID)
-		switch {
-		case err == nil:
-		case errors.Is(err, registry.ErrNotFound):
-			notFoundError(w, r, err)
-			return
-		default:
-			internalServerError(w, r, err)
+		if err != nil {
+			renderEntityError(w, r, err)
 			return
 		}
 		ctx := context.WithValue(r.Context(), areaCtxKey, area)

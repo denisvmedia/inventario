@@ -9,20 +9,25 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
+type Location struct {
+	*models.Location
+	Areas []string `json:"areas"`
+}
+
 // LocationResponse is an object that holds location information.
 type LocationResponse struct {
 	HTTPStatusCode int `json:"-"` // http response status code
 
-	ID         string          `json:"id"`
-	Type       string          `json:"type" example:"locations" enums:"locations"`
-	Attributes models.Location `json:"attributes"`
+	ID         string    `json:"id"`
+	Type       string    `json:"type" example:"locations" enums:"locations"`
+	Attributes *Location `json:"attributes"`
 }
 
-func NewLocationResponse(location *models.Location) *LocationResponse {
+func NewLocationResponse(location *Location) *LocationResponse {
 	return &LocationResponse{
 		ID:         location.ID,
 		Type:       "locations",
-		Attributes: *location,
+		Attributes: location,
 	}
 }
 
@@ -51,7 +56,9 @@ type LocationsResponse struct {
 func NewLocationsResponse(locations []models.Location, total int) *LocationsResponse {
 	return &LocationsResponse{
 		Data: locations,
-		Meta: LocationsMeta{Locations: total},
+		Meta: LocationsMeta{
+			Locations: total,
+		},
 	}
 }
 
