@@ -51,7 +51,7 @@ func TestCommoditiesList(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].tags"), expectedCommodities[0].Tags)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].image_ids"), expectedCommodities[0].ImageIDs)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].manual_ids"), expectedCommodities[0].ManualIDs)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].invoice.id"), expectedCommodities[0].InvoiceIDs)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].invoice_ids"), expectedCommodities[0].InvoiceIDs)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].status"), string(expectedCommodities[0].Status))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].purchase_date"), expectedCommodities[0].PurchaseDate)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].registered_date"), expectedCommodities[0].RegisteredDate)
@@ -343,4 +343,151 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+}
+
+func TestCommodityListImages(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+
+	imageIDs := params.CommodityRegistry.GetImages(commodity.ID)
+	expectedImages := make([]*models.Image, 0, len(imageIDs))
+	for _, id := range imageIDs {
+		expectedImages = append(expectedImages, must.Must(params.ImageRegistry.Get(id)))
+	}
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images", nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+
+	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedImages))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedImages[0].ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].path"), expectedImages[0].Path)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].commodity_id"), expectedImages[0].CommodityID)
+}
+
+func TestCommodityListInvoices(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+
+	invoiceIDs := params.CommodityRegistry.GetInvoices(commodity.ID)
+	expectedInvoices := make([]*models.Invoice, 0, len(invoiceIDs))
+	for _, id := range invoiceIDs {
+		expectedInvoices = append(expectedInvoices, must.Must(params.InvoiceRegistry.Get(id)))
+	}
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices", nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+
+	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedInvoices))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedInvoices[0].ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].path"), expectedInvoices[0].Path)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].commodity_id"), expectedInvoices[0].CommodityID)
+}
+
+func TestCommodityListManuals(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+
+	manualIDs := params.CommodityRegistry.GetManuals(commodity.ID)
+	expectedManuals := make([]*models.Manual, 0, len(manualIDs))
+	for _, id := range manualIDs {
+		expectedManuals = append(expectedManuals, must.Must(params.ManualRegistry.Get(id)))
+	}
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals", nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+
+	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedManuals))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedManuals[0].ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].path"), expectedManuals[0].Path)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].commodity_id"), expectedManuals[0].CommodityID)
+}
+
+func TestCommodityDeleteImage(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+	imageID := "image-id-to-delete"
+
+	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+commodity.ID+"/images/"+imageID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+func TestCommodityDeleteInvoice(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+	invoiceID := "invoice-id-to-delete"
+
+	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+commodity.ID+"/invoices/"+invoiceID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+func TestCommodityDeleteManual(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+	manualID := "manual-id-to-delete"
+
+	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+commodity.ID+"/manuals/"+manualID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }

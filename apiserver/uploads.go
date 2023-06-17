@@ -226,7 +226,7 @@ func Uploads(params Params) func(r chi.Router) {
 
 	return func(r chi.Router) {
 		r.With(commodityCtx(params.CommodityRegistry)).
-			Route("/uploads/commodities/{commodityID}", func(r chi.Router) {
+			Route("/commodities/{commodityID}", func(r chi.Router) {
 				r.With(api.uploadFiles(mimetypes.ImageContentTypes()...)).Post("/images", api.handleImagesUpload)
 				r.With(api.uploadFiles(mimetypes.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)
 				r.With(api.uploadFiles(mimetypes.DocContentTypes()...)).Post("/invoices", api.handleInvoicesUpload)

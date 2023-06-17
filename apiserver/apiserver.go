@@ -109,7 +109,7 @@ func APIServer(params Params) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.With(defaultAPIMiddlewares...).Route("/locations", Locations(params.LocationRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.AreaRegistry))
-		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params.CommodityRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
 		r.Route("/uploads", Uploads(params))
 	})
 

@@ -166,14 +166,38 @@ type Image struct {
 	CommodityID string `json:"commodity_id"`
 }
 
+func (a *Image) GetID() string {
+	return a.ID
+}
+
+func (a *Image) SetID(id string) {
+	a.ID = id
+}
+
 type Manual struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`
 	CommodityID string `json:"commodity_id"`
 }
 
+func (a *Manual) GetID() string {
+	return a.ID
+}
+
+func (a *Manual) SetID(id string) {
+	a.ID = id
+}
+
 type Invoice struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`
 	CommodityID string `json:"commodity_id"`
+}
+
+func (a *Invoice) GetID() string {
+	return a.ID
+}
+
+func (a *Invoice) SetID(id string) {
+	a.ID = id
 }

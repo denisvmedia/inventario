@@ -33,9 +33,9 @@ type MemoryCommodityRegistry struct {
 	imagesLock   sync.RWMutex
 	images       models.CommodityImages
 	manualsLock  sync.RWMutex
-	manuals      models.CommodityImages
+	manuals      models.CommodityManuals
 	invoicesLock sync.RWMutex
-	invoices     models.CommodityImages
+	invoices     models.CommodityInvoices
 }
 
 func NewMemoryCommodityRegistry(areaRegistry AreaRegistry) *MemoryCommodityRegistry {
@@ -43,6 +43,8 @@ func NewMemoryCommodityRegistry(areaRegistry AreaRegistry) *MemoryCommodityRegis
 		baseMemoryCommodityRegistry: NewMemoryRegistry[models.Commodity](),
 		areaRegistry:                areaRegistry,
 		images:                      make(models.CommodityImages),
+		manuals:                     make(models.CommodityManuals),
+		invoices:                    make(models.CommodityInvoices),
 	}
 }
 

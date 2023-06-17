@@ -15,3 +15,7 @@ type CommodityImages map[string][]string
 // CommodityManuals represents an index of manuals for a given commodity.
 // Map key is a CommodityID and value is a slice of ManualIDs.
 type CommodityManuals map[string][]string
+
+// CommodityInvoices represents an index of invoices for a given commodity.
+// Map key is a CommodityID and value is a slice of InvoiceIDs.
+type CommodityInvoices map[string][]string
