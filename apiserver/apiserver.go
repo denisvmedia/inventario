@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -9,12 +10,23 @@ import (
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
 	swagger "github.com/swaggo/http-swagger"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/azureblob" // register azureblob driver
+	_ "gocloud.dev/blob/fileblob"  // register fileblob driver
+	_ "gocloud.dev/blob/gcsblob"   // register gcsblob driver
+	_ "gocloud.dev/blob/memblob"   // register memblob driver
+	_ "gocloud.dev/blob/s3blob"    // register s3blob driver
 
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	"github.com/denisvmedia/inventario/registry"
 )
 
 type ctxValueKey string
+
+var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
+	defaultRequestContentType("application/vnd.api+json"),
+	middleware.AllowContentType("application/json", "application/vnd.api+json"),
+}
 
 func defaultRequestContentType(contentType string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -44,6 +56,11 @@ type Params struct {
 	LocationRegistry  registry.LocationRegistry
 	AreaRegistry      registry.AreaRegistry
 	CommodityRegistry registry.CommodityRegistry
+	ImageRegistry     registry.ImageRegistry
+	ManualRegistry    registry.ManualRegistry
+	InvoiceRegistry   registry.InvoiceRegistry
+
+	UploadLocation string
 }
 
 func (p *Params) Validate() error {
@@ -53,6 +70,15 @@ func (p *Params) Validate() error {
 		validation.Field(&p.LocationRegistry, validation.Required),
 		validation.Field(&p.AreaRegistry, validation.Required),
 		validation.Field(&p.CommodityRegistry, validation.Required),
+		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(value interface{}) error {
+			ctx := context.Background()
+			b, err := blob.OpenBucket(ctx, p.UploadLocation)
+			if err != nil {
+				return err
+			}
+			_ = b.Close() // best effort
+			return nil
+		})),
 	)
 
 	return validation.ValidateStruct(p, fields...)
@@ -72,7 +98,7 @@ func APIServer(params Params) http.Handler {
 	r.Use(middleware.Recoverer)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hi"))
+		w.Write([]byte("Welcome to Inventario!"))
 	})
 
 	// RESTy routes for "swagger" resource
@@ -81,15 +107,10 @@ func APIServer(params Params) http.Handler {
 	))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Middleware to set default content type if not provided
-		r.Use(
-			defaultRequestContentType("application/vnd.api+json"),
-			middleware.AllowContentType("application/json", "application/vnd.api+json"),
-		)
-
-		r.Route("/locations", Locations(params.LocationRegistry))
-		r.Route("/areas", Areas(params.AreaRegistry))
-		r.Route("/commodities", Commodities(params.CommodityRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/locations", Locations(params.LocationRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.AreaRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params.CommodityRegistry))
+		r.Route("/uploads", Uploads(params))
 	})
 
 	return r

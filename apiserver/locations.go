@@ -1,29 +1,17 @@
 package apiserver
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
 	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
-const locationCtxKey ctxValueKey = "location"
-
-func locationFromContext(ctx context.Context) *models.Location {
-	location, ok := ctx.Value(locationCtxKey).(*models.Location)
-	if !ok {
-		return nil
-	}
-	return location
-}
-
 type locationsAPI struct {
-	locationsRegistry registry.LocationRegistry
+	locationRegistry registry.LocationRegistry
 }
 
 // listLocations lists all locations.
@@ -35,7 +23,7 @@ type locationsAPI struct {
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
 // @Router /locations [get]
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
-	locations, _ := api.locationsRegistry.List()
+	locations, _ := api.locationRegistry.List()
 
 	if err := render.Render(w, r, jsonapi.NewLocationsResponse(locations, len(locations))); err != nil {
 		internalServerError(w, r, err)
@@ -61,7 +49,7 @@ func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { /
 
 	respLocation := &jsonapi.Location{
 		Location: location,
-		Areas:    api.locationsRegistry.GetAreas(location.ID),
+		Areas:    api.locationRegistry.GetAreas(location.ID),
 	}
 
 	if err := render.Render(w, r, jsonapi.NewLocationResponse(respLocation)); err != nil {
@@ -87,7 +75,7 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		unprocessableEntityError(w, r, err)
 		return
 	}
-	location, err := api.locationsRegistry.Create(*input.Data)
+	location, err := api.locationRegistry.Create(*input.Data)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -95,7 +83,7 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 
 	respLocation := &jsonapi.Location{
 		Location: location,
-		Areas:    api.locationsRegistry.GetAreas(location.ID),
+		Areas:    api.locationRegistry.GetAreas(location.ID),
 	}
 
 	resp := jsonapi.NewLocationResponse(respLocation).WithStatusCode(http.StatusCreated)
@@ -122,7 +110,7 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := api.locationsRegistry.Delete(location.ID)
+	err := api.locationRegistry.Delete(location.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -160,7 +148,7 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	newLocation, err := api.locationsRegistry.Update(*input.Data)
+	newLocation, err := api.locationRegistry.Update(*input.Data)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -168,7 +156,7 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 
 	respLocation := &jsonapi.Location{
 		Location: newLocation,
-		Areas:    api.locationsRegistry.GetAreas(location.ID),
+		Areas:    api.locationRegistry.GetAreas(location.ID),
 	}
 
 	resp := jsonapi.NewLocationResponse(respLocation).WithStatusCode(http.StatusOK)
@@ -178,25 +166,12 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (api *locationsAPI) locationCtx(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		locationID := chi.URLParam(r, "locationID")
-		location, err := api.locationsRegistry.Get(locationID)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-		ctx := context.WithValue(r.Context(), locationCtxKey, location)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func Locations(locationsRegistry registry.LocationRegistry) func(r chi.Router) {
-	api := &locationsAPI{locationsRegistry: locationsRegistry}
+func Locations(locationRegistry registry.LocationRegistry) func(r chi.Router) {
+	api := &locationsAPI{locationRegistry: locationRegistry}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listLocations) // GET /locations
 		r.Route("/{locationID}", func(r chi.Router) {
-			r.Use(api.locationCtx)
+			r.Use(locationCtx(locationRegistry))
 			r.Get("/", api.getLocation)       // GET /locations/123
 			r.Put("/", api.updateLocation)    // PUT /locations/123
 			r.Delete("/", api.deleteLocation) // DELETE /locations/123

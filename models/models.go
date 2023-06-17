@@ -118,7 +118,7 @@ type Commodity struct {
 	Tags                   []string        `json:"tags"`
 	ImageIDs               []string        `json:"image_ids"`
 	ManualIDs              []string        `json:"manual_ids"`
-	Invoice                Invoice         `json:"invoice"`
+	InvoiceIDs             []string        `json:"invoice_ids"`
 	Status                 CommodityStatus `json:"status"`
 	PurchaseDate           string          `json:"purchase_date"`
 	RegisteredDate         string          `json:"registered_date"`
@@ -173,6 +173,7 @@ type Manual struct {
 }
 
 type Invoice struct {
-	ID   string `json:"id"`
-	Path string `json:"path"`
+	ID          string `json:"id"`
+	Path        string `json:"path"`
+	CommodityID string `json:"commodity_id"`
 }

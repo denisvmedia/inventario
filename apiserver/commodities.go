@@ -1,26 +1,14 @@
 package apiserver
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
 	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
-
-const commodityCtxKey ctxValueKey = "commodity"
-
-func commodityFromContext(ctx context.Context) *models.Commodity {
-	commodity, ok := ctx.Value(commodityCtxKey).(*models.Commodity)
-	if !ok {
-		return nil
-	}
-	return commodity
-}
 
 type commoditiesAPI struct {
 	commodityRegistry registry.CommodityRegistry
@@ -165,19 +153,6 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (api *commoditiesAPI) commodityCtx(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		commodityID := chi.URLParam(r, "commodityID")
-		commodity, err := api.commodityRegistry.Get(commodityID)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-		ctx := context.WithValue(r.Context(), commodityCtxKey, commodity)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
 func Commodities(commodityRegistry registry.CommodityRegistry) func(r chi.Router) {
 	api := &commoditiesAPI{
 		commodityRegistry: commodityRegistry,
@@ -185,7 +160,7 @@ func Commodities(commodityRegistry registry.CommodityRegistry) func(r chi.Router
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listCommodities) // GET /commodities
 		r.Route("/{commodityID}", func(r chi.Router) {
-			r.Use(api.commodityCtx)
+			r.Use(commodityCtx(api.commodityRegistry))
 			r.Get("/", api.getCommodity)       // GET /commodities/123
 			r.Put("/", api.updateCommodity)    // PUT /commodities/123
 			r.Delete("/", api.deleteCommodity) // DELETE /commodities/123
