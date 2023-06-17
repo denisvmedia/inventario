@@ -26,7 +26,7 @@ type jsonPathMatchesChecker struct {
 }
 
 // Check checks that the obtained JSON value matches the expected value at the given JSON path expression.
-func (c *jsonPathMatchesChecker) Check(got any, args []any, note func(key string, value interface{})) error {
+func (c *jsonPathMatchesChecker) Check(got any, args []any, note func(key string, value any)) error {
 	switch v := got.(type) {
 	case []any:
 	case map[string]any:

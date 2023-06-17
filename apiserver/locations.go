@@ -52,7 +52,7 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Location ID"
 // @Success 200 {object} jsonapi.LocationResponse "OK"
 // @Router /locations/{id} [get]
-func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) {
+func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	location := locationFromContext(r.Context())
 	if location == nil {
 		unprocessableEntityError(w, r, nil)
