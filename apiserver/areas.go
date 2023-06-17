@@ -58,13 +58,15 @@ func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
-	if err := render.Render(w, r, jsonapi.NewAreaResponse(area)); err != nil {
+
+	resp := jsonapi.NewAreaResponse(area)
+	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 }
 
-// Create a new area
+// createArea creates a new area.
 // @Summary Create a new area
 // @Description add by area data
 // @Tags areas
@@ -81,11 +83,13 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 		unprocessableEntityError(w, r, err)
 		return
 	}
+
 	area, err := api.areasRegistry.Create(*input.Data)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
+
 	resp := jsonapi.NewAreaResponse(area).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
@@ -115,6 +119,7 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 		renderEntityError(w, r, err)
 		return
 	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -153,6 +158,7 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 		renderEntityError(w, r, err)
 		return
 	}
+
 	resp := jsonapi.NewAreaResponse(newArea).WithStatusCode(http.StatusOK)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
@@ -174,7 +180,9 @@ func (api *areasAPI) areaCtx(next http.Handler) http.Handler {
 }
 
 func Areas(areasRegistry registry.AreaRegistry) func(r chi.Router) {
-	api := &areasAPI{areasRegistry: areasRegistry}
+	api := &areasAPI{
+		areasRegistry: areasRegistry,
+	}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listAreas) // GET /areas
 		r.Route("/{areaID}", func(r chi.Router) {
@@ -183,6 +191,6 @@ func Areas(areasRegistry registry.AreaRegistry) func(r chi.Router) {
 			r.Put("/", api.updateArea)    // PUT /areas/123
 			r.Delete("/", api.deleteArea) // DELETE /areas/123
 		})
-		r.Post("/", api.createArea) // POST /articles
+		r.Post("/", api.createArea) // POST /areas
 	}
 }

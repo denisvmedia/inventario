@@ -69,6 +69,14 @@ const (
 
 type Currency string
 
+func URLParse(s string) (*URL, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, err
+	}
+	return (*URL)(u), nil
+}
+
 type URL url.URL
 
 func (u *URL) MarshalJSON() ([]byte, error) {
@@ -96,7 +104,7 @@ type Commodity struct {
 	ID                     string          `json:"id"`
 	Name                   string          `json:"name"`
 	ShortName              string          `json:"short_name"`
-	URLs                   []URL           `json:"urls"`
+	URLs                   []*URL          `json:"urls"`
 	Type                   CommodityType   `json:"type"`
 	AreaID                 string          `json:"area_id"`
 	Count                  int             `json:"count"`
@@ -117,6 +125,39 @@ type Commodity struct {
 	LastModifiedDate       string          `json:"last_modified_date"`
 	Comments               string          `json:"comments"`
 	Draft                  bool            `json:"draft"`
+}
+
+func (a *Commodity) GetID() string {
+	return a.ID
+}
+
+func (a *Commodity) SetID(id string) {
+	a.ID = id
+}
+
+func (a *Commodity) MarshalJSON() ([]byte, error) {
+	type Alias Commodity
+	tmp := *a
+	if len(tmp.URLs) == 0 {
+		tmp.URLs = make([]*URL, 0)
+	}
+	return json.Marshal(Alias(tmp))
+}
+
+func (a *Commodity) UnmarshalJSON(data []byte) error {
+	type Alias Commodity
+	tmp := &Alias{}
+	err := json.Unmarshal(data, tmp)
+	if err != nil {
+		return err
+	}
+
+	if len(tmp.URLs) == 0 {
+		tmp.URLs = make([]*URL, 0)
+	}
+
+	*a = Commodity(*tmp)
+	return nil
 }
 
 type Image struct {

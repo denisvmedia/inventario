@@ -48,6 +48,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	params := apiserver.Params{}
 	params.LocationRegistry = registry.NewMemoryLocationRegistry()
 	params.AreaRegistry = registry.NewMemoryAreaRegistry(params.LocationRegistry)
+	params.CommodityRegistry = registry.NewMemoryCommodityRegistry(params.AreaRegistry)
 
 	err := validation.Validate(params)
 	if err != nil {

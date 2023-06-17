@@ -1,25 +1,36 @@
 package registry
 
 import (
+	"sync"
+
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 )
 
-type AreaRegistry = Registry[models.Area]
+type AreaRegistry interface {
+	Registry[models.Area]
+
+	AddCommodity(areaID, commodityID string)
+	GetCommodities(areaID string) []string
+	DeleteCommodity(areaID, commodityID string)
+}
 
 type baseMemoryAreaRegistry = MemoryRegistry[models.Area]
 type MemoryAreaRegistry struct {
 	*baseMemoryAreaRegistry
 
 	locationRegistry LocationRegistry
+	commoditiesLock  sync.RWMutex
+	commodities      models.AreaCommmodities
 }
 
 func NewMemoryAreaRegistry(locationRegistry LocationRegistry) *MemoryAreaRegistry {
 	return &MemoryAreaRegistry{
 		baseMemoryAreaRegistry: NewMemoryRegistry[models.Area](),
 		locationRegistry:       locationRegistry,
+		commodities:            make(models.AreaCommmodities),
 	}
 }
 
@@ -58,4 +69,30 @@ func (r *MemoryAreaRegistry) Delete(id string) error {
 	r.locationRegistry.DeleteArea(area.LocationID, id)
 
 	return nil
+}
+
+func (r *MemoryAreaRegistry) AddCommodity(areaID, commodityID string) {
+	r.commoditiesLock.Lock()
+	r.commodities[areaID] = append(r.commodities[areaID], commodityID)
+	r.commoditiesLock.Unlock()
+}
+
+func (r *MemoryAreaRegistry) GetCommodities(areaID string) []string {
+	r.commoditiesLock.RLock()
+	commodities := make([]string, len(r.commodities[areaID]))
+	copy(commodities, r.commodities[areaID])
+	r.commoditiesLock.RUnlock()
+
+	return commodities
+}
+
+func (r *MemoryAreaRegistry) DeleteCommodity(areaID, commodityID string) {
+	r.commoditiesLock.Lock()
+	for i, foundCommodityID := range r.commodities[areaID] {
+		if foundCommodityID == commodityID {
+			r.commodities[areaID] = append(r.commodities[areaID][:i], r.commodities[areaID][i+1:]...)
+			break
+		}
+	}
+	r.commoditiesLock.Unlock()
 }

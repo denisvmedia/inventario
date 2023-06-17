@@ -3,6 +3,7 @@ package checkers
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/yalp/jsonpath"
@@ -65,6 +66,11 @@ func (c *jsonPathMatchesChecker) Check(got any, args []any, note func(key string
 	}
 
 	jsonPathVal, err := jsonpath.Read(got, c.jsonPath)
+
+	if isNil(jsonPathVal) && isNil(args[0]) {
+		return nil
+	}
+
 	if err != nil {
 		notes()
 		return fmt.Errorf("failed to evaluate JSON path expression: %w", err)
@@ -82,4 +88,21 @@ func (c *jsonPathMatchesChecker) Check(got any, args []any, note func(key string
 // ArgNames returns the names of all required arguments for the custom checker.
 func (c *jsonPathMatchesChecker) ArgNames() []string {
 	return []string{"got", "want"}
+}
+
+func isNil(i any) bool {
+	if i == nil {
+		return true
+	}
+
+	iv := reflect.ValueOf(i)
+	if !iv.IsValid() {
+		return true
+	}
+	switch iv.Kind() {
+	case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Func, reflect.Interface:
+		return iv.IsNil()
+	default:
+		return false
+	}
 }

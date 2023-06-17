@@ -41,8 +41,9 @@ func paginate(next http.Handler) http.Handler {
 }
 
 type Params struct {
-	LocationRegistry registry.LocationRegistry
-	AreaRegistry     registry.AreaRegistry
+	LocationRegistry  registry.LocationRegistry
+	AreaRegistry      registry.AreaRegistry
+	CommodityRegistry registry.CommodityRegistry
 }
 
 func (p *Params) Validate() error {
@@ -51,6 +52,7 @@ func (p *Params) Validate() error {
 	fields = append(fields,
 		validation.Field(&p.LocationRegistry, validation.Required),
 		validation.Field(&p.AreaRegistry, validation.Required),
+		validation.Field(&p.CommodityRegistry, validation.Required),
 	)
 
 	return validation.ValidateStruct(p, fields...)
@@ -87,6 +89,7 @@ func APIServer(params Params) http.Handler {
 
 		r.Route("/locations", Locations(params.LocationRegistry))
 		r.Route("/areas", Areas(params.AreaRegistry))
+		r.Route("/commodities", Commodities(params.CommodityRegistry))
 	})
 
 	return r

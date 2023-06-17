@@ -201,6 +201,6 @@ func Locations(locationsRegistry registry.LocationRegistry) func(r chi.Router) {
 			r.Put("/", api.updateLocation)    // PUT /locations/123
 			r.Delete("/", api.deleteLocation) // DELETE /locations/123
 		})
-		r.Post("/", api.createLocation) // POST /articles
+		r.Post("/", api.createLocation) // POST /areas
 	}
 }
