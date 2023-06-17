@@ -83,7 +83,7 @@ func TestCommodityGet(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.id"), commodity.ID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), commodity.Name)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.short_name"), commodity.ShortName)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []interface{}{})
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []any{})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.type"), string(commodity.Type))
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.area_id"), commodity.AreaID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.count"), float64(commodity.Count))
@@ -162,7 +162,7 @@ func TestCommodityCreate(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.type"), "commodities")
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "New Commodity in Area 2")
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.short_name"), "")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []interface{}{
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []any{
 		"https://example.com",
 		"https://example.com/2",
 	})
@@ -244,7 +244,7 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.id"), commodity.ID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "Updated Commodity")
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.short_name"), "UC")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []interface{}{})
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []any{})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.type"), string(models.CommodityTypeFurniture))
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.area_id"), commodity.AreaID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.count"), float64(commodity.Count))
