@@ -3,8 +3,10 @@ package run
 import (
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
 	"github.com/spf13/cobra"
 
@@ -23,7 +25,8 @@ var runCmd = &cobra.Command{
 }
 
 const (
-	addrFlag = "addr"
+	addrFlag           = "addr"
+	uploadLocationFlag = "upload-location"
 )
 
 var runFlags = map[string]cobraflags.Flag{
@@ -31,6 +34,11 @@ var runFlags = map[string]cobraflags.Flag{
 		Name:  addrFlag,
 		Value: ":3333",
 		Usage: "Bind address for the server",
+	},
+	uploadLocationFlag: &cobraflags.StringFlag{
+		Name:  uploadLocationFlag,
+		Value: "file://" + filepath.Join(filepath.ToSlash(must.Must(os.Getwd())), "uploads"),
+		Usage: "Location for the uploaded files",
 	},
 }
 
@@ -45,10 +53,11 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	bindAddr := runFlags[addrFlag].GetString()
 	log.WithField(addrFlag, bindAddr).Info("Starting server")
 
-	params := apiserver.Params{}
+	var params apiserver.Params
 	params.LocationRegistry = registry.NewMemoryLocationRegistry()
 	params.AreaRegistry = registry.NewMemoryAreaRegistry(params.LocationRegistry)
 	params.CommodityRegistry = registry.NewMemoryCommodityRegistry(params.AreaRegistry)
+	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
 
 	err := validation.Validate(params)
 	if err != nil {

@@ -23,14 +23,14 @@ type MemoryAreaRegistry struct {
 
 	locationRegistry LocationRegistry
 	commoditiesLock  sync.RWMutex
-	commodities      models.AreaCommmodities
+	commodities      models.AreaCommodities
 }
 
 func NewMemoryAreaRegistry(locationRegistry LocationRegistry) *MemoryAreaRegistry {
 	return &MemoryAreaRegistry{
 		baseMemoryAreaRegistry: NewMemoryRegistry[models.Area](),
 		locationRegistry:       locationRegistry,
-		commodities:            make(models.AreaCommmodities),
+		commodities:            make(models.AreaCommodities),
 	}
 }
 
