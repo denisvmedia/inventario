@@ -13,6 +13,9 @@ import (
 
 var (
 	ErrUnknownContentType = errors.New("render: unable to automatically decode the request content type")
+	ErrInvalidContentType = errors.New("invalid content type")
+	ErrNoFilesUploaded    = errors.New("no files uploaded")
+	ErrEntityNotFound     = errors.New("entity not found")
 )
 
 func NewNotFoundError(err error) jsonapi.Error {

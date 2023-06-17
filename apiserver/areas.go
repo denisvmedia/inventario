@@ -23,7 +23,7 @@ func areaFromContext(ctx context.Context) *models.Area {
 }
 
 type areasAPI struct {
-	areasRegistry registry.AreaRegistry
+	areaRegistry registry.AreaRegistry
 }
 
 // listAreas lists all areas.
@@ -35,7 +35,7 @@ type areasAPI struct {
 // @Success 200 {object} jsonapi.AreasResponse "OK"
 // @Router /areas [get]
 func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
-	areas, _ := api.areasRegistry.List()
+	areas, _ := api.areaRegistry.List()
 
 	if err := render.Render(w, r, jsonapi.NewAreasResponse(areas, len(areas))); err != nil {
 		internalServerError(w, r, err)
@@ -84,7 +84,7 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	area, err := api.areasRegistry.Create(*input.Data)
+	area, err := api.areaRegistry.Create(*input.Data)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -114,7 +114,7 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := api.areasRegistry.Delete(area.ID)
+	err := api.areaRegistry.Delete(area.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -153,7 +153,7 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newArea, err := api.areasRegistry.Update(*input.Data)
+	newArea, err := api.areaRegistry.Update(*input.Data)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -166,27 +166,14 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *areasAPI) areaCtx(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		areaID := chi.URLParam(r, "areaID")
-		area, err := api.areasRegistry.Get(areaID)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-		ctx := context.WithValue(r.Context(), areaCtxKey, area)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func Areas(areasRegistry registry.AreaRegistry) func(r chi.Router) {
+func Areas(areaRegistry registry.AreaRegistry) func(r chi.Router) {
 	api := &areasAPI{
-		areasRegistry: areasRegistry,
+		areaRegistry: areaRegistry,
 	}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listAreas) // GET /areas
 		r.Route("/{areaID}", func(r chi.Router) {
-			r.Use(api.areaCtx)
+			r.Use(areaCtx(areaRegistry))
 			r.Get("/", api.getArea)       // GET /areas/123
 			r.Put("/", api.updateArea)    // PUT /areas/123
 			r.Delete("/", api.deleteArea) // DELETE /areas/123
