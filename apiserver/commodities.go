@@ -52,7 +52,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // @Param id path string true "Commodity ID"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Router /commodities/{id} [get]
-func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) {
+func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
 		unprocessableEntityError(w, r, nil)
