@@ -51,8 +51,7 @@ func TestCommoditiesList(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].tags"), expectedCommodities[0].Tags)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].image_ids"), expectedCommodities[0].ImageIDs)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].manual_ids"), expectedCommodities[0].ManualIDs)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].invoice.id"), expectedCommodities[0].Invoice.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].invoice.path"), expectedCommodities[0].Invoice.Path)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].invoice.id"), expectedCommodities[0].InvoiceIDs)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].status"), string(expectedCommodities[0].Status))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].purchase_date"), expectedCommodities[0].PurchaseDate)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].registered_date"), expectedCommodities[0].RegisteredDate)
@@ -97,8 +96,7 @@ func TestCommodityGet(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.tags"), commodity.Tags)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.image_ids"), commodity.ImageIDs)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.manual_ids"), commodity.ManualIDs)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice.id"), commodity.Invoice.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice.path"), commodity.Invoice.Path)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice_ids"), commodity.InvoiceIDs)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.status"), string(commodity.Status))
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.purchase_date"), commodity.PurchaseDate)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.registered_date"), commodity.RegisteredDate)
@@ -133,10 +131,7 @@ func TestCommodityCreate(t *testing.T) {
 				must.Must(models.URLParse("https://example.com")),
 				must.Must(models.URLParse("https://example.com/2")),
 			},
-			Invoice: models.Invoice{
-				ID:   "inv1",
-				Path: "/path/to/invoice",
-			},
+			InvoiceIDs:       []string{"inv1"},
 			Status:           models.CommodityStatusInUse,
 			PurchaseDate:     "2023-01-01",
 			RegisteredDate:   "2023-01-02",
@@ -179,8 +174,7 @@ func TestCommodityCreate(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.tags"), []any{"tag1", "tag2"})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.image_ids"), []any{"img1", "img2"})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.manual_ids"), []any{"man1", "man2"})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice.id"), "inv1")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice.path"), "/path/to/invoice")
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice_ids"), []any{"inv1"})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.status"), string(models.CommodityStatusInUse))
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.purchase_date"), "2023-01-01")
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.registered_date"), "2023-01-02")
@@ -214,16 +208,13 @@ func TestCommodityUpdate(t *testing.T) {
 			Tags:                   []string{"tag1", "tag3"},
 			ImageIDs:               []string{"img1", "img3"},
 			ManualIDs:              []string{"man1", "man3"},
-			Invoice: models.Invoice{
-				ID:   "inv2",
-				Path: "/path/to/invoice2",
-			},
-			Status:           models.CommodityStatusInUse,
-			PurchaseDate:     "2022-01-01",
-			RegisteredDate:   "2022-01-02",
-			LastModifiedDate: "2022-01-03",
-			Comments:         "Updated commodity comments",
-			Draft:            false,
+			InvoiceIDs:             []string{"inv2"},
+			Status:                 models.CommodityStatusInUse,
+			PurchaseDate:           "2022-01-01",
+			RegisteredDate:         "2022-01-02",
+			LastModifiedDate:       "2022-01-03",
+			Comments:               "Updated commodity comments",
+			Draft:                  false,
 		},
 	}
 	data := must.Must(json.Marshal(obj))
@@ -258,8 +249,7 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.tags"), []any{"tag1", "tag3"})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.image_ids"), []any{"img1", "img3"})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.manual_ids"), []any{"man1", "man3"})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice.id"), "inv2")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice.path"), "/path/to/invoice2")
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoice_ids"), []any{"inv2"})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.status"), string(models.CommodityStatusInUse))
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.purchase_date"), "2022-01-01")
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.registered_date"), "2022-01-02")
@@ -332,16 +322,13 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 			Tags:                   []string{"tag1", "tag3"},
 			ImageIDs:               []string{"img1", "img3"},
 			ManualIDs:              []string{"man1", "man3"},
-			Invoice: models.Invoice{
-				ID:   "inv2",
-				Path: "/path/to/invoice2",
-			},
-			Status:           models.CommodityStatusInUse,
-			PurchaseDate:     "2022-01-01",
-			RegisteredDate:   "2022-01-02",
-			LastModifiedDate: "2022-01-03",
-			Comments:         "Updated commodity comments",
-			Draft:            false,
+			InvoiceIDs:             []string{"inv2"},
+			Status:                 models.CommodityStatusInUse,
+			PurchaseDate:           "2022-01-01",
+			RegisteredDate:         "2022-01-02",
+			LastModifiedDate:       "2022-01-03",
+			Comments:               "Updated commodity comments",
+			Draft:                  false,
 		},
 	}
 	data := must.Must(json.Marshal(obj))

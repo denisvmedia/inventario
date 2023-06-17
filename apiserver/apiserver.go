@@ -70,7 +70,7 @@ func (p *Params) Validate() error {
 		validation.Field(&p.LocationRegistry, validation.Required),
 		validation.Field(&p.AreaRegistry, validation.Required),
 		validation.Field(&p.CommodityRegistry, validation.Required),
-		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(value interface{}) error {
+		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(value any) error {
 			ctx := context.Background()
 			b, err := blob.OpenBucket(ctx, p.UploadLocation)
 			if err != nil {
