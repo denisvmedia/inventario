@@ -1,7 +1,6 @@
 package apiserver
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
@@ -37,7 +36,7 @@ func GetContentType(s string) render.ContentType {
 	}
 }
 
-func JSONAPIAwareDecoder(r *http.Request, v interface{}) error {
+func JSONAPIAwareDecoder(r *http.Request, v any) error {
 	var err error
 
 	switch GetRequestContentType(r) {
@@ -48,7 +47,7 @@ func JSONAPIAwareDecoder(r *http.Request, v interface{}) error {
 	case render.ContentTypeForm:
 		err = render.DecodeForm(r.Body, v)
 	default:
-		err = errors.New("render: unable to automatically decode the request content type")
+		err = ErrUnknownContentType
 	}
 
 	return err

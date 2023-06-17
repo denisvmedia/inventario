@@ -11,6 +11,10 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+var (
+	ErrUnknownContentType = errors.New("render: unable to automatically decode the request content type")
+)
+
 func NewNotFoundError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,

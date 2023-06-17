@@ -3,6 +3,7 @@ package apiserver_test
 import (
 	"github.com/go-extras/go-kit/must"
 
+	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -41,4 +42,11 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 	}))
 
 	return areaRegistry
+}
+
+func newParams() apiserver.Params {
+	var params apiserver.Params
+	params.LocationRegistry = newLocationRegistry()
+	params.AreaRegistry = newAreaRegistry(params.LocationRegistry)
+	return params
 }
