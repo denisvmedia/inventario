@@ -1,4 +1,4 @@
-package mimetypes
+package mimekit
 
 var imageContentTypes = []string{
 	"image/gif",

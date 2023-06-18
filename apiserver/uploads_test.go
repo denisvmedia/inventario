@@ -16,170 +16,183 @@ import (
 	"github.com/denisvmedia/inventario/apiserver"
 )
 
-func TestUploads_HandleImagesUpload(t *testing.T) {
-	c := qt.New(t)
-
+func TestUploads(t *testing.T) {
 	params := newParams()
 
-	filePath := "testdata/image.jpg"
+	tcs := []struct {
+		typ            string
+		contentType    string
+		filePath       string
+		expectedLength func(c *qt.C) int
+		checkResult    func(c *qt.C, expectedLen int, expectedCommodityID string)
+	}{
+		{
+			typ:         "images",
+			contentType: "image/jpeg",
+			filePath:    "testdata/image.jpg",
+			expectedLength: func(c *qt.C) int {
+				images, err := params.ImageRegistry.List()
+				c.Assert(err, qt.IsNil)
+				expectedLen := len(images) + 1
+				return expectedLen
+			},
+			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
+				images, err := params.ImageRegistry.List()
+				c.Assert(err, qt.IsNil)
+				c.Assert(images, qt.HasLen, expectedLen)
+				c.Assert(images[expectedLen-1].Path, qt.Not(qt.Equals), "")
+				c.Assert(images[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
+			},
+		},
+		{
+			typ:         "manuals",
+			contentType: "application/pdf",
+			filePath:    "testdata/manual.pdf",
+			expectedLength: func(c *qt.C) int {
+				manuals, err := params.ManualRegistry.List()
+				c.Assert(err, qt.IsNil)
+				expectedLen := len(manuals) + 1
+				return expectedLen
+			},
+			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
+				manuals, err := params.ManualRegistry.List()
+				c.Assert(err, qt.IsNil)
+				c.Assert(manuals, qt.HasLen, expectedLen)
+				c.Assert(manuals[expectedLen-1].Path, qt.Not(qt.Equals), "")
+				c.Assert(manuals[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
+			},
+		},
+		{
+			typ:         "invoices",
+			contentType: "application/pdf",
+			filePath:    "testdata/invoice.pdf",
+			expectedLength: func(c *qt.C) int {
+				invoices, err := params.InvoiceRegistry.List()
+				c.Assert(err, qt.IsNil)
+				expectedLen := len(invoices) + 1
+				return expectedLen
+			},
+			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
+				invoices, err := params.InvoiceRegistry.List()
+				c.Assert(err, qt.IsNil)
+				c.Assert(invoices, qt.HasLen, expectedLen)
+				c.Assert(invoices[expectedLen-1].Path, qt.Not(qt.Equals), "")
+				c.Assert(invoices[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
+			},
+		},
+	}
 
-	expectedCommodities := must.Must(params.CommodityRegistry.List())
-	commodity := expectedCommodities[0]
+	for _, tc := range tcs {
+		t.Run(tc.typ, func(t *testing.T) {
+			c := qt.New(t)
 
-	images, err := params.ImageRegistry.List()
-	c.Assert(err, qt.IsNil)
-	expectedLen := len(images) + 1
+			expectedCommodities := must.Must(params.CommodityRegistry.List())
+			commodity := expectedCommodities[0]
+			expectedLen := tc.expectedLength(c)
 
-	// Create a buffer to write the form data
-	bodyBuf := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuf)
+			// Create a buffer to write the form data
+			bodyBuf := &bytes.Buffer{}
+			bodyWriter := multipart.NewWriter(bodyBuf)
 
-	// Create a file field in the form
-	h := CreateFormFileMIME("file", filepath.Base(filePath), "image/jpeg")
-	fileWriter, err := bodyWriter.CreatePart(h)
-	c.Assert(err, qt.IsNil)
+			// Create a file field in the form
+			h := CreateFormFileMIME("file", filepath.Base(tc.filePath), tc.contentType)
+			fileWriter, err := bodyWriter.CreatePart(h)
+			c.Assert(err, qt.IsNil)
 
-	// Open the file and copy its contents to the file field
-	file, err := os.Open(filePath)
-	c.Assert(err, qt.IsNil)
-	defer file.Close()
+			// Open the file and copy its contents to the file field
+			file, err := os.Open(tc.filePath)
+			c.Assert(err, qt.IsNil)
+			defer file.Close()
 
-	_, err = io.Copy(fileWriter, file)
-	c.Assert(err, qt.IsNil)
+			_, err = io.Copy(fileWriter, file)
+			c.Assert(err, qt.IsNil)
 
-	// Close the form writer
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
+			// Close the form writer
+			contentType := bodyWriter.FormDataContentType()
+			bodyWriter.Close()
 
-	// Create a new request with the form data
-	req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/images", bodyBuf)
-	c.Assert(err, qt.IsNil)
-	req.Header.Set("Content-Type", contentType)
+			// Create a new request with the form data
+			req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/"+tc.typ, bodyBuf)
+			c.Assert(err, qt.IsNil)
+			req.Header.Set("Content-Type", contentType)
 
-	rr := httptest.NewRecorder()
+			rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
-	handler.ServeHTTP(rr, req)
+			handler := apiserver.APIServer(params)
+			handler.ServeHTTP(rr, req)
 
-	// Verify the response
-	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
+			// Verify the response
+			c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 
-	// Verify the image is created in the registry
-	images, err = params.ImageRegistry.List()
-	c.Assert(err, qt.IsNil)
-	c.Assert(images, qt.HasLen, expectedLen)
-	c.Assert(images[expectedLen-1].Path, qt.Not(qt.Equals), "")
-	c.Assert(images[expectedLen-1].CommodityID, qt.Equals, commodity.ID)
+			// Verify the image is created in the registry
+			tc.checkResult(c, expectedLen, commodity.ID)
+		})
+	}
 }
 
-func TestUploads_HandleManualsUpload(t *testing.T) {
-	c := qt.New(t)
+func TestUploads_invalid_upload(t *testing.T) {
+	tcs := []struct {
+		typ         string
+		contentType string
+	}{
+		{
+			typ:         "images",
+			contentType: "image/png",
+		},
+		{
+			typ:         "manuals",
+			contentType: "application/pdf",
+		},
+		{
+			typ:         "invoices",
+			contentType: "application/pdf",
+		},
+	}
 
-	params := newParams()
+	for _, tc := range tcs {
+		t.Run(tc.typ, func(t *testing.T) {
+			c := qt.New(t)
 
-	filePath := "testdata/manual.pdf"
+			params := newParams()
 
-	expectedCommodities := must.Must(params.CommodityRegistry.List())
-	commodity := expectedCommodities[0]
+			filePath := "testdata/invalid.txt"
 
-	manuals, err := params.ManualRegistry.List()
-	c.Assert(err, qt.IsNil)
-	expectedLen := len(manuals) + 1
+			expectedCommodities := must.Must(params.CommodityRegistry.List())
+			commodity := expectedCommodities[0]
 
-	// Create a buffer to write the form data
-	bodyBuf := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuf)
+			// Create a buffer to write the form data
+			bodyBuf := &bytes.Buffer{}
+			bodyWriter := multipart.NewWriter(bodyBuf)
 
-	// Create a file field in the form
-	h := CreateFormFileMIME("file", filepath.Base(filePath), "application/pdf")
-	fileWriter, err := bodyWriter.CreatePart(h)
-	c.Assert(err, qt.IsNil)
+			// Create a file field in the form
+			h := CreateFormFileMIME("file", filepath.Base(filePath), tc.contentType)
+			fileWriter, err := bodyWriter.CreatePart(h)
+			c.Assert(err, qt.IsNil)
 
-	// Open the file and copy its contents to the file field
-	file, err := os.Open(filePath)
-	c.Assert(err, qt.IsNil)
-	defer file.Close()
+			// Open the file and copy its contents to the file field
+			file, err := os.Open(filePath)
+			c.Assert(err, qt.IsNil)
+			defer file.Close()
 
-	_, err = io.Copy(fileWriter, file)
-	c.Assert(err, qt.IsNil)
+			_, err = io.Copy(fileWriter, file)
+			c.Assert(err, qt.IsNil)
 
-	// Close the form writer
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
+			// Close the form writer
+			contentType := bodyWriter.FormDataContentType()
+			bodyWriter.Close()
 
-	// Create a new request with the form data
-	req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/manuals", bodyBuf)
-	c.Assert(err, qt.IsNil)
-	req.Header.Set("Content-Type", contentType)
+			// Create a new request with the form data
+			req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/"+tc.typ, bodyBuf)
+			c.Assert(err, qt.IsNil)
+			req.Header.Set("Content-Type", contentType)
 
-	rr := httptest.NewRecorder()
+			rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
-	handler.ServeHTTP(rr, req)
+			handler := apiserver.APIServer(params)
+			handler.ServeHTTP(rr, req)
 
-	// Verify the response
-	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
-
-	// Verify the manual is created in the registry
-	manuals, err = params.ManualRegistry.List()
-	c.Assert(err, qt.IsNil)
-	c.Assert(manuals, qt.HasLen, expectedLen)
-	c.Assert(manuals[expectedLen-1].Path, qt.Not(qt.Equals), "")
-	c.Assert(manuals[expectedLen-1].CommodityID, qt.Equals, commodity.ID)
-}
-
-func TestUploads_HandleInvoicesUpload(t *testing.T) {
-	c := qt.New(t)
-
-	params := newParams()
-
-	filePath := "testdata/invoice.pdf"
-
-	expectedCommodities := must.Must(params.CommodityRegistry.List())
-	commodity := expectedCommodities[0]
-
-	invoices, err := params.InvoiceRegistry.List()
-	c.Assert(err, qt.IsNil)
-	expectedLen := len(invoices) + 1
-
-	// Create a buffer to write the form data
-	bodyBuf := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuf)
-
-	// Create a file field in the form
-	h := CreateFormFileMIME("file", filepath.Base(filePath), "application/pdf")
-	fileWriter, err := bodyWriter.CreatePart(h)
-	c.Assert(err, qt.IsNil)
-
-	// Open the file and copy its contents to the file field
-	file, err := os.Open(filePath)
-	c.Assert(err, qt.IsNil)
-	defer file.Close()
-
-	_, err = io.Copy(fileWriter, file)
-	c.Assert(err, qt.IsNil)
-
-	// Close the form writer
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-
-	// Create a new request with the form data
-	req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/invoices", bodyBuf)
-	c.Assert(err, qt.IsNil)
-	req.Header.Set("Content-Type", contentType)
-
-	rr := httptest.NewRecorder()
-
-	handler := apiserver.APIServer(params)
-	handler.ServeHTTP(rr, req)
-
-	// Verify the response
-	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
-
-	// Verify the invoice is created in the registry
-	invoices, err = params.InvoiceRegistry.List()
-	c.Assert(err, qt.IsNil)
-	c.Assert(invoices, qt.HasLen, expectedLen)
-	c.Assert(invoices[expectedLen-1].Path, qt.Not(qt.Equals), "")
-	c.Assert(invoices[expectedLen-1].CommodityID, qt.Equals, commodity.ID)
+			// Verify the response
+			c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+		})
+	}
 }
