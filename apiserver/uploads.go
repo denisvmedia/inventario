@@ -2,17 +2,17 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
-	"golang.org/x/exp/slices"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/filekit"
-	"github.com/denisvmedia/inventario/internal/mimetypes"
+	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -143,7 +143,7 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (api *uploadsAPI) uploadFiles(contentTypes ...string) func(next http.Handler) http.Handler {
+func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get the multipart reader from the request
@@ -172,16 +172,14 @@ func (api *uploadsAPI) uploadFiles(contentTypes ...string) func(next http.Handle
 					continue
 				}
 
-				contentType := part.Header.Get("Content-Type")
-				if !slices.Contains(contentTypes, contentType) {
-					unprocessableEntityError(w, r, ErrInvalidContentType)
-					return
-				}
-
 				// Generate the file path and open a new file
 				filename := filekit.UploadFileName(part.FileName())
-				err = api.saveFile(filename, part)
-				if err != nil {
+				err = api.saveFile(r.Context(), filename, part, allowedContentTypes) // TODO: make sure that the file is not too big
+				switch {
+				case errors.Is(err, mimekit.ErrInvalidContentType):
+					unprocessableEntityError(w, r, errkit.Wrap(err, "unsupported content type"))
+					return
+				case err != nil:
 					internalServerError(w, r, errkit.Wrap(err, "unable to save file"))
 					return
 				}
@@ -194,8 +192,7 @@ func (api *uploadsAPI) uploadFiles(contentTypes ...string) func(next http.Handle
 	}
 }
 
-func (api *uploadsAPI) saveFile(filename string, src io.Reader) error {
-	ctx := context.Background()
+func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) error {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
 		return errkit.Wrap(err, "failed to open bucket") // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
@@ -208,7 +205,9 @@ func (api *uploadsAPI) saveFile(filename string, src io.Reader) error {
 	}
 	defer fw.Close()
 
-	_, err = io.Copy(fw, src)
+	wrappedSrc := mimekit.NewMIMEReader(src, allowedContentTypes)
+
+	_, err = io.Copy(fw, wrappedSrc)
 	if err != nil {
 		return errkit.ChainWrap(err, "failed when saving the file").WithField("filename", filename)
 	}
@@ -227,9 +226,9 @@ func Uploads(params Params) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.With(commodityCtx(params.CommodityRegistry)).
 			Route("/commodities/{commodityID}", func(r chi.Router) {
-				r.With(api.uploadFiles(mimetypes.ImageContentTypes()...)).Post("/images", api.handleImagesUpload)
-				r.With(api.uploadFiles(mimetypes.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)
-				r.With(api.uploadFiles(mimetypes.DocContentTypes()...)).Post("/invoices", api.handleInvoicesUpload)
+				r.With(api.uploadFiles(mimekit.ImageContentTypes()...)).Post("/images", api.handleImagesUpload)
+				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)
+				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/invoices", api.handleInvoicesUpload)
 			})
 	}
 }
