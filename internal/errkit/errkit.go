@@ -177,3 +177,55 @@ func newError(err error, msg string, skip int) *Error {
 		},
 	}
 }
+
+type fieldError struct {
+	fields Fields
+	err    error
+}
+
+func WithFields(err error, fields Fields) error {
+	return &fieldError{
+		fields: fields,
+		err:    err,
+	}
+}
+
+// Error implements the error interface and returns the error message.
+func (e *fieldError) Error() string {
+	return fmt.Sprintf("%s (%+v)", e.err.Error(), e.fields)
+}
+
+// Is implements the errors.Is interface and returns true if the target error is found.
+func (e *fieldError) Is(target error) bool {
+	return errors.Is(e.err, target)
+}
+
+// As implements the errors.As interface and returns true if the target error is found.
+func (e *fieldError) As(target any) bool {
+	return errors.As(e.err, target)
+}
+
+// Unwrap implements the errors.Wrapper interface and returns the wrapped error.
+func (e *fieldError) Unwrap() error {
+	return e.err
+}
+
+// MarshalJSON implements the json.Marshaler interface and returns the serialized error.
+func (e *fieldError) MarshalJSON() ([]byte, error) {
+	type jsonError struct {
+		Error  json.RawMessage `json:"error"`
+		Fields Fields          `json:"fields,omitempty"`
+	}
+
+	errData, err := MarshalError(e.err)
+	if err != nil {
+		return nil, err
+	}
+
+	jerr := jsonError{
+		Error:  errData,
+		Fields: e.fields,
+	}
+
+	return json.Marshal(jerr)
+}
