@@ -116,9 +116,6 @@ type Commodity struct {
 	ExtraSerialNumbers     []string        `json:"extra_serial_numbers"`
 	PartNumbers            []string        `json:"part_numbers"`
 	Tags                   []string        `json:"tags"`
-	ImageIDs               []string        `json:"image_ids"`
-	ManualIDs              []string        `json:"manual_ids"`
-	InvoiceIDs             []string        `json:"invoice_ids"`
 	Status                 CommodityStatus `json:"status"`
 	PurchaseDate           string          `json:"purchase_date"`
 	RegisteredDate         string          `json:"registered_date"`
@@ -133,31 +130,6 @@ func (a *Commodity) GetID() string {
 
 func (a *Commodity) SetID(id string) {
 	a.ID = id
-}
-
-func (a *Commodity) MarshalJSON() ([]byte, error) {
-	type Alias Commodity
-	tmp := *a
-	if len(tmp.URLs) == 0 {
-		tmp.URLs = make([]*URL, 0)
-	}
-	return json.Marshal(Alias(tmp))
-}
-
-func (a *Commodity) UnmarshalJSON(data []byte) error {
-	type Alias Commodity
-	tmp := &Alias{}
-	err := json.Unmarshal(data, tmp)
-	if err != nil {
-		return err
-	}
-
-	if len(tmp.URLs) == 0 {
-		tmp.URLs = make([]*URL, 0)
-	}
-
-	*a = Commodity(*tmp)
-	return nil
 }
 
 type Image struct {

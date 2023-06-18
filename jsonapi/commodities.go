@@ -2,6 +2,7 @@
 package jsonapi
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -10,21 +11,47 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
+type Commodity struct {
+	*models.Commodity
+	CommodityExtra
+}
+
+type CommodityExtra struct {
+	Images   []string `json:"images"`
+	Manuals  []string `json:"manuals"`
+	Invoices []string `json:"invoices"`
+}
+
+func (a *Commodity) MarshalJSON() ([]byte, error) {
+	type AliasCommodity models.Commodity
+	type Alias struct {
+		*AliasCommodity
+		CommodityExtra
+	}
+	tmp := AliasCommodity(*a.Commodity)
+	var x = Alias{
+		AliasCommodity: &tmp,
+		CommodityExtra: a.CommodityExtra,
+	}
+	v, err := json.Marshal(x)
+	return v, err
+}
+
 // CommodityResponse is an object that holds commodity information.
 type CommodityResponse struct {
 	HTTPStatusCode int `json:"-"` // HTTP response status code
 
-	ID         string           `json:"id"`
-	Type       string           `json:"type" example:"commodities" enums:"commodities"`
-	Attributes models.Commodity `json:"attributes"`
+	ID         string     `json:"id"`
+	Type       string     `json:"type" example:"commodities" enums:"commodities"`
+	Attributes *Commodity `json:"attributes"`
 }
 
 // NewCommodityResponse creates a new CommodityResponse instance.
-func NewCommodityResponse(commodity *models.Commodity) *CommodityResponse {
+func NewCommodityResponse(commodity *Commodity) *CommodityResponse {
 	return &CommodityResponse{
 		ID:         commodity.ID,
 		Type:       "commodities",
-		Attributes: *commodity,
+		Attributes: commodity,
 	}
 }
 

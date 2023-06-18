@@ -52,7 +52,16 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp := jsonapi.NewCommodityResponse(commodity)
+	respCommodity := &jsonapi.Commodity{
+		Commodity: commodity,
+		CommodityExtra: jsonapi.CommodityExtra{
+			Images:   api.commodityRegistry.GetImages(commodity.ID),
+			Manuals:  api.commodityRegistry.GetManuals(commodity.ID),
+			Invoices: api.commodityRegistry.GetInvoices(commodity.ID),
+		},
+	}
+
+	resp := jsonapi.NewCommodityResponse(respCommodity)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -82,7 +91,16 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp := jsonapi.NewCommodityResponse(commodity).WithStatusCode(http.StatusCreated)
+	respCommodity := &jsonapi.Commodity{
+		Commodity: commodity,
+		CommodityExtra: jsonapi.CommodityExtra{
+			Images:   api.commodityRegistry.GetImages(commodity.ID),
+			Manuals:  api.commodityRegistry.GetManuals(commodity.ID),
+			Invoices: api.commodityRegistry.GetInvoices(commodity.ID),
+		},
+	}
+
+	resp := jsonapi.NewCommodityResponse(respCommodity).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -151,7 +169,16 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp := jsonapi.NewCommodityResponse(updatedCommodity).WithStatusCode(http.StatusOK)
+	respCommodity := &jsonapi.Commodity{
+		Commodity: updatedCommodity,
+		CommodityExtra: jsonapi.CommodityExtra{
+			Images:   api.commodityRegistry.GetImages(updatedCommodity.ID),
+			Manuals:  api.commodityRegistry.GetManuals(updatedCommodity.ID),
+			Invoices: api.commodityRegistry.GetInvoices(updatedCommodity.ID),
+		},
+	}
+
+	resp := jsonapi.NewCommodityResponse(respCommodity).WithStatusCode(http.StatusOK)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
