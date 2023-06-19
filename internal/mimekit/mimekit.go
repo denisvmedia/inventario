@@ -1,5 +1,9 @@
 package mimekit
 
+import (
+	"github.com/gabriel-vasile/mimetype"
+)
+
 var imageContentTypes = []string{
 	"image/gif",
 	"image/jpeg",
@@ -39,4 +43,8 @@ func DocContentTypes() []string {
 	result := make([]string, len(docContentTypes))
 	copy(result, docContentTypes)
 	return result
+}
+
+func ExtensionByMime(mimeType string) string {
+	return mimetype.Lookup(mimeType).Extension()
 }

@@ -160,6 +160,7 @@ func (a *Commodity) UnmarshalJSON(data []byte) error {
 type Image struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`
+	Ext         string `json:"ext"`
 	CommodityID string `json:"commodity_id"`
 }
 
@@ -174,6 +175,7 @@ func (a *Image) SetID(id string) {
 type Manual struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`
+	Ext         string `json:"ext"`
 	CommodityID string `json:"commodity_id"`
 }
 
@@ -188,6 +190,7 @@ func (a *Manual) SetID(id string) {
 type Invoice struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`
+	Ext         string `json:"ext"`
 	CommodityID string `json:"commodity_id"`
 }
 

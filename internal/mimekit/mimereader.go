@@ -21,7 +21,7 @@ type MIMEReader struct {
 	read                int64
 	buf                 bytes.Buffer
 	allowedContentTypes []string
-	mimeDetected        bool
+	mimetype            string
 	err                 error
 }
 
@@ -55,7 +55,7 @@ func (mr *MIMEReader) Read(p []byte) (n int, err error) {
 		return 0, mr.err
 	}
 
-	if mr.mimeDetected {
+	if mr.mimetype != "" {
 		// Read from the underlying reader till the end
 		n, err = mr.r.Read(p)
 		mr.read += int64(n)
@@ -73,7 +73,7 @@ func (mr *MIMEReader) Read(p []byte) (n int, err error) {
 		defer mr.buf.Reset()
 		ct := http.DetectContentType(mr.buf.Bytes())
 		mt, _, _ := mime.ParseMediaType(ct)
-		if !slices.Contains(mr.allowedContentTypes, mt) {
+		if mt == "" || !slices.Contains(mr.allowedContentTypes, mt) {
 			mr.err = errkit.WithFields(ErrInvalidContentType, errkit.Fields{
 				"expected": mr.allowedContentTypes,
 				"detected": ct,
@@ -82,11 +82,15 @@ func (mr *MIMEReader) Read(p []byte) (n int, err error) {
 			log.Printf("=================== Invalid MIME: %s", mr.err.Error())
 			return n, mr.err
 		}
-		mr.mimeDetected = true
+		mr.mimetype = mt
 	case err != nil:
 		mr.buf.Reset() // if we had an error, and it wasn't io.EOF, we should reset the buffer
 		mr.err = err
 	}
 
 	return n, err
+}
+
+func (mr *MIMEReader) MIMEType() string {
+	return mr.mimetype
 }
