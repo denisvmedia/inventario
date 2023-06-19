@@ -132,6 +132,31 @@ func (a *Commodity) SetID(id string) {
 	a.ID = id
 }
 
+func (a *Commodity) MarshalJSON() ([]byte, error) {
+	type Alias Commodity
+	tmp := *a
+	if len(tmp.URLs) == 0 {
+		tmp.URLs = make([]*URL, 0)
+	}
+	return json.Marshal(Alias(tmp))
+}
+
+func (a *Commodity) UnmarshalJSON(data []byte) error {
+	type Alias Commodity
+	tmp := &Alias{}
+	err := json.Unmarshal(data, tmp)
+	if err != nil {
+		return err
+	}
+
+	if len(tmp.URLs) == 0 {
+		tmp.URLs = make([]*URL, 0)
+	}
+
+	*a = Commodity(*tmp)
+	return nil
+}
+
 type Image struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`

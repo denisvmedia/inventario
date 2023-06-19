@@ -168,3 +168,10 @@ func CreateFormFileMIME(fieldname, filename, contentType string) textproto.MIMEH
 	h.Set("Content-Type", contentType)
 	return h
 }
+
+func sliceToSliceOfAny[T any](v []T) (result []any) {
+	for _, item := range v {
+		result = append(result, item)
+	}
+	return result
+}

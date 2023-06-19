@@ -11,47 +11,43 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-type Commodity struct {
-	*models.Commodity
-	CommodityExtra
-}
-
-type CommodityExtra struct {
+type CommodityMeta struct {
 	Images   []string `json:"images"`
 	Manuals  []string `json:"manuals"`
 	Invoices []string `json:"invoices"`
 }
 
-func (a *Commodity) MarshalJSON() ([]byte, error) {
-	type AliasCommodity models.Commodity
-	type Alias struct {
-		*AliasCommodity
-		CommodityExtra
+func (a *CommodityMeta) MarshalJSON() ([]byte, error) {
+	tmp := *a
+	if tmp.Images == nil {
+		tmp.Images = make([]string, 0)
 	}
-	tmp := AliasCommodity(*a.Commodity)
-	var x = Alias{
-		AliasCommodity: &tmp,
-		CommodityExtra: a.CommodityExtra,
+	if tmp.Manuals == nil {
+		tmp.Manuals = make([]string, 0)
 	}
-	v, err := json.Marshal(x)
-	return v, err
+	if tmp.Invoices == nil {
+		tmp.Invoices = make([]string, 0)
+	}
+	return json.Marshal(tmp)
 }
 
 // CommodityResponse is an object that holds commodity information.
 type CommodityResponse struct {
 	HTTPStatusCode int `json:"-"` // HTTP response status code
 
-	ID         string     `json:"id"`
-	Type       string     `json:"type" example:"commodities" enums:"commodities"`
-	Attributes *Commodity `json:"attributes"`
+	ID         string            `json:"id"`
+	Type       string            `json:"type" example:"commodities" enums:"commodities"`
+	Attributes *models.Commodity `json:"attributes"`
+	Meta       *CommodityMeta    `json:"meta"`
 }
 
 // NewCommodityResponse creates a new CommodityResponse instance.
-func NewCommodityResponse(commodity *Commodity) *CommodityResponse {
+func NewCommodityResponse(commodity *models.Commodity, meta *CommodityMeta) *CommodityResponse {
 	return &CommodityResponse{
 		ID:         commodity.ID,
 		Type:       "commodities",
 		Attributes: commodity,
+		Meta:       meta,
 	}
 }
 

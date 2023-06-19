@@ -75,32 +75,15 @@ func TestCommodityGet(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	expectedImages, err := params.ImageRegistry.List()
-	c.Assert(err, qt.IsNil)
-	images := make([]any, 0, len(expectedImages))
-	for _, image := range expectedImages {
-		images = append(images, image.ID)
-	}
-
-	expectedInvoices, err := params.InvoiceRegistry.List()
-	c.Assert(err, qt.IsNil)
-	invoices := make([]any, 0, len(expectedInvoices))
-	for _, invoice := range expectedInvoices {
-		invoices = append(invoices, invoice.ID)
-	}
-
-	expectedManuals, err := params.ManualRegistry.List()
-	c.Assert(err, qt.IsNil)
-	manuals := make([]any, 0, len(expectedManuals))
-	for _, manual := range expectedManuals {
-		manuals = append(manuals, manual.ID)
-	}
+	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params).Images)
+	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
+	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params).Manuals)
 
 	c.Assert(body, checkers.JSONPathEquals("$.type"), "commodities")
 	c.Assert(body, checkers.JSONPathEquals("$.id"), commodity.ID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), commodity.Name)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.short_name"), commodity.ShortName)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), nil)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []any{})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.type"), string(commodity.Type))
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.area_id"), commodity.AreaID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.count"), float64(commodity.Count))
@@ -118,9 +101,9 @@ func TestCommodityGet(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.last_modified_date"), commodity.LastModifiedDate)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.comments"), commodity.Comments)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.draft"), commodity.Draft)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.images"), images)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.invoices"), invoices)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.manuals"), manuals)
+	c.Assert(body, checkers.JSONPathEquals("$.meta.images"), expectedImages)
+	c.Assert(body, checkers.JSONPathEquals("$.meta.invoices"), expectedInvoices)
+	c.Assert(body, checkers.JSONPathEquals("$.meta.manuals"), expectedManuals)
 }
 
 func TestCommodityCreate(t *testing.T) {
@@ -240,11 +223,15 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
+	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params).Images)
+	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
+	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params).Manuals)
+
 	c.Assert(body, checkers.JSONPathEquals("$.type"), "commodities")
 	c.Assert(body, checkers.JSONPathEquals("$.id"), commodity.ID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "Updated Commodity")
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.short_name"), "UC")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), nil)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []any{})
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.type"), string(models.CommodityTypeFurniture))
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.area_id"), commodity.AreaID)
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.count"), float64(commodity.Count))
@@ -262,6 +249,9 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.last_modified_date"), "2022-01-03")
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.comments"), "Updated commodity comments")
 	c.Assert(body, checkers.JSONPathEquals("$.attributes.draft"), false)
+	c.Assert(body, checkers.JSONPathEquals("$.meta.images"), expectedImages)
+	c.Assert(body, checkers.JSONPathEquals("$.meta.invoices"), expectedInvoices)
+	c.Assert(body, checkers.JSONPathEquals("$.meta.manuals"), expectedManuals)
 }
 
 func TestCommodityDelete(t *testing.T) {
@@ -493,4 +483,33 @@ func TestCommodityDeleteManual(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+func getCommodityMeta(c *qt.C, params apiserver.Params) *jsonapi.CommodityMeta {
+	expectedImages, err := params.ImageRegistry.List()
+	c.Assert(err, qt.IsNil)
+	images := make([]string, 0, len(expectedImages))
+	for _, image := range expectedImages {
+		images = append(images, image.ID)
+	}
+
+	expectedInvoices, err := params.InvoiceRegistry.List()
+	c.Assert(err, qt.IsNil)
+	invoices := make([]string, 0, len(expectedInvoices))
+	for _, invoice := range expectedInvoices {
+		invoices = append(invoices, invoice.ID)
+	}
+
+	expectedManuals, err := params.ManualRegistry.List()
+	c.Assert(err, qt.IsNil)
+	manuals := make([]string, 0, len(expectedManuals))
+	for _, manual := range expectedManuals {
+		manuals = append(manuals, manual.ID)
+	}
+
+	return &jsonapi.CommodityMeta{
+		Images:   images,
+		Invoices: invoices,
+		Manuals:  manuals,
+	}
 }
