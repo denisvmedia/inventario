@@ -1,17 +1,26 @@
 package apiserver_test
 
 import (
+	"context"
 	"fmt"
 	"net/textproto"
 	"strings"
 
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/fileblob"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	_ "github.com/denisvmedia/inventario/internal/fileblob"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
+
+const uploadLocation = "afile://uploads?memfs=1&create_dir=1"
+
+// const uploadLocation = "file://uploads"
+// const uploadLocation = "afile://uploads"
 
 func newLocationRegistry() registry.LocationRegistry {
 	var locationsRegistry = registry.NewMemoryLocationRegistry()
@@ -82,15 +91,33 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 
 	commodities := must.Must(commodityRegistry.List())
 
+	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err := b.WriteAll(context.TODO(), "image1.jpg", []byte("image1"), nil)
+	if err != nil {
+		panic(err)
+	}
+
 	must.Must(imageRegistry.Create(models.Image{
 		ID:          "img1",
-		Path:        "/path/to/image1.jpg",
+		Path:        "image1.jpg",
+		Ext:         ".jpg",
+		MIMEType:    "image/jpeg",
 		CommodityID: commodities[0].ID,
 	}))
 
+	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err = b.WriteAll(context.TODO(), "image2.jpg", []byte("image2"), nil)
+	if err != nil {
+		panic(err)
+	}
+
 	must.Must(imageRegistry.Create(models.Image{
 		ID:          "img2",
-		Path:        "/path/to/image2.jpg",
+		Path:        "image2.jpg",
+		Ext:         ".jpg",
+		MIMEType:    "image/jpeg",
 		CommodityID: commodities[0].ID,
 	}))
 
@@ -102,15 +129,33 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 
 	commodities := must.Must(commodityRegistry.List())
 
+	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err := b.WriteAll(context.TODO(), "invoice1.pdf", []byte("invoice1"), nil)
+	if err != nil {
+		panic(err)
+	}
+
 	must.Must(invoiceRegistry.Create(models.Invoice{
 		ID:          "inv1",
-		Path:        "path/to/invoice1.pdf",
+		Path:        "invoice1.pdf",
+		Ext:         ".pdf",
+		MIMEType:    "application/pdf",
 		CommodityID: commodities[0].ID,
 	}))
 
+	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err = b.WriteAll(context.TODO(), "invoice2.pdf", []byte("invoice2"), nil)
+	if err != nil {
+		panic(err)
+	}
+
 	must.Must(invoiceRegistry.Create(models.Invoice{
 		ID:          "inv2",
-		Path:        "path/to/invoice2.pdf",
+		Path:        "invoice2.pdf",
+		Ext:         ".pdf",
+		MIMEType:    "application/pdf",
 		CommodityID: commodities[0].ID,
 	}))
 
@@ -122,15 +167,33 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 
 	commodities := must.Must(commodityRegistry.List())
 
+	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err := b.WriteAll(context.TODO(), "manual1.pdf", []byte("manual1"), nil)
+	if err != nil {
+		panic(err)
+	}
+
 	must.Must(manualRegistry.Create(models.Manual{
 		ID:          "man1",
-		Path:        "/path/to/manual1.pdf",
+		Path:        "manual1.pdf",
+		Ext:         ".pdf",
+		MIMEType:    "application/pdf",
 		CommodityID: commodities[0].ID,
 	}))
 
+	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err = b.WriteAll(context.TODO(), "manual2.pdf", []byte("manual2"), nil)
+	if err != nil {
+		panic(err)
+	}
+
 	must.Must(manualRegistry.Create(models.Manual{
 		ID:          "man2",
-		Path:        "/path/to/manual2.pdf",
+		Path:        "manual2.pdf",
+		Ext:         ".pdf",
+		MIMEType:    "application/pdf",
 		CommodityID: commodities[0].ID,
 	}))
 
@@ -145,7 +208,7 @@ func newParams() apiserver.Params {
 	params.ImageRegistry = newImageRegistry(params.CommodityRegistry)
 	params.InvoiceRegistry = newInvoiceRegistry(params.CommodityRegistry)
 	params.ManualRegistry = newManualRegistry(params.CommodityRegistry)
-	params.UploadLocation = "mem://uploads"
+	params.UploadLocation = uploadLocation
 	return params
 }
 
@@ -167,4 +230,11 @@ func CreateFormFileMIME(fieldname, filename, contentType string) textproto.MIMEH
 			escapeQuotes(fieldname), escapeQuotes(filename)))
 	h.Set("Content-Type", contentType)
 	return h
+}
+
+func sliceToSliceOfAny[T any](v []T) (result []any) {
+	for _, item := range v {
+		result = append(result, item)
+	}
+	return result
 }

@@ -18,10 +18,15 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+type uploadedFile struct {
+	FilePath string
+	MIMEType string
+}
+
 const uploadedFilesCtxKey ctxValueKey = "uploadedFiles"
 
-func uploadedFilesFromContext(ctx context.Context) []string {
-	uploadedFiles, ok := ctx.Value(uploadedFilesCtxKey).([]string)
+func uploadedFilesFromContext(ctx context.Context) []uploadedFile {
+	uploadedFiles, ok := ctx.Value(uploadedFilesCtxKey).([]uploadedFile)
 	if !ok {
 		return nil
 	}
@@ -52,10 +57,12 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		Type: "images",
 	}
 
-	for _, v := range uploadedFiles {
+	for _, f := range uploadedFiles {
 		img, err := api.imageRegistry.Create(models.Image{
-			Path:        v,
+			Path:        f.FilePath,
+			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
+			MIMEType:    f.MIMEType,
 		})
 		if err != nil {
 			renderEntityError(w, r, err)
@@ -88,10 +95,12 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		Type: "manuals",
 	}
 
-	for _, v := range uploadedFiles {
+	for _, f := range uploadedFiles {
 		img, err := api.manualRegistry.Create(models.Manual{
-			Path:        v,
+			Path:        f.FilePath,
+			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
+			MIMEType:    f.MIMEType,
 		})
 		if err != nil {
 			renderEntityError(w, r, err)
@@ -124,10 +133,12 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		Type: "invoices",
 	}
 
-	for _, v := range uploadedFiles {
+	for _, f := range uploadedFiles {
 		img, err := api.invoiceRegistry.Create(models.Invoice{
-			Path:        v,
+			Path:        f.FilePath,
+			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
+			MIMEType:    f.MIMEType,
 		})
 		if err != nil {
 			renderEntityError(w, r, err)
@@ -153,7 +164,8 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 				return
 			}
 
-			var filePaths []string
+			var uploadedFiles []uploadedFile
+
 		loop:
 			for {
 				// Read the next part (file) in the multipart stream
@@ -174,7 +186,7 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 
 				// Generate the file path and open a new file
 				filename := filekit.UploadFileName(part.FileName())
-				err = api.saveFile(r.Context(), filename, part, allowedContentTypes) // TODO: make sure that the file is not too big
+				mimeType, err := api.saveFile(r.Context(), filename, part, allowedContentTypes) // TODO: make sure that the file is not too big
 				switch {
 				case errors.Is(err, mimekit.ErrInvalidContentType):
 					unprocessableEntityError(w, r, errkit.Wrap(err, "unsupported content type"))
@@ -183,25 +195,25 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 					internalServerError(w, r, errkit.Wrap(err, "unable to save file"))
 					return
 				}
-				filePaths = append(filePaths, filename)
+				uploadedFiles = append(uploadedFiles, uploadedFile{FilePath: filename, MIMEType: mimeType})
 			}
 
-			ctx := context.WithValue(r.Context(), uploadedFilesCtxKey, filePaths)
+			ctx := context.WithValue(r.Context(), uploadedFilesCtxKey, uploadedFiles)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
-func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) error {
+func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) (mimeType string, err error) {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
-		return errkit.Wrap(err, "failed to open bucket") // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
+		return "", errkit.Wrap(err, "failed to open bucket") // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
 	}
 	defer b.Close()
 
 	fw, err := b.NewWriter(ctx, filename, nil)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create a new writer")
+		return "", errkit.Wrap(err, "failed to create a new writer")
 	}
 	defer fw.Close()
 
@@ -209,10 +221,10 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 	_, err = io.Copy(fw, wrappedSrc)
 	if err != nil {
-		return errkit.ChainWrap(err, "failed when saving the file").WithField("filename", filename)
+		return "", errkit.ChainWrap(err, "failed when saving the file").WithField("filename", filename)
 	}
 
-	return nil
+	return wrappedSrc.MIMEType(), nil
 }
 
 func Uploads(params Params) func(r chi.Router) {

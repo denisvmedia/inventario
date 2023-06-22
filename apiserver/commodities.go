@@ -1,18 +1,24 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
+	"io"
+	"mime"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"gocloud.dev/blob"
 
+	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
 type commoditiesAPI struct {
+	uploadLocation    string
 	commodityRegistry registry.CommodityRegistry
 	imageRegistry     registry.ImageRegistry
 	manualRegistry    registry.ManualRegistry
@@ -52,7 +58,12 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp := jsonapi.NewCommodityResponse(commodity)
+	resp := jsonapi.NewCommodityResponse(commodity, &jsonapi.CommodityMeta{
+		Images:   api.commodityRegistry.GetImages(commodity.ID),
+		Manuals:  api.commodityRegistry.GetManuals(commodity.ID),
+		Invoices: api.commodityRegistry.GetInvoices(commodity.ID),
+	})
+
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -82,7 +93,11 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp := jsonapi.NewCommodityResponse(commodity).WithStatusCode(http.StatusCreated)
+	resp := jsonapi.NewCommodityResponse(commodity, &jsonapi.CommodityMeta{
+		Images:   api.commodityRegistry.GetImages(commodity.ID),
+		Manuals:  api.commodityRegistry.GetManuals(commodity.ID),
+		Invoices: api.commodityRegistry.GetInvoices(commodity.ID),
+	}).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -151,7 +166,12 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp := jsonapi.NewCommodityResponse(updatedCommodity).WithStatusCode(http.StatusOK)
+	resp := jsonapi.NewCommodityResponse(updatedCommodity, &jsonapi.CommodityMeta{
+		Images:   api.commodityRegistry.GetImages(commodity.ID),
+		Manuals:  api.commodityRegistry.GetManuals(commodity.ID),
+		Invoices: api.commodityRegistry.GetInvoices(commodity.ID),
+	}).WithStatusCode(http.StatusOK)
+
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -179,7 +199,7 @@ func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 	for _, id := range imageIDs {
 		img, err := api.imageRegistry.Get(id)
 		if err != nil {
-			unprocessableEntityError(w, r, nil)
+			renderEntityError(w, r, nil)
 			return
 		}
 		images = append(images, img)
@@ -213,7 +233,7 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 	for _, id := range invoiceIDs {
 		img, err := api.invoiceRegistry.Get(id)
 		if err != nil {
-			unprocessableEntityError(w, r, nil)
+			renderEntityError(w, r, nil)
 			return
 		}
 		invoices = append(invoices, img)
@@ -247,7 +267,7 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 	for _, id := range manualIDs {
 		img, err := api.manualRegistry.Get(id)
 		if err != nil {
-			unprocessableEntityError(w, r, nil)
+			renderEntityError(w, r, nil)
 			return
 		}
 		manuals = append(manuals, img)
@@ -377,13 +397,235 @@ func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// downloadImage downloads an image file for a commodity.
+// @Summary Download an image file for a commodity
+// @Description Download an image file for a commodity
+// @Tags commodities
+// @Accept octet-stream
+// @Produce octet-stream
+// @Param commodityID path string true "Commodity ID"
+// @Param imageID path string true "Image ID"
+// @Param imageExt path string true "Image Extension"
+// @Success 200 "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
+// @Router /commodities/{commodityID}/images/{imageID}.{imageExt} [get]
+func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request) {
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	imageID := chi.URLParam(r, "imageID")
+	image, err := api.imageRegistry.Get(imageID)
+	if err != nil || image.CommodityID != commodity.ID {
+		http.NotFound(w, r)
+		return
+	}
+
+	file, err := api.getDownloadFile(r.Context(), image.Path)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	defer file.Close()
+
+	w.Header().Set("Content-Type", mime.TypeByExtension(image.Ext))
+	w.Header().Set("Content-Disposition", "attachment; filename="+imageID+"."+image.Ext)
+
+	if _, err := io.Copy(w, file); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// downloadInvoice downloads an invoice file for a commodity.
+// @Summary Download an invoice file for a commodity
+// @Description Download an invoice file for a commodity
+// @Tags commodities
+// @Accept octet-stream
+// @Produce octet-stream
+// @Param commodityID path string true "Commodity ID"
+// @Param invoiceID path string true "Invoice ID"
+// @Param invoiceExt path string true "Invoice Extension"
+// @Success 200 "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
+// @Router /commodities/{commodityID}/invoices/{invoiceID}.{invoiceExt} [get]
+func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Request) {
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	invoiceID := chi.URLParam(r, "invoiceID")
+	invoice, err := api.invoiceRegistry.Get(invoiceID)
+	if err != nil || invoice.CommodityID != commodity.ID {
+		http.NotFound(w, r)
+		return
+	}
+
+	file, err := api.getDownloadFile(r.Context(), invoice.Path)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	defer file.Close()
+
+	w.Header().Set("Content-Type", mime.TypeByExtension(invoice.Ext))
+	w.Header().Set("Content-Disposition", "attachment; filename="+invoiceID+"."+invoice.Ext)
+
+	if _, err := io.Copy(w, file); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// downloadManual downloads a manual file for a commodity.
+// @Summary Download a manual file for a commodity
+// @Description Download a manual file for a commodity
+// @Tags commodities
+// @Accept octet-stream
+// @Produce octet-stream
+// @Param commodityID path string true "Commodity ID"
+// @Param manualID path string true "Manual ID"
+// @Param manualExt path string true "Manual Extension"
+// @Success 200 "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
+// @Router /commodities/{commodityID}/manuals/{manualID}.{manualExt} [get]
+func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request) {
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	manualID := chi.URLParam(r, "manualID")
+	manual, err := api.manualRegistry.Get(manualID)
+	if err != nil || manual.CommodityID != commodity.ID {
+		http.NotFound(w, r)
+		return
+	}
+
+	file, err := api.getDownloadFile(r.Context(), manual.Path)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	defer file.Close()
+
+	w.Header().Set("Content-Type", mime.TypeByExtension(manual.Ext))
+	w.Header().Set("Content-Disposition", "attachment; filename="+manualID+"."+manual.Ext)
+
+	if _, err := io.Copy(w, file); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+func (api *commoditiesAPI) getDownloadFile(ctx context.Context, path string) (io.ReadCloser, error) {
+	b, err := blob.OpenBucket(ctx, api.uploadLocation)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to open bucket")
+	}
+	defer b.Close()
+
+	return b.NewReader(context.Background(), path, nil)
+}
+
+// getImageData retrieves data of an image for a commodity.
+// @Summary Get image data
+// @Description get data of an image for a commodity
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param commodityID path string true "Commodity ID"
+// @Param imageID path string true "Image ID"
+// @Success 200 {object} jsonapi.ImageResponse "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
+// @Router /commodities/{commodityID}/images/{imageID} [get]
+func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	imageID := chi.URLParam(r, "imageID")
+
+	image, err := api.imageRegistry.Get(imageID)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	response := jsonapi.NewImageResponse(image)
+
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// getInvoiceData retrieves data of an invoice for a commodity.
+// @Summary Get invoice data
+// @Description get data of an invoice for a commodity
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param commodityID path string true "Commodity ID"
+// @Param invoiceID path string true "Invoice ID"
+// @Success 200 {object} jsonapi.InvoiceResponse "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
+// @Router /commodities/{commodityID}/invoices/{invoiceID} [get]
+func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	invoiceID := chi.URLParam(r, "invoiceID")
+
+	invoice, err := api.invoiceRegistry.Get(invoiceID)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	response := jsonapi.NewInvoiceResponse(invoice)
+
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// getManualsData retrieves data of a manual for a commodity.
+// @Summary Get manual data
+// @Description get data of a manual for a commodity
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param commodityID path string true "Commodity ID"
+// @Param manualID path string true "Manual ID"
+// @Success 200 {object} jsonapi.ManualResponse "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
+// @Router /commodities/{commodityID}/manuals/{manualID} [get]
+func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	manualID := chi.URLParam(r, "manualID")
+
+	manual, err := api.manualRegistry.Get(manualID)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	response := jsonapi.NewManualResponse(manual)
+
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 func Commodities(params Params) func(r chi.Router) {
 	api := &commoditiesAPI{
+		uploadLocation:    params.UploadLocation,
 		commodityRegistry: params.CommodityRegistry,
 		imageRegistry:     params.ImageRegistry,
 		invoiceRegistry:   params.InvoiceRegistry,
 		manualRegistry:    params.ManualRegistry,
 	}
+
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listCommodities) // GET /commodities
 		r.Route("/{commodityID}", func(r chi.Router) {
@@ -400,6 +642,14 @@ func Commodities(params Params) func(r chi.Router) {
 
 			r.Get("/manuals", api.listManuals)                // GET /commodities/123/manuals
 			r.Delete("/manuals/{manualID}", api.deleteManual) // DELETE /commodities/123/manuals/abc
+
+			r.Get("/images/{imageID}.{imageExt}", api.downloadImage)         // GET /commodities/123/images/456.png
+			r.Get("/invoices/{invoiceID}.{invoiceExt}", api.downloadInvoice) // GET /commodities/123/invoices/789.pdf
+			r.Get("/manuals/{manualID}.{manualExt}", api.downloadManual)     // GET /commodities/123/manuals/abc.pdf
+
+			r.Get("/images/{imageID}", api.getImageData)       // GET /commodities/123/images/456
+			r.Get("/invoices/{invoiceID}", api.getInvoiceData) // GET /commodities/123/invoices/789
+			r.Get("/manuals/{manualID}", api.getManualsData)   // GET /commodities/123/manuals/abc
 		})
 		r.Post("/", api.createCommodity) // POST /commodities
 	}

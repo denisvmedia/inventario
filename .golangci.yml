@@ -128,3 +128,5 @@ issues:
 run:
   concurrency: 8
   go: '1.19'
+  skip-dirs:
+    - ^sample/
