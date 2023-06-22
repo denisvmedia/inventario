@@ -365,6 +365,7 @@ func TestCommodityListImages(t *testing.T) {
 	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedImages))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedImages[0].ID)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].path"), expectedImages[0].Path)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].ext"), expectedImages[0].Ext)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].commodity_id"), expectedImages[0].CommodityID)
 }
 
@@ -395,6 +396,7 @@ func TestCommodityListInvoices(t *testing.T) {
 	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedInvoices))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedInvoices[0].ID)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].path"), expectedInvoices[0].Path)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].ext"), expectedInvoices[0].Ext)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].commodity_id"), expectedInvoices[0].CommodityID)
 }
 
@@ -425,6 +427,7 @@ func TestCommodityListManuals(t *testing.T) {
 	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedManuals))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedManuals[0].ID)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].path"), expectedManuals[0].Path)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].ext"), expectedManuals[0].Ext)
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].commodity_id"), expectedManuals[0].CommodityID)
 }
 
@@ -483,6 +486,279 @@ func TestCommodityDeleteManual(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+func TestDownloadImage(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	expectedImage := must.Must(params.ImageRegistry.List())
+	commodity := expectedCommodities[0]
+	imageID := expectedImage[0].ID
+	imageExt := expectedImage[0].Ext
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images/"+imageID+"."+imageExt, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Header().Get("Content-Type"), qt.Equals, "image/jpeg")
+	c.Assert(rr.Body.Bytes(), qt.DeepEquals, []byte("image1"))
+}
+
+func TestDownloadImage_CommodityNotFound(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	imageID := "image-id"
+	imageExt := "png"
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/non-existent/images/"+imageID+"."+imageExt, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	// Assert the response body or other details as needed
+}
+
+func TestDownloadInvoice(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	expectedInvoices := must.Must(params.InvoiceRegistry.List())
+	commodity := expectedCommodities[0]
+	invoiceID := expectedInvoices[0].ID
+	invoiceExt := expectedInvoices[0].Ext
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices/"+invoiceID+"."+invoiceExt, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Header().Get("Content-Type"), qt.Equals, "application/pdf")
+	c.Assert(rr.Body.Bytes(), qt.DeepEquals, []byte("invoice1"))
+}
+
+func TestDownloadInvoice_CommodityNotFound(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	invoiceID := "invoice-id"
+	invoiceExt := "pdf"
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/non-existent/invoices/"+invoiceID+"."+invoiceExt, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	// Assert the response body or other details as needed
+}
+
+func TestDownloadManual(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	expectedManuals := must.Must(params.ManualRegistry.List())
+	commodity := expectedCommodities[0]
+	manualID := expectedManuals[0].ID
+	manualExt := expectedManuals[0].Ext
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+manualID+"."+manualExt, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Header().Get("Content-Type"), qt.Equals, "application/pdf")
+	c.Assert(rr.Body.Bytes(), qt.DeepEquals, []byte("manual1"))
+}
+
+func TestDownloadManual_CommodityNotFound(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	manualID := "manual-id"
+	manualExt := "pdf"
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/non-existent/manuals/"+manualID+"."+manualExt, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	// Assert the response body or other details as needed
+}
+
+func TestGetImageData(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	expectedImages := must.Must(params.ImageRegistry.List())
+	commodity := expectedCommodities[0]
+	imageID := expectedImages[0].ID
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images/"+imageID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+
+	expectedImage := must.Must(params.ImageRegistry.Get(imageID))
+
+	c.Assert(body, checkers.JSONPathEquals("$.type"), "images")
+	c.Assert(body, checkers.JSONPathEquals("$.id"), expectedImage.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.path"), expectedImage.Path)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.ext"), expectedImage.Ext)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.commodity_id"), expectedImage.CommodityID)
+}
+
+func TestGetImageData_ImageNotFound(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+	nonExistentImageID := "non-existent-image-id"
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images/"+nonExistentImageID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	// Assert the response body or other details as needed
+}
+
+func TestGetInvoiceData(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	expectedInvoices := must.Must(params.InvoiceRegistry.List())
+	commodity := expectedCommodities[0]
+	invoiceID := expectedInvoices[0].ID
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices/"+invoiceID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+
+	expectedInvoice := must.Must(params.InvoiceRegistry.Get(invoiceID))
+
+	c.Assert(body, checkers.JSONPathEquals("$.type"), "invoices")
+	c.Assert(body, checkers.JSONPathEquals("$.id"), expectedInvoice.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.path"), expectedInvoice.Path)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.ext"), expectedInvoice.Ext)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.commodity_id"), expectedInvoice.CommodityID)
+}
+
+func TestGetInvoiceData_InvoiceNotFound(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+	nonExistentInvoiceID := "non-existent-invoice-id"
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices/"+nonExistentInvoiceID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	// Assert the response body or other details as needed
+}
+
+func TestGetManualsData(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	expectedManuals := must.Must(params.ManualRegistry.List())
+	commodity := expectedCommodities[0]
+	manualID := expectedManuals[0].ID
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+manualID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+
+	expectedManual := must.Must(params.ManualRegistry.Get(manualID))
+
+	c.Assert(body, checkers.JSONPathEquals("$.type"), "manuals")
+	c.Assert(body, checkers.JSONPathEquals("$.id"), expectedManual.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.path"), expectedManual.Path)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.ext"), expectedManual.Ext)
+	c.Assert(body, checkers.JSONPathEquals("$.attributes.commodity_id"), expectedManual.CommodityID)
+}
+
+func TestGetManualsData_ManualNotFound(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedCommodities := must.Must(params.CommodityRegistry.List())
+	commodity := expectedCommodities[0]
+	nonExistentManualID := "non-existent-manual-id"
+
+	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+nonExistentManualID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	// Assert the response body or other details as needed
 }
 
 func getCommodityMeta(c *qt.C, params apiserver.Params) *jsonapi.CommodityMeta {

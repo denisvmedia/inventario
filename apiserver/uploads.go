@@ -18,10 +18,15 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+type uploadedFile struct {
+	FilePath string
+	MIMEType string
+}
+
 const uploadedFilesCtxKey ctxValueKey = "uploadedFiles"
 
-func uploadedFilesFromContext(ctx context.Context) [][]string {
-	uploadedFiles, ok := ctx.Value(uploadedFilesCtxKey).([][]string)
+func uploadedFilesFromContext(ctx context.Context) []uploadedFile {
+	uploadedFiles, ok := ctx.Value(uploadedFilesCtxKey).([]uploadedFile)
 	if !ok {
 		return nil
 	}
@@ -52,11 +57,12 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		Type: "images",
 	}
 
-	for _, v := range uploadedFiles {
+	for _, f := range uploadedFiles {
 		img, err := api.imageRegistry.Create(models.Image{
-			Path:        v[0],
-			Ext:         mimekit.ExtensionByMime(v[1]),
+			Path:        f.FilePath,
+			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
+			MIMEType:    f.MIMEType,
 		})
 		if err != nil {
 			renderEntityError(w, r, err)
@@ -89,11 +95,12 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		Type: "manuals",
 	}
 
-	for _, v := range uploadedFiles {
+	for _, f := range uploadedFiles {
 		img, err := api.manualRegistry.Create(models.Manual{
-			Path:        v[0],
-			Ext:         mimekit.ExtensionByMime(v[1]),
+			Path:        f.FilePath,
+			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
+			MIMEType:    f.MIMEType,
 		})
 		if err != nil {
 			renderEntityError(w, r, err)
@@ -126,11 +133,12 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		Type: "invoices",
 	}
 
-	for _, v := range uploadedFiles {
+	for _, f := range uploadedFiles {
 		img, err := api.invoiceRegistry.Create(models.Invoice{
-			Path:        v[0],
-			Ext:         mimekit.ExtensionByMime(v[1]),
+			Path:        f.FilePath,
+			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
+			MIMEType:    f.MIMEType,
 		})
 		if err != nil {
 			renderEntityError(w, r, err)
@@ -156,7 +164,8 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 				return
 			}
 
-			var filePaths [][]string // TODO: use a dedicated struct instead of a sub-slice
+			var uploadedFiles []uploadedFile
+
 		loop:
 			for {
 				// Read the next part (file) in the multipart stream
@@ -186,10 +195,10 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 					internalServerError(w, r, errkit.Wrap(err, "unable to save file"))
 					return
 				}
-				filePaths = append(filePaths, []string{filename, mimeType})
+				uploadedFiles = append(uploadedFiles, uploadedFile{FilePath: filename, MIMEType: mimeType})
 			}
 
-			ctx := context.WithValue(r.Context(), uploadedFilesCtxKey, filePaths)
+			ctx := context.WithValue(r.Context(), uploadedFilesCtxKey, uploadedFiles)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

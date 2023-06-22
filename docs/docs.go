@@ -102,7 +102,7 @@ const docTemplate = `{
                 "tags": [
                     "areas"
                 ],
-                "summary": "Get a area",
+                "summary": "Get an area",
                 "parameters": [
                     {
                         "type": "string",
@@ -183,7 +183,7 @@ const docTemplate = `{
                 "tags": [
                     "areas"
                 ],
-                "summary": "Delete a area",
+                "summary": "Delete an area",
                 "parameters": [
                     {
                         "type": "string",
@@ -199,6 +199,681 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Area not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities": {
+            "get": {
+                "description": "get commodities",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "List commodities",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommoditiesResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Add a new commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Create a new commodity",
+                "parameters": [
+                    {
+                        "description": "Commodity object",
+                        "name": "commodity",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Commodity created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/images": {
+            "get": {
+                "description": "get images for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "List images for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ImagesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/images/{imageID}": {
+            "get": {
+                "description": "get data of an image for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Get image data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "imageID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ImageResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity or image not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete an image for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Delete an image for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "imageID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Commodity or image not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/images/{imageID}.{imageExt}": {
+            "get": {
+                "description": "Download an image file for a commodity",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Download an image file for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "imageID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image Extension",
+                        "name": "imageExt",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Commodity or image not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/invoices": {
+            "get": {
+                "description": "get invoices for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "List invoices for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InvoicesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/invoices/{invoiceID}": {
+            "get": {
+                "description": "get data of an invoice for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Get invoice data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Invoice ID",
+                        "name": "invoiceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InvoiceResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity or invoice not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete an invoice for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Delete an invoice for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Invoice ID",
+                        "name": "invoiceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Commodity or invoice not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/invoices/{invoiceID}.{invoiceExt}": {
+            "get": {
+                "description": "Download an invoice file for a commodity",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Download an invoice file for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Invoice ID",
+                        "name": "invoiceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Invoice Extension",
+                        "name": "invoiceExt",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Commodity or invoice not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/manuals": {
+            "get": {
+                "description": "get manuals for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "List manuals for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ManualsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/manuals/{manualID}": {
+            "get": {
+                "description": "get data of a manual for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Get manual data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Manual ID",
+                        "name": "manualID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ManualResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity or manual not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a manual for a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Delete a manual for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Manual ID",
+                        "name": "manualID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Commodity or manual not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{commodityID}/manuals/{manualID}.{manualExt}": {
+            "get": {
+                "description": "Download a manual file for a commodity",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Download a manual file for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Manual ID",
+                        "name": "manualID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Manual Extension",
+                        "name": "manualExt",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Commodity or manual not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/commodities/{id}": {
+            "get": {
+                "description": "get commodity by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Get a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update a commodity",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Update a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Commodity object",
+                        "name": "commodity",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a commodity by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Delete a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Commodity not found",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -441,9 +1116,89 @@ const docTemplate = `{
                 }
             }
         },
-        "jsonapi.UserError": {
+        "jsonapi.CommoditiesMeta": {
             "type": "object",
             "properties": {
+                "commodities": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.CommoditiesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Commodity"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommoditiesMeta"
+                }
+            }
+        },
+        "jsonapi.CommodityMeta": {
+            "type": "object",
+            "properties": {
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "invoices": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "manuals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.CommodityRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/models.Commodity"
+                }
+            }
+        },
+        "jsonapi.CommodityResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Commodity"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityMeta"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodities"
+                    ],
+                    "example": "commodities"
+                }
+            }
+        },
+        "jsonapi.Error": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "description": "user-level error message",
+                    "type": "object"
+                },
                 "status": {
                     "description": "user-level status message",
                     "type": "string"
@@ -456,8 +1211,112 @@ const docTemplate = `{
                 "errors": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/jsonapi.UserError"
+                        "$ref": "#/definitions/jsonapi.Error"
                     }
+                }
+            }
+        },
+        "jsonapi.ImageResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Image"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "images"
+                    ],
+                    "example": "images"
+                }
+            }
+        },
+        "jsonapi.ImagesMeta": {
+            "type": "object",
+            "properties": {
+                "images": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.ImagesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Image"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ImagesMeta"
+                }
+            }
+        },
+        "jsonapi.InvoiceResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Invoice"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "invoices"
+                    ],
+                    "example": "invoices"
+                }
+            }
+        },
+        "jsonapi.InvoicesMeta": {
+            "type": "object",
+            "properties": {
+                "invoices": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.InvoicesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Invoice"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.InvoicesMeta"
+                }
+            }
+        },
+        "jsonapi.Location": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "areas": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -473,7 +1332,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "attributes": {
-                    "$ref": "#/definitions/models.Location"
+                    "$ref": "#/definitions/jsonapi.Location"
                 },
                 "id": {
                     "type": "string"
@@ -511,6 +1370,48 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.ManualResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Manual"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "manuals"
+                    ],
+                    "example": "manuals"
+                }
+            }
+        },
+        "jsonapi.ManualsMeta": {
+            "type": "object",
+            "properties": {
+                "manuals": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.ManualsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Manual"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ManualsMeta"
+                }
+            }
+        },
         "models.Area": {
             "type": "object",
             "properties": {
@@ -525,6 +1426,157 @@ const docTemplate = `{
                 }
             }
         },
+        "models.Commodity": {
+            "type": "object",
+            "properties": {
+                "area_id": {
+                    "type": "string"
+                },
+                "comments": {
+                    "type": "string"
+                },
+                "converted_original_price": {
+                    "type": "number"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "current_price": {
+                    "type": "number"
+                },
+                "draft": {
+                    "type": "boolean"
+                },
+                "extra_serial_numbers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_modified_date": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "original_price": {
+                    "type": "number"
+                },
+                "original_price_currency": {
+                    "type": "string"
+                },
+                "part_numbers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "purchase_date": {
+                    "type": "string"
+                },
+                "registered_date": {
+                    "type": "string"
+                },
+                "serial_number": {
+                    "type": "string"
+                },
+                "short_name": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.CommodityStatus"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "$ref": "#/definitions/models.CommodityType"
+                },
+                "urls": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.CommodityStatus": {
+            "type": "string",
+            "enum": [
+                "in_use",
+                "sold",
+                "lost",
+                "disposed",
+                "written_off"
+            ],
+            "x-enum-varnames": [
+                "CommodityStatusInUse",
+                "CommodityStatusSold",
+                "CommodityStatusLost",
+                "CommodityStatusDisposed",
+                "CommodityStatusWrittenOff"
+            ]
+        },
+        "models.CommodityType": {
+            "type": "string",
+            "enum": [
+                "white_goods",
+                "electronics",
+                "furniture",
+                "clothes",
+                "other"
+            ],
+            "x-enum-varnames": [
+                "CommodityTypeWhiteGoods",
+                "CommodityTypeElectronics",
+                "CommodityTypeFurniture",
+                "CommodityTypeClothes",
+                "CommodyTypeOther"
+            ]
+        },
+        "models.Image": {
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "type": "string"
+                },
+                "ext": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Invoice": {
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "type": "string"
+                },
+                "ext": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Location": {
             "type": "object",
             "properties": {
@@ -535,6 +1587,26 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Manual": {
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "type": "string"
+                },
+                "ext": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "path": {
                     "type": "string"
                 }
             }

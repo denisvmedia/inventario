@@ -5,8 +5,8 @@ import (
 	"io"
 	"log"
 	"mime"
-	"net/http"
 
+	"github.com/gabriel-vasile/mimetype"
 	"golang.org/x/exp/slices"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -71,12 +71,12 @@ func (mr *MIMEReader) Read(p []byte) (n int, err error) {
 	switch {
 	case err == io.EOF || (mr.read >= sniffLen && mr.buf.Len() > 0):
 		defer mr.buf.Reset()
-		ct := http.DetectContentType(mr.buf.Bytes())
-		mt, _, _ := mime.ParseMediaType(ct)
+		mtype := mimetype.Detect(mr.buf.Bytes())
+		mt, _, _ := mime.ParseMediaType(mtype.String())
 		if mt == "" || !slices.Contains(mr.allowedContentTypes, mt) {
 			mr.err = errkit.WithFields(ErrInvalidContentType, errkit.Fields{
 				"expected": mr.allowedContentTypes,
-				"detected": ct,
+				"detected": mtype,
 				"parsed":   mt,
 			})
 			log.Printf("=================== Invalid MIME: %s", mr.err.Error())
