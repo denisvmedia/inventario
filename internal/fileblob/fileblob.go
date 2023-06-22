@@ -295,7 +295,7 @@ func (b *bucket) Close() error {
 }
 
 // escapeKey does all required escaping for UTF-8 strings to work the filesystem.
-func escapeKey(s string) string {
+func escapeKey(s string) string { //nolint:gocognit,gocyclo // external file source
 	s = escape.HexEscape(s, func(r []rune, i int) bool {
 		c := r[i]
 		switch {
@@ -323,7 +323,7 @@ func escapeKey(s string) string {
 	// Replace "/" with os.PathSeparator if needed, so that the local filesystem
 	// can use subdirectories.
 	if os.PathSeparator != '/' {
-		s = strings.Replace(s, "/", string(os.PathSeparator), -1)
+		s = strings.Replace(s, "/", string(os.PathSeparator), -1) //nolint:gocritic // external file source
 	}
 	return s
 }
@@ -331,7 +331,7 @@ func escapeKey(s string) string {
 // unescapeKey reverses escapeKey.
 func unescapeKey(s string) string {
 	if os.PathSeparator != '/' {
-		s = strings.Replace(s, string(os.PathSeparator), "/", -1)
+		s = strings.Replace(s, string(os.PathSeparator), "/", -1) //nolint:gocritic // external file source
 	}
 	s = escape.HexUnescape(s)
 	return s
@@ -376,8 +376,7 @@ func (b *bucket) forKey(key string) (string, os.FileInfo, *xattrs, error) {
 }
 
 // ListPaged implements driver.ListPaged.
-func (b *bucket) ListPaged(ctx context.Context, opts *driver.ListOptions) (*driver.ListPage, error) {
-
+func (b *bucket) ListPaged(ctx context.Context, opts *driver.ListOptions) (*driver.ListPage, error) { //nolint:gocognit,gocyclo // external file source
 	var pageToken string
 	if len(opts.PageToken) > 0 {
 		pageToken = string(opts.PageToken)

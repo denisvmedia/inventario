@@ -411,26 +411,28 @@ func TestOpenBucketFromURL(t *testing.T) {
 
 	ctx := context.Background()
 	for i, test := range tests {
-		b, err := blob.OpenBucket(ctx, test.URL)
-		if b != nil {
-			defer b.Close()
-		}
-		if (err != nil) != test.WantErr {
-			t.Errorf("#%d: %s: got error %v, want error %v", i, test.URL, err, test.WantErr)
-		}
-		if err != nil {
-			continue
-		}
-		got, err := b.ReadAll(ctx, test.Key)
-		if (err != nil) != test.WantReadErr {
-			t.Errorf("%s: got read error %v, want error %v", test.URL, err, test.WantReadErr)
-		}
-		if err != nil {
-			continue
-		}
-		if string(got) != test.Want {
-			t.Errorf("%s: got %q want %q", test.URL, got, test.Want)
-		}
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			b, err := blob.OpenBucket(ctx, test.URL)
+			if b != nil {
+				defer b.Close()
+			}
+			if (err != nil) != test.WantErr {
+				t.Errorf("#%d: %s: got error %v, want error %v", i, test.URL, err, test.WantErr)
+			}
+			if err != nil {
+				return
+			}
+			got, err := b.ReadAll(ctx, test.Key)
+			if (err != nil) != test.WantReadErr {
+				t.Errorf("%s: got read error %v, want error %v", test.URL, err, test.WantReadErr)
+			}
+			if err != nil {
+				return
+			}
+			if string(got) != test.Want {
+				t.Errorf("%s: got %q want %q", test.URL, got, test.Want)
+			}
+		})
 	}
 }
 
@@ -494,27 +496,29 @@ func TestSkipMetadata(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	for _, test := range tests {
-		b, err := blob.OpenBucket(ctx, test.URL)
-		if b != nil {
-			defer b.Close()
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			b, err := blob.OpenBucket(ctx, test.URL)
+			if b != nil {
+				defer b.Close()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		err = b.WriteAll(ctx, "key", []byte("hello world"), &blob.WriterOptions{
-			ContentType: "text/plain",
+			err = b.WriteAll(ctx, "key", []byte("hello world"), &blob.WriterOptions{
+				ContentType: "text/plain",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = os.Stat(filepath.Join(dir, "key"+attrsExt))
+			if gotSidecar := !errors.Is(err, os.ErrNotExist); test.wantSidecar != gotSidecar {
+				t.Errorf("Metadata sidecar file (extension %s) exists: %v, did we want it: %v",
+					attrsExt, gotSidecar, test.wantSidecar)
+			}
+			b.Delete(ctx, "key")
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, err = os.Stat(filepath.Join(dir, "key"+attrsExt))
-		if gotSidecar := !errors.Is(err, os.ErrNotExist); test.wantSidecar != gotSidecar {
-			t.Errorf("Metadata sidecar file (extension %s) exists: %v, did we want it: %v",
-				attrsExt, gotSidecar, test.wantSidecar)
-		}
-		b.Delete(ctx, "key")
 	}
 }
