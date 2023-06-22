@@ -544,7 +544,7 @@ func (api *commoditiesAPI) getDownloadFile(ctx context.Context, path string) (io
 // @Success 200 {object} jsonapi.ImageResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
 // @Router /commodities/{commodityID}/images/{imageID} [get]
-func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) {
+func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	imageID := chi.URLParam(r, "imageID")
 
 	image, err := api.imageRegistry.Get(imageID)
@@ -572,7 +572,7 @@ func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) 
 // @Success 200 {object} jsonapi.InvoiceResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
 // @Router /commodities/{commodityID}/invoices/{invoiceID} [get]
-func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request) {
+func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	invoiceID := chi.URLParam(r, "invoiceID")
 
 	invoice, err := api.invoiceRegistry.Get(invoiceID)
@@ -600,7 +600,7 @@ func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request
 // @Success 200 {object} jsonapi.ManualResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
 // @Router /commodities/{commodityID}/manuals/{manualID} [get]
-func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request) {
+func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	manualID := chi.URLParam(r, "manualID")
 
 	manual, err := api.manualRegistry.Get(manualID)
