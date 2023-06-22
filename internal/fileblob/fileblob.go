@@ -459,7 +459,7 @@ func (b *bucket) ListPaged(ctx context.Context, opts *driver.ListOptions) (*driv
 		if err != nil {
 			return err
 		}
-		asFunc := func(i interface{}) bool {
+		asFunc := func(i any) bool {
 			p, ok := i.(*os.FileInfo)
 			if !ok {
 				return false
@@ -536,7 +536,7 @@ func (b *bucket) ListPaged(ctx context.Context, opts *driver.ListOptions) (*driv
 }
 
 // As implements driver.As.
-func (b *bucket) As(i interface{}) bool {
+func (b *bucket) As(i any) bool {
 	p, ok := i.(*os.FileInfo)
 	if !ok {
 		return false
@@ -550,7 +550,7 @@ func (b *bucket) As(i interface{}) bool {
 }
 
 // ErrorAs implements driver.ErrorAs.
-func (b *bucket) ErrorAs(err error, i interface{}) bool {
+func (b *bucket) ErrorAs(err error, i any) bool {
 	if perr, ok := err.(*os.PathError); ok {
 		if p, ok := i.(**os.PathError); ok {
 			*p = perr
@@ -578,7 +578,7 @@ func (b *bucket) Attributes(ctx context.Context, key string) (*driver.Attributes
 		Size:    info.Size(),
 		MD5:     xa.MD5,
 		ETag:    fmt.Sprintf("\"%x-%x\"", info.ModTime().UnixNano(), info.Size()),
-		AsFunc: func(i interface{}) bool {
+		AsFunc: func(i any) bool {
 			p, ok := i.(*os.FileInfo)
 			if !ok {
 				return false
@@ -600,7 +600,7 @@ func (b *bucket) NewRangeReader(ctx context.Context, key string, offset, length 
 		return nil, err
 	}
 	if opts.BeforeRead != nil {
-		if err := opts.BeforeRead(func(i interface{}) bool {
+		if err := opts.BeforeRead(func(i any) bool {
 			p, ok := i.(*afero.File)
 			if !ok {
 				return false
@@ -655,7 +655,7 @@ func (r *reader) Attributes() *driver.ReaderAttributes {
 	return &r.attrs
 }
 
-func (r *reader) As(i interface{}) bool {
+func (r *reader) As(i any) bool {
 	p, ok := i.(*io.Reader)
 	if !ok {
 		return false
@@ -701,7 +701,7 @@ func (b *bucket) NewTypedWriter(ctx context.Context, key string, contentType str
 		return nil, err
 	}
 	if opts.BeforeWrite != nil {
-		if err := opts.BeforeWrite(func(i interface{}) bool {
+		if err := opts.BeforeWrite(func(i any) bool {
 			p, ok := i.(*afero.File)
 			if !ok {
 				return false
@@ -903,7 +903,7 @@ func (b *bucket) SignedURL(ctx context.Context, key string, opts *driver.SignedU
 		return "", gcerr.New(gcerr.Unimplemented, nil, 1, "fileblob.SignedURL: bucket does not have an Options.URLSigner")
 	}
 	if opts.BeforeSign != nil {
-		if err := opts.BeforeSign(func(interface{}) bool { return false }); err != nil {
+		if err := opts.BeforeSign(func(any) bool { return false }); err != nil {
 			return "", err
 		}
 	}

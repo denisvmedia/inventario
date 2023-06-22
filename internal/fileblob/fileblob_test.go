@@ -280,29 +280,29 @@ func (verifyAs) BucketCheck(b *blob.Bucket) error {
 	}
 	return nil
 }
-func (verifyAs) BeforeRead(as func(interface{}) bool) error {
+func (verifyAs) BeforeRead(as func(any) bool) error {
 	var f afero.File
 	if !as(&f) {
 		return errors.New("BeforeRead.As failed")
 	}
 	return nil
 }
-func (verifyAs) BeforeWrite(as func(interface{}) bool) error {
+func (verifyAs) BeforeWrite(as func(any) bool) error {
 	var f afero.File
 	if !as(&f) {
 		return errors.New("BeforeWrite.As failed")
 	}
 	return nil
 }
-func (verifyAs) BeforeCopy(as func(interface{}) bool) error {
+func (verifyAs) BeforeCopy(as func(any) bool) error {
 	var f afero.File
 	if !as(&f) {
 		return errors.New("BeforeCopy.As failed")
 	}
 	return nil
 }
-func (verifyAs) BeforeList(as func(interface{}) bool) error { return nil }
-func (verifyAs) BeforeSign(as func(interface{}) bool) error { return nil }
+func (verifyAs) BeforeList(as func(any) bool) error { return nil }
+func (verifyAs) BeforeSign(as func(any) bool) error { return nil }
 func (verifyAs) AttributesCheck(attrs *blob.Attributes) error {
 	var fi os.FileInfo
 	if !attrs.As(&fi) {

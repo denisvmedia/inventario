@@ -51,7 +51,7 @@ func Example_openBucketFromURL() {
 	// Create a temporary directory.
 	dir, err := afero.TempDir(fs, "", "go-cloud-fileblob-example")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) //nolint:exitAfterDefer
 	}
 	defer fs.RemoveAll(dir)
 
