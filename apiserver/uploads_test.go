@@ -40,7 +40,9 @@ func TestUploads(t *testing.T) {
 				images, err := params.ImageRegistry.List()
 				c.Assert(err, qt.IsNil)
 				c.Assert(images, qt.HasLen, expectedLen)
-				c.Assert(images[expectedLen-1].Path, qt.Not(qt.Equals), "")
+				c.Assert(images[expectedLen-1].Path, qt.Matches, `image-\d+\.jpg`)
+				c.Assert(images[expectedLen-1].Ext, qt.Equals, ".jpg")
+				c.Assert(images[expectedLen-1].MIMEType, qt.Equals, "image/jpeg")
 				c.Assert(images[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
 			},
 		},
@@ -58,7 +60,9 @@ func TestUploads(t *testing.T) {
 				manuals, err := params.ManualRegistry.List()
 				c.Assert(err, qt.IsNil)
 				c.Assert(manuals, qt.HasLen, expectedLen)
-				c.Assert(manuals[expectedLen-1].Path, qt.Not(qt.Equals), "")
+				c.Assert(manuals[expectedLen-1].Path, qt.Matches, `manual-\d+\.pdf`)
+				c.Assert(manuals[expectedLen-1].Ext, qt.Equals, ".pdf")
+				c.Assert(manuals[expectedLen-1].MIMEType, qt.Equals, "application/pdf")
 				c.Assert(manuals[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
 			},
 		},
@@ -76,7 +80,9 @@ func TestUploads(t *testing.T) {
 				invoices, err := params.InvoiceRegistry.List()
 				c.Assert(err, qt.IsNil)
 				c.Assert(invoices, qt.HasLen, expectedLen)
-				c.Assert(invoices[expectedLen-1].Path, qt.Not(qt.Equals), "")
+				c.Assert(invoices[expectedLen-1].Path, qt.Matches, `invoice-\d+\.pdf`)
+				c.Assert(invoices[expectedLen-1].Ext, qt.Equals, ".pdf")
+				c.Assert(invoices[expectedLen-1].MIMEType, qt.Equals, "application/pdf")
 				c.Assert(invoices[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
 			},
 		},

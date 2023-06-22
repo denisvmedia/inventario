@@ -104,7 +104,7 @@ type Commodity struct {
 	ID                     string          `json:"id"`
 	Name                   string          `json:"name"`
 	ShortName              string          `json:"short_name"`
-	URLs                   []*URL          `json:"urls"`
+	URLs                   []*URL          `json:"urls" swaggertype:"string"`
 	Type                   CommodityType   `json:"type"`
 	AreaID                 string          `json:"area_id"`
 	Count                  int             `json:"count"`
@@ -116,9 +116,6 @@ type Commodity struct {
 	ExtraSerialNumbers     []string        `json:"extra_serial_numbers"`
 	PartNumbers            []string        `json:"part_numbers"`
 	Tags                   []string        `json:"tags"`
-	ImageIDs               []string        `json:"image_ids"`
-	ManualIDs              []string        `json:"manual_ids"`
-	InvoiceIDs             []string        `json:"invoice_ids"`
 	Status                 CommodityStatus `json:"status"`
 	PurchaseDate           string          `json:"purchase_date"`
 	RegisteredDate         string          `json:"registered_date"`
@@ -163,41 +160,47 @@ func (a *Commodity) UnmarshalJSON(data []byte) error {
 type Image struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`
+	Ext         string `json:"ext"`
 	CommodityID string `json:"commodity_id"`
+	MIMEType    string `json:"mime_type"`
 }
 
-func (a *Image) GetID() string {
-	return a.ID
+func (i *Image) GetID() string {
+	return i.ID
 }
 
-func (a *Image) SetID(id string) {
-	a.ID = id
+func (i *Image) SetID(id string) {
+	i.ID = id
 }
 
 type Manual struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`
+	Ext         string `json:"ext"`
 	CommodityID string `json:"commodity_id"`
+	MIMEType    string `json:"mime_type"`
 }
 
-func (a *Manual) GetID() string {
-	return a.ID
+func (m *Manual) GetID() string {
+	return m.ID
 }
 
-func (a *Manual) SetID(id string) {
-	a.ID = id
+func (m *Manual) SetID(id string) {
+	m.ID = id
 }
 
 type Invoice struct {
 	ID          string `json:"id"`
 	Path        string `json:"path"`
+	Ext         string `json:"ext"`
 	CommodityID string `json:"commodity_id"`
+	MIMEType    string `json:"mime_type"`
 }
 
-func (a *Invoice) GetID() string {
-	return a.ID
+func (i *Invoice) GetID() string {
+	return i.ID
 }
 
-func (a *Invoice) SetID(id string) {
-	a.ID = id
+func (i *Invoice) SetID(id string) {
+	i.ID = id
 }
