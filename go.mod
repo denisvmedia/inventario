@@ -3,15 +3,17 @@ module github.com/denisvmedia/inventario
 go 1.20
 
 require (
-	github.com/frankban/quicktest v1.14.4
+	github.com/frankban/quicktest v1.14.5
 	github.com/gabriel-vasile/mimetype v1.4.2
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/render v1.0.2
 	github.com/go-extras/go-kit v1.0.0
 	github.com/google/uuid v1.3.0
+	github.com/googleapis/gax-go/v2 v2.8.0
 	github.com/jellydator/validation v1.1.0
 	github.com/shopspring/decimal v1.3.1
 	github.com/sirupsen/logrus v1.9.3
+	github.com/spf13/afero v1.9.5
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.16.0
 	github.com/swaggo/http-swagger v1.3.4
@@ -19,6 +21,8 @@ require (
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
 	gocloud.dev v0.29.0
 	golang.org/x/exp v0.0.0-20230124195608-d38c7dcee874
+	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
+	google.golang.org/grpc v1.55.0
 )
 
 require (
@@ -68,7 +72,6 @@ require (
 	github.com/google/s2a-go v0.1.3 // indirect
 	github.com/google/wire v0.5.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
-	github.com/googleapis/gax-go/v2 v2.8.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
@@ -82,7 +85,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
-	github.com/spf13/afero v1.9.5 // indirect
 	github.com/spf13/cast v1.5.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
@@ -95,11 +97,9 @@ require (
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/tools v0.7.0 // indirect
-	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.122.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
-	google.golang.org/grpc v1.55.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
