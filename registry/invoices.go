@@ -26,7 +26,7 @@ func NewMemoryInvoiceRegistry(commodityRegistry CommodityRegistry) *MemoryInvoic
 }
 
 func (r *MemoryInvoiceRegistry) Create(invoice models.Invoice) (*models.Invoice, error) {
-	err := validation.Validate(invoice)
+	err := validation.Validate(&invoice)
 	if err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
 	}

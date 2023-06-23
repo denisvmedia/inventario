@@ -36,16 +36,19 @@ type MemoryRegistry[T any] struct {
 }
 
 func NewMemoryRegistry[T any]() *MemoryRegistry[T] {
+	var item T
+	_, ok := (any)(&item).(idable)
+	if !ok {
+		panic("registry: T must implement idable interface")
+	}
+
 	return &MemoryRegistry[T]{
 		items: orderedmap.New[T](),
 	}
 }
 
 func (r *MemoryRegistry[T]) Create(item T) (*T, error) {
-	iitem, ok := (any)(&item).(idable)
-	if !ok {
-		return nil, ErrNotIDable
-	}
+	iitem := (any)(&item).(idable) //nolint:errcheck // checked in NewMemoryRegistry
 	iitem.SetID(uuid.New().String())
 	r.items.Set(iitem.GetID(), item)
 
@@ -69,11 +72,7 @@ func (r *MemoryRegistry[T]) List() ([]T, error) {
 }
 
 func (r *MemoryRegistry[T]) Update(item T) (*T, error) {
-	iitem, ok := (any)(&item).(idable)
-	if !ok {
-		return nil, ErrNotIDable
-	}
-
+	iitem := (any)(&item).(idable) //nolint:errcheck // checked in NewMemoryRegistry
 	if _, ok := r.items.Get(iitem.GetID()); !ok {
 		return nil, ErrNotFound
 	}

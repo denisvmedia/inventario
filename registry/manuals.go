@@ -26,7 +26,7 @@ func NewMemoryManualRegistry(commodityRegistry CommodityRegistry) *MemoryManualR
 }
 
 func (r *MemoryManualRegistry) Create(manual models.Manual) (*models.Manual, error) {
-	err := validation.Validate(manual)
+	err := validation.Validate(&manual)
 	if err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
 	}
