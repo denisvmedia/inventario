@@ -64,20 +64,20 @@ func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.Commodity
 	areas := must.Must(areaRegistry.List())
 
 	must.Must(commodityRegistry.Create(models.Commodity{
-		ID:            "1",
 		Name:          "Commodity 1",
 		ShortName:     "C1",
 		AreaID:        areas[0].ID,
 		Type:          models.CommodityTypeFurniture,
+		Status:        models.CommodityStatusInUse,
 		Count:         10,
 		OriginalPrice: must.Must(decimal.NewFromString("2000.00")),
 	}))
 
 	must.Must(commodityRegistry.Create(models.Commodity{
-		ID:            "2",
 		Name:          "Commodity 2",
 		ShortName:     "C2",
 		AreaID:        areas[0].ID,
+		Status:        models.CommodityStatusInUse,
 		Type:          models.CommodityTypeElectronics,
 		Count:         5,
 		OriginalPrice: must.Must(decimal.NewFromString("1500.00")),
@@ -99,11 +99,12 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 	}
 
 	must.Must(imageRegistry.Create(models.Image{
-		ID:          "img1",
-		Path:        "image1.jpg",
-		Ext:         ".jpg",
-		MIMEType:    "image/jpeg",
 		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:     "image1.jpg",
+			Ext:      ".jpg",
+			MIMEType: "image/jpeg",
+		},
 	}))
 
 	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
@@ -114,11 +115,12 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 	}
 
 	must.Must(imageRegistry.Create(models.Image{
-		ID:          "img2",
-		Path:        "image2.jpg",
-		Ext:         ".jpg",
-		MIMEType:    "image/jpeg",
 		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:     "image2.jpg",
+			Ext:      ".jpg",
+			MIMEType: "image/jpeg",
+		},
 	}))
 
 	return imageRegistry
@@ -137,11 +139,12 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 	}
 
 	must.Must(invoiceRegistry.Create(models.Invoice{
-		ID:          "inv1",
-		Path:        "invoice1.pdf",
-		Ext:         ".pdf",
-		MIMEType:    "application/pdf",
 		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:     "invoice1.pdf",
+			Ext:      ".pdf",
+			MIMEType: "application/pdf",
+		},
 	}))
 
 	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
@@ -152,11 +155,12 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 	}
 
 	must.Must(invoiceRegistry.Create(models.Invoice{
-		ID:          "inv2",
-		Path:        "invoice2.pdf",
-		Ext:         ".pdf",
-		MIMEType:    "application/pdf",
 		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:     "invoice2.pdf",
+			Ext:      ".pdf",
+			MIMEType: "application/pdf",
+		},
 	}))
 
 	return invoiceRegistry
@@ -175,11 +179,12 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 	}
 
 	must.Must(manualRegistry.Create(models.Manual{
-		ID:          "man1",
-		Path:        "manual1.pdf",
-		Ext:         ".pdf",
-		MIMEType:    "application/pdf",
 		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:     "manual1.pdf",
+			Ext:      ".pdf",
+			MIMEType: "application/pdf",
+		},
 	}))
 
 	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
@@ -190,11 +195,12 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 	}
 
 	must.Must(manualRegistry.Create(models.Manual{
-		ID:          "man2",
-		Path:        "manual2.pdf",
-		Ext:         ".pdf",
-		MIMEType:    "application/pdf",
 		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:     "manual2.pdf",
+			Ext:      ".pdf",
+			MIMEType: "application/pdf",
+		},
 	}))
 
 	return manualRegistry

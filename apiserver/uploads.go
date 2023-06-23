@@ -59,10 +59,12 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 
 	for _, f := range uploadedFiles {
 		img, err := api.imageRegistry.Create(models.Image{
-			Path:        f.FilePath,
-			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
-			MIMEType:    f.MIMEType,
+			File: &models.File{
+				Path:     f.FilePath,
+				Ext:      mimekit.ExtensionByMime(f.MIMEType),
+				MIMEType: f.MIMEType,
+			},
 		})
 		if err != nil {
 			renderEntityError(w, r, err)
@@ -97,10 +99,12 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 
 	for _, f := range uploadedFiles {
 		img, err := api.manualRegistry.Create(models.Manual{
-			Path:        f.FilePath,
-			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
-			MIMEType:    f.MIMEType,
+			File: &models.File{
+				Path:     f.FilePath,
+				Ext:      mimekit.ExtensionByMime(f.MIMEType),
+				MIMEType: f.MIMEType,
+			},
 		})
 		if err != nil {
 			renderEntityError(w, r, err)
@@ -135,10 +139,12 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 
 	for _, f := range uploadedFiles {
 		img, err := api.invoiceRegistry.Create(models.Invoice{
-			Path:        f.FilePath,
-			Ext:         mimekit.ExtensionByMime(f.MIMEType),
 			CommodityID: entityID,
-			MIMEType:    f.MIMEType,
+			File: &models.File{
+				Path:     f.FilePath,
+				Ext:      mimekit.ExtensionByMime(f.MIMEType),
+				MIMEType: f.MIMEType,
+			},
 		})
 		if err != nil {
 			renderEntityError(w, r, err)

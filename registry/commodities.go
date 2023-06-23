@@ -49,7 +49,7 @@ func NewMemoryCommodityRegistry(areaRegistry AreaRegistry) *MemoryCommodityRegis
 }
 
 func (r *MemoryCommodityRegistry) Create(commodity models.Commodity) (*models.Commodity, error) {
-	err := validation.Validate(commodity)
+	err := validation.Validate(&commodity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
 	}

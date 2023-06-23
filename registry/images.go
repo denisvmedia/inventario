@@ -26,7 +26,7 @@ func NewMemoryImageRegistry(commodityRegistry CommodityRegistry) *MemoryImageReg
 }
 
 func (r *MemoryImageRegistry) Create(image models.Image) (*models.Image, error) {
-	err := validation.Validate(image)
+	err := validation.Validate(&image)
 	if err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
 	}
