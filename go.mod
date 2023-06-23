@@ -3,7 +3,7 @@ module github.com/denisvmedia/inventario
 go 1.20
 
 require (
-	github.com/frankban/quicktest v1.14.4
+	github.com/frankban/quicktest v1.14.5
 	github.com/gabriel-vasile/mimetype v1.4.2
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/render v1.0.2
