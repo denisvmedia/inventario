@@ -35,7 +35,7 @@ func NewMemoryAreaRegistry(locationRegistry LocationRegistry) *MemoryAreaRegistr
 }
 
 func (r *MemoryAreaRegistry) Create(area models.Area) (*models.Area, error) {
-	err := validation.Validate(area)
+	err := validation.Validate(&area)
 	if err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
 	}

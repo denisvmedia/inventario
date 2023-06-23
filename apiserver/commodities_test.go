@@ -186,8 +186,7 @@ func TestCommodityUpdate(t *testing.T) {
 	commodity := expectedCommodities[0]
 
 	obj := &jsonapi.CommodityRequest{
-		Data: &models.Commodity{
-			ID:                     commodity.ID,
+		Data: models.WithID(commodity.ID, &models.Commodity{
 			Name:                   "Updated Commodity",
 			ShortName:              "UC",
 			AreaID:                 commodity.AreaID,
@@ -207,7 +206,7 @@ func TestCommodityUpdate(t *testing.T) {
 			LastModifiedDate:       "2022-01-03",
 			Comments:               "Updated commodity comments",
 			Draft:                  false,
-		},
+		}),
 	}
 	data := must.Must(json.Marshal(obj))
 	buf := bytes.NewReader(data)
@@ -302,8 +301,7 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 	wrongCommodityID := "wrong-commodity-id"
 
 	obj := &jsonapi.CommodityRequest{
-		Data: &models.Commodity{
-			ID:                     wrongCommodityID, // Using a different ID in the update request
+		Data: models.WithID(wrongCommodityID, &models.Commodity{
 			Name:                   "Updated Commodity",
 			ShortName:              "UC",
 			AreaID:                 wrongAreaID,
@@ -322,7 +320,7 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 			LastModifiedDate:       "2022-01-03",
 			Comments:               "Updated commodity comments",
 			Draft:                  false,
-		},
+		}),
 	}
 	data := must.Must(json.Marshal(obj))
 	buf := bytes.NewReader(data)

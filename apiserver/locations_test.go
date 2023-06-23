@@ -147,11 +147,10 @@ func TestLocationsUpdate(t *testing.T) {
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: &models.Location{
-			ID:      location.ID,
+		Data: models.WithID(location.ID, &models.Location{
 			Name:    "Updated Name",
 			Address: "Updated Address",
-		},
+		}),
 	}
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
@@ -223,11 +222,10 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: &models.Location{
-			ID:   location.ID,
+		Data: models.WithID(location.ID, &models.Location{
 			Name: "Updated Name",
 			// Address field is not provided
-		},
+		}),
 	}
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
@@ -240,16 +238,9 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 	handler := apiserver.APIServer(params)
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	body := rr.Body.Bytes()
-	c.Assert(body, checkers.JSONPathEquals("$.id"), location.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "locations")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "Updated Name")
-
-	// Assert that the address field is unchanged
-	// c.Assert(body, checkers.JSONPathEquals("$.attributes.address"), location.Address)
-	// As we are not supporting partial updates, the address field should be empty
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.address"), "")
+	c.Assert(body, checkers.JSONPathEquals("$.errors[0].error.data.address"), "cannot be blank")
 }
 
 func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
@@ -263,11 +254,10 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 	anotherLocation := locations[1]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: &models.Location{
-			ID:      anotherLocation.ID, // Using a different ID in the update request
+		Data: models.WithID(anotherLocation.ID, &models.Location{
 			Name:    "Updated Name",
 			Address: "Updated Address",
-		},
+		}),
 	}
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
@@ -293,11 +283,10 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	unknownID := "unknown-id"
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: &models.Location{
-			ID:      unknownID,
+		Data: models.WithID(unknownID, &models.Location{
 			Name:    "Updated Name",
 			Address: "Updated Address",
-		},
+		}),
 	}
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)

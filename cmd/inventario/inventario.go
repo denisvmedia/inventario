@@ -9,6 +9,10 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/run"
 )
 
+const (
+	envPrefix = "INVENTARIO"
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "inventario",
 	Short: "Inventario application",
@@ -23,13 +27,12 @@ var rootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(args ...string) {
 	viper.AutomaticEnv()
-	viper.SetEnvPrefix("INVENTARIO")
+	viper.SetEnvPrefix(envPrefix)
 
 	rootCmd.SetArgs(args)
 	rootCmd.AddCommand(run.NewRunCommand())
 	err := rootCmd.Execute()
 	if err != nil {
-		// log.WithError(err).UserError("Failed to execute root command")
 		os.Exit(1)
 	}
 }
