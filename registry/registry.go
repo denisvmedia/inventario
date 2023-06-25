@@ -1,9 +1,10 @@
 package registry
 
 import (
-	"github.com/google/uuid"
+	"sync"
 
-	"github.com/denisvmedia/inventario/internal/orderedmap"
+	"github.com/google/uuid"
+	"github.com/wk8/go-ordered-map/v2"
 )
 
 type idable interface {
@@ -32,7 +33,8 @@ type Registry[T any] interface {
 }
 
 type MemoryRegistry[T any] struct {
-	items *orderedmap.OrderedMap[T]
+	items *orderedmap.OrderedMap[string, T]
+	lock  sync.RWMutex
 }
 
 func NewMemoryRegistry[T any]() *MemoryRegistry[T] {
@@ -43,20 +45,25 @@ func NewMemoryRegistry[T any]() *MemoryRegistry[T] {
 	}
 
 	return &MemoryRegistry[T]{
-		items: orderedmap.New[T](),
+		items: orderedmap.New[string, T](),
 	}
 }
 
 func (r *MemoryRegistry[T]) Create(item T) (*T, error) {
 	iitem := (any)(&item).(idable) //nolint:errcheck // checked in NewMemoryRegistry
 	iitem.SetID(uuid.New().String())
+
+	r.lock.Lock()
 	r.items.Set(iitem.GetID(), item)
+	r.lock.Unlock()
 
 	return &item, nil
 }
 
 func (r *MemoryRegistry[T]) Get(id string) (*T, error) {
+	r.lock.RLock()
 	item, ok := r.items.Get(id)
+	r.lock.RUnlock()
 	if !ok {
 		return nil, ErrNotFound
 	}
@@ -65,15 +72,22 @@ func (r *MemoryRegistry[T]) Get(id string) (*T, error) {
 
 func (r *MemoryRegistry[T]) List() ([]T, error) {
 	items := make([]T, 0, r.items.Len())
-	for _, item := range r.items.Iterate() {
-		items = append(items, item.Value)
+	r.lock.RLock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		items = append(items, pair.Value)
 	}
+	r.lock.RUnlock()
 	return items, nil
 }
 
 func (r *MemoryRegistry[T]) Update(item T) (*T, error) {
 	iitem := (any)(&item).(idable) //nolint:errcheck // checked in NewMemoryRegistry
-	if _, ok := r.items.Get(iitem.GetID()); !ok {
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	_, ok := r.items.Get(iitem.GetID())
+	if !ok {
 		return nil, ErrNotFound
 	}
 
@@ -82,10 +96,14 @@ func (r *MemoryRegistry[T]) Update(item T) (*T, error) {
 }
 
 func (r *MemoryRegistry[T]) Delete(id string) error {
+	r.lock.Lock()
 	r.items.Delete(id)
+	r.lock.Unlock()
 	return nil
 }
 
 func (r *MemoryRegistry[T]) Count() (int, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
 	return r.items.Len(), nil
 }
