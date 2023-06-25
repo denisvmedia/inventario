@@ -4,11 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"runtime"
 )
 
+type stackTrace struct {
+	funcName string
+	fileName string
+	line     int
+}
+
 var (
-	_ error          = (*fieldError)(nil)
-	_ json.Marshaler = (*fieldError)(nil)
+	_ error          = (*stackTracedError)(nil)
+	_ json.Marshaler = (*stackTracedError)(nil)
 )
 
 type stackTracedError struct {
@@ -54,9 +62,13 @@ func (e *stackTracedError) Unwrap() error {
 // MarshalJSON implements the json.Marshaler interface and returns the serialized error.
 // It serializes the error and its associated stack trace to JSON.
 func (e *stackTracedError) MarshalJSON() ([]byte, error) {
+	type jsonStackTrace struct {
+		FuncName string `json:"funcName"`
+		FilePos  string `json:"filePos"`
+	}
 	type jsonError struct {
 		Error      json.RawMessage `json:"error"`                // Serialized error
-		StackTrace stackTrace      `json:"stackTrace,omitempty"` // Serialized stack trace
+		StackTrace jsonStackTrace  `json:"stackTrace,omitempty"` // Serialized stack trace
 	}
 
 	errData, err := MarshalError(e.err) // Assuming MarshalError is a custom function to serialize the error
@@ -65,9 +77,31 @@ func (e *stackTracedError) MarshalJSON() ([]byte, error) {
 	}
 
 	jerr := jsonError{
-		Error:      errData,
-		StackTrace: e.stackTrace,
+		Error: errData,
+		StackTrace: jsonStackTrace{
+			FuncName: e.stackTrace.funcName,
+			FilePos:  fmt.Sprintf("%s:%d", e.stackTrace.fileName, e.stackTrace.line),
+		},
 	}
 
 	return json.Marshal(jerr) // Serialize the error and stack trace to JSON
+}
+
+func getStackTrace(skip int) (stackTrace, error) {
+	pc, file, line, ok := runtime.Caller(skip)
+	if !ok {
+		return stackTrace{}, &Error{
+			error: errors.New("failed to retrieve caller information"),
+			msg:   "failed to retrieve caller information",
+		}
+	}
+
+	funcName := runtime.FuncForPC(pc).Name()
+	fileName := filepath.Base(file)
+
+	return stackTrace{
+		funcName: funcName,
+		fileName: fileName,
+		line:     line,
+	}, nil
 }

@@ -240,7 +240,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	body := rr.Body.Bytes()
-	c.Assert(body, checkers.JSONPathEquals("$.errors[0].error.data.address"), "cannot be blank")
+	c.Assert(body, checkers.JSONPathEquals("$.errors[0].error.error.data.address"), "cannot be blank")
 }
 
 func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
