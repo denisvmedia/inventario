@@ -227,7 +227,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 	_, err = io.Copy(fw, wrappedSrc)
 	if err != nil {
-		return "", errkit.ChainWrap(err, "failed when saving the file").WithField("filename", filename)
+		return "", errkit.Wrap(err, "failed when saving the file").WithField("filename", filename)
 	}
 
 	return wrappedSrc.MIMEType(), nil

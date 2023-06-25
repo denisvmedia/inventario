@@ -19,9 +19,6 @@ import (
 
 const uploadLocation = "afile://uploads?memfs=1&create_dir=1"
 
-// const uploadLocation = "file://uploads"
-// const uploadLocation = "afile://uploads"
-
 func newLocationRegistry() registry.LocationRegistry {
 	var locationsRegistry = registry.NewMemoryLocationRegistry()
 
