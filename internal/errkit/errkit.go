@@ -5,17 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
-	"runtime"
 )
 
 type Fields = map[string]any
-
-type stackTrace struct {
-	funcName string
-	fileName string
-	line     int
-}
 
 var (
 	_ error          = (*Error)(nil)
@@ -24,30 +16,65 @@ var (
 
 type Error struct {
 	error
-	msg        string
-	stackTrace stackTrace
-	fields     Fields
+	msg    string
+	fields Fields
+	prev   Errors
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s: %s", e.msg, e.error.Error())
+	switch {
+	case e.msg != "" && len(e.fields) > 0:
+		return fmt.Sprintf("%s: %s (fields: %+v)", e.msg, e.error.Error(), e.fields)
+	case e.msg == "" && len(e.fields) > 0:
+		return fmt.Sprintf("%s (fields: %+v)", e.error.Error(), e.fields)
+	case e.msg != "" && len(e.fields) == 0:
+		return fmt.Sprintf("%s: %s", e.msg, e.error.Error())
+	default:
+		return e.error.Error()
+	}
+}
+
+func (e *Error) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+
+	if target == e {
+		return true
+	}
+
+	if e.prev.Is(target) {
+		return true
+	}
+
+	return errors.Is(e.error, target)
+}
+
+func (e *Error) As(target any) bool {
+	if target == nil {
+		return false
+	}
+
+	if e.prev.As(target) {
+		return true
+	}
+
+	return errors.As(e.error, target)
 }
 
 func (e *Error) MarshalJSON() ([]byte, error) {
 	type jsonError struct {
-		Msg        string          `json:"msg"`
-		Func       string          `json:"func"`
-		FilePos    string          `json:"filepos"`
+		Msg        string          `json:"msg,omitempty"`
+		Func       string          `json:"func,omitempty"`
+		FilePos    string          `json:"filepos,omitempty"`
 		Fields     Fields          `json:"fields,omitempty"`
 		Error      json.RawMessage `json:"error,omitempty"`
 		ErrorExtra any             `json:"error_extra,omitempty"`
 	}
 
 	jerr := jsonError{
-		Msg:     e.msg,
-		Func:    e.stackTrace.funcName,
-		FilePos: fmt.Sprintf("%s:%d", e.stackTrace.fileName, e.stackTrace.line),
-		Fields:  e.fields,
+		Msg:    e.msg,
+		Fields: e.fields,
 	}
 
 	if e.error == nil {
@@ -76,6 +103,7 @@ func (e *Error) WithFields(fields Fields) *Error {
 	for k, v := range fields {
 		tmp.fields[k] = v
 	}
+	tmp.prev = append(tmp.prev, e)
 	return &tmp
 }
 
@@ -86,6 +114,14 @@ func (e *Error) WithField(key string, value any) *Error {
 		tmp.fields[k] = v
 	}
 	tmp.fields[key] = value
+	tmp.prev = append(tmp.prev, e)
+	return &tmp
+}
+
+func (e *Error) WithEquivalents(errs ...error) *Error {
+	tmp := *e
+	tmp.error = WithEquivalents(e.error, errs...)
+	tmp.prev = append(tmp.prev, e)
 	return &tmp
 }
 
@@ -94,34 +130,38 @@ func (e *Error) Unwrap() error {
 }
 
 func Wrap(err error, msg string) *Error {
-	return newError(err, msg, 2)
-}
-
-func getStackTrace(skip int) (stackTrace, error) {
-	pc, file, line, ok := runtime.Caller(skip)
-	if !ok {
-		return stackTrace{}, &Error{
-			error: errors.New("failed to retrieve caller information"),
-			msg:   "failed to retrieve caller information",
-		}
-	}
-
-	funcName := runtime.FuncForPC(pc).Name()
-	fileName := filepath.Base(file)
-
-	return stackTrace{
-		funcName: funcName,
-		fileName: fileName,
-		line:     line,
-	}, nil
-}
-
-func newError(err error, msg string, skip int) *Error {
-	stack, _ := getStackTrace(skip + 1)
-
 	return &Error{
-		error:      err,
-		msg:        msg,
-		stackTrace: stack,
+		error: WithStackTrace(err),
+		msg:   msg,
 	}
+}
+
+func WrapWithFields(err error, msg string, fields Fields) *Error {
+	result := &Error{
+		error:  WithStackTrace(err),
+		msg:    msg,
+		fields: make(Fields, len(fields)),
+	}
+	for k, v := range fields {
+		result.fields[k] = v
+	}
+	return result
+}
+
+func WithMessage(err error, msg string) *Error {
+	return &Error{
+		error: err,
+		msg:   msg,
+	}
+}
+
+func WithFields(err error, fields Fields) *Error {
+	result := &Error{
+		error:  err,
+		fields: make(Fields, len(fields)),
+	}
+	for k, v := range fields {
+		result.fields[k] = v
+	}
+	return result
 }
