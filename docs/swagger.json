@@ -1517,6 +1517,7 @@
             "enum": [
                 "white_goods",
                 "electronics",
+                "equipment",
                 "furniture",
                 "clothes",
                 "other"
@@ -1524,6 +1525,7 @@
             "x-enum-varnames": [
                 "CommodityTypeWhiteGoods",
                 "CommodityTypeElectronics",
+                "CommodityTypeEquipment",
                 "CommodityTypeFurniture",
                 "CommodityTypeClothes",
                 "CommodyTypeOther"
