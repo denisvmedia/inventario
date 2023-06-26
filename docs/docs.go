@@ -1525,6 +1525,7 @@ const docTemplate = `{
             "enum": [
                 "white_goods",
                 "electronics",
+                "equipment",
                 "furniture",
                 "clothes",
                 "other"
@@ -1532,6 +1533,7 @@ const docTemplate = `{
             "x-enum-varnames": [
                 "CommodityTypeWhiteGoods",
                 "CommodityTypeElectronics",
+                "CommodityTypeEquipment",
                 "CommodityTypeFurniture",
                 "CommodityTypeClothes",
                 "CommodyTypeOther"
