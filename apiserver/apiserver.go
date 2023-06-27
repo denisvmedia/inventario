@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
+	"github.com/rs/cors"
 	swagger "github.com/swaggo/http-swagger"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
@@ -88,6 +89,16 @@ func APIServer(params Params) http.Handler {
 	render.Decode = JSONAPIAwareDecoder
 
 	r := chi.NewRouter()
+
+	//c := cors.New(cors.Options{
+	//	AllowedOrigins: []string{"http://foo.com", "http://foo.com:8080"},
+	//	AllowCredentials: true,
+	//	// Enable Debugging for testing, consider disabling in production
+	//	Debug: true,
+	//})
+
+	// CORS middleware
+	r.Use(cors.Default().Handler)
 
 	// Set a timeout value on the request context (ctx), that will signal
 	// through ctx.Done() that the request has timed out and further
