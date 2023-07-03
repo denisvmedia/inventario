@@ -18,7 +18,7 @@ require (
 	github.com/spf13/viper v1.16.0
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag v1.16.1
-	github.com/wk8/go-ordered-map/v2 v2.1.7
+	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
 	gocloud.dev v0.30.0
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
