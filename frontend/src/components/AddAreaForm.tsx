@@ -1,19 +1,16 @@
 import React, { useState } from 'react';
 import api from '../api/api';
+import { Area } from '../api/models/Area';
 
 function AddAreaForm() {
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState([]);
+  // const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-
-    if (!name) {
-      setError('Please enter the area name.');
-      return;
-    }
+    setErrors([]);
 
     setIsLoading(true);
 
@@ -30,7 +27,31 @@ function AddAreaForm() {
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error('Error creating area:', error);
-      if (error.response && error.response.data && error.response.data.errors) {
+      if (Array.isArray(error.response?.data?.errors) && error.response.data.errors.length > 0) {
+        setErrors(error.response.data.errors)
+        /*
+        errors:
+        - error:
+            type: "validation.Errors"
+            error:
+              data:
+                <field>: <error message>
+          status: "Unprocessable Entity"
+         */
+
+        // eslint-disable-next-line no-console
+        console.log(error.response);
+        // eslint-disable-next-line no-console
+        console.log(error.response.data);
+
+        error.response.data.errors.forEach((e: any) => {
+          if (e.type === 'validation.Errors' && e.error?.data) {
+            if (typeof e.error?.data === 'object' && Object.keys(e.error.data).length > 0) {
+
+            }
+          }
+        });
+
         const errorMessage = error.response.data.errors[0].error.error.data.location_id;
         setError(`location_id: ${errorMessage}`);
       } else {
