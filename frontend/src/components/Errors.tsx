@@ -1,28 +1,48 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-const [error] = useState('');
+function Errors({ errors }:any) {
+  // example of expected errors variable:
+  // [
+  //   {
+  //     error: {
+  //       error: {
+  //         data: {
+  //           name: 'cannot be blank',
+  //           address: 'cannot be blank'
+  //         }
+  //       },
+  //       type: 'validation.Errors'
+  //     }
+  //     status: 'Unprocessable Entity'
+  //   }
+  // ]
 
-function xx() {
-  if (!error) {
+  // eslint-disable-next-line no-console
+  console.log(errors);
+
+  if (!Array.isArray(errors) || errors.length === 0) {
     return null;
   }
 
-  if (error.type === 'validation.Errors' && error.error?.data) {
-    if (typeof e.error?.data === 'object' && Object.keys(e.error.data).length > 0) {
+  let errorMessages: any;
 
+  errors.forEach((e: any) => {
+    if (e.error?.error?.data) {
+      errorMessages = Object.keys(e.error.error.data)
+        .map((key: any) => (
+          <li key={key}>{`${key}: ${e.error.error.data[key]}`}</li>
+        ));
+    } else {
+      errorMessages = [e.status];
     }
-  }
+  });
 
-  return <span>x</span>;
-}
-
-function Errors() {
   return (
     <div>
-      <span>Errors</span>
-      {error && <div>{error}</div>}
+      <span>Errors:</span>
+      <div><ul>{errorMessages}</ul></div>
     </div>
   );
 }
 
-export default Errors();
+export default Errors;

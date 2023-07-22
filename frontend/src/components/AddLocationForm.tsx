@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import api from '../api/api';
+import Errors from './Errors';
 
 // interface AddLocationFormProps {
 //   onLocationAdded: () => void;
@@ -8,7 +9,7 @@ import api from '../api/api';
 function AddLocationForm({ onLocationAdded }:any) {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState<object[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,14 +24,32 @@ function AddLocationForm({ onLocationAdded }:any) {
 
       setName('');
       setAddress('');
-      setError('');
+      setErrors([]);
       onLocationAdded(); // Invoke the callback function to trigger re-fetching of locations
     } catch (error: any) {
-      if (error.response && error.response.data && error.response.data.errors) {
-        const errorMessage = error.response.data.errors[0].error.error.data.name; // Modify the error message based on your API response
-        setError(errorMessage);
+      if (error.response && error.response.data && error.response.data.errors && error.response.data.errors.length > 0) {
+        // example of error.response.data.errors:
+        // [
+        //   {
+        //     error: {
+        //       error: {
+        //         data: {
+        //           name: 'cannot be blank',
+        //           address: 'cannot be blank'
+        //         }
+        //       },
+        //       type: 'validation.Errors'
+        //     }
+        //     status: 'Unprocessable Entity'
+        //   }
+        // ]
+        setErrors(error.response.data.errors);
       } else {
-        setError('Error creating location');
+        // eslint-disable-next-line no-console
+        console.log(error.response.data);
+        setErrors([{
+          status: 'Unknown Error',
+        }]);
       }
     }
   };
@@ -38,6 +57,7 @@ function AddLocationForm({ onLocationAdded }:any) {
   return (
     <div>
       <h2>Add Location</h2>
+      <Errors errors={errors} />
       <form onSubmit={handleSubmit}>
         <div>
           {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
@@ -50,12 +70,6 @@ function AddLocationForm({ onLocationAdded }:any) {
           <input type="text" id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
         </div>
         <button type="submit">Add Location</button>
-        {error && (
-        <div>
-          Error:
-          {error}
-        </div>
-        )}
       </form>
     </div>
   );
