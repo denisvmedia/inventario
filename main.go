@@ -8,7 +8,7 @@ import (
 // @version 1.0
 // @description This is an Inventario daemon.
 
-// @contact.name API Support
+// @contact.name Inventario Support
 // @contact.url https://github.com/denisvmedia/inventario/issues
 // @contact.email ask@artprima.cz
 

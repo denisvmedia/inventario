@@ -54,13 +54,23 @@ type LocationsMeta struct {
 
 // LocationsResponse is an object that holds location list information.
 type LocationsResponse struct {
-	Data []models.Location `json:"data"`
-	Meta LocationsMeta     `json:"meta"`
+	Data []LocationData `json:"data"`
+	Meta LocationsMeta  `json:"meta"`
 }
 
 func NewLocationsResponse(locations []models.Location, total int) *LocationsResponse {
+	locationData := make([]LocationData, 0) // must be an empty array instead of nil due to JSON serialization
+	for _, l := range locations {
+		l := l
+		locationData = append(locationData, LocationData{
+			ID:         l.ID,
+			Type:       "locations",
+			Attributes: &l,
+		})
+	}
+
 	return &LocationsResponse{
-		Data: locations,
+		Data: locationData,
 		Meta: LocationsMeta{
 			Locations: total,
 		},
@@ -75,16 +85,17 @@ func (rd *LocationsResponse) Render(w http.ResponseWriter, r *http.Request) erro
 var _ render.Binder = (*LocationRequest)(nil)
 
 type LocationRequest struct {
-	Data *LocationRequestData `json:"data"`
+	Data *LocationData `json:"data"`
 }
 
-// LocationRequestData is an object that holds location data information.
-type LocationRequestData struct {
+// LocationData is an object that holds location data information.
+type LocationData struct {
+	ID         string           `json:"id,omitempty"`
 	Type       string           `json:"type" example:"locations" enums:"locations"`
 	Attributes *models.Location `json:"attributes"`
 }
 
-func (lr *LocationRequestData) Validate() error {
+func (lr *LocationData) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&lr.Type, validation.Required, validation.In("locations")),
@@ -98,6 +109,8 @@ func (lr *LocationRequest) Bind(r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
+	lr.Data.Attributes.ID = lr.Data.ID
 
 	return nil
 }

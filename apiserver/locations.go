@@ -143,7 +143,7 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if location.ID != input.Data.Attributes.ID {
+	if location.ID != input.Data.ID {
 		unprocessableEntityError(w, r, nil)
 		return
 	}

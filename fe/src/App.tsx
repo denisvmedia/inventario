@@ -1,61 +1,16 @@
 import {
   Admin,
   Resource,
-  ReferenceInput,
   EditGuesser,
   ShowGuesser,
-  Create,
-  List,
-  Datagrid,
-  TextField,
-  SimpleForm,
-  TextInput,
-  required,
 } from 'react-admin';
 import React from 'react';
 import dataProvider from './dataProvider';
-
-export function LocationCreate() {
-  return (
-    <Create>
-      <SimpleForm>
-        <TextInput source="name" validate={[required()]} label="Name" fullWidth name="name" />
-        <TextInput source="address" multiline label="Address" name="address" />
-      </SimpleForm>
-    </Create>
-  );
-}
-
-export function AreaCreate() {
-  return (
-    <Create>
-      <SimpleForm>
-        <TextInput source="name" validate={[required()]} label="Name" fullWidth name="name" />
-        <ReferenceInput source="location_id" reference="locations" name="location" />
-      </SimpleForm>
-    </Create>
-  );
-}
-
-export function LocationList() {
-  return (
-    <List>
-      <Datagrid rowClick="edit">
-        <TextField source="id" />
-      </Datagrid>
-    </List>
-  );
-}
-
-export function AreaList() {
-  return (
-    <List>
-      <Datagrid rowClick="edit">
-        <TextField source="id" />
-      </Datagrid>
-    </List>
-  );
-}
+import AreaCreate from './components/AreaCreate';
+import LocationCreate from './components/LocationCreate';
+import LocationList from './components/LocationList';
+import AreaList from './components/AreaList';
+import LocationEdit from './components/LocationEdit';
 
 function App() {
   return (
@@ -64,8 +19,9 @@ function App() {
         name="locations"
         list={LocationList}
         create={LocationCreate}
-        edit={EditGuesser}
+        edit={LocationEdit}
         show={ShowGuesser}
+        recordRepresentation="name"
       />
       <Resource
         name="areas"
@@ -73,6 +29,7 @@ function App() {
         create={AreaCreate}
         edit={EditGuesser}
         show={ShowGuesser}
+        recordRepresentation="name"
       />
     </Admin>
   );

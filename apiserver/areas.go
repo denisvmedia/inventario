@@ -148,7 +148,7 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if area.ID != input.Data.Attributes.ID {
+	if area.ID != input.Data.ID {
 		unprocessableEntityError(w, r, nil)
 		return
 	}

@@ -46,7 +46,7 @@ func TestLocationsCreate(t *testing.T) {
 	c := qt.New(t)
 
 	obj := &jsonapi.LocationRequest{
-		Data: &jsonapi.LocationRequestData{
+		Data: &jsonapi.LocationData{
 			Type: "locations",
 			Attributes: &models.Location{
 				Name:    "LocationResponse New",
@@ -150,7 +150,7 @@ func TestLocationsUpdate(t *testing.T) {
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: &jsonapi.LocationRequestData{
+		Data: &jsonapi.LocationData{
 			Type: "locations",
 			Attributes: models.WithID(location.ID, &models.Location{
 				Name:    "Updated Name",
@@ -228,7 +228,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: &jsonapi.LocationRequestData{
+		Data: &jsonapi.LocationData{
 			Type: "locations",
 			Attributes: models.WithID(location.ID, &models.Location{
 				Name: "Updated Name",
@@ -263,7 +263,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 	anotherLocation := locations[1]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: &jsonapi.LocationRequestData{
+		Data: &jsonapi.LocationData{
 			Type: "locations",
 			Attributes: models.WithID(anotherLocation.ID, &models.Location{
 				Name:    "Updated Name",
@@ -295,7 +295,7 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	unknownID := "unknown-id"
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: &jsonapi.LocationRequestData{
+		Data: &jsonapi.LocationData{
 			Type: "locations",
 			Attributes: models.WithID(unknownID, &models.Location{
 				Name:    "Updated Name",

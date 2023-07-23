@@ -49,13 +49,23 @@ type AreasMeta struct {
 
 // AreasResponse is an object that holds area list information.
 type AreasResponse struct {
-	Data []models.Area `json:"data"`
-	Meta AreasMeta     `json:"meta"`
+	Data []AreaData `json:"data"`
+	Meta AreasMeta  `json:"meta"`
 }
 
 func NewAreasResponse(areas []models.Area, total int) *AreasResponse {
+	areaData := make([]AreaData, 0) // must be an empty array instead of nil due to JSON serialization
+	for _, l := range areas {
+		l := l
+		areaData = append(areaData, AreaData{
+			ID:         l.ID,
+			Type:       "areas",
+			Attributes: &l,
+		})
+	}
+
 	return &AreasResponse{
-		Data: areas,
+		Data: areaData,
 		Meta: AreasMeta{Areas: total},
 	}
 }
@@ -69,16 +79,17 @@ var _ render.Binder = (*AreaRequest)(nil)
 
 // AreaRequest is an object that holds area data information.
 type AreaRequest struct {
-	Data *AreaRequestData `json:"data"`
+	Data *AreaData `json:"data"`
 }
 
-// AreaRequestData is an object that holds area data information.
-type AreaRequestData struct {
-	Type       string       `json:"type" example:"locations" enums:"locations"`
+// AreaData is an object that holds area data information.
+type AreaData struct {
+	ID         string       `json:"id,omitempty"`
+	Type       string       `json:"type" example:"areas" enums:"areas"`
 	Attributes *models.Area `json:"attributes"`
 }
 
-func (lr *AreaRequestData) Validate() error {
+func (lr *AreaData) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&lr.Type, validation.Required, validation.In("areas")),
@@ -92,6 +103,8 @@ func (lr *AreaRequest) Bind(r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
+	lr.Data.Attributes.ID = lr.Data.ID
 
 	return nil
 }
