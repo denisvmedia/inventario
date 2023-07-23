@@ -14,10 +14,13 @@ type Location struct {
 	Areas []string `json:"areas"`
 }
 
-// LocationResponse is an object that holds location information.
 type LocationResponse struct {
-	HTTPStatusCode int `json:"-"` // http response status code
+	HTTPStatusCode int                   `json:"-"` // http response status code
+	Data           *LocationResponseData `json:"data"`
+}
 
+// LocationResponseData is an object that holds location information.
+type LocationResponseData struct {
 	ID         string    `json:"id"`
 	Type       string    `json:"type" example:"locations" enums:"locations"`
 	Attributes *Location `json:"attributes"`
@@ -25,9 +28,11 @@ type LocationResponse struct {
 
 func NewLocationResponse(location *Location) *LocationResponse {
 	return &LocationResponse{
-		ID:         location.ID,
-		Type:       "locations",
-		Attributes: location,
+		Data: &LocationResponseData{
+			ID:         location.ID,
+			Type:       "locations",
+			Attributes: location,
+		},
 	}
 }
 
@@ -69,9 +74,23 @@ func (rd *LocationsResponse) Render(w http.ResponseWriter, r *http.Request) erro
 
 var _ render.Binder = (*LocationRequest)(nil)
 
-// LocationRequest is an object that holds location data information.
 type LocationRequest struct {
-	Data *models.Location `json:"data"`
+	Data *LocationRequestData `json:"data"`
+}
+
+// LocationRequestData is an object that holds location data information.
+type LocationRequestData struct {
+	Type       string           `json:"type" example:"locations" enums:"locations"`
+	Attributes *models.Location `json:"attributes"`
+}
+
+func (lr *LocationRequestData) Validate() error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&lr.Type, validation.Required, validation.In("locations")),
+		validation.Field(&lr.Attributes, validation.Required),
+	)
+	return validation.ValidateStruct(lr, fields...)
 }
 
 func (lr *LocationRequest) Bind(r *http.Request) error {

@@ -84,7 +84,7 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	area, err := api.areaRegistry.Create(*input.Data)
+	area, err := api.areaRegistry.Create(*input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -148,12 +148,12 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if area.ID != input.Data.ID {
+	if area.ID != input.Data.Attributes.ID {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	newArea, err := api.areaRegistry.Update(*input.Data)
+	newArea, err := api.areaRegistry.Update(*input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

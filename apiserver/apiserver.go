@@ -98,7 +98,7 @@ func APIServer(params Params) http.Handler {
 	//})
 
 	// CORS middleware
-	r.Use(cors.Default().Handler)
+	r.Use(cors.AllowAll().Handler)
 
 	// Set a timeout value on the request context (ctx), that will signal
 	// through ctx.Done() that the request has timed out and further
