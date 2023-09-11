@@ -22,7 +22,7 @@ require (
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
 	gocloud.dev v0.34.0
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
-	golang.org/x/text v0.12.0
+	golang.org/x/text v0.13.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 	google.golang.org/grpc v1.58.0
 )
