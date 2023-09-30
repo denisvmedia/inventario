@@ -9,7 +9,6 @@ function LocationList() {
   return (
     <List>
       <Datagrid rowClick="edit">
-        <TextField source="id" />
         <TextField source="name" />
         <TextField source="address" />
       </Datagrid>
