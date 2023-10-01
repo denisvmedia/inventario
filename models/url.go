@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"net/url"
+	"strings"
 
 	"github.com/jellydator/validation"
 )
@@ -22,6 +23,10 @@ var (
 )
 
 type URL url.URL
+
+func (u *URL) String() string {
+	return (*url.URL)(u).String()
+}
 
 func (u *URL) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
@@ -52,5 +57,52 @@ func (u *URL) UnmarshalJSON(data []byte) error {
 	}
 
 	*u = URL(*v)
+	return nil
+}
+
+type URLs []*URL
+
+func (u *URLs) Validate() error {
+	if u == nil {
+		return nil
+	}
+
+	return validation.Validate(u)
+}
+
+func (u *URLs) MarshalJSON() ([]byte, error) {
+	if u == nil {
+		return []byte("null"), nil
+	}
+
+	tmp := make([]string, 0, len(*u))
+	for _, v := range *u {
+		tmp = append(tmp, v.String())
+	}
+
+	return json.Marshal(strings.Join(tmp, "\n"))
+}
+
+func (u *URLs) UnmarshalJSON(data []byte) error {
+	var tmp string
+	err := json.Unmarshal(data, &tmp)
+	if err != nil {
+		return err
+	}
+
+	surls := strings.Split(tmp, "\n")
+	*u = make([]*URL, 0, len(surls))
+
+	for _, el := range surls {
+		s := strings.TrimSpace(el)
+
+		parsed, err := URLParse(s)
+		if err != nil {
+			return err
+		}
+
+		*u = append(*u, parsed)
+	}
+
 	return nil
 }

@@ -2,7 +2,6 @@ import {
   List,
   Datagrid,
   TextField,
-  ReferenceField,
 } from 'react-admin';
 import React from 'react';
 
@@ -10,8 +9,13 @@ function CommodityList() {
   return (
     <List>
       <Datagrid rowClick="edit">
-        <TextField source="name" />
-        <ReferenceField source="commodity_id" reference="commodities" />
+        <TextField source="short_name" />
+        <TextField source="type" />
+        <TextField source="count" />
+        <TextField source="original_price" />
+        <TextField source="current_price" />
+        <TextField source="status" />
+        <TextField source="purchase_date" />
       </Datagrid>
     </List>
   );

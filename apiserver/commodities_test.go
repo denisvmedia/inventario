@@ -36,25 +36,25 @@ func TestCommoditiesList(t *testing.T) {
 
 	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedCommodities))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedCommodities[0].ID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].name"), expectedCommodities[0].Name)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].short_name"), expectedCommodities[0].ShortName)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].type"), string(expectedCommodities[0].Type))
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].area_id"), expectedCommodities[0].AreaID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].count"), float64(expectedCommodities[0].Count))
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].original_price"), expectedCommodities[0].OriginalPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].original_price_currency"), string(expectedCommodities[0].OriginalPriceCurrency))
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].converted_original_price"), expectedCommodities[0].ConvertedOriginalPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].current_price"), expectedCommodities[0].CurrentPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].serial_number"), expectedCommodities[0].SerialNumber)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].extra_serial_numbers"), expectedCommodities[0].ExtraSerialNumbers)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].part_numbers"), expectedCommodities[0].PartNumbers)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].tags"), expectedCommodities[0].Tags)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].status"), string(expectedCommodities[0].Status))
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].purchase_date"), expectedCommodities[0].PurchaseDate)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].registered_date"), expectedCommodities[0].RegisteredDate)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].last_modified_date"), expectedCommodities[0].LastModifiedDate)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].comments"), expectedCommodities[0].Comments)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].draft"), expectedCommodities[0].Draft)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.name"), expectedCommodities[0].Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.short_name"), expectedCommodities[0].ShortName)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.type"), string(expectedCommodities[0].Type))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.area_id"), expectedCommodities[0].AreaID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.count"), float64(expectedCommodities[0].Count))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.original_price"), expectedCommodities[0].OriginalPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.original_price_currency"), string(expectedCommodities[0].OriginalPriceCurrency))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.converted_original_price"), expectedCommodities[0].ConvertedOriginalPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.current_price"), expectedCommodities[0].CurrentPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.serial_number"), expectedCommodities[0].SerialNumber)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.extra_serial_numbers"), expectedCommodities[0].ExtraSerialNumbers)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.part_numbers"), expectedCommodities[0].PartNumbers)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.tags"), expectedCommodities[0].Tags)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.status"), string(expectedCommodities[0].Status))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.purchase_date"), expectedCommodities[0].PurchaseDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.registered_date"), expectedCommodities[0].RegisteredDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.last_modified_date"), expectedCommodities[0].LastModifiedDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.comments"), expectedCommodities[0].Comments)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.draft"), expectedCommodities[0].Draft)
 }
 
 func TestCommodityGet(t *testing.T) {
@@ -83,7 +83,7 @@ func TestCommodityGet(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data.id"), commodity.ID)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), commodity.Name)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.short_name"), commodity.ShortName)
-	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), []any{})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), "")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.type"), string(commodity.Type))
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.area_id"), commodity.AreaID)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
@@ -113,11 +113,17 @@ func TestCommodityCreate(t *testing.T) {
 	expectedAreas := must.Must(params.AreaRegistry.List())
 	area := expectedAreas[1]
 
+	urls := models.URLs([]*models.URL{
+		must.Must(models.URLParse("https://example.com")),
+		must.Must(models.URLParse("https://example.com/2")),
+	})
+
 	obj := &jsonapi.CommodityRequest{
 		Data: &jsonapi.CommodityData{
 			Type: "commodities",
 			Attributes: &models.Commodity{
 				Name:                   "New Commodity in Area 2",
+				ShortName:              "NewCom2",
 				AreaID:                 area.ID,
 				Type:                   models.CommodityTypeElectronics,
 				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
@@ -128,16 +134,14 @@ func TestCommodityCreate(t *testing.T) {
 				ExtraSerialNumbers:     []string{"SN654321"},
 				PartNumbers:            []string{"P123", "P456"},
 				Tags:                   []string{"tag1", "tag2"},
-				URLs: []*models.URL{
-					must.Must(models.URLParse("https://example.com")),
-					must.Must(models.URLParse("https://example.com/2")),
-				},
-				Status:           models.CommodityStatusInUse,
-				PurchaseDate:     "2023-01-01",
-				RegisteredDate:   "2023-01-02",
-				LastModifiedDate: "2023-01-03",
-				Comments:         "New commodity comments",
-				Draft:            false,
+				URLs:                   &urls,
+				Count:                  1,
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+				RegisteredDate:         models.ToPDate("2023-01-02"),
+				LastModifiedDate:       models.ToPDate("2023-01-03"),
+				Comments:               "New commodity comments",
+				Draft:                  false,
 			},
 		},
 	}
@@ -157,14 +161,11 @@ func TestCommodityCreate(t *testing.T) {
 
 	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "commodities")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "New Commodity in Area 2")
-	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.short_name"), "")
-	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), []any{
-		"https://example.com",
-		"https://example.com/2",
-	})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.short_name"), "NewCom2")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), "https://example.com\nhttps://example.com/2")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.type"), string(models.CommodityTypeElectronics))
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.area_id"), area.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(0))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(1))
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.original_price"), "1000")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), "USD")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "1200")
@@ -207,9 +208,9 @@ func TestCommodityUpdate(t *testing.T) {
 				PartNumbers:            []string{"P789"},
 				Tags:                   []string{"tag1", "tag3"},
 				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           "2022-01-01",
-				RegisteredDate:         "2022-01-02",
-				LastModifiedDate:       "2022-01-03",
+				PurchaseDate:           models.ToPDate("2022-01-01"),
+				RegisteredDate:         models.ToPDate("2022-01-02"),
+				LastModifiedDate:       models.ToPDate("2022-01-03"),
 				Comments:               "Updated commodity comments",
 				Draft:                  false,
 			}),
@@ -237,7 +238,7 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data.id"), commodity.ID)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "Updated Commodity")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.short_name"), "UC")
-	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), []any{})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), "")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.type"), string(models.CommodityTypeFurniture))
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.area_id"), commodity.AreaID)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
@@ -325,9 +326,9 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 				PartNumbers:            []string{"P789"},
 				Tags:                   []string{"tag1", "tag3"},
 				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           "2022-01-01",
-				RegisteredDate:         "2022-01-02",
-				LastModifiedDate:       "2022-01-03",
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+				RegisteredDate:         models.ToPDate("2023-01-02"),
+				LastModifiedDate:       models.ToPDate("2023-01-03"),
 				Comments:               "Updated commodity comments",
 				Draft:                  false,
 			}),

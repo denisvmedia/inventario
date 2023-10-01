@@ -77,14 +77,24 @@ type CommoditiesMeta struct {
 
 // CommoditiesResponse is an object that holds a list of commodities information.
 type CommoditiesResponse struct {
-	Data []models.Commodity `json:"data"`
-	Meta CommoditiesMeta    `json:"meta"`
+	Data []CommodityData `json:"data"`
+	Meta CommoditiesMeta `json:"meta"`
 }
 
 // NewCommoditiesResponse creates a new CommoditiesResponse instance.
 func NewCommoditiesResponse(commodities []models.Commodity, total int) *CommoditiesResponse {
+	commodityData := make([]CommodityData, 0) // must be an empty array instead of nil due to JSON serialization
+	for _, l := range commodities {
+		l := l
+		commodityData = append(commodityData, CommodityData{
+			ID:         l.ID,
+			Type:       "commodities",
+			Attributes: &l,
+		})
+	}
+
 	return &CommoditiesResponse{
-		Data: commodities,
+		Data: commodityData,
 		Meta: CommoditiesMeta{Commodities: total},
 	}
 }
