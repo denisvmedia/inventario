@@ -46,9 +46,12 @@ func TestLocationsCreate(t *testing.T) {
 	c := qt.New(t)
 
 	obj := &jsonapi.LocationRequest{
-		Data: &models.Location{
-			Name:    "LocationResponse New",
-			Address: "Address New",
+		Data: &jsonapi.LocationData{
+			Type: "locations",
+			Attributes: &models.Location{
+				Name:    "LocationResponse New",
+				Address: "Address New",
+			},
 		},
 	}
 	data := must.Must(json.Marshal(obj))
@@ -68,10 +71,10 @@ func TestLocationsCreate(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 	body := rr.Body.Bytes()
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "locations")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "LocationResponse New")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.address"), "Address New")
-	c.Assert(body, checkers.JSONPathMatches("$.id", qt.Matches), "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$")
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "locations")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "LocationResponse New")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), "Address New")
+	c.Assert(body, checkers.JSONPathMatches("$.data.id", qt.Matches), "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$")
 
 	cnt, err := params.LocationRegistry.Count()
 	c.Assert(err, qt.IsNil)
@@ -98,15 +101,15 @@ func TestLocationsGet(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "locations")
-	c.Assert(body, checkers.JSONPathEquals("$.id"), location.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), location.Name)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.address"), location.Address)
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "locations")
+	c.Assert(body, checkers.JSONPathEquals("$.data.id"), location.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), location.Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), location.Address)
 
 	areas := params.LocationRegistry.GetAreas(location.ID)
-	c.Assert(body, checkers.JSONPathMatches("$.attributes.areas", qt.HasLen), len(areas))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.areas[0]"), areas[0])
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.areas[1]"), areas[1])
+	c.Assert(body, checkers.JSONPathMatches("$.data.attributes.areas", qt.HasLen), len(areas))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.areas[0]"), areas[0])
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.areas[1]"), areas[1])
 }
 
 func TestLocationsList(t *testing.T) {
@@ -130,11 +133,11 @@ func TestLocationsList(t *testing.T) {
 
 	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedLocations))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedLocations[0].ID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].name"), expectedLocations[0].Name)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].address"), expectedLocations[0].Address)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.name"), expectedLocations[0].Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.address"), expectedLocations[0].Address)
 	c.Assert(body, checkers.JSONPathEquals("$.data[1].id"), expectedLocations[1].ID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[1].name"), expectedLocations[1].Name)
-	c.Assert(body, checkers.JSONPathEquals("$.data[1].address"), expectedLocations[1].Address)
+	c.Assert(body, checkers.JSONPathEquals("$.data[1].attributes.name"), expectedLocations[1].Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data[1].attributes.address"), expectedLocations[1].Address)
 }
 
 func TestLocationsUpdate(t *testing.T) {
@@ -147,10 +150,14 @@ func TestLocationsUpdate(t *testing.T) {
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: models.WithID(location.ID, &models.Location{
-			Name:    "Updated Name",
-			Address: "Updated Address",
-		}),
+		Data: &jsonapi.LocationData{
+			ID:   location.ID,
+			Type: "locations",
+			Attributes: models.WithID(location.ID, &models.Location{
+				Name:    "Updated Name",
+				Address: "Updated Address",
+			}),
+		},
 	}
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
@@ -165,10 +172,10 @@ func TestLocationsUpdate(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
-	c.Assert(body, checkers.JSONPathEquals("$.id"), location.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "locations")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "Updated Name")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.address"), "Updated Address")
+	c.Assert(body, checkers.JSONPathEquals("$.data.id"), location.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "locations")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "Updated Name")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), "Updated Address")
 }
 
 func TestLocationsList_EmptyRegistry(t *testing.T) {
@@ -222,10 +229,14 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: models.WithID(location.ID, &models.Location{
-			Name: "Updated Name",
-			// Address field is not provided
-		}),
+		Data: &jsonapi.LocationData{
+			ID:   location.ID,
+			Type: "locations",
+			Attributes: models.WithID(location.ID, &models.Location{
+				Name: "Updated Name",
+				// Address field is not provided
+			}),
+		},
 	}
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
@@ -240,7 +251,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	body := rr.Body.Bytes()
-	c.Assert(body, checkers.JSONPathEquals("$.errors[0].error.error.data.address"), "cannot be blank")
+	c.Assert(body, checkers.JSONPathEquals("$.errors[0].error.error.data.attributes.address"), "cannot be blank")
 }
 
 func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
@@ -254,10 +265,14 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 	anotherLocation := locations[1]
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: models.WithID(anotherLocation.ID, &models.Location{
-			Name:    "Updated Name",
-			Address: "Updated Address",
-		}),
+		Data: &jsonapi.LocationData{
+			ID:   anotherLocation.ID,
+			Type: "locations",
+			Attributes: models.WithID(anotherLocation.ID, &models.Location{
+				Name:    "Updated Name",
+				Address: "Updated Address",
+			}),
+		},
 	}
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)
@@ -283,10 +298,13 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	unknownID := "unknown-id"
 
 	updateObj := &jsonapi.LocationRequest{
-		Data: models.WithID(unknownID, &models.Location{
-			Name:    "Updated Name",
-			Address: "Updated Address",
-		}),
+		Data: &jsonapi.LocationData{
+			Type: "locations",
+			Attributes: models.WithID(unknownID, &models.Location{
+				Name:    "Updated Name",
+				Address: "Updated Address",
+			}),
+		},
 	}
 	updateData := must.Must(json.Marshal(updateObj))
 	updateBuf := bytes.NewReader(updateData)

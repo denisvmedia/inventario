@@ -36,11 +36,11 @@ func TestAreasList(t *testing.T) {
 
 	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedAreas))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedAreas[0].ID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].name"), expectedAreas[0].Name)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].location_id"), expectedAreas[0].LocationID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.name"), expectedAreas[0].Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.location_id"), expectedAreas[0].LocationID)
 	c.Assert(body, checkers.JSONPathEquals("$.data[1].id"), expectedAreas[1].ID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[1].name"), expectedAreas[1].Name)
-	c.Assert(body, checkers.JSONPathEquals("$.data[1].location_id"), expectedAreas[1].LocationID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[1].attributes.name"), expectedAreas[1].Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data[1].attributes.location_id"), expectedAreas[1].LocationID)
 }
 
 func TestAreasGet(t *testing.T) {
@@ -61,10 +61,10 @@ func TestAreasGet(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "areas")
-	c.Assert(body, checkers.JSONPathEquals("$.id"), area.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), area.Name)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.location_id"), area.LocationID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "areas")
+	c.Assert(body, checkers.JSONPathEquals("$.data.id"), area.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), area.Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.location_id"), area.LocationID)
 }
 
 func TestAreaCreate(t *testing.T) {
@@ -75,9 +75,12 @@ func TestAreaCreate(t *testing.T) {
 	location := expectedLocations[1]
 
 	obj := &jsonapi.AreaRequest{
-		Data: &models.Area{
-			Name:       "New Area in location 2",
-			LocationID: location.ID,
+		Data: &jsonapi.AreaData{
+			Type: "areas",
+			Attributes: &models.Area{
+				Name:       "New Area in location 2",
+				LocationID: location.ID,
+			},
 		},
 	}
 	data := must.Must(json.Marshal(obj))
@@ -93,15 +96,15 @@ func TestAreaCreate(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 	body := rr.Body.Bytes()
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "areas")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "New Area in location 2")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.location_id"), location.ID)
-	c.Assert(body, checkers.JSONPathMatches("$.id", qt.Matches), "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$")
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "areas")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "New Area in location 2")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.location_id"), location.ID)
+	c.Assert(body, checkers.JSONPathMatches("$.data.id", qt.Matches), "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$")
 
 	var v any
 	err = json.Unmarshal(body, &v)
 	c.Assert(err, qt.IsNil)
-	areaID, err := jsonpath.Read(v, "$.id")
+	areaID, err := jsonpath.Read(v, "$.data.id")
 	c.Assert(err, qt.IsNil)
 
 	// check that the area was attached to the location
@@ -116,8 +119,8 @@ func TestAreaCreate(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body = rr.Body.Bytes()
-	c.Assert(body, checkers.JSONPathMatches("$.attributes.areas", qt.HasLen), 1)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.areas[0]"), areaID)
+	c.Assert(body, checkers.JSONPathMatches("$.data.attributes.areas", qt.HasLen), 1)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.areas[0]"), areaID)
 }
 
 func TestAreaDelete(t *testing.T) {
@@ -152,10 +155,14 @@ func TestAreaUpdate(t *testing.T) {
 	area := expectedAreas[0]
 
 	obj := &jsonapi.AreaRequest{
-		Data: &models.Area{
-			ID:         area.ID,
-			Name:       "Updated Area",
-			LocationID: area.LocationID,
+		Data: &jsonapi.AreaData{
+			ID:   area.ID,
+			Type: "areas",
+			Attributes: &models.Area{
+				ID:         area.ID,
+				Name:       "Updated Area",
+				LocationID: area.LocationID,
+			},
 		},
 	}
 	data := must.Must(json.Marshal(obj))
@@ -172,10 +179,10 @@ func TestAreaUpdate(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	c.Assert(body, checkers.JSONPathEquals("$.id"), area.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "areas")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "Updated Area")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.location_id"), area.LocationID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.id"), area.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "areas")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "Updated Area")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.location_id"), area.LocationID)
 }
 
 func TestAreaGet_InvalidID(t *testing.T) {
@@ -203,7 +210,10 @@ func TestAreaCreate_InvalidData(t *testing.T) {
 
 	// Send an invalid area request with missing required fields
 	invalidObj := &jsonapi.AreaRequest{
-		Data: &models.Area{},
+		Data: &jsonapi.AreaData{
+			Type:       "areas",
+			Attributes: &models.Area{},
+		},
 	}
 	invalidData := must.Must(json.Marshal(invalidObj))
 	invalidBuf := bytes.NewReader(invalidData)
@@ -247,10 +257,14 @@ func TestAreaUpdate_WrongIDInRequestBody(t *testing.T) {
 	wrongID := "wrong-id"
 
 	obj := &jsonapi.AreaRequest{
-		Data: &models.Area{
-			ID:         wrongID, // Using a different ID in the update request
-			Name:       "Updated Area",
-			LocationID: area.LocationID,
+		Data: &jsonapi.AreaData{
+			ID:   wrongID,
+			Type: "areas",
+			Attributes: &models.Area{
+				ID:         wrongID, // Using a different ID in the update request
+				Name:       "Updated Area",
+				LocationID: area.LocationID,
+			},
 		},
 	}
 	data := must.Must(json.Marshal(obj))

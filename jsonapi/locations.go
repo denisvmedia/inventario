@@ -14,10 +14,13 @@ type Location struct {
 	Areas []string `json:"areas"`
 }
 
-// LocationResponse is an object that holds location information.
 type LocationResponse struct {
-	HTTPStatusCode int `json:"-"` // http response status code
+	HTTPStatusCode int                   `json:"-"` // http response status code
+	Data           *LocationResponseData `json:"data"`
+}
 
+// LocationResponseData is an object that holds location information.
+type LocationResponseData struct {
 	ID         string    `json:"id"`
 	Type       string    `json:"type" example:"locations" enums:"locations"`
 	Attributes *Location `json:"attributes"`
@@ -25,9 +28,11 @@ type LocationResponse struct {
 
 func NewLocationResponse(location *Location) *LocationResponse {
 	return &LocationResponse{
-		ID:         location.ID,
-		Type:       "locations",
-		Attributes: location,
+		Data: &LocationResponseData{
+			ID:         location.ID,
+			Type:       "locations",
+			Attributes: location,
+		},
 	}
 }
 
@@ -49,13 +54,23 @@ type LocationsMeta struct {
 
 // LocationsResponse is an object that holds location list information.
 type LocationsResponse struct {
-	Data []models.Location `json:"data"`
-	Meta LocationsMeta     `json:"meta"`
+	Data []LocationData `json:"data"`
+	Meta LocationsMeta  `json:"meta"`
 }
 
 func NewLocationsResponse(locations []models.Location, total int) *LocationsResponse {
+	locationData := make([]LocationData, 0) // must be an empty array instead of nil due to JSON serialization
+	for _, l := range locations {
+		l := l
+		locationData = append(locationData, LocationData{
+			ID:         l.ID,
+			Type:       "locations",
+			Attributes: &l,
+		})
+	}
+
 	return &LocationsResponse{
-		Data: locations,
+		Data: locationData,
 		Meta: LocationsMeta{
 			Locations: total,
 		},
@@ -69,9 +84,24 @@ func (rd *LocationsResponse) Render(w http.ResponseWriter, r *http.Request) erro
 
 var _ render.Binder = (*LocationRequest)(nil)
 
-// LocationRequest is an object that holds location data information.
 type LocationRequest struct {
-	Data *models.Location `json:"data"`
+	Data *LocationData `json:"data"`
+}
+
+// LocationData is an object that holds location data information.
+type LocationData struct {
+	ID         string           `json:"id,omitempty"`
+	Type       string           `json:"type" example:"locations" enums:"locations"`
+	Attributes *models.Location `json:"attributes"`
+}
+
+func (ld *LocationData) Validate() error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&ld.Type, validation.Required, validation.In("locations")),
+		validation.Field(&ld.Attributes, validation.Required),
+	)
+	return validation.ValidateStruct(ld, fields...)
 }
 
 func (lr *LocationRequest) Bind(r *http.Request) error {
@@ -79,6 +109,8 @@ func (lr *LocationRequest) Bind(r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
+	lr.Data.Attributes.ID = lr.Data.ID
 
 	return nil
 }

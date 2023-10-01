@@ -36,25 +36,25 @@ func TestCommoditiesList(t *testing.T) {
 
 	c.Assert(body, checkers.JSONPathMatches("$.data", qt.HasLen), len(expectedCommodities))
 	c.Assert(body, checkers.JSONPathEquals("$.data[0].id"), expectedCommodities[0].ID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].name"), expectedCommodities[0].Name)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].short_name"), expectedCommodities[0].ShortName)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].type"), string(expectedCommodities[0].Type))
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].area_id"), expectedCommodities[0].AreaID)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].count"), float64(expectedCommodities[0].Count))
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].original_price"), expectedCommodities[0].OriginalPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].original_price_currency"), string(expectedCommodities[0].OriginalPriceCurrency))
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].converted_original_price"), expectedCommodities[0].ConvertedOriginalPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].current_price"), expectedCommodities[0].CurrentPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].serial_number"), expectedCommodities[0].SerialNumber)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].extra_serial_numbers"), expectedCommodities[0].ExtraSerialNumbers)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].part_numbers"), expectedCommodities[0].PartNumbers)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].tags"), expectedCommodities[0].Tags)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].status"), string(expectedCommodities[0].Status))
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].purchase_date"), expectedCommodities[0].PurchaseDate)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].registered_date"), expectedCommodities[0].RegisteredDate)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].last_modified_date"), expectedCommodities[0].LastModifiedDate)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].comments"), expectedCommodities[0].Comments)
-	c.Assert(body, checkers.JSONPathEquals("$.data[0].draft"), expectedCommodities[0].Draft)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.name"), expectedCommodities[0].Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.short_name"), expectedCommodities[0].ShortName)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.type"), string(expectedCommodities[0].Type))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.area_id"), expectedCommodities[0].AreaID)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.count"), float64(expectedCommodities[0].Count))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.original_price"), expectedCommodities[0].OriginalPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.original_price_currency"), string(expectedCommodities[0].OriginalPriceCurrency))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.converted_original_price"), expectedCommodities[0].ConvertedOriginalPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.current_price"), expectedCommodities[0].CurrentPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.serial_number"), expectedCommodities[0].SerialNumber)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.extra_serial_numbers"), expectedCommodities[0].ExtraSerialNumbers)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.part_numbers"), expectedCommodities[0].PartNumbers)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.tags"), expectedCommodities[0].Tags)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.status"), string(expectedCommodities[0].Status))
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.purchase_date"), expectedCommodities[0].PurchaseDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.registered_date"), expectedCommodities[0].RegisteredDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.last_modified_date"), expectedCommodities[0].LastModifiedDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.comments"), expectedCommodities[0].Comments)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.draft"), expectedCommodities[0].Draft)
 }
 
 func TestCommodityGet(t *testing.T) {
@@ -79,31 +79,31 @@ func TestCommodityGet(t *testing.T) {
 	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
 	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params).Manuals)
 
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "commodities")
-	c.Assert(body, checkers.JSONPathEquals("$.id"), commodity.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), commodity.Name)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.short_name"), commodity.ShortName)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []any{})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.type"), string(commodity.Type))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.area_id"), commodity.AreaID)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.count"), float64(commodity.Count))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.original_price"), commodity.OriginalPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.original_price_currency"), string(commodity.OriginalPriceCurrency))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.converted_original_price"), commodity.ConvertedOriginalPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.current_price"), commodity.CurrentPrice.String())
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.serial_number"), commodity.SerialNumber)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.extra_serial_numbers"), commodity.ExtraSerialNumbers)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.part_numbers"), commodity.PartNumbers)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.tags"), commodity.Tags)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.status"), string(commodity.Status))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.purchase_date"), commodity.PurchaseDate)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.registered_date"), commodity.RegisteredDate)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.last_modified_date"), commodity.LastModifiedDate)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.comments"), commodity.Comments)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.draft"), commodity.Draft)
-	c.Assert(body, checkers.JSONPathEquals("$.meta.images"), expectedImages)
-	c.Assert(body, checkers.JSONPathEquals("$.meta.invoices"), expectedInvoices)
-	c.Assert(body, checkers.JSONPathEquals("$.meta.manuals"), expectedManuals)
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "commodities")
+	c.Assert(body, checkers.JSONPathEquals("$.data.id"), commodity.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), commodity.Name)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.short_name"), commodity.ShortName)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), "")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.type"), string(commodity.Type))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.area_id"), commodity.AreaID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.original_price"), commodity.OriginalPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), string(commodity.OriginalPriceCurrency))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), commodity.ConvertedOriginalPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.current_price"), commodity.CurrentPrice.String())
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.serial_number"), commodity.SerialNumber)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.extra_serial_numbers"), commodity.ExtraSerialNumbers)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.part_numbers"), commodity.PartNumbers)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.tags"), commodity.Tags)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.status"), string(commodity.Status))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.purchase_date"), commodity.PurchaseDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.registered_date"), commodity.RegisteredDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), commodity.LastModifiedDate)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.comments"), commodity.Comments)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.draft"), commodity.Draft)
+	c.Assert(body, checkers.JSONPathEquals("$.data.meta.images"), expectedImages)
+	c.Assert(body, checkers.JSONPathEquals("$.data.meta.invoices"), expectedInvoices)
+	c.Assert(body, checkers.JSONPathEquals("$.data.meta.manuals"), expectedManuals)
 }
 
 func TestCommodityCreate(t *testing.T) {
@@ -113,29 +113,36 @@ func TestCommodityCreate(t *testing.T) {
 	expectedAreas := must.Must(params.AreaRegistry.List())
 	area := expectedAreas[1]
 
+	urls := models.URLs([]*models.URL{
+		must.Must(models.URLParse("https://example.com")),
+		must.Must(models.URLParse("https://example.com/2")),
+	})
+
 	obj := &jsonapi.CommodityRequest{
-		Data: &models.Commodity{
-			Name:                   "New Commodity in Area 2",
-			AreaID:                 area.ID,
-			Type:                   models.CommodityTypeElectronics,
-			OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
-			OriginalPriceCurrency:  models.Currency("USD"),
-			ConvertedOriginalPrice: must.Must(decimal.NewFromString("1200.00")),
-			CurrentPrice:           must.Must(decimal.NewFromString("800.00")),
-			SerialNumber:           "SN123456",
-			ExtraSerialNumbers:     []string{"SN654321"},
-			PartNumbers:            []string{"P123", "P456"},
-			Tags:                   []string{"tag1", "tag2"},
-			URLs: []*models.URL{
-				must.Must(models.URLParse("https://example.com")),
-				must.Must(models.URLParse("https://example.com/2")),
+		Data: &jsonapi.CommodityData{
+			Type: "commodities",
+			Attributes: &models.Commodity{
+				Name:                   "New Commodity in Area 2",
+				ShortName:              "NewCom2",
+				AreaID:                 area.ID,
+				Type:                   models.CommodityTypeElectronics,
+				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
+				OriginalPriceCurrency:  models.Currency("USD"),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("1200.00")),
+				CurrentPrice:           must.Must(decimal.NewFromString("800.00")),
+				SerialNumber:           "SN123456",
+				ExtraSerialNumbers:     []string{"SN654321"},
+				PartNumbers:            []string{"P123", "P456"},
+				Tags:                   []string{"tag1", "tag2"},
+				URLs:                   &urls,
+				Count:                  1,
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+				RegisteredDate:         models.ToPDate("2023-01-02"),
+				LastModifiedDate:       models.ToPDate("2023-01-03"),
+				Comments:               "New commodity comments",
+				Draft:                  false,
 			},
-			Status:           models.CommodityStatusInUse,
-			PurchaseDate:     "2023-01-01",
-			RegisteredDate:   "2023-01-02",
-			LastModifiedDate: "2023-01-03",
-			Comments:         "New commodity comments",
-			Draft:            false,
 		},
 	}
 	data := must.Must(json.Marshal(obj))
@@ -152,30 +159,27 @@ func TestCommodityCreate(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 	body := rr.Body.Bytes()
 
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "commodities")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "New Commodity in Area 2")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.short_name"), "")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []any{
-		"https://example.com",
-		"https://example.com/2",
-	})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.type"), string(models.CommodityTypeElectronics))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.area_id"), area.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.count"), float64(0))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.original_price"), "1000")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.original_price_currency"), "USD")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.converted_original_price"), "1200")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.current_price"), "800")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.serial_number"), "SN123456")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.extra_serial_numbers"), []any{"SN654321"})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.part_numbers"), []any{"P123", "P456"})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.tags"), []any{"tag1", "tag2"})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.status"), string(models.CommodityStatusInUse))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.purchase_date"), "2023-01-01")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.registered_date"), "2023-01-02")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.last_modified_date"), "2023-01-03")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.comments"), "New commodity comments")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.draft"), false)
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "commodities")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "New Commodity in Area 2")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.short_name"), "NewCom2")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), "https://example.com\nhttps://example.com/2")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.type"), string(models.CommodityTypeElectronics))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.area_id"), area.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(1))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.original_price"), "1000")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), "USD")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "1200")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.current_price"), "800")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.serial_number"), "SN123456")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.extra_serial_numbers"), []any{"SN654321"})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.part_numbers"), []any{"P123", "P456"})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.tags"), []any{"tag1", "tag2"})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.status"), string(models.CommodityStatusInUse))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.purchase_date"), "2023-01-01")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.registered_date"), "2023-01-02")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), "2023-01-03")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.comments"), "New commodity comments")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.draft"), false)
 }
 
 func TestCommodityUpdate(t *testing.T) {
@@ -186,27 +190,31 @@ func TestCommodityUpdate(t *testing.T) {
 	commodity := expectedCommodities[0]
 
 	obj := &jsonapi.CommodityRequest{
-		Data: models.WithID(commodity.ID, &models.Commodity{
-			Name:                   "Updated Commodity",
-			ShortName:              "UC",
-			AreaID:                 commodity.AreaID,
-			Type:                   models.CommodityTypeFurniture,
-			Count:                  10,
-			OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
-			OriginalPriceCurrency:  models.Currency("USD"),
-			ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
-			CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
-			SerialNumber:           "SN654321",
-			ExtraSerialNumbers:     []string{"SN123456"},
-			PartNumbers:            []string{"P789"},
-			Tags:                   []string{"tag1", "tag3"},
-			Status:                 models.CommodityStatusInUse,
-			PurchaseDate:           "2022-01-01",
-			RegisteredDate:         "2022-01-02",
-			LastModifiedDate:       "2022-01-03",
-			Comments:               "Updated commodity comments",
-			Draft:                  false,
-		}),
+		Data: &jsonapi.CommodityData{
+			ID:   commodity.ID,
+			Type: "commodities",
+			Attributes: models.WithID(commodity.ID, &models.Commodity{
+				Name:                   "Updated Commodity",
+				ShortName:              "UC",
+				AreaID:                 commodity.AreaID,
+				Type:                   models.CommodityTypeFurniture,
+				Count:                  10,
+				OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
+				OriginalPriceCurrency:  models.Currency("USD"),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
+				CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
+				SerialNumber:           "SN654321",
+				ExtraSerialNumbers:     []string{"SN123456"},
+				PartNumbers:            []string{"P789"},
+				Tags:                   []string{"tag1", "tag3"},
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2022-01-01"),
+				RegisteredDate:         models.ToPDate("2022-01-02"),
+				LastModifiedDate:       models.ToPDate("2022-01-03"),
+				Comments:               "Updated commodity comments",
+				Draft:                  false,
+			}),
+		},
 	}
 	data := must.Must(json.Marshal(obj))
 	buf := bytes.NewReader(data)
@@ -226,31 +234,31 @@ func TestCommodityUpdate(t *testing.T) {
 	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
 	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params).Manuals)
 
-	c.Assert(body, checkers.JSONPathEquals("$.type"), "commodities")
-	c.Assert(body, checkers.JSONPathEquals("$.id"), commodity.ID)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.name"), "Updated Commodity")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.short_name"), "UC")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.urls"), []any{})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.type"), string(models.CommodityTypeFurniture))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.area_id"), commodity.AreaID)
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.count"), float64(commodity.Count))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.original_price"), "2000")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.original_price_currency"), "USD")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.converted_original_price"), "2400")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.current_price"), "1800")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.serial_number"), "SN654321")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.extra_serial_numbers"), []any{"SN123456"})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.part_numbers"), []any{"P789"})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.tags"), []any{"tag1", "tag3"})
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.status"), string(models.CommodityStatusInUse))
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.purchase_date"), "2022-01-01")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.registered_date"), "2022-01-02")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.last_modified_date"), "2022-01-03")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.comments"), "Updated commodity comments")
-	c.Assert(body, checkers.JSONPathEquals("$.attributes.draft"), false)
-	c.Assert(body, checkers.JSONPathEquals("$.meta.images"), expectedImages)
-	c.Assert(body, checkers.JSONPathEquals("$.meta.invoices"), expectedInvoices)
-	c.Assert(body, checkers.JSONPathEquals("$.meta.manuals"), expectedManuals)
+	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "commodities")
+	c.Assert(body, checkers.JSONPathEquals("$.data.id"), commodity.ID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "Updated Commodity")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.short_name"), "UC")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.urls"), "")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.type"), string(models.CommodityTypeFurniture))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.area_id"), commodity.AreaID)
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.original_price"), "2000")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), "USD")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "2400")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.current_price"), "1800")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.serial_number"), "SN654321")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.extra_serial_numbers"), []any{"SN123456"})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.part_numbers"), []any{"P789"})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.tags"), []any{"tag1", "tag3"})
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.status"), string(models.CommodityStatusInUse))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.purchase_date"), "2022-01-01")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.registered_date"), "2022-01-02")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), "2022-01-03")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.comments"), "Updated commodity comments")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.draft"), false)
+	c.Assert(body, checkers.JSONPathEquals("$.data.meta.images"), expectedImages)
+	c.Assert(body, checkers.JSONPathEquals("$.data.meta.invoices"), expectedInvoices)
+	c.Assert(body, checkers.JSONPathEquals("$.data.meta.manuals"), expectedManuals)
 }
 
 func TestCommodityDelete(t *testing.T) {
@@ -301,26 +309,30 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 	wrongCommodityID := "wrong-commodity-id"
 
 	obj := &jsonapi.CommodityRequest{
-		Data: models.WithID(wrongCommodityID, &models.Commodity{
-			Name:                   "Updated Commodity",
-			ShortName:              "UC",
-			AreaID:                 wrongAreaID,
-			Type:                   models.CommodityTypeFurniture,
-			OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
-			OriginalPriceCurrency:  models.Currency("USD"),
-			ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
-			CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
-			SerialNumber:           "SN654321",
-			ExtraSerialNumbers:     []string{"SN123456"},
-			PartNumbers:            []string{"P789"},
-			Tags:                   []string{"tag1", "tag3"},
-			Status:                 models.CommodityStatusInUse,
-			PurchaseDate:           "2022-01-01",
-			RegisteredDate:         "2022-01-02",
-			LastModifiedDate:       "2022-01-03",
-			Comments:               "Updated commodity comments",
-			Draft:                  false,
-		}),
+		Data: &jsonapi.CommodityData{
+			ID:   wrongCommodityID,
+			Type: "commodities",
+			Attributes: models.WithID(wrongCommodityID, &models.Commodity{
+				Name:                   "Updated Commodity",
+				ShortName:              "UC",
+				AreaID:                 wrongAreaID,
+				Type:                   models.CommodityTypeFurniture,
+				OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
+				OriginalPriceCurrency:  models.Currency("USD"),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
+				CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
+				SerialNumber:           "SN654321",
+				ExtraSerialNumbers:     []string{"SN123456"},
+				PartNumbers:            []string{"P789"},
+				Tags:                   []string{"tag1", "tag3"},
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+				RegisteredDate:         models.ToPDate("2023-01-02"),
+				LastModifiedDate:       models.ToPDate("2023-01-03"),
+				Comments:               "Updated commodity comments",
+				Draft:                  false,
+			}),
+		},
 	}
 	data := must.Must(json.Marshal(obj))
 	buf := bytes.NewReader(data)

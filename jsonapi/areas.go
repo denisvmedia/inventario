@@ -9,10 +9,13 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-// AreaResponse is an object that holds area information.
 type AreaResponse struct {
-	HTTPStatusCode int `json:"-"` // http response status code
+	HTTPStatusCode int               `json:"-"` // http response status code
+	Data           *AreaResponseData `json:"data"`
+}
 
+// AreaResponseData is an object that holds area information.
+type AreaResponseData struct {
 	ID         string      `json:"id"`
 	Type       string      `json:"type" example:"areas" enums:"areas"`
 	Attributes models.Area `json:"attributes"`
@@ -20,9 +23,11 @@ type AreaResponse struct {
 
 func NewAreaResponse(area *models.Area) *AreaResponse {
 	return &AreaResponse{
-		ID:         area.ID,
-		Type:       "areas",
-		Attributes: *area,
+		Data: &AreaResponseData{
+			ID:         area.ID,
+			Type:       "areas",
+			Attributes: *area,
+		},
 	}
 }
 
@@ -44,13 +49,23 @@ type AreasMeta struct {
 
 // AreasResponse is an object that holds area list information.
 type AreasResponse struct {
-	Data []models.Area `json:"data"`
-	Meta AreasMeta     `json:"meta"`
+	Data []AreaData `json:"data"`
+	Meta AreasMeta  `json:"meta"`
 }
 
 func NewAreasResponse(areas []models.Area, total int) *AreasResponse {
+	areaData := make([]AreaData, 0) // must be an empty array instead of nil due to JSON serialization
+	for _, l := range areas {
+		l := l
+		areaData = append(areaData, AreaData{
+			ID:         l.ID,
+			Type:       "areas",
+			Attributes: &l,
+		})
+	}
+
 	return &AreasResponse{
-		Data: areas,
+		Data: areaData,
 		Meta: AreasMeta{Areas: total},
 	}
 }
@@ -64,7 +79,23 @@ var _ render.Binder = (*AreaRequest)(nil)
 
 // AreaRequest is an object that holds area data information.
 type AreaRequest struct {
-	Data *models.Area `json:"data"`
+	Data *AreaData `json:"data"`
+}
+
+// AreaData is an object that holds area data information.
+type AreaData struct {
+	ID         string       `json:"id,omitempty"`
+	Type       string       `json:"type" example:"areas" enums:"areas"`
+	Attributes *models.Area `json:"attributes"`
+}
+
+func (lr *AreaData) Validate() error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&lr.Type, validation.Required, validation.In("areas")),
+		validation.Field(&lr.Attributes, validation.Required),
+	)
+	return validation.ValidateStruct(lr, fields...)
 }
 
 func (lr *AreaRequest) Bind(r *http.Request) error {
@@ -72,6 +103,8 @@ func (lr *AreaRequest) Bind(r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
+	lr.Data.Attributes.ID = lr.Data.ID
 
 	return nil
 }

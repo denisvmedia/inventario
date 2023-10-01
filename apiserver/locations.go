@@ -75,7 +75,7 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		unprocessableEntityError(w, r, err)
 		return
 	}
-	location, err := api.locationRegistry.Create(*input.Data)
+	location, err := api.locationRegistry.Create(*input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -148,7 +148,7 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	newLocation, err := api.locationRegistry.Update(*input.Data)
+	newLocation, err := api.locationRegistry.Update(*input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
