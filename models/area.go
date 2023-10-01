@@ -2,6 +2,8 @@ package models
 
 import (
 	"github.com/jellydator/validation"
+
+	"github.com/denisvmedia/inventario/models/rules"
 )
 
 var (
@@ -27,8 +29,8 @@ func (a *Area) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&a.LocationID, validation.Required),
-		validation.Field(&a.Name, validation.Required),
+		validation.Field(&a.LocationID, rules.NotEmpty),
+		validation.Field(&a.Name, rules.NotEmpty),
 	)
 
 	return validation.ValidateStruct(a, fields...)

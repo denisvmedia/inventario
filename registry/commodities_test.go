@@ -128,15 +128,19 @@ func TestMemoryCommodityRegistry_Create_Validation(t *testing.T) {
 	_, err := r.Create(commodity)
 	var errs validation.Errors
 	c.Assert(err, qt.ErrorAs, &errs)
-	c.Assert(errs, qt.HasLen, 4)
+	c.Assert(errs, qt.HasLen, 6)
 	c.Assert(errs["name"], qt.Not(qt.IsNil))
 	c.Assert(errs["name"].Error(), qt.Equals, "cannot be blank")
+	c.Assert(errs["short_name"], qt.Not(qt.IsNil))
+	c.Assert(errs["short_name"].Error(), qt.Equals, "cannot be blank")
 	c.Assert(errs["type"], qt.Not(qt.IsNil))
 	c.Assert(errs["type"].Error(), qt.Equals, "cannot be blank")
 	c.Assert(errs["area_id"], qt.Not(qt.IsNil))
 	c.Assert(errs["area_id"].Error(), qt.Equals, "cannot be blank")
 	c.Assert(errs["status"], qt.Not(qt.IsNil))
 	c.Assert(errs["status"].Error(), qt.Equals, "cannot be blank")
+	c.Assert(errs["count"], qt.Not(qt.IsNil))
+	c.Assert(errs["count"].Error(), qt.Equals, "cannot be blank")
 }
 
 func TestMemoryCommodityRegistry_Create_AreaNotFound(t *testing.T) {
@@ -149,10 +153,12 @@ func TestMemoryCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 
 	// Create a test commodity with an invalid area ID
 	commodity := models.Commodity{
-		AreaID: "invalid",
-		Name:   "test",
-		Status: models.CommodityStatusInUse,
-		Type:   models.CommodityTypeEquipment,
+		AreaID:    "invalid",
+		Name:      "test",
+		Status:    models.CommodityStatusInUse,
+		Type:      models.CommodityTypeEquipment,
+		Count:     1,
+		ShortName: "test",
 	}
 
 	// Attempt to create the commodity in the registry and expect an area not found error
@@ -190,10 +196,12 @@ func getCommodityRegistry(c *qt.C) (registry.CommodityRegistry, *models.Commodit
 	c.Assert(err, qt.IsNil)
 
 	createdCommodity, err := r.Create(*models.WithID("commodity1", &models.Commodity{
-		AreaID: area1.ID,
-		Name:   "commodity1",
-		Status: models.CommodityStatusInUse,
-		Type:   models.CommodityTypeWhiteGoods,
+		AreaID:    area1.ID,
+		Name:      "commodity1",
+		ShortName: "commodity1",
+		Status:    models.CommodityStatusInUse,
+		Type:      models.CommodityTypeWhiteGoods,
+		Count:     1,
 	}))
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdCommodity, qt.Not(qt.IsNil))

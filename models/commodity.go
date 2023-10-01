@@ -5,6 +5,8 @@ import (
 
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
+
+	"github.com/denisvmedia/inventario/models/rules"
 )
 
 var (
@@ -88,7 +90,7 @@ type Commodity struct {
 	EntityID
 	Name                   string          `json:"name"`
 	ShortName              string          `json:"short_name"`
-	URLs                   []*URL          `json:"urls" swaggertype:"string"`
+	URLs                   *URLs           `json:"urls" swaggertype:"string"`
 	Type                   CommodityType   `json:"type"`
 	AreaID                 string          `json:"area_id"`
 	Count                  int             `json:"count"`
@@ -101,9 +103,9 @@ type Commodity struct {
 	PartNumbers            []string        `json:"part_numbers"`
 	Tags                   []string        `json:"tags"`
 	Status                 CommodityStatus `json:"status"`
-	PurchaseDate           string          `json:"purchase_date"`
-	RegisteredDate         string          `json:"registered_date"`
-	LastModifiedDate       string          `json:"last_modified_date"`
+	PurchaseDate           PDate           `json:"purchase_date"`
+	RegisteredDate         PDate           `json:"registered_date"`
+	LastModifiedDate       PDate           `json:"last_modified_date"`
 	Comments               string          `json:"comments"`
 	Draft                  bool            `json:"draft"`
 }
@@ -112,10 +114,14 @@ func (a *Commodity) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&a.Name, validation.Required),
-		validation.Field(&a.Type, validation.Required),
-		validation.Field(&a.AreaID, validation.Required),
-		validation.Field(&a.Status, validation.Required),
+		validation.Field(&a.Name, rules.NotEmpty),
+		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 20)),
+		validation.Field(&a.Type, rules.NotEmpty),
+		validation.Field(&a.AreaID, rules.NotEmpty),
+		validation.Field(&a.Status, rules.NotEmpty),
+		validation.Field(&a.PurchaseDate, rules.NotEmpty),
+		validation.Field(&a.Count, validation.Required, validation.Min(1)),
+		validation.Field(&a.URLs),
 	)
 
 	return validation.ValidateStruct(a, fields...)
@@ -124,8 +130,11 @@ func (a *Commodity) Validate() error {
 func (a *Commodity) MarshalJSON() ([]byte, error) {
 	type Alias Commodity
 	tmp := *a
-	if len(tmp.URLs) == 0 {
-		tmp.URLs = make([]*URL, 0)
+	if tmp.URLs == nil {
+		tmp.URLs = &URLs{}
+	}
+	if len(*tmp.URLs) == 0 {
+		*tmp.URLs = make([]*URL, 0)
 	}
 	return json.Marshal(Alias(tmp))
 }
@@ -138,8 +147,11 @@ func (a *Commodity) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	if len(tmp.URLs) == 0 {
-		tmp.URLs = make([]*URL, 0)
+	if tmp.URLs == nil {
+		tmp.URLs = &URLs{}
+	}
+	if len(*tmp.URLs) == 0 {
+		*tmp.URLs = make([]*URL, 0)
 	}
 
 	*a = Commodity(*tmp)

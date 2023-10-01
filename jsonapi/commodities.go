@@ -33,8 +33,12 @@ func (a *CommodityMeta) MarshalJSON() ([]byte, error) {
 
 // CommodityResponse is an object that holds commodity information.
 type CommodityResponse struct {
-	HTTPStatusCode int `json:"-"` // HTTP response status code
+	HTTPStatusCode int                    `json:"-"` // HTTP response status code
+	Data           *CommodityResponseData `json:"data"`
+}
 
+// CommodityResponseData is an object that holds commodity information.
+type CommodityResponseData struct {
 	ID         string            `json:"id"`
 	Type       string            `json:"type" example:"commodities" enums:"commodities"`
 	Attributes *models.Commodity `json:"attributes"`
@@ -44,10 +48,12 @@ type CommodityResponse struct {
 // NewCommodityResponse creates a new CommodityResponse instance.
 func NewCommodityResponse(commodity *models.Commodity, meta *CommodityMeta) *CommodityResponse {
 	return &CommodityResponse{
-		ID:         commodity.ID,
-		Type:       "commodities",
-		Attributes: commodity,
-		Meta:       meta,
+		Data: &CommodityResponseData{
+			ID:         commodity.ID,
+			Type:       "commodities",
+			Attributes: commodity,
+			Meta:       meta,
+		},
 	}
 }
 
@@ -71,14 +77,24 @@ type CommoditiesMeta struct {
 
 // CommoditiesResponse is an object that holds a list of commodities information.
 type CommoditiesResponse struct {
-	Data []models.Commodity `json:"data"`
-	Meta CommoditiesMeta    `json:"meta"`
+	Data []CommodityData `json:"data"`
+	Meta CommoditiesMeta `json:"meta"`
 }
 
 // NewCommoditiesResponse creates a new CommoditiesResponse instance.
 func NewCommoditiesResponse(commodities []models.Commodity, total int) *CommoditiesResponse {
+	commodityData := make([]CommodityData, 0) // must be an empty array instead of nil due to JSON serialization
+	for _, l := range commodities {
+		l := l
+		commodityData = append(commodityData, CommodityData{
+			ID:         l.ID,
+			Type:       "commodities",
+			Attributes: &l,
+		})
+	}
+
 	return &CommoditiesResponse{
-		Data: commodities,
+		Data: commodityData,
 		Meta: CommoditiesMeta{Commodities: total},
 	}
 }
@@ -91,7 +107,23 @@ func (cr *CommoditiesResponse) Render(w http.ResponseWriter, r *http.Request) er
 
 // CommodityRequest is an object that holds commodity data information.
 type CommodityRequest struct {
-	Data *models.Commodity `json:"data"`
+	Data *CommodityData `json:"data"`
+}
+
+// CommodityData is an object that holds commodity data information.
+type CommodityData struct {
+	ID         string            `json:"id,omitempty"`
+	Type       string            `json:"type" example:"commodities" enums:"commodities"`
+	Attributes *models.Commodity `json:"attributes"`
+}
+
+func (cd *CommodityData) Validate() error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&cd.Type, validation.Required, validation.In("commodities")),
+		validation.Field(&cd.Attributes, validation.Required),
+	)
+	return validation.ValidateStruct(cd, fields...)
 }
 
 var _ render.Binder = (*CommodityRequest)(nil)
