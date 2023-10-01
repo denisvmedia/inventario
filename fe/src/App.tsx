@@ -11,6 +11,8 @@ import LocationCreate from './components/LocationCreate';
 import LocationList from './components/LocationList';
 import AreaList from './components/AreaList';
 import LocationEdit from './components/LocationEdit';
+import CommodityList from './components/CommodityList';
+import CommodityCreate from './components/CommodityCreate';
 
 function App() {
   return (
@@ -27,6 +29,14 @@ function App() {
         name="areas"
         list={AreaList}
         create={AreaCreate}
+        edit={EditGuesser}
+        show={ShowGuesser}
+        recordRepresentation="name"
+      />
+      <Resource
+        name="commodities"
+        list={CommodityList}
+        create={CommodityCreate}
         edit={EditGuesser}
         show={ShowGuesser}
         recordRepresentation="name"

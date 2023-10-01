@@ -3,7 +3,6 @@ import {
   Create,
   SimpleForm,
   TextInput,
-  SelectInput,
   required,
 } from 'react-admin';
 import React from 'react';

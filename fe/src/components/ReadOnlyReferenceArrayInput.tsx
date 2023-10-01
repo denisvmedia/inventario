@@ -35,7 +35,7 @@ function ReadOnlyReferenceArrayInput({ source, reference, label }: any) {
         justifyContent: 'center',
         flexWrap: 'wrap',
         listStyle: 'none',
-        m: 0,
+        margin: 0,
         position: 'relative',
       }}
     >

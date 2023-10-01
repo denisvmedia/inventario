@@ -1,13 +1,10 @@
-// import fakeRestDataProvider from 'ra-data-fakerest';
-// import jsonServerProvider from 'ra-data-json-server';
+import { LegacyDataProvider } from 'react-admin';
 
-// @ts-ignore: there is no @types/ra-jsonapi-client
-import jsonapiClient from 'ra-jsonapi-client';
-
-// import data from './data.json';
+// eslint-disable-next-line import/no-relative-packages
+import jsonapiClient from './lib/ra-jsonapi-client/src';
 
 // const dataProvider = fakeRestDataProvider(data, true);
-const dataProvider = jsonapiClient(
+const dataProvider : LegacyDataProvider = jsonapiClient(
   'http://localhost:3333/api/v1',
   {
     total: null,
