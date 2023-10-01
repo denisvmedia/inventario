@@ -90,12 +90,12 @@ func APIServer(params Params) http.Handler {
 
 	r := chi.NewRouter()
 
-	//c := cors.New(cors.Options{
+	// c := cors.New(cors.Options{
 	//	AllowedOrigins: []string{"http://foo.com", "http://foo.com:8080"},
 	//	AllowCredentials: true,
 	//	// Enable Debugging for testing, consider disabling in production
 	//	Debug: true,
-	//})
+	// })
 
 	// CORS middleware
 	r.Use(cors.AllowAll().Handler)

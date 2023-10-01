@@ -100,6 +100,9 @@ func (u *URLs) UnmarshalJSON(data []byte) error {
 
 	for _, el := range surls {
 		s := strings.TrimSpace(el)
+		if s == "" {
+			continue
+		}
 
 		parsed, err := URLParse(s)
 		if err != nil {
