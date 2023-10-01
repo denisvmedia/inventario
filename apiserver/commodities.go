@@ -87,7 +87,7 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	commodity, err := api.commodityRegistry.Create(*input.Data)
+	commodity, err := api.commodityRegistry.Create(*input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -160,7 +160,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	updatedCommodity, err := api.commodityRegistry.Update(*input.Data)
+	updatedCommodity, err := api.commodityRegistry.Update(*input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

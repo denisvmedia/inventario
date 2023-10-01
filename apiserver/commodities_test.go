@@ -114,28 +114,31 @@ func TestCommodityCreate(t *testing.T) {
 	area := expectedAreas[1]
 
 	obj := &jsonapi.CommodityRequest{
-		Data: &models.Commodity{
-			Name:                   "New Commodity in Area 2",
-			AreaID:                 area.ID,
-			Type:                   models.CommodityTypeElectronics,
-			OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
-			OriginalPriceCurrency:  models.Currency("USD"),
-			ConvertedOriginalPrice: must.Must(decimal.NewFromString("1200.00")),
-			CurrentPrice:           must.Must(decimal.NewFromString("800.00")),
-			SerialNumber:           "SN123456",
-			ExtraSerialNumbers:     []string{"SN654321"},
-			PartNumbers:            []string{"P123", "P456"},
-			Tags:                   []string{"tag1", "tag2"},
-			URLs: []*models.URL{
-				must.Must(models.URLParse("https://example.com")),
-				must.Must(models.URLParse("https://example.com/2")),
+		Data: &jsonapi.CommodityData{
+			Type: "commodity",
+			Attributes: &models.Commodity{
+				Name:                   "New Commodity in Area 2",
+				AreaID:                 area.ID,
+				Type:                   models.CommodityTypeElectronics,
+				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
+				OriginalPriceCurrency:  models.Currency("USD"),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("1200.00")),
+				CurrentPrice:           must.Must(decimal.NewFromString("800.00")),
+				SerialNumber:           "SN123456",
+				ExtraSerialNumbers:     []string{"SN654321"},
+				PartNumbers:            []string{"P123", "P456"},
+				Tags:                   []string{"tag1", "tag2"},
+				URLs: []*models.URL{
+					must.Must(models.URLParse("https://example.com")),
+					must.Must(models.URLParse("https://example.com/2")),
+				},
+				Status:           models.CommodityStatusInUse,
+				PurchaseDate:     "2023-01-01",
+				RegisteredDate:   "2023-01-02",
+				LastModifiedDate: "2023-01-03",
+				Comments:         "New commodity comments",
+				Draft:            false,
 			},
-			Status:           models.CommodityStatusInUse,
-			PurchaseDate:     "2023-01-01",
-			RegisteredDate:   "2023-01-02",
-			LastModifiedDate: "2023-01-03",
-			Comments:         "New commodity comments",
-			Draft:            false,
 		},
 	}
 	data := must.Must(json.Marshal(obj))
@@ -186,27 +189,31 @@ func TestCommodityUpdate(t *testing.T) {
 	commodity := expectedCommodities[0]
 
 	obj := &jsonapi.CommodityRequest{
-		Data: models.WithID(commodity.ID, &models.Commodity{
-			Name:                   "Updated Commodity",
-			ShortName:              "UC",
-			AreaID:                 commodity.AreaID,
-			Type:                   models.CommodityTypeFurniture,
-			Count:                  10,
-			OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
-			OriginalPriceCurrency:  models.Currency("USD"),
-			ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
-			CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
-			SerialNumber:           "SN654321",
-			ExtraSerialNumbers:     []string{"SN123456"},
-			PartNumbers:            []string{"P789"},
-			Tags:                   []string{"tag1", "tag3"},
-			Status:                 models.CommodityStatusInUse,
-			PurchaseDate:           "2022-01-01",
-			RegisteredDate:         "2022-01-02",
-			LastModifiedDate:       "2022-01-03",
-			Comments:               "Updated commodity comments",
-			Draft:                  false,
-		}),
+		Data: &jsonapi.CommodityData{
+			ID:   commodity.ID,
+			Type: "commodity",
+			Attributes: models.WithID(commodity.ID, &models.Commodity{
+				Name:                   "Updated Commodity",
+				ShortName:              "UC",
+				AreaID:                 commodity.AreaID,
+				Type:                   models.CommodityTypeFurniture,
+				Count:                  10,
+				OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
+				OriginalPriceCurrency:  models.Currency("USD"),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
+				CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
+				SerialNumber:           "SN654321",
+				ExtraSerialNumbers:     []string{"SN123456"},
+				PartNumbers:            []string{"P789"},
+				Tags:                   []string{"tag1", "tag3"},
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           "2022-01-01",
+				RegisteredDate:         "2022-01-02",
+				LastModifiedDate:       "2022-01-03",
+				Comments:               "Updated commodity comments",
+				Draft:                  false,
+			}),
+		},
 	}
 	data := must.Must(json.Marshal(obj))
 	buf := bytes.NewReader(data)
@@ -301,26 +308,30 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 	wrongCommodityID := "wrong-commodity-id"
 
 	obj := &jsonapi.CommodityRequest{
-		Data: models.WithID(wrongCommodityID, &models.Commodity{
-			Name:                   "Updated Commodity",
-			ShortName:              "UC",
-			AreaID:                 wrongAreaID,
-			Type:                   models.CommodityTypeFurniture,
-			OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
-			OriginalPriceCurrency:  models.Currency("USD"),
-			ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
-			CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
-			SerialNumber:           "SN654321",
-			ExtraSerialNumbers:     []string{"SN123456"},
-			PartNumbers:            []string{"P789"},
-			Tags:                   []string{"tag1", "tag3"},
-			Status:                 models.CommodityStatusInUse,
-			PurchaseDate:           "2022-01-01",
-			RegisteredDate:         "2022-01-02",
-			LastModifiedDate:       "2022-01-03",
-			Comments:               "Updated commodity comments",
-			Draft:                  false,
-		}),
+		Data: &jsonapi.CommodityData{
+			ID:   wrongCommodityID,
+			Type: "commodity",
+			Attributes: models.WithID(wrongCommodityID, &models.Commodity{
+				Name:                   "Updated Commodity",
+				ShortName:              "UC",
+				AreaID:                 wrongAreaID,
+				Type:                   models.CommodityTypeFurniture,
+				OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
+				OriginalPriceCurrency:  models.Currency("USD"),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
+				CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
+				SerialNumber:           "SN654321",
+				ExtraSerialNumbers:     []string{"SN123456"},
+				PartNumbers:            []string{"P789"},
+				Tags:                   []string{"tag1", "tag3"},
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           "2022-01-01",
+				RegisteredDate:         "2022-01-02",
+				LastModifiedDate:       "2022-01-03",
+				Comments:               "Updated commodity comments",
+				Draft:                  false,
+			}),
+		},
 	}
 	data := must.Must(json.Marshal(obj))
 	buf := bytes.NewReader(data)

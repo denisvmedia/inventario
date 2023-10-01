@@ -91,7 +91,14 @@ func (cr *CommoditiesResponse) Render(w http.ResponseWriter, r *http.Request) er
 
 // CommodityRequest is an object that holds commodity data information.
 type CommodityRequest struct {
-	Data *models.Commodity `json:"data"`
+	Data *CommodityData `json:"data"`
+}
+
+// CommodityData is an object that holds commodity data information.
+type CommodityData struct {
+	ID         string            `json:"id,omitempty"`
+	Type       string            `json:"type" example:"commodity" enums:"commodity"`
+	Attributes *models.Commodity `json:"attributes"`
 }
 
 var _ render.Binder = (*CommodityRequest)(nil)
