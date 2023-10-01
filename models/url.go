@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -67,7 +68,11 @@ func (u *URLs) Validate() error {
 		return nil
 	}
 
-	return validation.Validate(u)
+	if err := validation.Validate(*u); err != nil {
+		return fmt.Errorf("invalid urls: %w", err)
+	}
+
+	return nil
 }
 
 func (u *URLs) MarshalJSON() ([]byte, error) {

@@ -121,6 +121,7 @@ func (a *Commodity) Validate() error {
 		validation.Field(&a.Status, rules.NotEmpty),
 		validation.Field(&a.PurchaseDate, rules.NotEmpty),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),
+		validation.Field(&a.URLs),
 	)
 
 	return validation.ValidateStruct(a, fields...)
