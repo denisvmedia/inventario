@@ -5,6 +5,8 @@ import (
 
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
+
+	"github.com/denisvmedia/inventario/models/rules"
 )
 
 var (
@@ -112,10 +114,10 @@ func (a *Commodity) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&a.Name, validation.Required),
-		validation.Field(&a.Type, validation.Required),
-		validation.Field(&a.AreaID, validation.Required),
-		validation.Field(&a.Status, validation.Required),
+		validation.Field(&a.Name, rules.NotEmpty),
+		validation.Field(&a.Type, rules.NotEmpty),
+		validation.Field(&a.AreaID, rules.NotEmpty),
+		validation.Field(&a.Status, rules.NotEmpty),
 	)
 
 	return validation.ValidateStruct(a, fields...)

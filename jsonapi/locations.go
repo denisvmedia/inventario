@@ -95,13 +95,13 @@ type LocationData struct {
 	Attributes *models.Location `json:"attributes"`
 }
 
-func (lr *LocationData) Validate() error {
+func (ld *LocationData) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
-		validation.Field(&lr.Type, validation.Required, validation.In("locations")),
-		validation.Field(&lr.Attributes, validation.Required),
+		validation.Field(&ld.Type, validation.Required, validation.In("locations")),
+		validation.Field(&ld.Attributes, validation.Required),
 	)
-	return validation.ValidateStruct(lr, fields...)
+	return validation.ValidateStruct(ld, fields...)
 }
 
 func (lr *LocationRequest) Bind(r *http.Request) error {

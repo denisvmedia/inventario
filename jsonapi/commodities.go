@@ -33,8 +33,12 @@ func (a *CommodityMeta) MarshalJSON() ([]byte, error) {
 
 // CommodityResponse is an object that holds commodity information.
 type CommodityResponse struct {
-	HTTPStatusCode int `json:"-"` // HTTP response status code
+	HTTPStatusCode int                    `json:"-"` // HTTP response status code
+	Data           *CommodityResponseData `json:"data"`
+}
 
+// CommodityResponseData is an object that holds commodity information.
+type CommodityResponseData struct {
 	ID         string            `json:"id"`
 	Type       string            `json:"type" example:"commodities" enums:"commodities"`
 	Attributes *models.Commodity `json:"attributes"`
@@ -44,10 +48,12 @@ type CommodityResponse struct {
 // NewCommodityResponse creates a new CommodityResponse instance.
 func NewCommodityResponse(commodity *models.Commodity, meta *CommodityMeta) *CommodityResponse {
 	return &CommodityResponse{
-		ID:         commodity.ID,
-		Type:       "commodities",
-		Attributes: commodity,
-		Meta:       meta,
+		Data: &CommodityResponseData{
+			ID:         commodity.ID,
+			Type:       "commodities",
+			Attributes: commodity,
+			Meta:       meta,
+		},
 	}
 }
 
@@ -97,8 +103,17 @@ type CommodityRequest struct {
 // CommodityData is an object that holds commodity data information.
 type CommodityData struct {
 	ID         string            `json:"id,omitempty"`
-	Type       string            `json:"type" example:"commodity" enums:"commodity"`
+	Type       string            `json:"type" example:"commodities" enums:"commodities"`
 	Attributes *models.Commodity `json:"attributes"`
+}
+
+func (cd *CommodityData) Validate() error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&cd.Type, validation.Required, validation.In("commodities")),
+		validation.Field(&cd.Attributes, validation.Required),
+	)
+	return validation.ValidateStruct(cd, fields...)
 }
 
 var _ render.Binder = (*CommodityRequest)(nil)
