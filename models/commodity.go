@@ -90,7 +90,6 @@ type Commodity struct {
 	EntityID
 	Name                   string          `json:"name"`
 	ShortName              string          `json:"short_name"`
-	URLs                   *URLs           `json:"urls" swaggertype:"string"`
 	Type                   CommodityType   `json:"type"`
 	AreaID                 string          `json:"area_id"`
 	Count                  int             `json:"count"`
@@ -106,6 +105,7 @@ type Commodity struct {
 	PurchaseDate           PDate           `json:"purchase_date"`
 	RegisteredDate         PDate           `json:"registered_date"`
 	LastModifiedDate       PDate           `json:"last_modified_date"`
+	URLs                   *URLs           `json:"urls" swaggertype:"string"`
 	Comments               string          `json:"comments"`
 	Draft                  bool            `json:"draft"`
 }

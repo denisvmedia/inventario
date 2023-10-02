@@ -160,6 +160,8 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	input.Data.Attributes.ID = input.Data.ID
+
 	updatedCommodity, err := api.commodityRegistry.Update(*input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)

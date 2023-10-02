@@ -15,5 +15,5 @@ export default {
     {
       type: 'user', id: 5, attributes: { name: 'Jack' },
     },
-  ]
+  ],
 };

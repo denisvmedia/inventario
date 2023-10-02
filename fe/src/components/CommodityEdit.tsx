@@ -1,15 +1,15 @@
 import {
-  Create,
+  Edit,
 } from 'react-admin';
 import React from 'react';
 import ComodityBaseForm from './ComodityBaseForm';
 
-function CommodityCreate() {
+function CommodityEdit() {
   return (
-    <Create>
+    <Edit mutationMode="pessimistic">
       {ComodityBaseForm()}
-    </Create>
+    </Edit>
   );
 }
 
-export default CommodityCreate;
+export default CommodityEdit;

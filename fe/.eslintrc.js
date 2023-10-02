@@ -7,6 +7,7 @@ module.exports = {
     ],
     rules: {
         '@typescript-eslint/no-shadow': 'off',
+        'react/jsx-props-no-spreading': 'off',
         'max-len': ["error", { "code": 160 }]
     },
     parserOptions: {
