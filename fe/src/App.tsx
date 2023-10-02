@@ -13,6 +13,7 @@ import AreaList from './components/AreaList';
 import LocationEdit from './components/LocationEdit';
 import CommodityList from './components/CommodityList';
 import CommodityCreate from './components/CommodityCreate';
+import CommodityEdit from './components/CommodityEdit';
 
 function App() {
   return (
@@ -37,7 +38,7 @@ function App() {
         name="commodities"
         list={CommodityList}
         create={CommodityCreate}
-        edit={EditGuesser}
+        edit={CommodityEdit}
         show={ShowGuesser}
         recordRepresentation="name"
       />
