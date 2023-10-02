@@ -3,8 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useInput } from 'ra-core';
 import { CommonInputProps, ResettableTextFieldProps, sanitizeInputRestProps } from 'react-admin';
 
-export type ChipsInputProps = CommonInputProps &
-Omit<ResettableTextFieldProps, 'label' | 'helperText' | 'value'>;
+export type ChipsInputProps = CommonInputProps & ResettableTextFieldProps;
 
 function ChipsInput(props: ChipsInputProps) {
   const {
