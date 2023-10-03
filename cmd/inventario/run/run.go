@@ -14,7 +14,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/cobraflags"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
-	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
 var runCmd = &cobra.Command{
@@ -54,9 +54,12 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	log.WithField(addrFlag, bindAddr).Info("Starting server")
 
 	var params apiserver.Params
-	params.LocationRegistry = registry.NewMemoryLocationRegistry()
-	params.AreaRegistry = registry.NewMemoryAreaRegistry(params.LocationRegistry)
-	params.CommodityRegistry = registry.NewMemoryCommodityRegistry(params.AreaRegistry)
+	params.LocationRegistry = memory.NewLocationRegistry()
+	params.AreaRegistry = memory.NewAreaRegistry(params.LocationRegistry)
+	params.CommodityRegistry = memory.NewCommodityRegistry(params.AreaRegistry)
+	params.ImageRegistry = memory.NewImageRegistry(params.CommodityRegistry)
+	params.InvoiceRegistry = memory.NewInvoiceRegistry(params.CommodityRegistry)
+	params.ManualRegistry = memory.NewManualRegistry(params.CommodityRegistry)
 	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
 
 	err := validation.Validate(params)

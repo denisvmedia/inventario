@@ -14,7 +14,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/checkers"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
 func TestLocationsDelete(t *testing.T) {
@@ -182,7 +182,7 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 	c := qt.New(t)
 
 	params := apiserver.Params{
-		LocationRegistry: registry.NewMemoryLocationRegistry(), // Empty registry
+		LocationRegistry: memory.NewLocationRegistry(), // Empty registry
 	}
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)

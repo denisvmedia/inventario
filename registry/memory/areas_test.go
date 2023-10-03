@@ -1,4 +1,4 @@
-package registry_test
+package memory_test
 
 import (
 	"testing"
@@ -8,14 +8,15 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
 func TestMemoryAreaRegistry_Create(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryLocationRegistry
-	locationRegistry := registry.NewMemoryLocationRegistry()
-	r := registry.NewMemoryAreaRegistry(locationRegistry)
+	// Create a new instance of LocationRegistry
+	locationRegistry := memory.NewLocationRegistry()
+	r := memory.NewAreaRegistry(locationRegistry)
 
 	// Test area
 	var area models.Area
@@ -39,12 +40,12 @@ func TestMemoryAreaRegistry_Create(t *testing.T) {
 	c.Assert(count, qt.Equals, 1)
 }
 
-func TestMemoryAreaRegistry_Create_Validation(t *testing.T) {
+func TestAreaRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryLocationRegistry
-	locationRegistry := registry.NewMemoryLocationRegistry()
-	r := registry.NewMemoryAreaRegistry(locationRegistry)
+	// Create a new instance of LocationRegistry
+	locationRegistry := memory.NewLocationRegistry()
+	r := memory.NewAreaRegistry(locationRegistry)
 
 	// Create a test area without a location ID
 	var area models.Area
@@ -67,12 +68,12 @@ func TestMemoryAreaRegistry_Create_Validation(t *testing.T) {
 	c.Assert(err, qt.ErrorMatches, "location not found.*")
 }
 
-func TestMemoryAreaRegistry_Commodities(t *testing.T) {
+func TestAreaRegistry_Commodities(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryAreaRegistry
-	locationRegistry := registry.NewMemoryLocationRegistry()
-	r := registry.NewMemoryAreaRegistry(locationRegistry)
+	// Create a new instance of AreaRegistry
+	locationRegistry := memory.NewLocationRegistry()
+	r := memory.NewAreaRegistry(locationRegistry)
 
 	// Test area
 	var area models.Area
@@ -106,12 +107,12 @@ func TestMemoryAreaRegistry_Commodities(t *testing.T) {
 	c.Assert(commodities, qt.Contains, "commodity2")
 }
 
-func TestMemoryAreaRegistry_Delete(t *testing.T) {
+func TestAreaRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryAreaRegistry
-	locationRegistry := registry.NewMemoryLocationRegistry()
-	r := registry.NewMemoryAreaRegistry(locationRegistry)
+	// Create a new instance of AreaRegistry
+	locationRegistry := memory.NewLocationRegistry()
+	r := memory.NewAreaRegistry(locationRegistry)
 
 	// Test area
 	var area models.Area

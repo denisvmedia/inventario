@@ -1,4 +1,4 @@
-package registry_test
+package memory_test
 
 import (
 	"testing"
@@ -8,14 +8,15 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func TestMemoryImageRegistry_Create(t *testing.T) {
+func TestImageRegistry_Create(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryImageRegistry
+	// Create a new instance of ImageRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	r := registry.NewMemoryImageRegistry(commodityRegistry)
+	r := memory.NewImageRegistry(commodityRegistry)
 
 	// Create a test image
 	image := models.Image{
@@ -38,12 +39,12 @@ func TestMemoryImageRegistry_Create(t *testing.T) {
 	c.Assert(count, qt.Equals, 1)
 }
 
-func TestMemoryImageRegistry_Delete(t *testing.T) {
+func TestImageRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryImageRegistry
+	// Create a new instance of ImageRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	r := registry.NewMemoryImageRegistry(commodityRegistry)
+	r := memory.NewImageRegistry(commodityRegistry)
 
 	// Create a test image
 	image := models.Image{
@@ -73,12 +74,12 @@ func TestMemoryImageRegistry_Delete(t *testing.T) {
 	c.Assert(count, qt.Equals, 0)
 }
 
-func TestMemoryImageRegistry_Create_Validation(t *testing.T) {
+func TestImageRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryImageRegistry
+	// Create a new instance of ImageRegistry
 	commodityRegistry, _ := getCommodityRegistry(c)
-	r := registry.NewMemoryImageRegistry(commodityRegistry)
+	r := memory.NewImageRegistry(commodityRegistry)
 
 	// Create a test image without required fields
 	image := models.Image{}
@@ -105,12 +106,12 @@ func TestMemoryImageRegistry_Create_Validation(t *testing.T) {
 	c.Assert(err, qt.ErrorMatches, "commodity not found.*")
 }
 
-func TestMemoryImageRegistry_Create_CommodityNotFound(t *testing.T) {
+func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryImageRegistry
+	// Create a new instance of ImageRegistry
 	commodityRegistry, _ := getCommodityRegistry(c)
-	r := registry.NewMemoryImageRegistry(commodityRegistry)
+	r := memory.NewImageRegistry(commodityRegistry)
 
 	// Create a test image with an invalid commodity ID
 	image := models.Image{
