@@ -105,7 +105,7 @@ type Commodity struct {
 	PurchaseDate           PDate           `json:"purchase_date"`
 	RegisteredDate         PDate           `json:"registered_date"`
 	LastModifiedDate       PDate           `json:"last_modified_date"`
-	URLs                   *URLs           `json:"urls" swaggertype:"string"`
+	URLs                   []*URL          `json:"urls" swaggertype:"string"`
 	Comments               string          `json:"comments"`
 	Draft                  bool            `json:"draft"`
 }
@@ -130,12 +130,6 @@ func (a *Commodity) Validate() error {
 func (a *Commodity) MarshalJSON() ([]byte, error) {
 	type Alias Commodity
 	tmp := *a
-	if tmp.URLs == nil {
-		tmp.URLs = &URLs{}
-	}
-	if len(*tmp.URLs) == 0 {
-		*tmp.URLs = make([]*URL, 0)
-	}
 	return json.Marshal(Alias(tmp))
 }
 
@@ -145,13 +139,6 @@ func (a *Commodity) UnmarshalJSON(data []byte) error {
 	err := json.Unmarshal(data, tmp)
 	if err != nil {
 		return err
-	}
-
-	if tmp.URLs == nil {
-		tmp.URLs = &URLs{}
-	}
-	if len(*tmp.URLs) == 0 {
-		*tmp.URLs = make([]*URL, 0)
 	}
 
 	*a = Commodity(*tmp)
