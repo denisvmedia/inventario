@@ -1,13 +1,10 @@
 package registry
 
 import (
-	"sync"
-
-	"github.com/google/uuid"
-	"github.com/wk8/go-ordered-map/v2"
+	"github.com/denisvmedia/inventario/models"
 )
 
-type idable interface {
+type Idable interface {
 	GetID() string
 	SetID(id string)
 }
@@ -32,78 +29,46 @@ type Registry[T any] interface {
 	Count() (int, error)
 }
 
-type MemoryRegistry[T any] struct {
-	items *orderedmap.OrderedMap[string, T]
-	lock  sync.RWMutex
+type AreaRegistry interface {
+	Registry[models.Area]
+
+	AddCommodity(areaID, commodityID string)
+	GetCommodities(areaID string) []string
+	DeleteCommodity(areaID, commodityID string)
 }
 
-func NewMemoryRegistry[T any]() *MemoryRegistry[T] {
-	var item T
-	_, ok := (any)(&item).(idable)
-	if !ok {
-		panic("registry: T must implement idable interface")
-	}
+type CommodityRegistry interface {
+	Registry[models.Commodity]
 
-	return &MemoryRegistry[T]{
-		items: orderedmap.New[string, T](),
-	}
+	AddImage(commodityID, imageID string)
+	GetImages(commodityID string) []string
+	DeleteImage(commodityID, imageID string)
+
+	AddManual(commodityID, manualID string)
+	GetManuals(commodityID string) []string
+	DeleteManual(commodityID, manualID string)
+
+	AddInvoice(commodityID, invoiceID string)
+	GetInvoices(commodityID string) []string
+	DeleteInvoice(commodityID, invoiceID string)
 }
 
-func (r *MemoryRegistry[T]) Create(item T) (*T, error) {
-	iitem := (any)(&item).(idable) //nolint:errcheck // checked in NewMemoryRegistry
-	iitem.SetID(uuid.New().String())
+type LocationRegistry interface {
+	Registry[models.Location]
 
-	r.lock.Lock()
-	r.items.Set(iitem.GetID(), item)
-	r.lock.Unlock()
-
-	return &item, nil
+	AddArea(locationID, areaID string)
+	GetAreas(locationID string) []string
+	DeleteArea(locationID, areaID string)
 }
 
-func (r *MemoryRegistry[T]) Get(id string) (*T, error) {
-	r.lock.RLock()
-	item, ok := r.items.Get(id)
-	r.lock.RUnlock()
-	if !ok {
-		return nil, ErrNotFound
-	}
-	return &item, nil
+type ImageRegistry interface {
+	Registry[models.Image]
 }
 
-func (r *MemoryRegistry[T]) List() ([]T, error) {
-	items := make([]T, 0, r.items.Len())
-	r.lock.RLock()
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-		items = append(items, pair.Value)
-	}
-	r.lock.RUnlock()
-	return items, nil
+type InvoiceRegistry interface {
+	Registry[models.Invoice]
 }
 
-func (r *MemoryRegistry[T]) Update(item T) (*T, error) {
-	iitem := (any)(&item).(idable) //nolint:errcheck // checked in NewMemoryRegistry
-
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	_, ok := r.items.Get(iitem.GetID())
-	if !ok {
-		return nil, ErrNotFound
-	}
-
-	r.items.Set(iitem.GetID(), item)
-	return &item, nil
-}
-
-func (r *MemoryRegistry[T]) Delete(id string) error {
-	r.lock.Lock()
-	r.items.Delete(id)
-	r.lock.Unlock()
-	return nil
-}
-
-func (r *MemoryRegistry[T]) Count() (int, error) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-	return r.items.Len(), nil
+type ManualRegistry interface {
+	Registry[models.Manual]
 }
