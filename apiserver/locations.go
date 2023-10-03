@@ -21,7 +21,7 @@ type locationsAPI struct {
 // @Accept json-api
 // @Produce json-api
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
-// @Router /locations [get]
+// @Router /locations [get].
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 	locations, _ := api.locationRegistry.List()
 
@@ -39,7 +39,7 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 // @Produce  json-api
 // @Param id path string true "Location ID"
 // @Success 200 {object} jsonapi.LocationResponse "OK"
-// @Router /locations/{id} [get]
+// @Router /locations/{id} [get].
 func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	location := locationFromContext(r.Context())
 	if location == nil {
@@ -68,7 +68,7 @@ func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { /
 // @Success 201 {object} jsonapi.LocationResponse "Location created"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /locations [post]
+// @Router /locations [post].
 func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.LocationRequest
 	if err := render.Bind(r, &input); err != nil {
@@ -102,7 +102,7 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 // @Param id path string true "Location ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
-// @Router /locations/{id} [delete]
+// @Router /locations/{id} [delete].
 func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) {
 	location := locationFromContext(r.Context())
 	if location == nil {
@@ -129,7 +129,7 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 // @Success 200 {object} jsonapi.LocationResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /locations/{id} [put]
+// @Router /locations/{id} [put].
 func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) {
 	location := locationFromContext(r.Context())
 	if location == nil {

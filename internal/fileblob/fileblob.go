@@ -295,7 +295,7 @@ func (b *bucket) Close() error {
 }
 
 // escapeKey does all required escaping for UTF-8 strings to work the filesystem.
-func escapeKey(s string) string { //nolint:gocognit,gocyclo // external file source
+func escapeKey(s string) string { //nolint:gocyclo // external file source
 	s = escape.HexEscape(s, func(r []rune, i int) bool {
 		c := r[i]
 		switch {
@@ -346,7 +346,7 @@ func (b *bucket) ErrorCode(err error) gcerrors.ErrorCode {
 	}
 }
 
-// path returns the full path for a key
+// path returns the full path for a key.
 func (b *bucket) path(key string) (string, error) {
 	path := filepath.Join(b.dir, escapeKey(key))
 	if strings.HasSuffix(path, attrsExt) {
@@ -896,7 +896,7 @@ func (b *bucket) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// SignedURL implements driver.SignedURL
+// SignedURL implements driver.SignedURL.
 func (b *bucket) SignedURL(ctx context.Context, key string, opts *driver.SignedURLOptions) (string, error) {
 	if b.opts.URLSigner == nil {
 		return "", gcerr.New(gcerr.Unimplemented, nil, 1, "fileblob.SignedURL: bucket does not have an Options.URLSigner")

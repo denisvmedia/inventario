@@ -13,72 +13,63 @@ var nopNoteFn = func(string, any) {}
 func TestJSONPathEquals(t *testing.T) {
 	t.Run("Test case 1: JSON value matches the expected value at the JSON path expression (string JSON)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = `{"name": "John", "age": 30}`
+		jsonData := `{"name": "John", "age": 30}`
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"John"}, nopNoteFn)
 		c.Assert(result, qt.IsNil)
 	})
 
 	t.Run("Test case 2: JSON value does not match the expected value at the JSON path expression (string JSON)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = `{"name": "John", "age": 30}`
+		jsonData := `{"name": "John", "age": 30}`
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"Jane"}, nopNoteFn)
 		c.Assert(result, qt.Not(qt.IsNil))
 	})
 
 	t.Run("Test case 3: JSON value matches the expected value at the JSON path expression ([]any)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = []any{"name", "John", "age", 30}
+		jsonData := []any{"name", "John", "age", 30}
 		result := checkers.JSONPathEquals("$[1]").Check(jsonData, []any{"John"}, nopNoteFn)
 		c.Assert(result, qt.IsNil)
 	})
 
 	t.Run("Test case 4: JSON value does not match the expected value at the JSON path expression ([]any)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = []any{"name", "John", "age", 30}
+		jsonData := []any{"name", "John", "age", 30}
 		result := checkers.JSONPathEquals("$[1]").Check(jsonData, []any{"Jane"}, nopNoteFn)
 		c.Assert(result, qt.Not(qt.IsNil))
 	})
 
 	t.Run("Test case 5: JSON value matches the expected value at the JSON path expression (map[string]any)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = map[string]any{"name": "John", "age": 30}
+		jsonData := map[string]any{"name": "John", "age": 30}
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"John"}, nopNoteFn)
 		c.Assert(result, qt.IsNil)
 	})
 
 	t.Run("Test case 6: JSON value does not match the expected value at the JSON path expression (map[string]any)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = map[string]any{"name": "John", "age": 30}
+		jsonData := map[string]any{"name": "John", "age": 30}
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"Jane"}, nopNoteFn)
 		c.Assert(result, qt.Not(qt.IsNil))
 	})
 
 	t.Run("Test case 7: JSON value matches the expected value at the JSON path expression ([]byte)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = []byte(`{"name": "John", "age": 30}`)
+		jsonData := []byte(`{"name": "John", "age": 30}`)
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"John"}, nopNoteFn)
 		c.Assert(result, qt.IsNil)
 	})
 
 	t.Run("Test case 8: JSON value does not match the expected value at the JSON path expression ([]byte)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = []byte(`{"name": "John", "age": 30}`)
+		jsonData := []byte(`{"name": "John", "age": 30}`)
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"Jane"}, nopNoteFn)
 		c.Assert(result, qt.Not(qt.IsNil))
 	})
 
 	t.Run("Test case 9: JSON value matches the expected value at the JSON path expression (different input type)", func(t *testing.T) {
 		c := qt.New(t)
-		var jsonData any
-		jsonData = 42 // Example of a different input type (int)
+		jsonData := 42 // Example of a different input type (int)
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{42}, nopNoteFn)
 		c.Assert(result, qt.Not(qt.IsNil))
 	})

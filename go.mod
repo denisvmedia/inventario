@@ -1,6 +1,6 @@
 module github.com/denisvmedia/inventario
 
-go 1.20
+go 1.21.0
 
 require (
 	github.com/frankban/quicktest v1.14.6
