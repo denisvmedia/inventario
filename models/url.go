@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"errors"
 	"net/url"
 
 	"github.com/jellydator/validation"
@@ -35,7 +36,11 @@ func (u *URL) Validate() error {
 		validation.Field(&u.Scheme, validation.Required, validation.In("http", "https")),
 	)
 
-	return validation.ValidateStruct(u, fields...)
+	err := validation.ValidateStruct(u, fields...)
+	if err != nil {
+		return errors.New(err.Error())
+	}
+	return nil
 }
 
 func (u *URL) MarshalJSON() ([]byte, error) {
