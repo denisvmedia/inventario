@@ -46,7 +46,7 @@ const (
 	// AlreadyExists means that the resource exists, but it should not.
 	AlreadyExists ErrorCode = 3
 
-	// InvalidArguments means that a value given to a Go CDK API is incorrect.
+	// InvalidArgument means that a value given to a Go CDK API is incorrect.
 	InvalidArgument ErrorCode = 4
 
 	// Internal means that something unexpected happened. Internal errors always indicate
@@ -152,10 +152,8 @@ func DoNotWrap(err error) bool {
 		return true
 	}
 	var r *retry.ContextError
-	if errors.As(err, &r) {
-		return true
-	}
-	return false
+
+	return errors.As(err, &r)
 }
 
 // GRPCCode extracts the gRPC status code and converts it into an ErrorCode.

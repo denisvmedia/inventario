@@ -13,11 +13,7 @@ type Currency string
 
 func (c Currency) IsValid() bool {
 	_, err := currency.ParseISO(string(c))
-	if err != nil {
-		return false
-	}
-
-	return true
+	return err == nil
 }
 
 func (c Currency) Validate() error {

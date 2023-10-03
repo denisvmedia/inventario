@@ -32,7 +32,7 @@ type commoditiesAPI struct {
 // @Accept json-api
 // @Produce json-api
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
-// @Router /commodities [get]
+// @Router /commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
 	commodities, _ := api.commodityRegistry.List()
 
@@ -50,7 +50,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // @Produce  json-api
 // @Param id path string true "Commodity ID"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
-// @Router /commodities/{id} [get]
+// @Router /commodities/{id} [get].
 func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -79,7 +79,7 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 // @Param commodity body jsonapi.CommodityRequest true "Commodity object"
 // @Success 201 {object} jsonapi.CommodityResponse "Commodity created"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /commodities [post]
+// @Router /commodities [post].
 func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.CommodityRequest
 	if err := render.Bind(r, &input); err != nil {
@@ -113,7 +113,7 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 // @Param id path string true "Commodity ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Commodity not found"
-// @Router /commodities/{id} [delete]
+// @Router /commodities/{id} [delete].
 func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -141,7 +141,7 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /commodities/{id} [put]
+// @Router /commodities/{id} [put].
 func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -188,7 +188,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Produce json-api
 // @Param commodityID path string true "Commodity ID"
 // @Success 200 {object} jsonapi.ImagesResponse "OK"
-// @Router /commodities/{commodityID}/images [get]
+// @Router /commodities/{commodityID}/images [get].
 func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -222,7 +222,7 @@ func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 // @Produce json-api
 // @Param commodityID path string true "Commodity ID"
 // @Success 200 {object} jsonapi.InvoicesResponse "OK"
-// @Router /commodities/{commodityID}/invoices [get]
+// @Router /commodities/{commodityID}/invoices [get].
 func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -256,7 +256,7 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 // @Produce json-api
 // @Param commodityID path string true "Commodity ID"
 // @Success 200 {object} jsonapi.ManualsResponse "OK"
-// @Router /commodities/{commodityID}/manuals [get]
+// @Router /commodities/{commodityID}/manuals [get].
 func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -292,7 +292,7 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 // @Param imageID path string true "Image ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
-// @Router /commodities/{commodityID}/images/{imageID} [delete]
+// @Router /commodities/{commodityID}/images/{imageID} [delete].
 func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -331,7 +331,7 @@ func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
 // @Param invoiceID path string true "Invoice ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
-// @Router /commodities/{commodityID}/invoices/{invoiceID} [delete]
+// @Router /commodities/{commodityID}/invoices/{invoiceID} [delete].
 func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -370,7 +370,7 @@ func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request)
 // @Param manualID path string true "Manual ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
-// @Router /commodities/{commodityID}/manuals/{manualID} [delete]
+// @Router /commodities/{commodityID}/manuals/{manualID} [delete].
 func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -410,7 +410,7 @@ func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) 
 // @Param imageExt path string true "Image Extension"
 // @Success 200 "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
-// @Router /commodities/{commodityID}/images/{imageID}.{imageExt} [get]
+// @Router /commodities/{commodityID}/images/{imageID}.{imageExt} [get].
 func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -452,7 +452,7 @@ func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request)
 // @Param invoiceExt path string true "Invoice Extension"
 // @Success 200 "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
-// @Router /commodities/{commodityID}/invoices/{invoiceID}.{invoiceExt} [get]
+// @Router /commodities/{commodityID}/invoices/{invoiceID}.{invoiceExt} [get].
 func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -494,7 +494,7 @@ func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Reques
 // @Param manualExt path string true "Manual Extension"
 // @Success 200 "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
-// @Router /commodities/{commodityID}/manuals/{manualID}.{manualExt} [get]
+// @Router /commodities/{commodityID}/manuals/{manualID}.{manualExt} [get].
 func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -545,7 +545,7 @@ func (api *commoditiesAPI) getDownloadFile(ctx context.Context, path string) (io
 // @Param imageID path string true "Image ID"
 // @Success 200 {object} jsonapi.ImageResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
-// @Router /commodities/{commodityID}/images/{imageID} [get]
+// @Router /commodities/{commodityID}/images/{imageID} [get].
 func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	imageID := chi.URLParam(r, "imageID")
 
@@ -573,7 +573,7 @@ func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) 
 // @Param invoiceID path string true "Invoice ID"
 // @Success 200 {object} jsonapi.InvoiceResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
-// @Router /commodities/{commodityID}/invoices/{invoiceID} [get]
+// @Router /commodities/{commodityID}/invoices/{invoiceID} [get].
 func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	invoiceID := chi.URLParam(r, "invoiceID")
 
@@ -601,7 +601,7 @@ func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request
 // @Param manualID path string true "Manual ID"
 // @Success 200 {object} jsonapi.ManualResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
-// @Router /commodities/{commodityID}/manuals/{manualID} [get]
+// @Router /commodities/{commodityID}/manuals/{manualID} [get].
 func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	manualID := chi.URLParam(r, "manualID")
 
