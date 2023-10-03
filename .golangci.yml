@@ -1,32 +1,45 @@
 linters:
   disable-all: true
   enable:
+    - asciicheck
+    - depguard
     - funlen
     - gci
     - gocognit
     - gocritic
     - gocyclo
+    - godot
     - gofmt
+    - goprintffuncname
+    - gosimple
     - govet
     - importas
     - ineffassign
     - lll
     - nakedret
+    - nestif
+    - nolintlint
     - revive
     - staticcheck
     - whitespace
 
 linters-settings:
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "io/ioutil"
+            desc: "Deprecated: As of Go 1.16, the same functionality is now provided by package io or package os."
+          - pkg: "github.com/pkg/errors"
+            desc: "Replace by errkit or std errors"
+  funlen:
+    lines: 240
+    statements: 160
   gci:
     sections:
       - standard
       - default
       - prefix(github.com/denisvmedia/inventario)
-  funlen:
-    lines: 240
-    statements: 160
-  lll:
-    line-length: 240
   gocognit:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     # starting with 60 and will work our way down to 20
@@ -42,6 +55,18 @@ linters-settings:
         alias: qt
       - pkg: github.com/goextras/errors
         alias: errkit
+  lll:
+    line-length: 240
+  nestif:
+    min-complexity: 6
+  nolintlint:
+    allow-leading-space: false
+    allow-no-explanation:
+      # for the following linters it's usually there's nothing to explain
+      - errcheck
+      - lll
+    require-explanation: true
+    require-specific: true
   revive:
     severity: error
     rules:
@@ -80,10 +105,7 @@ linters-settings:
       - name: indent-error-flow
         disabled: false
       - name: imports-blacklist
-        severity: warning
-        disabled: false
-        arguments:
-          - "github.com/pkg/errors"
+        disabled: true # depgard is used instead
       - name: import-shadowing
         disabled: false
       - name: optimize-operands-order
@@ -127,6 +149,6 @@ issues:
 
 run:
   concurrency: 8
-  go: '1.19'
+  go: '1.21'
   skip-dirs:
     - ^sample/
