@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models"
 )
@@ -43,15 +42,8 @@ func TestNegativeURLValidation(t *testing.T) {
 			c := qt.New(t)
 
 			err := tc.url.Validate()
-
-			var validationErrors validation.Errors
-			c.Assert(err, qt.ErrorAs, &validationErrors)
-			c.Assert(validationErrors, qt.HasLen, 1)
-
-			var validationError validation.ErrorObject
-			c.Assert(validationErrors["Scheme"], qt.ErrorAs, &validationError)
-			c.Assert(validationError.Code(), qt.Equals, "validation_in_invalid")
-			c.Assert(validationError.Message(), qt.Equals, "must be a valid value")
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Equals, "Scheme: must be a valid value.")
 		})
 	}
 }
