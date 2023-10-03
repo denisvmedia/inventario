@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"time"
@@ -13,7 +14,7 @@ type APIServer struct {
 	done   chan struct{}
 }
 
-func (s *APIServer) Run(addr string, h http.Handler) (<-chan struct{}, <-chan error) {
+func (s *APIServer) Run(addr string, h http.Handler) <-chan error {
 	s.done = make(chan struct{})
 	s.server = &http.Server{
 		Addr:    addr,
@@ -30,19 +31,19 @@ func (s *APIServer) Run(addr string, h http.Handler) (<-chan struct{}, <-chan er
 		errCh <- err
 		close(errCh)
 		close(s.done)
-		return s.done, errCh
+		return errCh
 	}
 	s.ln = ln
 
 	go func() {
 		err := s.server.Serve(ln)
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 		close(errCh)
 	}()
 
-	return s.done, errCh
+	return errCh
 }
 
 func (s *APIServer) Port() int {
@@ -56,4 +57,8 @@ func (s *APIServer) Shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return s.server.Shutdown(ctx)
+}
+
+func (s *APIServer) Done() <-chan struct{} {
+	return s.done
 }
