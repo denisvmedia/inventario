@@ -64,12 +64,18 @@ func runCommand(_ *cobra.Command, _ []string) error {
 		log.WithError(err).Error("Invalid server parameters")
 		return err
 	}
-	srv.Run(bindAddr, apiserver.APIServer(params))
+	errCh := srv.Run(bindAddr, apiserver.APIServer(params))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
+	select {
+	case <-c:
+	case err := <-errCh:
+		log.WithError(err).Error("Failure during server startup")
+		os.Exit(1)
+		return nil
+	}
 
 	log.Info("Shutting down server")
 	err = srv.Shutdown()

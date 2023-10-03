@@ -23,10 +23,12 @@ func TestAPIServer_Run(t *testing.T) {
 	})
 
 	// Start the server in a separate goroutine.
-	doneCh, errCh := apiServer.Run("localhost:0", mockHandler)
+	errCh := apiServer.Run("localhost:0", mockHandler)
 	select {
-	case <-doneCh:
-		c.Fatalf("server stopped unexpectedly. Error: %v", <-errCh)
+	case <-apiServer.Done():
+		c.Fatal("server stopped unexpectedly")
+	case err := <-errCh:
+		c.Fatalf("server stopped unexpectedly. Error: %v", err)
 	default:
 		c.Log("Server running on", apiServer.Port())
 	}
@@ -56,5 +58,5 @@ func TestAPIServer_Run(t *testing.T) {
 		c.Fatal("server did not stop in time")
 	}
 
-	<-doneCh
+	<-apiServer.Done()
 }
