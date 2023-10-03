@@ -1,4 +1,4 @@
-package registry_test
+package memory_test
 
 import (
 	"testing"
@@ -8,17 +8,18 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func TestMemoryManualRegistry_Create(t *testing.T) {
+func TestInvoiceRegistry_Create(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryManualRegistry
+	// Create a new instance of InvoiceRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	r := registry.NewMemoryManualRegistry(commodityRegistry)
+	r := memory.NewInvoiceRegistry(commodityRegistry)
 
-	// Create a test manual
-	manual := models.Manual{
+	// Create a test invoice
+	invoice := models.Invoice{
 		CommodityID: createdCommodity.GetID(),
 		File: &models.File{
 			Path:     "path",
@@ -27,26 +28,26 @@ func TestMemoryManualRegistry_Create(t *testing.T) {
 		},
 	}
 
-	// Create a new manual in the registry
-	createdManual, err := r.Create(manual)
+	// Create a new invoice in the registry
+	createdInvoice, err := r.Create(invoice)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdManual, qt.Not(qt.IsNil))
+	c.Assert(createdInvoice, qt.Not(qt.IsNil))
 
-	// Verify the count of manuals in the registry
+	// Verify the count of invoices in the registry
 	count, err := r.Count()
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
 
-func TestMemoryManualRegistry_Delete(t *testing.T) {
+func TestInvoiceRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryManualRegistry
+	// Create a new instance of InvoiceRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	r := registry.NewMemoryManualRegistry(commodityRegistry)
+	r := memory.NewInvoiceRegistry(commodityRegistry)
 
-	// Create a test manual
-	manual := models.Manual{
+	// Create a test invoice
+	invoice := models.Invoice{
 		CommodityID: createdCommodity.GetID(),
 		File: &models.File{
 			Path:     "path",
@@ -55,34 +56,34 @@ func TestMemoryManualRegistry_Delete(t *testing.T) {
 		},
 	}
 
-	// Create a new manual in the registry
-	createdManual, err := r.Create(manual)
+	// Create a new invoice in the registry
+	createdInvoice, err := r.Create(invoice)
 	c.Assert(err, qt.IsNil)
 
-	// Delete the manual from the registry
-	err = r.Delete(createdManual.ID)
+	// Delete the invoice from the registry
+	err = r.Delete(createdInvoice.ID)
 	c.Assert(err, qt.IsNil)
 
-	// Verify that the manual is no longer present in the registry
-	_, err = r.Get(createdManual.ID)
+	// Verify that the invoice is no longer present in the registry
+	_, err = r.Get(createdInvoice.ID)
 	c.Assert(err, qt.Equals, registry.ErrNotFound)
 
-	// Verify the count of manuals in the registry
+	// Verify the count of invoices in the registry
 	count, err := r.Count()
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }
 
-func TestMemoryManualRegistry_Create_Validation(t *testing.T) {
+func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryManualRegistry
+	// Create a new instance of InvoiceRegistry
 	commodityRegistry, _ := getCommodityRegistry(c)
-	r := registry.NewMemoryManualRegistry(commodityRegistry)
+	r := memory.NewInvoiceRegistry(commodityRegistry)
 
-	// Create a test manual without required fields
-	manual := models.Manual{}
-	_, err := r.Create(manual)
+	// Create a test invoice without required fields
+	invoice := models.Invoice{}
+	_, err := r.Create(invoice)
 	c.Assert(err, qt.Not(qt.IsNil))
 	var errs validation.Errors
 	c.Assert(err, qt.ErrorAs, &errs)
@@ -91,7 +92,7 @@ func TestMemoryManualRegistry_Create_Validation(t *testing.T) {
 	c.Assert(errs["commodity_id"], qt.Not(qt.IsNil))
 	c.Assert(errs["commodity_id"].Error(), qt.Equals, "cannot be blank")
 
-	manual = models.Manual{
+	invoice = models.Invoice{
 		File: &models.File{
 			Path:     "test",
 			Ext:      ".png",
@@ -99,21 +100,21 @@ func TestMemoryManualRegistry_Create_Validation(t *testing.T) {
 		},
 		CommodityID: "invalid",
 	}
-	// Attempt to create the manual in the registry and expect a validation error
-	_, err = r.Create(manual)
+	// Attempt to create the invoice in the registry and expect a validation error
+	_, err = r.Create(invoice)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	c.Assert(err, qt.ErrorMatches, "commodity not found.*")
 }
 
-func TestMemoryManualRegistry_Create_CommodityNotFound(t *testing.T) {
+func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryManualRegistry
+	// Create a new instance of InvoiceRegistry
 	commodityRegistry, _ := getCommodityRegistry(c)
-	r := registry.NewMemoryManualRegistry(commodityRegistry)
+	r := memory.NewInvoiceRegistry(commodityRegistry)
 
-	// Create a test manual with an invalid commodity ID
-	manual := models.Manual{
+	// Create a test invoice with an invalid commodity ID
+	invoice := models.Invoice{
 		CommodityID: "invalid",
 		File: &models.File{
 			Path:     "path",
@@ -122,7 +123,7 @@ func TestMemoryManualRegistry_Create_CommodityNotFound(t *testing.T) {
 		},
 	}
 
-	// Attempt to create the manual in the registry and expect a commodity not found error
-	_, err := r.Create(manual)
+	// Attempt to create the invoice in the registry and expect a commodity not found error
+	_, err := r.Create(invoice)
 	c.Assert(err, qt.ErrorMatches, "commodity not found.*")
 }

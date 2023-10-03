@@ -15,12 +15,13 @@ import (
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
 const uploadLocation = "afile://uploads?memfs=1&create_dir=1"
 
 func newLocationRegistry() registry.LocationRegistry {
-	var locationsRegistry = registry.NewMemoryLocationRegistry()
+	var locationsRegistry = memory.NewLocationRegistry()
 
 	must.Must(locationsRegistry.Create(models.Location{
 		Name:    "Location 1",
@@ -36,7 +37,7 @@ func newLocationRegistry() registry.LocationRegistry {
 }
 
 func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRegistry {
-	var areaRegistry = registry.NewMemoryAreaRegistry(locationRegistry)
+	var areaRegistry = memory.NewAreaRegistry(locationRegistry)
 
 	locations := must.Must(locationRegistry.List())
 
@@ -56,7 +57,7 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 }
 
 func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
-	var commodityRegistry = registry.NewMemoryCommodityRegistry(areaRegistry)
+	var commodityRegistry = memory.NewCommodityRegistry(areaRegistry)
 
 	areas := must.Must(areaRegistry.List())
 
@@ -84,7 +85,7 @@ func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.Commodity
 }
 
 func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.ImageRegistry {
-	var imageRegistry = registry.NewMemoryImageRegistry(commodityRegistry)
+	var imageRegistry = memory.NewImageRegistry(commodityRegistry)
 
 	commodities := must.Must(commodityRegistry.List())
 
@@ -124,7 +125,7 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 }
 
 func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.InvoiceRegistry {
-	var invoiceRegistry = registry.NewMemoryInvoiceRegistry(commodityRegistry)
+	var invoiceRegistry = memory.NewInvoiceRegistry(commodityRegistry)
 
 	commodities := must.Must(commodityRegistry.List())
 
@@ -164,7 +165,7 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 }
 
 func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.ManualRegistry {
-	var manualRegistry = registry.NewMemoryManualRegistry(commodityRegistry)
+	var manualRegistry = memory.NewManualRegistry(commodityRegistry)
 
 	commodities := must.Must(commodityRegistry.List())
 

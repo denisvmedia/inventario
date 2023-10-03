@@ -1,4 +1,4 @@
-package registry_test
+package memory_test
 
 import (
 	"testing"
@@ -7,13 +7,14 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func TestMemoryLocationRegistry_Create(t *testing.T) {
+func TestLocationRegistry_Create(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryLocationRegistry
-	r := registry.NewMemoryLocationRegistry()
+	// Create a new instance of LocationRegistry
+	r := memory.NewLocationRegistry()
 
 	// Create a test location
 	location := models.WithID("location1", &models.Location{})
@@ -29,11 +30,11 @@ func TestMemoryLocationRegistry_Create(t *testing.T) {
 	c.Assert(count, qt.Equals, 1)
 }
 
-func TestMemoryLocationRegistry_Areas(t *testing.T) {
+func TestLocationRegistry_Areas(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryLocationRegistry
-	r := registry.NewMemoryLocationRegistry()
+	// Create a new instance of LocationRegistry
+	r := memory.NewLocationRegistry()
 
 	// Create a test location
 	location := models.WithID("location1", &models.Location{})
@@ -59,11 +60,11 @@ func TestMemoryLocationRegistry_Areas(t *testing.T) {
 	c.Assert(areas, qt.Contains, "area2")
 }
 
-func TestMemoryLocationRegistry_Delete(t *testing.T) {
+func TestLocationRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryLocationRegistry
-	r := registry.NewMemoryLocationRegistry()
+	// Create a new instance of LocationRegistry
+	r := memory.NewLocationRegistry()
 
 	// Create a test location
 	location := models.WithID("location1", &models.Location{})
@@ -85,11 +86,11 @@ func TestMemoryLocationRegistry_Delete(t *testing.T) {
 	c.Assert(count, qt.Equals, 0)
 }
 
-func TestMemoryLocationRegistry_Delete_ErrCases(t *testing.T) {
+func TestLocationRegistry_Delete_ErrCases(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryLocationRegistry
-	r := registry.NewMemoryLocationRegistry()
+	// Create a new instance of LocationRegistry
+	r := memory.NewLocationRegistry()
 
 	// Create a test location
 	location := models.WithID("location1", &models.Location{})

@@ -1,4 +1,4 @@
-package registry_test
+package memory_test
 
 import (
 	"testing"
@@ -8,12 +8,13 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func TestMemoryCommodityRegistry_Create(t *testing.T) {
+func TestCommodityRegistry_Create(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryCommodityRegistry
+	// Create a new instance of CommodityRegistry
 	r, _ := getCommodityRegistry(c) // will create the commodity
 
 	// Verify the count of commodities in the registry
@@ -22,10 +23,10 @@ func TestMemoryCommodityRegistry_Create(t *testing.T) {
 	c.Assert(count, qt.Equals, 1)
 }
 
-func TestMemoryCommodityRegistry_AddImage(t *testing.T) {
+func TestCommodityRegistry_AddImage(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryCommodityRegistry
+	// Create a new instance of CommodityRegistry
 	r, createdCommodity := getCommodityRegistry(c)
 
 	// Add an image to the commodity
@@ -46,7 +47,7 @@ func TestMemoryCommodityRegistry_AddImage(t *testing.T) {
 	c.Assert(images, qt.Contains, "image2")
 }
 
-func TestMemoryCommodityRegistry_AddManual(t *testing.T) {
+func TestCommodityRegistry_AddManual(t *testing.T) {
 	c := qt.New(t)
 
 	r, createdCommodity := getCommodityRegistry(c)
@@ -69,10 +70,10 @@ func TestMemoryCommodityRegistry_AddManual(t *testing.T) {
 	c.Assert(manuals, qt.Contains, "manual2")
 }
 
-func TestMemoryCommodityRegistry_AddInvoice(t *testing.T) {
+func TestCommodityRegistry_AddInvoice(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryCommodityRegistry
+	// Create a new instance of CommodityRegistry
 	r, createdCommodity := getCommodityRegistry(c)
 
 	// Add an invoice to the commodity
@@ -93,10 +94,10 @@ func TestMemoryCommodityRegistry_AddInvoice(t *testing.T) {
 	c.Assert(invoices, qt.Contains, "invoice2")
 }
 
-func TestMemoryCommodityRegistry_Delete(t *testing.T) {
+func TestCommodityRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryCommodityRegistry
+	// Create a new instance of CommodityRegistry
 	r, createdCommodity := getCommodityRegistry(c)
 
 	// Delete the commodity from the registry
@@ -113,13 +114,13 @@ func TestMemoryCommodityRegistry_Delete(t *testing.T) {
 	c.Assert(count, qt.Equals, 0)
 }
 
-func TestMemoryCommodityRegistry_Create_Validation(t *testing.T) {
+func TestCommodityRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryCommodityRegistry
-	locationRegistry := registry.NewMemoryLocationRegistry()
-	areaRegistry := registry.NewMemoryAreaRegistry(locationRegistry)
-	r := registry.NewMemoryCommodityRegistry(areaRegistry)
+	// Create a new instance of CommodityRegistry
+	locationRegistry := memory.NewLocationRegistry()
+	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	r := memory.NewCommodityRegistry(areaRegistry)
 
 	// Create a test commodity without required fields
 	commodity := models.Commodity{}
@@ -143,13 +144,13 @@ func TestMemoryCommodityRegistry_Create_Validation(t *testing.T) {
 	c.Assert(errs["count"].Error(), qt.Equals, "cannot be blank")
 }
 
-func TestMemoryCommodityRegistry_Create_AreaNotFound(t *testing.T) {
+func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryCommodityRegistry
-	locationRegistry := registry.NewMemoryLocationRegistry()
-	areaRegistry := registry.NewMemoryAreaRegistry(locationRegistry)
-	r := registry.NewMemoryCommodityRegistry(areaRegistry)
+	// Create a new instance of CommodityRegistry
+	locationRegistry := memory.NewLocationRegistry()
+	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	r := memory.NewCommodityRegistry(areaRegistry)
 
 	// Create a test commodity with an invalid area ID
 	commodity := models.Commodity{
@@ -166,13 +167,13 @@ func TestMemoryCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 	c.Assert(err, qt.ErrorMatches, "area not found.*")
 }
 
-func TestMemoryCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
+func TestCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a new instance of MemoryCommodityRegistry
-	locationRegistry := registry.NewMemoryLocationRegistry()
-	areaRegistry := registry.NewMemoryAreaRegistry(locationRegistry)
-	r := registry.NewMemoryCommodityRegistry(areaRegistry)
+	// Create a new instance of CommodityRegistry
+	locationRegistry := memory.NewLocationRegistry()
+	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	r := memory.NewCommodityRegistry(areaRegistry)
 
 	// Attempt to delete a non-existing commodity from the registry and expect a not found error
 	err := r.Delete("nonexistent")
@@ -180,9 +181,9 @@ func TestMemoryCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
 }
 
 func getCommodityRegistry(c *qt.C) (registry.CommodityRegistry, *models.Commodity) {
-	locationRegistry := registry.NewMemoryLocationRegistry()
-	areaRegistry := registry.NewMemoryAreaRegistry(locationRegistry)
-	r := registry.NewMemoryCommodityRegistry(areaRegistry)
+	locationRegistry := memory.NewLocationRegistry()
+	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	r := memory.NewCommodityRegistry(areaRegistry)
 
 	location1, err := locationRegistry.Create(models.Location{
 		Name: "Location 1",
