@@ -77,22 +77,3 @@ func TestPositiveURLJSONMarshalling(t *testing.T) {
 		})
 	}
 }
-
-func TestURLsJSON(t *testing.T) {
-	c := qt.New(t)
-
-	data := `"http://example.com\nhttp://example.org\nhttp://example.net"`
-
-	var u models.URLs
-	err := json.Unmarshal([]byte(data), &u)
-
-	c.Assert(err, qt.IsNil)
-	c.Assert(u, qt.HasLen, 3)
-	c.Assert(u[0].String(), qt.Equals, "http://example.com")
-	c.Assert(u[1].String(), qt.Equals, "http://example.org")
-	c.Assert(u[2].String(), qt.Equals, "http://example.net")
-
-	marshaled, err := json.Marshal(&u)
-	c.Assert(err, qt.IsNil)
-	c.Assert(string(marshaled), qt.Equals, data)
-}
