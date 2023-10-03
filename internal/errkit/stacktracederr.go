@@ -38,7 +38,7 @@ func WithStackTrace(err error) error {
 // Error implements the error interface and returns the error message.
 // It includes only the wrapped error message, without the stack trace.
 func (e *stackTracedError) Error() string {
-	return fmt.Sprintf("%s", e.err.Error())
+	return e.err.Error()
 }
 
 // Is implements the errors.Is interface and returns true if the target error is found.

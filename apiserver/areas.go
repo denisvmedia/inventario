@@ -33,7 +33,7 @@ type areasAPI struct {
 // @Accept json-api
 // @Produce json-api
 // @Success 200 {object} jsonapi.AreasResponse "OK"
-// @Router /areas [get]
+// @Router /areas [get].
 func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 	areas, _ := api.areaRegistry.List()
 
@@ -51,7 +51,7 @@ func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 // @Produce  json-api
 // @Param id path string true "Area ID"
 // @Success 200 {object} jsonapi.AreaResponse "OK"
-// @Router /areas/{id} [get]
+// @Router /areas/{id} [get].
 func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	area := areaFromContext(r.Context())
 	if area == nil {
@@ -76,7 +76,7 @@ func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:
 // @Success 201 {object} jsonapi.AreaResponse "Area created"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /areas [post]
+// @Router /areas [post].
 func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.AreaRequest
 	if err := render.Bind(r, &input); err != nil {
@@ -106,7 +106,7 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Area ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
-// @Router /areas/{id} [delete]
+// @Router /areas/{id} [delete].
 func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 	area := areaFromContext(r.Context())
 	if area == nil {
@@ -134,7 +134,7 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.AreaResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /areas/{id} [put]
+// @Router /areas/{id} [put].
 func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 	area := areaFromContext(r.Context())
 	if area == nil {
