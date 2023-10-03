@@ -2,7 +2,7 @@ import axios from 'axios';
 import { HttpError } from 'react-admin';
 
 interface InnerErrors {
-  [key: string]: string;
+  [key: string]: string|Array<any>;
 }
 
 interface ParsedError {
@@ -38,9 +38,25 @@ function parseError(input: any): ParsedError | null {
   }
 
   // Convert the errors (capitalize the first letter of each message)
-  const errors: { [key: string]: string } = {};
+  const errors: { [key: string]: string|Array<string> } = {};
   Object.keys(errs).forEach((key) => {
-    errors[key] = errs[key].charAt(0).toUpperCase() + errs[key].slice(1);
+    // check if errs[key] is an object
+    if (typeof errs[key] === 'object') {
+      errors[key] = [];
+
+      // for each key of object
+      Object.keys(errs[key]).forEach((itemKey: any) => {
+        // try parse itemKey as integer, return if not a number
+        const index = parseInt(itemKey, 10);
+        if (Number.isNaN(index)) {
+          return;
+        }
+
+        (errors[key] as string[])[index] = errs[key][itemKey].charAt(0).toUpperCase() + errs[key][itemKey].slice(1);
+      });
+    } else if (typeof errs[key] === 'string') {
+      errors[key] = (errs[key] as string).charAt(0).toUpperCase() + errs[key].slice(1);
+    }
   });
 
   const status = input?.errors[0]?.status || 'Unknown error';

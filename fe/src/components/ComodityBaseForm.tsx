@@ -165,13 +165,15 @@ function ComodityBaseForm() {
         defaultValue={new Date().toISOString().slice(0, 10)}
       />
 
-      <TextInput
+      <ArrayInput
         source="urls"
-        multiline
-        label="URLs"
         name="urls"
-        fullWidth
-      />
+        label="URLs"
+      >
+        <SimpleFormIterator inline>
+          <TextInput source="" />
+        </SimpleFormIterator>
+      </ArrayInput>
 
       <TextInput
         source="comments"
