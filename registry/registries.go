@@ -1,9 +1,8 @@
 package registry
 
 import (
+	"maps"
 	"net/url"
-
-	"github.com/denisvmedia/inventario/internal/mapkit"
 )
 
 type Config string
@@ -38,5 +37,5 @@ func Unregister(name string) {
 // Registries returns a map of registered registry set funcs.
 // It can be used concurrently with itself, but not with Register or Unregister.
 func Registries() map[string]SetFunc {
-	return mapkit.Clone(registries)
+	return maps.Clone(registries)
 }

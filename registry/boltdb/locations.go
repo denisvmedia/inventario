@@ -21,34 +21,30 @@ const (
 var _ registry.LocationRegistry = (*LocationRegistry)(nil)
 
 type LocationRegistry struct {
-	db   *bolt.DB
-	base *dbx.BaseRepository[models.Location, *models.Location]
+	db       *bolt.DB
+	base     *dbx.BaseRepository[models.Location, *models.Location]
+	registry *Registry[models.Location, *models.Location]
 }
 
 func NewLocationRegistry(db *bolt.DB) *LocationRegistry {
-	return &LocationRegistry{
-		db:   db,
-		base: dbx.NewBaseRepository[models.Location, *models.Location](bucketNameLocations),
-	}
-}
+	base := dbx.NewBaseRepository[models.Location, *models.Location](bucketNameLocations)
 
-func (r *LocationRegistry) Init() (err error) {
-	return r.db.Update(func(tx *bolt.Tx) error {
-		// this will create the required buckets in case they don't exist
-		r.base.GetOrCreateBucket(tx, bucketNameLocations)
-		return nil
-	})
+	return &LocationRegistry{
+		db:       db,
+		base:     base,
+		registry: NewRegistry[models.Location, *models.Location](db, base),
+	}
 }
 
 func (r *LocationRegistry) Create(m models.Location) (*models.Location, error) {
-	result := &m
-	if m.Name == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Name",
-		)
-	}
-	err := r.db.Update(func(tx *bolt.Tx) error {
-		_, err := r.base.GetIndexValue(tx, idxLocationsByName, m.Name)
+	return r.registry.Create(m, func(tx dbx.TransactionOrBucket, location *models.Location) error {
+		if location.Name == "" {
+			return errkit.WithStack(registry.ErrFieldRequired,
+				"field_name", "Name",
+			)
+		}
+
+		_, err := r.base.GetIndexValue(tx, idxLocationsByName, location.Name)
 		if err == nil {
 			return errkit.Wrap(registry.ErrAlreadyExists, "user name is already used")
 		}
@@ -56,44 +52,22 @@ func (r *LocationRegistry) Create(m models.Location) (*models.Location, error) {
 			// any other error is a problem
 			return err
 		}
-		result.SetID("") // ignore the id
-		err = r.base.Save(tx, result)
-		if err != nil {
-			return err
-		}
-		err = r.base.SaveIndexValue(tx, idxLocationsByName, m.Name, m.ID)
+		return nil
+	}, func(tx dbx.TransactionOrBucket, location *models.Location) error {
+		err := r.base.SaveIndexValue(tx, idxLocationsByName, location.Name, location.ID)
 		if err != nil {
 			return err
 		}
 
-		r.base.GetOrCreateBucket(tx, bucketNameLocationsChildren, m.ID)
-		r.base.GetOrCreateBucket(tx, bucketNameLocationsChildren, m.ID, bucketNameAreas)
+		r.base.GetOrCreateBucket(tx, bucketNameLocationsChildren, location.ID)
+		r.base.GetOrCreateBucket(tx, bucketNameLocationsChildren, location.ID, bucketNameAreas)
 
 		return nil
 	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 func (r *LocationRegistry) Get(id string) (result *models.Location, err error) {
-	err = r.db.View(func(tx *bolt.Tx) error {
-		m := &models.Location{}
-		err := r.base.Get(tx, id, m)
-		if err != nil {
-			return errkit.Wrap(err, "failed to obtain location")
-		}
-		result = m
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return r.registry.Get(id)
 }
 
 func (r *LocationRegistry) GetOneByName(name string) (result *models.Location, err error) {
@@ -114,109 +88,63 @@ func (r *LocationRegistry) GetOneByName(name string) (result *models.Location, e
 }
 
 func (r *LocationRegistry) List() (results []*models.Location, err error) {
-	err = r.db.View(func(tx *bolt.Tx) error {
-		val, err := r.base.GetAll(tx, &models.Location{})
-		if err != nil {
-			return err
-		}
-		results = val
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return results, nil
+	return r.registry.List()
 }
 
 func (r *LocationRegistry) Update(m models.Location) (result *models.Location, err error) {
-	result = &m
-	err = r.db.Update(func(tx *bolt.Tx) error {
-		old := &models.Location{}
-		err := r.base.Get(tx, m.ID, old)
-		if err != nil {
-			return err
+	var old *models.Location
+	return r.registry.Update(m, func(tx dbx.TransactionOrBucket, location *models.Location) error {
+		old = location
+		return nil
+	}, func(tx dbx.TransactionOrBucket, result *models.Location) error {
+		if old.Name == result.Name {
+			return nil
 		}
-		err = r.base.Save(tx, result)
-		if err != nil {
-			return err
-		}
-		if old.Name != result.Name {
-			u := &models.Location{}
-			err := r.base.GetByIndexValue(tx, idxLocationsByName, result.Name, u)
-			switch {
-			case err == nil:
-				return errkit.Wrap(registry.ErrAlreadyExists, "location name is already used")
-			case errors.Is(err, registry.ErrNotFound):
-				// skip, it's expected
-			case err != nil:
-				return errkit.Wrap(err, "failed to check if location name is already used")
-			}
 
-			err = r.base.DeleteIndexValue(tx, idxLocationsByName, old.Name)
-			if err != nil {
-				return err
-			}
-			err = r.base.SaveIndexValue(tx, idxLocationsByName, result.Name, result.GetID())
-			if err != nil {
-				return err
-			}
+		u := &models.Location{}
+		err := r.base.GetByIndexValue(tx, idxLocationsByName, result.Name, u)
+		switch {
+		case err == nil:
+			return errkit.Wrap(registry.ErrAlreadyExists, "location name is already used")
+		case errors.Is(err, registry.ErrNotFound):
+			// skip, it's expected
+		case err != nil:
+			return errkit.Wrap(err, "failed to check if location name is already used")
 		}
+
+		err = r.base.DeleteIndexValue(tx, idxLocationsByName, old.Name)
+		if err != nil {
+			return err
+		}
+		err = r.base.SaveIndexValue(tx, idxLocationsByName, result.Name, result.GetID())
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 func (r *LocationRegistry) Count() (int, error) {
-	var cnt int
-
-	err := r.db.View(func(tx *bolt.Tx) error {
-		var err error
-		cnt, err = r.base.Count(tx)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-
-	return cnt, nil
+	return r.registry.Count()
 }
 
 func (r *LocationRegistry) Delete(id string) error {
-	return r.db.Update(func(tx *bolt.Tx) error {
-		m := &models.Location{}
-		err := r.base.Get(tx, id, m)
-		if err != nil {
-			return err
-		}
-
-		children := r.base.GetBucket(tx, bucketNameLocationsChildren, m.ID)
+	return r.registry.Delete(id, func(tx dbx.TransactionOrBucket, location *models.Location) error {
+		children := r.base.GetBucket(tx, bucketNameLocationsChildren, location.ID)
 		if children != nil {
-			bucket := r.base.GetBucket(children, m.ID)
+			bucket := r.base.GetBucket(children, location.ID)
 			vals, err := r.base.GetIndexValues(bucket, bucketNameAreas)
 			if err == nil && len(vals) > 0 {
 				return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
 			}
 			if bucket != nil {
-				_ = children.DeleteBucket([]byte(m.ID))
+				_ = children.DeleteBucket([]byte(location.ID))
 			}
 		}
-
-		err = r.base.Delete(tx, id)
-		if err != nil {
-			return err
-		}
-
-		err = r.base.DeleteIndexValue(tx, idxLocationsByName, m.Name)
+		return nil
+	}, func(tx dbx.TransactionOrBucket, result *models.Location) error {
+		err := r.base.DeleteIndexValue(tx, idxLocationsByName, result.Name)
 		if err != nil {
 			return err
 		}
