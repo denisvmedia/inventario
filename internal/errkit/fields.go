@@ -5,6 +5,16 @@ func ToFields(fields []any) Fields {
 		return nil
 	}
 
+	if len(fields) == 1 {
+		if fm, ok := fields[0].(Fields); ok {
+			fs := make(Fields, len(fm))
+			for k, v := range fm {
+				fs[k] = v
+			}
+			return fs
+		}
+	}
+
 	if len(fields)%2 != 0 {
 		panic("errkit: invalid fields (must be odd count)")
 	}

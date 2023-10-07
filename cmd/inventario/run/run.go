@@ -16,7 +16,8 @@ import (
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/registry/boltdb"
+	"github.com/denisvmedia/inventario/registry/boltdb/dbx"
 )
 
 var runCmd = &cobra.Command{
@@ -58,12 +59,13 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	var params apiserver.Params
 	params.Config = config.New() // TODO: read path from the flags
 	params.RegistrySet = &registry.Set{}
-	params.LocationRegistry = memory.NewLocationRegistry()
-	params.AreaRegistry = memory.NewAreaRegistry(params.LocationRegistry)
-	params.CommodityRegistry = memory.NewCommodityRegistry(params.AreaRegistry)
-	params.ImageRegistry = memory.NewImageRegistry(params.CommodityRegistry)
-	params.InvoiceRegistry = memory.NewInvoiceRegistry(params.CommodityRegistry)
-	params.ManualRegistry = memory.NewManualRegistry(params.CommodityRegistry)
+	params.RegistrySet.LocationRegistry = boltdb.NewLocationRegistry(must.Must(dbx.NewDB("./.db", "main.db").Open()))
+	//params.RegistrySet.LocationRegistry = memory.NewLocationRegistry()
+	//params.RegistrySet.AreaRegistry = memory.NewAreaRegistry(params.RegistrySet.LocationRegistry)
+	//params.RegistrySet.CommodityRegistry = memory.NewCommodityRegistry(params.RegistrySet.AreaRegistry)
+	//params.RegistrySet.ImageRegistry = memory.NewImageRegistry(params.RegistrySet.CommodityRegistry)
+	//params.RegistrySet.InvoiceRegistry = memory.NewInvoiceRegistry(params.RegistrySet.CommodityRegistry)
+	//params.RegistrySet.ManualRegistry = memory.NewManualRegistry(params.RegistrySet.CommodityRegistry)
 	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
 
 	err := validation.Validate(params)

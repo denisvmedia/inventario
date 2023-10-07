@@ -82,10 +82,10 @@ type CommoditiesResponse struct {
 }
 
 // NewCommoditiesResponse creates a new CommoditiesResponse instance.
-func NewCommoditiesResponse(commodities []models.Commodity, total int) *CommoditiesResponse {
+func NewCommoditiesResponse(commodities []*models.Commodity, total int) *CommoditiesResponse {
 	commodityData := make([]CommodityData, 0) // must be an empty array instead of nil due to JSON serialization
 	for _, l := range commodities {
-		l := l
+		l := *l
 		commodityData = append(commodityData, CommodityData{
 			ID:         l.ID,
 			Type:       "commodities",

@@ -63,9 +63,9 @@ type CommodityRegistry interface {
 type LocationRegistry interface {
 	Registry[models.Location]
 
-	AddArea(locationID, areaID string)
-	GetAreas(locationID string) []string
-	DeleteArea(locationID, areaID string)
+	AddArea(locationID, areaID string) error
+	GetAreas(locationID string) ([]string, error)
+	DeleteArea(locationID, areaID string) error
 }
 
 type ImageRegistry interface {
@@ -93,12 +93,12 @@ func (s *Set) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&s.AreaRegistry, validation.Required),
 		validation.Field(&s.LocationRegistry, validation.Required),
-		validation.Field(&s.CommodityRegistry, validation.Required),
-		validation.Field(&s.ImageRegistry, validation.Required),
-		validation.Field(&s.ManualRegistry, validation.Required),
-		validation.Field(&s.InvoiceRegistry, validation.Required),
+		//validation.Field(&s.AreaRegistry, validation.Required),
+		//validation.Field(&s.CommodityRegistry, validation.Required),
+		//validation.Field(&s.ImageRegistry, validation.Required),
+		//validation.Field(&s.ManualRegistry, validation.Required),
+		//validation.Field(&s.InvoiceRegistry, validation.Required),
 	)
 
 	return validation.ValidateStruct(s, fields...)

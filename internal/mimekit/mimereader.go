@@ -74,7 +74,7 @@ func (mr *MIMEReader) Read(p []byte) (n int, err error) {
 		mtype := mimetype.Detect(mr.buf.Bytes())
 		mt, _, _ := mime.ParseMediaType(mtype.String())
 		if mt == "" || !slices.Contains(mr.allowedContentTypes, mt) {
-			mr.err = errkit.WithFieldMap(ErrInvalidContentType, errkit.Fields{
+			mr.err = errkit.WithFields(ErrInvalidContentType, errkit.Fields{
 				"expected": mr.allowedContentTypes,
 				"detected": mtype,
 				"parsed":   mt,

@@ -11,21 +11,25 @@ import (
 
 type DB struct {
 	dbPath string
-	db     *bolt.DB
+	name   string
+
+	db *bolt.DB
 }
 
-func NewDB(dbPath string) *DB {
+func NewDB(dbPath, name string) *DB {
 	return &DB{
 		dbPath: dbPath,
+		name:   name,
 	}
 }
 
 func (db *DB) Open() (result *bolt.DB, err error) {
-	dbPath := filepath.Dir(db.dbPath)
 	err = os.MkdirAll(db.dbPath, 0o700)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create db directory")
 	}
+
+	dbPath := filepath.Join(db.dbPath, db.name)
 
 	result, err = bolt.Open(dbPath, 0o600, nil)
 	if err != nil {
@@ -51,7 +55,8 @@ func (db *DB) Delete() error {
 	}
 
 	err := db.db.Close()
-	errRemove := os.Remove(db.dbPath)
+	dbPath := filepath.Join(db.dbPath, db.name)
+	errRemove := os.Remove(dbPath)
 
 	return errkit.Append(err, errRemove)
 }
@@ -61,7 +66,7 @@ func (db *DB) Exists() bool {
 }
 
 func (db *DB) exists() bool {
-	info, err := os.Stat(db.dbPath)
+	info, err := os.Stat(filepath.Join(db.dbPath, db.name))
 	if os.IsNotExist(err) {
 		return false
 	}

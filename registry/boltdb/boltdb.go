@@ -1,6 +1,8 @@
 package boltdb
 
 import (
+	"path/filepath"
+
 	_ "go.etcd.io/bbolt"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -24,7 +26,7 @@ func NewRegistrySet(c registry.Config) (*registry.Set, error) {
 		return nil, errkit.Wrap(registry.ErrInvalidConfig, "invalid scheme")
 	}
 
-	db, err := dbx.NewDB(parsed.Path).Open()
+	db, err := dbx.NewDB(filepath.Dir(parsed.Path), filepath.Base(parsed.Path)).Open()
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to open db")
 	}

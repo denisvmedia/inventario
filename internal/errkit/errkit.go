@@ -94,16 +94,23 @@ func (e *Error) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jerr)
 }
 
-func (e *Error) WithFields(fields Fields) *Error {
+func (e *Error) WithFields(fields ...any) *Error {
 	tmp := *e
+
+	if len(fields) == 0 {
+		return &tmp
+	}
+
 	tmp.fields = make(Fields)
+
 	for k, v := range e.fields {
 		tmp.fields[k] = v
 	}
-	for k, v := range fields {
+	for k, v := range ToFields(fields) {
 		tmp.fields[k] = v
 	}
 	tmp.prev = append(tmp.prev, e)
+
 	return &tmp
 }
 
@@ -141,34 +148,12 @@ func Wrap(err error, msg string, fields ...any) *Error {
 	}
 }
 
-func WrapWithFields(err error, msg string, fields Fields) *Error {
-	result := &Error{
-		error:  WithStack(err),
-		msg:    msg,
-		fields: make(Fields, len(fields)),
-	}
-	for k, v := range fields {
-		result.fields[k] = v
-	}
-	return result
-}
-
-func WithMessage(err error, msg string) *Error {
+func WithMessage(err error, msg string, fields ...any) *Error {
 	return &Error{
-		error: err,
-		msg:   msg,
-	}
-}
-
-func WithFieldMap(err error, fields Fields) *Error {
-	result := &Error{
 		error:  err,
-		fields: make(Fields, len(fields)),
+		msg:    msg,
+		fields: ToFields(fields),
 	}
-	for k, v := range fields {
-		result.fields[k] = v
-	}
-	return result
 }
 
 func WithFields(err error, fields ...any) *Error {

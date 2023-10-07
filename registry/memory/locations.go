@@ -3,6 +3,8 @@ package memory
 import (
 	"sync"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -31,7 +33,7 @@ func (r *LocationRegistry) Delete(id string) error {
 		return err
 	}
 
-	if len(r.GetAreas(id)) > 0 {
+	if len(must.Must(r.GetAreas(id))) > 0 {
 		return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
 	}
 
@@ -43,22 +45,24 @@ func (r *LocationRegistry) Delete(id string) error {
 	return nil
 }
 
-func (r *LocationRegistry) AddArea(locationID, areaID string) {
+func (r *LocationRegistry) AddArea(locationID, areaID string) error {
 	r.areasLock.Lock()
 	r.areas[locationID] = append(r.areas[locationID], areaID)
 	r.areasLock.Unlock()
+
+	return nil
 }
 
-func (r *LocationRegistry) GetAreas(locationID string) []string {
+func (r *LocationRegistry) GetAreas(locationID string) ([]string, error) {
 	r.areasLock.RLock()
 	areas := make([]string, len(r.areas[locationID]))
 	copy(areas, r.areas[locationID])
 	r.areasLock.RUnlock()
 
-	return areas
+	return areas, nil
 }
 
-func (r *LocationRegistry) DeleteArea(locationID, areaID string) {
+func (r *LocationRegistry) DeleteArea(locationID, areaID string) error {
 	r.areasLock.Lock()
 	for i, foundAreaID := range r.areas[locationID] {
 		if foundAreaID == areaID {
@@ -67,4 +71,6 @@ func (r *LocationRegistry) DeleteArea(locationID, areaID string) {
 		}
 	}
 	r.areasLock.Unlock()
+
+	return nil
 }
