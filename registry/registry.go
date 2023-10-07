@@ -39,9 +39,9 @@ type Registry[T any] interface {
 type AreaRegistry interface {
 	Registry[models.Area]
 
-	AddCommodity(areaID, commodityID string)
-	GetCommodities(areaID string) []string
-	DeleteCommodity(areaID, commodityID string)
+	AddCommodity(areaID, commodityID string) error
+	GetCommodities(areaID string) ([]string, error)
+	DeleteCommodity(areaID, commodityID string) error
 }
 
 type CommodityRegistry interface {

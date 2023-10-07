@@ -46,7 +46,7 @@ func (r *LocationRegistry) Create(m models.Location) (*models.Location, error) {
 
 		_, err := r.base.GetIndexValue(tx, idxLocationsByName, location.Name)
 		if err == nil {
-			return errkit.Wrap(registry.ErrAlreadyExists, "user name is already used")
+			return errkit.Wrap(registry.ErrAlreadyExists, "location name is already used")
 		}
 		if !errors.Is(err, registry.ErrNotFound) {
 			// any other error is a problem

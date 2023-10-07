@@ -59,7 +59,9 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	var params apiserver.Params
 	params.Config = config.New() // TODO: read path from the flags
 	params.RegistrySet = &registry.Set{}
-	params.RegistrySet.LocationRegistry = boltdb.NewLocationRegistry(must.Must(dbx.NewDB("./.db", "main.db").Open()))
+	db := must.Must(dbx.NewDB("./.db", "main.db").Open())
+	params.RegistrySet.LocationRegistry = boltdb.NewLocationRegistry(db)
+	params.RegistrySet.AreaRegistry = boltdb.NewAreaRegistry(db, params.RegistrySet.LocationRegistry)
 	//params.RegistrySet.LocationRegistry = memory.NewLocationRegistry()
 	//params.RegistrySet.AreaRegistry = memory.NewAreaRegistry(params.RegistrySet.LocationRegistry)
 	//params.RegistrySet.CommodityRegistry = memory.NewCommodityRegistry(params.RegistrySet.AreaRegistry)

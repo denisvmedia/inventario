@@ -46,7 +46,7 @@ func (r *AreaRegistry) Create(area models.Area) (*models.Area, error) {
 		return nil, errkit.Wrap(err, "failed to create area")
 	}
 
-	r.locationRegistry.AddArea(area.LocationID, newArea.ID)
+	err = r.locationRegistry.AddArea(area.LocationID, newArea.ID)
 
 	return newArea, err
 }
@@ -62,27 +62,29 @@ func (r *AreaRegistry) Delete(id string) error {
 		return err
 	}
 
-	r.locationRegistry.DeleteArea(area.LocationID, id)
+	err = r.locationRegistry.DeleteArea(area.LocationID, id)
+
+	return err
+}
+
+func (r *AreaRegistry) AddCommodity(areaID, commodityID string) error {
+	r.commoditiesLock.Lock()
+	r.commodities[areaID] = append(r.commodities[areaID], commodityID)
+	r.commoditiesLock.Unlock()
 
 	return nil
 }
 
-func (r *AreaRegistry) AddCommodity(areaID, commodityID string) {
-	r.commoditiesLock.Lock()
-	r.commodities[areaID] = append(r.commodities[areaID], commodityID)
-	r.commoditiesLock.Unlock()
-}
-
-func (r *AreaRegistry) GetCommodities(areaID string) []string {
+func (r *AreaRegistry) GetCommodities(areaID string) ([]string, error) {
 	r.commoditiesLock.RLock()
 	commodities := make([]string, len(r.commodities[areaID]))
 	copy(commodities, r.commodities[areaID])
 	r.commoditiesLock.RUnlock()
 
-	return commodities
+	return commodities, nil
 }
 
-func (r *AreaRegistry) DeleteCommodity(areaID, commodityID string) {
+func (r *AreaRegistry) DeleteCommodity(areaID, commodityID string) error {
 	r.commoditiesLock.Lock()
 	for i, foundCommodityID := range r.commodities[areaID] {
 		if foundCommodityID == commodityID {
@@ -91,4 +93,6 @@ func (r *AreaRegistry) DeleteCommodity(areaID, commodityID string) {
 		}
 	}
 	r.commoditiesLock.Unlock()
+
+	return nil
 }
