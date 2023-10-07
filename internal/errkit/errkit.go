@@ -129,16 +129,21 @@ func (e *Error) Unwrap() error {
 	return e.error
 }
 
-func Wrap(err error, msg string) *Error {
+func NewEquivalent(msg string, errs ...error) error {
+	return WithEquivalents(errors.New(msg), errs...)
+}
+
+func Wrap(err error, msg string, fields ...any) *Error {
 	return &Error{
-		error: WithStackTrace(err),
-		msg:   msg,
+		error:  WithStack(err),
+		msg:    msg,
+		fields: ToFields(fields),
 	}
 }
 
 func WrapWithFields(err error, msg string, fields Fields) *Error {
 	result := &Error{
-		error:  WithStackTrace(err),
+		error:  WithStack(err),
 		msg:    msg,
 		fields: make(Fields, len(fields)),
 	}
@@ -155,13 +160,21 @@ func WithMessage(err error, msg string) *Error {
 	}
 }
 
-func WithFields(err error, fields Fields) *Error {
+func WithFieldMap(err error, fields Fields) *Error {
 	result := &Error{
 		error:  err,
 		fields: make(Fields, len(fields)),
 	}
 	for k, v := range fields {
 		result.fields[k] = v
+	}
+	return result
+}
+
+func WithFields(err error, fields ...any) *Error {
+	result := &Error{
+		error:  err,
+		fields: ToFields(fields),
 	}
 	return result
 }

@@ -29,7 +29,7 @@ func TestError_Wrap_MarshalJSON(t *testing.T) {
         "type": "*errors.errorString"
       },
       "stackTrace": {
-        "funcName": "github.com/denisvmedia/inventario/internal/errkit.WithStackTrace",
+        "funcName": "github.com/denisvmedia/inventario/internal/errkit.WithStack",
         "filePos": "stacktracederr.go:30"
       }
     },

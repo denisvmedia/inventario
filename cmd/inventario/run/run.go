@@ -11,9 +11,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/config"
 	"github.com/denisvmedia/inventario/internal/cobraflags"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
@@ -54,6 +56,8 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	log.WithField(addrFlag, bindAddr).Info("Starting server")
 
 	var params apiserver.Params
+	params.Config = config.New() // TODO: read path from the flags
+	params.RegistrySet = &registry.Set{}
 	params.LocationRegistry = memory.NewLocationRegistry()
 	params.AreaRegistry = memory.NewAreaRegistry(params.LocationRegistry)
 	params.CommodityRegistry = memory.NewCommodityRegistry(params.AreaRegistry)

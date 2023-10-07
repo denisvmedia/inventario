@@ -26,7 +26,7 @@ func TestRegistry_Create(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a new instance of Registry
-	r := memory.NewRegistry[testItem]()
+	r := memory.NewRegistry[testItem, *testItem]()
 
 	// Create a test item
 	item := &testItem{Data: "test"}
@@ -49,7 +49,7 @@ func TestRegistry_Get(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a new instance of Registry
-	r := memory.NewRegistry[testItem]()
+	r := memory.NewRegistry[testItem, *testItem]()
 
 	// Create a test item
 	item := &testItem{Data: "test"}
@@ -71,7 +71,7 @@ func TestRegistry_Update(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a new instance of Registry
-	r := memory.NewRegistry[testItem]()
+	r := memory.NewRegistry[testItem, *testItem]()
 
 	// Create a test item
 	item := &testItem{Data: "test"}
@@ -96,7 +96,7 @@ func TestRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a new instance of Registry
-	r := memory.NewRegistry[testItem]()
+	r := memory.NewRegistry[testItem, *testItem]()
 
 	// Create a test item
 	item := &testItem{Data: "test"}
@@ -121,7 +121,7 @@ func TestRegistry_Count(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a new instance of Registry
-	r := memory.NewRegistry[testItem]()
+	r := memory.NewRegistry[testItem, *testItem]()
 
 	// Verify the initial count of items in the registry
 	count, err := r.Count()
@@ -144,7 +144,7 @@ func TestRegistry_List(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a new instance of Registry
-	r := memory.NewRegistry[testItem]()
+	r := memory.NewRegistry[testItem, *testItem]()
 
 	// Create test items
 	item1 := &testItem{Data: "item1"}
@@ -165,10 +165,4 @@ func TestRegistry_List(t *testing.T) {
 	c.Assert(items[0].Data, qt.Equals, "item1")
 	c.Assert(items[1].Data, qt.Equals, "item2")
 	c.Assert(items[2].Data, qt.Equals, "item3")
-}
-
-func TestRegistry_NewRegistry_NonIDable(t *testing.T) {
-	c := qt.New(t)
-
-	c.Assert(memory.NewRegistry[string], qt.PanicMatches, "registry: T must implement idable interface")
 }

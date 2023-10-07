@@ -10,7 +10,9 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-type baseAreaRegistry = Registry[models.Area]
+var _ registry.AreaRegistry = (*AreaRegistry)(nil)
+
+type baseAreaRegistry = Registry[models.Area, *models.Area]
 
 type AreaRegistry struct {
 	*baseAreaRegistry
@@ -22,7 +24,7 @@ type AreaRegistry struct {
 
 func NewAreaRegistry(locationRegistry registry.LocationRegistry) *AreaRegistry {
 	return &AreaRegistry{
-		baseAreaRegistry: NewRegistry[models.Area](),
+		baseAreaRegistry: NewRegistry[models.Area, *models.Area](),
 		locationRegistry: locationRegistry,
 		commodities:      make(models.AreaCommodities),
 	}

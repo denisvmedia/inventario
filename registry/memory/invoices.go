@@ -8,7 +8,9 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-type baseInvoiceRegistry = Registry[models.Invoice]
+var _ registry.InvoiceRegistry = (*InvoiceRegistry)(nil)
+
+type baseInvoiceRegistry = Registry[models.Invoice, *models.Invoice]
 type InvoiceRegistry struct {
 	*baseInvoiceRegistry
 
@@ -17,7 +19,7 @@ type InvoiceRegistry struct {
 
 func NewInvoiceRegistry(commodityRegistry registry.CommodityRegistry) *InvoiceRegistry {
 	return &InvoiceRegistry{
-		baseInvoiceRegistry: NewRegistry[models.Invoice](),
+		baseInvoiceRegistry: NewRegistry[models.Invoice, *models.Invoice](),
 		commodityRegistry:   commodityRegistry,
 	}
 }

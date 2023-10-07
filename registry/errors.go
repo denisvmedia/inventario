@@ -5,6 +5,10 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrCannotDelete = errors.New("cannot delete")
+	ErrNotFound         = errors.New("not found")
+	ErrCannotDelete     = errors.New("cannot delete")
+	ErrInvalidConfig    = errors.New("invalid config")
+	ErrFieldRequired    = errors.New("field required")
+	ErrAlreadyExists    = errors.New("already exists")
+	ErrBadDataStructure = errors.New("bad data structure")
 )

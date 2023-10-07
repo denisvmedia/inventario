@@ -74,10 +74,19 @@ func TestError_WithFields(t *testing.T) {
 func TestWrap(t *testing.T) {
 	c := qt.New(t)
 
-	err := errors.New("some error")
-	e := errkit.Wrap(err, "wrapped error")
+	c.Run("wrap error", func(c *qt.C) {
+		err := errors.New("some error")
+		e := errkit.Wrap(err, "wrapped error")
 
-	c.Assert(e.Error(), qt.Equals, "wrapped error: some error")
+		c.Assert(e.Error(), qt.Equals, "wrapped error: some error")
+	})
+
+	c.Run("wrap with fields", func(c *qt.C) {
+		err := errors.New("some error")
+		e := errkit.Wrap(err, "wrapped error", "aaa", 123, "bbb", "test")
+
+		c.Assert(e.Error(), qt.Equals, "wrapped error: some error (fields: map[aaa:123 bbb:test])")
+	})
 }
 
 func TestWrapWithFields(t *testing.T) {
@@ -112,7 +121,7 @@ func TestWithFields(t *testing.T) {
 		"key2": 2,
 	}
 
-	e := errkit.WithFields(err, fields)
+	e := errkit.WithFieldMap(err, fields)
 
 	c.Assert(e.Error(), qt.Equals, "some error (fields: map[key1:value1 key2:2])")
 }

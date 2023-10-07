@@ -8,7 +8,9 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-type baseImageRegistry = Registry[models.Image]
+var _ registry.ImageRegistry = (*ImageRegistry)(nil)
+
+type baseImageRegistry = Registry[models.Image, *models.Image]
 type ImageRegistry struct {
 	*baseImageRegistry
 
@@ -17,7 +19,7 @@ type ImageRegistry struct {
 
 func NewImageRegistry(commodityRegistry registry.CommodityRegistry) *ImageRegistry {
 	return &ImageRegistry{
-		baseImageRegistry: NewRegistry[models.Image](),
+		baseImageRegistry: NewRegistry[models.Image, *models.Image](),
 		commodityRegistry: commodityRegistry,
 	}
 }

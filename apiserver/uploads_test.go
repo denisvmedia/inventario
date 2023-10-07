@@ -31,13 +31,13 @@ func TestUploads(t *testing.T) {
 			contentType: "image/jpeg",
 			filePath:    "testdata/image.jpg",
 			expectedLength: func(c *qt.C) int {
-				images, err := params.ImageRegistry.List()
+				images, err := params.RegistrySet.ImageRegistry.List()
 				c.Assert(err, qt.IsNil)
 				expectedLen := len(images) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				images, err := params.ImageRegistry.List()
+				images, err := params.RegistrySet.ImageRegistry.List()
 				c.Assert(err, qt.IsNil)
 				c.Assert(images, qt.HasLen, expectedLen)
 				c.Assert(images[expectedLen-1].Path, qt.Matches, `image-\d+\.jpg`)
@@ -51,13 +51,13 @@ func TestUploads(t *testing.T) {
 			contentType: "application/pdf",
 			filePath:    "testdata/manual.pdf",
 			expectedLength: func(c *qt.C) int {
-				manuals, err := params.ManualRegistry.List()
+				manuals, err := params.RegistrySet.ManualRegistry.List()
 				c.Assert(err, qt.IsNil)
 				expectedLen := len(manuals) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				manuals, err := params.ManualRegistry.List()
+				manuals, err := params.RegistrySet.ManualRegistry.List()
 				c.Assert(err, qt.IsNil)
 				c.Assert(manuals, qt.HasLen, expectedLen)
 				c.Assert(manuals[expectedLen-1].Path, qt.Matches, `manual-\d+\.pdf`)
@@ -71,13 +71,13 @@ func TestUploads(t *testing.T) {
 			contentType: "application/pdf",
 			filePath:    "testdata/invoice.pdf",
 			expectedLength: func(c *qt.C) int {
-				invoices, err := params.InvoiceRegistry.List()
+				invoices, err := params.RegistrySet.InvoiceRegistry.List()
 				c.Assert(err, qt.IsNil)
 				expectedLen := len(invoices) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				invoices, err := params.InvoiceRegistry.List()
+				invoices, err := params.RegistrySet.InvoiceRegistry.List()
 				c.Assert(err, qt.IsNil)
 				c.Assert(invoices, qt.HasLen, expectedLen)
 				c.Assert(invoices[expectedLen-1].Path, qt.Matches, `invoice-\d+\.pdf`)
@@ -92,7 +92,7 @@ func TestUploads(t *testing.T) {
 		t.Run(tc.typ, func(t *testing.T) {
 			c := qt.New(t)
 
-			expectedCommodities := must.Must(params.CommodityRegistry.List())
+			expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
 			commodity := expectedCommodities[0]
 			expectedLen := tc.expectedLength(c)
 
@@ -163,7 +163,7 @@ func TestUploads_invalid_upload(t *testing.T) {
 
 			filePath := "testdata/invalid.txt"
 
-			expectedCommodities := must.Must(params.CommodityRegistry.List())
+			expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
 			commodity := expectedCommodities[0]
 
 			// Create a buffer to write the form data

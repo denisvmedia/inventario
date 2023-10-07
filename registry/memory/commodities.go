@@ -10,7 +10,9 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-type baseCommodityRegistry = Registry[models.Commodity]
+var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
+
+type baseCommodityRegistry = Registry[models.Commodity, *models.Commodity]
 type CommodityRegistry struct {
 	*baseCommodityRegistry
 
@@ -25,7 +27,7 @@ type CommodityRegistry struct {
 
 func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry {
 	return &CommodityRegistry{
-		baseCommodityRegistry: NewRegistry[models.Commodity](),
+		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
 		areaRegistry:          areaRegistry,
 		images:                make(models.CommodityImages),
 		manuals:               make(models.CommodityManuals),

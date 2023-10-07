@@ -1,10 +1,17 @@
 package registry
 
 import (
+	"github.com/jellydator/validation"
+
 	"github.com/denisvmedia/inventario/models"
 )
 
-type Idable interface {
+type PIDable[T any] interface {
+	*T
+	IDable
+}
+
+type IDable interface {
 	GetID() string
 	SetID(id string)
 }
@@ -17,7 +24,7 @@ type Registry[T any] interface {
 	Get(id string) (*T, error)
 
 	// List returns a list of Ts from the registry.
-	List() ([]T, error)
+	List() ([]*T, error)
 
 	// Update updates a T in the registry.
 	Update(T) (*T, error)
@@ -71,4 +78,28 @@ type InvoiceRegistry interface {
 
 type ManualRegistry interface {
 	Registry[models.Manual]
+}
+
+type Set struct {
+	LocationRegistry  LocationRegistry
+	AreaRegistry      AreaRegistry
+	CommodityRegistry CommodityRegistry
+	ImageRegistry     ImageRegistry
+	InvoiceRegistry   InvoiceRegistry
+	ManualRegistry    ManualRegistry
+}
+
+func (s *Set) Validate() error {
+	fields := make([]*validation.FieldRules, 0)
+
+	fields = append(fields,
+		validation.Field(&s.AreaRegistry, validation.Required),
+		validation.Field(&s.LocationRegistry, validation.Required),
+		validation.Field(&s.CommodityRegistry, validation.Required),
+		validation.Field(&s.ImageRegistry, validation.Required),
+		validation.Field(&s.ManualRegistry, validation.Required),
+		validation.Field(&s.InvoiceRegistry, validation.Required),
+	)
+
+	return validation.ValidateStruct(s, fields...)
 }

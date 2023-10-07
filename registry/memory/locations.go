@@ -8,7 +8,9 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-type baseLocationRegistry = Registry[models.Location]
+var _ registry.LocationRegistry = (*LocationRegistry)(nil)
+
+type baseLocationRegistry = Registry[models.Location, *models.Location]
 type LocationRegistry struct {
 	*baseLocationRegistry
 
@@ -18,7 +20,7 @@ type LocationRegistry struct {
 
 func NewLocationRegistry() *LocationRegistry {
 	return &LocationRegistry{
-		baseLocationRegistry: NewRegistry[models.Location](),
+		baseLocationRegistry: NewRegistry[models.Location, *models.Location](),
 		areas:                make(models.LocationAreas),
 	}
 }
