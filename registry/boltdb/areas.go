@@ -12,6 +12,8 @@ import (
 )
 
 const (
+	entityNameArea = "area"
+
 	bucketNameAreas         = "areas"
 	bucketNameAreasChildren = "areas-children"
 
@@ -31,9 +33,14 @@ func NewAreaRegistry(db *bolt.DB, locationRegistry registry.LocationRegistry) *A
 	base := dbx.NewBaseRepository[models.Area, *models.Area](bucketNameAreas)
 
 	return &AreaRegistry{
-		db:               db,
-		base:             base,
-		registry:         NewRegistry[models.Area, *models.Area](db, base),
+		db:   db,
+		base: base,
+		registry: NewRegistry[models.Area, *models.Area](
+			db,
+			base,
+			entityNameArea,
+			bucketNameAreasChildren,
+		),
 		locationRegistry: locationRegistry,
 	}
 }
@@ -83,20 +90,7 @@ func (r *AreaRegistry) Get(id string) (result *models.Area, err error) {
 }
 
 func (r *AreaRegistry) GetOneByName(name string) (result *models.Area, err error) {
-	err = r.db.View(func(tx *bolt.Tx) error {
-		entity := &models.Area{}
-		err := r.base.GetByIndexValue(tx, idxAreasByName, name, entity)
-		if err != nil {
-			return err
-		}
-		result = entity
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return r.registry.GetBy(idxAreasByName, name)
 }
 
 func (r *AreaRegistry) List() (results []*models.Area, err error) {
@@ -145,25 +139,13 @@ func (r *AreaRegistry) Delete(id string) error {
 	var locationID string
 	err := r.registry.Delete(id, func(tx dbx.TransactionOrBucket, area *models.Area) error {
 		locationID = area.LocationID
-		children := r.base.GetBucket(tx, bucketNameAreasChildren, area.ID)
-		if children != nil {
-			bucket := r.base.GetBucket(children, area.ID)
-			vals, err := r.base.GetIndexValues(bucket, bucketNameCommodities)
-			if err == nil && len(vals) > 0 {
-				return errkit.Wrap(registry.ErrCannotDelete, "area has commodities")
-			}
-			if bucket != nil {
-				_ = children.DeleteBucket([]byte(area.ID))
-			}
-		}
-		return nil
+		return r.registry.DeleteEmptyBuckets(
+			tx,
+			area.ID,
+			bucketNameCommodities,
+		)
 	}, func(tx dbx.TransactionOrBucket, result *models.Area) error {
-		err := r.base.DeleteIndexValue(tx, idxAreasByName, result.Name)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return r.base.DeleteIndexValue(tx, idxAreasByName, result.Name)
 	})
 	if err != nil {
 		return err
@@ -178,80 +160,13 @@ func (r *AreaRegistry) Delete(id string) error {
 }
 
 func (r *AreaRegistry) AddCommodity(areaID, commodityID string) error {
-	return r.db.Update(func(tx *bolt.Tx) error {
-		m := &models.Area{}
-		err := r.base.Get(tx, areaID, m)
-		if err != nil {
-			return err
-		}
-
-		children := r.base.GetBucket(tx, bucketNameAreasChildren, m.ID)
-		if children == nil {
-			return errkit.Wrap(registry.ErrNotFound, "unknown area id")
-		}
-
-		err = r.base.SaveIndexValue(children, bucketNameCommodities, commodityID, commodityID)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
+	return r.registry.AddChild(bucketNameCommodities, areaID, commodityID)
 }
 
 func (r *AreaRegistry) GetCommodities(areaID string) ([]string, error) {
-	var values map[string]string
-
-	err := r.db.View(func(tx *bolt.Tx) error {
-		m := &models.Area{}
-		err := r.base.Get(tx, areaID, m)
-		if err != nil {
-			return err
-		}
-
-		children := r.base.GetBucket(tx, bucketNameAreasChildren, m.ID)
-		if children == nil {
-			return errkit.Wrap(registry.ErrNotFound, "unknown area id")
-		}
-
-		values, err = r.base.GetIndexValues(children, bucketNameCommodities)
-		if err != nil {
-			return errkit.Wrap(err, "failed to get commodities")
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	areas := make([]string, 0, len(values))
-
-	for v := range values {
-		areas = append(areas, v)
-	}
-
-	return areas, nil
+	return r.registry.GetChildren(bucketNameCommodities, areaID)
 }
 
 func (r *AreaRegistry) DeleteCommodity(areaID, commodityID string) error {
-	return r.db.Update(func(tx *bolt.Tx) error {
-		m := &models.Area{}
-		err := r.base.Get(tx, areaID, m)
-		if err != nil {
-			return err
-		}
-
-		children := r.base.GetBucket(tx, bucketNameAreasChildren, m.ID)
-		if children == nil {
-			return errkit.Wrap(registry.ErrNotFound, "unknown area id")
-		}
-
-		err = r.base.DeleteIndexValue(children, bucketNameCommodities, commodityID)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
+	return r.registry.DeleteChild(bucketNameCommodities, areaID, commodityID)
 }

@@ -62,6 +62,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	db := must.Must(dbx.NewDB("./.db", "main.db").Open())
 	params.RegistrySet.LocationRegistry = boltdb.NewLocationRegistry(db)
 	params.RegistrySet.AreaRegistry = boltdb.NewAreaRegistry(db, params.RegistrySet.LocationRegistry)
+	params.RegistrySet.CommodityRegistry = boltdb.NewCommodityRegistry(db, params.RegistrySet.AreaRegistry)
 	//params.RegistrySet.LocationRegistry = memory.NewLocationRegistry()
 	//params.RegistrySet.AreaRegistry = memory.NewAreaRegistry(params.RegistrySet.LocationRegistry)
 	//params.RegistrySet.CommodityRegistry = memory.NewCommodityRegistry(params.RegistrySet.AreaRegistry)

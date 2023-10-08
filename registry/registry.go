@@ -47,17 +47,17 @@ type AreaRegistry interface {
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 
-	AddImage(commodityID, imageID string)
-	GetImages(commodityID string) []string
-	DeleteImage(commodityID, imageID string)
+	AddImage(commodityID, imageID string) error
+	GetImages(commodityID string) ([]string, error)
+	DeleteImage(commodityID, imageID string) error
 
-	AddManual(commodityID, manualID string)
-	GetManuals(commodityID string) []string
-	DeleteManual(commodityID, manualID string)
+	AddManual(commodityID, manualID string) error
+	GetManuals(commodityID string) ([]string, error)
+	DeleteManual(commodityID, manualID string) error
 
-	AddInvoice(commodityID, invoiceID string)
-	GetInvoices(commodityID string) []string
-	DeleteInvoice(commodityID, invoiceID string)
+	AddInvoice(commodityID, invoiceID string) error
+	GetInvoices(commodityID string) ([]string, error)
+	DeleteInvoice(commodityID, invoiceID string) error
 }
 
 type LocationRegistry interface {

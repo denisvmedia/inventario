@@ -12,9 +12,12 @@ import (
 )
 
 type CommodityMeta struct {
-	Images   []string `json:"images"`
-	Manuals  []string `json:"manuals"`
-	Invoices []string `json:"invoices"`
+	Images        []string `json:"images"`
+	Manuals       []string `json:"manuals"`
+	Invoices      []string `json:"invoices"`
+	ImagesError   string   `json:"images_error,omitempty"`
+	ManualsError  string   `json:"manuals_error,omitempty"`
+	InvoicesError string   `json:"invoices_error,omitempty"`
 }
 
 func (a *CommodityMeta) MarshalJSON() ([]byte, error) {
