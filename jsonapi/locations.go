@@ -58,10 +58,10 @@ type LocationsResponse struct {
 	Meta LocationsMeta  `json:"meta"`
 }
 
-func NewLocationsResponse(locations []models.Location, total int) *LocationsResponse {
+func NewLocationsResponse(locations []*models.Location, total int) *LocationsResponse {
 	locationData := make([]LocationData, 0) // must be an empty array instead of nil due to JSON serialization
 	for _, l := range locations {
-		l := l
+		l := *l
 		locationData = append(locationData, LocationData{
 			ID:         l.ID,
 			Type:       "locations",

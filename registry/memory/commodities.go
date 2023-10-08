@@ -10,7 +10,9 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-type baseCommodityRegistry = Registry[models.Commodity]
+var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
+
+type baseCommodityRegistry = Registry[models.Commodity, *models.Commodity]
 type CommodityRegistry struct {
 	*baseCommodityRegistry
 
@@ -25,7 +27,7 @@ type CommodityRegistry struct {
 
 func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry {
 	return &CommodityRegistry{
-		baseCommodityRegistry: NewRegistry[models.Commodity](),
+		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
 		areaRegistry:          areaRegistry,
 		images:                make(models.CommodityImages),
 		manuals:               make(models.CommodityManuals),
@@ -49,7 +51,7 @@ func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodit
 		return nil, errkit.Wrap(err, "failed to create commodity")
 	}
 
-	r.areaRegistry.AddCommodity(commodity.AreaID, newCommodity.ID)
+	err = r.areaRegistry.AddCommodity(commodity.AreaID, newCommodity.ID)
 
 	return newCommodity, err
 }
@@ -65,27 +67,27 @@ func (r *CommodityRegistry) Delete(id string) error {
 		return err
 	}
 
-	r.areaRegistry.DeleteCommodity(commodity.AreaID, id)
+	return r.areaRegistry.DeleteCommodity(commodity.AreaID, id)
+}
+
+func (r *CommodityRegistry) AddImage(commodityID, imageID string) error {
+	r.imagesLock.Lock()
+	r.images[commodityID] = append(r.images[commodityID], imageID)
+	r.imagesLock.Unlock()
 
 	return nil
 }
 
-func (r *CommodityRegistry) AddImage(commodityID, imageID string) {
-	r.imagesLock.Lock()
-	r.images[commodityID] = append(r.images[commodityID], imageID)
-	r.imagesLock.Unlock()
-}
-
-func (r *CommodityRegistry) GetImages(commodityID string) []string {
+func (r *CommodityRegistry) GetImages(commodityID string) ([]string, error) {
 	r.imagesLock.RLock()
 	images := make([]string, len(r.images[commodityID]))
 	copy(images, r.images[commodityID])
 	r.imagesLock.RUnlock()
 
-	return images
+	return images, nil
 }
 
-func (r *CommodityRegistry) DeleteImage(commodityID, imageID string) {
+func (r *CommodityRegistry) DeleteImage(commodityID, imageID string) error {
 	r.imagesLock.Lock()
 	for i, foundImageID := range r.images[commodityID] {
 		if foundImageID == imageID {
@@ -94,24 +96,28 @@ func (r *CommodityRegistry) DeleteImage(commodityID, imageID string) {
 		}
 	}
 	r.imagesLock.Unlock()
+
+	return nil
 }
 
-func (r *CommodityRegistry) AddManual(commodityID, manualID string) {
+func (r *CommodityRegistry) AddManual(commodityID, manualID string) error {
 	r.manualsLock.Lock()
 	r.manuals[commodityID] = append(r.manuals[commodityID], manualID)
 	r.manualsLock.Unlock()
+
+	return nil
 }
 
-func (r *CommodityRegistry) GetManuals(commodityID string) []string {
+func (r *CommodityRegistry) GetManuals(commodityID string) ([]string, error) {
 	r.manualsLock.RLock()
 	manuals := make([]string, len(r.manuals[commodityID]))
 	copy(manuals, r.manuals[commodityID])
 	r.manualsLock.RUnlock()
 
-	return manuals
+	return manuals, nil
 }
 
-func (r *CommodityRegistry) DeleteManual(commodityID, manualID string) {
+func (r *CommodityRegistry) DeleteManual(commodityID, manualID string) error {
 	r.manualsLock.Lock()
 	for i, foundManualID := range r.manuals[commodityID] {
 		if foundManualID == manualID {
@@ -120,24 +126,28 @@ func (r *CommodityRegistry) DeleteManual(commodityID, manualID string) {
 		}
 	}
 	r.manualsLock.Unlock()
+
+	return nil
 }
 
-func (r *CommodityRegistry) AddInvoice(commodityID, invoiceID string) {
+func (r *CommodityRegistry) AddInvoice(commodityID, invoiceID string) error {
 	r.invoicesLock.Lock()
 	r.invoices[commodityID] = append(r.invoices[commodityID], invoiceID)
 	r.invoicesLock.Unlock()
+
+	return nil
 }
 
-func (r *CommodityRegistry) GetInvoices(commodityID string) []string {
+func (r *CommodityRegistry) GetInvoices(commodityID string) ([]string, error) {
 	r.invoicesLock.RLock()
 	invoices := make([]string, len(r.invoices[commodityID]))
 	copy(invoices, r.invoices[commodityID])
 	r.invoicesLock.RUnlock()
 
-	return invoices
+	return invoices, nil
 }
 
-func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) {
+func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) error {
 	r.invoicesLock.Lock()
 	for i, foundInvoiceID := range r.invoices[commodityID] {
 		if foundInvoiceID == invoiceID {
@@ -146,4 +156,6 @@ func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) {
 		}
 	}
 	r.invoicesLock.Unlock()
+
+	return nil
 }

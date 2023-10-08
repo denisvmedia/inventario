@@ -8,7 +8,9 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-type baseManualRegistry = Registry[models.Manual]
+var _ registry.ManualRegistry = (*ManualRegistry)(nil)
+
+type baseManualRegistry = Registry[models.Manual, *models.Manual]
 type ManualRegistry struct {
 	*baseManualRegistry
 
@@ -17,7 +19,7 @@ type ManualRegistry struct {
 
 func NewManualRegistry(commodityRegistry registry.CommodityRegistry) *ManualRegistry {
 	return &ManualRegistry{
-		baseManualRegistry: NewRegistry[models.Manual](),
+		baseManualRegistry: NewRegistry[models.Manual, *models.Manual](),
 		commodityRegistry:  commodityRegistry,
 	}
 }

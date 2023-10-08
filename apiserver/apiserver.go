@@ -54,13 +54,7 @@ func paginate(next http.Handler) http.Handler {
 }
 
 type Params struct {
-	LocationRegistry  registry.LocationRegistry
-	AreaRegistry      registry.AreaRegistry
-	CommodityRegistry registry.CommodityRegistry
-	ImageRegistry     registry.ImageRegistry
-	ManualRegistry    registry.ManualRegistry
-	InvoiceRegistry   registry.InvoiceRegistry
-
+	RegistrySet    *registry.Set
 	UploadLocation string
 }
 
@@ -68,12 +62,7 @@ func (p *Params) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&p.LocationRegistry, validation.Required),
-		validation.Field(&p.AreaRegistry, validation.Required),
-		validation.Field(&p.CommodityRegistry, validation.Required),
-		validation.Field(&p.ImageRegistry, validation.Required),
-		validation.Field(&p.ManualRegistry, validation.Required),
-		validation.Field(&p.InvoiceRegistry, validation.Required),
+		validation.Field(&p.RegistrySet, validation.Required),
 		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(value any) error {
 			ctx := context.Background()
 			b, err := blob.OpenBucket(ctx, p.UploadLocation)
@@ -121,8 +110,8 @@ func APIServer(params Params) http.Handler {
 	))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.With(defaultAPIMiddlewares...).Route("/locations", Locations(params.LocationRegistry))
-		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.AreaRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
 		r.Route("/uploads", Uploads(params))
 	})

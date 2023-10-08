@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/googleapis/gax-go/v2 v2.12.0
 	github.com/jellydator/validation v1.1.0
+	github.com/pkg/errors v0.9.1
 	github.com/rs/cors v1.10.1
 	github.com/shopspring/decimal v1.3.1
 	github.com/sirupsen/logrus v1.9.3
@@ -21,6 +22,7 @@ require (
 	github.com/swaggo/swag v1.16.2
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
+	go.etcd.io/bbolt v1.3.7
 	gocloud.dev v0.34.0
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 	golang.org/x/text v0.13.0
