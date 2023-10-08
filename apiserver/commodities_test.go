@@ -355,7 +355,8 @@ func TestCommodityListImages(t *testing.T) {
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
 	commodity := expectedCommodities[0]
 
-	imageIDs := params.RegistrySet.CommodityRegistry.GetImages(commodity.ID)
+	imageIDs, err := params.RegistrySet.CommodityRegistry.GetImages(commodity.ID)
+	c.Assert(err, qt.IsNil)
 	expectedImages := make([]*models.Image, 0, len(imageIDs))
 	for _, id := range imageIDs {
 		expectedImages = append(expectedImages, must.Must(params.RegistrySet.ImageRegistry.Get(id)))
@@ -386,7 +387,8 @@ func TestCommodityListInvoices(t *testing.T) {
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
 	commodity := expectedCommodities[0]
 
-	invoiceIDs := params.RegistrySet.CommodityRegistry.GetInvoices(commodity.ID)
+	invoiceIDs, err := params.RegistrySet.CommodityRegistry.GetInvoices(commodity.ID)
+	c.Assert(err, qt.IsNil)
 	expectedInvoices := make([]*models.Invoice, 0, len(invoiceIDs))
 	for _, id := range invoiceIDs {
 		expectedInvoices = append(expectedInvoices, must.Must(params.RegistrySet.InvoiceRegistry.Get(id)))
@@ -417,7 +419,8 @@ func TestCommodityListManuals(t *testing.T) {
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
 	commodity := expectedCommodities[0]
 
-	manualIDs := params.RegistrySet.CommodityRegistry.GetManuals(commodity.ID)
+	manualIDs, err := params.RegistrySet.CommodityRegistry.GetManuals(commodity.ID)
+	c.Assert(err, qt.IsNil)
 	expectedManuals := make([]*models.Manual, 0, len(manualIDs))
 	for _, id := range manualIDs {
 		expectedManuals = append(expectedManuals, must.Must(params.RegistrySet.ManualRegistry.Get(id)))

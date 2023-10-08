@@ -112,7 +112,8 @@ func TestLocationsGet(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), location.Name)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), location.Address)
 
-	areas := params.RegistrySet.LocationRegistry.GetAreas(location.ID)
+	areas, err := params.RegistrySet.LocationRegistry.GetAreas(location.ID)
+	c.Assert(err, qt.IsNil)
 	c.Assert(body, checkers.JSONPathMatches("$.data.attributes.areas", qt.HasLen), len(areas))
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.areas[0]"), areas[0])
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.areas[1]"), areas[1])
