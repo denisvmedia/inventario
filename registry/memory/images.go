@@ -40,9 +40,12 @@ func (r *ImageRegistry) Create(image models.Image) (*models.Image, error) {
 		return nil, errkit.Wrap(err, "failed to create image")
 	}
 
-	r.commodityRegistry.AddImage(image.CommodityID, newImage.ID)
+	err = r.commodityRegistry.AddImage(image.CommodityID, newImage.ID)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed adding image")
+	}
 
-	return newImage, err
+	return newImage, nil
 }
 
 func (r *ImageRegistry) Delete(id string) error {
@@ -56,7 +59,5 @@ func (r *ImageRegistry) Delete(id string) error {
 		return err
 	}
 
-	r.commodityRegistry.DeleteImage(image.CommodityID, id)
-
-	return nil
+	return r.commodityRegistry.DeleteImage(image.CommodityID, id)
 }

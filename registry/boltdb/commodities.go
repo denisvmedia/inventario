@@ -17,10 +17,6 @@ const (
 	bucketNameCommodities         = "commodities"
 	bucketNameCommoditiesChildren = "commodities-children"
 
-	bucketNameInvoices = "invoices"
-	bucketNameManuals  = "manuals"
-	bucketNameImages   = "images"
-
 	idxCommoditiesByName = "commodities-names"
 )
 

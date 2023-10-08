@@ -13,7 +13,7 @@ func (c Config) Parse() (*url.URL, error) {
 
 type SetFunc func(Config) (*Set, error)
 
-var registries map[string]SetFunc
+var registries = make(map[string]SetFunc)
 
 // Register registers a new registry set func.
 // It panics if the name is already registered.
@@ -38,4 +38,18 @@ func Unregister(name string) {
 // It can be used concurrently with itself, but not with Register or Unregister.
 func Registries() map[string]SetFunc {
 	return maps.Clone(registries)
+}
+
+func GetRegistry(conf string) (SetFunc, bool) {
+	parsed, err := url.Parse(conf)
+	if err != nil {
+		return nil, false
+	}
+
+	r, ok := registries[parsed.Scheme]
+	if !ok {
+		return nil, false
+	}
+
+	return r, true
 }

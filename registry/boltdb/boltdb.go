@@ -24,18 +24,20 @@ func NewRegistrySet(c registry.Config) (*registry.Set, error) {
 		return nil, errkit.Wrap(registry.ErrInvalidConfig, "invalid scheme")
 	}
 
-	db, err := dbx.NewDB(filepath.Dir(parsed.Path), filepath.Base(parsed.Path)).Open()
+	fpath := filepath.Join(parsed.Host, parsed.Path)
+
+	db, err := dbx.NewDB(filepath.Dir(fpath), filepath.Base(fpath)).Open()
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to open db")
 	}
 
 	s := &registry.Set{}
 	s.LocationRegistry = NewLocationRegistry(db)
-	// s.AreaRegistry = NewAreaRegistry(s.LocationRegistry)
-	// s.CommodityRegistry = NewCommodityRegistry(s.AreaRegistry)
-	// s.ImageRegistry = NewImageRegistry(s.CommodityRegistry)
-	// s.InvoiceRegistry = NewInvoiceRegistry(s.CommodityRegistry)
-	// s.ManualRegistry = NewManualRegistry(s.CommodityRegistry)
+	s.AreaRegistry = NewAreaRegistry(db, s.LocationRegistry)
+	s.CommodityRegistry = NewCommodityRegistry(db, s.AreaRegistry)
+	s.ImageRegistry = NewImageRegistry(db, s.CommodityRegistry)
+	s.InvoiceRegistry = NewInvoiceRegistry(db, s.CommodityRegistry)
+	s.ManualRegistry = NewManualRegistry(db, s.CommodityRegistry)
 
 	return s, nil
 }

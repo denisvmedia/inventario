@@ -18,7 +18,6 @@ import (
 	_ "gocloud.dev/blob/memblob"   // register memblob driver
 	_ "gocloud.dev/blob/s3blob"    // register s3blob driver
 
-	"github.com/denisvmedia/inventario/config"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -55,7 +54,6 @@ func paginate(next http.Handler) http.Handler {
 }
 
 type Params struct {
-	Config         *config.Config
 	RegistrySet    *registry.Set
 	UploadLocation string
 }
@@ -64,7 +62,6 @@ func (p *Params) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&p.Config, validation.Required),
 		validation.Field(&p.RegistrySet, validation.Required),
 		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(value any) error {
 			ctx := context.Background()
