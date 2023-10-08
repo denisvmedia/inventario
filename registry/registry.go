@@ -94,11 +94,11 @@ func (s *Set) Validate() error {
 
 	fields = append(fields,
 		validation.Field(&s.LocationRegistry, validation.Required),
-		//validation.Field(&s.AreaRegistry, validation.Required),
-		//validation.Field(&s.CommodityRegistry, validation.Required),
-		//validation.Field(&s.ImageRegistry, validation.Required),
-		//validation.Field(&s.ManualRegistry, validation.Required),
-		//validation.Field(&s.InvoiceRegistry, validation.Required),
+		validation.Field(&s.AreaRegistry, validation.Required),
+		validation.Field(&s.CommodityRegistry, validation.Required),
+		// validation.Field(&s.ImageRegistry, validation.Required),
+		// validation.Field(&s.ManualRegistry, validation.Required),
+		// validation.Field(&s.InvoiceRegistry, validation.Required),
 	)
 
 	return validation.ValidateStruct(s, fields...)

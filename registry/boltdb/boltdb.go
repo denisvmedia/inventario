@@ -3,8 +3,6 @@ package boltdb
 import (
 	"path/filepath"
 
-	_ "go.etcd.io/bbolt"
-
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/boltdb/dbx"
