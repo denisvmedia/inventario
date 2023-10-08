@@ -95,7 +95,7 @@ func TestCommodityRegistry_AddInvoice(t *testing.T) {
 
 	// Verify that the deleted invoice is not present in the commodity's invoices
 	invoices, err = r.GetInvoices(createdCommodity.ID)
-	c.Assert(err, qt.Equals)
+	c.Assert(err, qt.IsNil)
 	c.Assert(invoices, qt.Not(qt.Contains), "invoice1")
 	c.Assert(invoices, qt.Contains, "invoice2")
 }
