@@ -47,9 +47,15 @@ func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { /
 		return
 	}
 
+	areas, err := api.locationRegistry.GetAreas(location.ID)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	respLocation := &jsonapi.Location{
 		Location: location,
-		Areas:    api.locationRegistry.GetAreas(location.ID),
+		Areas:    areas,
 	}
 
 	if err := render.Render(w, r, jsonapi.NewLocationResponse(respLocation)); err != nil {
@@ -81,9 +87,15 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	areas, err := api.locationRegistry.GetAreas(location.ID)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	respLocation := &jsonapi.Location{
 		Location: location,
-		Areas:    api.locationRegistry.GetAreas(location.ID),
+		Areas:    areas,
 	}
 
 	resp := jsonapi.NewLocationResponse(respLocation).WithStatusCode(http.StatusCreated)
@@ -154,9 +166,15 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	areas, err := api.locationRegistry.GetAreas(location.ID)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	respLocation := &jsonapi.Location{
 		Location: newLocation,
-		Areas:    api.locationRegistry.GetAreas(location.ID),
+		Areas:    areas,
 	}
 
 	resp := jsonapi.NewLocationResponse(respLocation).WithStatusCode(http.StatusOK)

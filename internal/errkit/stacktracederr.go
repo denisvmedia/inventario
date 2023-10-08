@@ -24,15 +24,21 @@ type stackTracedError struct {
 	stackTrace stackTrace // Stack trace associated with the error
 }
 
-// WithStackTrace creates a new error with a stack trace.
+// WithStack creates a new error with a stack trace.
 // It wraps the given error with the stack trace.
-func WithStackTrace(err error) error {
+func WithStack(err error, fields ...any) error {
 	stack, _ := getStackTrace(1)
 
-	return &stackTracedError{
+	result := &stackTracedError{
 		stackTrace: stack,
 		err:        err,
 	}
+
+	if len(fields) == 0 {
+		return result
+	}
+
+	return WithFields(result, fields)
 }
 
 // Error implements the error interface and returns the error message.

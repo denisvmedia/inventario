@@ -12,9 +12,12 @@ import (
 )
 
 type CommodityMeta struct {
-	Images   []string `json:"images"`
-	Manuals  []string `json:"manuals"`
-	Invoices []string `json:"invoices"`
+	Images        []string `json:"images"`
+	Manuals       []string `json:"manuals"`
+	Invoices      []string `json:"invoices"`
+	ImagesError   string   `json:"images_error,omitempty"`
+	ManualsError  string   `json:"manuals_error,omitempty"`
+	InvoicesError string   `json:"invoices_error,omitempty"`
 }
 
 func (a *CommodityMeta) MarshalJSON() ([]byte, error) {
@@ -82,10 +85,10 @@ type CommoditiesResponse struct {
 }
 
 // NewCommoditiesResponse creates a new CommoditiesResponse instance.
-func NewCommoditiesResponse(commodities []models.Commodity, total int) *CommoditiesResponse {
+func NewCommoditiesResponse(commodities []*models.Commodity, total int) *CommoditiesResponse {
 	commodityData := make([]CommodityData, 0) // must be an empty array instead of nil due to JSON serialization
 	for _, l := range commodities {
-		l := l
+		l := *l
 		commodityData = append(commodityData, CommodityData{
 			ID:         l.ID,
 			Type:       "commodities",

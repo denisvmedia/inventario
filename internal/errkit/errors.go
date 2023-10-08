@@ -75,8 +75,7 @@ func Append(err error, errs ...error) error {
 		return nil
 	}
 
-	var e Errors
-	if errors.As(err, &e) {
+	if e := (Errors)(nil); errors.As(err, &e) {
 		return append(e, errs...)
 	}
 

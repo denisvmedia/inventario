@@ -94,7 +94,8 @@ func TestAreaRegistry_Commodities(t *testing.T) {
 	r.AddCommodity(createdArea.ID, "commodity2")
 
 	// Get the commodities of the area
-	commodities := r.GetCommodities(createdArea.ID)
+	commodities, err := r.GetCommodities(createdArea.ID)
+	c.Assert(err, qt.IsNil)
 	c.Assert(commodities, qt.Contains, "commodity1")
 	c.Assert(commodities, qt.Contains, "commodity2")
 
@@ -102,7 +103,8 @@ func TestAreaRegistry_Commodities(t *testing.T) {
 	r.DeleteCommodity(createdArea.ID, "commodity1")
 
 	// Verify that the deleted commodity is not present in the area's commodities
-	commodities = r.GetCommodities(createdArea.ID)
+	commodities, err = r.GetCommodities(createdArea.ID)
+	c.Assert(err, qt.IsNil)
 	c.Assert(commodities, qt.Not(qt.Contains), "commodity1")
 	c.Assert(commodities, qt.Contains, "commodity2")
 }

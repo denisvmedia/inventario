@@ -47,7 +47,8 @@ func TestLocationRegistry_Areas(t *testing.T) {
 	r.AddArea(createdLocation.GetID(), "area2")
 
 	// Get the areas of the location
-	areas := r.GetAreas(createdLocation.GetID())
+	areas, err := r.GetAreas(createdLocation.GetID())
+	c.Assert(err, qt.IsNil)
 	c.Assert(areas, qt.Contains, "area1")
 	c.Assert(areas, qt.Contains, "area2")
 
@@ -55,7 +56,8 @@ func TestLocationRegistry_Areas(t *testing.T) {
 	r.DeleteArea(createdLocation.GetID(), "area1")
 
 	// Verify that the deleted area is not present in the location's areas
-	areas = r.GetAreas(createdLocation.GetID())
+	areas, err = r.GetAreas(createdLocation.GetID())
+	c.Assert(err, qt.IsNil)
 	c.Assert(areas, qt.Not(qt.Contains), "area1")
 	c.Assert(areas, qt.Contains, "area2")
 }

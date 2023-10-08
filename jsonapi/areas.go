@@ -53,10 +53,10 @@ type AreasResponse struct {
 	Meta AreasMeta  `json:"meta"`
 }
 
-func NewAreasResponse(areas []models.Area, total int) *AreasResponse {
+func NewAreasResponse(areas []*models.Area, total int) *AreasResponse {
 	areaData := make([]AreaData, 0) // must be an empty array instead of nil due to JSON serialization
 	for _, l := range areas {
-		l := l
+		l := *l
 		areaData = append(areaData, AreaData{
 			ID:         l.ID,
 			Type:       "areas",

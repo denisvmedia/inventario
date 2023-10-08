@@ -206,12 +206,13 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 
 func newParams() apiserver.Params {
 	var params apiserver.Params
-	params.LocationRegistry = newLocationRegistry()
-	params.AreaRegistry = newAreaRegistry(params.LocationRegistry)
-	params.CommodityRegistry = newCommodityRegistry(params.AreaRegistry)
-	params.ImageRegistry = newImageRegistry(params.CommodityRegistry)
-	params.InvoiceRegistry = newInvoiceRegistry(params.CommodityRegistry)
-	params.ManualRegistry = newManualRegistry(params.CommodityRegistry)
+	params.RegistrySet = &registry.Set{}
+	params.RegistrySet.LocationRegistry = newLocationRegistry()
+	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
+	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry)
+	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry)
+	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)
+	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
 	params.UploadLocation = uploadLocation
 	return params
 }

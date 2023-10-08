@@ -236,13 +236,13 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 func Uploads(params Params) func(r chi.Router) {
 	api := &uploadsAPI{
 		uploadLocation:  params.UploadLocation,
-		imageRegistry:   params.ImageRegistry,
-		manualRegistry:  params.ManualRegistry,
-		invoiceRegistry: params.InvoiceRegistry,
+		imageRegistry:   params.RegistrySet.ImageRegistry,
+		manualRegistry:  params.RegistrySet.ManualRegistry,
+		invoiceRegistry: params.RegistrySet.InvoiceRegistry,
 	}
 
 	return func(r chi.Router) {
-		r.With(commodityCtx(params.CommodityRegistry)).
+		r.With(commodityCtx(params.RegistrySet.CommodityRegistry)).
 			Route("/commodities/{commodityID}", func(r chi.Router) {
 				r.With(api.uploadFiles(mimekit.ImageContentTypes()...)).Post("/images", api.handleImagesUpload)
 				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)
