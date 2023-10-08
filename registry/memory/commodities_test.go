@@ -34,7 +34,8 @@ func TestCommodityRegistry_AddImage(t *testing.T) {
 	r.AddImage(createdCommodity.ID, "image2")
 
 	// Get the images of the commodity
-	images := r.GetImages(createdCommodity.ID)
+	images, err := r.GetImages(createdCommodity.ID)
+	c.Assert(err, qt.IsNil)
 	c.Assert(images, qt.Contains, "image1")
 	c.Assert(images, qt.Contains, "image2")
 
@@ -42,7 +43,8 @@ func TestCommodityRegistry_AddImage(t *testing.T) {
 	r.DeleteImage(createdCommodity.ID, "image1")
 
 	// Verify that the deleted image is not present in the commodity's images
-	images = r.GetImages(createdCommodity.ID)
+	images, err = r.GetImages(createdCommodity.ID)
+	c.Assert(err, qt.IsNil)
 	c.Assert(images, qt.Not(qt.Contains), "image1")
 	c.Assert(images, qt.Contains, "image2")
 }
@@ -57,7 +59,8 @@ func TestCommodityRegistry_AddManual(t *testing.T) {
 	r.AddManual(createdCommodity.ID, "manual2")
 
 	// Get the manuals of the commodity
-	manuals := r.GetManuals(createdCommodity.ID)
+	manuals, err := r.GetManuals(createdCommodity.ID)
+	c.Assert(err, qt.IsNil)
 	c.Assert(manuals, qt.Contains, "manual1")
 	c.Assert(manuals, qt.Contains, "manual2")
 
@@ -65,7 +68,8 @@ func TestCommodityRegistry_AddManual(t *testing.T) {
 	r.DeleteManual(createdCommodity.ID, "manual1")
 
 	// Verify that the deleted manual is not present in the commodity's manuals
-	manuals = r.GetManuals(createdCommodity.ID)
+	manuals, err = r.GetManuals(createdCommodity.ID)
+	c.Assert(err, qt.IsNil)
 	c.Assert(manuals, qt.Not(qt.Contains), "manual1")
 	c.Assert(manuals, qt.Contains, "manual2")
 }
@@ -81,7 +85,8 @@ func TestCommodityRegistry_AddInvoice(t *testing.T) {
 	r.AddInvoice(createdCommodity.ID, "invoice2")
 
 	// Get the invoices for the commodity
-	invoices := r.GetInvoices(createdCommodity.ID)
+	invoices, err := r.GetInvoices(createdCommodity.ID)
+	c.Assert(err, qt.IsNil)
 	c.Assert(invoices, qt.Contains, "invoice1")
 	c.Assert(invoices, qt.Contains, "invoice2")
 
@@ -89,7 +94,8 @@ func TestCommodityRegistry_AddInvoice(t *testing.T) {
 	r.DeleteInvoice(createdCommodity.ID, "invoice1")
 
 	// Verify that the deleted invoice is not present in the commodity's invoices
-	invoices = r.GetInvoices(createdCommodity.ID)
+	invoices, err = r.GetInvoices(createdCommodity.ID)
+	c.Assert(err, qt.Equals)
 	c.Assert(invoices, qt.Not(qt.Contains), "invoice1")
 	c.Assert(invoices, qt.Contains, "invoice2")
 }
