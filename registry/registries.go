@@ -40,6 +40,16 @@ func Registries() map[string]SetFunc {
 	return maps.Clone(registries)
 }
 
+// RegistryNames returns a slice of registered registry set names.
+func RegistryNames() []string {
+	names := make([]string, 0, len(registries))
+	for name := range registries {
+		names = append(names, name)
+	}
+
+	return names
+}
+
 func GetRegistry(conf string) (SetFunc, bool) {
 	parsed, err := url.Parse(conf)
 	if err != nil {

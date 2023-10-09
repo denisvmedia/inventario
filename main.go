@@ -2,6 +2,8 @@ package main
 
 import (
 	"github.com/denisvmedia/inventario/cmd/inventario"
+	"github.com/denisvmedia/inventario/registry/boltdb"
+	"github.com/denisvmedia/inventario/registry/memory"
 )
 
 // @title Inventario API
@@ -16,6 +18,13 @@ import (
 
 // @BasePath /api/v1
 
+func registerDBBackends() {
+	boltdb.Register()
+	memory.Register()
+}
+
 func main() {
+	registerDBBackends()
+
 	inventario.Execute()
 }
