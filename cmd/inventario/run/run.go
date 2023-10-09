@@ -15,8 +15,6 @@ import (
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/boltdb"
-	"github.com/denisvmedia/inventario/registry/memory"
 )
 
 var runCmd = &cobra.Command{
@@ -29,7 +27,7 @@ var runCmd = &cobra.Command{
 const (
 	addrFlag           = "addr"
 	uploadLocationFlag = "upload-location"
-	dbDSN              = "db-dsn"
+	dbDSNFlag          = "db-dsn"
 )
 
 var runFlags = map[string]cobraflags.Flag{
@@ -43,9 +41,10 @@ var runFlags = map[string]cobraflags.Flag{
 		Value: "file://" + filepath.Join(filepath.ToSlash(must.Must(os.Getwd())), "uploads"),
 		Usage: "Location for the uploaded files",
 	},
-	dbDSN: &cobraflags.StringFlag{
-		Name:  dbDSN,
+	dbDSNFlag: &cobraflags.StringFlag{
+		Name:  dbDSNFlag,
 		Value: "memory://",
+		Usage: "Database DSN",
 	},
 }
 
@@ -55,20 +54,13 @@ func NewRunCommand() *cobra.Command {
 	return runCmd
 }
 
-func registerDBBackends() {
-	boltdb.Register()
-	memory.Register()
-}
-
 func runCommand(_ *cobra.Command, _ []string) error {
-	registerDBBackends()
-
 	srv := &httpserver.APIServer{}
 	bindAddr := runFlags[addrFlag].GetString()
-	dsn := runFlags[dbDSN].GetString()
+	dsn := runFlags[dbDSNFlag].GetString()
 	log.WithFields(log.Fields{
-		addrFlag: bindAddr,
-		dbDSN:    dsn,
+		addrFlag:  bindAddr,
+		dbDSNFlag: dsn,
 	}).Info("Starting server")
 
 	var params apiserver.Params
