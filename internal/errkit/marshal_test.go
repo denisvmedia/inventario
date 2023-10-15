@@ -26,6 +26,40 @@ func TestForceMarshalError(t *testing.T) {
 		c.Assert(data, qt.JSONEquals, &expectedData)
 	})
 
+	t.Run("joined error", func(t *testing.T) {
+		c := qt.New(t)
+
+		err1 := errors.New("test error1")
+		err2 := errors.New("test error2")
+		err3 := errors.Join(err1, err2)
+		data := errkit.ForceMarshalError(err3)
+
+		expectedJSON := `{"error":[{"msg": "test error1", "type": "*errors.errorString"}, {"msg": "test error2", "type": "*errors.errorString"}],"type":"*errors.joinError"}`
+		var expectedData any
+
+		err := json.Unmarshal([]byte(expectedJSON), &expectedData)
+		c.Assert(err, qt.IsNil)
+		c.Assert(data, qt.JSONEquals, &expectedData)
+	})
+
+	t.Run("joined and appended error", func(t *testing.T) {
+		c := qt.New(t)
+
+		err1 := errors.New("test error1")
+		err2 := errors.New("test error2")
+		err3 := errors.Join(err1, err2)
+		err4 := errkit.Append(err3, errors.New("test error3"))
+		data, err := json.Marshal(err4)
+		c.Assert(err, qt.IsNil)
+
+		expectedJSON := `{"error":[{"msg": "test error1", "type": "*errors.errorString"}, {"msg": "test error2", "type": "*errors.errorString"}, {"msg": "test error3", "type": "*errors.errorString"}],"type":"*errkit.multiError"}`
+		var expectedData any
+
+		err = json.Unmarshal([]byte(expectedJSON), &expectedData)
+		c.Assert(err, qt.IsNil)
+		c.Assert(data, qt.JSONEquals, &expectedData)
+	})
+
 	t.Run("unmarshallable error", func(t *testing.T) {
 		c := qt.New(t)
 
@@ -62,8 +96,8 @@ func TestMarshalError_Error(t *testing.T) {
 		},
 		{
 			name:         "errkit.Errors",
-			err:          errkit.Errors{errkit.WithMessage(errors.New("test error"), "wrapped error")},
-			expectedJSON: `{"error":[{"msg":"wrapped error","error":{"msg":"test error","type":"*errors.errorString"}}],"type":"errkit.Errors"}`,
+			err:          errkit.Append(errkit.WithMessage(errors.New("test error"), "wrapped error")),
+			expectedJSON: `{"error":[{"msg":"wrapped error","error":{"msg":"test error","type":"*errors.errorString"}}],"type":"*errkit.multiError"}`,
 		},
 		{
 			name:         "error struct",

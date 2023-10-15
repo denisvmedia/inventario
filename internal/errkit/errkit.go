@@ -18,7 +18,7 @@ type Error struct {
 	error
 	msg    string
 	fields Fields
-	prev   Errors
+	prev   *multiError
 }
 
 func (e *Error) Error() string {
@@ -43,7 +43,7 @@ func (e *Error) Is(target error) bool {
 		return true
 	}
 
-	if e.prev.Is(target) {
+	if e.prev != nil && e.prev.Is(target) {
 		return true
 	}
 
@@ -55,7 +55,7 @@ func (e *Error) As(target any) bool {
 		return false
 	}
 
-	if e.prev.As(target) {
+	if e.prev != nil && e.prev.As(target) {
 		return true
 	}
 
@@ -109,7 +109,10 @@ func (e *Error) WithFields(fields ...any) *Error {
 	for k, v := range ToFields(fields) {
 		tmp.fields[k] = v
 	}
-	tmp.prev = append(tmp.prev, e)
+	if tmp.prev == nil {
+		tmp.prev = &multiError{}
+	}
+	tmp.prev.errs = append(tmp.prev.errs, e)
 
 	return &tmp
 }
@@ -121,14 +124,20 @@ func (e *Error) WithField(key string, value any) *Error {
 		tmp.fields[k] = v
 	}
 	tmp.fields[key] = value
-	tmp.prev = append(tmp.prev, e)
+	if tmp.prev == nil {
+		tmp.prev = &multiError{}
+	}
+	tmp.prev.errs = append(tmp.prev.errs, e)
 	return &tmp
 }
 
 func (e *Error) WithEquivalents(errs ...error) *Error {
 	tmp := *e
 	tmp.error = WithEquivalents(e.error, errs...)
-	tmp.prev = append(tmp.prev, e)
+	if tmp.prev == nil {
+		tmp.prev = &multiError{}
+	}
+	tmp.prev.errs = append(tmp.prev.errs, e)
 	return &tmp
 }
 

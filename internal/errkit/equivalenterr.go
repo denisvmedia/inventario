@@ -13,8 +13,8 @@ var (
 )
 
 type equivalentError struct {
-	err         error  // The main error
-	equivalents Errors // Equivalent errors
+	err         error       // The main error
+	equivalents *multiError // Equivalent errors
 }
 
 // WithEquivalents creates a new error with equivalent errors.
@@ -22,7 +22,7 @@ type equivalentError struct {
 func WithEquivalents(err error, errs ...error) error {
 	return &equivalentError{
 		err:         err,
-		equivalents: errs,
+		equivalents: &multiError{errs: errs},
 	}
 }
 
@@ -40,7 +40,7 @@ func (e *equivalentError) Is(target error) bool {
 		return true
 	}
 
-	for _, err := range e.equivalents {
+	for _, err := range e.equivalents.errs {
 		if errors.Is(err, target) {
 			return true
 		}
@@ -65,7 +65,7 @@ func (e *equivalentError) As(target any) bool {
 		return true
 	}
 
-	for _, err := range e.equivalents {
+	for _, err := range e.equivalents.errs {
 		if errors.As(err, target) {
 			return true
 		}
