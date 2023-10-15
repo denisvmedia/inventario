@@ -33,6 +33,8 @@ func MarshalError(aerr error) ([]byte, error) {
 	}
 
 	switch v := aerr.(type) {
+	case *HumanError:
+		return v.MarshalJSON()
 	case *Error:
 		return v.MarshalJSON()
 	case *multiError:

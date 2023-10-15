@@ -34,6 +34,7 @@ func (e *multiError) Is(target error) bool {
 	return false
 }
 
+// Unwrap returns a slice of errors that are wrapped by Append or Join.
 func (e *multiError) Unwrap() []error {
 	return e.errs
 }
@@ -60,9 +61,10 @@ func (e *multiError) MarshalJSON() ([]byte, error) {
 	return marshalMultiple(e)
 }
 
-// Append appends one or more errors into a single slice.
+// Append appends one or more errors additionally to the first error.
 // It will return nil if err is nil.
-// It will merge the errors implementing `interface { Unwrap() []error }` by calling Unwrap.
+// It will unwrap err if it implements `interface { Unwrap() []error }`
+// and merge the value with errs.
 // It will merge the errors from the previous Append call in a single slice.
 func Append(err error, errs ...error) error {
 	if err == nil {
@@ -75,8 +77,6 @@ func Append(err error, errs ...error) error {
 
 	var prevErrs []error
 	switch verr := err.(type) {
-	case *multiError:
-		prevErrs = verr.errs
 	case multipleErrors:
 		prevErrs = verr.Unwrap()
 	default:
@@ -90,7 +90,9 @@ func Append(err error, errs ...error) error {
 	return &multiError{errs: newErrs}
 }
 
-// Join merges one or more errors to the Errors slice.
+// Join merges one or more errors under the hood of a single error.
+// nil values are discarded.
+// It will return nil if all errors are nil or no errors were given.
 func Join(errs ...error) error {
 	if len(errs) == 0 {
 		return nil
