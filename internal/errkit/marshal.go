@@ -23,20 +23,23 @@ func ForceMarshalError(e error) []byte {
 }
 
 func MarshalError(aerr error) ([]byte, error) {
+	type jsonError struct {
+		Error json.RawMessage `json:"error,omitempty"`
+		Type  string          `json:"type,omitempty"`
+	}
 	type jsonMinimalError struct {
 		Msg  string `json:"msg,omitempty"`
 		Type string `json:"type,omitempty"`
 	}
 
 	switch v := aerr.(type) {
+	case *HumanError:
+		return v.MarshalJSON()
 	case *Error:
 		return v.MarshalJSON()
+	case *multiError:
+		return marshalMultiple(v)
 	case json.Marshaler:
-		type jsonError struct {
-			Error json.RawMessage `json:"error,omitempty"`
-			Type  string          `json:"type,omitempty"`
-		}
-
 		data, err := v.MarshalJSON()
 		if err != nil {
 			return nil, err
@@ -46,6 +49,8 @@ func MarshalError(aerr error) ([]byte, error) {
 			Type:  fmt.Sprintf("%T", v),
 		}
 		return json.Marshal(&jsonErr)
+	case multipleErrors:
+		return marshalMultiple(v)
 	case encoding.TextMarshaler:
 		data, err := v.MarshalText()
 		if err != nil {
@@ -71,4 +76,32 @@ func MarshalError(aerr error) ([]byte, error) {
 		}
 		return json.Marshal(&jsonErr)
 	}
+}
+
+func marshalMultiple(merrs multipleErrors) ([]byte, error) {
+	type jsonError struct {
+		Error json.RawMessage `json:"error,omitempty"`
+		Type  string          `json:"type,omitempty"`
+	}
+
+	jsonErr := jsonError{
+		Type: fmt.Sprintf("%T", merrs),
+	}
+
+	errs := merrs.Unwrap()
+	rawErrs := make([]json.RawMessage, 0, len(errs))
+	for _, uerr := range errs {
+		data, err := MarshalError(uerr)
+		if err != nil {
+			return nil, err
+		}
+		rawErrs = append(rawErrs, data)
+	}
+	marshalled, err := json.Marshal(rawErrs)
+	if err != nil {
+		return nil, err
+	}
+	jsonErr.Error = marshalled
+
+	return json.Marshal(jsonErr)
 }

@@ -1,5 +1,11 @@
 package errkit
 
+import (
+	"fmt"
+)
+
+const badKey = "!BADKEY"
+
 func ToFields(fields []any) Fields {
 	if len(fields) == 0 {
 		return nil
@@ -16,7 +22,7 @@ func ToFields(fields []any) Fields {
 	}
 
 	if len(fields)%2 != 0 {
-		panic("errkit: invalid fields (must be odd count)")
+		fields = append(fields[:len(fields)-1], badKey, fields[len(fields)-1])
 	}
 
 	fs := make(Fields, len(fields)/2)
@@ -25,7 +31,7 @@ func ToFields(fields []any) Fields {
 		f := fields[i]
 		fstr, ok := f.(string)
 		if !ok {
-			panic("errkit: invalid field key (must be string)")
+			fstr = fmt.Sprintf("%v(%v)", badKey, f)
 		}
 
 		fs[fstr] = fields[i+1]

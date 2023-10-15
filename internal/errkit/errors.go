@@ -1,19 +1,23 @@
 package errkit
 
 import (
-	"encoding/json"
 	"errors"
-	"reflect"
 	"strings"
 )
 
-type Errors []error
+type multipleErrors interface {
+	Unwrap() []error
+}
+
+type multiError struct {
+	errs []error
+}
 
 // Error implements the error interface and returns the concatenated error messages.
 // It joins the error messages of all errors in the slice with a newline separator.
-func (e Errors) Error() string {
+func (e *multiError) Error() string {
 	var errorMessages []string
-	for _, err := range e {
+	for _, err := range e.errs {
 		errorMessages = append(errorMessages, err.Error())
 	}
 	return strings.Join(errorMessages, "\n")
@@ -21,8 +25,8 @@ func (e Errors) Error() string {
 
 // Is implements the errors.Is interface and returns true if the target error is found.
 // It checks if any error in the slice matches the target error.
-func (e Errors) Is(target error) bool {
-	for _, err := range e {
+func (e *multiError) Is(target error) bool {
+	for _, err := range e.errs {
 		if errors.Is(err, target) {
 			return true
 		}
@@ -30,54 +34,83 @@ func (e Errors) Is(target error) bool {
 	return false
 }
 
+// Unwrap returns a slice of errors that are wrapped by Append or Join.
+func (e *multiError) Unwrap() []error {
+	return e.errs
+}
+
 // As implements the errors.As interface and returns true if the target error is found.
 // It checks if any error in the slice can be assigned to the target error.
-func (e Errors) As(target any) bool {
+func (e *multiError) As(target any) bool {
 	if target == nil {
 		return false
 	}
 
-	// Check if the target matches the Errors slice itself
-	if reflect.TypeOf(target) == reflect.TypeOf(e) {
-		reflect.ValueOf(target).Elem().Set(reflect.ValueOf(e))
-		return true
-	}
-
-	for _, err := range e {
+	for _, err := range e.errs {
 		if errors.As(err, target) {
 			return true
 		}
 	}
+
 	return false
 }
 
 // MarshalJSON implements the json.Marshaler interface and returns the serialized errors.
 // It serializes each error in the slice and returns them as a JSON array.
-func (e Errors) MarshalJSON() ([]byte, error) {
-	errs := make([]json.RawMessage, 0, len(e))
-
-	for _, v := range e {
-		ev, err := MarshalError(v)
-		if err != nil {
-			return nil, err
-		}
-		errs = append(errs, ev)
-	}
-
-	return json.Marshal(errs)
+func (e *multiError) MarshalJSON() ([]byte, error) {
+	return marshalMultiple(e)
 }
 
-// Append appends one or more errors to the Errors slice.
-// It checks if the provided error is already an Errors slice and appends the new errors.
-// Otherwise, it creates a new Errors slice and appends the provided error and new errors.
+// Append appends one or more errors additionally to the first error.
+// It will return nil if err is nil.
+// It will unwrap err if it implements `interface { Unwrap() []error }`
+// and merge the value with errs.
+// It will merge the errors from the previous Append call in a single slice.
 func Append(err error, errs ...error) error {
 	if err == nil {
 		return nil
 	}
 
-	if e := (Errors)(nil); errors.As(err, &e) {
-		return append(e, errs...)
+	if len(errs) == 0 {
+		return &multiError{errs: []error{err}}
 	}
 
-	return append(Errors{err}, errs...)
+	var prevErrs []error
+	switch verr := err.(type) {
+	case multipleErrors:
+		prevErrs = verr.Unwrap()
+	default:
+		prevErrs = []error{err}
+	}
+
+	newErrs := make([]error, 0, len(prevErrs)+len(errs))
+	newErrs = append(newErrs, prevErrs...)
+	newErrs = append(newErrs, errs...)
+
+	return &multiError{errs: newErrs}
+}
+
+// Join merges one or more errors under the hood of a single error.
+// nil values are discarded.
+// It will return nil if all errors are nil or no errors were given.
+func Join(errs ...error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+
+	newErrs := make([]error, 0, len(errs))
+	for _, e := range errs {
+		if e != nil {
+			newErrs = append(newErrs, e)
+		}
+	}
+
+	switch len(newErrs) {
+	case 0:
+		return nil
+	case 1:
+		return Append(newErrs[0])
+	default:
+		return Append(newErrs[0], newErrs[1:]...)
+	}
 }
