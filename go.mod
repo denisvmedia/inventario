@@ -21,7 +21,7 @@ require (
 	github.com/swaggo/swag v1.16.2
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
-	go.etcd.io/bbolt v1.3.7
+	go.etcd.io/bbolt v1.3.8
 	gocloud.dev v0.34.0
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 	golang.org/x/text v0.13.0
