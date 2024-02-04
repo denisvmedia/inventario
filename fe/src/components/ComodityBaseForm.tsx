@@ -3,6 +3,9 @@ import {
   AutocompleteInput,
   BooleanInput,
   DateInput,
+  FileField,
+  FileInput,
+  ImageField,
   NumberInput,
   ReferenceInput,
   required,
@@ -12,10 +15,28 @@ import {
   TextInput,
 } from 'react-admin';
 import React from 'react';
+import { useRecordContext } from 'ra-core';
 import { COMMODITY_TYPES_ELEMENTS } from '../api/types/commodity-types';
 import { CURRENCIES_ELEMENTS } from '../api/types/currencies';
 import { COMMODITY_STATUS_ELEMENTS, COMMODITY_STATUS_IN_USE } from '../api/types/commodity-statuses';
 import ChipsInput from './ChipsInput';
+
+function Images(props: any) {
+  const record = useRecordContext(props);
+  // TODO(2024-02-04): continue here with the images
+  // TODO: maybe do the transformation in dataProvider => this will allow to not think about the domain here
+  // TODO: display small images, allow deleting them, allow viewing them in a modal
+  // TODO(2024-02-04): do the same for manuals and invoices
+  const fields = record._meta.images.map((image: any, index: any) => (
+    <img src={`http://localhost:3333/api/v1/commodities/${record.id}/images/${image}.png`} />
+  ));
+
+  return (
+    <div>
+      {fields}
+    </div>
+  );
+}
 
 function ComodityBaseForm() {
   return (
@@ -182,6 +203,20 @@ function ComodityBaseForm() {
         name="comments"
         fullWidth
       />
+
+      <Images source="_meta" />
+
+      <FileInput name="images" source="images" multiple>
+        <FileField source="src" title="title" />
+      </FileInput>
+
+      <FileInput name="manuals" source="manuals" multiple>
+        <FileField source="src" title="title" />
+      </FileInput>
+
+      <FileInput name="invoices" source="invoices" multiple>
+        <FileField source="src" title="title" />
+      </FileInput>
 
       <BooleanInput
         source="draft"
