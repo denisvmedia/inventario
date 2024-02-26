@@ -9,7 +9,7 @@ require (
 	github.com/go-chi/render v1.0.3
 	github.com/go-extras/go-kit v1.1.1
 	github.com/google/uuid v1.6.0
-	github.com/googleapis/gax-go/v2 v2.12.1
+	github.com/googleapis/gax-go/v2 v2.12.2
 	github.com/jellydator/validation v1.1.0
 	github.com/rs/cors v1.10.1
 	github.com/shopspring/decimal v1.3.1
