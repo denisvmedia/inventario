@@ -12,7 +12,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.12.3
 	github.com/jellydator/validation v1.1.0
 	github.com/rs/cors v1.10.1
-	github.com/shopspring/decimal v1.3.1
+	github.com/shopspring/decimal v1.4.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cobra v1.8.0
