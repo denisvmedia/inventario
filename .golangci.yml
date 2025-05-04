@@ -233,6 +233,8 @@ linters:
           - dupl
         path: '(jsonapi|apiserver|registry/.*)/.*\.go$'
     paths:
+      - 'drivertest/.*\.go$'
+      - 'drivertest/escape/.*\.go$'
       - 'third_party$'
       - 'builtin$'
       - 'examples$'

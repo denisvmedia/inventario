@@ -31,8 +31,9 @@ import (
 	"github.com/spf13/afero"
 	"gocloud.dev/blob"
 	"gocloud.dev/blob/driver"
-	"gocloud.dev/blob/drivertest"
 	"gocloud.dev/gcerrors"
+
+	"github.com/denisvmedia/inventario/internal/fileblob/drivertest"
 )
 
 type harness struct {
