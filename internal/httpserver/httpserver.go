@@ -17,8 +17,9 @@ type APIServer struct {
 func (s *APIServer) Run(addr string, h http.Handler) <-chan error {
 	s.done = make(chan struct{})
 	s.server = &http.Server{
-		Addr:    addr,
-		Handler: h,
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	errCh := make(chan error, 2)

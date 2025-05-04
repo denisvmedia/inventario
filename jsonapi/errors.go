@@ -33,7 +33,7 @@ func NewErrors(errs ...Error) *Errors {
 	}
 }
 
-func (e *Errors) Render(w http.ResponseWriter, r *http.Request) error {
+func (e *Errors) Render(_w http.ResponseWriter, r *http.Request) error {
 	statusCode := e.HTTPStatusCode
 	if e.HTTPStatusCode == 0 && len(e.Errors) != 0 {
 		statusCode = e.Errors[0].HTTPStatusCode

@@ -41,9 +41,9 @@ func NewImageRegistry(db *bolt.DB, commodityRegistry registry.CommodityRegistry)
 }
 
 func (r *ImageRegistry) Create(m models.Image) (*models.Image, error) {
-	result, err := r.registry.Create(m, func(tx dbx.TransactionOrBucket, image *models.Image) error {
+	result, err := r.registry.Create(m, func(_tx dbx.TransactionOrBucket, _image *models.Image) error {
 		return nil
-	}, func(tx dbx.TransactionOrBucket, image *models.Image) error {
+	}, func(_tx dbx.TransactionOrBucket, _image *models.Image) error {
 		return nil
 	})
 	if err != nil {
@@ -67,19 +67,19 @@ func (r *ImageRegistry) List() ([]*models.Image, error) {
 }
 
 func (r *ImageRegistry) Update(m models.Image) (*models.Image, error) {
-	return r.registry.Update(m, func(tx dbx.TransactionOrBucket, image *models.Image) error {
+	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, _image *models.Image) error {
 		return nil
-	}, func(tx dbx.TransactionOrBucket, result *models.Image) error {
+	}, func(_tx dbx.TransactionOrBucket, _result *models.Image) error {
 		return nil
 	})
 }
 
 func (r *ImageRegistry) Delete(id string) error {
 	var commodityID string
-	err := r.registry.Delete(id, func(tx dbx.TransactionOrBucket, image *models.Image) error {
+	err := r.registry.Delete(id, func(_tx dbx.TransactionOrBucket, image *models.Image) error {
 		commodityID = image.CommodityID
 		return nil
-	}, func(tx dbx.TransactionOrBucket, result *models.Image) error {
+	}, func(_tx dbx.TransactionOrBucket, _result *models.Image) error {
 		return nil
 	})
 	if err != nil {

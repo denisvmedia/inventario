@@ -57,7 +57,7 @@ package fileblob // import "gocloud.dev/blob/fileblob"
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // this is a hard requirement by the parent library
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -85,7 +85,7 @@ var memFS = afero.NewMemMapFs()
 
 const defaultPageSize = 1000
 
-func init() {
+func init() { //nolint:gochecknoinits // Acceptable in this case
 	blob.DefaultURLMux().RegisterBucket(Scheme, &URLOpener{})
 }
 
@@ -165,7 +165,7 @@ const (
 	MetadataDontWrite metadataOption = "skip"
 )
 
-func (o *URLOpener) forParams(ctx context.Context, q url.Values) (*Options, error) {
+func (o *URLOpener) forParams(_ctx context.Context, q url.Values) (*Options, error) {
 	for k := range q {
 		if _, ok := recognizedParams[k]; !ok {
 			return nil, fmt.Errorf("invalid query parameter %q", k)
@@ -290,7 +290,7 @@ func OpenBucket(dir string, opts *Options) (*blob.Bucket, error) {
 	return blob.NewBucket(drv), nil
 }
 
-func (b *bucket) Close() error {
+func (*bucket) Close() error {
 	return nil
 }
 
@@ -323,7 +323,7 @@ func escapeKey(s string) string { //nolint:gocyclo // external file source
 	// Replace "/" with os.PathSeparator if needed, so that the local filesystem
 	// can use subdirectories.
 	if os.PathSeparator != '/' {
-		s = strings.Replace(s, "/", string(os.PathSeparator), -1) //nolint:gocritic // external file source
+		s = strings.ReplaceAll(s, "/", string(os.PathSeparator))
 	}
 	return s
 }
@@ -331,13 +331,13 @@ func escapeKey(s string) string { //nolint:gocyclo // external file source
 // unescapeKey reverses escapeKey.
 func unescapeKey(s string) string {
 	if os.PathSeparator != '/' {
-		s = strings.Replace(s, string(os.PathSeparator), "/", -1) //nolint:gocritic // external file source
+		s = strings.ReplaceAll(s, string(os.PathSeparator), "/")
 	}
 	s = escape.HexUnescape(s)
 	return s
 }
 
-func (b *bucket) ErrorCode(err error) gcerrors.ErrorCode {
+func (*bucket) ErrorCode(err error) gcerrors.ErrorCode {
 	switch {
 	case os.IsNotExist(err):
 		return gcerrors.NotFound
@@ -356,7 +356,7 @@ func (b *bucket) path(key string) (string, error) {
 }
 
 // forKey returns the full path, os.FileInfo, and attributes for key.
-func (b *bucket) forKey(key string) (string, os.FileInfo, *xattrs, error) {
+func (b *bucket) forKey(key string) (string, os.FileInfo, *xattrs, error) { //revive:disable-line:function-result-limit
 	path, err := b.path(key)
 	if err != nil {
 		return "", nil, nil, err
@@ -376,7 +376,7 @@ func (b *bucket) forKey(key string) (string, os.FileInfo, *xattrs, error) {
 }
 
 // ListPaged implements driver.ListPaged.
-func (b *bucket) ListPaged(ctx context.Context, opts *driver.ListOptions) (*driver.ListPage, error) { //nolint:gocognit,gocyclo // external file source
+func (b *bucket) ListPaged(_ctx context.Context, opts *driver.ListOptions) (*driver.ListPage, error) { //nolint:gocognit,gocyclo // external file source
 	var pageToken string
 	if len(opts.PageToken) > 0 {
 		pageToken = string(opts.PageToken)
@@ -448,11 +448,11 @@ func (b *bucket) ListPaged(ctx context.Context, opts *driver.ListOptions) (*driv
 		if !strings.HasPrefix(key, opts.Prefix) {
 			return nil
 		}
-		var md5 []byte
+		var md5hash []byte
 		if xa, err := getAttrs(b.opts.FS, path); err == nil {
 			// Note: we only have the MD5 hash for blobs that we wrote.
 			// For other blobs, md5 will remain nil.
-			md5 = xa.MD5
+			md5hash = xa.MD5
 		}
 		fi, err := info.Info()
 		if err != nil {
@@ -470,7 +470,7 @@ func (b *bucket) ListPaged(ctx context.Context, opts *driver.ListOptions) (*driv
 			Key:     key,
 			ModTime: fi.ModTime(),
 			Size:    fi.Size(),
-			MD5:     md5,
+			MD5:     md5hash,
 			AsFunc:  asFunc,
 		}
 		// If using Delimiter, collapse "directories".
@@ -549,7 +549,7 @@ func (b *bucket) As(i any) bool {
 }
 
 // ErrorAs implements driver.ErrorAs.
-func (b *bucket) ErrorAs(err error, i any) bool {
+func (*bucket) ErrorAs(err error, i any) bool {
 	if perr, ok := err.(*os.PathError); ok {
 		if p, ok := i.(**os.PathError); ok {
 			*p = perr
@@ -560,7 +560,7 @@ func (b *bucket) ErrorAs(err error, i any) bool {
 }
 
 // Attributes implements driver.Attributes.
-func (b *bucket) Attributes(ctx context.Context, key string) (*driver.Attributes, error) {
+func (b *bucket) Attributes(_ctx context.Context, key string) (*driver.Attributes, error) {
 	_, info, xa, err := b.forKey(key)
 	if err != nil {
 		return nil, err
@@ -589,7 +589,7 @@ func (b *bucket) Attributes(ctx context.Context, key string) (*driver.Attributes
 }
 
 // NewRangeReader implements driver.NewRangeReader.
-func (b *bucket) NewRangeReader(ctx context.Context, key string, offset, length int64, opts *driver.ReaderOptions) (driver.Reader, error) {
+func (b *bucket) NewRangeReader(_ctx context.Context, key string, offset, length int64, opts *driver.ReaderOptions) (driver.Reader, error) {
 	path, info, xa, err := b.forKey(key)
 	if err != nil {
 		return nil, err
@@ -687,7 +687,7 @@ func createTemp(path string, opts *Options) (afero.File, error) {
 }
 
 // NewTypedWriter implements driver.NewTypedWriter.
-func (b *bucket) NewTypedWriter(ctx context.Context, key string, contentType string, opts *driver.WriterOptions) (driver.Writer, error) {
+func (b *bucket) NewTypedWriter(ctx context.Context, key, contentType string, opts *driver.WriterOptions) (driver.Writer, error) {
 	path, err := b.path(key)
 	if err != nil {
 		return nil, err
@@ -740,7 +740,7 @@ func (b *bucket) NewTypedWriter(ctx context.Context, key string, contentType str
 		path:       path,
 		attrs:      attrs,
 		contentMD5: opts.ContentMD5,
-		md5hash:    md5.New(),
+		md5hash:    md5.New(), //nolint:gosec // this is a hard requirement by the parent library
 		opts:       b.opts,
 	}
 	return w, nil
@@ -833,9 +833,11 @@ func (w *writer) Close() error {
 	}
 
 	// Rename the temp file to path.
-	if err := w.opts.FS.Rename(tempname, w.path); err != nil {
+	err = w.opts.FS.Rename(tempname, w.path)
+	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -881,7 +883,7 @@ func (b *bucket) Copy(ctx context.Context, dstKey, srcKey string, opts *driver.C
 }
 
 // Delete implements driver.Delete.
-func (b *bucket) Delete(ctx context.Context, key string) error {
+func (b *bucket) Delete(_ctx context.Context, key string) error {
 	path, err := b.path(key)
 	if err != nil {
 		return err
@@ -956,7 +958,7 @@ func NewURLSignerHMAC(baseURL *url.URL, secretKey []byte) *URLSignerHMAC {
 
 // URLFromKey creates a signed URL by copying the baseURL and appending the
 // object key, expiry, and signature as a query params.
-func (h *URLSignerHMAC) URLFromKey(ctx context.Context, key string, opts *driver.SignedURLOptions) (*url.URL, error) {
+func (h *URLSignerHMAC) URLFromKey(_ctx context.Context, key string, opts *driver.SignedURLOptions) (*url.URL, error) {
 	sURL := new(url.URL)
 	*sURL = *h.baseURL
 
@@ -990,7 +992,7 @@ func (h *URLSignerHMAC) getMAC(q url.Values) string {
 
 // KeyFromURL checks expiry and signature, and returns the object key
 // only if the signed URL is both authentic and unexpired.
-func (h *URLSignerHMAC) KeyFromURL(ctx context.Context, sURL *url.URL) (string, error) {
+func (h *URLSignerHMAC) KeyFromURL(_ctx context.Context, sURL *url.URL) (string, error) {
 	q := sURL.Query()
 
 	exp, err := strconv.ParseInt(q.Get("expiry"), 10, 64)

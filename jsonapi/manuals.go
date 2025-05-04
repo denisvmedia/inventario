@@ -36,7 +36,7 @@ func (mr *ManualResponse) WithStatusCode(statusCode int) *ManualResponse {
 }
 
 // Render renders the ManualResponse as an HTTP response.
-func (mr *ManualResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (mr *ManualResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, statusCodeDef(mr.HTTPStatusCode, http.StatusOK))
 	return nil
 }
@@ -61,7 +61,7 @@ func NewManualsResponse(manuals []*models.Manual, total int) *ManualsResponse {
 }
 
 // Render renders the ManualsResponse as an HTTP response.
-func (mr *ManualsResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (*ManualsResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }

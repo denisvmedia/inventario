@@ -68,7 +68,7 @@ func (cr *CommodityResponse) WithStatusCode(statusCode int) *CommodityResponse {
 }
 
 // Render renders the CommodityResponse as an HTTP response.
-func (cr *CommodityResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (cr *CommodityResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, statusCodeDef(cr.HTTPStatusCode, http.StatusOK))
 	return nil
 }
@@ -103,7 +103,7 @@ func NewCommoditiesResponse(commodities []*models.Commodity, total int) *Commodi
 }
 
 // Render renders the CommoditiesResponse as an HTTP response.
-func (cr *CommoditiesResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (*CommoditiesResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }
@@ -132,7 +132,7 @@ func (cd *CommodityData) Validate() error {
 var _ render.Binder = (*CommodityRequest)(nil)
 
 // Bind binds the commodity data from the request to the CommodityRequest object.
-func (cr *CommodityRequest) Bind(r *http.Request) error {
+func (cr *CommodityRequest) Bind(_r *http.Request) error {
 	err := cr.Validate()
 	if err != nil {
 		return err

@@ -133,7 +133,7 @@ func TestJoin(t *testing.T) {
 		err1 := errors.New("test1")
 		err2 := errors.New("test2")
 		errs := errkit.Join(err1, err2)
-		verrs := errs.(interface{ Unwrap() []error })
+		verrs := errs.(interface{ Unwrap() []error }) //revive:disable-line:unchecked-type-assertion
 		aerrs := verrs.Unwrap()
 		c.Assert(aerrs, qt.HasLen, 2)
 		c.Assert(aerrs[0], qt.Equals, err1)
@@ -147,7 +147,7 @@ func TestJoin(t *testing.T) {
 		errsj := errors.Join(err1, err2)
 		err3 := errors.New("test3")
 		errs := errkit.Join(errsj, err3)
-		verrs := errs.(interface{ Unwrap() []error })
+		verrs := errs.(interface{ Unwrap() []error }) //revive:disable-line:unchecked-type-assertion
 		aerrs := verrs.Unwrap()
 		c.Assert(aerrs, qt.HasLen, 3)
 		c.Assert(aerrs[0], qt.Equals, err1)

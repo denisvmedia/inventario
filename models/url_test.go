@@ -17,7 +17,6 @@ func TestPositiveURLValidation(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc // Capture the range variable.
 		t.Run(tc.url.String(), func(t *testing.T) {
 			c := qt.New(t)
 
@@ -37,7 +36,6 @@ func TestNegativeURLValidation(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc // Capture the range variable.
 		t.Run(tc.url.String(), func(t *testing.T) {
 			c := qt.New(t)
 
@@ -58,7 +56,6 @@ func TestPositiveURLJSONMarshalling(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc // Capture the range variable.
 		t.Run(tc.expected, func(t *testing.T) {
 			c := qt.New(t)
 

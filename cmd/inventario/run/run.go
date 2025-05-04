@@ -94,7 +94,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	case <-c:
 	case err := <-errCh:
 		log.WithError(err).Error("Failure during server startup")
-		os.Exit(1)
+		os.Exit(1) //revive:disable-line:deep-exit
 		return nil
 	}
 

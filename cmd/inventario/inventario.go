@@ -33,6 +33,6 @@ func Execute(args ...string) {
 	rootCmd.AddCommand(run.NewRunCommand())
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(1)
+		os.Exit(1) //revive:disable-line:deep-exit
 	}
 }

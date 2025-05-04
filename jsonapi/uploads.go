@@ -38,7 +38,7 @@ func (cr *UploadResponse) WithStatusCode(statusCode int) *UploadResponse {
 }
 
 // Render renders the UploadResponse as an HTTP response.
-func (cr *UploadResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (cr *UploadResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, statusCodeDef(cr.HTTPStatusCode, http.StatusOK))
 	return nil
 }

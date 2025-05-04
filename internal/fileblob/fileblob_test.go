@@ -31,8 +31,9 @@ import (
 	"github.com/spf13/afero"
 	"gocloud.dev/blob"
 	"gocloud.dev/blob/driver"
-	"gocloud.dev/blob/drivertest"
 	"gocloud.dev/gcerrors"
+
+	"github.com/denisvmedia/inventario/internal/fileblob/drivertest"
 )
 
 type harness struct {
@@ -44,7 +45,7 @@ type harness struct {
 	closer      func()
 }
 
-func newHarness(ctx context.Context, t *testing.T, prefix string, metadataHow metadataOption) (drivertest.Harness, error) {
+func newHarness(_ctx context.Context, t *testing.T, prefix string, metadataHow metadataOption) (drivertest.Harness, error) {
 	if metadataHow == MetadataDontWrite {
 		// Skip tests for if no metadata gets written.
 		// For these it is currently undefined whether any gets read (back).
@@ -140,11 +141,11 @@ func (h *harness) serveSignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *harness) HTTPClient() *http.Client {
+func (*harness) HTTPClient() *http.Client {
 	return &http.Client{}
 }
 
-func (h *harness) MakeDriver(ctx context.Context) (driver.Bucket, error) {
+func (h *harness) MakeDriver(_ctx context.Context) (driver.Bucket, error) {
 	opts := &Options{
 		URLSigner: h.urlSigner,
 		Metadata:  h.metadataHow,
@@ -159,7 +160,7 @@ func (h *harness) MakeDriver(ctx context.Context) (driver.Bucket, error) {
 	return driver.NewPrefixedBucket(drv, h.prefix), nil
 }
 
-func (h *harness) MakeDriverForNonexistentBucket(ctx context.Context) (driver.Bucket, error) {
+func (*harness) MakeDriverForNonexistentBucket(_ctx context.Context) (driver.Bucket, error) {
 	// Does not make sense for this driver, as it verifies
 	// that the directory exists in OpenBucket.
 	return nil, nil
@@ -301,8 +302,8 @@ func (verifyAs) BeforeCopy(as func(any) bool) error {
 	}
 	return nil
 }
-func (verifyAs) BeforeList(as func(any) bool) error { return nil }
-func (verifyAs) BeforeSign(as func(any) bool) error { return nil }
+func (verifyAs) BeforeList(_as func(any) bool) error { return nil }
+func (verifyAs) BeforeSign(_as func(any) bool) error { return nil }
 func (verifyAs) AttributesCheck(attrs *blob.Attributes) error {
 	var fi os.FileInfo
 	if !attrs.As(&fi) {
@@ -346,15 +347,15 @@ func TestOpenBucketFromURL(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, subdir), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "myfile.txt"), []byte("hello world"), 0666); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "myfile.txt"), []byte("hello world"), 0o666); err != nil { //nolint:gosec // test file
 		t.Fatal(err)
 	}
 	// To avoid making another temp dir, use the bucket directory to hold the secret key file.
 	secretKeyPath := filepath.Join(dir, "secret.key")
-	if err := os.WriteFile(secretKeyPath, []byte("secret key"), 0666); err != nil {
+	if err := os.WriteFile(secretKeyPath, []byte("secret key"), 0o666); err != nil { //nolint:gosec // test file
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, subdir, "myfileinsubdir.txt"), []byte("hello world in subdir"), 0666); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, subdir, "myfileinsubdir.txt"), []byte("hello world in subdir"), 0o666); err != nil { //nolint:gosec // test file
 		t.Fatal(err)
 	}
 	// Convert dir to a URL path, adding a leading "/" if needed on Windows.

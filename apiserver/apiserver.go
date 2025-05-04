@@ -63,7 +63,7 @@ func (p *Params) Validate() error {
 
 	fields = append(fields,
 		validation.Field(&p.RegistrySet, validation.Required),
-		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(value any) error {
+		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(_value any) error {
 			ctx := context.Background()
 			b, err := blob.OpenBucket(ctx, p.UploadLocation)
 			if err != nil {
@@ -100,7 +100,7 @@ func APIServer(params Params) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/", func(w http.ResponseWriter, _r *http.Request) {
 		w.Write([]byte("Welcome to Inventario!"))
 	})
 

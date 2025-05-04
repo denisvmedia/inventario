@@ -3,7 +3,6 @@ package errkit_test
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -19,7 +18,7 @@ func TestError_Wrap_MarshalJSON(t *testing.T) {
 
 	jsonBytes, err := json.Marshal(e)
 	c.Assert(err, qt.IsNil)
-	fmt.Println(string(jsonBytes))
+	// fmt.Println(string(jsonBytes))
 	expectedJSON := `{
   "msg": "wrapped error",
   "error": {

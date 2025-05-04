@@ -41,9 +41,9 @@ func NewManualRegistry(db *bolt.DB, commodityRegistry registry.CommodityRegistry
 }
 
 func (r *ManualRegistry) Create(m models.Manual) (*models.Manual, error) {
-	result, err := r.registry.Create(m, func(tx dbx.TransactionOrBucket, manual *models.Manual) error {
+	result, err := r.registry.Create(m, func(_tx dbx.TransactionOrBucket, _manual *models.Manual) error {
 		return nil
-	}, func(tx dbx.TransactionOrBucket, manual *models.Manual) error {
+	}, func(_tx dbx.TransactionOrBucket, _manual *models.Manual) error {
 		return nil
 	})
 	if err != nil {
@@ -67,19 +67,19 @@ func (r *ManualRegistry) List() ([]*models.Manual, error) {
 }
 
 func (r *ManualRegistry) Update(m models.Manual) (*models.Manual, error) {
-	return r.registry.Update(m, func(tx dbx.TransactionOrBucket, manual *models.Manual) error {
+	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, _manual *models.Manual) error {
 		return nil
-	}, func(tx dbx.TransactionOrBucket, result *models.Manual) error {
+	}, func(_tx dbx.TransactionOrBucket, _result *models.Manual) error {
 		return nil
 	})
 }
 
 func (r *ManualRegistry) Delete(id string) error {
 	var commodityID string
-	err := r.registry.Delete(id, func(tx dbx.TransactionOrBucket, manual *models.Manual) error {
+	err := r.registry.Delete(id, func(_tx dbx.TransactionOrBucket, manual *models.Manual) error {
 		commodityID = manual.CommodityID
 		return nil
-	}, func(tx dbx.TransactionOrBucket, result *models.Manual) error {
+	}, func(_tx dbx.TransactionOrBucket, _result *models.Manual) error {
 		return nil
 	})
 	if err != nil {
