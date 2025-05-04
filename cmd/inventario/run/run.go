@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/go-extras/cobraflags"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/cobraflags"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
