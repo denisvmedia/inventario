@@ -66,7 +66,7 @@ func Example_openBucketFromURL() {
 	ctx := context.Background()
 	b, err := blob.OpenBucket(ctx, "afile://"+dirpath)
 	if err != nil {
-		log.Fatal(err) //nolint:gocritic // external file source
+		log.Fatal(err)
 	}
 	defer b.Close()
 

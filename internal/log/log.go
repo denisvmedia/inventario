@@ -24,19 +24,19 @@ func Print(args ...any) {
 }
 
 func Fatalf(format string, args ...any) {
-	log.Fatalf(format, args...)
+	log.Fatalf(format, args...) //revive:disable-line:deep-exit
 }
 
 func Panicf(format string, args ...any) {
-	log.Panicf(format, args...)
+	log.Panicf(format, args...) //revive:disable-line:deep-exit
 }
 
 func Fatal(args ...any) {
-	log.Fatal(args...)
+	log.Fatal(args...) //revive:disable-line:deep-exit
 }
 
 func Panic(args ...any) {
-	log.Panic(args...)
+	log.Panic(args...) //revive:disable-line:deep-exit
 }
 
 func Debugf(format string, args ...any) {

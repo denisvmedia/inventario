@@ -36,7 +36,7 @@ func (ir *InvoiceResponse) WithStatusCode(statusCode int) *InvoiceResponse {
 }
 
 // Render renders the InvoiceResponse as an HTTP response.
-func (ir *InvoiceResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (ir *InvoiceResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, statusCodeDef(ir.HTTPStatusCode, http.StatusOK))
 	return nil
 }
@@ -61,7 +61,7 @@ func NewInvoicesResponse(invoices []*models.Invoice, total int) *InvoicesRespons
 }
 
 // Render renders the InvoicesResponse as an HTTP response.
-func (ir *InvoicesResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (*InvoicesResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }

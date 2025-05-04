@@ -86,7 +86,7 @@ func (c *jsonPathMatchesChecker) Check(got any, args []any, note func(key string
 }
 
 // ArgNames returns the names of all required arguments for the custom checker.
-func (c *jsonPathMatchesChecker) ArgNames() []string {
+func (*jsonPathMatchesChecker) ArgNames() []string {
 	return []string{"got", "want"}
 }
 

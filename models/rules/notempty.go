@@ -13,7 +13,7 @@ var NotEmpty validation.Rule = notEmptyRule{}
 
 type notEmptyRule struct{}
 
-func (n notEmptyRule) Validate(value any) error {
+func (notEmptyRule) Validate(value any) error {
 	if IsEmpty(value) {
 		return ErrIsEmpty
 	}

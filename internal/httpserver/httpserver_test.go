@@ -17,7 +17,7 @@ func TestAPIServer_Run(t *testing.T) {
 	apiServer := &httpserver.APIServer{}
 
 	// Create a mock HTTP handler for testing.
-	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, _r *http.Request) {
 		_, err := fmt.Fprintln(w, "Hello, client")
 		c.Assert(err, qt.IsNil)
 	})

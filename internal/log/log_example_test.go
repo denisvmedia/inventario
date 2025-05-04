@@ -14,7 +14,7 @@ var _ logrus.Formatter = (*simpleFormatter)(nil)
 type simpleFormatter struct {
 }
 
-func (s *simpleFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+func (*simpleFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return []byte(strings.ToUpper(entry.Level.String()) + " " + entry.Message), nil
 }
 

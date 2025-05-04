@@ -137,7 +137,7 @@ func TestMarshalError_Error(t *testing.T) {
 			c := qt.New(t)
 
 			data, err := errkit.MarshalError(tc.err)
-			fmt.Println(string(data))
+			// fmt.Println(string(data))
 			c.Assert(err, qt.IsNil)
 			var expectedData any
 			err = json.Unmarshal([]byte(tc.expectedJSON), &expectedData)
