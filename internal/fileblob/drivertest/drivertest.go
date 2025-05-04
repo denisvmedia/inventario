@@ -2418,7 +2418,7 @@ func testSignedURL(t *testing.T, newHarness HarnessMaker) {
 			if success != test.wantSuccess {
 				t.Errorf("PUT to %q with ContentType %q got status code %d, wanted 2xx? %v", test.urlDescription, test.contentType, resp.StatusCode, test.wantSuccess)
 				gotBody, _ := ioutil.ReadAll(resp.Body)
-				t.Errorf(string(gotBody))
+				t.Error(string(gotBody))
 			}
 		}
 	}
@@ -2442,7 +2442,7 @@ func testSignedURL(t *testing.T, newHarness HarnessMaker) {
 			if success != test.wantSuccess {
 				t.Errorf("GET to %q got status code %d, want 2xx? %v", test.urlDescription, resp.StatusCode, test.wantSuccess)
 				gotBody, _ := ioutil.ReadAll(resp.Body)
-				t.Errorf(string(gotBody))
+				t.Error(string(gotBody))
 			} else if success {
 				gotBody, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
@@ -2474,7 +2474,7 @@ func testSignedURL(t *testing.T, newHarness HarnessMaker) {
 			success := resp.StatusCode >= 200 && resp.StatusCode < 300
 			if success != test.wantSuccess {
 				gotBody, _ := ioutil.ReadAll(resp.Body)
-				t.Errorf(string(gotBody))
+				t.Error(string(gotBody))
 				t.Fatalf("DELETE to %q got status code %d, want 2xx? %v", test.urlDescription, resp.StatusCode, test.wantSuccess)
 			}
 		}
@@ -2489,7 +2489,7 @@ func testSignedURL(t *testing.T, newHarness HarnessMaker) {
 			if resp.StatusCode != 404 {
 				t.Errorf("GET after DELETE got status code %d, want 404", resp.StatusCode)
 				gotBody, _ := ioutil.ReadAll(resp.Body)
-				t.Errorf(string(gotBody))
+				t.Error(string(gotBody))
 			}
 		}
 	}
