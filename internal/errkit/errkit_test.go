@@ -3,7 +3,6 @@ package errkit_test
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -153,13 +152,13 @@ func TestError_WithEquivalents(t *testing.T) {
 	c.Assert(newErr, qt.ErrorIs, err1)
 	c.Assert(newErr, qt.ErrorIs, err2)
 
-	data, err := json.Marshal(newErr)
+	_, err = json.Marshal(newErr)
 	c.Assert(err, qt.IsNil)
-	fmt.Println(string(data))
+	// fmt.Println(string(data))
 }
 
 type testError struct{}
 
-func (e *testError) Error() string {
+func (*testError) Error() string {
 	return "test error"
 }

@@ -99,7 +99,7 @@ func (r *AreaRegistry) List() (results []*models.Area, err error) {
 
 func (r *AreaRegistry) Update(m models.Area) (result *models.Area, err error) {
 	var old *models.Area
-	return r.registry.Update(m, func(tx dbx.TransactionOrBucket, area *models.Area) error {
+	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, area *models.Area) error {
 		old = area
 		return nil
 	}, func(tx dbx.TransactionOrBucket, result *models.Area) error {

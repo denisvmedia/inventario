@@ -101,7 +101,7 @@ func (r *CommodityRegistry) List() ([]*models.Commodity, error) {
 
 func (r *CommodityRegistry) Update(m models.Commodity) (*models.Commodity, error) {
 	var old *models.Commodity
-	return r.registry.Update(m, func(tx dbx.TransactionOrBucket, commodity *models.Commodity) error {
+	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, commodity *models.Commodity) error {
 		old = commodity
 		return nil
 	}, func(tx dbx.TransactionOrBucket, result *models.Commodity) error {

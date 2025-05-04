@@ -36,7 +36,7 @@ func (ir *ImageResponse) WithStatusCode(statusCode int) *ImageResponse {
 }
 
 // Render renders the ImageResponse as an HTTP response.
-func (ir *ImageResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (ir *ImageResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, statusCodeDef(ir.HTTPStatusCode, http.StatusOK))
 	return nil
 }
@@ -61,7 +61,7 @@ func NewImagesResponse(images []*models.Image, total int) *ImagesResponse {
 }
 
 // Render renders the ImagesResponse as an HTTP response.
-func (ir *ImagesResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (*ImagesResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }

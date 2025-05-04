@@ -16,7 +16,7 @@ func TestToFields(t *testing.T) {
 	}{
 		{
 			name:   "Empty Fields",
-			fields: []any{},
+			fields: make([]any, 0),
 			result: nil,
 		},
 		{

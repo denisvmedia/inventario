@@ -209,7 +209,7 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	c.Assert(body, checkers.JSONPathEquals("$.data"), []any{})
+	c.Assert(body, checkers.JSONPathEquals("$.data"), make([]any, 0))
 }
 
 func TestLocationsGet_InvalidID(t *testing.T) {

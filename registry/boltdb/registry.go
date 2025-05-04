@@ -26,7 +26,7 @@ type Registry[T any, P registry.PIDable[T]] struct {
 func NewRegistry[T any, P registry.PIDable[T]](
 	db *bolt.DB,
 	base *dbx.BaseRepository[T, P],
-	entityName string,
+	entityName,
 	childrenBucketName string,
 ) *Registry[T, P] {
 	return &Registry[T, P]{

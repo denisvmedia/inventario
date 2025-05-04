@@ -41,9 +41,9 @@ func NewInvoiceRegistry(db *bolt.DB, commodityRegistry registry.CommodityRegistr
 }
 
 func (r *InvoiceRegistry) Create(m models.Invoice) (*models.Invoice, error) {
-	result, err := r.registry.Create(m, func(tx dbx.TransactionOrBucket, invoice *models.Invoice) error {
+	result, err := r.registry.Create(m, func(_tx dbx.TransactionOrBucket, _invoice *models.Invoice) error {
 		return nil
-	}, func(tx dbx.TransactionOrBucket, invoice *models.Invoice) error {
+	}, func(_tx dbx.TransactionOrBucket, _invoice *models.Invoice) error {
 		return nil
 	})
 	if err != nil {
@@ -67,19 +67,19 @@ func (r *InvoiceRegistry) List() ([]*models.Invoice, error) {
 }
 
 func (r *InvoiceRegistry) Update(m models.Invoice) (*models.Invoice, error) {
-	return r.registry.Update(m, func(tx dbx.TransactionOrBucket, invoice *models.Invoice) error {
+	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, _invoice *models.Invoice) error {
 		return nil
-	}, func(tx dbx.TransactionOrBucket, result *models.Invoice) error {
+	}, func(_tx dbx.TransactionOrBucket, _result *models.Invoice) error {
 		return nil
 	})
 }
 
 func (r *InvoiceRegistry) Delete(id string) error {
 	var commodityID string
-	err := r.registry.Delete(id, func(tx dbx.TransactionOrBucket, invoice *models.Invoice) error {
+	err := r.registry.Delete(id, func(_tx dbx.TransactionOrBucket, invoice *models.Invoice) error {
 		commodityID = invoice.CommodityID
 		return nil
-	}, func(tx dbx.TransactionOrBucket, result *models.Invoice) error {
+	}, func(_tx dbx.TransactionOrBucket, _result *models.Invoice) error {
 		return nil
 	})
 	if err != nil {

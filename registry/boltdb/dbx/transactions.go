@@ -38,8 +38,8 @@ func (s *BaseRepository[_, P]) GetAll(tx TransactionOrBucket, typ P) (results []
 		return nil, errkit.Wrap(ErrNotFound, "bucket does not exist")
 	}
 
-	err = b.ForEach(func(k, v []byte) error {
-		elem := typekit.NewOfType(typ)
+	err = b.ForEach(func(_k, v []byte) error {
+		elem := typekit.ZeroOfType(typ)
 		err := json.Unmarshal(v, elem)
 		if err != nil {
 			return err
@@ -141,7 +141,7 @@ func (s *BaseRepository[_, _]) GetBucket(tx TransactionOrBucket, names ...string
 	return result
 }
 
-func (s *BaseRepository[_, _]) GetOrCreateBucket(tx TransactionOrBucket, names ...string) (result *bolt.Bucket) {
+func (*BaseRepository[_, _]) GetOrCreateBucket(tx TransactionOrBucket, names ...string) (result *bolt.Bucket) {
 	if len(names) == 0 {
 		return nil
 	}
@@ -164,7 +164,7 @@ func (s *BaseRepository[_, _]) GetOrCreateBucket(tx TransactionOrBucket, names .
 	return result
 }
 
-func (s *BaseRepository[_, _]) DeleteBucket(tx TransactionOrBucket, names ...string) {
+func (*BaseRepository[_, _]) DeleteBucket(tx TransactionOrBucket, names ...string) {
 	if len(names) == 0 {
 		return
 	}
@@ -188,7 +188,7 @@ func (s *BaseRepository[_, _]) DeleteBucket(tx TransactionOrBucket, names ...str
 	}
 }
 
-func (s *BaseRepository[_, _]) GetIndexValues(tx TransactionOrBucket, idx string) (results map[string]string, err error) {
+func (*BaseRepository[_, _]) GetIndexValues(tx TransactionOrBucket, idx string) (results map[string]string, err error) {
 	if tx == nil || (reflect.ValueOf(tx).Kind() == reflect.Ptr && reflect.ValueOf(tx).IsNil()) {
 		return nil, errkit.Wrap(ErrNotFound, "bucket or transaction does not exist")
 	}
@@ -215,7 +215,7 @@ func (s *BaseRepository[_, _]) GetIndexValue(tx TransactionOrBucket, idx, key st
 	return string(v), err
 }
 
-func (s *BaseRepository[_, _]) GetIndexValueBytes(tx TransactionOrBucket, idx string, key []byte) (val []byte, err error) {
+func (*BaseRepository[_, _]) GetIndexValueBytes(tx TransactionOrBucket, idx string, key []byte) (val []byte, err error) {
 	if tx == nil || (reflect.ValueOf(tx).Kind() == reflect.Ptr && reflect.ValueOf(tx).IsNil()) {
 		return nil, errkit.Wrap(ErrNotFound, "bucket or transaction does not exist")
 	}
@@ -288,11 +288,11 @@ func (s *BaseRepository[_, P]) Save(tx TransactionOrBucket, entity P) error {
 	return nil
 }
 
-func (s *BaseRepository[_, _]) SaveIndexValue(tx TransactionOrBucket, idx string, key, val string) error {
+func (s *BaseRepository[_, _]) SaveIndexValue(tx TransactionOrBucket, idx, key, val string) error {
 	return s.SaveIndexValueBytes(tx, idx, []byte(key), []byte(val))
 }
 
-func (s *BaseRepository[_, _]) SaveIndexValueBytes(tx TransactionOrBucket, idx string, key, val []byte) error {
+func (*BaseRepository[_, _]) SaveIndexValueBytes(tx TransactionOrBucket, idx string, key, val []byte) error {
 	if tx == nil || (reflect.ValueOf(tx).Kind() == reflect.Ptr && reflect.ValueOf(tx).IsNil()) {
 		return errkit.Wrap(ErrNotFound, "bucket or transaction does not exist")
 	}
@@ -346,7 +346,7 @@ func (s *BaseRepository[_, _]) DeleteByIndexValue(tx TransactionOrBucket, idx, k
 	return nil
 }
 
-func (s *BaseRepository[_, _]) DeleteIndexValue(tx TransactionOrBucket, idx, name string) error {
+func (*BaseRepository[_, _]) DeleteIndexValue(tx TransactionOrBucket, idx, name string) error {
 	if tx == nil || (reflect.ValueOf(tx).Kind() == reflect.Ptr && reflect.ValueOf(tx).IsNil()) {
 		return errkit.Wrap(ErrNotFound, "bucket or transaction does not exist")
 	}

@@ -42,7 +42,7 @@ func (rd *LocationResponse) WithStatusCode(statusCode int) *LocationResponse {
 	return &tmp
 }
 
-func (rd *LocationResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (rd *LocationResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, statusCodeDef(rd.HTTPStatusCode, http.StatusOK))
 	return nil
 }
@@ -77,7 +77,7 @@ func NewLocationsResponse(locations []*models.Location, total int) *LocationsRes
 	}
 }
 
-func (rd *LocationsResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (*LocationsResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }
@@ -104,7 +104,7 @@ func (ld *LocationData) Validate() error {
 	return validation.ValidateStruct(ld, fields...)
 }
 
-func (lr *LocationRequest) Bind(r *http.Request) error {
+func (lr *LocationRequest) Bind(_r *http.Request) error {
 	err := lr.Validate()
 	if err != nil {
 		return err

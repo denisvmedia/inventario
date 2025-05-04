@@ -37,7 +37,7 @@ func (rd *AreaResponse) WithStatusCode(statusCode int) *AreaResponse {
 	return &tmp
 }
 
-func (rd *AreaResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (rd *AreaResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, statusCodeDef(rd.HTTPStatusCode, http.StatusOK))
 	return nil
 }
@@ -70,7 +70,7 @@ func NewAreasResponse(areas []*models.Area, total int) *AreasResponse {
 	}
 }
 
-func (rd *AreasResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (*AreasResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }
@@ -98,7 +98,7 @@ func (lr *AreaData) Validate() error {
 	return validation.ValidateStruct(lr, fields...)
 }
 
-func (lr *AreaRequest) Bind(r *http.Request) error {
+func (lr *AreaRequest) Bind(_r *http.Request) error {
 	err := lr.Validate()
 	if err != nil {
 		return err

@@ -87,7 +87,7 @@ func (r *LocationRegistry) List() (results []*models.Location, err error) {
 
 func (r *LocationRegistry) Update(m models.Location) (result *models.Location, err error) {
 	var old *models.Location
-	return r.registry.Update(m, func(tx dbx.TransactionOrBucket, location *models.Location) error {
+	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, location *models.Location) error {
 		old = location
 		return nil
 	}, func(tx dbx.TransactionOrBucket, result *models.Location) error {
