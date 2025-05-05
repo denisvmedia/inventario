@@ -11,9 +11,10 @@ var imageContentTypes = []string{
 	"image/webp",
 }
 
-var docContentTypes = []string{
-	"application/pdf",
-}
+var docContentTypes = append(append(
+	[]string(nil),
+	imageContentTypes...,
+), "application/pdf")
 
 func IsImage(contentType string) bool {
 	for _, v := range imageContentTypes {
