@@ -4,7 +4,7 @@
         "description": "This is an Inventario daemon.",
         "title": "Inventario API",
         "contact": {
-            "name": "API Support",
+            "name": "Inventario Support",
             "url": "https://github.com/denisvmedia/inventario/issues",
             "email": "ask@artprima.cz"
         },
@@ -1058,15 +1058,41 @@
         }
     },
     "definitions": {
+        "jsonapi.AreaData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Area"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "areas"
+                    ],
+                    "example": "areas"
+                }
+            }
+        },
         "jsonapi.AreaRequest": {
             "type": "object",
             "properties": {
                 "data": {
-                    "$ref": "#/definitions/models.Area"
+                    "$ref": "#/definitions/jsonapi.AreaData"
                 }
             }
         },
         "jsonapi.AreaResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.AreaResponseData"
+                }
+            }
+        },
+        "jsonapi.AreaResponseData": {
             "type": "object",
             "properties": {
                 "attributes": {
@@ -1100,7 +1126,7 @@
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Area"
+                        "$ref": "#/definitions/jsonapi.AreaData"
                     }
                 },
                 "meta": {
@@ -1124,11 +1150,29 @@
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Commodity"
+                        "$ref": "#/definitions/jsonapi.CommodityData"
                     }
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.CommoditiesMeta"
+                }
+            }
+        },
+        "jsonapi.CommodityData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Commodity"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodities"
+                    ],
+                    "example": "commodities"
                 }
             }
         },
@@ -1141,17 +1185,26 @@
                         "type": "string"
                     }
                 },
+                "images_error": {
+                    "type": "string"
+                },
                 "invoices": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
+                "invoices_error": {
+                    "type": "string"
+                },
                 "manuals": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "manuals_error": {
+                    "type": "string"
                 }
             }
         },
@@ -1159,11 +1212,19 @@
             "type": "object",
             "properties": {
                 "data": {
-                    "$ref": "#/definitions/models.Commodity"
+                    "$ref": "#/definitions/jsonapi.CommodityData"
                 }
             }
         },
         "jsonapi.CommodityResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityResponseData"
+                }
+            }
+        },
+        "jsonapi.CommodityResponseData": {
             "type": "object",
             "properties": {
                 "attributes": {
@@ -1312,15 +1373,41 @@
                 }
             }
         },
+        "jsonapi.LocationData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Location"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "locations"
+                    ],
+                    "example": "locations"
+                }
+            }
+        },
         "jsonapi.LocationRequest": {
             "type": "object",
             "properties": {
                 "data": {
-                    "$ref": "#/definitions/models.Location"
+                    "$ref": "#/definitions/jsonapi.LocationData"
                 }
             }
         },
         "jsonapi.LocationResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.LocationResponseData"
+                }
+            }
+        },
+        "jsonapi.LocationResponseData": {
             "type": "object",
             "properties": {
                 "attributes": {
@@ -1354,7 +1441,7 @@
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Location"
+                        "$ref": "#/definitions/jsonapi.LocationData"
                     }
                 },
                 "meta": {

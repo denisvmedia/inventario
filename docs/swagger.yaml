@@ -1,11 +1,28 @@
 basePath: /api/v1
 definitions:
+  jsonapi.AreaData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Area'
+      id:
+        type: string
+      type:
+        enum:
+        - areas
+        example: areas
+        type: string
+    type: object
   jsonapi.AreaRequest:
     properties:
       data:
-        $ref: '#/definitions/models.Area'
+        $ref: '#/definitions/jsonapi.AreaData'
     type: object
   jsonapi.AreaResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.AreaResponseData'
+    type: object
+  jsonapi.AreaResponseData:
     properties:
       attributes:
         $ref: '#/definitions/models.Area'
@@ -28,7 +45,7 @@ definitions:
     properties:
       data:
         items:
-          $ref: '#/definitions/models.Area'
+          $ref: '#/definitions/jsonapi.AreaData'
         type: array
       meta:
         $ref: '#/definitions/jsonapi.AreasMeta'
@@ -44,10 +61,22 @@ definitions:
     properties:
       data:
         items:
-          $ref: '#/definitions/models.Commodity'
+          $ref: '#/definitions/jsonapi.CommodityData'
         type: array
       meta:
         $ref: '#/definitions/jsonapi.CommoditiesMeta'
+    type: object
+  jsonapi.CommodityData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Commodity'
+      id:
+        type: string
+      type:
+        enum:
+        - commodities
+        example: commodities
+        type: string
     type: object
   jsonapi.CommodityMeta:
     properties:
@@ -55,21 +84,32 @@ definitions:
         items:
           type: string
         type: array
+      images_error:
+        type: string
       invoices:
         items:
           type: string
         type: array
+      invoices_error:
+        type: string
       manuals:
         items:
           type: string
         type: array
+      manuals_error:
+        type: string
     type: object
   jsonapi.CommodityRequest:
     properties:
       data:
-        $ref: '#/definitions/models.Commodity'
+        $ref: '#/definitions/jsonapi.CommodityData'
     type: object
   jsonapi.CommodityResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityResponseData'
+    type: object
+  jsonapi.CommodityResponseData:
     properties:
       attributes:
         $ref: '#/definitions/models.Commodity'
@@ -168,12 +208,29 @@ definitions:
       name:
         type: string
     type: object
+  jsonapi.LocationData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Location'
+      id:
+        type: string
+      type:
+        enum:
+        - locations
+        example: locations
+        type: string
+    type: object
   jsonapi.LocationRequest:
     properties:
       data:
-        $ref: '#/definitions/models.Location'
+        $ref: '#/definitions/jsonapi.LocationData'
     type: object
   jsonapi.LocationResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.LocationResponseData'
+    type: object
+  jsonapi.LocationResponseData:
     properties:
       attributes:
         $ref: '#/definitions/jsonapi.Location'
@@ -196,7 +253,7 @@ definitions:
     properties:
       data:
         items:
-          $ref: '#/definitions/models.Location'
+          $ref: '#/definitions/jsonapi.LocationData'
         type: array
       meta:
         $ref: '#/definitions/jsonapi.LocationsMeta'
@@ -370,7 +427,7 @@ definitions:
 info:
   contact:
     email: ask@artprima.cz
-    name: API Support
+    name: Inventario Support
     url: https://github.com/denisvmedia/inventario/issues
   description: This is an Inventario daemon.
   license:
