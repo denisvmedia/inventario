@@ -44,6 +44,6 @@ func TestImageContentTypes(t *testing.T) {
 func TestDocContentTypes(t *testing.T) {
 	c := qt.New(t)
 
-	expected := []string{"application/pdf"}
+	expected := []string{"image/gif", "image/jpeg", "image/png", "image/webp", "application/pdf"}
 	c.Assert(mimekit.DocContentTypes(), qt.DeepEquals, expected)
 }
