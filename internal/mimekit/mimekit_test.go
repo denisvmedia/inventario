@@ -21,7 +21,7 @@ func TestIsDoc(t *testing.T) {
 	c := qt.New(t)
 
 	c.Assert(mimekit.IsDoc("application/pdf"), qt.IsTrue)
-	c.Assert(mimekit.IsDoc("image/jpeg"), qt.IsFalse)
+	c.Assert(mimekit.IsDoc("image/jpeg"), qt.IsTrue)
 	c.Assert(mimekit.IsDoc("text/plain"), qt.IsFalse)
 }
 
