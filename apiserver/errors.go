@@ -54,6 +54,8 @@ func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error)
 
 func toJSONAPIError(err error) jsonapi.Error {
 	switch {
+	case errors.Is(err, registry.ErrCannotDelete):
+		return NewUnprocessableEntityError(err)
 	case errors.Is(err, registry.ErrNotFound):
 		return NewNotFoundError(err)
 	default:

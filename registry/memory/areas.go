@@ -3,6 +3,7 @@ package memory
 import (
 	"sync"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -55,6 +56,10 @@ func (r *AreaRegistry) Delete(id string) error {
 	area, err := r.baseAreaRegistry.Get(id)
 	if err != nil {
 		return err
+	}
+
+	if len(must.Must(r.GetCommodities(id))) > 0 {
+		return errkit.Wrap(registry.ErrCannotDelete, "area has commodities")
 	}
 
 	err = r.baseAreaRegistry.Delete(id)
