@@ -10,8 +10,15 @@
     <div v-else-if="areas.length === 0" class="empty">No areas found. Create your first area!</div>
 
     <div v-else class="areas-grid">
-      <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
-        <h3>{{ area.attributes.name }}</h3>
+      <div v-for="area in areas" :key="area.id" class="area-card">
+        <div class="area-content" @click="viewArea(area.id)">
+          <h3>{{ area.attributes.name }}</h3>
+        </div>
+        <div class="area-actions">
+          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(area.id)">
+            Delete
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -40,6 +47,22 @@ onMounted(async () => {
 
 const viewArea = (id: string) => {
   router.push(`/areas/${id}`)
+}
+
+const confirmDelete = (id: string) => {
+  if (confirm('Are you sure you want to delete this area?')) {
+    deleteArea(id)
+  }
+}
+
+const deleteArea = async (id: string) => {
+  try {
+    await areaService.deleteArea(id)
+    // Remove the deleted area from the list
+    areas.value = areas.value.filter(area => area.id !== id)
+  } catch (err: any) {
+    error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
+  }
 }
 </script>
 
@@ -81,10 +104,28 @@ const viewArea = (id: string) => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .area-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.area-content {
+  flex: 1;
+  cursor: pointer;
+}
+
+.area-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
 }
 </style>
