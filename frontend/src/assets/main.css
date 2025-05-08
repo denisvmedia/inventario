@@ -204,3 +204,78 @@ label {
   word-wrap: break-word;
   overflow-x: auto;
 }
+
+/* Detail view styles */
+.area-detail {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.loading, .error, .not-found {
+  text-align: center;
+  padding: 2rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.error {
+  color: #dc3545;
+}
+
+.area-info {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.info-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.info-card h2 {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.locations-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.locations-list li {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.locations-list li:last-child {
+  border-bottom: none;
+}
+
+.locations-list li:hover {
+  color: #4CAF50;
+}
+
+@media (min-width: 768px) {
+  .area-info {
+    grid-template-columns: 1fr 1fr;
+  }
+}
