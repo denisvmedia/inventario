@@ -53,10 +53,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 
 const router = useRouter()
+const route = useRoute()
 const isSubmitting = ref(false)
 const error = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
@@ -81,6 +82,12 @@ onMounted(async () => {
       }
     })
     locations.value = response.data.data
+
+    // Check if location ID was passed in the URL
+    const locationId = route.query.location as string
+    if (locationId) {
+      form.locationId = locationId
+    }
   } catch (err: any) {
     console.error('Failed to load locations:', err)
     error.value = 'Failed to load locations. Please refresh the page.'

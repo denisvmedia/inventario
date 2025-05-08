@@ -16,18 +16,29 @@
       </div>
 
       <div class="areas-section" v-if="areas.length > 0">
-        <h2>Areas</h2>
+        <div class="section-header">
+          <h2>Areas</h2>
+          <router-link :to="`/areas/new?location=${location.id}`" class="btn btn-primary btn-sm">Add Area</router-link>
+        </div>
         <div class="areas-grid">
-          <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
-            <div class="area-content">
+          <div v-for="area in areas" :key="area.id" class="area-card">
+            <div class="area-content" @click="viewArea(area.id)">
               <h3>{{ area.attributes.name }}</h3>
+            </div>
+            <div class="area-actions">
+              <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)">
+                Edit
+              </button>
+              <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteArea(area.id)">
+                Delete
+              </button>
             </div>
           </div>
         </div>
       </div>
       <div v-else class="no-areas">
         <p>No areas found for this location.</p>
-        <router-link to="/areas/new" class="btn btn-primary">Create New Area</router-link>
+        <router-link :to="`/areas/new?location=${location.id}`" class="btn btn-primary">Add Area</router-link>
       </div>
 
       <!-- Test API Results Section -->
@@ -111,6 +122,26 @@ const deleteLocation = async () => {
 const viewArea = (id: string) => {
   router.push(`/areas/${id}`)
 }
+
+const editArea = (id: string) => {
+  router.push(`/areas/${id}/edit`)
+}
+
+const confirmDeleteArea = (id: string) => {
+  if (confirm('Are you sure you want to delete this area?')) {
+    deleteArea(id)
+  }
+}
+
+const deleteArea = async (id: string) => {
+  try {
+    await areaService.deleteArea(id)
+    // Remove the deleted area from the list
+    areas.value = areas.value.filter(area => area.id !== id)
+  } catch (err: any) {
+    error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
+  }
+}
 </script>
 
 <style scoped>
@@ -183,6 +214,9 @@ const viewArea = (id: string) => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .area-card:hover {
@@ -191,7 +225,24 @@ const viewArea = (id: string) => {
 }
 
 .area-content {
+  flex: 1;
   cursor: pointer;
+}
+
+.area-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 1rem;
+  cursor: pointer;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
 }
 
 .test-section {
@@ -216,6 +267,27 @@ const viewArea = (id: string) => {
   border-radius: 4px;
   display: inline-block;
   margin-top: 1rem;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  margin-top: 0;
+  border-radius: 4px;
 }
 
 .test-result, .test-error {
