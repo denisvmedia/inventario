@@ -95,6 +95,7 @@ const deleteLocation = async (id: string) => {
 .location-list {
   max-width: 1200px;
   margin: 0 auto;
+  padding: 20px;
 }
 
 .header {
