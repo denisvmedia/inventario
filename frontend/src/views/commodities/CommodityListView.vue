@@ -25,6 +25,9 @@
           </div>
         </div>
         <div class="commodity-actions">
+          <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)">
+            Edit
+          </button>
           <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(commodity.id)">
             Delete
           </button>
@@ -69,6 +72,10 @@ onMounted(async () => {
 
 const viewCommodity = (id: string) => {
   router.push(`/commodities/${id}`)
+}
+
+const editCommodity = (id: string) => {
+  router.push(`/commodities/${id}/edit`)
 }
 
 const confirmDelete = (id: string) => {
@@ -145,6 +152,7 @@ const deleteCommodity = async (id: string) => {
   display: flex;
   gap: 0.5rem;
   margin-left: 1rem;
+  cursor: pointer;
 }
 
 .btn-sm {
@@ -215,6 +223,11 @@ const deleteCommodity = async (id: string) => {
 
 .btn-primary {
   background-color: #4CAF50;
+  color: white;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
   color: white;
 }
 </style>

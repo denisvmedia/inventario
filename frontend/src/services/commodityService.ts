@@ -36,7 +36,7 @@ const commodityService = {
   },
 
   updateCommodity(id: string, data: any) {
-    return axios.patch(`${API_URL}/${id}`, data, {
+    return axios.put(`${API_URL}/${id}`, data, {
       headers: {
         'Content-Type': 'application/vnd.api+json',
         'Accept': 'application/vnd.api+json'
