@@ -167,6 +167,7 @@ const formatDate = (date: string): string => {
 .commodity-detail {
   max-width: 1200px;
   margin: 0 auto;
+  padding: 20px;
 }
 
 .header {
@@ -267,6 +268,42 @@ const formatDate = (date: string): string => {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   margin-right: 0.5rem;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background-color: #4CAF50;
+  color: white;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  margin-top: 0;
+  border-radius: 4px;
 }
 
 @media (min-width: 768px) {
