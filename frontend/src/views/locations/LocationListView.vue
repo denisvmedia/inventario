@@ -10,11 +10,18 @@
     <div v-else-if="locations.length === 0" class="empty">No locations found. Create your first location!</div>
 
     <div v-else class="locations-grid">
-      <div v-for="location in locations" :key="location.id" class="location-card" @click="viewLocation(location.id)">
-        <h3>{{ location.attributes.name }}</h3>
-        <p v-if="location.attributes.description" class="description">{{ location.attributes.description }}</p>
-        <div class="location-meta" v-if="location.relationships && location.relationships.area">
-          <span class="area">Area: {{ getAreaName(location.relationships.area.data.id) }}</span>
+      <div v-for="location in locations" :key="location.id" class="location-card">
+        <div class="location-content" @click="viewLocation(location.id)">
+          <h3>{{ location.attributes.name }}</h3>
+          <p v-if="location.attributes.description" class="description">{{ location.attributes.description }}</p>
+          <div class="location-meta" v-if="location.relationships && location.relationships.area">
+            <span class="area">Area: {{ getAreaName(location.relationships.area.data.id) }}</span>
+          </div>
+        </div>
+        <div class="location-actions">
+          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(location.id)">
+            Delete
+          </button>
         </div>
       </div>
     </div>
@@ -58,6 +65,22 @@ const getAreaName = (areaId: string) => {
 const viewLocation = (id: string) => {
   router.push(`/locations/${id}`)
 }
+
+const confirmDelete = (id: string) => {
+  if (confirm('Are you sure you want to delete this location?')) {
+    deleteLocation(id)
+  }
+}
+
+const deleteLocation = async (id: string) => {
+  try {
+    await locationService.deleteLocation(id)
+    // Remove the deleted location from the list
+    locations.value = locations.value.filter(location => location.id !== id)
+  } catch (err: any) {
+    error.value = 'Failed to delete location: ' + (err.message || 'Unknown error')
+  }
+}
 </script>
 
 <style scoped>
@@ -98,11 +121,30 @@ const viewLocation = (id: string) => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .location-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.location-content {
+  flex: 1;
+  cursor: pointer;
+}
+
+.location-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 1rem;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
 }
 
 .description {
