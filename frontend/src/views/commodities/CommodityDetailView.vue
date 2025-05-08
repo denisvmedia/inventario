@@ -105,6 +105,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
+import { COMMODITY_TYPES } from '@/constants/commodityTypes'
+import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 
 const router = useRouter()
 const route = useRoute()
@@ -131,7 +133,7 @@ const editCommodity = () => {
 
 const confirmDelete = () => {
   if (confirm('Are you sure you want to delete this commodity?')) {
-    deleteCommodity
+    deleteCommodity()
   }
 }
 
@@ -145,28 +147,14 @@ const deleteCommodity = async () => {
   }
 }
 
-const getTypeName = (type: string): string => {
-  switch (type) {
-    case 'type1':
-      return 'Type 1'
-    case 'type2':
-      return 'Type 2'
-    // Add more types as needed
-    default:
-      return 'Unknown Type'
-  }
+const getTypeName = (typeId: string): string => {
+  const type = COMMODITY_TYPES.find(t => t.id === typeId)
+  return type ? type.name : typeId
 }
 
-const getStatusName = (status: string): string => {
-  switch (status) {
-    case 'active':
-      return 'Active'
-    case 'inactive':
-      return 'Inactive'
-    // Add more statuses as needed
-    default:
-      return 'Unknown Status'
-  }
+const getStatusName = (statusId: string): string => {
+  const status = COMMODITY_STATUSES.find(s => s.id === statusId)
+  return status ? status.name : statusId
 }
 
 const formatDate = (date: string): string => {
@@ -242,14 +230,29 @@ const formatDate = (date: string): string => {
   margin-left: 0.5rem;
 }
 
-.status.active {
+.status.in_use {
   background-color: #d4edda;
   color: #155724;
 }
 
-.status.inactive {
+.status.sold {
+  background-color: #cce5ff;
+  color: #004085;
+}
+
+.status.lost {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status.disposed {
   background-color: #f8d7da;
   color: #721c24;
+}
+
+.status.written_off {
+  background-color: #e2e3e5;
+  color: #383d41;
 }
 
 .tags {
