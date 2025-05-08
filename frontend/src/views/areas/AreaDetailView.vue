@@ -24,8 +24,15 @@
           <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card">
             <div class="commodity-content" @click="viewCommodity(commodity.id)">
               <h3>{{ commodity.attributes.name }}</h3>
-              <div class="commodity-meta" v-if="commodity.attributes.type">
-                <span class="type">Type: {{ getTypeName(commodity.attributes.type) }}</span>
+              <div class="commodity-meta">
+                <span class="type">{{ getTypeName(commodity.attributes.type) }}</span>
+                <span class="count">Count: {{ commodity.attributes.count || 1 }}</span>
+              </div>
+              <div class="commodity-price" v-if="commodity.attributes.current_price">
+                <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
+              </div>
+              <div class="commodity-status" v-if="commodity.attributes.status">
+                <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
               </div>
             </div>
             <div class="commodity-actions">
@@ -54,6 +61,7 @@ import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
+import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 
 const router = useRouter()
 const route = useRoute()
@@ -116,6 +124,11 @@ onMounted(async () => {
 const getTypeName = (typeId: string) => {
   const type = COMMODITY_TYPES.find(t => t.id === typeId)
   return type ? type.name : typeId
+}
+
+const getStatusName = (statusId: string) => {
+  const status = COMMODITY_STATUSES.find(s => s.id === statusId)
+  return status ? status.name : statusId
 }
 
 const editArea = () => {
@@ -263,6 +276,8 @@ const deleteCommodity = async (id: string) => {
 }
 
 .commodity-meta {
+  display: flex;
+  justify-content: space-between;
   margin-top: 0.5rem;
   font-size: 0.9rem;
   color: #555;
@@ -270,6 +285,49 @@ const deleteCommodity = async (id: string) => {
 
 .type {
   font-style: italic;
+}
+
+.commodity-price {
+  margin-top: 1rem;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.commodity-status {
+  margin-top: 0.5rem;
+}
+
+.status {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.status.in_use {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status.sold {
+  background-color: #cce5ff;
+  color: #004085;
+}
+
+.status.lost {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status.disposed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.status.written_off {
+  background-color: #e2e3e5;
+  color: #383d41;
 }
 
 .btn-primary {
