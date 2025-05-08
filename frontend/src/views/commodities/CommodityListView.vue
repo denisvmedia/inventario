@@ -10,8 +10,8 @@
     <div v-else-if="commodities.length === 0" class="empty">No commodities found. Create your first commodity!</div>
 
     <div v-else class="commodities-grid">
-      <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card">
-        <div class="commodity-content" @click="viewCommodity(commodity.id)">
+      <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" @click="viewCommodity(commodity.id)">
+        <div class="commodity-content">
           <h3>{{ commodity.attributes.name }}</h3>
           <div class="commodity-meta">
             <span class="type">{{ getTypeName(commodity.attributes.type) }}</span>
@@ -132,6 +132,7 @@ const deleteCommodity = async (id: string) => {
   border-radius: 8px;
   padding: 1.5rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   display: flex;
   justify-content: space-between;
