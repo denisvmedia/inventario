@@ -128,8 +128,31 @@ const submitForm = async () => {
     alert('Location updated successfully')
     router.push(`/locations/${id}`)
   } catch (err: any) {
-    formError.value = 'Failed to update location: ' + (err.message || 'Unknown error')
     console.error('Error updating location:', err)
+
+    if (err.response) {
+      console.error('Response status:', err.response.status)
+      console.error('Response data:', err.response.data)
+
+      // Extract validation errors if present
+      const apiErrors = err.response.data.errors?.[0]?.error?.error?.data?.attributes || {}
+
+      if (apiErrors.name) {
+        errors.value.name = apiErrors.name
+      }
+
+      if (apiErrors.address) {
+        errors.value.address = apiErrors.address
+      }
+
+      if (errors.value.name || errors.value.address) {
+        formError.value = 'Please correct the errors above.'
+      } else {
+        formError.value = `Failed to update location: ${err.response.status} - ${JSON.stringify(err.response.data)}`
+      }
+    } else {
+      formError.value = 'Failed to update location: ' + (err.message || 'Unknown error')
+    }
   } finally {
     isSubmitting.value = false
   }
