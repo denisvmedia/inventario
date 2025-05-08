@@ -5,30 +5,43 @@
     <div v-else-if="!area" class="not-found">Area not found</div>
     <div v-else>
       <div class="header">
-        <h1>{{ area.attributes.name }}</h1>
+        <div class="title-section">
+          <h1>{{ area.attributes.name }}</h1>
+          <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
+        </div>
         <div class="actions">
           <button class="btn btn-secondary" @click="editArea">Edit</button>
           <button class="btn btn-danger" @click="confirmDelete">Delete</button>
         </div>
       </div>
 
-      <div class="area-info">
-        <div class="info-card">
-          <h2>Details</h2>
-          <div class="info-row">
-            <span class="label">Location:</span>
-            <span>{{ locationName || 'N/A' }}</span>
+      <div class="commodities-section" v-if="commodities.length > 0">
+        <div class="section-header">
+          <h2>Commodities</h2>
+          <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm">Add Commodity</router-link>
+        </div>
+        <div class="commodities-grid">
+          <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card">
+            <div class="commodity-content" @click="viewCommodity(commodity.id)">
+              <h3>{{ commodity.attributes.name }}</h3>
+              <div class="commodity-meta" v-if="commodity.attributes.type">
+                <span class="type">Type: {{ getTypeName(commodity.attributes.type) }}</span>
+              </div>
+            </div>
+            <div class="commodity-actions">
+              <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)">
+                Edit
+              </button>
+              <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteCommodity(commodity.id)">
+                Delete
+              </button>
+            </div>
           </div>
         </div>
-
-        <div class="info-card" v-if="locations.length > 0">
-          <h2>Locations</h2>
-          <ul class="locations-list">
-            <li v-for="location in locations" :key="location.id" @click="viewLocation(location.id)">
-              {{ location.attributes.name }}
-            </li>
-          </ul>
-        </div>
+      </div>
+      <div v-else class="no-commodities">
+        <p>No commodities found in this area.</p>
+        <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary">Add Commodity</router-link>
       </div>
     </div>
   </div>
@@ -39,23 +52,28 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
+import commodityService from '@/services/commodityService'
+import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 
 const router = useRouter()
 const route = useRoute()
 const area = ref<any>(null)
 const locations = ref<any[]>([])
+const commodities = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const locationName = ref<string | null>(null)
+const locationAddress = ref<string | null>(null)
 
 onMounted(async () => {
   const id = route.params.id as string
 
   try {
-    // Load area and all locations in parallel
-    const [areaResponse, locationsResponse] = await Promise.all([
+    // Load area, locations, and commodities in parallel
+    const [areaResponse, locationsResponse, commoditiesResponse] = await Promise.all([
       areaService.getArea(id),
-      locationService.getLocations()
+      locationService.getLocations(),
+      commodityService.getCommodities()
     ])
 
     area.value = areaResponse.data.data
@@ -71,6 +89,7 @@ onMounted(async () => {
 
       if (location) {
         locationName.value = location.attributes.name
+        locationAddress.value = location.attributes.address
       }
     }
 
@@ -82,12 +101,22 @@ onMounted(async () => {
         location.relationships.area.data.id === id
     )
 
+    // Filter commodities that belong to this area
+    commodities.value = commoditiesResponse.data.data.filter(
+      (commodity: any) => commodity.attributes.area_id === id
+    )
+
     loading.value = false
   } catch (err: any) {
     error.value = 'Failed to load area: ' + (err.message || 'Unknown error')
     loading.value = false
   }
 })
+
+const getTypeName = (typeId: string) => {
+  const type = COMMODITY_TYPES.find(t => t.id === typeId)
+  return type ? type.name : typeId
+}
 
 const editArea = () => {
   router.push(`/areas/${area.value.id}/edit`)
@@ -112,19 +141,59 @@ const deleteArea = async () => {
 const viewLocation = (id: string) => {
   router.push(`/locations/${id}`)
 }
+
+const viewCommodity = (id: string) => {
+  router.push(`/commodities/${id}`)
+}
+
+const editCommodity = (id: string) => {
+  router.push(`/commodities/${id}/edit`)
+}
+
+const confirmDeleteCommodity = (id: string) => {
+  if (confirm('Are you sure you want to delete this commodity?')) {
+    deleteCommodity(id)
+  }
+}
+
+const deleteCommodity = async (id: string) => {
+  try {
+    await commodityService.deleteCommodity(id)
+    // Remove the deleted commodity from the list
+    commodities.value = commodities.value.filter(commodity => commodity.id !== id)
+  } catch (err: any) {
+    error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
+  }
+}
 </script>
 
 <style scoped>
 .area-detail {
   max-width: 1200px;
   margin: 0 auto;
+  padding: 20px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 2rem;
+}
+
+.title-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.title-section h1 {
+  margin-bottom: 0.5rem;
+}
+
+.location-info {
+  color: #666;
+  font-style: italic;
+  margin-top: 0;
 }
 
 .actions {
@@ -132,63 +201,106 @@ const viewLocation = (id: string) => {
   gap: 0.5rem;
 }
 
-.loading, .error, .not-found {
+.loading, .error, .not-found, .no-commodities {
   text-align: center;
   padding: 2rem;
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
 }
 
 .error {
   color: #dc3545;
 }
 
-.area-info, .test-section {
+.commodities-section {
   margin-bottom: 2rem;
 }
 
-.info-card {
-  background: white;
-  border-radius: 8px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.info-card h2 {
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #eee;
 }
 
-.locations-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.commodities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
 }
 
-.locations-list li {
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #eee;
+.commodity-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.commodity-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.commodity-content {
+  flex: 1;
   cursor: pointer;
 }
 
-.locations-list li:last-child {
-  border-bottom: none;
-}
-
-.locations-list li:hover {
-  color: #4CAF50;
-}
-
-.info-row {
+.commodity-actions {
   display: flex;
-  margin-bottom: 0.5rem;
+  gap: 0.5rem;
+  margin-left: 1rem;
+  cursor: pointer;
 }
 
-.label {
-  font-weight: bold;
-  width: 100px;
+.commodity-meta {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.type {
+  font-style: italic;
+}
+
+.btn-primary {
+  background-color: #4CAF50;
+  color: white;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  margin-top: 0;
+  border-radius: 4px;
 }
 
 .test-result, .test-error {
