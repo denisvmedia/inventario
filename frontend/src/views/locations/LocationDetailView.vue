@@ -43,6 +43,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
+import locationService from '@/services/locationService'
 
 const route = useRoute()
 const router = useRouter()
@@ -58,18 +59,8 @@ onMounted(async () => {
   const id = route.params.id as string
 
   try {
-    // Uncomment when you have the service
-    // const response = await locationService.getLocation(id)
-    // location.value = response.data.data
-
-    // Mock data for now
-    location.value = {
-      id,
-      attributes: {
-        name: 'Warehouse A',
-        address: '123 Main St'
-      }
-    }
+    const response = await locationService.getLocation(id)
+    location.value = response.data.data
     loading.value = false
   } catch (err: any) {
     error.value = 'Failed to load location: ' + (err.message || 'Unknown error')
@@ -78,8 +69,7 @@ onMounted(async () => {
 })
 
 const editLocation = () => {
-  // Implement edit functionality
-  alert('Edit functionality not implemented yet')
+  router.push(`/locations/${location.value.id}/edit`)
 }
 
 const confirmDelete = () => {
@@ -90,8 +80,7 @@ const confirmDelete = () => {
 
 const deleteLocation = async () => {
   try {
-    // Uncomment when you have the service
-    // await locationService.deleteLocation(location.value.id)
+    await locationService.deleteLocation(location.value.id)
     alert('Location deleted successfully')
     router.push('/locations')
   } catch (err: any) {
