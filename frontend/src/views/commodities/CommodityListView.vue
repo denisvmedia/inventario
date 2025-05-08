@@ -99,7 +99,7 @@ const deleteCommodity = async (id: string) => {
 .commodity-list {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 20px;
 }
 
 .header {
