@@ -10,17 +10,24 @@
     <div v-else-if="commodities.length === 0" class="empty">No commodities found. Create your first commodity!</div>
 
     <div v-else class="commodities-grid">
-      <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" @click="viewCommodity(commodity.id)">
-        <h3>{{ commodity.attributes.name }}</h3>
-        <div class="commodity-meta">
-          <span class="type">{{ getTypeName(commodity.attributes.type) }}</span>
-          <span class="count">Count: {{ commodity.attributes.count || 1 }}</span>
+      <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card">
+        <div class="commodity-content" @click="viewCommodity(commodity.id)">
+          <h3>{{ commodity.attributes.name }}</h3>
+          <div class="commodity-meta">
+            <span class="type">{{ getTypeName(commodity.attributes.type) }}</span>
+            <span class="count">Count: {{ commodity.attributes.count || 1 }}</span>
+          </div>
+          <div class="commodity-price">
+            <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
+          </div>
+          <div class="commodity-status">
+            <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
+          </div>
         </div>
-        <div class="commodity-price">
-          <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
-        </div>
-        <div class="commodity-status">
-          <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
+        <div class="commodity-actions">
+          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(commodity.id)">
+            Delete
+          </button>
         </div>
       </div>
     </div>
@@ -63,6 +70,22 @@ onMounted(async () => {
 const viewCommodity = (id: string) => {
   router.push(`/commodities/${id}`)
 }
+
+const confirmDelete = (id: string) => {
+  if (confirm('Are you sure you want to delete this commodity?')) {
+    deleteCommodity(id)
+  }
+}
+
+const deleteCommodity = async (id: string) => {
+  try {
+    await commodityService.deleteCommodity(id)
+    // Remove the deleted commodity from the list
+    commodities.value = commodities.value.filter(commodity => commodity.id !== id)
+  } catch (err: any) {
+    error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
+  }
+}
 </script>
 
 <style scoped>
@@ -102,13 +125,31 @@ const viewCommodity = (id: string) => {
   border-radius: 8px;
   padding: 1.5rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .commodity-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.commodity-content {
+  flex: 1;
+  cursor: pointer;
+}
+
+.commodity-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 1rem;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
 }
 
 .commodity-meta {
