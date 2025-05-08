@@ -195,12 +195,6 @@ const deleteArea = async (id: string) => {
   margin-bottom: 2rem;
 }
 
-.areas-section h2 {
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #eee;
-}
-
 .areas-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
