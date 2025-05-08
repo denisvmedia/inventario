@@ -18,6 +18,9 @@
           </div>
         </div>
         <div class="area-actions">
+          <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)">
+            Edit
+          </button>
           <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(area.id)">
             Delete
           </button>
@@ -63,6 +66,10 @@ const getLocationName = (locationId: string) => {
 
 const viewArea = (id: string) => {
   router.push(`/areas/${id}`)
+}
+
+const editArea = (id: string) => {
+  router.push(`/areas/${id}/edit`)
 }
 
 const confirmDelete = (id: string) => {
