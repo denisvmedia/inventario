@@ -14,6 +14,7 @@
         <div class="location-content" @click="viewLocation(location.id)">
           <h3>{{ location.attributes.name }}</h3>
           <p v-if="location.attributes.description" class="description">{{ location.attributes.description }}</p>
+          <p v-if="location.attributes.address" class="address">{{ location.attributes.address }}</p>
           <div class="location-meta" v-if="location.relationships && location.relationships.area">
             <span class="area">Area: {{ getAreaName(location.relationships.area.data.id) }}</span>
           </div>
@@ -151,6 +152,13 @@ const deleteLocation = async (id: string) => {
   color: #666;
   margin: 0.5rem 0;
   font-size: 0.9rem;
+}
+
+.address {
+  color: #666;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  font-style: italic;
 }
 
 .location-meta {
