@@ -78,6 +78,7 @@ import (
 	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/internal/fileblob/escape"
+	"github.com/denisvmedia/inventario/internal/fileblob/fileio"
 	"github.com/denisvmedia/inventario/internal/fileblob/gcerr"
 )
 
@@ -91,7 +92,7 @@ func init() { //nolint:gochecknoinits // Acceptable in this case
 
 // Scheme is the URL scheme fileblob registers its URLOpener under on
 // blob.DefaultMux.
-const Scheme = "afile"
+const Scheme = "file"
 
 // URLOpener opens file bucket URLs like "file:///foo/bar/baz".
 //
@@ -799,7 +800,7 @@ func (w *writerWithSidecar) Close() error {
 		return err
 	}
 	// Rename the temp file to path.
-	if err := w.opts.FS.Rename(oldname, w.path); err != nil {
+	if err := fileio.Move(w.opts.FS, oldname, w.path); err != nil {
 		_ = w.opts.FS.Remove(w.path + attrsExt)
 		return err
 	}

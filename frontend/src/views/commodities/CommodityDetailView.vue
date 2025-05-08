@@ -96,6 +96,84 @@
             </li>
           </ul>
         </div>
+
+        <!-- Images Section -->
+        <div class="info-card full-width">
+          <div class="section-header">
+            <h2>Images</h2>
+            <button class="btn btn-sm btn-primary" @click="showImageUploader = !showImageUploader">
+              {{ showImageUploader ? 'Cancel' : 'Add Images' }}
+            </button>
+          </div>
+
+          <FileUploader
+            v-if="showImageUploader"
+            :multiple="true"
+            accept="image/*"
+            uploadPrompt="Drag and drop images here"
+            @upload="uploadImages"
+          />
+
+          <FileList
+            :files="images"
+            fileType="images"
+            :commodityId="commodity.id"
+            :loading="loadingImages"
+            @delete="deleteImage"
+          />
+        </div>
+
+        <!-- Manuals Section -->
+        <div class="info-card full-width">
+          <div class="section-header">
+            <h2>Manuals</h2>
+            <button class="btn btn-sm btn-primary" @click="showManualUploader = !showManualUploader">
+              {{ showManualUploader ? 'Cancel' : 'Add Manuals' }}
+            </button>
+          </div>
+
+          <FileUploader
+            v-if="showManualUploader"
+            :multiple="true"
+            accept=".pdf,.doc,.docx,.txt"
+            uploadPrompt="Drag and drop manuals here"
+            @upload="uploadManuals"
+          />
+
+          <FileList
+            :files="manuals"
+            fileType="manuals"
+            :commodityId="commodity.id"
+            :loading="loadingManuals"
+            @delete="deleteManual"
+          />
+        </div>
+
+        <!-- Invoices Section -->
+        <div class="info-card full-width">
+          <div class="section-header">
+            <h2>Invoices</h2>
+            <button class="btn btn-sm btn-primary" @click="showInvoiceUploader = !showInvoiceUploader">
+              {{ showInvoiceUploader ? 'Cancel' : 'Add Invoices' }}
+            </button>
+          </div>
+
+          <FileUploader
+            v-if="showInvoiceUploader"
+            :multiple="true"
+            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+            uploadPrompt="Drag and drop invoices here"
+            @upload="uploadInvoices"
+          />
+
+          <FileList
+            :files="invoices"
+            fileType="invoices"
+            :commodityId="commodity.id"
+            :loading="loadingInvoices"
+            @delete="deleteInvoice"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -107,12 +185,29 @@ import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import FileUploader from '@/components/FileUploader.vue'
+import FileList from '@/components/FileList.vue'
 
 const router = useRouter()
 const route = useRoute()
 const commodity = ref<any>(null)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+
+// File states
+const images = ref<any[]>([])
+const manuals = ref<any[]>([])
+const invoices = ref<any[]>([])
+
+// Loading states for files
+const loadingImages = ref<boolean>(false)
+const loadingManuals = ref<boolean>(false)
+const loadingInvoices = ref<boolean>(false)
+
+// Toggle states for file uploaders
+const showImageUploader = ref<boolean>(false)
+const showManualUploader = ref<boolean>(false)
+const showInvoiceUploader = ref<boolean>(false)
 
 onMounted(async () => {
   const id = route.params.id as string
@@ -121,11 +216,135 @@ onMounted(async () => {
     const response = await commodityService.getCommodity(id)
     commodity.value = response.data.data
     loading.value = false
+
+    // Load files after commodity is loaded
+    loadFiles()
   } catch (err: any) {
     error.value = 'Failed to load commodity: ' + (err.message || 'Unknown error')
     loading.value = false
   }
 })
+
+const loadFiles = async () => {
+  if (!commodity.value) return
+
+  // Load images
+  loadingImages.value = true
+  try {
+    const response = await commodityService.getImages(commodity.value.id)
+    images.value = response.data || []
+  } catch (err: any) {
+    console.error('Failed to load images:', err)
+  } finally {
+    loadingImages.value = false
+  }
+
+  // Load manuals
+  loadingManuals.value = true
+  try {
+    const response = await commodityService.getManuals(commodity.value.id)
+    manuals.value = response.data || []
+  } catch (err: any) {
+    console.error('Failed to load manuals:', err)
+  } finally {
+    loadingManuals.value = false
+  }
+
+  // Load invoices
+  loadingInvoices.value = true
+  try {
+    const response = await commodityService.getInvoices(commodity.value.id)
+    invoices.value = response.data || []
+  } catch (err: any) {
+    console.error('Failed to load invoices:', err)
+  } finally {
+    loadingInvoices.value = false
+  }
+}
+
+const uploadImages = async (files: File[]) => {
+  if (!commodity.value || files.length === 0) return
+
+  try {
+    await commodityService.uploadImages(commodity.value.id, files)
+    showImageUploader.value = false
+    // Reload images after upload
+    loadingImages.value = true
+    const response = await commodityService.getImages(commodity.value.id)
+    images.value = response.data || []
+    loadingImages.value = false
+  } catch (err: any) {
+    error.value = 'Failed to upload images: ' + (err.message || 'Unknown error')
+  }
+}
+
+const uploadManuals = async (files: File[]) => {
+  if (!commodity.value || files.length === 0) return
+
+  try {
+    await commodityService.uploadManuals(commodity.value.id, files)
+    showManualUploader.value = false
+    // Reload manuals after upload
+    loadingManuals.value = true
+    const response = await commodityService.getManuals(commodity.value.id)
+    manuals.value = response.data || []
+    loadingManuals.value = false
+  } catch (err: any) {
+    error.value = 'Failed to upload manuals: ' + (err.message || 'Unknown error')
+  }
+}
+
+const uploadInvoices = async (files: File[]) => {
+  if (!commodity.value || files.length === 0) return
+
+  try {
+    await commodityService.uploadInvoices(commodity.value.id, files)
+    showInvoiceUploader.value = false
+    // Reload invoices after upload
+    loadingInvoices.value = true
+    const response = await commodityService.getInvoices(commodity.value.id)
+    invoices.value = response.data || []
+    loadingInvoices.value = false
+  } catch (err: any) {
+    error.value = 'Failed to upload invoices: ' + (err.message || 'Unknown error')
+  }
+}
+
+const deleteImage = async (image: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.deleteImage(commodity.value.id, image.id)
+    // Remove the deleted image from the list
+    images.value = images.value.filter(img => img.id !== image.id)
+  } catch (err: any) {
+    error.value = 'Failed to delete image: ' + (err.message || 'Unknown error')
+  }
+}
+
+const deleteManual = async (manual: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.deleteManual(commodity.value.id, manual.id)
+    // Remove the deleted manual from the list
+    manuals.value = manuals.value.filter(m => m.id !== manual.id)
+  } catch (err: any) {
+    error.value = 'Failed to delete manual: ' + (err.message || 'Unknown error')
+  }
+}
+
+const deleteInvoice = async (invoice: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.deleteInvoice(commodity.value.id, invoice.id)
+    // Remove the deleted invoice from the list
+    invoices.value = invoices.value.filter(inv => inv.id !== invoice.id)
+  } catch (err: any) {
+    error.value = 'Failed to delete invoice: ' + (err.message || 'Unknown error')
+  }
+}
 
 const editCommodity = () => {
   router.push(`/commodities/${commodity.value.id}/edit`)
@@ -303,6 +522,26 @@ const formatDate = (date: string): string => {
   font-size: 0.875rem;
   margin-top: 0;
   border-radius: 4px;
+}
+
+/* New styles for file upload sections */
+.full-width {
+  grid-column: 1 / -1; /* Make the card span all columns */
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.section-header h2 {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 @media (min-width: 768px) {
