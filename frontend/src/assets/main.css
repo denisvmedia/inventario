@@ -34,6 +34,47 @@ button {
   font-family: inherit;
 }
 
+/* App layout styles */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+header {
+  background-color: #2c3e50;
+  color: white;
+  padding: 1rem;
+}
+
+nav {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+}
+
+nav a.router-link-active {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+main {
+  flex: 1;
+  padding: 2rem 0;
+}
+
+footer {
+  background-color: #2c3e50;
+  color: white;
+  padding: 1rem;
+  text-align: center;
+}
+
 /* Utility classes */
 .container {
   max-width: 1200px;
@@ -80,4 +121,86 @@ button {
 .btn-danger:hover {
   background-color: #c82333;
   text-decoration: none;
+}
+
+/* Form styles */
+.form {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.form-control.is-invalid {
+  border-color: #dc3545;
+}
+
+.error-message {
+  color: #dc3545;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.form-error {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background-color: #f8d7da;
+  color: #721c24;
+  border-radius: 4px;
+}
+
+/* Area styles */
+.area-create {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.area-create h1 {
+  margin-bottom: 2rem;
+}
+
+/* Debug styles (expanded) */
+.debug-info {
+  margin-top: 2rem;
+  padding: 1rem;
+  background-color: #ffffcc;
+  border-radius: 4px;
+  border: 1px solid #e6e600;
+}
+
+.debug-info pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: auto;
 }

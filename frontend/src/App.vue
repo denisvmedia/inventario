@@ -10,7 +10,7 @@
     </header>
 
     <!-- Debug information -->
-    <div style="background-color: #ffffcc; padding: 10px; margin: 10px 0; border: 1px solid #e6e600;">
+    <div class="debug-info">
       <p>Current route: {{ $route.path }}</p>
     </div>
 
@@ -27,45 +27,3 @@
 <script setup lang="ts">
 // No TypeScript logic needed for this component
 </script>
-
-<style>
-.app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
-header {
-  background-color: #2c3e50;
-  color: white;
-  padding: 1rem;
-}
-
-nav {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-}
-
-nav a {
-  color: white;
-  text-decoration: none;
-}
-
-nav a.router-link-active {
-  font-weight: bold;
-  text-decoration: underline;
-}
-
-main {
-  flex: 1;
-  padding: 2rem 0;
-}
-
-footer {
-  background-color: #2c3e50;
-  color: white;
-  padding: 1rem;
-  text-align: center;
-}
-</style>

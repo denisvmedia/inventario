@@ -55,7 +55,6 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import areaService from '@/services/areaService'
 
 const router = useRouter()
 const isSubmitting = ref(false)
@@ -184,84 +183,3 @@ const cancel = () => {
   router.push('/areas')
 }
 </script>
-
-<style scoped>
-.area-create {
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-h1 {
-  margin-bottom: 2rem;
-}
-
-.form {
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-
-.form-control:focus {
-  outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-}
-
-.form-control.is-invalid {
-  border-color: #dc3545;
-}
-
-.error-message {
-  color: #dc3545;
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.form-error {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: #f8d7da;
-  color: #721c24;
-  border-radius: 4px;
-}
-
-.debug-info {
-  margin-top: 2rem;
-  padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-}
-
-.debug-info pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  overflow-x: auto;
-}
-</style>
