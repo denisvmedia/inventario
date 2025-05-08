@@ -1,6 +1,9 @@
 <template>
   <div class="area-edit">
-    <h1>Edit Area</h1>
+    <div class="header">
+      <h1>Edit Area</h1>
+      <button class="btn btn-secondary" @click="goBack">Go Back</button>
+    </div>
 
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
@@ -206,7 +209,10 @@ const goBack = () => {
   margin: 0 auto;
 }
 
-h1 {
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 2rem;
 }
 
