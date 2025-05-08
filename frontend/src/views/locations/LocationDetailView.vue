@@ -21,8 +21,8 @@
           <router-link :to="`/areas/new?location=${location.id}`" class="btn btn-primary btn-sm">Add Area</router-link>
         </div>
         <div class="areas-grid">
-          <div v-for="area in areas" :key="area.id" class="area-card">
-            <div class="area-content" @click="viewArea(area.id)">
+          <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
+            <div class="area-content">
               <h3>{{ area.attributes.name }}</h3>
             </div>
             <div class="area-actions">
@@ -112,7 +112,6 @@ const confirmDelete = () => {
 const deleteLocation = async () => {
   try {
     await locationService.deleteLocation(location.value.id)
-    alert('Location deleted successfully')
     router.push('/locations')
   } catch (err: any) {
     error.value = 'Failed to delete location: ' + (err.message || 'Unknown error')

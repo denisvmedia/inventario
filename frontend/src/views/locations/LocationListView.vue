@@ -10,8 +10,8 @@
     <div v-else-if="locations.length === 0" class="empty">No locations found. Create your first location!</div>
 
     <div v-else class="locations-grid">
-      <div v-for="location in locations" :key="location.id" class="location-card">
-        <div class="location-content" @click="viewLocation(location.id)">
+      <div v-for="location in locations" :key="location.id" class="location-card" @click="viewLocation(location.id)">
+        <div class="location-content">
           <h3>{{ location.attributes.name }}</h3>
           <p v-if="location.attributes.description" class="description">{{ location.attributes.description }}</p>
           <p v-if="location.attributes.address" class="address">{{ location.attributes.address }}</p>

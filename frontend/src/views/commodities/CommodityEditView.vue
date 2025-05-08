@@ -512,7 +512,6 @@ const submitForm = async () => {
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
 
     // On success, navigate to commodity details
-    alert('Commodity updated successfully')
     router.push(`/commodities/${id}`)
   } catch (err: any) {
     console.error('Error updating commodity:', err)

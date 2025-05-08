@@ -10,8 +10,8 @@
     <div v-else-if="areas.length === 0" class="empty">No areas found. Create your first area!</div>
 
     <div v-else class="areas-grid">
-      <div v-for="area in areas" :key="area.id" class="area-card">
-        <div class="area-content" @click="viewArea(area.id)">
+      <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
+        <div class="area-content">
           <h3>{{ area.attributes.name }}</h3>
           <div class="area-meta" v-if="area.attributes.location_id">
             <span class="location">Location: {{ getLocationName(area.attributes.location_id) }}</span>

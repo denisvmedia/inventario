@@ -140,7 +140,6 @@ const confirmDelete = () => {
 const deleteCommodity = async () => {
   try {
     await commodityService.deleteCommodity(commodity.value.id)
-    alert('Commodity deleted successfully')
     router.push('/commodities')
   } catch (err: any) {
     error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')

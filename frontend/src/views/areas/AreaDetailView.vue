@@ -144,7 +144,6 @@ const confirmDelete = () => {
 const deleteArea = async () => {
   try {
     await areaService.deleteArea(area.value.id)
-    alert('Area deleted successfully')
     router.push('/areas')
   } catch (err: any) {
     error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
