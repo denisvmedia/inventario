@@ -20,6 +20,15 @@
             <span>{{ location.attributes.address || 'N/A' }}</span>
           </div>
         </div>
+
+        <div class="info-card" v-if="areas.length > 0">
+          <h2>Areas</h2>
+          <ul class="areas-list">
+            <li v-for="area in areas" :key="area.id" @click="viewArea(area.id)">
+              {{ area.attributes.name }}
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Test API Results Section -->
@@ -43,12 +52,14 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import locationService from '@/services/locationService'
+import areaService from '@/services/areaService'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const location = ref<any>(null)
+const areas = ref<any[]>([])
 
 // Test API variables
 const testResult = ref('')
@@ -58,8 +69,19 @@ onMounted(async () => {
   const id = route.params.id as string
 
   try {
-    const response = await locationService.getLocation(id)
-    location.value = response.data.data
+    // Load location and areas in parallel
+    const [locationResponse, areasResponse] = await Promise.all([
+      locationService.getLocation(id),
+      areaService.getAreas()
+    ])
+
+    location.value = locationResponse.data.data
+
+    // Filter areas that belong to this location
+    areas.value = areasResponse.data.data.filter(
+      (area: any) => area.attributes.location_id === id
+    )
+
     loading.value = false
   } catch (err: any) {
     error.value = 'Failed to load location: ' + (err.message || 'Unknown error')
@@ -85,6 +107,10 @@ const deleteLocation = async () => {
   } catch (err: any) {
     error.value = 'Failed to delete location: ' + (err.message || 'Unknown error')
   }
+}
+
+const viewArea = (id: string) => {
+  router.push(`/areas/${id}`)
 }
 </script>
 
@@ -120,6 +146,9 @@ const deleteLocation = async () => {
 
 .location-info, .test-section {
   margin-bottom: 2rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
 }
 
 .info-card {
@@ -143,6 +172,32 @@ const deleteLocation = async () => {
 .label {
   font-weight: bold;
   width: 100px;
+}
+
+.areas-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.areas-list li {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.areas-list li:last-child {
+  border-bottom: none;
+}
+
+.areas-list li:hover {
+  color: #4CAF50;
+}
+
+@media (min-width: 768px) {
+  .location-info {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .test-result, .test-error {
