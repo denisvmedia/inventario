@@ -1,14 +1,11 @@
 <template>
   <div class="area-edit">
-    <div class="header">
-      <h1>Edit Area</h1>
-      <button class="btn btn-secondary" @click="goBack">Go Back</button>
-    </div>
+    <h1>Edit Area</h1>
 
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!area" class="not-found">Area not found</div>
-    <div v-else class="form-container">
+    <div v-else>
       <form @submit.prevent="submitForm" class="form">
         <div class="form-group">
           <label for="name">Name</label>
@@ -16,10 +13,10 @@
             type="text"
             id="name"
             v-model="form.name"
+            required
             class="form-control"
             :class="{ 'is-invalid': errors.name }"
-            required
-          />
+          >
           <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
         </div>
 
@@ -205,15 +202,11 @@ const goBack = () => {
 
 <style scoped>
 .area-edit {
-  max-width: 800px;
+  max-width: 600px;
   margin: 0 auto;
-  padding: 20px;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+h1 {
   margin-bottom: 2rem;
 }
 
@@ -229,7 +222,7 @@ const goBack = () => {
   color: #dc3545;
 }
 
-.form-container {
+.form {
   background: white;
   padding: 2rem;
   border-radius: 8px;
