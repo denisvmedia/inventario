@@ -5,34 +5,33 @@
     <div v-else-if="!location" class="not-found">Location not found</div>
     <div v-else>
       <div class="header">
-        <h1>{{ location.attributes.name }}</h1>
+        <div class="title-section">
+          <h1>{{ location.attributes.name }}</h1>
+          <p class="address">{{ location.attributes.address || 'No address provided' }}</p>
+        </div>
         <div class="actions">
           <button class="btn btn-secondary" @click="editLocation">Edit</button>
           <button class="btn btn-danger" @click="confirmDelete">Delete</button>
         </div>
       </div>
 
-      <div class="location-info">
-        <div class="info-card">
-          <h2>Details</h2>
-          <div class="info-row">
-            <span class="label">Address:</span>
-            <span>{{ location.attributes.address || 'N/A' }}</span>
+      <div class="areas-section" v-if="areas.length > 0">
+        <h2>Areas</h2>
+        <div class="areas-grid">
+          <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
+            <div class="area-content">
+              <h3>{{ area.attributes.name }}</h3>
+            </div>
           </div>
         </div>
-
-        <div class="info-card" v-if="areas.length > 0">
-          <h2>Areas</h2>
-          <ul class="areas-list">
-            <li v-for="area in areas" :key="area.id" @click="viewArea(area.id)">
-              {{ area.attributes.name }}
-            </li>
-          </ul>
-        </div>
+      </div>
+      <div v-else class="no-areas">
+        <p>No areas found for this location.</p>
+        <router-link to="/areas/new" class="btn btn-primary">Create New Area</router-link>
       </div>
 
       <!-- Test API Results Section -->
-      <div v-if="testResult || testError" class="test-section info-card">
+      <div v-if="testResult || testError" class="test-section">
         <h2>API Test Results</h2>
         <div v-if="testResult" class="test-result">
           <h3>Success:</h3>
@@ -118,13 +117,29 @@ const viewArea = (id: string) => {
 .location-detail {
   max-width: 1200px;
   margin: 0 auto;
+  padding: 20px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 2rem;
+}
+
+.title-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.title-section h1 {
+  margin-bottom: 0.5rem;
+}
+
+.address {
+  color: #666;
+  font-style: italic;
+  margin-top: 0;
 }
 
 .actions {
@@ -132,72 +147,75 @@ const viewArea = (id: string) => {
   gap: 0.5rem;
 }
 
-.loading, .error, .not-found {
+.loading, .error, .not-found, .no-areas {
   text-align: center;
   padding: 2rem;
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
 }
 
 .error {
   color: #dc3545;
 }
 
-.location-info, .test-section {
+.areas-section {
   margin-bottom: 2rem;
+}
+
+.areas-section h2 {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.areas-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
 }
 
-.info-card {
+.area-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.area-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.area-content {
+  cursor: pointer;
+}
+
+.test-section {
+  margin-bottom: 2rem;
   background: white;
   border-radius: 8px;
   padding: 1.5rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.info-card h2 {
+.test-section h2 {
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #eee;
 }
 
-.info-row {
-  display: flex;
-  margin-bottom: 0.5rem;
-}
-
-.label {
-  font-weight: bold;
-  width: 100px;
-}
-
-.areas-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.areas-list li {
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #eee;
-  cursor: pointer;
-}
-
-.areas-list li:last-child {
-  border-bottom: none;
-}
-
-.areas-list li:hover {
-  color: #4CAF50;
-}
-
-@media (min-width: 768px) {
-  .location-info {
-    grid-template-columns: 1fr 1fr;
-  }
+.btn-primary {
+  background-color: #4CAF50;
+  color: white;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 1rem;
 }
 
 .test-result, .test-error {
