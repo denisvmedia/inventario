@@ -6,7 +6,6 @@
         <router-link to="/areas">Areas</router-link> |
         <router-link to="/locations">Locations</router-link> |
         <router-link to="/commodities">Commodities</router-link> |
-        <router-link to="/locations/test">Test API</router-link>
       </nav>
     </header>
 

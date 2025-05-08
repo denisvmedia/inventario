@@ -42,11 +42,6 @@ const routes = [
     component: () => import('../views/locations/LocationCreateView.vue')
   },
   {
-    path: '/locations/test',
-    name: 'location-test',
-    component: () => import('../views/locations/LocationTestView.vue')
-  },
-  {
     path: '/locations/:id',
     name: 'location-detail',
     component: () => import('../views/locations/LocationDetailView.vue')
