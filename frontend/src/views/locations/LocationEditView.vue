@@ -115,7 +115,7 @@ const submitForm = async () => {
   try {
     const payload = {
       data: {
-        id: location.value.id,
+        id: id,
         type: 'locations',
         attributes: {
           name: form.value.name.trim(),
@@ -125,7 +125,7 @@ const submitForm = async () => {
     }
 
     await locationService.updateLocation(id, payload)
-    alert('Location updated successfully')
+
     router.push(`/locations/${id}`)
   } catch (err: any) {
     console.error('Error updating location:', err)
