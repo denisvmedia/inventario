@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { Area, ResourceObject } from '@/types'
 
 const API_URL = '/api/v1'
 

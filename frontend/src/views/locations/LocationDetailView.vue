@@ -9,7 +9,6 @@
         <div class="actions">
           <button class="btn btn-secondary" @click="editLocation">Edit</button>
           <button class="btn btn-danger" @click="confirmDelete">Delete</button>
-          <button class="btn btn-primary" @click="testCreateLocation">Test API</button>
         </div>
       </div>
 
@@ -85,59 +84,6 @@ const deleteLocation = async () => {
     router.push('/locations')
   } catch (err: any) {
     error.value = 'Failed to delete location: ' + (err.message || 'Unknown error')
-  }
-}
-
-// Add test function
-const testCreateLocation = async () => {
-  testResult.value = ''
-  testError.value = ''
-
-  try {
-    // Create a test payload with a unique timestamp and ensure non-empty values
-    const timestamp = new Date().toISOString()
-    const payload = {
-      data: {
-        type: 'locations',
-        attributes: {
-          name: `Test Location ${timestamp}`,
-          address: `Test Address ${timestamp}`
-        }
-      }
-    }
-
-    console.log('Sending payload:', JSON.stringify(payload, null, 2))
-
-    // Make a direct axios call with detailed logging
-    const response = await axios.post('/api/v1/locations', payload, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
-
-    console.log('Response status:', response.status)
-    console.log('Response headers:', response.headers)
-    console.log('Response data:', response.data)
-
-    testResult.value = JSON.stringify(response.data, null, 2)
-  } catch (err: any) {
-    console.error('Error details:', err)
-
-    if (err.response) {
-      console.error('Response status:', err.response.status)
-      console.error('Response data:', err.response.data)
-
-      // Extract validation errors if present
-      const apiErrors = err.response.data.errors?.[0]?.error?.error?.data?.attributes || {}
-      if (apiErrors.name || apiErrors.address) {
-        testError.value = `Validation errors:\n- Name: ${apiErrors.name || 'none'}\n- Address: ${apiErrors.address || 'none'}`
-      } else {
-        testError.value = JSON.stringify(err.response.data, null, 2)
-      }
-    } else {
-      testError.value = 'Error: ' + err.message
-    }
   }
 }
 </script>
