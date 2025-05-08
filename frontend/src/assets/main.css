@@ -273,9 +273,3 @@ label {
 .locations-list li:hover {
   color: #4CAF50;
 }
-
-@media (min-width: 768px) {
-  .area-info {
-    grid-template-columns: 1fr 1fr;
-  }
-}

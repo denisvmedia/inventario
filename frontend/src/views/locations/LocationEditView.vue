@@ -8,7 +8,7 @@
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!location" class="not-found">Location not found</div>
-    <div v-else class="form-container">
+    <div v-else>
       <form @submit.prevent="submitForm" class="form">
         <div class="form-group">
           <label for="name">Name</label>
@@ -16,29 +16,31 @@
             type="text"
             id="name"
             v-model="form.name"
+            required
             class="form-control"
             :class="{ 'is-invalid': errors.name }"
-            required
-          />
+          >
           <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
         </div>
 
         <div class="form-group">
           <label for="address">Address</label>
-          <textarea
+          <input
+            type="text"
             id="address"
             v-model="form.address"
+            required
             class="form-control"
             :class="{ 'is-invalid': errors.address }"
-            rows="3"
-            required
-          ></textarea>
+          >
           <div v-if="errors.address" class="error-message">{{ errors.address }}</div>
         </div>
 
         <div class="form-actions">
           <button type="button" class="btn btn-secondary" @click="goBack">Cancel</button>
-          <button type="submit" class="btn btn-primary" :disabled="isSubmitting">Save Changes</button>
+          <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
+            {{ isSubmitting ? 'Saving...' : 'Save Changes' }}
+          </button>
         </div>
 
         <div v-if="formError" class="form-error">{{ formError }}</div>
@@ -165,9 +167,8 @@ const goBack = () => {
 
 <style scoped>
 .location-edit {
-  max-width: 800px;
+  max-width: 600px;
   margin: 0 auto;
-  padding: 20px;
 }
 
 .header {
@@ -189,91 +190,7 @@ const goBack = () => {
   color: #dc3545;
 }
 
-.form-container {
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-
-.form-control:focus {
-  outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-}
-
-.form-control.is-invalid {
-  border-color: #dc3545;
-}
-
-.error-message {
-  color: #dc3545;
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.form-error {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: #f8d7da;
-  color: #721c24;
-  border-radius: 4px;
-}
-
-.btn {
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-}
-
-.btn-primary {
-  background-color: #4CAF50;
-  color: white;
-}
-
-.btn-primary:hover {
-  background-color: #43a047;
-}
-
-.btn-secondary {
-  background-color: #f8f9fa;
-  color: #333;
-  border: 1px solid #ddd;
-}
-
-.btn-secondary:hover {
-  background-color: #e9ecef;
-}
-
-.btn:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
+h1 {
+  margin-bottom: 0;
 }
 </style>

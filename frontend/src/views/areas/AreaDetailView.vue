@@ -15,7 +15,10 @@
       <div class="area-info">
         <div class="info-card">
           <h2>Details</h2>
-          <!-- Add area details here -->
+          <div class="info-row">
+            <span class="label">Location:</span>
+            <span>{{ locationName || 'N/A' }}</span>
+          </div>
         </div>
 
         <div class="info-card" v-if="locations.length > 0">
@@ -43,27 +46,41 @@ const area = ref<any>(null)
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+const locationName = ref<string | null>(null)
 
 onMounted(async () => {
   const id = route.params.id as string
 
   try {
-    const response = await areaService.getArea(id)
-    area.value = response.data.data
+    // Load area and all locations in parallel
+    const [areaResponse, locationsResponse] = await Promise.all([
+      areaService.getArea(id),
+      locationService.getLocations()
+    ])
 
-    // Load locations for this area
-    try {
-      const locationsResponse = await locationService.getLocations()
-      // Filter locations that belong to this area
-      locations.value = locationsResponse.data.data.filter(
-        (location: any) =>
-          location.relationships &&
-          location.relationships.area &&
-          location.relationships.area.data.id === id
+    area.value = areaResponse.data.data
+
+    // Get the location ID from the area
+    const locationId = area.value.attributes.location_id
+
+    if (locationId) {
+      // Find the location in the locations list
+      const location = locationsResponse.data.data.find(
+        (loc: any) => loc.id === locationId
       )
-    } catch (err) {
-      console.error('Failed to load locations:', err)
+
+      if (location) {
+        locationName.value = location.attributes.name
+      }
     }
+
+    // Filter locations that belong to this area
+    locations.value = locationsResponse.data.data.filter(
+      (location: any) =>
+        location.relationships &&
+        location.relationships.area &&
+        location.relationships.area.data.id === id
+    )
 
     loading.value = false
   } catch (err: any) {
@@ -127,10 +144,8 @@ const viewLocation = (id: string) => {
   color: #dc3545;
 }
 
-.area-info {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
+.area-info, .test-section {
+  margin-bottom: 2rem;
 }
 
 .info-card {
@@ -166,9 +181,36 @@ const viewLocation = (id: string) => {
   color: #4CAF50;
 }
 
-@media (min-width: 768px) {
-  .area-info {
-    grid-template-columns: 1fr 1fr;
-  }
+.info-row {
+  display: flex;
+  margin-bottom: 0.5rem;
+}
+
+.label {
+  font-weight: bold;
+  width: 100px;
+}
+
+.test-result, .test-error {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.test-result {
+  background-color: #e6f7e6;
+}
+
+.test-error {
+  background-color: #f7e6e6;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: auto;
+  background: #f8f9fa;
+  padding: 0.5rem;
+  border-radius: 4px;
 }
 </style>
