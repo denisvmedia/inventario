@@ -147,6 +147,7 @@ const deleteArea = async (id: string) => {
   display: flex;
   gap: 0.5rem;
   margin-left: 1rem;
+  cursor: pointer;
 }
 
 .btn-sm {
@@ -162,5 +163,25 @@ const deleteArea = async (id: string) => {
 
 .location {
   font-style: italic;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
 }
 </style>
