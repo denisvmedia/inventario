@@ -56,11 +56,11 @@ const emit = defineEmits(['delete', 'download'])
 
 const getFileUrl = (file: any) => {
   if (props.fileType === 'images') {
-    return `/api/v1/uploads/commodities/${props.commodityId}/images/${file.id}.${file.ext}`
+    return `/api/v1/commodities/${props.commodityId}/images/${file.id}.${file.ext}`
   } else if (props.fileType === 'manuals') {
-    return `/api/v1/uploads/commodities/${props.commodityId}/manuals/${file.id}.${file.ext}`
+    return `/api/v1/commodities/${props.commodityId}/manuals/${file.id}.${file.ext}`
   } else if (props.fileType === 'invoices') {
-    return `/api/v1/uploads/commodities/${props.commodityId}/invoices/${file.id}.${file.ext}`
+    return `/api/v1/commodities/${props.commodityId}/invoices/${file.id}.${file.ext}`
   }
   return ''
 }

@@ -232,7 +232,7 @@ const loadFiles = async () => {
   loadingImages.value = true
   try {
     const response = await commodityService.getImages(commodity.value.id)
-    images.value = response.data || []
+    images.value = response.data?.data || []
   } catch (err: any) {
     console.error('Failed to load images:', err)
   } finally {
@@ -243,7 +243,7 @@ const loadFiles = async () => {
   loadingManuals.value = true
   try {
     const response = await commodityService.getManuals(commodity.value.id)
-    manuals.value = response.data || []
+    manuals.value = response.data?.data || []
   } catch (err: any) {
     console.error('Failed to load manuals:', err)
   } finally {
@@ -254,7 +254,7 @@ const loadFiles = async () => {
   loadingInvoices.value = true
   try {
     const response = await commodityService.getInvoices(commodity.value.id)
-    invoices.value = response.data || []
+    invoices.value = response.data?.data || []
   } catch (err: any) {
     console.error('Failed to load invoices:', err)
   } finally {
@@ -271,7 +271,7 @@ const uploadImages = async (files: File[]) => {
     // Reload images after upload
     loadingImages.value = true
     const response = await commodityService.getImages(commodity.value.id)
-    images.value = response.data || []
+    images.value = response.data?.data || []
     loadingImages.value = false
   } catch (err: any) {
     error.value = 'Failed to upload images: ' + (err.message || 'Unknown error')
@@ -287,7 +287,7 @@ const uploadManuals = async (files: File[]) => {
     // Reload manuals after upload
     loadingManuals.value = true
     const response = await commodityService.getManuals(commodity.value.id)
-    manuals.value = response.data || []
+    manuals.value = response.data?.data || []
     loadingManuals.value = false
   } catch (err: any) {
     error.value = 'Failed to upload manuals: ' + (err.message || 'Unknown error')
@@ -303,7 +303,7 @@ const uploadInvoices = async (files: File[]) => {
     // Reload invoices after upload
     loadingInvoices.value = true
     const response = await commodityService.getInvoices(commodity.value.id)
-    invoices.value = response.data || []
+    invoices.value = response.data?.data || []
     loadingInvoices.value = false
   } catch (err: any) {
     error.value = 'Failed to upload invoices: ' + (err.message || 'Unknown error')
