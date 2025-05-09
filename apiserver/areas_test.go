@@ -126,7 +126,7 @@ func TestAreaCreate(t *testing.T) {
 func TestAreaDelete(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params := newParamsAreaRegistryOnly()
 	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List())
 	area := expectedAreas[0]
 
@@ -141,6 +141,30 @@ func TestAreaDelete(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+
+	cnt, err := params.RegistrySet.AreaRegistry.Count()
+	c.Assert(err, qt.IsNil)
+	c.Assert(cnt, qt.Equals, expectedCount)
+}
+
+func TestAreaDelete_AreaHasCommodities(t *testing.T) {
+	c := qt.New(t)
+
+	params := newParams()
+	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List())
+	area := expectedAreas[0]
+
+	req, err := http.NewRequest("DELETE", "/api/v1/areas/"+area.ID, nil)
+	c.Assert(err, qt.IsNil)
+
+	rr := httptest.NewRecorder()
+
+	expectedCount := must.Must(params.RegistrySet.AreaRegistry.Count())
+
+	handler := apiserver.APIServer(params)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 
 	cnt, err := params.RegistrySet.AreaRegistry.Count()
 	c.Assert(err, qt.IsNil)

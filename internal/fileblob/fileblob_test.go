@@ -372,42 +372,42 @@ func TestOpenBucketFromURL(t *testing.T) {
 		Want        string
 	}{
 		// Bucket doesn't exist -> error at construction time.
-		{"afile:///bucket-not-found", "", true, false, ""},
+		{"file:///bucket-not-found", "", true, false, ""},
 		// File doesn't exist -> error at read time.
-		{"afile://" + dirpath, "filenotfound.txt", false, true, ""},
+		{"file://" + dirpath, "filenotfound.txt", false, true, ""},
 		// Relative path using host="."; bucket is created but error at read time.
-		{"afile://./../..", "filenotfound.txt", false, true, ""},
+		{"file://./../..", "filenotfound.txt", false, true, ""},
 		// OK.
-		{"afile://" + dirpath, "myfile.txt", false, false, "hello world"},
+		{"file://" + dirpath, "myfile.txt", false, false, "hello world"},
 		// OK, host is ignored.
-		{"afile://localhost" + dirpath, "myfile.txt", false, false, "hello world"},
+		{"file://localhost" + dirpath, "myfile.txt", false, false, "hello world"},
 		// OK, with prefix.
-		{"afile://" + dirpath + "?prefix=" + subdir + "/", "myfileinsubdir.txt", false, false, "hello world in subdir"},
+		{"file://" + dirpath + "?prefix=" + subdir + "/", "myfileinsubdir.txt", false, false, "hello world in subdir"},
 		// Subdir does not exist.
-		{"afile://" + dirpath + "subdir", "", true, false, ""},
+		{"file://" + dirpath + "subdir", "", true, false, ""},
 		// Subdir does not exist, but create_dir creates it. Error is at file read time.
-		{"afile://" + dirpath + "subdir2?create_dir=true", "filenotfound.txt", false, true, ""},
+		{"file://" + dirpath + "subdir2?create_dir=true", "filenotfound.txt", false, true, ""},
 		// Invalid query parameter.
-		{"afile://" + dirpath + "?param=value", "myfile.txt", true, false, ""},
+		{"file://" + dirpath + "?param=value", "myfile.txt", true, false, ""},
 		// Unrecognized value for parameter "metadata".
-		{"afile://" + dirpath + "?metadata=nosuchstrategy", "myfile.txt", true, false, ""},
+		{"file://" + dirpath + "?metadata=nosuchstrategy", "myfile.txt", true, false, ""},
 		// OK, with params.
 		{
-			fmt.Sprintf("afile://%s?base_url=/show&secret_key_path=%s", dirpath, secretKeyPath),
+			fmt.Sprintf("file://%s?base_url=/show&secret_key_path=%s", dirpath, secretKeyPath),
 			"myfile.txt", false, false, "hello world",
 		},
 		// Bad secret key filename.
 		{
-			fmt.Sprintf("afile://%s?base_url=/show&secret_key_path=%s", dirpath, "bad"),
+			fmt.Sprintf("file://%s?base_url=/show&secret_key_path=%s", dirpath, "bad"),
 			"myfile.txt", true, false, "",
 		},
 		// Missing base_url.
 		{
-			fmt.Sprintf("afile://%s?secret_key_path=%s", dirpath, secretKeyPath),
+			fmt.Sprintf("file://%s?secret_key_path=%s", dirpath, secretKeyPath),
 			"myfile.txt", true, false, "",
 		},
 		// Missing secret_key_path.
-		{"afile://" + dirpath + "?base_url=/show", "myfile.txt", true, false, ""},
+		{"file://" + dirpath + "?base_url=/show", "myfile.txt", true, false, ""},
 	}
 
 	ctx := context.Background()
@@ -490,9 +490,9 @@ func TestSkipMetadata(t *testing.T) {
 		URL         string
 		wantSidecar bool
 	}{
-		{"afile://" + dirpath + "?metadata=skip", false},
-		{"afile://" + dirpath, true},                // Implicitly sets the default strategy…
-		{"afile://" + dirpath + "?metadata=", true}, // … and explicitly.
+		{"file://" + dirpath + "?metadata=skip", false},
+		{"file://" + dirpath, true},                // Implicitly sets the default strategy…
+		{"file://" + dirpath + "?metadata=", true}, // … and explicitly.
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

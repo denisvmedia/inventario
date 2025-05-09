@@ -9,7 +9,6 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
-	_ "gocloud.dev/blob/fileblob"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
@@ -18,7 +17,7 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-const uploadLocation = "afile://uploads?memfs=1&create_dir=1"
+const uploadLocation = "file://uploads?memfs=1&create_dir=1"
 
 func newLocationRegistry() registry.LocationRegistry {
 	var locationsRegistry = memory.NewLocationRegistry()
@@ -213,6 +212,15 @@ func newParams() apiserver.Params {
 	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
+	params.UploadLocation = uploadLocation
+	return params
+}
+
+func newParamsAreaRegistryOnly() apiserver.Params {
+	var params apiserver.Params
+	params.RegistrySet = &registry.Set{}
+	params.RegistrySet.LocationRegistry = newLocationRegistry()
+	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
 	params.UploadLocation = uploadLocation
 	return params
 }
