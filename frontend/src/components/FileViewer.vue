@@ -43,7 +43,7 @@
         <div class="modal-body">
           <!-- Image viewer -->
           <template v-if="isImageFile(currentFile)">
-            <button v-if="files.length > 1" class="nav-button prev" @click="prevFile">&lt;</button>
+            <button v-if="files.length > 1" class="nav-button prev" @click="prevFile" title="Previous file">&lt;</button>
             <div class="image-container">
               <img
                 :src="currentFileUrl"
@@ -59,12 +59,12 @@
                 @mouseleave="endPan"
               />
             </div>
-            <button v-if="files.length > 1" class="nav-button next" @click="nextFile">&gt;</button>
+            <button v-if="files.length > 1" class="nav-button next" @click="nextFile" title="Next file">&gt;</button>
           </template>
 
           <!-- PDF viewer -->
           <template v-else-if="isPdfFile(currentFile)">
-            <button v-if="files.length > 1" class="nav-button prev" @click="prevFile">&lt;</button>
+            <button v-if="files.length > 1" class="nav-button prev" @click="prevFile" title="Previous file">&lt;</button>
             <div class="pdf-container">
               <template v-if="!pdfViewerError">
                 <PDFViewerCanvas
@@ -83,7 +83,7 @@
                 </button>
               </div>
             </div>
-            <button v-if="files.length > 1" class="nav-button next" @click="nextFile">&gt;</button>
+            <button v-if="files.length > 1" class="nav-button next" @click="nextFile" title="Next file">&gt;</button>
           </template>
 
           <!-- Fallback for other file types -->
@@ -691,6 +691,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative; /* Ensure proper positioning for navigation buttons */
 }
 
 .modal-header {
@@ -725,13 +726,14 @@ onBeforeUnmount(() => {
 
 .modal-body {
   display: flex;
-  align-items: center;
+  /*align-items: center;*/
   justify-content: center;
   padding: 1rem;
   flex: 1;
   overflow: hidden;
   position: relative;
   background-color: #f8f9fa;
+  min-height: 300px; /* Ensure minimum height for content */
 }
 
 .image-container {
@@ -761,10 +763,11 @@ onBeforeUnmount(() => {
 
 .pdf-container {
   width: 100%;
-  height: 100%;
+  /*height: 100%;*/
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative; /* Ensure proper positioning */
 }
 
 .pdf-viewer {
@@ -835,6 +838,7 @@ onBeforeUnmount(() => {
   top: 50%;
   transform: translateY(-50%);
   background-color: rgba(255, 255, 255, 0.5);
+  color: #333;
   border: none;
   border-radius: 50%;
   width: 40px;
@@ -846,6 +850,15 @@ onBeforeUnmount(() => {
   cursor: pointer;
   z-index: 10;
   transition: background-color 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 768px) {
+  .nav-button {
+    width: 30px;
+    height: 30px;
+    font-size: 1.2rem;
+  }
 }
 
 .nav-button:hover {

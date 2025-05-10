@@ -12,11 +12,11 @@
     </div>
     <div v-else class="pdf-view">
       <div class="pdf-controls">
-        <div class="pdf-navigation">
+        <div class="pdf-navigation" v-if="!viewAllPages">
           <button
             class="btn btn-sm"
             @click="prevPage"
-            :disabled="currentPage <= 1 || viewAllPages"
+            :disabled="currentPage <= 1"
             title="Previous Page"
           >
             <i class="fas fa-chevron-left"></i>
@@ -25,7 +25,7 @@
           <button
             class="btn btn-sm"
             @click="nextPage"
-            :disabled="currentPage >= numPages || viewAllPages"
+            :disabled="currentPage >= numPages"
             title="Next Page"
           >
             <i class="fas fa-chevron-right"></i>
@@ -63,16 +63,6 @@
         </button>
       </div>
       <div class="pdf-container" ref="pdfContainer">
-        <!-- Navigation arrows -->
-        <button
-          v-if="!viewAllPages && numPages > 1"
-          class="nav-button prev"
-          @click="prevPage"
-          :disabled="currentPage <= 1"
-        >
-          <i class="fas fa-chevron-left"></i>
-        </button>
-
         <div v-if="viewAllPages" class="pdf-all-pages">
           <div v-for="n in numPages" :key="n" class="pdf-page-container">
             <img v-if="pageImages[n]" :src="pageImages[n]" class="pdf-page" />
@@ -89,15 +79,6 @@
             </div>
           </div>
         </div>
-
-        <button
-          v-if="!viewAllPages && numPages > 1"
-          class="nav-button next"
-          @click="nextPage"
-          :disabled="currentPage >= numPages"
-        >
-          <i class="fas fa-chevron-right"></i>
-        </button>
       </div>
     </div>
   </div>
@@ -535,21 +516,33 @@ onBeforeUnmount(() => {
   background-color: #e9ecef;
   border-bottom: 1px solid #dee2e6;
   gap: 0.5rem;
+  overflow-x: auto; /* Allow horizontal scrolling if needed */
+  min-height: 60px; /* Ensure minimum height for controls */
 }
 
 .pdf-navigation, .pdf-zoom, .pdf-view-mode {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0; /* Prevent controls from shrinking */
 }
 
 @media (max-width: 768px) {
   .pdf-controls {
-    justify-content: center;
+    justify-content: flex-start;
+    padding: 0.75rem 0.5rem;
   }
 
   .pdf-navigation, .pdf-zoom, .pdf-view-mode {
     margin: 0.25rem;
+  }
+
+  .page-info, .zoom-level {
+    min-width: 50px;
+  }
+
+  .btn-sm {
+    padding: 0.2rem 0.4rem;
   }
 }
 
