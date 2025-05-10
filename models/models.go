@@ -14,9 +14,10 @@ var (
 )
 
 type File struct {
-	Path     string `json:"path"`
-	Ext      string `json:"ext"`
-	MIMEType string `json:"mime_type"`
+	Path         string `json:"path"`
+	OriginalPath string `json:"original_path"`
+	Ext          string `json:"ext"`
+	MIMEType     string `json:"mime_type"`
 }
 
 func (i *File) Validate() error {
@@ -24,6 +25,7 @@ func (i *File) Validate() error {
 
 	fields = append(fields,
 		validation.Field(&i.Path, validation.Required),
+		validation.Field(&i.OriginalPath, validation.Required),
 		validation.Field(&i.Ext, validation.Required),
 		validation.Field(&i.MIMEType, validation.Required),
 	)

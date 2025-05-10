@@ -22,9 +22,10 @@ func TestImageRegistry_Create(t *testing.T) {
 	image := models.Image{
 		CommodityID: createdCommodity.GetID(),
 		File: &models.File{
-			Path:     "path",
-			Ext:      ".ext",
-			MIMEType: "octet/stream",
+			Path:         "path.ext",
+			OriginalPath: "path",
+			Ext:          ".ext",
+			MIMEType:     "octet/stream",
 		},
 	}
 
@@ -50,9 +51,10 @@ func TestImageRegistry_Delete(t *testing.T) {
 	image := models.Image{
 		CommodityID: createdCommodity.GetID(),
 		File: &models.File{
-			Path:     "path",
-			Ext:      ".ext",
-			MIMEType: "octet/stream",
+			Path:         "path.ext",
+			OriginalPath: "path",
+			Ext:          ".ext",
+			MIMEType:     "octet/stream",
 		},
 	}
 
@@ -94,9 +96,10 @@ func TestImageRegistry_Create_Validation(t *testing.T) {
 
 	image = models.Image{
 		File: &models.File{
-			Path:     "test",
-			Ext:      ".png",
-			MIMEType: "image/png",
+			Path:         "test.png",
+			OriginalPath: "test",
+			Ext:          ".png",
+			MIMEType:     "image/png",
 		},
 		CommodityID: "invalid",
 	}
@@ -117,9 +120,10 @@ func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
 	image := models.Image{
 		CommodityID: "invalid",
 		File: &models.File{
-			Path:     "path",
-			Ext:      ".ext",
-			MIMEType: "octet/stream",
+			Path:         "path.ext",
+			OriginalPath: "path",
+			Ext:          ".ext",
+			MIMEType:     "octet/stream",
 		},
 	}
 
