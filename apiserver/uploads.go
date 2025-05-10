@@ -215,13 +215,17 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 	if err != nil {
 		return "", errkit.Wrap(err, "failed to open bucket") // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
 	}
-	defer b.Close()
+	defer func() {
+		err = errors.Join(err, b.Close())
+	}()
 
 	fw, err := b.NewWriter(ctx, filename, nil)
 	if err != nil {
 		return "", errkit.Wrap(err, "failed to create a new writer")
 	}
-	defer fw.Close()
+	defer func() {
+		err = errors.Join(err, fw.Close())
+	}()
 
 	wrappedSrc := mimekit.NewMIMEReader(src, allowedContentTypes)
 

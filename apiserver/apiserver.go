@@ -13,12 +13,13 @@ import (
 	swagger "github.com/swaggo/http-swagger"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
-	_ "gocloud.dev/blob/fileblob"  // register fileblob driver
-	_ "gocloud.dev/blob/gcsblob"   // register gcsblob driver
-	_ "gocloud.dev/blob/memblob"   // register memblob driver
-	_ "gocloud.dev/blob/s3blob"    // register s3blob driver
+	// _ "gocloud.dev/blob/fileblob"  // register fileblob driver
+	_ "gocloud.dev/blob/gcsblob" // register gcsblob driver
+	_ "gocloud.dev/blob/memblob" // register memblob driver
+	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
+	_ "github.com/denisvmedia/inventario/internal/fileblob"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -114,6 +115,7 @@ func APIServer(params Params) http.Handler {
 		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
 		r.Route("/uploads", Uploads(params))
+		r.Route("/seed", Seed(params.RegistrySet))
 	})
 
 	return r
