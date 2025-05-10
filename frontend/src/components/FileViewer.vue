@@ -64,6 +64,7 @@
 
           <!-- PDF viewer -->
           <template v-else-if="isPdfFile(currentFile)">
+            <button v-if="files.length > 1" class="nav-button prev" @click="prevFile">&lt;</button>
             <div class="pdf-container">
               <template v-if="!pdfViewerError">
                 <PDFViewerCanvas
@@ -82,6 +83,7 @@
                 </button>
               </div>
             </div>
+            <button v-if="files.length > 1" class="nav-button next" @click="nextFile">&gt;</button>
           </template>
 
           <!-- Fallback for other file types -->

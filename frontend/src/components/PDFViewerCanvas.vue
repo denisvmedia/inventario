@@ -16,7 +16,7 @@
           <button
             class="btn btn-sm"
             @click="prevPage"
-            :disabled="currentPage <= 1"
+            :disabled="currentPage <= 1 || viewAllPages"
             title="Previous Page"
           >
             <i class="fas fa-chevron-left"></i>
@@ -25,10 +25,28 @@
           <button
             class="btn btn-sm"
             @click="nextPage"
-            :disabled="currentPage >= numPages"
+            :disabled="currentPage >= numPages || viewAllPages"
             title="Next Page"
           >
             <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+        <div class="pdf-view-mode">
+          <button
+            class="btn btn-sm"
+            :class="{ 'btn-active': !viewAllPages }"
+            @click="setViewMode(false)"
+            title="Page by Page"
+          >
+            <i class="fas fa-file"></i>
+          </button>
+          <button
+            class="btn btn-sm"
+            :class="{ 'btn-active': viewAllPages }"
+            @click="setViewMode(true)"
+            title="View All Pages"
+          >
+            <i class="fas fa-copy"></i>
           </button>
         </div>
         <div class="pdf-zoom">
@@ -45,12 +63,41 @@
         </button>
       </div>
       <div class="pdf-container" ref="pdfContainer">
-        <div v-for="n in renderedPages" :key="n" class="pdf-page-container">
-          <img v-if="pageImages[n]" :src="pageImages[n]" class="pdf-page" />
-          <div v-else class="pdf-page-loading">
-            <div class="spinner small"></div>
+        <!-- Navigation arrows -->
+        <button
+          v-if="!viewAllPages && numPages > 1"
+          class="nav-button prev"
+          @click="prevPage"
+          :disabled="currentPage <= 1"
+        >
+          <i class="fas fa-chevron-left"></i>
+        </button>
+
+        <div v-if="viewAllPages" class="pdf-all-pages">
+          <div v-for="n in numPages" :key="n" class="pdf-page-container">
+            <img v-if="pageImages[n]" :src="pageImages[n]" class="pdf-page" />
+            <div v-else class="pdf-page-loading">
+              <div class="spinner small"></div>
+            </div>
           </div>
         </div>
+        <div v-else class="pdf-single-page">
+          <div class="pdf-page-container">
+            <img v-if="pageImages[currentPage]" :src="pageImages[currentPage]" class="pdf-page" />
+            <div v-else class="pdf-page-loading">
+              <div class="spinner small"></div>
+            </div>
+          </div>
+        </div>
+
+        <button
+          v-if="!viewAllPages && numPages > 1"
+          class="nav-button next"
+          @click="nextPage"
+          :disabled="currentPage >= numPages"
+        >
+          <i class="fas fa-chevron-right"></i>
+        </button>
       </div>
     </div>
   </div>
@@ -78,9 +125,10 @@ const currentPage = ref(1)
 const numPages = ref(0)
 const scale = ref(1.5)
 const pageImages = ref({})
-const renderedPages = ref(0)
 const isRendering = ref(false)
 const isMounted = ref(false)
+const viewAllPages = ref(false)
+const pageRenderQueue = ref([])
 
 // Load the PDF document
 const loadPDF = async () => {
@@ -99,7 +147,7 @@ const loadPDF = async () => {
   pdfDoc.value = null
   numPages.value = 0
   pageImages.value = {}
-  renderedPages.value = 0
+  pageRenderQueue.value = []
 
   try {
     console.log('Loading PDF from URL:', props.url)
@@ -127,8 +175,12 @@ const loadPDF = async () => {
     numPages.value = pdf.numPages
 
     // Render the first page
-    renderedPages.value = 1
     await renderPage(currentPage.value)
+
+    // If viewing all pages, start rendering other pages
+    if (viewAllPages.value) {
+      loadAllPages()
+    }
 
     loading.value = false
     emit('loading', false)
@@ -142,13 +194,62 @@ const loadPDF = async () => {
   }
 }
 
+// Set view mode (single page or all pages)
+const setViewMode = async (allPages) => {
+  viewAllPages.value = allPages
+
+  if (allPages) {
+    // When switching to all pages view, start loading all pages
+    loadAllPages()
+  }
+}
+
+// Load all pages of the PDF
+const loadAllPages = async () => {
+  if (!pdfDoc.value || numPages.value === 0) return
+
+  // Create a queue of pages to render
+  const pagesToRender = []
+  for (let i = 1; i <= numPages.value; i++) {
+    if (!pageImages.value[i]) {
+      pagesToRender.push(i)
+    }
+  }
+
+  // Update the queue
+  pageRenderQueue.value = pagesToRender
+
+  // Start rendering pages if not already rendering
+  if (!isRendering.value) {
+    processRenderQueue()
+  }
+}
+
+// Process the render queue
+const processRenderQueue = async () => {
+  if (pageRenderQueue.value.length === 0 || isRendering.value) return
+
+  // Get the next page to render
+  const pageNum = pageRenderQueue.value.shift()
+
+  // Render the page
+  await renderPage(pageNum)
+
+  // Continue processing the queue
+  if (pageRenderQueue.value.length > 0) {
+    processRenderQueue()
+  }
+}
+
 // Render a specific page and convert it to an image
 const renderPage = async (pageNum) => {
   if (!pdfDoc.value) return
 
-  // If already rendering, don't start another render operation
+  // If already rendering, add to queue and return
   if (isRendering.value) {
-    console.log('Render operation already in progress, skipping')
+    if (!pageRenderQueue.value.includes(pageNum)) {
+      pageRenderQueue.value.push(pageNum)
+    }
     return
   }
 
@@ -182,17 +283,28 @@ const renderPage = async (pageNum) => {
     pageImages.value[pageNum] = imageUrl
 
     isRendering.value = false
+
+    // Continue processing the queue
+    if (pageRenderQueue.value.length > 0) {
+      processRenderQueue()
+    }
   } catch (err) {
     console.error('Error rendering page:', err)
     error.value = 'Failed to render PDF page. Please try downloading the file instead.'
     isRendering.value = false
     // Emit error to parent component
     emit('error', err)
+
+    // Continue processing the queue despite error
+    if (pageRenderQueue.value.length > 0) {
+      processRenderQueue()
+    }
   }
 }
 
 // Navigation functions
 const prevPage = async () => {
+  if (viewAllPages.value) return // Don't navigate in all pages view
   if (isRendering.value) return // Don't navigate if already rendering
 
   if (currentPage.value > 1) {
@@ -206,19 +318,14 @@ const prevPage = async () => {
 }
 
 const nextPage = async () => {
+  if (viewAllPages.value) return // Don't navigate in all pages view
   if (isRendering.value) return // Don't navigate if already rendering
 
   if (currentPage.value < numPages.value) {
     currentPage.value++
 
-    // If we're showing a new page that hasn't been rendered yet
+    // If this page hasn't been rendered yet, render it
     if (!pageImages.value[currentPage.value]) {
-      // Update rendered pages count if needed
-      if (currentPage.value > renderedPages.value) {
-        renderedPages.value = currentPage.value
-      }
-
-      // Render the page
       await renderPage(currentPage.value)
     }
   }
@@ -233,7 +340,15 @@ const zoomIn = async () => {
 
   // Clear all rendered pages and re-render at new scale
   pageImages.value = {}
+  pageRenderQueue.value = []
+
+  // Render current page first
   await renderPage(currentPage.value)
+
+  // If viewing all pages, start rendering other pages
+  if (viewAllPages.value) {
+    loadAllPages()
+  }
 }
 
 const zoomOut = async () => {
@@ -244,7 +359,15 @@ const zoomOut = async () => {
 
   // Clear all rendered pages and re-render at new scale
   pageImages.value = {}
+  pageRenderQueue.value = []
+
+  // Render current page first
   await renderPage(currentPage.value)
+
+  // If viewing all pages, start rendering other pages
+  if (viewAllPages.value) {
+    loadAllPages()
+  }
 }
 
 // Download PDF function
@@ -268,7 +391,7 @@ watch(() => props.url, (newUrl, oldUrl) => {
     currentPage.value = 1
     scale.value = 1.5
     pageImages.value = {}
-    renderedPages.value = 0
+    pageRenderQueue.value = []
 
     // Only load if component is mounted
     if (isMounted.value) {
@@ -304,6 +427,25 @@ onMounted(() => {
   }, 200) // Increased delay for more reliable mounting
 })
 
+// Handle keyboard navigation
+const handleKeyDown = (event) => {
+  if (!isMounted.value || viewAllPages.value) return
+
+  switch (event.key) {
+    case 'ArrowLeft':
+      prevPage()
+      break
+    case 'ArrowRight':
+      nextPage()
+      break
+  }
+}
+
+// Add keyboard event listener
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
 // Clean up when component is unmounted
 onBeforeUnmount(() => {
   // Mark component as unmounted
@@ -315,7 +457,10 @@ onBeforeUnmount(() => {
   // Clear references
   pdfDoc.value = null
   pageImages.value = {}
-  renderedPages.value = 0
+  pageRenderQueue.value = []
+
+  // Remove keyboard event listener
+  window.removeEventListener('keydown', handleKeyDown)
 })
 </script>
 
@@ -382,18 +527,30 @@ onBeforeUnmount(() => {
 
 .pdf-controls {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   width: 100%;
   padding: 0.75rem;
   background-color: #e9ecef;
   border-bottom: 1px solid #dee2e6;
+  gap: 0.5rem;
 }
 
-.pdf-navigation, .pdf-zoom {
+.pdf-navigation, .pdf-zoom, .pdf-view-mode {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .pdf-controls {
+    justify-content: center;
+  }
+
+  .pdf-navigation, .pdf-zoom, .pdf-view-mode {
+    margin: 0.25rem;
+  }
 }
 
 .page-info, .zoom-level {
@@ -404,6 +561,7 @@ onBeforeUnmount(() => {
 }
 
 .pdf-container {
+  position: relative;
   overflow: auto;
   max-height: 600px;
   margin: 1rem 0;
@@ -416,10 +574,58 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
+.nav-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: rgba(255, 255, 255, 0.7);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: background-color 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.nav-button:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.nav-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prev {
+  left: 10px;
+}
+
+.next {
+  right: 10px;
+}
+
+.pdf-all-pages {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pdf-single-page {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
 .pdf-page-container {
   margin-bottom: 1rem;
   background-color: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   position: relative;
 }
 
@@ -427,6 +633,7 @@ onBeforeUnmount(() => {
   display: block;
   max-width: 100%;
   height: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .pdf-page-loading {
@@ -470,5 +677,10 @@ onBeforeUnmount(() => {
 
 .btn-primary:hover {
   background-color: #45a049;
+}
+
+.btn-active {
+  background-color: #4CAF50;
+  color: white;
 }
 </style>
