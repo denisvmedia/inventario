@@ -61,5 +61,3 @@ func seedCommand(_ *cobra.Command, _ []string) error {
 	log.Info("Database seeded successfully")
 	return nil
 }
-
-

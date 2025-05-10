@@ -8,8 +8,8 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-// SeedData seeds the database with example data
-func SeedData(registrySet *registry.Set) error {
+// SeedData seeds the database with example data.
+func SeedData(registrySet *registry.Set) error { //nolint:funlen // it's a seed function
 	// Create locations
 	home, err := registrySet.LocationRegistry.Create(models.Location{
 		Name:    "Home",
