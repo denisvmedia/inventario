@@ -10,7 +10,10 @@
   },
   "dependencies": {
     "axios": "^1.6.2",
+    "pdfjs-dist": "^4.0.379",
     "pinia": "^2.1.7",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.3.4",
     "vue": "^3.3.9",
     "vue-router": "^4.2.5"
   },
