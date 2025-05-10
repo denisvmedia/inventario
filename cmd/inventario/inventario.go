@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/denisvmedia/inventario/cmd/inventario/run"
+	"github.com/denisvmedia/inventario/cmd/inventario/seed"
 )
 
 const (
@@ -31,6 +32,7 @@ func Execute(args ...string) {
 
 	rootCmd.SetArgs(args)
 	rootCmd.AddCommand(run.NewRunCommand())
+	rootCmd.AddCommand(seed.NewSeedCommand())
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1) //revive:disable-line:deep-exit

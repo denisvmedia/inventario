@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/go-extras/cobraflags"
@@ -30,6 +31,14 @@ const (
 	dbDSNFlag          = "db-dsn"
 )
 
+func getFileURL(path string) string {
+	absPath := filepath.ToSlash(filepath.Join(must.Must(os.Getwd()), path))
+	if strings.Contains(absPath, ":") {
+		absPath = "/" + absPath // Ensure the drive letter is prefixed with a slash
+	}
+	return "file://" + absPath
+}
+
 var runFlags = map[string]cobraflags.Flag{
 	addrFlag: &cobraflags.StringFlag{
 		Name:  addrFlag,
@@ -38,7 +47,7 @@ var runFlags = map[string]cobraflags.Flag{
 	},
 	uploadLocationFlag: &cobraflags.StringFlag{
 		Name:  uploadLocationFlag,
-		Value: "file://" + filepath.Join(filepath.ToSlash(must.Must(os.Getwd())), "uploads"),
+		Value: getFileURL("uploads"),
 		Usage: "Location for the uploaded files",
 	},
 	dbDSNFlag: &cobraflags.StringFlag{

@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/render"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -45,6 +46,7 @@ func NewInternalServerError(err error) jsonapi.Error {
 }
 
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
+	log.WithError(err).Error("internal server error")
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
 }
 
@@ -54,9 +56,12 @@ func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error)
 
 func toJSONAPIError(err error) jsonapi.Error {
 	switch {
+	case errors.Is(err, registry.ErrCannotDelete):
+		return NewUnprocessableEntityError(err)
 	case errors.Is(err, registry.ErrNotFound):
 		return NewNotFoundError(err)
 	default:
+		log.WithError(err).Error("internal server error")
 		return NewInternalServerError(err)
 	}
 }

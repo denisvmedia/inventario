@@ -24,7 +24,8 @@ import (
 
 	"github.com/spf13/afero"
 	"gocloud.dev/blob"
-	"gocloud.dev/blob/fileblob"
+
+	"github.com/denisvmedia/inventario/internal/fileblob"
 )
 
 func ExampleOpenBucket() {
@@ -64,7 +65,7 @@ func Example_openBucketFromURL() {
 
 	// blob.OpenBucket creates a *blob.Bucket from a URL.
 	ctx := context.Background()
-	b, err := blob.OpenBucket(ctx, "afile://"+dirpath)
+	b, err := blob.OpenBucket(ctx, "file://"+dirpath)
 	if err != nil {
 		log.Fatal(err)
 	}
