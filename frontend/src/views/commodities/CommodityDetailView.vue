@@ -109,16 +109,17 @@
           <FileUploader
             v-if="showImageUploader"
             :multiple="true"
-            accept="image/*"
+            accept=".gif,.jpg,.jpeg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
             uploadPrompt="Drag and drop images here"
             @upload="uploadImages"
           />
 
-          <FileList
-            :files="images"
-            fileType="images"
-            :commodityId="commodity.id"
-            :loading="loadingImages"
+          <div v-if="loadingImages" class="loading">Loading images...</div>
+          <ImageViewer
+            v-else
+            :images="images"
+            :entityId="commodity.id"
+            entityType="commodities"
             @delete="deleteImage"
           />
         </div>
@@ -135,16 +136,18 @@
           <FileUploader
             v-if="showManualUploader"
             :multiple="true"
-            accept=".pdf,.doc,.docx,.txt"
+            accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
             uploadPrompt="Drag and drop manuals here"
             @upload="uploadManuals"
           />
 
-          <FileList
+          <div v-if="loadingManuals" class="loading">Loading manuals...</div>
+          <FileViewer
+            v-else
             :files="manuals"
             fileType="manuals"
-            :commodityId="commodity.id"
-            :loading="loadingManuals"
+            :entityId="commodity.id"
+            entityType="commodities"
             @delete="deleteManual"
           />
         </div>
@@ -161,16 +164,18 @@
           <FileUploader
             v-if="showInvoiceUploader"
             :multiple="true"
-            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+            accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
             uploadPrompt="Drag and drop invoices here"
             @upload="uploadInvoices"
           />
 
-          <FileList
+          <div v-if="loadingInvoices" class="loading">Loading invoices...</div>
+          <FileViewer
+            v-else
             :files="invoices"
             fileType="invoices"
-            :commodityId="commodity.id"
-            :loading="loadingInvoices"
+            :entityId="commodity.id"
+            entityType="commodities"
             @delete="deleteInvoice"
           />
         </div>
@@ -187,6 +192,8 @@ import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 import FileUploader from '@/components/FileUploader.vue'
 import FileList from '@/components/FileList.vue'
+import ImageViewer from '@/components/ImageViewer.vue'
+import FileViewer from '@/components/FileViewer.vue'
 
 const router = useRouter()
 const route = useRoute()
