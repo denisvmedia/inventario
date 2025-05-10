@@ -726,7 +726,6 @@ onBeforeUnmount(() => {
 
 .modal-body {
   display: flex;
-  /*align-items: center;*/
   justify-content: center;
   padding: 1rem;
   flex: 1;
@@ -763,7 +762,6 @@ onBeforeUnmount(() => {
 
 .pdf-container {
   width: 100%;
-  /*height: 100%;*/
   display: flex;
   justify-content: center;
   align-items: center;

@@ -12,11 +12,11 @@
     </div>
     <div v-else class="pdf-view">
       <div class="pdf-controls">
-        <div class="pdf-navigation" v-if="!viewAllPages">
+        <div class="pdf-navigation">
           <button
             class="btn btn-sm"
             @click="prevPage"
-            :disabled="currentPage <= 1"
+            :disabled="currentPage <= 1 || viewAllPages"
             title="Previous Page"
           >
             <i class="fas fa-chevron-left"></i>
@@ -25,7 +25,7 @@
           <button
             class="btn btn-sm"
             @click="nextPage"
-            :disabled="currentPage >= numPages"
+            :disabled="currentPage >= numPages || viewAllPages"
             title="Next Page"
           >
             <i class="fas fa-chevron-right"></i>
@@ -63,8 +63,8 @@
         </button>
       </div>
       <div class="pdf-container" ref="pdfContainer">
-        <div v-if="viewAllPages" class="pdf-all-pages">
-          <div v-for="n in numPages" :key="n" class="pdf-page-container">
+        <div v-if="viewAllPages" class="pdf-all-pages" ref="pdfAllPages">
+          <div v-for="n in numPages" :key="n" class="pdf-page-container" :data-page="n" ref="pageContainers">
             <img v-if="pageImages[n]" :src="pageImages[n]" class="pdf-page" />
             <div v-else class="pdf-page-loading">
               <div class="spinner small"></div>
@@ -110,6 +110,7 @@ const isRendering = ref(false)
 const isMounted = ref(false)
 const viewAllPages = ref(false)
 const pageRenderQueue = ref([])
+const pageObserver = ref(null) // Intersection observer for tracking visible pages
 
 // Load the PDF document
 const loadPDF = async () => {
@@ -175,6 +176,50 @@ const loadPDF = async () => {
   }
 }
 
+// Set up intersection observer to track visible pages
+const setupPageObserver = () => {
+  // Clean up existing observer if any
+  if (pageObserver.value) {
+    pageObserver.value.disconnect()
+    pageObserver.value = null
+  }
+
+  // Create a new observer
+  pageObserver.value = new IntersectionObserver((entries) => {
+    // Find the most visible page
+    let maxVisiblePage = null
+    let maxVisibility = 0
+
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const pageNum = parseInt(entry.target.dataset.page)
+        const visibleRatio = entry.intersectionRatio
+
+        if (visibleRatio > maxVisibility) {
+          maxVisibility = visibleRatio
+          maxVisiblePage = pageNum
+        }
+      }
+    })
+
+    // Update current page if we found a visible page
+    if (maxVisiblePage !== null && viewAllPages.value) {
+      currentPage.value = maxVisiblePage
+    }
+  }, {
+    root: pdfContainer.value,
+    threshold: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+  })
+
+  // Start observing all page containers
+  setTimeout(() => {
+    const containers = document.querySelectorAll('.pdf-page-container[data-page]')
+    containers.forEach(container => {
+      pageObserver.value.observe(container)
+    })
+  }, 100)
+}
+
 // Set view mode (single page or all pages)
 const setViewMode = async (allPages) => {
   viewAllPages.value = allPages
@@ -182,6 +227,17 @@ const setViewMode = async (allPages) => {
   if (allPages) {
     // When switching to all pages view, start loading all pages
     loadAllPages()
+
+    // Set up observer to track visible pages
+    setTimeout(() => {
+      setupPageObserver()
+    }, 200)
+  } else {
+    // Clean up observer when switching back to single page mode
+    if (pageObserver.value) {
+      pageObserver.value.disconnect()
+      pageObserver.value = null
+    }
   }
 }
 
@@ -203,6 +259,13 @@ const loadAllPages = async () => {
   // Start rendering pages if not already rendering
   if (!isRendering.value) {
     processRenderQueue()
+  }
+
+  // Set up the page observer after a short delay to ensure pages are in the DOM
+  if (viewAllPages.value) {
+    setTimeout(() => {
+      setupPageObserver()
+    }, 300)
   }
 }
 
@@ -434,6 +497,12 @@ onBeforeUnmount(() => {
 
   // Cancel any ongoing rendering
   isRendering.value = false
+
+  // Clean up intersection observer
+  if (pageObserver.value) {
+    pageObserver.value.disconnect()
+    pageObserver.value = null
+  }
 
   // Clear references
   pdfDoc.value = null
