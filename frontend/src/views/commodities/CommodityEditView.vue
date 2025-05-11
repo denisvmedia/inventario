@@ -1,14 +1,11 @@
 <template>
   <div class="commodity-edit">
-    <div class="header">
-      <h1>Edit Commodity</h1>
-      <button class="btn btn-secondary" @click="goBack">Go Back</button>
-    </div>
+    <h1>Edit Commodity</h1>
 
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!commodity" class="not-found">Commodity not found</div>
-    <div v-else class="form-container">
+    <div v-else>
       <form @submit.prevent="submitForm" class="form">
         <!-- Basic Information -->
         <div class="form-section">
@@ -545,7 +542,13 @@ const submitForm = async () => {
 }
 
 const goBack = () => {
-  router.push(`/commodities/${id}`)
+  // Go back to the previous page in history if available
+  if (window.history.length > 1) {
+    router.go(-1)
+  } else {
+    // Fallback to commodity details page
+    router.push(`/commodities/${id}`)
+  }
 }
 
 // Helper methods for array fields
@@ -584,15 +587,12 @@ const removeUrl = (index: number) => {
 
 <style scoped>
 .commodity-edit {
-  max-width: 1200px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 1rem;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+h1 {
   margin-bottom: 2rem;
 }
 
@@ -608,10 +608,10 @@ const removeUrl = (index: number) => {
   color: #dc3545;
 }
 
-.form-container {
+.form {
   background: white;
-  border-radius: 8px;
   padding: 2rem;
+  border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 

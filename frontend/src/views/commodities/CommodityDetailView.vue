@@ -24,7 +24,10 @@
           </div>
           <div class="info-row">
             <span class="label">Type:</span>
-            <span>{{ getTypeName(commodity.attributes.type) }}</span>
+            <span class="type-with-icon">
+              <i :class="getTypeIcon(commodity.attributes.type)"></i>
+              {{ getTypeName(commodity.attributes.type) }}
+            </span>
           </div>
           <div class="info-row">
             <span class="label">Count:</span>
@@ -54,7 +57,11 @@
           </div>
           <div class="info-row">
             <span class="label">Current Price:</span>
-            <span>{{ commodity.attributes.current_price }}</span>
+            <span>{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
+          </div>
+          <div class="info-row" v-if="(commodity.attributes.count || 1) > 1">
+            <span class="label">Price Per Unit:</span>
+            <span>{{ calculatePricePerUnit() }} {{ commodity.attributes.original_price_currency }}</span>
           </div>
         </div>
 
@@ -473,6 +480,25 @@ const deleteCommodity = async () => {
   }
 }
 
+const getTypeIcon = (typeId: string): string => {
+  switch(typeId) {
+    case 'white_goods':
+      return 'fas fa-blender'
+    case 'electronics':
+      return 'fas fa-laptop'
+    case 'equipment':
+      return 'fas fa-tools'
+    case 'furniture':
+      return 'fas fa-couch'
+    case 'clothes':
+      return 'fas fa-tshirt'
+    case 'other':
+      return 'fas fa-box'
+    default:
+      return 'fas fa-box'
+  }
+}
+
 const getTypeName = (typeId: string): string => {
   const type = COMMODITY_TYPES.find(t => t.id === typeId)
   return type ? type.name : typeId
@@ -486,6 +512,18 @@ const getStatusName = (statusId: string): string => {
 const formatDate = (date: string): string => {
   const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' }
   return new Date(date).toLocaleDateString('en-US', options)
+}
+
+const calculatePricePerUnit = (): string => {
+  if (!commodity.value) return '0.00'
+
+  const price = parseFloat(commodity.value.attributes.current_price) || 0
+  const count = commodity.value.attributes.count || 1
+  if (count <= 1) return price.toFixed(2)
+
+  // Calculate price per unit and round to 2 decimal places
+  const pricePerUnit = price / count
+  return pricePerUnit.toFixed(2)
 }
 </script>
 
@@ -580,6 +618,16 @@ const formatDate = (date: string): string => {
 .status.written_off {
   background-color: #e2e3e5;
   color: #383d41;
+}
+
+.type-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.type-with-icon i {
+  font-size: 1.2rem;
 }
 
 .tags {

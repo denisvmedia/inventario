@@ -6,23 +6,48 @@
     <div v-else>
       <div class="header">
         <div class="title-section">
-          <h1>{{ location.attributes.name }}</h1>
-          <p class="address">{{ location.attributes.address || 'No address provided' }}</p>
+          <h1>
+            <InlineEdit
+              v-model="location.attributes.name"
+              @save="updateLocationName"
+            >
+              <template #display>{{ location.attributes.name }}</template>
+            </InlineEdit>
+          </h1>
+          <p class="address">
+            <InlineEdit
+              v-model="location.attributes.address"
+              @save="updateLocationAddress"
+              placeholder="Add address"
+            >
+              <template #display>{{ location.attributes.address || 'No address provided' }}</template>
+            </InlineEdit>
+          </p>
         </div>
         <div class="actions">
-          <button class="btn btn-secondary" @click="editLocation">Edit</button>
           <button class="btn btn-danger" @click="confirmDelete">Delete</button>
         </div>
       </div>
 
 
 
-      <div class="areas-section" v-if="areas.length > 0">
+      <div class="areas-section">
         <div class="section-header">
           <h2>Areas</h2>
-          <router-link :to="`/areas/new?location=${location.id}`" class="btn btn-primary btn-sm">Add Area</router-link>
+          <button class="btn btn-primary btn-sm" @click="showAreaForm = !showAreaForm">
+            {{ showAreaForm ? 'Cancel' : 'Add Area' }}
+          </button>
         </div>
-        <div class="areas-grid">
+
+        <!-- Inline Area Creation Form -->
+        <AreaForm
+          v-if="showAreaForm"
+          :locationId="location.id"
+          @created="handleAreaCreated"
+          @cancel="showAreaForm = false"
+        />
+
+        <div v-if="areas.length > 0" class="areas-grid">
           <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
             <div class="area-content">
               <h3>{{ area.attributes.name }}</h3>
@@ -37,10 +62,9 @@
             </div>
           </div>
         </div>
-      </div>
-      <div v-else class="no-areas">
-        <p>No areas found for this location.</p>
-        <router-link :to="`/areas/new?location=${location.id}`" class="btn btn-primary">Add Area</router-link>
+        <div v-else class="no-areas">
+          <p>No areas found for this location. Use the button above to add your first area.</p>
+        </div>
       </div>
 
       <!-- Test API Results Section -->
@@ -65,6 +89,8 @@ import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
+import AreaForm from '@/components/AreaForm.vue'
+import InlineEdit from '@/components/InlineEdit.vue'
 
 
 const route = useRoute()
@@ -79,6 +105,9 @@ const areas = ref<any[]>([])
 // Test API variables
 const testResult = ref('')
 const testError = ref('')
+
+// State for inline forms
+const showAreaForm = ref(false)
 
 onMounted(async () => {
   const id = route.params.id as string
@@ -108,8 +137,48 @@ onMounted(async () => {
 
 
 
-const editLocation = () => {
-  router.push(`/locations/${location.value.id}/edit`)
+const updateLocationName = async (newName: string) => {
+  try {
+    const payload = {
+      data: {
+        id: location.value.id,
+        type: 'locations',
+        attributes: {
+          name: newName,
+          address: location.value.attributes.address || ''
+        }
+      }
+    }
+
+    await locationService.updateLocation(location.value.id, payload)
+    // Update was successful, the model is already updated via v-model
+  } catch (err: any) {
+    error.value = 'Failed to update location name: ' + (err.message || 'Unknown error')
+    // Revert the change in the UI
+    location.value.attributes.name = location.value.attributes.name
+  }
+}
+
+const updateLocationAddress = async (newAddress: string) => {
+  try {
+    const payload = {
+      data: {
+        id: location.value.id,
+        type: 'locations',
+        attributes: {
+          name: location.value.attributes.name,
+          address: newAddress
+        }
+      }
+    }
+
+    await locationService.updateLocation(location.value.id, payload)
+    // Update was successful, the model is already updated via v-model
+  } catch (err: any) {
+    error.value = 'Failed to update location address: ' + (err.message || 'Unknown error')
+    // Revert the change in the UI
+    location.value.attributes.address = location.value.attributes.address
+  }
 }
 
 const confirmDelete = () => {
@@ -149,6 +218,12 @@ const deleteArea = async (id: string) => {
   } catch (err: any) {
     error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
   }
+}
+
+// Handle area creation
+const handleAreaCreated = (newArea: any) => {
+  areas.value.push(newArea)
+  showAreaForm.value = false
 }
 </script>
 

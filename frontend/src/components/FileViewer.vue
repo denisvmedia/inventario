@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, defineProps, defineEmits, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import PDFViewerCanvas from './PDFViewerCanvas.vue'
 import PDFViewer from './PDFViewer.vue'
 import FileList from './FileList.vue'

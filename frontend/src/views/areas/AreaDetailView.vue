@@ -6,41 +6,53 @@
     <div v-else>
       <div class="header">
         <div class="title-section">
-          <h1>{{ area.attributes.name }}</h1>
+          <h1>
+            <InlineEdit
+              v-model="area.attributes.name"
+              @save="updateAreaName"
+            >
+              <template #display>{{ area.attributes.name }}</template>
+            </InlineEdit>
+          </h1>
           <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
         </div>
         <div class="actions">
-          <button class="btn btn-secondary" @click="editArea">Edit</button>
-          <button class="btn btn-danger" @click="confirmDelete">Delete</button>
+          <button class="btn btn-danger" @click="confirmDelete" title="Delete"><i class="fas fa-trash"></i></button>
         </div>
       </div>
 
       <div class="commodities-section" v-if="commodities.length > 0">
         <div class="section-header">
           <h2>Commodities</h2>
-          <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm">Add Commodity</router-link>
+          <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New</router-link>
         </div>
         <div class="commodities-grid">
           <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card">
             <div class="commodity-content" @click="viewCommodity(commodity.id)">
               <h3>{{ commodity.attributes.name }}</h3>
               <div class="commodity-meta">
-                <span class="type">{{ getTypeName(commodity.attributes.type) }}</span>
-                <span class="count">Count: {{ commodity.attributes.count || 1 }}</span>
+                <span class="type">
+                  <i :class="getTypeIcon(commodity.attributes.type)"></i>
+                  {{ getTypeName(commodity.attributes.type) }}
+                </span>
+                <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
               </div>
               <div class="commodity-price" v-if="commodity.attributes.current_price">
                 <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
+                <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
+                  {{ calculatePricePerUnit(commodity) }} {{ commodity.attributes.original_price_currency }} per unit
+                </span>
               </div>
               <div class="commodity-status" v-if="commodity.attributes.status">
                 <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
               </div>
             </div>
             <div class="commodity-actions">
-              <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)">
-                Edit
+              <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)" title="Edit">
+                <i class="fas fa-edit"></i>
               </button>
-              <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteCommodity(commodity.id)">
-                Delete
+              <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteCommodity(commodity.id)" title="Delete">
+                <i class="fas fa-trash"></i>
               </button>
             </div>
           </div>
@@ -62,6 +74,7 @@ import locationService from '@/services/locationService'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import InlineEdit from '@/components/InlineEdit.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -121,6 +134,25 @@ onMounted(async () => {
   }
 })
 
+const getTypeIcon = (typeId: string) => {
+  switch(typeId) {
+    case 'white_goods':
+      return 'fas fa-blender'
+    case 'electronics':
+      return 'fas fa-laptop'
+    case 'equipment':
+      return 'fas fa-tools'
+    case 'furniture':
+      return 'fas fa-couch'
+    case 'clothes':
+      return 'fas fa-tshirt'
+    case 'other':
+      return 'fas fa-box'
+    default:
+      return 'fas fa-box'
+  }
+}
+
 const getTypeName = (typeId: string) => {
   const type = COMMODITY_TYPES.find(t => t.id === typeId)
   return type ? type.name : typeId
@@ -131,8 +163,37 @@ const getStatusName = (statusId: string) => {
   return status ? status.name : statusId
 }
 
-const editArea = () => {
-  router.push(`/areas/${area.value.id}/edit`)
+// Calculate price per unit
+const calculatePricePerUnit = (commodity: any) => {
+  const price = parseFloat(commodity.attributes.current_price) || 0
+  const count = commodity.attributes.count || 1
+  if (count <= 1) return price
+
+  // Calculate price per unit and round to 2 decimal places
+  const pricePerUnit = price / count
+  return pricePerUnit.toFixed(2)
+}
+
+const updateAreaName = async (newName: string) => {
+  try {
+    const payload = {
+      data: {
+        id: area.value.id,
+        type: 'areas',
+        attributes: {
+          name: newName,
+          location_id: area.value.attributes.location_id
+        }
+      }
+    }
+
+    await areaService.updateArea(area.value.id, payload)
+    // Update was successful, the model is already updated via v-model
+  } catch (err: any) {
+    error.value = 'Failed to update area name: ' + (err.message || 'Unknown error')
+    // Revert the change in the UI
+    area.value.attributes.name = area.value.attributes.name
+  }
 }
 
 const confirmDelete = () => {
@@ -382,4 +443,24 @@ pre {
   padding: 0.5rem;
   border-radius: 4px;
 }
+.type {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.commodity-price {
+  display: flex;
+  flex-direction: column;
+}
+
+.price-per-unit {
+  font-size: 0.8rem;
+  font-weight: normal;
+  font-style: italic;
+  color: #666;
+  margin-top: 0.25rem;
+}
+
+
 </style>

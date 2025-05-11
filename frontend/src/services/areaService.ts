@@ -31,6 +31,7 @@ export default {
 
   createArea(area: AreaPayload) {
     console.log('Creating area with data:', JSON.stringify(area, null, 2))
+    // Use the standard areas endpoint
     return axios.post(`${API_URL}/areas`, area, {
       headers: {
         'Content-Type': 'application/vnd.api+json',

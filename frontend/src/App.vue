@@ -4,7 +4,6 @@
       <nav>
         <router-link to="/">Home</router-link> |
         <router-link to="/locations">Locations</router-link> |
-        <router-link to="/areas">Areas</router-link> |
         <router-link to="/commodities">Commodities</router-link> |
       </nav>
     </header>
