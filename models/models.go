@@ -15,12 +15,13 @@ var (
 
 // File represents a file in the system with its metadata.
 // Example:
-// {
-//   "path": "invoice-2023",           // Just the filename without extension (editable by user)
-//   "original_path": "invoice.pdf",   // Original filename as uploaded
-//   "ext": ".pdf",                   // File extension including the dot
-//   "mime_type": "application/pdf"    // MIME type of the file
-// }
+//
+//	{
+//	  "path": "invoice-2023",           // Just the filename without extension (editable by user)
+//	  "original_path": "invoice.pdf",   // Original filename as uploaded
+//	  "ext": ".pdf",                   // File extension including the dot
+//	  "mime_type": "application/pdf"    // MIME type of the file
+//	}
 type File struct {
 	// Path is the filename without extension. This is the only field that can be modified by the user.
 	// Example: "invoice-2023"

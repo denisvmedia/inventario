@@ -22,7 +22,7 @@ type FileUpdateParams struct {
 }
 
 // Bind validates and binds the request.
-func (fr *FileUpdateRequest) Bind(r *http.Request) error {
+func (fr *FileUpdateRequest) Bind(_r *http.Request) error {
 	if fr.Data.ID == "" {
 		return errors.New("missing id")
 	}
