@@ -1,5 +1,10 @@
 <template>
   <div class="commodity-create">
+    <div v-if="areaFromUrl" class="breadcrumb-nav">
+      <a href="#" @click.prevent="navigateToArea" class="breadcrumb-link">
+        <font-awesome-icon icon="arrow-left" /> Back to Area
+      </a>
+    </div>
     <h1>Create New Commodity</h1>
 
     <form @submit.prevent="submitForm" class="form">
@@ -580,9 +585,20 @@ const submitForm = async () => {
   }
 }
 
+const navigateToArea = () => {
+  // Navigate back to the area detail view
+  if (areaFromUrl.value) {
+    router.push(`/areas/${areaFromUrl.value}`)
+  }
+}
+
 const cancel = () => {
-  // Go back to the previous page in history if available
-  if (window.history.length > 1) {
+  // If coming from an area, navigate back to that area
+  if (areaFromUrl.value) {
+    router.push(`/areas/${areaFromUrl.value}`)
+  }
+  // Otherwise, go back to the previous page in history if available
+  else if (window.history.length > 1) {
     router.go(-1)
   } else {
     // Fallback to commodities list
@@ -628,6 +644,25 @@ const removeUrl = (index: number) => {
   max-width: 800px;
   margin: 0 auto;
   padding: 1rem;
+}
+
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: #6c757d;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #4CAF50;
+  text-decoration: none;
 }
 
 h1 {
