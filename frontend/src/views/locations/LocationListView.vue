@@ -61,7 +61,14 @@
 
           <!-- Areas List -->
           <div v-if="getAreasForLocation(location.id).length > 0" class="areas-list">
-            <div v-for="area in getAreasForLocation(location.id)" :key="area.id" class="area-card" @click="viewArea(area.id)">
+            <div
+              v-for="area in getAreasForLocation(location.id)"
+              :key="area.id"
+              :id="`area-${area.id}`"
+              class="area-card"
+              :class="{ 'area-highlight': areaToFocus === area.id }"
+              @click="viewArea(area.id)"
+            >
               <div class="area-content">
                 <h5>{{ area.attributes.name }}</h5>
               </div>
@@ -85,14 +92,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import LocationForm from '@/components/LocationForm.vue'
 import AreaForm from '@/components/AreaForm.vue'
 
 const router = useRouter()
+const route = useRoute()
 const locations = ref<any[]>([])
 const areas = ref<any[]>([])
 const loading = ref<boolean>(true)
@@ -104,6 +112,9 @@ const showAreaFormForLocation = ref<string | null>(null)
 
 // Track expanded locations
 const expandedLocations = ref<string[]>([])
+
+// Reference to the area element to scroll to
+const areaToFocus = ref<string | null>(null)
 
 onMounted(async () => {
   try {
@@ -117,8 +128,24 @@ onMounted(async () => {
     areas.value = areasResponse.data.data
     loading.value = false
 
-    // If there's only one location, expand it by default
-    if (locations.value.length === 1) {
+    // Check for query parameters
+    const areaId = route.query.areaId as string
+    const locationId = route.query.locationId as string
+
+    if (areaId && locationId) {
+      // Expand the location that contains the area
+      if (!expandedLocations.value.includes(locationId)) {
+        expandedLocations.value.push(locationId)
+      }
+
+      // Set the area to focus on
+      areaToFocus.value = areaId
+
+      // Wait for the DOM to update before scrolling
+      await nextTick()
+      scrollToArea(areaId)
+    } else if (locations.value.length === 1) {
+      // If there's only one location, expand it by default
       expandedLocations.value = [locations.value[0].id]
     }
   } catch (err: any) {
@@ -182,6 +209,24 @@ const deleteLocation = async (id: string) => {
     expandedLocations.value = expandedLocations.value.filter(locationId => locationId !== id)
   } catch (err: any) {
     error.value = 'Failed to delete location: ' + (err.message || 'Unknown error')
+  }
+}
+
+// Function to scroll to a specific area
+const scrollToArea = (areaId: string) => {
+  // Find the area element by its ID
+  const areaElement = document.getElementById(`area-${areaId}`)
+  if (areaElement) {
+    // Scroll the area into view with smooth behavior
+    areaElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+    // Add a temporary highlight class to make it more visible
+    areaElement.classList.add('area-highlight')
+
+    // Remove the highlight class after a delay
+    setTimeout(() => {
+      areaElement.classList.remove('area-highlight')
+    }, 2000)
   }
 }
 
@@ -331,6 +376,24 @@ const deleteArea = async (id: string) => {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.area-card:hover {
+  background-color: #f9f9f9;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.area-highlight {
+  background-color: #e8f5e9 !important;
+  box-shadow: 0 0 0 2px #4CAF50 !important;
+  animation: pulse 1s ease-in-out;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
 }
 
 .area-content {
