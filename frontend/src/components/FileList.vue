@@ -10,13 +10,13 @@
           <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
         </div>
         <div class="file-icon" v-else @click="openViewer(file)">
-          <i :class="getFileIcon(file)"></i>
+          <font-awesome-icon :icon="getFileIcon(file)" size="3x" />
         </div>
         <div class="file-info">
           <div class="file-name-container">
             <div v-if="editingFile !== file.id" class="file-name" @click="startEditing(file)">
               {{ getFileName(file) }}
-              <i class="fas fa-pencil-alt edit-icon"></i>
+              <font-awesome-icon icon="pencil-alt" class="edit-icon" />
             </div>
             <div v-else class="file-name-edit">
               <input
@@ -28,23 +28,23 @@
               />
               <div class="edit-actions">
                 <button class="btn btn-sm btn-success" @click="saveFileName(file)">
-                  <i class="fas fa-check"></i>
+                  <font-awesome-icon icon="check" />
                 </button>
                 <button class="btn btn-sm btn-secondary" @click="cancelEditing">
-                  <i class="fas fa-times"></i>
+                  <font-awesome-icon icon="times" />
                 </button>
               </div>
             </div>
           </div>
           <div class="file-actions">
             <button class="btn btn-sm btn-primary" @click="downloadFile(file)">
-              <i class="fas fa-download"></i> Download
+              <font-awesome-icon icon="download" /> Download
             </button>
             <button class="btn btn-sm btn-danger" @click="confirmDelete(file)">
-              <i class="fas fa-trash"></i> Delete
+              <font-awesome-icon icon="trash" /> Delete
             </button>
             <button class="btn btn-sm btn-info" @click="viewFileDetails(file)">
-              <i class="fas fa-info-circle"></i> Details
+              <font-awesome-icon icon="info-circle" /> Details
             </button>
           </div>
         </div>
@@ -102,15 +102,15 @@ const getFileName = (file: any) => {
 
 const getFileIcon = (file: any) => {
   if (isPdfFile(file)) {
-    return 'fas fa-file-pdf'
+    return 'file-pdf'
   } else if (isImageFile(file)) {
-    return 'fas fa-file-image'
+    return 'file-image'
   } else if (props.fileType === 'manuals') {
-    return 'fas fa-book'
+    return 'book'
   } else if (props.fileType === 'invoices') {
-    return 'fas fa-file-invoice-dollar'
+    return 'file-invoice-dollar'
   }
-  return 'fas fa-file'
+  return 'file'
 }
 
 const downloadFile = (file: any) => {

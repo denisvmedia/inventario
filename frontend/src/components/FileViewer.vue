@@ -65,11 +65,11 @@
               </template>
               <div v-else class="pdf-error-container">
                 <div class="file-icon large">
-                  <i class="fas fa-file-pdf"></i>
+                  <font-awesome-icon icon="file-pdf" size="3x" />
                 </div>
                 <p>{{ pdfErrorMessage }}</p>
                 <button class="btn btn-primary" @click="downloadCurrentFile">
-                  <i class="fas fa-download"></i> Download PDF
+                  <font-awesome-icon icon="download" /> Download PDF
                 </button>
               </div>
             </div>
@@ -79,7 +79,7 @@
           <!-- Fallback for other file types -->
           <div v-else class="unsupported-file">
             <div class="file-icon large">
-              <i :class="getFileIcon(currentFile)"></i>
+              <font-awesome-icon :icon="getFileIcon(currentFile)" size="3x" />
             </div>
             <p>This file type cannot be previewed. Please download the file to view it.</p>
           </div>
@@ -88,13 +88,13 @@
           <span class="file-counter">{{ currentIndex + 1 }} / {{ files.length }}</span>
           <div class="file-actions">
             <button class="btn btn-sm btn-primary" @click="downloadCurrentFile">
-              <i class="fas fa-download"></i> Download
+              <font-awesome-icon icon="download" /> Download
             </button>
             <button v-if="allowDelete" class="btn btn-sm btn-danger" @click="confirmDeleteCurrentFile">
-              <i class="fas fa-trash"></i> Delete
+              <font-awesome-icon icon="trash" /> Delete
             </button>
             <button class="btn btn-sm btn-secondary" @click="closeViewer">
-              <i class="fas fa-times"></i> Close
+              <font-awesome-icon icon="times" /> Close
             </button>
           </div>
         </div>
@@ -274,15 +274,15 @@ const getFileName = (file: any) => {
 
 const getFileIcon = (file: any) => {
   if (isPdfFile(file)) {
-    return 'fas fa-file-pdf'
+    return 'file-pdf'
   } else if (isImageFile(file)) {
-    return 'fas fa-file-image'
+    return 'file-image'
   } else if (props.fileType === 'manuals') {
-    return 'fas fa-book'
+    return 'book'
   } else if (props.fileType === 'invoices') {
-    return 'fas fa-file-invoice-dollar'
+    return 'file-invoice-dollar'
   }
-  return 'fas fa-file'
+  return 'file'
 }
 
 const isImageFile = (file: any) => {

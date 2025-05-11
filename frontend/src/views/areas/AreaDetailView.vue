@@ -17,14 +17,14 @@
           <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
         </div>
         <div class="actions">
-          <button class="btn btn-danger" @click="confirmDelete" title="Delete"><i class="fas fa-trash"></i></button>
+          <button class="btn btn-danger" @click="confirmDelete" title="Delete"><font-awesome-icon icon="trash" /></button>
         </div>
       </div>
 
       <div class="commodities-section" v-if="commodities.length > 0">
         <div class="section-header">
           <h2>Commodities</h2>
-          <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New</router-link>
+          <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
         </div>
         <div class="commodities-grid">
           <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card">
@@ -32,7 +32,7 @@
               <h3>{{ commodity.attributes.name }}</h3>
               <div class="commodity-meta">
                 <span class="type">
-                  <i :class="getTypeIcon(commodity.attributes.type)"></i>
+                  <font-awesome-icon :icon="getTypeIcon(commodity.attributes.type)" />
                   {{ getTypeName(commodity.attributes.type) }}
                 </span>
                 <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
@@ -49,10 +49,10 @@
             </div>
             <div class="commodity-actions">
               <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)" title="Edit">
-                <i class="fas fa-edit"></i>
+                <font-awesome-icon icon="edit" />
               </button>
               <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteCommodity(commodity.id)" title="Delete">
-                <i class="fas fa-trash"></i>
+                <font-awesome-icon icon="trash" />
               </button>
             </div>
           </div>
@@ -137,19 +137,19 @@ onMounted(async () => {
 const getTypeIcon = (typeId: string) => {
   switch(typeId) {
     case 'white_goods':
-      return 'fas fa-blender'
+      return 'blender'
     case 'electronics':
-      return 'fas fa-laptop'
+      return 'laptop'
     case 'equipment':
-      return 'fas fa-tools'
+      return 'tools'
     case 'furniture':
-      return 'fas fa-couch'
+      return 'couch'
     case 'clothes':
-      return 'fas fa-tshirt'
+      return 'tshirt'
     case 'other':
-      return 'fas fa-box'
+      return 'box'
     default:
-      return 'fas fa-box'
+      return 'box'
   }
 }
 

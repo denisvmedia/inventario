@@ -2,7 +2,7 @@
   <div class="inline-edit">
     <div v-if="!editing" class="display-value" @click="startEditing">
       <slot name="display">{{ modelValue }}</slot>
-      <i class="fas fa-pencil-alt edit-icon"></i>
+      <font-awesome-icon icon="pencil-alt" class="edit-icon" />
     </div>
     <div v-else class="edit-form">
       <input
@@ -26,10 +26,10 @@
       ></textarea>
       <div class="edit-actions">
         <button class="btn btn-sm btn-success" @click="save" title="Save">
-          <i class="fas fa-check"></i>
+          <font-awesome-icon icon="check" />
         </button>
         <button class="btn btn-sm btn-secondary" @click="cancel" title="Cancel">
-          <i class="fas fa-times"></i>
+          <font-awesome-icon icon="times" />
         </button>
       </div>
     </div>

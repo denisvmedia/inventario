@@ -17,10 +17,10 @@
           <div class="file-name" :title="getFileName(image)">{{ getFileName(image) }}</div>
           <div class="file-actions">
             <button class="btn btn-sm btn-primary" @click="downloadImage(image)">
-              <i class="fas fa-download"></i> Download
+              <font-awesome-icon icon="download" /> Download
             </button>
             <button v-if="allowDelete" class="btn btn-sm btn-danger" @click="confirmDeleteImage(image)">
-              <i class="fas fa-trash"></i> Delete
+              <font-awesome-icon icon="trash" /> Delete
             </button>
           </div>
         </div>
@@ -57,10 +57,10 @@
           <span class="image-counter">{{ currentIndex + 1 }} / {{ images.length }}</span>
           <div class="image-actions">
             <button class="btn btn-sm btn-primary" @click="downloadCurrentImage">
-              <i class="fas fa-download"></i> Download
+              <font-awesome-icon icon="download" /> Download
             </button>
             <button v-if="allowDelete" class="btn btn-sm btn-danger" @click="confirmDeleteCurrentImage">
-              <i class="fas fa-trash"></i> Delete
+              <font-awesome-icon icon="trash" /> Delete
             </button>
           </div>
         </div>
