@@ -7,12 +7,7 @@
       <div class="header">
         <div class="title-section">
           <h1>
-            <InlineEdit
-              v-model="area.attributes.name"
-              @save="updateAreaName"
-            >
-              <template #display>{{ area.attributes.name }}</template>
-            </InlineEdit>
+            {{ area.attributes.name }}
           </h1>
           <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
         </div>
@@ -74,7 +69,6 @@ import locationService from '@/services/locationService'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
-import InlineEdit from '@/components/InlineEdit.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -272,6 +266,7 @@ const deleteCommodity = async (id: string) => {
 .actions {
   display: flex;
   gap: 0.5rem;
+  margin-top: 0.6rem;
 }
 
 .loading, .error, .not-found, .no-commodities {
