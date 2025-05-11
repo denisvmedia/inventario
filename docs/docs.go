@@ -342,6 +342,58 @@ const docTemplate = `{
                     }
                 }
             },
+            "put": {
+                "description": "update an image's path",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Update an image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image ID",
+                        "name": "imageID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ImageResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity or image not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
             "delete": {
                 "description": "Delete an image for a commodity",
                 "consumes": [
@@ -508,6 +560,58 @@ const docTemplate = `{
                     }
                 }
             },
+            "put": {
+                "description": "update an invoice's path",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Update an invoice",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Invoice ID",
+                        "name": "invoiceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InvoiceResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity or invoice not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
             "delete": {
                 "description": "Delete an invoice for a commodity",
                 "consumes": [
@@ -657,6 +761,58 @@ const docTemplate = `{
                         "name": "manualID",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ManualResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity or manual not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update a manual's path",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Update a manual",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Manual ID",
+                        "name": "manualID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -1062,6 +1218,32 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/seed": {
+            "post": {
+                "description": "Seed the database with example data",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Seed database",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1272,6 +1454,40 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/jsonapi.Error"
+                    }
+                }
+            }
+        },
+        "jsonapi.FileUpdateParams": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "description": "Only the Path field can be updated",
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.FileUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "$ref": "#/definitions/jsonapi.FileUpdateParams"
+                        },
+                        "id": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "images",
+                                "manuals",
+                                "invoices"
+                            ],
+                            "example": "images"
+                        }
                     }
                 }
             }
@@ -1632,15 +1848,22 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "ext": {
+                    "description": "Ext is the file extension including the dot.\nExample: \".pdf\"",
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
                 "mime_type": {
+                    "description": "MIMEType is the MIME type of the file.\nExample: \"application/pdf\"",
+                    "type": "string"
+                },
+                "original_path": {
+                    "description": "OriginalPath is the original filename as uploaded by the user.\nExample: \"invoice.pdf\"",
                     "type": "string"
                 },
                 "path": {
+                    "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 }
             }
@@ -1652,15 +1875,22 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "ext": {
+                    "description": "Ext is the file extension including the dot.\nExample: \".pdf\"",
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
                 "mime_type": {
+                    "description": "MIMEType is the MIME type of the file.\nExample: \"application/pdf\"",
+                    "type": "string"
+                },
+                "original_path": {
+                    "description": "OriginalPath is the original filename as uploaded by the user.\nExample: \"invoice.pdf\"",
                     "type": "string"
                 },
                 "path": {
+                    "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 }
             }
@@ -1686,15 +1916,22 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "ext": {
+                    "description": "Ext is the file extension including the dot.\nExample: \".pdf\"",
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
                 "mime_type": {
+                    "description": "MIMEType is the MIME type of the file.\nExample: \"application/pdf\"",
+                    "type": "string"
+                },
+                "original_path": {
+                    "description": "OriginalPath is the original filename as uploaded by the user.\nExample: \"invoice.pdf\"",
                     "type": "string"
                 },
                 "path": {
+                    "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 }
             }

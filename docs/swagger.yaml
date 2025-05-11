@@ -139,6 +139,29 @@ definitions:
           $ref: '#/definitions/jsonapi.Error'
         type: array
     type: object
+  jsonapi.FileUpdateParams:
+    properties:
+      path:
+        description: Only the Path field can be updated
+        type: string
+    type: object
+  jsonapi.FileUpdateRequest:
+    properties:
+      data:
+        properties:
+          attributes:
+            $ref: '#/definitions/jsonapi.FileUpdateParams'
+          id:
+            type: string
+          type:
+            enum:
+            - images
+            - manuals
+            - invoices
+            example: images
+            type: string
+        type: object
+    type: object
   jsonapi.ImageResponse:
     properties:
       attributes:
@@ -381,12 +404,26 @@ definitions:
       commodity_id:
         type: string
       ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
         type: string
       id:
         type: string
       mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
         type: string
       path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
         type: string
     type: object
   models.Invoice:
@@ -394,12 +431,26 @@ definitions:
       commodity_id:
         type: string
       ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
         type: string
       id:
         type: string
       mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
         type: string
       path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
         type: string
     type: object
   models.Location:
@@ -416,12 +467,26 @@ definitions:
       commodity_id:
         type: string
       ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
         type: string
       id:
         type: string
       mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
         type: string
       path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
         type: string
     type: object
 info:
@@ -674,6 +739,41 @@ paths:
       summary: Get image data
       tags:
       - commodities
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update an image's path
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Image ID
+        in: path
+        name: imageID
+        required: true
+        type: string
+      - description: Update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ImageResponse'
+        "404":
+          description: Commodity or image not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update an image
+      tags:
+      - commodities
   /commodities/{commodityID}/images/{imageID}.{imageExt}:
     get:
       consumes:
@@ -785,6 +885,41 @@ paths:
       summary: Get invoice data
       tags:
       - commodities
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update an invoice's path
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Invoice ID
+        in: path
+        name: invoiceID
+        required: true
+        type: string
+      - description: Update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.InvoiceResponse'
+        "404":
+          description: Commodity or invoice not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update an invoice
+      tags:
+      - commodities
   /commodities/{commodityID}/invoices/{invoiceID}.{invoiceExt}:
     get:
       consumes:
@@ -894,6 +1029,41 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Get manual data
+      tags:
+      - commodities
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update a manual's path
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Manual ID
+        in: path
+        name: manualID
+        required: true
+        type: string
+      - description: Update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ManualResponse'
+        "404":
+          description: Commodity or manual not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a manual
       tags:
       - commodities
   /commodities/{commodityID}/manuals/{manualID}.{manualExt}:
@@ -1127,4 +1297,21 @@ paths:
       summary: Update a location
       tags:
       - locations
+  /seed:
+    post:
+      consumes:
+      - application/json
+      description: Seed the database with example data
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Seed database
+      tags:
+      - admin
 swagger: "2.0"

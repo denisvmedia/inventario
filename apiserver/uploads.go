@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -58,12 +60,19 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	for _, f := range uploadedFiles {
+		// Get the extension from the MIME type
+		ext := mimekit.ExtensionByMime(f.MIMEType)
+		originalPath := f.FilePath
+		// Set Path to be the filename without extension
+		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+
 		img, err := api.imageRegistry.Create(models.Image{
 			CommodityID: entityID,
 			File: &models.File{
-				Path:     f.FilePath,
-				Ext:      mimekit.ExtensionByMime(f.MIMEType),
-				MIMEType: f.MIMEType,
+				Path:         pathWithoutExt, // Just the filename without extension
+				OriginalPath: originalPath,
+				Ext:          ext,
+				MIMEType:     f.MIMEType,
 			},
 		})
 		if err != nil {
@@ -98,12 +107,19 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 	}
 
 	for _, f := range uploadedFiles {
+		// Get the extension from the MIME type
+		ext := mimekit.ExtensionByMime(f.MIMEType)
+		originalPath := f.FilePath
+		// Set Path to be the filename without extension
+		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+
 		img, err := api.manualRegistry.Create(models.Manual{
 			CommodityID: entityID,
 			File: &models.File{
-				Path:     f.FilePath,
-				Ext:      mimekit.ExtensionByMime(f.MIMEType),
-				MIMEType: f.MIMEType,
+				Path:         pathWithoutExt, // Just the filename without extension
+				OriginalPath: originalPath,
+				Ext:          ext,
+				MIMEType:     f.MIMEType,
 			},
 		})
 		if err != nil {
@@ -138,12 +154,19 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 	}
 
 	for _, f := range uploadedFiles {
+		// Get the extension from the MIME type
+		ext := mimekit.ExtensionByMime(f.MIMEType)
+		originalPath := f.FilePath
+		// Set Path to be the filename without extension
+		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+
 		img, err := api.invoiceRegistry.Create(models.Invoice{
 			CommodityID: entityID,
 			File: &models.File{
-				Path:     f.FilePath,
-				Ext:      mimekit.ExtensionByMime(f.MIMEType),
-				MIMEType: f.MIMEType,
+				Path:         pathWithoutExt, // Just the filename without extension
+				OriginalPath: originalPath,
+				Ext:          ext,
+				MIMEType:     f.MIMEType,
 			},
 		})
 		if err != nil {
