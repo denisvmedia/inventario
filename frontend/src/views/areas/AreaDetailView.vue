@@ -4,6 +4,11 @@
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!area" class="not-found">Area not found</div>
     <div v-else>
+      <div class="breadcrumb-nav">
+        <a href="#" @click.prevent="navigateToLocations" class="breadcrumb-link">
+          <font-awesome-icon icon="arrow-left" /> Back to Locations
+        </a>
+      </div>
       <div class="header">
         <div class="title-section">
           <h1>
@@ -199,7 +204,7 @@ const confirmDelete = () => {
 const deleteArea = async () => {
   try {
     await areaService.deleteArea(area.value.id)
-    router.push('/areas')
+    router.push('/locations')
   } catch (err: any) {
     error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
   }
@@ -223,6 +228,11 @@ const confirmDeleteCommodity = (id: string) => {
   }
 }
 
+const navigateToLocations = () => {
+  // Always navigate directly to locations list
+  router.push('/locations')
+}
+
 const deleteCommodity = async (id: string) => {
   try {
     await commodityService.deleteCommodity(id)
@@ -239,6 +249,25 @@ const deleteCommodity = async (id: string) => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: #6c757d;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #4CAF50;
+  text-decoration: none;
 }
 
 .header {

@@ -1,5 +1,10 @@
 <template>
   <div class="area-create">
+    <div class="breadcrumb-nav">
+      <a href="#" @click.prevent="navigateToLocations" class="breadcrumb-link">
+        <font-awesome-icon icon="arrow-left" /> Back to Locations
+      </a>
+    </div>
     <h1>Create New Area</h1>
 
     <form @submit.prevent="submitForm" class="form">
@@ -34,7 +39,7 @@
       </div>
 
       <div class="form-actions">
-        <button type="button" class="btn btn-secondary" @click="cancel">Cancel</button>
+        <button type="button" class="btn btn-secondary" @click="navigateToLocations">Cancel</button>
         <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
           {{ isSubmitting ? 'Creating...' : 'Create Area' }}
         </button>
@@ -151,8 +156,8 @@ const submitForm = async () => {
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
 
-    // On success, navigate to areas list
-    router.push('/areas')
+    // On success, navigate to locations list
+    router.push('/locations')
   } catch (err: any) {
     console.error('Error creating area:', err)
 
@@ -186,7 +191,34 @@ const submitForm = async () => {
   }
 }
 
-const cancel = () => {
-  router.push('/areas')
+const navigateToLocations = () => {
+  // Always navigate directly to locations list
+  router.push('/locations')
 }
 </script>
+
+<style scoped>
+.area-create {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: #6c757d;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #4CAF50;
+  text-decoration: none;
+}
+</style>
