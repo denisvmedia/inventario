@@ -167,8 +167,14 @@ const submitForm = async () => {
 
     await areaService.updateArea(id, payload)
 
-    // On success, navigate back to area detail
-    router.push(`/areas/${id}`)
+    // On success, navigate back to locations list with area focused
+    router.push({
+      path: '/locations',
+      query: {
+        areaId: id,
+        locationId: form.locationId
+      }
+    })
   } catch (err: any) {
     console.error('Error updating area:', err)
 
@@ -203,12 +209,25 @@ const submitForm = async () => {
 }
 
 const goBack = () => {
-  router.go(-1)
+  // Navigate to locations list with area and location context
+  router.push({
+    path: '/locations',
+    query: {
+      areaId: id,
+      locationId: form.locationId
+    }
+  })
 }
 
 const navigateToLocations = () => {
-  // Always navigate directly to locations list
-  router.push('/locations')
+  // Navigate to locations list with area and location context
+  router.push({
+    path: '/locations',
+    query: {
+      areaId: id,
+      locationId: form.locationId
+    }
+  })
 }
 
 const navigateToArea = () => {

@@ -229,8 +229,14 @@ const confirmDeleteCommodity = (id: string) => {
 }
 
 const navigateToLocations = () => {
-  // Always navigate directly to locations list
-  router.push('/locations')
+  // Navigate to locations list with area and location context
+  router.push({
+    path: '/locations',
+    query: {
+      areaId: area.value.id,
+      locationId: area.value.attributes.location_id
+    }
+  })
 }
 
 const deleteCommodity = async (id: string) => {

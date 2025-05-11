@@ -156,8 +156,17 @@ const submitForm = async () => {
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
 
-    // On success, navigate to locations list
-    router.push('/locations')
+    // Get the ID of the newly created area
+    const newAreaId = response.data.data.id
+
+    // On success, navigate to locations list with the new area focused
+    router.push({
+      path: '/locations',
+      query: {
+        areaId: newAreaId,
+        locationId: form.locationId
+      }
+    })
   } catch (err: any) {
     console.error('Error creating area:', err)
 
@@ -192,8 +201,17 @@ const submitForm = async () => {
 }
 
 const navigateToLocations = () => {
-  // Always navigate directly to locations list
-  router.push('/locations')
+  // Navigate to locations list with location context if available
+  if (form.locationId) {
+    router.push({
+      path: '/locations',
+      query: {
+        locationId: form.locationId
+      }
+    })
+  } else {
+    router.push('/locations')
+  }
 }
 </script>
 
