@@ -3,7 +3,7 @@
     <div class="header">
       <h1>Locations</h1>
       <button class="btn btn-primary" @click="showLocationForm = !showLocationForm">
-        <i :class="showLocationForm ? 'fas fa-times' : 'fas fa-plus'"></i> {{ showLocationForm ? 'Cancel' : 'New' }}
+        <font-awesome-icon :icon="showLocationForm ? 'times' : 'plus'" /> {{ showLocationForm ? 'Cancel' : 'New' }}
       </button>
     </div>
 
@@ -27,17 +27,17 @@
             <div class="location-header">
               <h3>{{ location.attributes.name }}</h3>
               <div class="location-expand-icon">
-                <i :class="expandedLocations.includes(location.id) ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
+                <font-awesome-icon :icon="expandedLocations.includes(location.id) ? 'chevron-down' : 'chevron-right'" />
               </div>
             </div>
             <p v-if="location.attributes.address" class="address">{{ location.attributes.address }}</p>
           </div>
           <div class="location-actions">
             <button class="btn btn-secondary btn-sm" @click.stop="editLocation(location.id)" title="Edit">
-              <i class="fas fa-edit"></i>
+              <font-awesome-icon icon="edit" />
             </button>
             <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteLocation(location.id)" title="Delete">
-              <i class="fas fa-trash"></i>
+              <font-awesome-icon icon="trash" />
             </button>
           </div>
         </div>
@@ -67,10 +67,10 @@
               </div>
               <div class="area-actions">
                 <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)" title="Edit">
-                  <i class="fas fa-edit"></i>
+                  <font-awesome-icon icon="edit" />
                 </button>
                 <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteArea(area.id)" title="Delete">
-                  <i class="fas fa-trash"></i>
+                  <font-awesome-icon icon="trash" />
                 </button>
               </div>
             </div>

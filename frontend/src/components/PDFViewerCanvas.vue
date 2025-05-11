@@ -19,7 +19,7 @@
             :disabled="currentPage <= 1 || viewAllPages"
             title="Previous Page"
           >
-            <i class="fas fa-chevron-left"></i>
+            <font-awesome-icon icon="chevron-left" />
           </button>
           <span class="page-info">{{ currentPage }} / {{ numPages }}</span>
           <button
@@ -28,7 +28,7 @@
             :disabled="currentPage >= numPages || viewAllPages"
             title="Next Page"
           >
-            <i class="fas fa-chevron-right"></i>
+            <font-awesome-icon icon="chevron-right" />
           </button>
         </div>
         <div class="pdf-view-mode">
@@ -38,7 +38,7 @@
             @click="setViewMode(false)"
             title="Page by Page"
           >
-            <i class="fas fa-file"></i>
+            <font-awesome-icon icon="file" />
           </button>
           <button
             class="btn btn-sm"
@@ -46,20 +46,20 @@
             @click="setViewMode(true)"
             title="View All Pages"
           >
-            <i class="fas fa-copy"></i>
+            <font-awesome-icon icon="copy" />
           </button>
         </div>
         <div class="pdf-zoom">
           <button class="btn btn-sm" @click="zoomOut" title="Zoom Out">
-            <i class="fas fa-search-minus"></i>
+            <font-awesome-icon icon="search-minus" />
           </button>
           <span class="zoom-level">{{ Math.round(scale * 100) }}%</span>
           <button class="btn btn-sm" @click="zoomIn" title="Zoom In">
-            <i class="fas fa-search-plus"></i>
+            <font-awesome-icon icon="search-plus" />
           </button>
         </div>
         <button class="btn btn-sm btn-primary" @click="downloadPDF" title="Download PDF">
-          <i class="fas fa-download"></i>
+          <font-awesome-icon icon="download" />
         </button>
       </div>
       <div class="pdf-container" ref="pdfContainer">

@@ -10,7 +10,7 @@
           <button class="btn btn-secondary" @click="editCommodity">Edit</button>
           <button class="btn btn-danger" @click="confirmDelete">Delete</button>
           <button class="btn btn-primary" @click="printCommodity">
-            <i class="fas fa-print"></i> Print
+            <font-awesome-icon icon="print" /> Print
           </button>
         </div>
       </div>
@@ -25,7 +25,7 @@
           <div class="info-row">
             <span class="label">Type:</span>
             <span class="type-with-icon">
-              <i :class="getTypeIcon(commodity.attributes.type)"></i>
+              <font-awesome-icon :icon="getTypeIcon(commodity.attributes.type)" />
               {{ getTypeName(commodity.attributes.type) }}
             </span>
           </div>
@@ -483,19 +483,19 @@ const deleteCommodity = async () => {
 const getTypeIcon = (typeId: string): string => {
   switch(typeId) {
     case 'white_goods':
-      return 'fas fa-blender'
+      return 'blender'
     case 'electronics':
-      return 'fas fa-laptop'
+      return 'laptop'
     case 'equipment':
-      return 'fas fa-tools'
+      return 'tools'
     case 'furniture':
-      return 'fas fa-couch'
+      return 'couch'
     case 'clothes':
-      return 'fas fa-tshirt'
+      return 'tshirt'
     case 'other':
-      return 'fas fa-box'
+      return 'box'
     default:
-      return 'fas fa-box'
+      return 'box'
   }
 }
 

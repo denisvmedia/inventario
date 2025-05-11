@@ -4,7 +4,7 @@
       <div class="file-details-header">
         <h3>File Details</h3>
         <button class="close-button" @click="close">
-          <i class="fas fa-times"></i>
+          <font-awesome-icon icon="times" />
         </button>
       </div>
 
@@ -15,7 +15,7 @@
             <img :src="fileUrl" alt="Image preview" />
           </div>
           <div v-else class="file-icon-preview">
-            <i :class="getFileIcon()"></i>
+            <font-awesome-icon :icon="getFileIcon()" size="5x" />
           </div>
         </div>
 
@@ -55,13 +55,13 @@
 
       <div class="file-details-actions">
         <button class="btn btn-primary" @click="downloadFile">
-          <i class="fas fa-download"></i> Download
+          <font-awesome-icon icon="download" /> Download
         </button>
         <button class="btn btn-danger" @click="confirmDelete">
-          <i class="fas fa-trash"></i> Delete
+          <font-awesome-icon icon="trash" /> Delete
         </button>
         <button class="btn btn-secondary" @click="close">
-          <i class="fas fa-times"></i> Close
+          <font-awesome-icon icon="times" /> Close
         </button>
       </div>
     </div>
@@ -144,15 +144,15 @@ const objectType = computed(() => {
 
 const getFileIcon = () => {
   if (isPdfFile.value) {
-    return 'fas fa-file-pdf fa-5x'
+    return 'file-pdf'
   } else if (isImageFile.value) {
-    return 'fas fa-file-image fa-5x'
+    return 'file-image'
   } else if (props.fileType === 'manuals') {
-    return 'fas fa-book fa-5x'
+    return 'book'
   } else if (props.fileType === 'invoices') {
-    return 'fas fa-file-invoice-dollar fa-5x'
+    return 'file-invoice-dollar'
   }
-  return 'fas fa-file fa-5x'
+  return 'file'
 }
 
 const close = () => {

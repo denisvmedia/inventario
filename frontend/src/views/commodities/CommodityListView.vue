@@ -2,7 +2,7 @@
   <div class="commodity-list">
     <div class="header">
       <h1>Commodities</h1>
-      <router-link to="/commodities/new" class="btn btn-primary"><i class="fas fa-plus"></i> New</router-link>
+      <router-link to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
@@ -15,13 +15,13 @@
           <h3>{{ commodity.attributes.name }}</h3>
           <div class="commodity-location" v-if="commodity.attributes.area_id">
             <span class="location-info">
-              <i class="fas fa-map-marker-alt"></i>
+              <font-awesome-icon icon="map-marker-alt" />
               {{ getLocationName(commodity.attributes.area_id) }} / {{ getAreaName(commodity.attributes.area_id) }}
             </span>
           </div>
           <div class="commodity-meta">
             <span class="type">
-              <i :class="getTypeIcon(commodity.attributes.type)"></i>
+              <font-awesome-icon :icon="getTypeIcon(commodity.attributes.type)" />
               {{ getTypeName(commodity.attributes.type) }}
             </span>
             <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
@@ -38,10 +38,10 @@
         </div>
         <div class="commodity-actions">
           <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)" title="Edit">
-            <i class="fas fa-edit"></i>
+            <font-awesome-icon icon="edit" />
           </button>
           <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(commodity.id)" title="Delete">
-            <i class="fas fa-trash"></i>
+            <font-awesome-icon icon="trash" />
           </button>
         </div>
       </div>
@@ -72,19 +72,19 @@ const locationMap = ref<Record<string, any>>({})
 const getTypeIcon = (typeId: string) => {
   switch(typeId) {
     case 'white_goods':
-      return 'fas fa-blender'
+      return 'blender'
     case 'electronics':
-      return 'fas fa-laptop'
+      return 'laptop'
     case 'equipment':
-      return 'fas fa-tools'
+      return 'tools'
     case 'furniture':
-      return 'fas fa-couch'
+      return 'couch'
     case 'clothes':
-      return 'fas fa-tshirt'
+      return 'tshirt'
     case 'other':
-      return 'fas fa-box'
+      return 'box'
     default:
-      return 'fas fa-box'
+      return 'box'
   }
 }
 
