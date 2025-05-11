@@ -156,7 +156,12 @@ onMounted(async () => {
 })
 
 const viewCommodity = (id: string) => {
-  router.push(`/commodities/${id}`)
+  router.push({
+    path: `/commodities/${id}`,
+    query: {
+      source: 'commodities'
+    }
+  })
 }
 
 const editCommodity = (id: string) => {
