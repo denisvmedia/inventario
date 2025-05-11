@@ -1,8 +1,11 @@
 <template>
   <div class="commodity-create">
-    <div v-if="areaFromUrl" class="breadcrumb-nav">
-      <a href="#" @click.prevent="navigateToArea" class="breadcrumb-link">
+    <div class="breadcrumb-nav">
+      <a v-if="areaFromUrl" href="#" @click.prevent="navigateToArea" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Area
+      </a>
+      <a v-else href="#" @click.prevent="navigateToCommodities" class="breadcrumb-link">
+        <font-awesome-icon icon="arrow-left" /> Back to Commodities
       </a>
     </div>
     <h1>Create New Commodity</h1>
@@ -592,16 +595,17 @@ const navigateToArea = () => {
   }
 }
 
+const navigateToCommodities = () => {
+  // Navigate back to the commodities list
+  router.push('/commodities')
+}
+
 const cancel = () => {
   // If coming from an area, navigate back to that area
   if (areaFromUrl.value) {
     router.push(`/areas/${areaFromUrl.value}`)
-  }
-  // Otherwise, go back to the previous page in history if available
-  else if (window.history.length > 1) {
-    router.go(-1)
   } else {
-    // Fallback to commodities list
+    // Otherwise, navigate to the commodities list
     router.push('/commodities')
   }
 }
