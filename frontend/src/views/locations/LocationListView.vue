@@ -3,7 +3,7 @@
     <div class="header">
       <h1>Locations</h1>
       <button class="btn btn-primary" @click="showLocationForm = !showLocationForm">
-        {{ showLocationForm ? 'Cancel' : 'Create New Location' }}
+        <i :class="showLocationForm ? 'fas fa-times' : 'fas fa-plus'"></i> {{ showLocationForm ? 'Cancel' : 'New' }}
       </button>
     </div>
 
@@ -33,11 +33,11 @@
             <p v-if="location.attributes.address" class="address">{{ location.attributes.address }}</p>
           </div>
           <div class="location-actions">
-            <button class="btn btn-secondary btn-sm" @click.stop="editLocation(location.id)">
-              Edit
+            <button class="btn btn-secondary btn-sm" @click.stop="editLocation(location.id)" title="Edit">
+              <i class="fas fa-edit"></i>
             </button>
-            <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteLocation(location.id)">
-              Delete
+            <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteLocation(location.id)" title="Delete">
+              <i class="fas fa-trash"></i>
             </button>
           </div>
         </div>
@@ -66,11 +66,11 @@
                 <h5>{{ area.attributes.name }}</h5>
               </div>
               <div class="area-actions">
-                <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)">
-                  Edit
+                <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)" title="Edit">
+                  <i class="fas fa-edit"></i>
                 </button>
-                <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteArea(area.id)">
-                  Delete
+                <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteArea(area.id)" title="Delete">
+                  <i class="fas fa-trash"></i>
                 </button>
               </div>
             </div>

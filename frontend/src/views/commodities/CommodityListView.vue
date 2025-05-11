@@ -2,7 +2,7 @@
   <div class="commodity-list">
     <div class="header">
       <h1>Commodities</h1>
-      <router-link to="/commodities/new" class="btn btn-primary">Create New Commodity</router-link>
+      <router-link to="/commodities/new" class="btn btn-primary"><i class="fas fa-plus"></i> New</router-link>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
@@ -24,21 +24,24 @@
               <i :class="getTypeIcon(commodity.attributes.type)"></i>
               {{ getTypeName(commodity.attributes.type) }}
             </span>
-            <span class="count" v-if="(commodity.attributes.count || 1) > 1">Count: {{ commodity.attributes.count }}</span>
+            <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
           </div>
           <div class="commodity-price">
             <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
+            <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
+              {{ calculatePricePerUnit(commodity) }} {{ commodity.attributes.original_price_currency }} per unit
+            </span>
           </div>
           <div class="commodity-status">
             <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
           </div>
         </div>
         <div class="commodity-actions">
-          <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)">
-            Edit
+          <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)" title="Edit">
+            <i class="fas fa-edit"></i>
           </button>
-          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(commodity.id)">
-            Delete
+          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(commodity.id)" title="Delete">
+            <i class="fas fa-trash"></i>
           </button>
         </div>
       </div>
@@ -104,6 +107,17 @@ const getAreaName = (areaId: string) => {
 const getLocationName = (areaId: string) => {
   const locationId = areaMap.value[areaId]?.locationId
   return locationId ? locationMap.value[locationId]?.name || '' : ''
+}
+
+// Calculate price per unit
+const calculatePricePerUnit = (commodity: any) => {
+  const price = parseFloat(commodity.attributes.current_price) || 0
+  const count = commodity.attributes.count || 1
+  if (count <= 1) return price
+
+  // Calculate price per unit and round to 2 decimal places
+  const pricePerUnit = price / count
+  return pricePerUnit.toFixed(2)
 }
 
 onMounted(async () => {
@@ -262,6 +276,16 @@ const deleteCommodity = async (id: string) => {
   margin-top: 1rem;
   font-weight: bold;
   font-size: 1.1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.price-per-unit {
+  font-size: 0.8rem;
+  font-weight: normal;
+  font-style: italic;
+  color: #666;
+  margin-top: 0.25rem;
 }
 
 .commodity-status {

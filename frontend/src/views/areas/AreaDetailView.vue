@@ -10,15 +10,15 @@
           <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
         </div>
         <div class="actions">
-          <button class="btn btn-secondary" @click="editArea">Edit</button>
-          <button class="btn btn-danger" @click="confirmDelete">Delete</button>
+          <button class="btn btn-secondary" @click="editArea" title="Edit"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-danger" @click="confirmDelete" title="Delete"><i class="fas fa-trash"></i></button>
         </div>
       </div>
 
       <div class="commodities-section" v-if="commodities.length > 0">
         <div class="section-header">
           <h2>Commodities</h2>
-          <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm">Add Commodity</router-link>
+          <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New</router-link>
         </div>
         <div class="commodities-grid">
           <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card">
@@ -29,21 +29,24 @@
                   <i :class="getTypeIcon(commodity.attributes.type)"></i>
                   {{ getTypeName(commodity.attributes.type) }}
                 </span>
-                <span class="count" v-if="(commodity.attributes.count || 1) > 1">Count: {{ commodity.attributes.count }}</span>
+                <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
               </div>
               <div class="commodity-price" v-if="commodity.attributes.current_price">
                 <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
+                <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
+                  {{ calculatePricePerUnit(commodity) }} {{ commodity.attributes.original_price_currency }} per unit
+                </span>
               </div>
               <div class="commodity-status" v-if="commodity.attributes.status">
                 <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
               </div>
             </div>
             <div class="commodity-actions">
-              <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)">
-                Edit
+              <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)" title="Edit">
+                <i class="fas fa-edit"></i>
               </button>
-              <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteCommodity(commodity.id)">
-                Delete
+              <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteCommodity(commodity.id)" title="Delete">
+                <i class="fas fa-trash"></i>
               </button>
             </div>
           </div>
@@ -151,6 +154,17 @@ const getTypeName = (typeId: string) => {
 const getStatusName = (statusId: string) => {
   const status = COMMODITY_STATUSES.find(s => s.id === statusId)
   return status ? status.name : statusId
+}
+
+// Calculate price per unit
+const calculatePricePerUnit = (commodity: any) => {
+  const price = parseFloat(commodity.attributes.current_price) || 0
+  const count = commodity.attributes.count || 1
+  if (count <= 1) return price
+
+  // Calculate price per unit and round to 2 decimal places
+  const pricePerUnit = price / count
+  return pricePerUnit.toFixed(2)
 }
 
 const editArea = () => {
@@ -408,6 +422,19 @@ pre {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.commodity-price {
+  display: flex;
+  flex-direction: column;
+}
+
+.price-per-unit {
+  font-size: 0.8rem;
+  font-weight: normal;
+  font-style: italic;
+  color: #666;
+  margin-top: 0.25rem;
 }
 
 /* Add Font Awesome icons */
