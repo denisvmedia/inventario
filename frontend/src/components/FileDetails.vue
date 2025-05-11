@@ -7,50 +7,52 @@
           <i class="fas fa-times"></i>
         </button>
       </div>
-      
+
       <div class="file-details-content">
         <!-- Preview section -->
         <div class="file-preview-section">
-          <div v-if="fileType === 'images'" class="image-preview">
+          <div v-if="isImageFile" class="image-preview">
             <img :src="fileUrl" alt="Image preview" />
-          </div>
-          <div v-else-if="isPdf" class="pdf-preview">
-            <iframe :src="fileUrl" title="PDF preview"></iframe>
           </div>
           <div v-else class="file-icon-preview">
             <i :class="getFileIcon()"></i>
           </div>
         </div>
-        
+
         <!-- Details section -->
         <div class="file-info-section">
-          <div class="file-info-item">
-            <div class="info-label">File Name:</div>
-            <div class="info-value">{{ file.path }}{{ file.ext }}</div>
-          </div>
-          
-          <div class="file-info-item">
-            <div class="info-label">Original Name:</div>
-            <div class="info-value">{{ file.original_path }}</div>
-          </div>
-          
-          <div class="file-info-item">
-            <div class="info-label">File Type:</div>
-            <div class="info-value">{{ file.mime_type }}</div>
-          </div>
-          
-          <div class="file-info-item">
-            <div class="info-label">Extension:</div>
-            <div class="info-value">{{ file.ext }}</div>
-          </div>
-          
           <div class="file-info-item">
             <div class="info-label">ID:</div>
             <div class="info-value">{{ file.id }}</div>
           </div>
+
+          <div class="file-info-item">
+            <div class="info-label">File Name:</div>
+            <div class="info-value">{{ file.path }}{{ file.ext }}</div>
+          </div>
+
+          <div class="file-info-item">
+            <div class="info-label">Original Name:</div>
+            <div class="info-value">{{ file.original_path }}</div>
+          </div>
+
+          <div class="file-info-item">
+            <div class="info-label">Object Type:</div>
+            <div class="info-value">{{ objectType }}</div>
+          </div>
+
+          <div class="file-info-item">
+            <div class="info-label">File Type:</div>
+            <div class="info-value">{{ file.mime_type }}</div>
+          </div>
+
+          <div class="file-info-item">
+            <div class="info-label">Extension:</div>
+            <div class="info-value">{{ file.ext }}</div>
+          </div>
         </div>
       </div>
-      
+
       <div class="file-details-actions">
         <button class="btn btn-primary" @click="downloadFile">
           <i class="fas fa-download"></i> Download
@@ -67,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits, computed } from 'vue'
+import { defineProps, defineEmits, computed, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   file: {
@@ -89,7 +91,7 @@ const emit = defineEmits(['close', 'delete', 'download'])
 
 const fileUrl = computed(() => {
   if (!props.file) return ''
-  
+
   if (props.fileType === 'images') {
     return `/api/v1/commodities/${props.commodityId}/images/${props.file.id}.${props.file.ext}`
   } else if (props.fileType === 'manuals') {
@@ -100,13 +102,53 @@ const fileUrl = computed(() => {
   return ''
 })
 
-const isPdf = computed(() => {
-  return props.file?.ext === '.pdf' || props.file?.mime_type === 'application/pdf'
+const isImageFile = computed(() => {
+  if (!props.file) return false
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+
+  // Check file extension
+  if (props.file.ext) {
+    const ext = props.file.ext.toLowerCase().replace('.', '')
+    return imageExtensions.includes(ext)
+  }
+
+  // Check mime type if available
+  if (props.file.mime_type && props.file.mime_type.startsWith('image/')) {
+    return true
+  }
+
+  return false
+})
+
+const isPdfFile = computed(() => {
+  if (!props.file) return false
+
+  // Check file extension
+  if (props.file.ext) {
+    return props.file.ext.toLowerCase() === '.pdf' || props.file.ext.toLowerCase() === 'pdf'
+  }
+
+  // Check mime type if available
+  if (props.file.mime_type && props.file.mime_type === 'application/pdf') {
+    return true
+  }
+
+  return false
+})
+
+const objectType = computed(() => {
+  if (isImageFile.value) return 'Image'
+  if (isPdfFile.value) return 'PDF'
+  return 'File'
 })
 
 const getFileIcon = () => {
-  if (props.fileType === 'manuals') {
+  if (isPdfFile.value) {
     return 'fas fa-file-pdf fa-5x'
+  } else if (isImageFile.value) {
+    return 'fas fa-file-image fa-5x'
+  } else if (props.fileType === 'manuals') {
+    return 'fas fa-book fa-5x'
   } else if (props.fileType === 'invoices') {
     return 'fas fa-file-invoice-dollar fa-5x'
   }
@@ -117,9 +159,26 @@ const close = () => {
   emit('close')
 }
 
+// Handle keyboard events
+const handleKeyDown = (event) => {
+  if (event.key === 'Escape') {
+    close()
+  }
+}
+
+// Add keyboard event listener when component is mounted
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+// Remove keyboard event listener when component is unmounted
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
+
 const downloadFile = () => {
   emit('download', props.file)
-  
+
   // Create a link and trigger download
   const link = document.createElement('a')
   link.href = fileUrl.value

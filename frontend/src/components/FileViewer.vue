@@ -93,6 +93,9 @@
             <button v-if="allowDelete" class="btn btn-sm btn-danger" @click="confirmDeleteCurrentFile">
               <i class="fas fa-trash"></i> Delete
             </button>
+            <button class="btn btn-sm btn-secondary" @click="closeViewer">
+              <i class="fas fa-times"></i> Close
+            </button>
           </div>
         </div>
       </div>

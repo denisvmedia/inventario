@@ -6,7 +6,7 @@
     </div>
     <div v-else class="files-container">
       <div v-for="file in files" :key="file.id" class="file-item">
-        <div class="file-preview" v-if="fileType === 'images' && file.path" @click="openViewer(file)">
+        <div class="file-preview" v-if="isImageFile(file)" @click="openViewer(file)">
           <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
         </div>
         <div class="file-icon" v-else @click="openViewer(file)">
@@ -101,8 +101,12 @@ const getFileName = (file: any) => {
 }
 
 const getFileIcon = (file: any) => {
-  if (props.fileType === 'manuals') {
+  if (isPdfFile(file)) {
     return 'fas fa-file-pdf'
+  } else if (isImageFile(file)) {
+    return 'fas fa-file-image'
+  } else if (props.fileType === 'manuals') {
+    return 'fas fa-book'
   } else if (props.fileType === 'invoices') {
     return 'fas fa-file-invoice-dollar'
   }
@@ -182,6 +186,41 @@ const viewFileDetails = (file: any) => {
 
 const openViewer = (file: any) => {
   emit('open-viewer', file)
+}
+
+// Helper functions to detect file types
+const isImageFile = (file: any) => {
+  if (!file) return false
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+
+  // Check file extension
+  if (file.ext) {
+    const ext = file.ext.toLowerCase().replace('.', '')
+    return imageExtensions.includes(ext)
+  }
+
+  // Check mime type if available
+  if (file.mime_type && file.mime_type.startsWith('image/')) {
+    return true
+  }
+
+  return false
+}
+
+const isPdfFile = (file: any) => {
+  if (!file) return false
+
+  // Check file extension
+  if (file.ext) {
+    return file.ext.toLowerCase() === '.pdf' || file.ext.toLowerCase() === 'pdf'
+  }
+
+  // Check mime type if available
+  if (file.mime_type && file.mime_type === 'application/pdf') {
+    return true
+  }
+
+  return false
 }
 </script>
 
