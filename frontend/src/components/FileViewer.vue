@@ -24,7 +24,7 @@
     />
 
     <!-- File Viewer Modal -->
-    <div v-if="showViewer" class="file-modal" @click="closeViewer">
+    <div v-if="showViewer" class="file-modal" @click="handleModalClick">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 :title="currentFileName">{{ currentFileName }}</h3>
@@ -155,6 +155,7 @@ const startY = ref(0)
 
 // Variables to track click vs. drag
 const isDragging = ref(false)
+const isGlobalDragging = ref(false) // Track dragging at the document level
 const clickStartTime = ref(0)
 const clickStartPos = ref({ x: 0, y: 0 })
 
@@ -371,6 +372,13 @@ const handlePdfError = (error) => {
   }
 }
 
+const handleModalClick = (event) => {
+  // Only close if we're not in a dragging operation
+  if (!isGlobalDragging.value) {
+    closeViewer()
+  }
+}
+
 const closeViewer = () => {
   showViewer.value = false
   // Restore scrolling
@@ -427,6 +435,12 @@ const resetZoom = () => {
   panX.value = 0
   panY.value = 0
   isPanning.value = false
+  isDragging.value = false
+  isGlobalDragging.value = false
+
+  // Remove any global event listeners that might be active
+  document.removeEventListener('mousemove', handleGlobalMouseMove)
+  document.removeEventListener('mouseup', handleGlobalMouseUp)
 }
 
 // Pan functions - only active when zoomed
@@ -434,6 +448,7 @@ const startPan = (event) => {
   if (isZoomed.value) {
     event.preventDefault()
     isPanning.value = true
+    isGlobalDragging.value = false // Reset global dragging state
     startX.value = event.clientX - panX.value
     startY.value = event.clientY - panY.value
 
@@ -441,12 +456,16 @@ const startPan = (event) => {
     clickStartTime.value = Date.now()
     clickStartPos.value = { x: event.clientX, y: event.clientY }
     isDragging.value = false
+
+    // Add global event listeners to track mouse movement outside the image
+    document.addEventListener('mousemove', handleGlobalMouseMove)
+    document.addEventListener('mouseup', handleGlobalMouseUp)
   }
 }
 
-const pan = (event) => {
+// Global mouse move handler - works even when mouse is outside the image
+const handleGlobalMouseMove = (event) => {
   if (!isPanning.value) return
-  event.preventDefault()
 
   // Calculate distance moved
   const dx = Math.abs(event.clientX - clickStartPos.value.x)
@@ -455,14 +474,38 @@ const pan = (event) => {
   // If moved more than 5px, consider it a drag
   if (dx > 5 || dy > 5) {
     isDragging.value = true
+    isGlobalDragging.value = true // Set global dragging state
   }
 
   panX.value = event.clientX - startX.value
   panY.value = event.clientY - startY.value
 }
 
+// Global mouse up handler
+const handleGlobalMouseUp = (event) => {
+  if (isPanning.value) {
+    isPanning.value = false
+
+    // Keep the global dragging state true for a short time
+    // This prevents the modal from closing when releasing after a drag
+    setTimeout(() => {
+      isGlobalDragging.value = false
+    }, 50) // Short delay to handle the click event that might follow
+
+    // Remove global event listeners
+    document.removeEventListener('mousemove', handleGlobalMouseMove)
+    document.removeEventListener('mouseup', handleGlobalMouseUp)
+  }
+}
+
+// These local handlers are still needed for the image element
+const pan = (event) => {
+  if (!isPanning.value) return
+  event.preventDefault()
+}
+
 const endPan = () => {
-  isPanning.value = false
+  // Local handler - the actual end of panning is handled by the global handler
 }
 
 // Download functions
@@ -563,6 +606,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown)
+
+  // Clean up any remaining global event listeners
+  document.removeEventListener('mousemove', handleGlobalMouseMove)
+  document.removeEventListener('mouseup', handleGlobalMouseUp)
 })
 </script>
 
