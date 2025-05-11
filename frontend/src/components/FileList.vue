@@ -114,21 +114,13 @@ const getFileIcon = (file: any) => {
 }
 
 const downloadFile = (file: any) => {
+  // Only emit the event, let parent handle the actual download
   emit('download', file)
-
-  // Create a link and trigger download
-  const link = document.createElement('a')
-  link.href = getFileUrl(file)
-  link.download = getFileName(file)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 const confirmDelete = (file: any) => {
-  if (confirm(`Are you sure you want to delete this ${props.fileType.slice(0, -1)}?`)) {
-    emit('delete', file)
-  }
+  // Only emit the event, let parent handle the confirmation and deletion
+  emit('delete', file)
 }
 
 // File name editing functionality

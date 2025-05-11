@@ -123,6 +123,7 @@
             entityType="commodities"
             @delete="deleteImage"
             @update="updateImage"
+            @download="downloadImage"
           />
         </div>
 
@@ -152,6 +153,7 @@
             entityType="commodities"
             @delete="deleteManual"
             @update="updateManual"
+            @download="downloadManual"
           />
         </div>
 
@@ -181,6 +183,7 @@
             entityType="commodities"
             @delete="deleteInvoice"
             @update="updateInvoice"
+            @download="downloadInvoice"
           />
         </div>
       </div>
@@ -355,6 +358,46 @@ const deleteInvoice = async (invoice: any) => {
   } catch (err: any) {
     error.value = 'Failed to delete invoice: ' + (err.message || 'Unknown error')
   }
+}
+
+// Download functions
+const downloadImage = (image: any) => {
+  if (!commodity.value) return
+
+  // Create a link and trigger download
+  const link = document.createElement('a')
+  const imageUrl = `/api/v1/commodities/${commodity.value.id}/images/${image.id}.${image.ext}`
+  link.href = imageUrl
+  link.download = image.path + image.ext
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+const downloadManual = (manual: any) => {
+  if (!commodity.value) return
+
+  // Create a link and trigger download
+  const link = document.createElement('a')
+  const manualUrl = `/api/v1/commodities/${commodity.value.id}/manuals/${manual.id}.${manual.ext}`
+  link.href = manualUrl
+  link.download = manual.path + manual.ext
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+const downloadInvoice = (invoice: any) => {
+  if (!commodity.value) return
+
+  // Create a link and trigger download
+  const link = document.createElement('a')
+  const invoiceUrl = `/api/v1/commodities/${commodity.value.id}/invoices/${invoice.id}.${invoice.ext}`
+  link.href = invoiceUrl
+  link.download = invoice.path + invoice.ext
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 // File update functions

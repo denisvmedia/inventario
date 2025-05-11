@@ -39,6 +39,7 @@
           :entityId="location.id"
           entityType="locations"
           @delete="deleteImage"
+          @download="downloadImage"
         />
       </div>
 
@@ -179,6 +180,19 @@ const deleteImage = async (image: any) => {
   } catch (err: any) {
     error.value = 'Failed to delete image: ' + (err.message || 'Unknown error')
   }
+}
+
+const downloadImage = (image: any) => {
+  if (!location.value) return
+
+  // Create a link and trigger download
+  const link = document.createElement('a')
+  const imageUrl = `/api/v1/locations/${location.value.id}/images/${image.id}.${image.ext}`
+  link.href = imageUrl
+  link.download = image.path + image.ext
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 const editLocation = () => {

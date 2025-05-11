@@ -262,15 +262,8 @@ const endPan = () => {
 
 // Download functions
 const downloadImage = (image) => {
+  // Only emit the event, let parent handle the actual download
   emit('download', image)
-
-  // Create a link and trigger download
-  const link = document.createElement('a')
-  link.href = getImageUrl(image)
-  link.download = getImageName(image)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 const downloadCurrentImage = () => {
@@ -280,21 +273,8 @@ const downloadCurrentImage = () => {
 
 // Delete functions
 const confirmDeleteImage = (image) => {
-  if (confirm(`Are you sure you want to delete this image?`)) {
-    emit('delete', image)
-
-    // If we're deleting the current image in the gallery, adjust accordingly
-    if (showGallery.value && currentImage.value && currentImage.value.id === image.id) {
-      if (props.images.length <= 1) {
-        closeGallery()
-      } else {
-        // Stay on the same index unless it's the last image
-        if (currentIndex.value === props.images.length - 1) {
-          currentIndex.value--
-        }
-      }
-    }
-  }
+  // Only emit the event, let parent handle the confirmation and deletion
+  emit('delete', image)
 }
 
 const confirmDeleteCurrentImage = () => {

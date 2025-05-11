@@ -510,15 +510,8 @@ const endPan = () => {
 
 // Download functions
 const downloadFile = (file: any) => {
+  // Only pass through the download event to parent
   emit('download', file)
-
-  // Create a link and trigger download
-  const link = document.createElement('a')
-  link.href = getFileUrl(file)
-  link.download = getFileName(file)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 const downloadCurrentFile = () => {
@@ -528,25 +521,33 @@ const downloadCurrentFile = () => {
 
 // Delete functions
 const confirmDeleteFile = (file: any) => {
+  // Show confirmation dialog
   if (confirm(`Are you sure you want to delete this ${props.fileType.slice(0, -1)}?`)) {
+    // Emit delete event to parent
     emit('delete', file)
 
-    // If we're deleting the current file in the viewer, adjust accordingly
-    if (showViewer.value && currentFile.value && currentFile.value.id === file.id) {
-      if (props.files.length <= 1) {
-        closeViewer()
-      } else {
-        // Stay on the same index unless it's the last file
-        if (currentIndex.value === props.files.length - 1) {
-          currentIndex.value--
-        }
+    // Handle UI updates after deletion
+    handlePostDeleteUI(file)
+  }
+}
+
+// Handle UI updates after a file is deleted
+const handlePostDeleteUI = (file: any) => {
+  // If we're deleting the current file in the viewer, adjust accordingly
+  if (showViewer.value && currentFile.value && currentFile.value.id === file.id) {
+    if (props.files.length <= 1) {
+      closeViewer()
+    } else {
+      // Stay on the same index unless it's the last file
+      if (currentIndex.value === props.files.length - 1) {
+        currentIndex.value--
       }
     }
+  }
 
-    // Close file details if we're deleting the selected file
-    if (selectedFile.value && selectedFile.value.id === file.id) {
-      closeFileDetails()
-    }
+  // Close file details if we're deleting the selected file
+  if (selectedFile.value && selectedFile.value.id === file.id) {
+    closeFileDetails()
   }
 }
 
@@ -697,7 +698,7 @@ onBeforeUnmount(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.9);
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -707,6 +708,7 @@ onBeforeUnmount(() => {
 .modal-content {
   background-color: white;
   border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   width: 90%;
   max-width: 1200px;
   max-height: 90vh;

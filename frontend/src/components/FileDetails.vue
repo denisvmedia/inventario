@@ -177,22 +177,14 @@ onBeforeUnmount(() => {
 })
 
 const downloadFile = () => {
+  // Only emit the event, let parent handle the actual download
   emit('download', props.file)
-
-  // Create a link and trigger download
-  const link = document.createElement('a')
-  link.href = fileUrl.value
-  link.download = `${props.file.path}${props.file.ext}`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 const confirmDelete = () => {
-  if (confirm(`Are you sure you want to delete this ${props.fileType.slice(0, -1)}?`)) {
-    emit('delete', props.file)
-    close()
-  }
+  // Only emit the event, let parent handle the confirmation and deletion
+  emit('delete', props.file)
+  // Don't close immediately, let the parent decide when to close
 }
 </script>
 
