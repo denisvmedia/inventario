@@ -7,21 +7,10 @@
       <div class="header">
         <div class="title-section">
           <h1>
-            <InlineEdit
-              v-model="location.attributes.name"
-              @save="updateLocationName"
-            >
-              <template #display>{{ location.attributes.name }}</template>
-            </InlineEdit>
+              {{ location.attributes.name }}
           </h1>
           <p class="address">
-            <InlineEdit
-              v-model="location.attributes.address"
-              @save="updateLocationAddress"
-              placeholder="Add address"
-            >
-              <template #display>{{ location.attributes.address || 'No address provided' }}</template>
-            </InlineEdit>
+              {{ location.attributes.address || 'No address provided' }}
           </p>
         </div>
         <div class="actions">
@@ -86,11 +75,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import axios from 'axios'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import AreaForm from '@/components/AreaForm.vue'
-import InlineEdit from '@/components/InlineEdit.vue'
 
 
 const route = useRoute()
