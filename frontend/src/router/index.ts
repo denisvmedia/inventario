@@ -27,6 +27,11 @@ const routes = [
   },
   // Keep area routes for backward compatibility
   {
+    path: '/areas/new',
+    name: 'area-create',
+    component: () => import('../views/areas/AreaCreateView.vue')
+  },
+  {
     path: '/areas/:id',
     name: 'area-detail',
     component: () => import('../views/areas/AreaDetailView.vue')

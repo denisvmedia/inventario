@@ -1,8 +1,12 @@
 <template>
   <div class="area-edit">
+    <div class="breadcrumb-nav">
+      <a href="#" @click.prevent="navigateToLocations" class="breadcrumb-link">
+        <font-awesome-icon icon="arrow-left" /> Back to Locations
+      </a>
+    </div>
     <div class="header">
       <h1>Edit Area</h1>
-      <button class="btn btn-secondary" @click="goBack">Go Back</button>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
@@ -201,12 +205,41 @@ const submitForm = async () => {
 const goBack = () => {
   router.go(-1)
 }
+
+const navigateToLocations = () => {
+  // Always navigate directly to locations list
+  router.push('/locations')
+}
+
+const navigateToArea = () => {
+  // Navigate back to the area detail view
+  router.push(`/areas/${id}`)
+}
 </script>
 
 <style scoped>
 .area-edit {
   max-width: 600px;
   margin: 0 auto;
+}
+
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: #6c757d;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #4CAF50;
+  text-decoration: none;
 }
 
 .header {
