@@ -300,7 +300,7 @@ const formatDate = (dateString: string) => {
 }
 
 const getImageUrl = (image: any) => {
-  return `/api/v1/commodities/${commodity.value.id}/images/${image.id}.${image.ext}`
+  return `/api/v1/commodities/${commodity.value.id}/images/${image.id}${image.ext}`
 }
 
 const getImageName = (image: any) => {
@@ -345,6 +345,12 @@ const goBack = () => {
 .toolbar-section {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
+}
+
+.toolbar-section:last-child {
+  display: flex;
+  flex-direction: row;
   gap: 0.5rem;
 }
 

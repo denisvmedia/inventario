@@ -93,11 +93,11 @@ const fileUrl = computed(() => {
   if (!props.file) return ''
 
   if (props.fileType === 'images') {
-    return `/api/v1/commodities/${props.commodityId}/images/${props.file.id}.${props.file.ext}`
+    return `/api/v1/commodities/${props.commodityId}/images/${props.file.id}${props.file.ext}`
   } else if (props.fileType === 'manuals') {
-    return `/api/v1/commodities/${props.commodityId}/manuals/${props.file.id}.${props.file.ext}`
+    return `/api/v1/commodities/${props.commodityId}/manuals/${props.file.id}${props.file.ext}`
   } else if (props.fileType === 'invoices') {
-    return `/api/v1/commodities/${props.commodityId}/invoices/${props.file.id}.${props.file.ext}`
+    return `/api/v1/commodities/${props.commodityId}/invoices/${props.file.id}${props.file.ext}`
   }
   return ''
 })
