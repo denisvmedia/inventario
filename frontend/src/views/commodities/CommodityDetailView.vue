@@ -369,7 +369,7 @@ const downloadImage = (image: any) => {
 
   // Create a link and trigger download
   const link = document.createElement('a')
-  const imageUrl = `/api/v1/commodities/${commodity.value.id}/images/${image.id}.${image.ext}`
+  const imageUrl = `/api/v1/commodities/${commodity.value.id}/images/${image.id}${image.ext}`
   link.href = imageUrl
   link.download = image.path + image.ext
   document.body.appendChild(link)
@@ -382,7 +382,7 @@ const downloadManual = (manual: any) => {
 
   // Create a link and trigger download
   const link = document.createElement('a')
-  const manualUrl = `/api/v1/commodities/${commodity.value.id}/manuals/${manual.id}.${manual.ext}`
+  const manualUrl = `/api/v1/commodities/${commodity.value.id}/manuals/${manual.id}${manual.ext}`
   link.href = manualUrl
   link.download = manual.path + manual.ext
   document.body.appendChild(link)
@@ -395,7 +395,7 @@ const downloadInvoice = (invoice: any) => {
 
   // Create a link and trigger download
   const link = document.createElement('a')
-  const invoiceUrl = `/api/v1/commodities/${commodity.value.id}/invoices/${invoice.id}.${invoice.ext}`
+  const invoiceUrl = `/api/v1/commodities/${commodity.value.id}/invoices/${invoice.id}${invoice.ext}`
   link.href = invoiceUrl
   link.download = invoice.path + invoice.ext
   document.body.appendChild(link)
