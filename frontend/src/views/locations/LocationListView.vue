@@ -22,8 +22,8 @@
 
     <div v-else class="locations-list">
       <div v-for="location in locations" :key="location.id" class="location-container">
-        <div class="location-card">
-          <div class="location-content" @click="toggleLocationExpanded(location.id)">
+        <div class="location-card" @click="toggleLocationExpanded(location.id)">
+          <div class="location-content">
             <div class="location-header">
               <h3>{{ location.attributes.name }}</h3>
               <div class="location-expand-icon">
@@ -61,8 +61,8 @@
 
           <!-- Areas List -->
           <div v-if="getAreasForLocation(location.id).length > 0" class="areas-list">
-            <div v-for="area in getAreasForLocation(location.id)" :key="area.id" class="area-card">
-              <div class="area-content" @click="viewArea(area.id)">
+            <div v-for="area in getAreasForLocation(location.id)" :key="area.id" class="area-card" @click="viewArea(area.id)">
+              <div class="area-content">
                 <h5>{{ area.attributes.name }}</h5>
               </div>
               <div class="area-actions">
@@ -258,6 +258,7 @@ const deleteArea = async (id: string) => {
   justify-content: space-between;
   align-items: flex-start;
   transition: box-shadow 0.2s;
+  cursor: pointer;
 }
 
 .location-card:hover {
@@ -329,6 +330,7 @@ const deleteArea = async (id: string) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer;
 }
 
 .area-content {
