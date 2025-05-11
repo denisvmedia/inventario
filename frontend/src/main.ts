@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import './assets/main.css'
+import { FontAwesomeIcon } from './fontawesome'
 
 // Add some debug logging
 console.log('Initializing Vue application')
@@ -21,6 +22,9 @@ app.config.errorHandler = (err, instance, info) => {
 }
 
 app.use(router)
+
+// Register Font Awesome component globally
+app.component('font-awesome-icon', FontAwesomeIcon)
 
 // Mount the app
 console.log('Mounting Vue app to #app element')

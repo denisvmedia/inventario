@@ -2,7 +2,7 @@
   <div class="area-list">
     <div class="header">
       <h1>Areas</h1>
-      <router-link to="/areas/new" class="btn btn-primary"><i class="fas fa-plus"></i> New</router-link>
+      <router-link to="/areas/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
@@ -19,10 +19,10 @@
         </div>
         <div class="area-actions">
           <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)" title="Edit">
-            <i class="fas fa-edit"></i>
+            <font-awesome-icon icon="edit" />
           </button>
           <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(area.id)" title="Delete">
-            <i class="fas fa-trash"></i>
+            <font-awesome-icon icon="trash" />
           </button>
         </div>
       </div>

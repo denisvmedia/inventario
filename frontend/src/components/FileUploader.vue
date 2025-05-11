@@ -15,7 +15,7 @@
       />
       <div class="upload-content">
         <div class="upload-icon">
-          <i class="fas fa-upload"></i>
+          <font-awesome-icon icon="upload" size="2x" />
         </div>
         <p class="upload-text">
           <span class="upload-prompt">{{ uploadPrompt }}</span>

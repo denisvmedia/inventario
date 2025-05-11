@@ -46,10 +46,10 @@
 
       <div class="toolbar-section">
         <button class="btn btn-primary" @click="print">
-          <i class="fas fa-print"></i> Print
+          <font-awesome-icon icon="print" /> Print
         </button>
         <button class="btn btn-secondary" @click="goBack">
-          <i class="fas fa-arrow-left"></i> Back
+          <font-awesome-icon icon="arrow-left" /> Back
         </button>
       </div>
     </div>
