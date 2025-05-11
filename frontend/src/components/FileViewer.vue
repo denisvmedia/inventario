@@ -1,37 +1,27 @@
 <template>
   <div class="file-viewer">
-    <div v-if="files.length === 0" class="no-files">
-      No files to display
-    </div>
-    <div v-else class="files-container">
-      <div v-for="(file, index) in files" :key="file.id" class="file-item">
-        <div class="file-preview" @click="openViewer(index)">
-          <!-- Image preview -->
-          <img
-            v-if="isImageFile(file)"
-            :src="getFileUrl(file)"
-            :alt="getFileName(file)"
-            class="preview-image"
-            :title="getFileName(file)"
-          />
-          <!-- PDF or other file icon -->
-          <div v-else class="file-icon">
-            <i :class="getFileIcon(file)"></i>
-          </div>
-        </div>
-        <div class="file-info">
-          <div class="file-name" :title="getFileName(file)">{{ getFileName(file) }}</div>
-          <div class="file-actions">
-            <button class="btn btn-sm btn-primary" @click="downloadFile(file)">
-              <i class="fas fa-download"></i> Download
-            </button>
-            <button v-if="allowDelete" class="btn btn-sm btn-danger" @click="confirmDeleteFile(file)">
-              <i class="fas fa-trash"></i> Delete
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <FileList
+      :files="files"
+      :fileType="fileType"
+      :commodityId="entityId"
+      :loading="false"
+      @delete="confirmDeleteFile"
+      @download="downloadFile"
+      @update="updateFile"
+      @view-details="openFileDetails"
+      @open-viewer="handleOpenViewer"
+    />
+
+    <!-- File Details Modal -->
+    <FileDetails
+      v-if="selectedFile"
+      :file="selectedFile"
+      :fileType="fileType"
+      :commodityId="entityId"
+      @close="closeFileDetails"
+      @delete="confirmDeleteFile"
+      @download="downloadFile"
+    />
 
     <!-- File Viewer Modal -->
     <div v-if="showViewer" class="file-modal" @click="closeViewer">
@@ -114,6 +104,8 @@
 import { ref, computed, defineProps, defineEmits, onMounted, onBeforeUnmount, watch } from 'vue'
 import PDFViewerCanvas from './PDFViewerCanvas.vue'
 import PDFViewer from './PDFViewer.vue'
+import FileList from './FileList.vue'
+import FileDetails from './FileDetails.vue'
 
 const props = defineProps({
   files: {
@@ -140,10 +132,11 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['delete', 'download'])
+const emit = defineEmits(['delete', 'download', 'update'])
 
 const showViewer = ref(false)
 const currentIndex = ref(0)
+const selectedFile = ref(null)
 const fullImage = ref(null)
 const pdfViewerError = ref(false)
 const pdfLoading = ref(true)
@@ -201,23 +194,24 @@ const getFileUrl = (file: any) => {
     return path
   }
 
-  // Get the file extension
+  // Get the file extension - now we should always have an ext field
   let ext = ''
-  if (path) {
-    // Extract extension from path
-    const parts = path.split('.')
-    if (parts.length > 1) {
-      ext = parts.pop()
-    }
-  } else if (file.ext) {
+  if (file.ext) {
+    // Use the ext field directly - remove the dot if not present
     ext = file.ext
+    if (ext.startsWith('.')) {
+      ext = ext.substring(1)
+    }
   } else if (file.attributes && file.attributes.ext) {
     ext = file.attributes.ext
+    if (ext.startsWith('.')) {
+      ext = ext.substring(1)
+    }
   }
 
   // If we still don't have an extension, try to determine from content type
   if (!ext) {
-    const contentType = file.content_type || (file.attributes && file.attributes.content_type)
+    const contentType = file.content_type || (file.attributes && file.attributes.content_type) || file.mime_type
     if (contentType) {
       if (contentType.includes('pdf')) {
         ext = 'pdf'
@@ -256,51 +250,22 @@ const getFileUrl = (file: any) => {
 }
 
 const getFileName = (file: any) => {
-  // Extract filename from path or use ID if not available
-
-  // Check for a name or filename property
-  if (file.name) {
-    return file.name
+  // Use the Path field directly (it's now just the filename without extension)
+  // and add the extension from the ext field
+  if (file.path) {
+    return file.path + file.ext
   }
 
-  if (file.filename) {
-    return file.filename
-  }
-
+  // Check for attributes if using JSON API format
   if (file.attributes) {
-    if (file.attributes.name) {
-      return file.attributes.name
-    }
-
-    if (file.attributes.filename) {
-      return file.attributes.filename
+    if (file.attributes.path) {
+      return file.attributes.path + (file.attributes.ext || '')
     }
   }
 
-  // Extract from path
-  const path = file.path || (file.attributes && file.attributes.path)
-  if (path) {
-    const pathParts = path.split('/')
-    const fileName = pathParts.length > 0 ? pathParts[pathParts.length - 1] : ''
-    if (fileName) {
-      return fileName
-    }
-  }
-
-  // Get the file extension
-  let ext = ''
-  if (file.ext) {
-    ext = file.ext
-  } else if (file.attributes && file.attributes.ext) {
-    ext = file.attributes.ext
-  } else if (isPdfFile(file)) {
-    ext = 'pdf'
-  } else if (isImageFile(file)) {
-    ext = 'jpg' // Default image extension
-  }
-
-  // Fallback to ID with extension if available
-  return ext ? `File ${file.id}.${ext}` : `File ${file.id}`
+  // Fallback to ID with extension if path is not available
+  const ext = file.ext || (file.attributes && file.attributes.ext) || ''
+  return `${file.id}${ext}`
 }
 
 const getFileIcon = (file: any) => {
@@ -321,27 +286,21 @@ const isImageFile = (file: any) => {
   const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
   const imageMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
-  // Extract the path from the file object
-  const path = file.path || (file.attributes && file.attributes.path)
-
-  if (path) {
-    // Check if the path ends with an image extension
-    const pathLower = path.toLowerCase()
-    for (const ext of imageExtensions) {
-      if (pathLower.endsWith(`.${ext}`)) {
-        return true
-      }
+  // Check for extension - this is now the primary way to identify file types
+  const ext = file.ext || (file.attributes && file.attributes.ext)
+  if (ext) {
+    // Remove the dot if present for comparison
+    let extLower = ext.toLowerCase()
+    if (extLower.startsWith('.')) {
+      extLower = extLower.substring(1)
+    }
+    if (imageExtensions.includes(extLower)) {
+      return true
     }
   }
 
-  // Check for extension
-  const ext = file.ext || (file.attributes && file.attributes.ext)
-  if (ext && imageExtensions.includes(ext.toLowerCase())) {
-    return true
-  }
-
   // Check for content_type
-  const contentType = file.content_type || (file.attributes && file.attributes.content_type)
+  const contentType = file.content_type || (file.attributes && file.attributes.content_type) || file.mime_type
   if (contentType && imageMimeTypes.includes(contentType.toLowerCase())) {
     return true
   }
@@ -353,27 +312,15 @@ const isPdfFile = (file: any) => {
   console.log('Checking if file is PDF:', file)
   if (!file) return false
 
-  // Extract the path from the file object
-  const path = file.path || (file.attributes && file.attributes.path)
-
-  if (path) {
-    console.log('PDF check - Path found:', path)
-    // Check if the path ends with .pdf
-    if (path.toLowerCase().endsWith('.pdf')) {
-      console.log('PDF detected from path')
-      return true
-    }
-  }
-
-  // Check for extension
+  // Check for extension - this is now the primary way to identify file types
   const ext = file.ext || (file.attributes && file.attributes.ext)
-  if (ext && ext.toLowerCase() === 'pdf') {
+  if (ext && (ext.toLowerCase() === '.pdf' || ext.toLowerCase() === 'pdf')) {
     console.log('PDF detected from ext property')
     return true
   }
 
   // Check for content_type
-  const contentType = file.content_type || (file.attributes && file.attributes.content_type)
+  const contentType = file.content_type || (file.attributes && file.attributes.content_type) || file.mime_type
   if (contentType && contentType.toLowerCase() === 'application/pdf') {
     console.log('PDF detected from content_type')
     return true
@@ -394,6 +341,14 @@ const openViewer = (index) => {
   pdfErrorMessage.value = 'Unable to display PDF. Please download the file to view it.'
   // Prevent scrolling when modal is open
   document.body.style.overflow = 'hidden'
+}
+
+const handleOpenViewer = (file) => {
+  // Find the index of the file in the files array
+  const index = props.files.findIndex(f => f.id === file.id)
+  if (index !== -1) {
+    openViewer(index)
+  }
 }
 
 // Handle PDF rendering errors
@@ -541,7 +496,24 @@ const confirmDeleteFile = (file: any) => {
         }
       }
     }
+
+    // Close file details if we're deleting the selected file
+    if (selectedFile.value && selectedFile.value.id === file.id) {
+      closeFileDetails()
+    }
   }
+}
+
+const updateFile = (data: any) => {
+  emit('update', data)
+}
+
+const openFileDetails = (file: any) => {
+  selectedFile.value = file
+}
+
+const closeFileDetails = () => {
+  selectedFile.value = null
 }
 
 const confirmDeleteCurrentFile = () => {

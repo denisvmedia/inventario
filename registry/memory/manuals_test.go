@@ -22,8 +22,8 @@ func TestManualRegistry_Create(t *testing.T) {
 	manual := models.Manual{
 		CommodityID: createdCommodity.GetID(),
 		File: &models.File{
-			Path:         "path.ext",
-			OriginalPath: "path",
+			Path:         "path", // Without extension
+			OriginalPath: "path.ext",
 			Ext:          ".ext",
 			MIMEType:     "octet/stream",
 		},
@@ -51,8 +51,8 @@ func TestManualRegistry_Delete(t *testing.T) {
 	manual := models.Manual{
 		CommodityID: createdCommodity.GetID(),
 		File: &models.File{
-			Path:         "path.ext",
-			OriginalPath: "path",
+			Path:         "path", // Without extension
+			OriginalPath: "path.ext",
 			Ext:          ".ext",
 			MIMEType:     "octet/stream",
 		},
@@ -96,8 +96,8 @@ func TestManualRegistry_Create_Validation(t *testing.T) {
 
 	manual = models.Manual{
 		File: &models.File{
-			Path:         "test.png",
-			OriginalPath: "test",
+			Path:         "test", // Without extension
+			OriginalPath: "test.png",
 			Ext:          ".png",
 			MIMEType:     "image/png",
 		},
@@ -120,8 +120,8 @@ func TestManualRegistry_Create_CommodityNotFound(t *testing.T) {
 	manual := models.Manual{
 		CommodityID: "invalid",
 		File: &models.File{
-			Path:         "path.ext",
-			OriginalPath: "path",
+			Path:         "path", // Without extension
+			OriginalPath: "path.ext",
 			Ext:          ".ext",
 			MIMEType:     "octet/stream",
 		},

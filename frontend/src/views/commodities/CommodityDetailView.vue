@@ -115,12 +115,14 @@
           />
 
           <div v-if="loadingImages" class="loading">Loading images...</div>
-          <ImageViewer
+          <FileViewer
             v-else
-            :images="images"
+            :files="images"
+            fileType="images"
             :entityId="commodity.id"
             entityType="commodities"
             @delete="deleteImage"
+            @update="updateImage"
           />
         </div>
 
@@ -149,6 +151,7 @@
             :entityId="commodity.id"
             entityType="commodities"
             @delete="deleteManual"
+            @update="updateManual"
           />
         </div>
 
@@ -177,6 +180,7 @@
             :entityId="commodity.id"
             entityType="commodities"
             @delete="deleteInvoice"
+            @update="updateInvoice"
           />
         </div>
       </div>
@@ -192,7 +196,7 @@ import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 import FileUploader from '@/components/FileUploader.vue'
 import FileList from '@/components/FileList.vue'
-import ImageViewer from '@/components/ImageViewer.vue'
+// import ImageViewer from '@/components/ImageViewer.vue' // Using FileViewer for all file types now
 import FileViewer from '@/components/FileViewer.vue'
 
 const router = useRouter()
@@ -350,6 +354,52 @@ const deleteInvoice = async (invoice: any) => {
     invoices.value = invoices.value.filter(inv => inv.id !== invoice.id)
   } catch (err: any) {
     error.value = 'Failed to delete invoice: ' + (err.message || 'Unknown error')
+  }
+}
+
+// File update functions
+const updateImage = async (data: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.updateImage(commodity.value.id, data.id, { path: data.path })
+    // Update the image in the list
+    const index = images.value.findIndex(img => img.id === data.id)
+    if (index !== -1) {
+      images.value[index].path = data.path
+    }
+  } catch (err: any) {
+    error.value = 'Failed to update image: ' + (err.message || 'Unknown error')
+  }
+}
+
+const updateManual = async (data: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.updateManual(commodity.value.id, data.id, { path: data.path })
+    // Update the manual in the list
+    const index = manuals.value.findIndex(m => m.id === data.id)
+    if (index !== -1) {
+      manuals.value[index].path = data.path
+    }
+  } catch (err: any) {
+    error.value = 'Failed to update manual: ' + (err.message || 'Unknown error')
+  }
+}
+
+const updateInvoice = async (data: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.updateInvoice(commodity.value.id, data.id, { path: data.path })
+    // Update the invoice in the list
+    const index = invoices.value.findIndex(inv => inv.id === data.id)
+    if (index !== -1) {
+      invoices.value[index].path = data.path
+    }
+  } catch (err: any) {
+    error.value = 'Failed to update invoice: ' + (err.message || 'Unknown error')
   }
 }
 

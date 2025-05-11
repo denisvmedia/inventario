@@ -98,8 +98,8 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 	must.Must(imageRegistry.Create(models.Image{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
-			Path:         "image1.jpg",
-			OriginalPath: "image1.jpg",
+			Path:         "image1", // Without extension
+			OriginalPath: "image1.jpg", // This is the actual file name in storage
 			Ext:          ".jpg",
 			MIMEType:     "image/jpeg",
 		},
@@ -115,8 +115,8 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 	must.Must(imageRegistry.Create(models.Image{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
-			Path:         "image2.jpg",
-			OriginalPath: "image2.jpg",
+			Path:         "image2", // Without extension
+			OriginalPath: "image2.jpg", // This is the actual file name in storage
 			Ext:          ".jpg",
 			MIMEType:     "image/jpeg",
 		},
@@ -140,8 +140,8 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 	must.Must(invoiceRegistry.Create(models.Invoice{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
-			Path:         "invoice1.pdf",
-			OriginalPath: "invoice1.pdf",
+			Path:         "invoice1", // Without extension
+			OriginalPath: "invoice1.pdf", // This is the actual file name in storage
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
@@ -157,8 +157,8 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 	must.Must(invoiceRegistry.Create(models.Invoice{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
-			Path:         "invoice2.pdf",
-			OriginalPath: "invoice2.pdf",
+			Path:         "invoice2", // Without extension
+			OriginalPath: "invoice2.pdf", // This is the actual file name in storage
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
@@ -182,8 +182,8 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 	must.Must(manualRegistry.Create(models.Manual{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
-			Path:         "manual1.pdf",
-			OriginalPath: "manual1.pdf",
+			Path:         "manual1", // Without extension
+			OriginalPath: "manual1.pdf", // This is the actual file name in storage
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
@@ -199,8 +199,8 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 	must.Must(manualRegistry.Create(models.Manual{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
-			Path:         "manual2.pdf",
-			OriginalPath: "manual2.pdf",
+			Path:         "manual2", // Without extension
+			OriginalPath: "manual2.pdf", // This is the actual file name in storage
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},

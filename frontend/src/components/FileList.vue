@@ -6,20 +6,45 @@
     </div>
     <div v-else class="files-container">
       <div v-for="file in files" :key="file.id" class="file-item">
-        <div class="file-preview" v-if="fileType === 'images' && file.path">
+        <div class="file-preview" v-if="fileType === 'images' && file.path" @click="openViewer(file)">
           <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
         </div>
-        <div class="file-icon" v-else>
+        <div class="file-icon" v-else @click="openViewer(file)">
           <i :class="getFileIcon(file)"></i>
         </div>
         <div class="file-info">
-          <div class="file-name">{{ getFileName(file) }}</div>
+          <div class="file-name-container">
+            <div v-if="editingFile !== file.id" class="file-name" @click="startEditing(file)">
+              {{ getFileName(file) }}
+              <i class="fas fa-pencil-alt edit-icon"></i>
+            </div>
+            <div v-else class="file-name-edit">
+              <input
+                type="text"
+                v-model="editedFileName"
+                @keyup.enter="saveFileName(file)"
+                @keyup.esc="cancelEditing"
+                ref="fileNameInput"
+              />
+              <div class="edit-actions">
+                <button class="btn btn-sm btn-success" @click="saveFileName(file)">
+                  <i class="fas fa-check"></i>
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="cancelEditing">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+          </div>
           <div class="file-actions">
             <button class="btn btn-sm btn-primary" @click="downloadFile(file)">
               <i class="fas fa-download"></i> Download
             </button>
             <button class="btn btn-sm btn-danger" @click="confirmDelete(file)">
               <i class="fas fa-trash"></i> Delete
+            </button>
+            <button class="btn btn-sm btn-info" @click="viewFileDetails(file)">
+              <i class="fas fa-info-circle"></i> Details
             </button>
           </div>
         </div>
@@ -29,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits } from 'vue'
+import { defineProps, defineEmits, ref, nextTick } from 'vue'
 
 const props = defineProps({
   files: {
@@ -52,7 +77,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['delete', 'download'])
+const emit = defineEmits(['delete', 'download', 'update', 'view-details', 'open-viewer'])
 
 const getFileUrl = (file: any) => {
   if (props.fileType === 'images') {
@@ -66,9 +91,13 @@ const getFileUrl = (file: any) => {
 }
 
 const getFileName = (file: any) => {
-  // Extract filename from path or use ID if not available
-  const pathParts = file.path ? file.path.split('/') : []
-  return pathParts.length > 0 ? pathParts[pathParts.length - 1] : `${file.id}.${file.ext}`
+  // Use the Path field directly (it's now just the filename without extension)
+  // and add the extension from the ext field
+  if (file.path) {
+    return file.path + file.ext
+  }
+  // Fallback to ID with extension if path is not available
+  return `${file.id}${file.ext}`
 }
 
 const getFileIcon = (file: any) => {
@@ -96,6 +125,63 @@ const confirmDelete = (file: any) => {
   if (confirm(`Are you sure you want to delete this ${props.fileType.slice(0, -1)}?`)) {
     emit('delete', file)
   }
+}
+
+// File name editing functionality
+const editingFile = ref<string | null>(null)
+const editedFileName = ref('')
+const fileNameInput = ref<HTMLInputElement | null>(null)
+
+const startEditing = (file: any) => {
+  editingFile.value = file.id
+  // Set the initial value to the path (without extension)
+  editedFileName.value = file.path
+
+  // Focus the input field after the DOM updates
+  nextTick(() => {
+    if (fileNameInput.value) {
+      fileNameInput.value.focus()
+    }
+  })
+}
+
+const cancelEditing = () => {
+  editingFile.value = null
+  editedFileName.value = ''
+}
+
+const saveFileName = async (file: any) => {
+  if (!editedFileName.value.trim()) {
+    alert('File name cannot be empty')
+    return
+  }
+
+  try {
+    // Create a copy of the file with the updated path
+    const updatedFile = { ...file, path: editedFileName.value }
+
+    // Emit the update event with the file ID and new path
+    emit('update', {
+      id: file.id,
+      type: props.fileType,
+      path: editedFileName.value
+    })
+
+    // Reset the editing state
+    editingFile.value = null
+    editedFileName.value = ''
+  } catch (error) {
+    console.error('Error updating file name:', error)
+    alert('Failed to update file name')
+  }
+}
+
+const viewFileDetails = (file: any) => {
+  emit('view-details', file)
+}
+
+const openViewer = (file: any) => {
+  emit('open-viewer', file)
 }
 </script>
 
@@ -161,13 +247,51 @@ const confirmDelete = (file: any) => {
   padding: 0.75rem;
 }
 
+.file-name-container {
+  margin-bottom: 0.5rem;
+}
+
 .file-name {
   font-weight: 500;
-  margin-bottom: 0.5rem;
   word-break: break-word;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-name:hover .edit-icon {
+  opacity: 1;
+}
+
+.edit-icon {
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+  color: #6c757d;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.file-name-edit {
+  display: flex;
+  align-items: center;
+}
+
+.file-name-edit input {
+  flex: 1;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
 }
 
 .file-actions {
