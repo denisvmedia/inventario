@@ -215,7 +215,13 @@ const viewLocation = (id: string) => {
 }
 
 const viewCommodity = (id: string) => {
-  router.push(`/commodities/${id}`)
+  router.push({
+    path: `/commodities/${id}`,
+    query: {
+      source: 'area',
+      areaId: area.value.id
+    }
+  })
 }
 
 const editCommodity = (id: string) => {

@@ -4,6 +4,13 @@
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!commodity" class="not-found">Commodity not found</div>
     <div v-else>
+      <div class="breadcrumb-nav">
+        <a href="#" @click.prevent="navigateBack" class="breadcrumb-link">
+          <font-awesome-icon icon="arrow-left" />
+          <span v-if="sourceIsArea">Back to Area</span>
+          <span v-else>Back to Commodities</span>
+        </a>
+      </div>
       <div class="header">
         <h1>{{ commodity.attributes.name }}</h1>
         <div class="actions">
@@ -202,7 +209,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
@@ -217,6 +224,10 @@ const route = useRoute()
 const commodity = ref<any>(null)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+
+// Navigation source tracking
+const sourceIsArea = computed(() => route.query.source === 'area')
+const areaId = computed(() => route.query.areaId as string || '')
 
 // File states
 const images = ref<any[]>([])
@@ -480,6 +491,16 @@ const deleteCommodity = async () => {
   }
 }
 
+const navigateBack = () => {
+  if (sourceIsArea.value && areaId.value) {
+    // Navigate back to the area detail view
+    router.push(`/areas/${areaId.value}`)
+  } else {
+    // Navigate back to the commodities list
+    router.push('/commodities')
+  }
+}
+
 const getTypeIcon = (typeId: string): string => {
   switch(typeId) {
     case 'white_goods':
@@ -532,6 +553,25 @@ const calculatePricePerUnit = (): string => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: #6c757d;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #4CAF50;
+  text-decoration: none;
 }
 
 .header {
