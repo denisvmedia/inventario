@@ -3,7 +3,7 @@
     <!-- Basic Information -->
     <div class="form-section">
       <h2>Basic Information</h2>
-      
+
       <div class="form-group">
         <label for="name">Name</label>
         <input
@@ -19,7 +19,7 @@
 
       <!-- Other fields from both forms -->
       <!-- ... -->
-      
+
       <div class="form-group">
         <label class="checkbox-label">
           <input type="checkbox" v-model="formData.draft">
@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, defineProps, defineEmits } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 import { CURRENCIES } from '@/constants/currencies'

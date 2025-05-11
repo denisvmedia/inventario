@@ -6,11 +6,17 @@
     <div v-else>
       <div class="header">
         <div class="title-section">
-          <h1>{{ area.attributes.name }}</h1>
+          <h1>
+            <InlineEdit
+              v-model="area.attributes.name"
+              @save="updateAreaName"
+            >
+              <template #display>{{ area.attributes.name }}</template>
+            </InlineEdit>
+          </h1>
           <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
         </div>
         <div class="actions">
-          <button class="btn btn-secondary" @click="editArea" title="Edit"><i class="fas fa-edit"></i></button>
           <button class="btn btn-danger" @click="confirmDelete" title="Delete"><i class="fas fa-trash"></i></button>
         </div>
       </div>
@@ -68,6 +74,7 @@ import locationService from '@/services/locationService'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import InlineEdit from '@/components/InlineEdit.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -167,8 +174,26 @@ const calculatePricePerUnit = (commodity: any) => {
   return pricePerUnit.toFixed(2)
 }
 
-const editArea = () => {
-  router.push(`/areas/${area.value.id}/edit`)
+const updateAreaName = async (newName: string) => {
+  try {
+    const payload = {
+      data: {
+        id: area.value.id,
+        type: 'areas',
+        attributes: {
+          name: newName,
+          location_id: area.value.attributes.location_id
+        }
+      }
+    }
+
+    await areaService.updateArea(area.value.id, payload)
+    // Update was successful, the model is already updated via v-model
+  } catch (err: any) {
+    error.value = 'Failed to update area name: ' + (err.message || 'Unknown error')
+    // Revert the change in the UI
+    area.value.attributes.name = area.value.attributes.name
+  }
 }
 
 const confirmDelete = () => {
@@ -437,6 +462,5 @@ pre {
   margin-top: 0.25rem;
 }
 
-/* Add Font Awesome icons */
-@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css');
+
 </style>

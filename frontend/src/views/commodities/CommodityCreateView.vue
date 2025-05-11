@@ -544,8 +544,9 @@ const submitForm = async () => {
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
 
-    // On success, navigate to commodities list
-    router.push('/commodities')
+    // On success, navigate to commodity details page
+    const newCommodityId = response.data.data.id
+    router.push(`/commodities/${newCommodityId}`)
   } catch (err: any) {
     console.error('Error creating commodity:', err)
 
@@ -580,7 +581,13 @@ const submitForm = async () => {
 }
 
 const cancel = () => {
-  router.push('/commodities')
+  // Go back to the previous page in history if available
+  if (window.history.length > 1) {
+    router.go(-1)
+  } else {
+    // Fallback to commodities list
+    router.push('/commodities')
+  }
 }
 
 const addExtraSerialNumber = () => {
