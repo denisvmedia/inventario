@@ -9,6 +9,9 @@
         <div class="actions">
           <button class="btn btn-secondary" @click="editCommodity">Edit</button>
           <button class="btn btn-danger" @click="confirmDelete">Delete</button>
+          <button class="btn btn-primary" @click="printCommodity">
+            <i class="fas fa-print"></i> Print
+          </button>
         </div>
       </div>
 
@@ -454,6 +457,11 @@ const confirmDelete = () => {
   if (confirm('Are you sure you want to delete this commodity?')) {
     deleteCommodity()
   }
+}
+
+const printCommodity = () => {
+  // Open the print view in a new tab/window
+  window.open(`/commodities/${commodity.value.id}/print`, '_blank')
 }
 
 const deleteCommodity = async () => {
