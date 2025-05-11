@@ -17,12 +17,23 @@
 
 
 
-      <div class="areas-section" v-if="areas.length > 0">
+      <div class="areas-section">
         <div class="section-header">
           <h2>Areas</h2>
-          <router-link :to="`/areas/new?location=${location.id}`" class="btn btn-primary btn-sm">Add Area</router-link>
+          <button class="btn btn-primary btn-sm" @click="showAreaForm = !showAreaForm">
+            {{ showAreaForm ? 'Cancel' : 'Add Area' }}
+          </button>
         </div>
-        <div class="areas-grid">
+
+        <!-- Inline Area Creation Form -->
+        <AreaForm
+          v-if="showAreaForm"
+          :locationId="location.id"
+          @created="handleAreaCreated"
+          @cancel="showAreaForm = false"
+        />
+
+        <div v-if="areas.length > 0" class="areas-grid">
           <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
             <div class="area-content">
               <h3>{{ area.attributes.name }}</h3>
@@ -37,10 +48,9 @@
             </div>
           </div>
         </div>
-      </div>
-      <div v-else class="no-areas">
-        <p>No areas found for this location.</p>
-        <router-link :to="`/areas/new?location=${location.id}`" class="btn btn-primary">Add Area</router-link>
+        <div v-else class="no-areas">
+          <p>No areas found for this location. Use the button above to add your first area.</p>
+        </div>
       </div>
 
       <!-- Test API Results Section -->
@@ -65,6 +75,7 @@ import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
+import AreaForm from '@/components/AreaForm.vue'
 
 
 const route = useRoute()
@@ -79,6 +90,9 @@ const areas = ref<any[]>([])
 // Test API variables
 const testResult = ref('')
 const testError = ref('')
+
+// State for inline forms
+const showAreaForm = ref(false)
 
 onMounted(async () => {
   const id = route.params.id as string
@@ -149,6 +163,12 @@ const deleteArea = async (id: string) => {
   } catch (err: any) {
     error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
   }
+}
+
+// Handle area creation
+const handleAreaCreated = (newArea: any) => {
+  areas.value.push(newArea)
+  showAreaForm.value = false
 }
 </script>
 
