@@ -872,6 +872,13 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
