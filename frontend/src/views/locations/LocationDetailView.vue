@@ -15,32 +15,7 @@
         </div>
       </div>
 
-      <!-- Images Section -->
-      <div class="info-card full-width">
-        <div class="section-header">
-          <h2>Images</h2>
-          <button class="btn btn-sm btn-primary" @click="showImageUploader = !showImageUploader">
-            {{ showImageUploader ? 'Cancel' : 'Add Images' }}
-          </button>
-        </div>
 
-        <FileUploader
-          v-if="showImageUploader"
-          :multiple="true"
-          accept="image/*"
-          uploadPrompt="Drag and drop images here"
-          @upload="uploadImages"
-        />
-
-        <div v-if="loadingImages" class="loading">Loading images...</div>
-        <ImageViewer
-          v-else
-          :images="images"
-          :entityId="location.id"
-          entityType="locations"
-          @delete="deleteImage"
-        />
-      </div>
 
       <div class="areas-section" v-if="areas.length > 0">
         <div class="section-header">
@@ -90,8 +65,7 @@ import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
-import FileUploader from '@/components/FileUploader.vue'
-import ImageViewer from '@/components/ImageViewer.vue'
+
 
 const route = useRoute()
 const router = useRouter()
@@ -100,10 +74,7 @@ const error = ref<string | null>(null)
 const location = ref<any>(null)
 const areas = ref<any[]>([])
 
-// Image related states
-const images = ref<any[]>([])
-const loadingImages = ref<boolean>(false)
-const showImageUploader = ref<boolean>(false)
+
 
 // Test API variables
 const testResult = ref('')
@@ -128,58 +99,14 @@ onMounted(async () => {
 
     loading.value = false
 
-    // Load images after location is loaded
-    loadImages()
+
   } catch (err: any) {
     error.value = 'Failed to load location: ' + (err.message || 'Unknown error')
     loading.value = false
   }
 })
 
-const loadImages = async () => {
-  if (!location.value) return
 
-  loadingImages.value = true
-  try {
-    // Note: This API endpoint might need to be implemented on the backend
-    const response = await locationService.getImages(location.value.id)
-    images.value = response.data?.data || []
-  } catch (err: any) {
-    console.error('Failed to load images:', err)
-  } finally {
-    loadingImages.value = false
-  }
-}
-
-const uploadImages = async (files: File[]) => {
-  if (!location.value || files.length === 0) return
-
-  try {
-    // Note: This API endpoint might need to be implemented on the backend
-    await locationService.uploadImages(location.value.id, files)
-    showImageUploader.value = false
-    // Reload images after upload
-    loadingImages.value = true
-    const response = await locationService.getImages(location.value.id)
-    images.value = response.data?.data || []
-    loadingImages.value = false
-  } catch (err: any) {
-    error.value = 'Failed to upload images: ' + (err.message || 'Unknown error')
-  }
-}
-
-const deleteImage = async (image: any) => {
-  if (!location.value) return
-
-  try {
-    // Note: This API endpoint might need to be implemented on the backend
-    await locationService.deleteImage(location.value.id, image.id)
-    // Remove the deleted image from the list
-    images.value = images.value.filter(img => img.id !== image.id)
-  } catch (err: any) {
-    error.value = 'Failed to delete image: ' + (err.message || 'Unknown error')
-  }
-}
 
 const editLocation = () => {
   router.push(`/locations/${location.value.id}/edit`)

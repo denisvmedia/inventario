@@ -105,6 +105,58 @@ const commodityService = {
     return axios.get(`${API_URL}/${id}/invoices`)
   },
 
+  // File update methods
+  updateImage(commodityId: string, imageId: string, data: any) {
+    return axios.put(`${API_URL}/${commodityId}/images/${imageId}`, {
+      data: {
+        id: imageId,
+        type: 'images',
+        attributes: {
+          path: data.path
+        }
+      }
+    }, {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json'
+      }
+    })
+  },
+
+  updateManual(commodityId: string, manualId: string, data: any) {
+    return axios.put(`${API_URL}/${commodityId}/manuals/${manualId}`, {
+      data: {
+        id: manualId,
+        type: 'manuals',
+        attributes: {
+          path: data.path
+        }
+      }
+    }, {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json'
+      }
+    })
+  },
+
+  updateInvoice(commodityId: string, invoiceId: string, data: any) {
+    return axios.put(`${API_URL}/${commodityId}/invoices/${invoiceId}`, {
+      data: {
+        id: invoiceId,
+        type: 'invoices',
+        attributes: {
+          path: data.path
+        }
+      }
+    }, {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json'
+      }
+    })
+  },
+
   // File deletion methods
   deleteImage(commodityId: string, imageId: string) {
     return axios.delete(`${API_URL}/${commodityId}/images/${imageId}`)

@@ -1,40 +1,30 @@
 <template>
   <div class="file-viewer">
-    <div v-if="files.length === 0" class="no-files">
-      No files to display
-    </div>
-    <div v-else class="files-container">
-      <div v-for="(file, index) in files" :key="file.id" class="file-item">
-        <div class="file-preview" @click="openViewer(index)">
-          <!-- Image preview -->
-          <img
-            v-if="isImageFile(file)"
-            :src="getFileUrl(file)"
-            :alt="getFileName(file)"
-            class="preview-image"
-            :title="getFileName(file)"
-          />
-          <!-- PDF or other file icon -->
-          <div v-else class="file-icon">
-            <i :class="getFileIcon(file)"></i>
-          </div>
-        </div>
-        <div class="file-info">
-          <div class="file-name" :title="getFileName(file)">{{ getFileName(file) }}</div>
-          <div class="file-actions">
-            <button class="btn btn-sm btn-primary" @click="downloadFile(file)">
-              <i class="fas fa-download"></i> Download
-            </button>
-            <button v-if="allowDelete" class="btn btn-sm btn-danger" @click="confirmDeleteFile(file)">
-              <i class="fas fa-trash"></i> Delete
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <FileList
+      :files="files"
+      :fileType="fileType"
+      :commodityId="entityId"
+      :loading="false"
+      @delete="confirmDeleteFile"
+      @download="downloadFile"
+      @update="updateFile"
+      @view-details="openFileDetails"
+      @open-viewer="handleOpenViewer"
+    />
+
+    <!-- File Details Modal -->
+    <FileDetails
+      v-if="selectedFile"
+      :file="selectedFile"
+      :fileType="fileType"
+      :commodityId="entityId"
+      @close="closeFileDetails"
+      @delete="confirmDeleteFile"
+      @download="downloadFile"
+    />
 
     <!-- File Viewer Modal -->
-    <div v-if="showViewer" class="file-modal" @click="closeViewer">
+    <div v-if="showViewer" class="file-modal" @click="handleModalClick">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 :title="currentFileName">{{ currentFileName }}</h3>
@@ -103,6 +93,9 @@
             <button v-if="allowDelete" class="btn btn-sm btn-danger" @click="confirmDeleteCurrentFile">
               <i class="fas fa-trash"></i> Delete
             </button>
+            <button class="btn btn-sm btn-secondary" @click="closeViewer">
+              <i class="fas fa-times"></i> Close
+            </button>
           </div>
         </div>
       </div>
@@ -114,6 +107,8 @@
 import { ref, computed, defineProps, defineEmits, onMounted, onBeforeUnmount, watch } from 'vue'
 import PDFViewerCanvas from './PDFViewerCanvas.vue'
 import PDFViewer from './PDFViewer.vue'
+import FileList from './FileList.vue'
+import FileDetails from './FileDetails.vue'
 
 const props = defineProps({
   files: {
@@ -140,10 +135,11 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['delete', 'download'])
+const emit = defineEmits(['delete', 'download', 'update'])
 
 const showViewer = ref(false)
 const currentIndex = ref(0)
+const selectedFile = ref(null)
 const fullImage = ref(null)
 const pdfViewerError = ref(false)
 const pdfLoading = ref(true)
@@ -159,6 +155,7 @@ const startY = ref(0)
 
 // Variables to track click vs. drag
 const isDragging = ref(false)
+const isGlobalDragging = ref(false) // Track dragging at the document level
 const clickStartTime = ref(0)
 const clickStartPos = ref({ x: 0, y: 0 })
 
@@ -201,23 +198,24 @@ const getFileUrl = (file: any) => {
     return path
   }
 
-  // Get the file extension
+  // Get the file extension - now we should always have an ext field
   let ext = ''
-  if (path) {
-    // Extract extension from path
-    const parts = path.split('.')
-    if (parts.length > 1) {
-      ext = parts.pop()
-    }
-  } else if (file.ext) {
+  if (file.ext) {
+    // Use the ext field directly - remove the dot if not present
     ext = file.ext
+    if (ext.startsWith('.')) {
+      ext = ext.substring(1)
+    }
   } else if (file.attributes && file.attributes.ext) {
     ext = file.attributes.ext
+    if (ext.startsWith('.')) {
+      ext = ext.substring(1)
+    }
   }
 
   // If we still don't have an extension, try to determine from content type
   if (!ext) {
-    const contentType = file.content_type || (file.attributes && file.attributes.content_type)
+    const contentType = file.content_type || (file.attributes && file.attributes.content_type) || file.mime_type
     if (contentType) {
       if (contentType.includes('pdf')) {
         ext = 'pdf'
@@ -256,51 +254,22 @@ const getFileUrl = (file: any) => {
 }
 
 const getFileName = (file: any) => {
-  // Extract filename from path or use ID if not available
-
-  // Check for a name or filename property
-  if (file.name) {
-    return file.name
+  // Use the Path field directly (it's now just the filename without extension)
+  // and add the extension from the ext field
+  if (file.path) {
+    return file.path + file.ext
   }
 
-  if (file.filename) {
-    return file.filename
-  }
-
+  // Check for attributes if using JSON API format
   if (file.attributes) {
-    if (file.attributes.name) {
-      return file.attributes.name
-    }
-
-    if (file.attributes.filename) {
-      return file.attributes.filename
+    if (file.attributes.path) {
+      return file.attributes.path + (file.attributes.ext || '')
     }
   }
 
-  // Extract from path
-  const path = file.path || (file.attributes && file.attributes.path)
-  if (path) {
-    const pathParts = path.split('/')
-    const fileName = pathParts.length > 0 ? pathParts[pathParts.length - 1] : ''
-    if (fileName) {
-      return fileName
-    }
-  }
-
-  // Get the file extension
-  let ext = ''
-  if (file.ext) {
-    ext = file.ext
-  } else if (file.attributes && file.attributes.ext) {
-    ext = file.attributes.ext
-  } else if (isPdfFile(file)) {
-    ext = 'pdf'
-  } else if (isImageFile(file)) {
-    ext = 'jpg' // Default image extension
-  }
-
-  // Fallback to ID with extension if available
-  return ext ? `File ${file.id}.${ext}` : `File ${file.id}`
+  // Fallback to ID with extension if path is not available
+  const ext = file.ext || (file.attributes && file.attributes.ext) || ''
+  return `${file.id}${ext}`
 }
 
 const getFileIcon = (file: any) => {
@@ -321,27 +290,21 @@ const isImageFile = (file: any) => {
   const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
   const imageMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
-  // Extract the path from the file object
-  const path = file.path || (file.attributes && file.attributes.path)
-
-  if (path) {
-    // Check if the path ends with an image extension
-    const pathLower = path.toLowerCase()
-    for (const ext of imageExtensions) {
-      if (pathLower.endsWith(`.${ext}`)) {
-        return true
-      }
+  // Check for extension - this is now the primary way to identify file types
+  const ext = file.ext || (file.attributes && file.attributes.ext)
+  if (ext) {
+    // Remove the dot if present for comparison
+    let extLower = ext.toLowerCase()
+    if (extLower.startsWith('.')) {
+      extLower = extLower.substring(1)
+    }
+    if (imageExtensions.includes(extLower)) {
+      return true
     }
   }
 
-  // Check for extension
-  const ext = file.ext || (file.attributes && file.attributes.ext)
-  if (ext && imageExtensions.includes(ext.toLowerCase())) {
-    return true
-  }
-
   // Check for content_type
-  const contentType = file.content_type || (file.attributes && file.attributes.content_type)
+  const contentType = file.content_type || (file.attributes && file.attributes.content_type) || file.mime_type
   if (contentType && imageMimeTypes.includes(contentType.toLowerCase())) {
     return true
   }
@@ -353,27 +316,15 @@ const isPdfFile = (file: any) => {
   console.log('Checking if file is PDF:', file)
   if (!file) return false
 
-  // Extract the path from the file object
-  const path = file.path || (file.attributes && file.attributes.path)
-
-  if (path) {
-    console.log('PDF check - Path found:', path)
-    // Check if the path ends with .pdf
-    if (path.toLowerCase().endsWith('.pdf')) {
-      console.log('PDF detected from path')
-      return true
-    }
-  }
-
-  // Check for extension
+  // Check for extension - this is now the primary way to identify file types
   const ext = file.ext || (file.attributes && file.attributes.ext)
-  if (ext && ext.toLowerCase() === 'pdf') {
+  if (ext && (ext.toLowerCase() === '.pdf' || ext.toLowerCase() === 'pdf')) {
     console.log('PDF detected from ext property')
     return true
   }
 
   // Check for content_type
-  const contentType = file.content_type || (file.attributes && file.attributes.content_type)
+  const contentType = file.content_type || (file.attributes && file.attributes.content_type) || file.mime_type
   if (contentType && contentType.toLowerCase() === 'application/pdf') {
     console.log('PDF detected from content_type')
     return true
@@ -396,6 +347,14 @@ const openViewer = (index) => {
   document.body.style.overflow = 'hidden'
 }
 
+const handleOpenViewer = (file) => {
+  // Find the index of the file in the files array
+  const index = props.files.findIndex(f => f.id === file.id)
+  if (index !== -1) {
+    openViewer(index)
+  }
+}
+
 // Handle PDF rendering errors
 const handlePdfError = (error) => {
   console.error('PDF rendering error:', error)
@@ -410,6 +369,13 @@ const handlePdfError = (error) => {
     } else {
       pdfErrorMessage.value = 'Unable to display PDF. Please download the file to view it.'
     }
+  }
+}
+
+const handleModalClick = (event) => {
+  // Only close if we're not in a dragging operation
+  if (!isGlobalDragging.value) {
+    closeViewer()
   }
 }
 
@@ -469,6 +435,12 @@ const resetZoom = () => {
   panX.value = 0
   panY.value = 0
   isPanning.value = false
+  isDragging.value = false
+  isGlobalDragging.value = false
+
+  // Remove any global event listeners that might be active
+  document.removeEventListener('mousemove', handleGlobalMouseMove)
+  document.removeEventListener('mouseup', handleGlobalMouseUp)
 }
 
 // Pan functions - only active when zoomed
@@ -476,6 +448,7 @@ const startPan = (event) => {
   if (isZoomed.value) {
     event.preventDefault()
     isPanning.value = true
+    isGlobalDragging.value = false // Reset global dragging state
     startX.value = event.clientX - panX.value
     startY.value = event.clientY - panY.value
 
@@ -483,12 +456,16 @@ const startPan = (event) => {
     clickStartTime.value = Date.now()
     clickStartPos.value = { x: event.clientX, y: event.clientY }
     isDragging.value = false
+
+    // Add global event listeners to track mouse movement outside the image
+    document.addEventListener('mousemove', handleGlobalMouseMove)
+    document.addEventListener('mouseup', handleGlobalMouseUp)
   }
 }
 
-const pan = (event) => {
+// Global mouse move handler - works even when mouse is outside the image
+const handleGlobalMouseMove = (event) => {
   if (!isPanning.value) return
-  event.preventDefault()
 
   // Calculate distance moved
   const dx = Math.abs(event.clientX - clickStartPos.value.x)
@@ -497,27 +474,44 @@ const pan = (event) => {
   // If moved more than 5px, consider it a drag
   if (dx > 5 || dy > 5) {
     isDragging.value = true
+    isGlobalDragging.value = true // Set global dragging state
   }
 
   panX.value = event.clientX - startX.value
   panY.value = event.clientY - startY.value
 }
 
+// Global mouse up handler
+const handleGlobalMouseUp = (event) => {
+  if (isPanning.value) {
+    isPanning.value = false
+
+    // Keep the global dragging state true for a short time
+    // This prevents the modal from closing when releasing after a drag
+    setTimeout(() => {
+      isGlobalDragging.value = false
+    }, 50) // Short delay to handle the click event that might follow
+
+    // Remove global event listeners
+    document.removeEventListener('mousemove', handleGlobalMouseMove)
+    document.removeEventListener('mouseup', handleGlobalMouseUp)
+  }
+}
+
+// These local handlers are still needed for the image element
+const pan = (event) => {
+  if (!isPanning.value) return
+  event.preventDefault()
+}
+
 const endPan = () => {
-  isPanning.value = false
+  // Local handler - the actual end of panning is handled by the global handler
 }
 
 // Download functions
 const downloadFile = (file: any) => {
+  // Only pass through the download event to parent
   emit('download', file)
-
-  // Create a link and trigger download
-  const link = document.createElement('a')
-  link.href = getFileUrl(file)
-  link.download = getFileName(file)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 const downloadCurrentFile = () => {
@@ -527,21 +521,46 @@ const downloadCurrentFile = () => {
 
 // Delete functions
 const confirmDeleteFile = (file: any) => {
+  // Show confirmation dialog
   if (confirm(`Are you sure you want to delete this ${props.fileType.slice(0, -1)}?`)) {
+    // Emit delete event to parent
     emit('delete', file)
 
-    // If we're deleting the current file in the viewer, adjust accordingly
-    if (showViewer.value && currentFile.value && currentFile.value.id === file.id) {
-      if (props.files.length <= 1) {
-        closeViewer()
-      } else {
-        // Stay on the same index unless it's the last file
-        if (currentIndex.value === props.files.length - 1) {
-          currentIndex.value--
-        }
+    // Handle UI updates after deletion
+    handlePostDeleteUI(file)
+  }
+}
+
+// Handle UI updates after a file is deleted
+const handlePostDeleteUI = (file: any) => {
+  // If we're deleting the current file in the viewer, adjust accordingly
+  if (showViewer.value && currentFile.value && currentFile.value.id === file.id) {
+    if (props.files.length <= 1) {
+      closeViewer()
+    } else {
+      // Stay on the same index unless it's the last file
+      if (currentIndex.value === props.files.length - 1) {
+        currentIndex.value--
       }
     }
   }
+
+  // Close file details if we're deleting the selected file
+  if (selectedFile.value && selectedFile.value.id === file.id) {
+    closeFileDetails()
+  }
+}
+
+const updateFile = (data: any) => {
+  emit('update', data)
+}
+
+const openFileDetails = (file: any) => {
+  selectedFile.value = file
+}
+
+const closeFileDetails = () => {
+  selectedFile.value = null
 }
 
 const confirmDeleteCurrentFile = () => {
@@ -588,6 +607,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown)
+
+  // Clean up any remaining global event listeners
+  document.removeEventListener('mousemove', handleGlobalMouseMove)
+  document.removeEventListener('mouseup', handleGlobalMouseUp)
 })
 </script>
 
@@ -675,7 +698,7 @@ onBeforeUnmount(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.9);
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -685,6 +708,7 @@ onBeforeUnmount(() => {
 .modal-content {
   background-color: white;
   border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   width: 90%;
   max-width: 1200px;
   max-height: 90vh;
@@ -892,6 +916,13 @@ onBeforeUnmount(() => {
 
 .btn-danger {
   background-color: #dc3545;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
   color: white;
   border: none;
   cursor: pointer;

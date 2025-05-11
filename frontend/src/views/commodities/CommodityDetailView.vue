@@ -9,6 +9,9 @@
         <div class="actions">
           <button class="btn btn-secondary" @click="editCommodity">Edit</button>
           <button class="btn btn-danger" @click="confirmDelete">Delete</button>
+          <button class="btn btn-primary" @click="printCommodity">
+            <i class="fas fa-print"></i> Print
+          </button>
         </div>
       </div>
 
@@ -115,12 +118,15 @@
           />
 
           <div v-if="loadingImages" class="loading">Loading images...</div>
-          <ImageViewer
+          <FileViewer
             v-else
-            :images="images"
+            :files="images"
+            fileType="images"
             :entityId="commodity.id"
             entityType="commodities"
             @delete="deleteImage"
+            @update="updateImage"
+            @download="downloadImage"
           />
         </div>
 
@@ -149,6 +155,8 @@
             :entityId="commodity.id"
             entityType="commodities"
             @delete="deleteManual"
+            @update="updateManual"
+            @download="downloadManual"
           />
         </div>
 
@@ -177,6 +185,8 @@
             :entityId="commodity.id"
             entityType="commodities"
             @delete="deleteInvoice"
+            @update="updateInvoice"
+            @download="downloadInvoice"
           />
         </div>
       </div>
@@ -192,7 +202,7 @@ import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 import FileUploader from '@/components/FileUploader.vue'
 import FileList from '@/components/FileList.vue'
-import ImageViewer from '@/components/ImageViewer.vue'
+// import ImageViewer from '@/components/ImageViewer.vue' // Using FileViewer for all file types now
 import FileViewer from '@/components/FileViewer.vue'
 
 const router = useRouter()
@@ -353,6 +363,92 @@ const deleteInvoice = async (invoice: any) => {
   }
 }
 
+// Download functions
+const downloadImage = (image: any) => {
+  if (!commodity.value) return
+
+  // Create a link and trigger download
+  const link = document.createElement('a')
+  const imageUrl = `/api/v1/commodities/${commodity.value.id}/images/${image.id}.${image.ext}`
+  link.href = imageUrl
+  link.download = image.path + image.ext
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+const downloadManual = (manual: any) => {
+  if (!commodity.value) return
+
+  // Create a link and trigger download
+  const link = document.createElement('a')
+  const manualUrl = `/api/v1/commodities/${commodity.value.id}/manuals/${manual.id}.${manual.ext}`
+  link.href = manualUrl
+  link.download = manual.path + manual.ext
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+const downloadInvoice = (invoice: any) => {
+  if (!commodity.value) return
+
+  // Create a link and trigger download
+  const link = document.createElement('a')
+  const invoiceUrl = `/api/v1/commodities/${commodity.value.id}/invoices/${invoice.id}.${invoice.ext}`
+  link.href = invoiceUrl
+  link.download = invoice.path + invoice.ext
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+// File update functions
+const updateImage = async (data: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.updateImage(commodity.value.id, data.id, { path: data.path })
+    // Update the image in the list
+    const index = images.value.findIndex(img => img.id === data.id)
+    if (index !== -1) {
+      images.value[index].path = data.path
+    }
+  } catch (err: any) {
+    error.value = 'Failed to update image: ' + (err.message || 'Unknown error')
+  }
+}
+
+const updateManual = async (data: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.updateManual(commodity.value.id, data.id, { path: data.path })
+    // Update the manual in the list
+    const index = manuals.value.findIndex(m => m.id === data.id)
+    if (index !== -1) {
+      manuals.value[index].path = data.path
+    }
+  } catch (err: any) {
+    error.value = 'Failed to update manual: ' + (err.message || 'Unknown error')
+  }
+}
+
+const updateInvoice = async (data: any) => {
+  if (!commodity.value) return
+
+  try {
+    await commodityService.updateInvoice(commodity.value.id, data.id, { path: data.path })
+    // Update the invoice in the list
+    const index = invoices.value.findIndex(inv => inv.id === data.id)
+    if (index !== -1) {
+      invoices.value[index].path = data.path
+    }
+  } catch (err: any) {
+    error.value = 'Failed to update invoice: ' + (err.message || 'Unknown error')
+  }
+}
+
 const editCommodity = () => {
   router.push(`/commodities/${commodity.value.id}/edit`)
 }
@@ -361,6 +457,11 @@ const confirmDelete = () => {
   if (confirm('Are you sure you want to delete this commodity?')) {
     deleteCommodity()
   }
+}
+
+const printCommodity = () => {
+  // Open the print view in a new tab/window
+  window.open(`/commodities/${commodity.value.id}/print`, '_blank')
 }
 
 const deleteCommodity = async () => {

@@ -72,6 +72,11 @@ const routes = [
     name: 'commodity-edit',
     component: () => import('../views/commodities/CommodityEditView.vue')
   },
+  {
+    path: '/commodities/:id/print',
+    name: 'commodity-print',
+    component: () => import('../views/commodities/CommodityPrintView.vue')
+  },
   // 404 - Keep this as the last route
   {
     path: '/:pathMatch(.*)*',
