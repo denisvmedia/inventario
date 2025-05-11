@@ -25,8 +25,11 @@
             <div class="commodity-content" @click="viewCommodity(commodity.id)">
               <h3>{{ commodity.attributes.name }}</h3>
               <div class="commodity-meta">
-                <span class="type">{{ getTypeName(commodity.attributes.type) }}</span>
-                <span class="count">Count: {{ commodity.attributes.count || 1 }}</span>
+                <span class="type">
+                  <i :class="getTypeIcon(commodity.attributes.type)"></i>
+                  {{ getTypeName(commodity.attributes.type) }}
+                </span>
+                <span class="count" v-if="(commodity.attributes.count || 1) > 1">Count: {{ commodity.attributes.count }}</span>
               </div>
               <div class="commodity-price" v-if="commodity.attributes.current_price">
                 <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
@@ -120,6 +123,25 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+const getTypeIcon = (typeId: string) => {
+  switch(typeId) {
+    case 'white_goods':
+      return 'fas fa-blender'
+    case 'electronics':
+      return 'fas fa-laptop'
+    case 'equipment':
+      return 'fas fa-tools'
+    case 'furniture':
+      return 'fas fa-couch'
+    case 'clothes':
+      return 'fas fa-tshirt'
+    case 'other':
+      return 'fas fa-box'
+    default:
+      return 'fas fa-box'
+  }
+}
 
 const getTypeName = (typeId: string) => {
   const type = COMMODITY_TYPES.find(t => t.id === typeId)
@@ -382,4 +404,12 @@ pre {
   padding: 0.5rem;
   border-radius: 4px;
 }
+.type {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Add Font Awesome icons */
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css');
 </style>
