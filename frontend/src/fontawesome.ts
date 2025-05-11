@@ -30,7 +30,12 @@ import {
   faQuoteLeftAlt,
   faMapMarkerAlt,
   faChevronDown,
-  faChevronRight
+  faChevronRight,
+  faChevronLeft,
+  faSearchMinus,
+  faSearchPlus,
+  faCopy,
+  faUpload
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -67,7 +72,12 @@ library.add(
   faQuoteLeftAlt,
   faMapMarkerAlt,
   faChevronDown,
-  faChevronRight
+  faChevronRight,
+  faChevronLeft,
+  faSearchMinus,
+  faSearchPlus,
+  faCopy,
+  faUpload
 )
 
 export { FontAwesomeIcon }
