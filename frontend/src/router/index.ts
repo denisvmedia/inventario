@@ -9,37 +9,11 @@ const routes = [
     name: 'home',
     component: HomeView
   },
-  // Areas
-  {
-    path: '/areas',
-    name: 'areas',
-    component: () => import('../views/areas/AreaListView.vue')
-  },
-  {
-    path: '/areas/new',
-    name: 'area-create',
-    component: () => import('../views/areas/AreaCreateView.vue')
-  },
-  {
-    path: '/areas/:id',
-    name: 'area-detail',
-    component: () => import('../views/areas/AreaDetailView.vue')
-  },
-  {
-    path: '/areas/:id/edit',
-    name: 'area-edit',
-    component: () => import('../views/areas/AreaEditView.vue')
-  },
-  // Locations
+  // Locations (now includes areas)
   {
     path: '/locations',
     name: 'locations',
     component: () => import('../views/locations/LocationListView.vue')
-  },
-  {
-    path: '/locations/new',
-    name: 'location-create',
-    component: () => import('../views/locations/LocationCreateView.vue')
   },
   {
     path: '/locations/:id',
@@ -50,6 +24,17 @@ const routes = [
     path: '/locations/:id/edit',
     name: 'location-edit',
     component: () => import('../views/locations/LocationEditView.vue')
+  },
+  // Keep area routes for backward compatibility
+  {
+    path: '/areas/:id',
+    name: 'area-detail',
+    component: () => import('../views/areas/AreaDetailView.vue')
+  },
+  {
+    path: '/areas/:id/edit',
+    name: 'area-edit',
+    component: () => import('../views/areas/AreaEditView.vue')
   },
   // Commodities
   {

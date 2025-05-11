@@ -5,11 +5,7 @@
     <div class="navigation-cards">
       <div class="card" @click="navigateTo('/locations')">
         <h2>Locations</h2>
-        <p>Manage storage locations</p>
-      </div>
-      <div class="card" @click="navigateTo('/areas')">
-        <h2>Areas</h2>
-        <p>Manage storage areas</p>
+        <p>Manage storage locations and areas</p>
       </div>
       <div class="card" @click="navigateTo('/commodities')">
         <h2>Commodities</h2>

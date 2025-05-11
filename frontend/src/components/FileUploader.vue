@@ -1,14 +1,14 @@
 <template>
   <div class="file-uploader">
-    <div class="upload-area" 
-         @dragover.prevent="onDragOver" 
-         @dragleave.prevent="onDragLeave" 
+    <div class="upload-area"
+         @dragover.prevent="onDragOver"
+         @dragleave.prevent="onDragLeave"
          @drop.prevent="onDrop"
          :class="{ 'drag-over': isDragOver }">
-      <input 
-        type="file" 
-        ref="fileInput" 
-        @change="onFileSelected" 
+      <input
+        type="file"
+        ref="fileInput"
+        @change="onFileSelected"
         :multiple="multiple"
         :accept="accept"
         class="file-input"
@@ -24,7 +24,7 @@
         </p>
       </div>
     </div>
-    
+
     <div v-if="selectedFiles.length > 0" class="selected-files">
       <div v-for="(file, index) in selectedFiles" :key="index" class="selected-file">
         <span class="file-name">{{ file.name }}</span>
@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits } from 'vue'
+import { ref } from 'vue'
 
 const props = defineProps({
   multiple: {
@@ -106,7 +106,7 @@ const removeFile = (index: number) => {
 
 const uploadFiles = async () => {
   if (selectedFiles.value.length === 0) return
-  
+
   isUploading.value = true
   try {
     emit('upload', selectedFiles.value)

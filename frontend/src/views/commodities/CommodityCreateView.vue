@@ -53,7 +53,18 @@
 
         <div class="form-group">
           <label for="area">Area</label>
+          <div v-if="areaFromUrl">
+            <input
+              type="text"
+              id="area"
+              :value="areaName"
+              disabled
+              class="form-control"
+            >
+            <input type="hidden" v-model="form.areaId">
+          </div>
           <select
+            v-else
             id="area"
             v-model="form.areaId"
             required
@@ -306,7 +317,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
@@ -314,6 +325,7 @@ import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodi
 import { CURRENCIES, CURRENCY_CZK } from '@/constants/currencies'
 
 const router = useRouter()
+const route = useRoute()
 const isSubmitting = ref(false)
 const error = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
@@ -321,6 +333,8 @@ const areas = ref<any[]>([])
 const commodityTypes = ref(COMMODITY_TYPES)
 const commodityStatuses = ref(COMMODITY_STATUSES)
 const currencies = ref(CURRENCIES)
+const areaFromUrl = ref<string | null>(null)
+const areaName = ref<string>('')
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -363,6 +377,12 @@ const errors = reactive({
 
 onMounted(async () => {
   try {
+    // Check if area ID is provided in the URL
+    if (route.query.area) {
+      areaFromUrl.value = route.query.area as string
+      console.log('Area ID from URL:', areaFromUrl.value)
+    }
+
     // Fetch areas
     const response = await axios.get('/api/v1/areas', {
       headers: {
@@ -371,6 +391,17 @@ onMounted(async () => {
     })
     areas.value = response.data.data
     console.log('Loaded areas:', areas.value)
+
+    // If area ID is provided in the URL, set it in the form
+    if (areaFromUrl.value) {
+      form.areaId = areaFromUrl.value
+
+      // Find the area name for display
+      const selectedArea = areas.value.find(area => area.id === areaFromUrl.value)
+      if (selectedArea) {
+        areaName.value = selectedArea.attributes.name
+      }
+    }
   } catch (err: any) {
     error.value = 'Failed to load areas: ' + (err.message || 'Unknown error')
     console.error('Failed to load areas:', err)
@@ -513,8 +544,9 @@ const submitForm = async () => {
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
 
-    // On success, navigate to commodities list
-    router.push('/commodities')
+    // On success, navigate to commodity details page
+    const newCommodityId = response.data.data.id
+    router.push(`/commodities/${newCommodityId}`)
   } catch (err: any) {
     console.error('Error creating commodity:', err)
 
@@ -549,7 +581,13 @@ const submitForm = async () => {
 }
 
 const cancel = () => {
-  router.push('/commodities')
+  // Go back to the previous page in history if available
+  if (window.history.length > 1) {
+    router.go(-1)
+  } else {
+    // Fallback to commodities list
+    router.push('/commodities')
+  }
 }
 
 const addExtraSerialNumber = () => {

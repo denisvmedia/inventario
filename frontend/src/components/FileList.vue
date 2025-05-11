@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits, ref, nextTick } from 'vue'
+import { ref, nextTick } from 'vue'
 
 const props = defineProps({
   files: {

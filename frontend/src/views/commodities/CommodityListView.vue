@@ -2,7 +2,7 @@
   <div class="commodity-list">
     <div class="header">
       <h1>Commodities</h1>
-      <router-link to="/commodities/new" class="btn btn-primary">Create New Commodity</router-link>
+      <router-link to="/commodities/new" class="btn btn-primary"><i class="fas fa-plus"></i> New</router-link>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
@@ -13,23 +13,35 @@
       <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" @click="viewCommodity(commodity.id)">
         <div class="commodity-content">
           <h3>{{ commodity.attributes.name }}</h3>
+          <div class="commodity-location" v-if="commodity.attributes.area_id">
+            <span class="location-info">
+              <i class="fas fa-map-marker-alt"></i>
+              {{ getLocationName(commodity.attributes.area_id) }} / {{ getAreaName(commodity.attributes.area_id) }}
+            </span>
+          </div>
           <div class="commodity-meta">
-            <span class="type">{{ getTypeName(commodity.attributes.type) }}</span>
-            <span class="count">Count: {{ commodity.attributes.count || 1 }}</span>
+            <span class="type">
+              <i :class="getTypeIcon(commodity.attributes.type)"></i>
+              {{ getTypeName(commodity.attributes.type) }}
+            </span>
+            <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
           </div>
           <div class="commodity-price">
             <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
+            <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
+              {{ calculatePricePerUnit(commodity) }} {{ commodity.attributes.original_price_currency }} per unit
+            </span>
           </div>
           <div class="commodity-status">
             <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
           </div>
         </div>
         <div class="commodity-actions">
-          <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)">
-            Edit
+          <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)" title="Edit">
+            <i class="fas fa-edit"></i>
           </button>
-          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(commodity.id)">
-            Delete
+          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(commodity.id)" title="Delete">
+            <i class="fas fa-trash"></i>
           </button>
         </div>
       </div>
@@ -41,13 +53,40 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import commodityService from '@/services/commodityService'
+import areaService from '@/services/areaService'
+import locationService from '@/services/locationService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 
 const router = useRouter()
 const commodities = ref<any[]>([])
+const areas = ref<any[]>([])
+const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+
+// Map to store area and location information
+const areaMap = ref<Record<string, any>>({})
+const locationMap = ref<Record<string, any>>({})
+
+const getTypeIcon = (typeId: string) => {
+  switch(typeId) {
+    case 'white_goods':
+      return 'fas fa-blender'
+    case 'electronics':
+      return 'fas fa-laptop'
+    case 'equipment':
+      return 'fas fa-tools'
+    case 'furniture':
+      return 'fas fa-couch'
+    case 'clothes':
+      return 'fas fa-tshirt'
+    case 'other':
+      return 'fas fa-box'
+    default:
+      return 'fas fa-box'
+  }
+}
 
 const getTypeName = (typeId: string) => {
   const type = COMMODITY_TYPES.find(t => t.id === typeId)
@@ -59,13 +98,59 @@ const getStatusName = (statusId: string) => {
   return status ? status.name : statusId
 }
 
+// Get area name for a commodity
+const getAreaName = (areaId: string) => {
+  return areaMap.value[areaId]?.name || ''
+}
+
+// Get location name for an area
+const getLocationName = (areaId: string) => {
+  const locationId = areaMap.value[areaId]?.locationId
+  return locationId ? locationMap.value[locationId]?.name || '' : ''
+}
+
+// Calculate price per unit
+const calculatePricePerUnit = (commodity: any) => {
+  const price = parseFloat(commodity.attributes.current_price) || 0
+  const count = commodity.attributes.count || 1
+  if (count <= 1) return price
+
+  // Calculate price per unit and round to 2 decimal places
+  const pricePerUnit = price / count
+  return pricePerUnit.toFixed(2)
+}
+
 onMounted(async () => {
   try {
-    const response = await commodityService.getCommodities()
-    commodities.value = response.data.data
+    // Load commodities, areas, and locations in parallel
+    const [commoditiesResponse, areasResponse, locationsResponse] = await Promise.all([
+      commodityService.getCommodities(),
+      areaService.getAreas(),
+      locationService.getLocations()
+    ])
+
+    commodities.value = commoditiesResponse.data.data
+    areas.value = areasResponse.data.data
+    locations.value = locationsResponse.data.data
+
+    // Create maps for quick lookups
+    areas.value.forEach(area => {
+      areaMap.value[area.id] = {
+        name: area.attributes.name,
+        locationId: area.attributes.location_id
+      }
+    })
+
+    locations.value.forEach(location => {
+      locationMap.value[location.id] = {
+        name: location.attributes.name,
+        address: location.attributes.address
+      }
+    })
+
     loading.value = false
   } catch (err: any) {
-    error.value = 'Failed to load commodities: ' + (err.message || 'Unknown error')
+    error.value = 'Failed to load data: ' + (err.message || 'Unknown error')
     loading.value = false
   }
 })
@@ -161,6 +246,18 @@ const deleteCommodity = async (id: string) => {
   font-size: 0.875rem;
 }
 
+.commodity-location {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.location-info {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .commodity-meta {
   display: flex;
   justify-content: space-between;
@@ -169,10 +266,26 @@ const deleteCommodity = async (id: string) => {
   color: #555;
 }
 
+.type {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .commodity-price {
   margin-top: 1rem;
   font-weight: bold;
   font-size: 1.1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.price-per-unit {
+  font-size: 0.8rem;
+  font-weight: normal;
+  font-style: italic;
+  color: #666;
+  margin-top: 0.25rem;
 }
 
 .commodity-status {
@@ -231,4 +344,6 @@ const deleteCommodity = async (id: string) => {
   background-color: #6c757d;
   color: white;
 }
+
+
 </style>

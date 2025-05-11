@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits, computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   file: {
