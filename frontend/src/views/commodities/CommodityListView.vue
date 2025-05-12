@@ -10,7 +10,7 @@
     <div v-else-if="commodities.length === 0" class="empty">No commodities found. Create your first commodity!</div>
 
     <div v-else class="commodities-grid">
-      <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" @click="viewCommodity(commodity.id)">
+      <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" :class="{ 'highlighted': commodity.id === highlightCommodityId }" @click="viewCommodity(commodity.id)">
         <div class="commodity-content">
           <h3>{{ commodity.attributes.name }}</h3>
           <div class="commodity-location" v-if="commodity.attributes.area_id">
@@ -50,8 +50,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
@@ -59,11 +59,16 @@ import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 
 const router = useRouter()
+const route = useRoute()
 const commodities = ref<any[]>([])
 const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+
+// Highlight commodity if specified in the URL
+const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
+let highlightTimeout: number | null = null
 
 // Map to store area and location information
 const areaMap = ref<Record<string, any>>({})
@@ -149,9 +154,32 @@ onMounted(async () => {
     })
 
     loading.value = false
+
+    // Scroll to highlighted commodity if specified
+    if (highlightCommodityId.value) {
+      nextTick(() => {
+        const highlightedElement = document.querySelector(`.commodity-card.highlighted`)
+        if (highlightedElement) {
+          highlightedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+
+          // Clear the highlight after 3 seconds
+          highlightTimeout = window.setTimeout(() => {
+            highlightCommodityId.value = ''
+          }, 3000)
+        }
+      })
+    }
   } catch (err: any) {
     error.value = 'Failed to load data: ' + (err.message || 'Unknown error')
     loading.value = false
+  }
+})
+
+// Clean up timeout when component is unmounted
+onBeforeUnmount(() => {
+  if (highlightTimeout !== null) {
+    window.clearTimeout(highlightTimeout)
+    highlightTimeout = null
   }
 })
 
@@ -165,7 +193,13 @@ const viewCommodity = (id: string) => {
 }
 
 const editCommodity = (id: string) => {
-  router.push(`/commodities/${id}/edit`)
+  router.push({
+    path: `/commodities/${id}/edit`,
+    query: {
+      source: 'commodities',
+      directEdit: 'true'
+    }
+  })
 }
 
 const confirmDelete = (id: string) => {
@@ -232,6 +266,12 @@ const deleteCommodity = async (id: string) => {
 .commodity-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.commodity-card.highlighted {
+  border-left: 4px solid #4CAF50;
+  box-shadow: 0 2px 10px rgba(76, 175, 80, 0.3);
+  background-color: #f9fff9;
 }
 
 .commodity-content {
