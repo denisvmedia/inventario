@@ -40,7 +40,7 @@ func (s *BaseRepository[_, P]) GetAll(tx TransactionOrBucket, typ P) (results []
 
 	err = b.ForEach(func(_k, v []byte) error {
 		elem := typekit.ZeroOfType(typ)
-		err := json.Unmarshal(v, elem)
+		err := json.Unmarshal(v, &elem)
 		if err != nil {
 			return err
 		}
@@ -369,6 +369,9 @@ func (s *BaseRepository[_, _]) Count(tx TransactionOrBucket, names ...string) (i
 	var count int
 
 	b := s.GetBucket(tx, names...)
+	if b == nil {
+		return 0, nil // Return 0 if the bucket doesn't exist
+	}
 
 	c := b.Cursor()
 	for k, v := c.First(); k != nil; k, v = c.Next() {

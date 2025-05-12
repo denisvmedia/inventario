@@ -49,12 +49,6 @@ func NewSettingsRegistry(db *bolt.DB) *SettingsRegistry {
 
 func (r *SettingsRegistry) Create(m models.Setting) (*models.Setting, error) {
 	return r.registry.Create(m, func(tx dbx.TransactionOrBucket, setting *models.Setting) error {
-		if setting.ID == "" {
-			return errkit.WithStack(registry.ErrFieldRequired,
-				"field_name", "ID",
-			)
-		}
-
 		if setting.Name != "" {
 			// Check if a setting with this name already exists
 			_, err := r.base.GetIndexValue(tx, idxSettingsByName, setting.Name)
@@ -180,16 +174,16 @@ func (r *SettingsRegistry) SetUIConfig(config *models.UIConfig) error {
 		return errkit.Wrap(err, "failed to marshal UI config")
 	}
 
-	setting := models.Setting{
-		Name:  settingIDUIConfig,
-		Value: value,
-	}
-
 	// Try to get the setting by name first
 	existingSetting, err := r.GetByName(settingIDUIConfig)
 	if err != nil {
 		// If not found, create it
 		if errors.Is(err, registry.ErrNotFound) {
+			setting := models.Setting{
+				ID:    settingIDUIConfig, // Set the ID to the same as the name
+				Name:  settingIDUIConfig,
+				Value: value,
+			}
 			_, err = r.Create(setting)
 			if err != nil {
 				return err
@@ -199,7 +193,11 @@ func (r *SettingsRegistry) SetUIConfig(config *models.UIConfig) error {
 		}
 	} else {
 		// If found, update it
-		setting.ID = existingSetting.ID
+		setting := models.Setting{
+			ID:    existingSetting.ID,
+			Name:  settingIDUIConfig,
+			Value: value,
+		}
 		_, err = r.Update(setting)
 		if err != nil {
 			return err
@@ -210,11 +208,11 @@ func (r *SettingsRegistry) SetUIConfig(config *models.UIConfig) error {
 }
 
 func (r *SettingsRegistry) RemoveUIConfig() error {
-	return r.Delete(settingIDUIConfig)
+	return r.DeleteByName(settingIDUIConfig)
 }
 
 func (r *SettingsRegistry) GetSystemConfig() (*models.SystemConfig, error) {
-	setting, err := r.Get(settingIDSystemConfig)
+	setting, err := r.GetByName(settingIDSystemConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -235,6 +233,7 @@ func (r *SettingsRegistry) SetSystemConfig(config *models.SystemConfig) error {
 
 	setting := models.Setting{
 		ID:    settingIDSystemConfig,
+		Name:  settingIDSystemConfig, // Set the Name field to the same as the ID
 		Value: value,
 	}
 
@@ -252,7 +251,7 @@ func (r *SettingsRegistry) SetSystemConfig(config *models.SystemConfig) error {
 }
 
 func (r *SettingsRegistry) RemoveSystemConfig() error {
-	return r.Delete(settingIDSystemConfig)
+	return r.DeleteByName(settingIDSystemConfig)
 }
 
 // Currency methods removed as requested
