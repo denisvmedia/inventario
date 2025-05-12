@@ -89,6 +89,8 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .pdf-viewer-container {
   display: flex;
   flex-direction: column;

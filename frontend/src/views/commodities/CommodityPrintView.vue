@@ -318,6 +318,8 @@ const goBack = () => {
 </script>
 
 <style lang="scss" scoped>
+@import '../../assets/main.scss';
+
 .commodity-print-view {
   max-width: 100%;
   margin: 0;

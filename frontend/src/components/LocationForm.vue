@@ -146,6 +146,8 @@ const cancel = () => {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .inline-form {
   background: white;
   padding: 1.5rem;

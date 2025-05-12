@@ -18,6 +18,8 @@ function goHome() {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .not-found {
   max-width: 800px;
   margin: 0 auto;

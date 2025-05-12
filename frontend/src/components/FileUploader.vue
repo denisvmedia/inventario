@@ -120,6 +120,8 @@ const uploadFiles = async () => {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .file-uploader {
   margin-bottom: 1.5rem;
 }

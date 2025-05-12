@@ -215,6 +215,8 @@ const handleAreaCreated = (newArea: any) => {
 </script>
 
 <style lang="scss" scoped>
+@import '../../assets/main.scss';
+
 .location-detail {
   max-width: $container-max-width;
   margin: 0 auto;

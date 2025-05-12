@@ -166,6 +166,8 @@ const goBack = () => {
 </script>
 
 <style lang="scss" scoped>
+@import '../../assets/main.scss';
+
 .location-edit {
   max-width: 600px;
   margin: 0 auto;

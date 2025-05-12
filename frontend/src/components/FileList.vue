@@ -217,6 +217,8 @@ const isPdfFile = (file: any) => {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .file-list {
   margin-bottom: 1.5rem;
 }

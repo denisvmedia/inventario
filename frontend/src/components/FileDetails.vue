@@ -189,6 +189,8 @@ const confirmDelete = () => {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .file-details-overlay {
   position: fixed;
   top: 0;
