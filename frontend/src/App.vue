@@ -1,11 +1,18 @@
 <template>
   <div class="app">
     <header v-if="!isPrintRoute">
-      <nav>
-        <router-link to="/">Home</router-link> |
-        <router-link to="/locations">Locations</router-link> |
-        <router-link to="/commodities">Commodities</router-link> |
-      </nav>
+      <div class="header-content">
+        <div class="logo-container">
+          <router-link to="/">
+            <img src="/favicon.png" alt="Inventario Logo" class="logo" />
+          </router-link>
+        </div>
+        <nav>
+          <router-link to="/">Home</router-link> |
+          <router-link to="/locations">Locations</router-link> |
+          <router-link to="/commodities">Commodities</router-link> |
+        </nav>
+      </div>
     </header>
 
     <!-- Debug information -->
@@ -40,6 +47,45 @@ const isPrintRoute = computed(() => {
   max-width: 100%;
   margin: 0;
   padding: 0;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.logo-container {
+  margin-right: 2rem;
+}
+
+.logo {
+  height: 40px;
+  width: auto;
+  vertical-align: middle;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .logo-container {
+    margin-right: 0;
+    margin-bottom: 1rem;
+  }
+
+  .logo {
+    height: 35px;
+  }
 }
 
 @media print {
