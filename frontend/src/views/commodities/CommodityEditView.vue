@@ -647,7 +647,7 @@ const removeUrl = (index: number) => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .commodity-edit {
   max-width: 800px;
   margin: 0 auto;
@@ -659,18 +659,18 @@ const removeUrl = (index: number) => {
 }
 
 .breadcrumb-link {
-  color: #6c757d;
+  color: $secondary-color;
   font-size: 0.9rem;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-}
 
-.breadcrumb-link:hover {
-  color: #4CAF50;
-  text-decoration: none;
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
 }
 
 h1 {
@@ -681,56 +681,56 @@ h1 {
   text-align: center;
   padding: 2rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .error {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 .form {
   background: white;
   padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .form-section {
   margin-bottom: 2rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid #eee;
-}
 
-.form-section h2 {
-  margin-bottom: 1rem;
-  color: #333;
+  h2 {
+    margin-bottom: 1rem;
+    color: $text-color;
+  }
 }
 
 .form-group {
   margin-bottom: 1rem;
-}
 
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
 }
 
 .form-control {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   font-size: 1rem;
-}
 
-.form-control.is-invalid {
-  border-color: #dc3545;
+  &.is-invalid {
+    border-color: $danger-color;
+  }
 }
 
 .error-message {
-  color: #dc3545;
+  color: $danger-color;
   font-size: 0.875rem;
   margin-top: 0.25rem;
 }
@@ -740,10 +740,10 @@ h1 {
   gap: 0.5rem;
   margin-bottom: 0.5rem;
   align-items: center;
-}
 
-.array-input-row .form-control {
-  flex: 1;
+  .form-control {
+    flex: 1;
+  }
 }
 
 .checkbox-label {
@@ -763,7 +763,7 @@ h1 {
 .btn {
   padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 4px;
+  border-radius: $default-radius;
   cursor: pointer;
   font-weight: 500;
   text-decoration: none;
@@ -771,17 +771,17 @@ h1 {
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
 }
 
 .btn-secondary {
-  background-color: #6c757d;
+  background-color: $secondary-color;
   color: white;
 }
 
 .btn-danger {
-  background-color: #dc3545;
+  background-color: $danger-color;
   color: white;
 }
 
@@ -794,21 +794,21 @@ h1 {
   margin-top: 1rem;
   padding: 1rem;
   background-color: #f8d7da;
-  color: #721c24;
-  border-radius: 4px;
+  color: $error-text-color;
+  border-radius: $default-radius;
 }
 
 .debug-info {
   margin-top: 2rem;
   padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 4px;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
   overflow-x: auto;
-}
 
-.debug-info pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
 }
 </style>

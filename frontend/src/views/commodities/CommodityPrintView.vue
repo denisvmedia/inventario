@@ -317,7 +317,7 @@ const goBack = () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .commodity-print-view {
   max-width: 100%;
   margin: 0;
@@ -325,9 +325,9 @@ const goBack = () => {
 }
 
 .print-toolbar {
-  background-color: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
+  background-color: $light-bg-color;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   padding: 1rem;
   margin-bottom: 2rem;
   display: flex;
@@ -339,44 +339,42 @@ const goBack = () => {
   left: 0;
   right: 0;
   z-index: 1000;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow;
 }
 
 .toolbar-section {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-}
 
-.toolbar-section:last-child {
-  display: flex;
-  flex-direction: row;
-  gap: 0.5rem;
-}
+  &:last-child {
+    flex-direction: row;
+  }
 
-.toolbar-section.disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
+  &.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
 
-.toolbar-section label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
 
-.toolbar-section select {
-  padding: 0.5rem;
-  border-radius: 4px;
-  border: 1px solid #ced4da;
+  select {
+    padding: 0.5rem;
+    border-radius: $default-radius;
+    border: 1px solid $border-color;
+  }
 }
 
 .print-content {
   background-color: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   padding: 2rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow;
   margin-top: 80px; /* Space for the fixed toolbar */
 }
 
@@ -391,13 +389,13 @@ const goBack = () => {
 
 .print-timestamp {
   font-size: 0.9rem;
-  color: #6c757d;
+  color: $secondary-color;
   text-align: right;
 }
 
 .location-area-info {
-  background-color: #f8f9fa;
-  border-left: 4px solid #4CAF50;
+  background-color: $light-bg-color;
+  border-left: 4px solid $primary-color;
   padding: 1rem;
   margin-bottom: 2rem;
 }

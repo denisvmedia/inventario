@@ -214,9 +214,9 @@ const handleAreaCreated = (newArea: any) => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .location-detail {
-  max-width: 1200px;
+  max-width: $container-max-width;
   margin: 0 auto;
   padding: 20px;
 }
@@ -231,14 +231,14 @@ const handleAreaCreated = (newArea: any) => {
 .title-section {
   display: flex;
   flex-direction: column;
-}
 
-.title-section h1 {
-  margin-bottom: 0.5rem;
+  h1 {
+    margin-bottom: 0.5rem;
+  }
 }
 
 .address {
-  color: #666;
+  color: $text-color;
   font-style: italic;
   margin-top: 0;
 }
@@ -252,20 +252,20 @@ const handleAreaCreated = (newArea: any) => {
   text-align: center;
   padding: 2rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   margin-bottom: 2rem;
 }
 
 .error {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 .info-card {
   background: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow;
   margin-bottom: 2rem;
 }
 
@@ -285,19 +285,19 @@ const handleAreaCreated = (newArea: any) => {
 
 .area-card {
   background: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-}
 
-.area-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  }
 }
 
 .area-content {
@@ -318,42 +318,42 @@ const handleAreaCreated = (newArea: any) => {
   align-items: center;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid $border-color;
 }
 
 .test-section {
   margin-bottom: 2rem;
   background: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+  box-shadow: $box-shadow;
 
-.test-section h2 {
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #eee;
+  h2 {
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid $border-color;
+  }
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
   text-decoration: none;
   padding: 0.5rem 1rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   display: inline-block;
   margin-top: 1rem;
 }
 
 .btn-secondary {
-  background-color: #6c757d;
+  background-color: $secondary-color;
   color: white;
   border: none;
   cursor: pointer;
 }
 
 .btn-danger {
-  background-color: #dc3545;
+  background-color: $danger-color;
   color: white;
   border: none;
   cursor: pointer;
@@ -363,38 +363,38 @@ const handleAreaCreated = (newArea: any) => {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
   margin-top: 0;
-  border-radius: 4px;
+  border-radius: $default-radius;
 }
 
 .test-result, .test-error {
   margin-top: 1rem;
   padding: 1rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
 }
 
 .test-result {
-  background-color: #e6f7e6;
+  background-color: lighten($primary-color, 40%);
 }
 
 .test-error {
-  background-color: #f7e6e6;
+  background-color: lighten($danger-color, 40%);
 }
 
 pre {
   white-space: pre-wrap;
   word-wrap: break-word;
   overflow-x: auto;
-  background: #f8f9fa;
+  background: $light-bg-color;
   padding: 0.5rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
 }
 
 .btn-info {
   background-color: #17a2b8;
   color: white;
-}
 
-.btn-info:hover {
-  background-color: #138496;
+  &:hover {
+    background-color: #138496;
+  }
 }
 </style>

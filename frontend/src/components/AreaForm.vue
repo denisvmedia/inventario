@@ -127,12 +127,12 @@ const cancel = () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .inline-form {
   background: white;
   padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   margin-bottom: 1rem;
   margin-top: 0.5rem;
   margin-left: 2rem; /* Indent to show hierarchy */
@@ -151,23 +151,23 @@ label {
 .form-control {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   font-size: 1rem;
-}
-
-.form-control:focus {
-  outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-}
-
-.form-control.is-invalid {
-  border-color: #dc3545;
+  
+  &:focus {
+    outline: none;
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
+  
+  &.is-invalid {
+    border-color: $danger-color;
+  }
 }
 
 .error-message {
-  color: #dc3545;
+  color: $danger-color;
   font-size: 0.875rem;
   margin-top: 0.25rem;
 }
@@ -180,10 +180,10 @@ label {
 }
 
 .form-error {
-  color: #dc3545;
+  color: $danger-color;
   margin-top: 1rem;
   padding: 0.5rem;
-  background-color: rgba(220, 53, 69, 0.1);
-  border-radius: 4px;
+  background-color: rgba($danger-color, 0.1);
+  border-radius: $default-radius;
 }
 </style>

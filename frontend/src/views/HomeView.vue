@@ -25,9 +25,9 @@ function navigateTo(path: string) {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .home {
-  max-width: 1200px;
+  max-width: $container-max-width;
   margin: 0 auto;
   padding: 20px;
   text-align: center;
@@ -35,7 +35,7 @@ function navigateTo(path: string) {
 
 h1 {
   margin-bottom: 10px;
-  color: #2c3e50;
+  color: $secondary-color;
 }
 
 .navigation-cards {
@@ -48,25 +48,25 @@ h1 {
 
 .card {
   background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   padding: 20px;
   width: 300px;
   cursor: pointer;
   transition: transform 0.3s, box-shadow 0.3s;
-}
 
-.card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
 
-.card h2 {
-  color: #2c3e50;
-  margin-bottom: 10px;
-}
+  h2 {
+    color: $secondary-color;
+    margin-bottom: 10px;
+  }
 
-.card p {
-  color: #666;
+  p {
+    color: $text-color;
+  }
 }
 </style>

@@ -17,32 +17,32 @@ function goHome() {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .not-found {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
   background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   text-align: center;
 }
 
 h1 {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 button {
-  background-color: #007bff;
+  background-color: $primary-color;
   color: white;
   padding: 8px 16px;
   border: none;
-  border-radius: 4px;
+  border-radius: $default-radius;
   cursor: pointer;
   margin-top: 20px;
-}
 
-button:hover {
-  background-color: #0056b3;
+  &:hover {
+    background-color: $primary-hover-color;
+  }
 }
 </style>

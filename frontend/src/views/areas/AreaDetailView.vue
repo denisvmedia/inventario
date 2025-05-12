@@ -290,9 +290,9 @@ const deleteCommodity = async (id: string) => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .area-detail {
-  max-width: 1200px;
+  max-width: $container-max-width;
   margin: 0 auto;
   padding: 20px;
 }
@@ -302,18 +302,18 @@ const deleteCommodity = async (id: string) => {
 }
 
 .breadcrumb-link {
-  color: #6c757d;
+  color: $secondary-color;
   font-size: 0.9rem;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-}
 
-.breadcrumb-link:hover {
-  color: #4CAF50;
-  text-decoration: none;
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
 }
 
 .header {
@@ -326,14 +326,14 @@ const deleteCommodity = async (id: string) => {
 .title-section {
   display: flex;
   flex-direction: column;
-}
 
-.title-section h1 {
-  margin-bottom: 0.5rem;
+  h1 {
+    margin-bottom: 0.5rem;
+  }
 }
 
 .location-info {
-  color: #666;
+  color: $text-color;
   font-style: italic;
   margin-top: 0;
 }
@@ -348,13 +348,13 @@ const deleteCommodity = async (id: string) => {
   text-align: center;
   padding: 2rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   margin-bottom: 2rem;
 }
 
 .error {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 .commodities-section {
@@ -367,7 +367,7 @@ const deleteCommodity = async (id: string) => {
   align-items: center;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid $border-color;
 }
 
 .commodities-grid {
@@ -378,25 +378,25 @@ const deleteCommodity = async (id: string) => {
 
 .commodity-card {
   background: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-}
 
-.commodity-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-}
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  }
 
-.commodity-card.highlighted {
-  border-left: 4px solid #4CAF50;
-  box-shadow: 0 2px 10px rgba(76, 175, 80, 0.3);
-  background-color: #f9fff9;
+  &.highlighted {
+    border-left: 4px solid $primary-color;
+    box-shadow: 0 2px 10px rgba($primary-color, 0.3);
+    background-color: lighten($primary-color, 45%);
+  }
 }
 
 .commodity-content {
@@ -416,17 +416,30 @@ const deleteCommodity = async (id: string) => {
   justify-content: space-between;
   margin-top: 0.5rem;
   font-size: 0.9rem;
-  color: #555;
+  color: $text-color;
 }
 
 .type {
   font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .commodity-price {
   margin-top: 1rem;
   font-weight: bold;
   font-size: 1.1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.price-per-unit {
+  font-size: 0.8rem;
+  font-weight: normal;
+  font-style: italic;
+  color: $text-color;
+  margin-top: 0.25rem;
 }
 
 .commodity-status {
@@ -436,55 +449,55 @@ const deleteCommodity = async (id: string) => {
 .status {
   display: inline-block;
   padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   font-size: 0.8rem;
   font-weight: 500;
-}
 
-.status.in_use {
-  background-color: #d4edda;
-  color: #155724;
-}
+  &.in_use {
+    background-color: #d4edda;
+    color: #155724;
+  }
 
-.status.sold {
-  background-color: #cce5ff;
-  color: #004085;
-}
+  &.sold {
+    background-color: #cce5ff;
+    color: #004085;
+  }
 
-.status.lost {
-  background-color: #fff3cd;
-  color: #856404;
-}
+  &.lost {
+    background-color: #fff3cd;
+    color: #856404;
+  }
 
-.status.disposed {
-  background-color: #f8d7da;
-  color: #721c24;
-}
+  &.disposed {
+    background-color: #f8d7da;
+    color: $error-text-color;
+  }
 
-.status.written_off {
-  background-color: #e2e3e5;
-  color: #383d41;
+  &.written_off {
+    background-color: #e2e3e5;
+    color: #383d41;
+  }
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
   text-decoration: none;
   padding: 0.5rem 1rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   display: inline-block;
   margin-top: 1rem;
 }
 
 .btn-secondary {
-  background-color: #6c757d;
+  background-color: $secondary-color;
   color: white;
   border: none;
   cursor: pointer;
 }
 
 .btn-danger {
-  background-color: #dc3545;
+  background-color: $danger-color;
   color: white;
   border: none;
   cursor: pointer;
@@ -494,48 +507,30 @@ const deleteCommodity = async (id: string) => {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
   margin-top: 0;
-  border-radius: 4px;
+  border-radius: $default-radius;
 }
 
 .test-result, .test-error {
   margin-top: 1rem;
   padding: 1rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
 }
 
 .test-result {
-  background-color: #e6f7e6;
+  background-color: lighten($primary-color, 40%);
 }
 
 .test-error {
-  background-color: #f7e6e6;
+  background-color: lighten($danger-color, 40%);
 }
 
 pre {
   white-space: pre-wrap;
   word-wrap: break-word;
   overflow-x: auto;
-  background: #f8f9fa;
+  background: $light-bg-color;
   padding: 0.5rem;
-  border-radius: 4px;
-}
-.type {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.commodity-price {
-  display: flex;
-  flex-direction: column;
-}
-
-.price-per-unit {
-  font-size: 0.8rem;
-  font-weight: normal;
-  font-style: italic;
-  color: #666;
-  margin-top: 0.25rem;
+  border-radius: $default-radius;
 }
 
 

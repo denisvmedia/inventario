@@ -560,9 +560,9 @@ const calculatePricePerUnit = (): string => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .commodity-detail {
-  max-width: 1200px;
+  max-width: $container-max-width;
   margin: 0 auto;
   padding: 20px;
 }
@@ -572,18 +572,18 @@ const calculatePricePerUnit = (): string => {
 }
 
 .breadcrumb-link {
-  color: #6c757d;
+  color: $secondary-color;
   font-size: 0.9rem;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-}
 
-.breadcrumb-link:hover {
-  color: #4CAF50;
-  text-decoration: none;
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
 }
 
 .header {
@@ -602,31 +602,35 @@ const calculatePricePerUnit = (): string => {
   text-align: center;
   padding: 2rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .error {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 .commodity-info {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1.5rem;
+
+  @media (min-width: 768px) {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .info-card {
   background: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+  box-shadow: $box-shadow;
 
-.info-card h2 {
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #eee;
+  h2 {
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #eee;
+  }
 }
 
 .info-row {
@@ -637,49 +641,49 @@ const calculatePricePerUnit = (): string => {
 .label {
   font-weight: 500;
   width: 120px;
-  color: #555;
+  color: $text-color;
 }
 
 .status {
   font-weight: 500;
   padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   margin-left: 0.5rem;
-}
 
-.status.in_use {
-  background-color: #d4edda;
-  color: #155724;
-}
+  &.in_use {
+    background-color: #d4edda;
+    color: #155724;
+  }
 
-.status.sold {
-  background-color: #cce5ff;
-  color: #004085;
-}
+  &.sold {
+    background-color: #cce5ff;
+    color: #004085;
+  }
 
-.status.lost {
-  background-color: #fff3cd;
-  color: #856404;
-}
+  &.lost {
+    background-color: #fff3cd;
+    color: #856404;
+  }
 
-.status.disposed {
-  background-color: #f8d7da;
-  color: #721c24;
-}
+  &.disposed {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
 
-.status.written_off {
-  background-color: #e2e3e5;
-  color: #383d41;
+  &.written_off {
+    background-color: #e2e3e5;
+    color: #383d41;
+  }
 }
 
 .type-with-icon {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
 
-.type-with-icon i {
-  font-size: 1.2rem;
+  i {
+    font-size: 1.2rem;
+  }
 }
 
 .tags {
@@ -689,37 +693,37 @@ const calculatePricePerUnit = (): string => {
 }
 
 .tag {
-  background-color: #e9ecef;
-  color: #333;
+  background-color: $light-bg-color;
+  color: $text-color;
   padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   margin-right: 0.5rem;
 }
 
 .btn {
   padding: 0.5rem 1rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   font-weight: 500;
   cursor: pointer;
   border: none;
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
   text-decoration: none;
   display: inline-block;
 }
 
 .btn-secondary {
-  background-color: #6c757d;
+  background-color: $secondary-color;
   color: white;
   border: none;
   cursor: pointer;
 }
 
 .btn-danger {
-  background-color: #dc3545;
+  background-color: $danger-color;
   color: white;
   border: none;
   cursor: pointer;
@@ -729,7 +733,7 @@ const calculatePricePerUnit = (): string => {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
   margin-top: 0;
-  border-radius: 4px;
+  border-radius: $default-radius;
 }
 
 /* New styles for file upload sections */
@@ -744,17 +748,11 @@ const calculatePricePerUnit = (): string => {
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #eee;
-}
 
-.section-header h2 {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-@media (min-width: 768px) {
-  .commodity-info {
-    grid-template-columns: 1fr 1fr;
+  h2 {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
   }
 }
 </style>

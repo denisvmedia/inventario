@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .file-viewer {
   margin-bottom: 1.5rem;
 }
@@ -622,9 +622,9 @@ onBeforeUnmount(() => {
 .no-files {
   padding: 1rem;
   text-align: center;
-  color: #6c757d;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  color: $secondary-color;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
 }
 
 .files-container {
@@ -634,17 +634,17 @@ onBeforeUnmount(() => {
 }
 
 .file-item {
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   overflow: hidden;
   background-color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: $box-shadow;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
 
-.file-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
 }
 
 .file-preview {
@@ -652,7 +652,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
   overflow: hidden;
   cursor: pointer;
 }
@@ -665,12 +665,12 @@ onBeforeUnmount(() => {
 
 .file-icon {
   font-size: 3rem;
-  color: #6c757d;
-}
+  color: $secondary-color;
 
-.file-icon.large {
-  font-size: 5rem;
-  margin-bottom: 1rem;
+  &.large {
+    font-size: 5rem;
+    margin-bottom: 1rem;
+  }
 }
 
 .file-info {
@@ -707,7 +707,7 @@ onBeforeUnmount(() => {
 
 .modal-content {
   background-color: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   width: 90%;
   max-width: 1200px;
@@ -723,16 +723,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  border-bottom: 1px solid #dee2e6;
-}
+  border-bottom: 1px solid $border-color;
 
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 70%;
+  h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 70%;
+  }
 }
 
 .close-button {
@@ -740,12 +740,12 @@ onBeforeUnmount(() => {
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #6c757d;
+  color: $secondary-color;
   margin-left: 0.5rem;
-}
 
-.close-button:hover {
-  color: #343a40;
+  &:hover {
+    color: darken($secondary-color, 10%);
+  }
 }
 
 .modal-body {
@@ -755,7 +755,7 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: hidden;
   position: relative;
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
   min-height: 300px; /* Ensure minimum height for content */
 }
 
@@ -774,14 +774,14 @@ onBeforeUnmount(() => {
   object-fit: contain;
   transition: transform 0.3s ease;
   transform-origin: center center;
-}
 
-.full-image.zoomed {
-  max-width: none;
-  max-height: none;
-  width: 200%;
-  height: auto;
-  object-fit: cover;
+  &.zoomed {
+    max-width: none;
+    max-height: none;
+    width: 200%;
+    height: auto;
+    object-fit: cover;
+  }
 }
 
 .pdf-container {
@@ -807,11 +807,11 @@ onBeforeUnmount(() => {
   padding: 2rem;
   width: 100%;
   height: 300px;
-}
 
-.pdf-loading-container p {
-  margin-top: 1rem;
-  color: #6c757d;
+  p {
+    margin-top: 1rem;
+    color: $secondary-color;
+  }
 }
 
 .spinner {
@@ -819,7 +819,7 @@ onBeforeUnmount(() => {
   height: 40px;
   border: 4px solid rgba(0, 0, 0, 0.1);
   border-radius: 50%;
-  border-top-color: #4CAF50;
+  border-top-color: $primary-color;
   animation: spin 1s ease-in-out infinite;
 }
 
@@ -834,20 +834,20 @@ onBeforeUnmount(() => {
   justify-content: center;
   text-align: center;
   padding: 2rem;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
   width: 100%;
   max-width: 500px;
   margin: 0 auto;
-}
 
-.pdf-error-container p {
-  margin: 1rem 0;
-  color: #6c757d;
-}
+  p {
+    margin: 1rem 0;
+    color: $secondary-color;
+  }
 
-.pdf-error-container .btn {
-  margin-top: 1rem;
+  .btn {
+    margin-top: 1rem;
+  }
 }
 
 .unsupported-file {
@@ -860,7 +860,7 @@ onBeforeUnmount(() => {
   top: 50%;
   transform: translateY(-50%);
   background-color: rgba(255, 255, 255, 0.5);
-  color: #333;
+  color: $text-color;
   border: none;
   border-radius: 50%;
   width: 40px;
@@ -872,19 +872,17 @@ onBeforeUnmount(() => {
   cursor: pointer;
   z-index: 10;
   transition: background-color 0.2s ease;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-}
+  box-shadow: $box-shadow;
 
-@media (max-width: 768px) {
-  .nav-button {
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.8);
+  }
+
+  @media (max-width: 768px) {
     width: 30px;
     height: 30px;
     font-size: 1.2rem;
   }
-}
-
-.nav-button:hover {
-  background-color: rgba(255, 255, 255, 0.8);
 }
 
 .prev {
@@ -900,29 +898,29 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid $border-color;
 }
 
 .file-counter {
-  color: #6c757d;
+  color: $secondary-color;
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
   border: none;
   cursor: pointer;
 }
 
 .btn-danger {
-  background-color: #dc3545;
+  background-color: $danger-color;
   color: white;
   border: none;
   cursor: pointer;
 }
 
 .btn-secondary {
-  background-color: #6c757d;
+  background-color: $secondary-color;
   color: white;
   border: none;
   cursor: pointer;
@@ -931,6 +929,6 @@ onBeforeUnmount(() => {
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
 }
 </style>

@@ -312,7 +312,7 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .image-viewer {
   margin-bottom: 1.5rem;
 }
@@ -320,9 +320,9 @@ onBeforeUnmount(() => {
 .no-images {
   padding: 1rem;
   text-align: center;
-  color: #6c757d;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  color: $secondary-color;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
 }
 
 .files-container {
@@ -332,17 +332,17 @@ onBeforeUnmount(() => {
 }
 
 .file-item {
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   overflow: hidden;
   background-color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: $box-shadow;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
 
-.file-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
 }
 
 .file-preview {
@@ -350,7 +350,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
   overflow: hidden;
   cursor: pointer;
 }
@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
 
 .modal-content {
   background-color: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   width: 90%;
   max-width: 1200px;
   max-height: 90vh;
@@ -409,16 +409,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  border-bottom: 1px solid #dee2e6;
-}
+  border-bottom: 1px solid $border-color;
 
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 70%;
+  h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 70%;
+  }
 }
 
 .modal-controls {
@@ -432,12 +432,12 @@ onBeforeUnmount(() => {
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #6c757d;
+  color: $secondary-color;
   margin-left: 0.5rem;
-}
 
-.close-button:hover {
-  color: #343a40;
+  &:hover {
+    color: darken($secondary-color, 10%);
+  }
 }
 
 .modal-body {
@@ -448,7 +448,7 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: hidden;
   position: relative;
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
 }
 
 .image-container {
@@ -466,14 +466,14 @@ onBeforeUnmount(() => {
   object-fit: contain;
   transition: transform 0.3s ease;
   transform-origin: center center;
-}
 
-.full-image.zoomed {
-  max-width: none;
-  max-height: none;
-  width: 200%;
-  height: auto;
-  object-fit: cover;
+  &.zoomed {
+    max-width: none;
+    max-height: none;
+    width: 200%;
+    height: auto;
+    object-fit: cover;
+  }
 }
 
 .nav-button {
@@ -492,18 +492,18 @@ onBeforeUnmount(() => {
   cursor: pointer;
   z-index: 10;
   transition: background-color 0.2s ease;
-}
 
-.nav-button:hover {
-  background-color: rgba(255, 255, 255, 0.8);
-}
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.8);
+  }
 
-.prev {
-  left: 10px;
-}
+  &.prev {
+    left: 10px;
+  }
 
-.next {
-  right: 10px;
+  &.next {
+    right: 10px;
+  }
 }
 
 .modal-footer {
@@ -511,11 +511,11 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid $border-color;
 }
 
 .image-counter {
-  color: #6c757d;
+  color: $secondary-color;
 }
 
 .image-actions {
@@ -523,23 +523,33 @@ onBeforeUnmount(() => {
   gap: 0.5rem;
 }
 
-.btn-primary {
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
+.btn {
+  &-primary {
+    background-color: $primary-color;
+    color: white;
+    border: none;
+    cursor: pointer;
 
-.btn-danger {
-  background-color: #dc3545;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
+    &:hover {
+      background-color: $primary-hover-color;
+    }
+  }
 
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-  border-radius: 4px;
+  &-danger {
+    background-color: $danger-color;
+    color: white;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      background-color: $danger-hover-color;
+    }
+  }
+
+  &-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    border-radius: $default-radius;
+  }
 }
 </style>

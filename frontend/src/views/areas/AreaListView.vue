@@ -89,9 +89,9 @@ const deleteArea = async (id: string) => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .area-list {
-  max-width: 1200px;
+  max-width: $container-max-width;
   margin: 0 auto;
   padding: 20px;
 }
@@ -107,12 +107,12 @@ const deleteArea = async (id: string) => {
   text-align: center;
   padding: 2rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .error {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 .areas-grid {
@@ -123,19 +123,19 @@ const deleteArea = async (id: string) => {
 
 .area-card {
   background: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-}
 
-.area-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  }
 }
 
 .area-content {
@@ -158,7 +158,7 @@ const deleteArea = async (id: string) => {
 .area-meta {
   margin-top: 0.5rem;
   font-size: 0.9rem;
-  color: #555;
+  color: $text-color;
 }
 
 .location {
@@ -168,7 +168,7 @@ const deleteArea = async (id: string) => {
 .btn {
   padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 4px;
+  border-radius: $default-radius;
   cursor: pointer;
   font-weight: 500;
   text-decoration: none;
@@ -176,12 +176,12 @@ const deleteArea = async (id: string) => {
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
 }
 
 .btn-secondary {
-  background-color: #6c757d;
+  background-color: $secondary-color;
   color: white;
 }
 </style>

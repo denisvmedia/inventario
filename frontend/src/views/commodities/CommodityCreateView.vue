@@ -661,7 +661,7 @@ const removeUrl = (index: number) => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .commodity-create {
   max-width: 800px;
   margin: 0 auto;
@@ -673,18 +673,18 @@ const removeUrl = (index: number) => {
 }
 
 .breadcrumb-link {
-  color: #6c757d;
+  color: $secondary-color;
   font-size: 0.9rem;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-}
 
-.breadcrumb-link:hover {
-  color: #4CAF50;
-  text-decoration: none;
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
 }
 
 h1 {
@@ -694,19 +694,19 @@ h1 {
 .form {
   background: white;
   padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .form-section {
   margin-bottom: 2rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid #eee;
-}
 
-.form-section h2 {
-  margin-bottom: 1.5rem;
-  font-size: 1.5rem;
+  h2 {
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+  }
 }
 
 .form-group {
@@ -722,27 +722,27 @@ label {
 .form-control {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   font-size: 1rem;
+
+  &:focus {
+    outline: none;
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
+
+  &.is-invalid {
+    border-color: $danger-color;
+  }
 }
 
 textarea.form-control {
   resize: vertical;
 }
 
-.form-control:focus {
-  outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-}
-
-.form-control.is-invalid {
-  border-color: #dc3545;
-}
-
 .error-message {
-  color: #dc3545;
+  color: $danger-color;
   font-size: 0.875rem;
   margin-top: 0.25rem;
 }
@@ -757,37 +757,37 @@ textarea.form-control {
 .btn {
   padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 4px;
+  border-radius: $default-radius;
   cursor: pointer;
   font-weight: 500;
+
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
 }
 
 .btn-secondary {
-  background-color: #f0f0f0;
-  color: #333;
+  background-color: $light-bg-color;
+  color: $text-color;
 }
 
 .btn-danger {
-  background-color: #dc3545;
+  background-color: $danger-color;
   color: white;
-}
-
-.btn:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
 }
 
 .form-error {
   margin-top: 1rem;
   padding: 0.75rem;
   background-color: #f8d7da;
-  color: #721c24;
-  border-radius: 4px;
+  color: $error-text-color;
+  border-radius: $default-radius;
 }
 
 .array-input {
@@ -809,15 +809,15 @@ textarea.form-control {
 
 .debug-info {
   margin-top: 2rem;
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
   padding: 1rem;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-}
+  border-radius: $default-radius;
+  border: 1px solid $border-color;
 
-pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  overflow-x: auto;
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-x: auto;
+  }
 }
 </style>

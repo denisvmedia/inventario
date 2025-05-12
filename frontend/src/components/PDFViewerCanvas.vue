@@ -514,14 +514,14 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .pdf-viewer-container {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background-color: #f8f9fa;
-  border-radius: 4px;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
   overflow: hidden;
 }
 
@@ -531,7 +531,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   align-items: center;
   height: 200px;
-  color: #6c757d;
+  color: $secondary-color;
   padding: 1rem;
   text-align: center;
 }
@@ -545,14 +545,14 @@ onBeforeUnmount(() => {
   height: 40px;
   border: 4px solid rgba(0, 0, 0, 0.1);
   border-radius: 50%;
-  border-top-color: #4CAF50;
+  border-top-color: $primary-color;
   animation: spin 1s ease-in-out infinite;
-}
 
-.spinner.small {
-  width: 20px;
-  height: 20px;
-  border-width: 2px;
+  &.small {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+  }
 }
 
 @keyframes spin {
@@ -582,8 +582,8 @@ onBeforeUnmount(() => {
   align-items: center;
   width: 100%;
   padding: 0.75rem;
-  background-color: #e9ecef;
-  border-bottom: 1px solid #dee2e6;
+  background-color: $light-hover-bg-color;
+  border-bottom: 1px solid $border-color;
   gap: 0.5rem;
   overflow-x: auto; /* Allow horizontal scrolling if needed */
   min-height: 60px; /* Ensure minimum height for controls */
@@ -617,7 +617,7 @@ onBeforeUnmount(() => {
 
 .page-info, .zoom-level {
   font-size: 0.875rem;
-  color: #495057;
+  color: $text-color;
   min-width: 60px;
   text-align: center;
 }
@@ -630,7 +630,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background-color: #e9ecef;
+  background-color: $light-hover-bg-color;
   box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
   padding: 1rem;
   width: 100%;
@@ -653,15 +653,15 @@ onBeforeUnmount(() => {
   z-index: 10;
   transition: background-color 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
 
-.nav-button:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.9);
-}
+  &:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.9);
+  }
 
-.nav-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .prev {
@@ -695,7 +695,7 @@ onBeforeUnmount(() => {
   display: block;
   max-width: 100%;
   height: auto;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow;
 }
 
 .pdf-page-loading {
@@ -709,40 +709,40 @@ onBeforeUnmount(() => {
 
 .btn {
   background-color: #fff;
-  border: 1px solid #ced4da;
-  color: #495057;
+  border: 1px solid $border-color;
+  color: $text-color;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: $default-radius;
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
-}
 
-.btn:hover:not(:disabled) {
-  background-color: #e9ecef;
-}
+  &:hover:not(:disabled) {
+    background-color: $light-hover-bg-color;
+  }
 
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-}
+  &-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+  }
 
-.btn-primary {
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-}
+  &-primary {
+    background-color: $primary-color;
+    color: white;
+    border: none;
 
-.btn-primary:hover {
-  background-color: #45a049;
-}
+    &:hover {
+      background-color: $primary-hover-color;
+    }
+  }
 
-.btn-active {
-  background-color: #4CAF50;
-  color: white;
+  &-active {
+    background-color: $primary-color;
+    color: white;
+  }
 }
 </style>
