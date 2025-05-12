@@ -82,6 +82,12 @@ footer {
   padding: 0 1rem;
 }
 
+@media (min-width: 800px) {
+  .container {
+    min-width: 800px;
+  }
+}
+
 .btn {
   display: inline-block;
   padding: 0.5rem 1rem;
