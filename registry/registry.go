@@ -83,6 +83,9 @@ type ManualRegistry interface {
 type SettingsRegistry interface {
 	Registry[models.Setting]
 
+	GetByName(name string) (*models.Setting, error)
+	DeleteByName(name string) error
+
 	GetUIConfig() (*models.UIConfig, error)
 	SetUIConfig(*models.UIConfig) error
 	RemoveUIConfig() error

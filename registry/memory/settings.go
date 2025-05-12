@@ -18,22 +18,21 @@ var _ registry.SettingsRegistry = (*SettingsRegistry)(nil)
 
 type SettingsRegistry struct {
 	registry *Registry[models.Setting, *models.Setting]
+	nameIdx  map[string]string // map[name]id
 	lock     sync.RWMutex
 }
 
 func NewSettingsRegistry() *SettingsRegistry {
 	return &SettingsRegistry{
 		registry: NewRegistry[models.Setting, *models.Setting](),
+		nameIdx:  make(map[string]string),
 	}
 }
 
 // TLS methods removed as requested
 
 func (r *SettingsRegistry) GetUIConfig() (*models.UIConfig, error) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-
-	setting, err := r.registry.Get(settingIDUIConfig)
+	setting, err := r.GetByName(settingIDUIConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -47,25 +46,22 @@ func (r *SettingsRegistry) GetUIConfig() (*models.UIConfig, error) {
 }
 
 func (r *SettingsRegistry) SetUIConfig(config *models.UIConfig) error {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
 	value, err := json.Marshal(config)
 	if err != nil {
 		return errkit.Wrap(err, "failed to marshal UI config")
 	}
 
 	setting := models.Setting{
-		ID:    settingIDUIConfig,
+		Name:  settingIDUIConfig,
 		Value: value,
 	}
 
-	// Try to get the setting first
-	_, err = r.registry.Get(settingIDUIConfig)
+	// Try to get the setting by name first
+	existingSetting, err := r.GetByName(settingIDUIConfig)
 	if err != nil {
 		// If not found, create it
 		if err == registry.ErrNotFound {
-			_, err = r.registry.Create(setting)
+			_, err = r.Create(setting)
 			if err != nil {
 				return err
 			}
@@ -74,7 +70,8 @@ func (r *SettingsRegistry) SetUIConfig(config *models.UIConfig) error {
 		}
 	} else {
 		// If found, update it
-		_, err = r.registry.Update(setting)
+		setting.ID = existingSetting.ID
+		_, err = r.Update(setting)
 		if err != nil {
 			return err
 		}
@@ -84,17 +81,11 @@ func (r *SettingsRegistry) SetUIConfig(config *models.UIConfig) error {
 }
 
 func (r *SettingsRegistry) RemoveUIConfig() error {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	return r.registry.Delete(settingIDUIConfig)
+	return r.DeleteByName(settingIDUIConfig)
 }
 
 func (r *SettingsRegistry) GetSystemConfig() (*models.SystemConfig, error) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-
-	setting, err := r.registry.Get(settingIDSystemConfig)
+	setting, err := r.GetByName(settingIDSystemConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -108,25 +99,22 @@ func (r *SettingsRegistry) GetSystemConfig() (*models.SystemConfig, error) {
 }
 
 func (r *SettingsRegistry) SetSystemConfig(config *models.SystemConfig) error {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
 	value, err := json.Marshal(config)
 	if err != nil {
 		return errkit.Wrap(err, "failed to marshal system config")
 	}
 
 	setting := models.Setting{
-		ID:    settingIDSystemConfig,
+		Name:  settingIDSystemConfig,
 		Value: value,
 	}
 
-	// Try to get the setting first
-	_, err = r.registry.Get(settingIDSystemConfig)
+	// Try to get the setting by name first
+	existingSetting, err := r.GetByName(settingIDSystemConfig)
 	if err != nil {
 		// If not found, create it
 		if err == registry.ErrNotFound {
-			_, err = r.registry.Create(setting)
+			_, err = r.Create(setting)
 			if err != nil {
 				return err
 			}
@@ -135,7 +123,8 @@ func (r *SettingsRegistry) SetSystemConfig(config *models.SystemConfig) error {
 		}
 	} else {
 		// If found, update it
-		_, err = r.registry.Update(setting)
+		setting.ID = existingSetting.ID
+		_, err = r.Update(setting)
 		if err != nil {
 			return err
 		}
@@ -145,20 +134,35 @@ func (r *SettingsRegistry) SetSystemConfig(config *models.SystemConfig) error {
 }
 
 func (r *SettingsRegistry) RemoveSystemConfig() error {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	return r.registry.Delete(settingIDSystemConfig)
+	return r.DeleteByName(settingIDSystemConfig)
 }
-
-// Currency methods removed as requested
 
 // Registry interface implementation
 func (r *SettingsRegistry) Create(m models.Setting) (*models.Setting, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	return r.registry.Create(m)
+	// Check if a setting with this name already exists
+	if m.Name != "" {
+		if id, ok := r.nameIdx[m.Name]; ok {
+			// Setting with this name already exists, update it
+			m.ID = id
+			return r.registry.Update(m)
+		}
+	}
+
+	// Create a new setting
+	setting, err := r.registry.Create(m)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the name index
+	if setting.Name != "" {
+		r.nameIdx[setting.Name] = setting.ID
+	}
+
+	return setting, nil
 }
 
 func (r *SettingsRegistry) Get(id string) (*models.Setting, error) {
@@ -179,12 +183,44 @@ func (r *SettingsRegistry) Update(m models.Setting) (*models.Setting, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	return r.registry.Update(m)
+	// Get the existing setting to check if the name has changed
+	oldSetting, err := r.registry.Get(m.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the setting
+	setting, err := r.registry.Update(m)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the name index
+	if oldSetting.Name != "" && oldSetting.Name != setting.Name {
+		// Remove the old name from the index
+		delete(r.nameIdx, oldSetting.Name)
+	}
+	if setting.Name != "" {
+		r.nameIdx[setting.Name] = setting.ID
+	}
+
+	return setting, nil
 }
 
 func (r *SettingsRegistry) Delete(id string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
+	// Get the setting to find its name
+	setting, err := r.registry.Get(id)
+	if err != nil {
+		return err
+	}
+
+	// Remove the setting from the name index
+	if setting.Name != "" {
+		delete(r.nameIdx, setting.Name)
+	}
 
 	return r.registry.Delete(id)
 }
@@ -194,4 +230,31 @@ func (r *SettingsRegistry) Count() (int, error) {
 	defer r.lock.RUnlock()
 
 	return r.registry.Count()
+}
+
+func (r *SettingsRegistry) GetByName(name string) (*models.Setting, error) {
+	r.lock.RLock()
+	id, ok := r.nameIdx[name]
+	r.lock.RUnlock()
+
+	if !ok {
+		return nil, registry.ErrNotFound
+	}
+
+	return r.Get(id)
+}
+
+func (r *SettingsRegistry) DeleteByName(name string) error {
+	r.lock.Lock()
+	id, ok := r.nameIdx[name]
+	if ok {
+		delete(r.nameIdx, name)
+	}
+	r.lock.Unlock()
+
+	if !ok {
+		return registry.ErrNotFound
+	}
+
+	return r.Delete(id)
 }

@@ -36,12 +36,13 @@ func NewSettingResponse(setting *models.Setting) *SettingResponse {
 }
 
 // NewSettingResponseWithValue creates a new SettingResponse instance with a parsed value.
-func NewSettingResponseWithValue(id string, value any) *SettingResponse {
+func NewSettingResponseWithValue(name string, value any) *SettingResponse {
 	// Marshal the value to JSON
 	valueJSON, _ := json.Marshal(value)
 
 	setting := &models.Setting{
-		ID:    id,
+		ID:    name,
+		Name:  name,
 		Value: valueJSON,
 	}
 

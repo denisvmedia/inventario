@@ -86,6 +86,7 @@ func TestSettingsRegistry_GenericSettings(t *testing.T) {
 
 	// Create a test setting
 	setting := models.Setting{
+		Name:  "test_setting",
 		Value: []byte(`{"test": "value"}`),
 	}
 
@@ -93,12 +94,21 @@ func TestSettingsRegistry_GenericSettings(t *testing.T) {
 	createdSetting, err := r.Create(setting)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdSetting.ID, qt.Not(qt.Equals), "")
+	c.Assert(createdSetting.Name, qt.Equals, setting.Name)
 
-	// Get the setting
+	// Get the setting by ID
 	retrievedSetting, err := r.Get(createdSetting.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(retrievedSetting.ID, qt.Equals, createdSetting.ID)
+	c.Assert(retrievedSetting.Name, qt.Equals, setting.Name)
 	c.Assert(string(retrievedSetting.Value), qt.Equals, string(setting.Value))
+
+	// Get the setting by Name
+	retrievedByNameSetting, err := r.GetByName(setting.Name)
+	c.Assert(err, qt.IsNil)
+	c.Assert(retrievedByNameSetting.ID, qt.Equals, createdSetting.ID)
+	c.Assert(retrievedByNameSetting.Name, qt.Equals, setting.Name)
+	c.Assert(string(retrievedByNameSetting.Value), qt.Equals, string(setting.Value))
 
 	// Update the setting
 	setting.ID = createdSetting.ID
@@ -106,13 +116,25 @@ func TestSettingsRegistry_GenericSettings(t *testing.T) {
 	updatedSetting, err := r.Update(setting)
 	c.Assert(err, qt.IsNil)
 	c.Assert(updatedSetting.ID, qt.Equals, createdSetting.ID)
+	c.Assert(updatedSetting.Name, qt.Equals, setting.Name)
 	c.Assert(string(updatedSetting.Value), qt.Equals, string(setting.Value))
 
-	// Delete the setting
-	err = r.Delete(createdSetting.ID)
+	// Get the updated setting by Name
+	retrievedUpdatedSetting, err := r.GetByName(setting.Name)
+	c.Assert(err, qt.IsNil)
+	c.Assert(retrievedUpdatedSetting.ID, qt.Equals, createdSetting.ID)
+	c.Assert(retrievedUpdatedSetting.Name, qt.Equals, setting.Name)
+	c.Assert(string(retrievedUpdatedSetting.Value), qt.Equals, string(setting.Value))
+
+	// Delete the setting by Name
+	err = r.DeleteByName(setting.Name)
 	c.Assert(err, qt.IsNil)
 
-	// Try to get the setting again, should fail
+	// Try to get the setting by ID again, should fail
 	_, err = r.Get(createdSetting.ID)
+	c.Assert(err, qt.Not(qt.IsNil))
+
+	// Try to get the setting by Name again, should fail
+	_, err = r.GetByName(setting.Name)
 	c.Assert(err, qt.Not(qt.IsNil))
 }

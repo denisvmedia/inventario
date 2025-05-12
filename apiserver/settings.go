@@ -47,10 +47,10 @@ func (api *settingsAPI) listSettings(w http.ResponseWriter, r *http.Request) {
 // @Produce  json-api
 // @Param id path string true "Setting ID"
 // @Success 200 {object} jsonapi.SettingResponse "OK"
-// @Router /settings/{id} [get].
+// @Router /settings/{name} [get].
 func (api *settingsAPI) getSetting(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if id == "" {
+	settingName := chi.URLParam(r, "name")
+	if settingName == "" {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
@@ -58,23 +58,13 @@ func (api *settingsAPI) getSetting(w http.ResponseWriter, r *http.Request) {
 	var result any
 	var err error
 
-	switch id {
+	switch settingName {
 	case "ui_config":
 		result, err = api.settingsRegistry.GetUIConfig()
 	case "system_config":
 		result, err = api.settingsRegistry.GetSystemConfig()
 	default:
-		// For any other ID, try to get the setting directly
-		setting, err := api.settingsRegistry.Get(id)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-		resp := jsonapi.NewSettingResponse(setting)
-		if err := render.Render(w, r, resp); err != nil {
-			internalServerError(w, r, err)
-		}
-		return
+		err = registry.ErrNotFound
 	}
 
 	if err != nil {
@@ -82,78 +72,14 @@ func (api *settingsAPI) getSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := jsonapi.NewSettingResponseWithValue(id, result)
+	resp := jsonapi.NewSettingResponseWithValue(settingName, result)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 }
 
-// createSetting creates a new setting.
-// @Summary Create a new setting
-// @Description add by setting data
-// @Tags settings
-// @Accept json-api
-// @Produce json-api
-// @Param setting body jsonapi.SettingRequest true "Setting object"
-// @Success 201 {object} jsonapi.SettingResponse "Setting created"
-// @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /settings [post].
-func (api *settingsAPI) createSetting(w http.ResponseWriter, r *http.Request) {
-	var input jsonapi.SettingRequest
-	if err := render.Bind(r, &input); err != nil {
-		unprocessableEntityError(w, r, err)
-		return
-	}
-
-	err := validation.Validate(input.Data)
-	if err != nil {
-		unprocessableEntityError(w, r, err)
-		return
-	}
-
-	setting := input.Data.Attributes
-	id := input.Data.ID
-
-	var result any
-
-	switch id {
-	case "ui_config":
-		var config models.UIConfig
-		if err := json.Unmarshal(setting.Value, &config); err != nil {
-			unprocessableEntityError(w, r, err)
-			return
-		}
-		err = api.settingsRegistry.SetUIConfig(&config)
-		result = &config
-	case "system_config":
-		var config models.SystemConfig
-		if err := json.Unmarshal(setting.Value, &config); err != nil {
-			unprocessableEntityError(w, r, err)
-			return
-		}
-		err = api.settingsRegistry.SetSystemConfig(&config)
-		result = &config
-	default:
-		// For any other ID, create the setting directly
-		setting.ID = id
-		result, err = api.settingsRegistry.Create(*setting)
-	}
-
-	if err != nil {
-		renderEntityError(w, r, err)
-		return
-	}
-
-	resp := jsonapi.NewSettingResponseWithValue(id, result)
-	resp.HTTPStatusCode = http.StatusCreated
-	if err := render.Render(w, r, resp); err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-}
-
-// updateSetting updates a setting.
+// setSetting updates a setting.
 // @Summary Update a setting
 // @Description Update by setting data
 // @Tags settings
@@ -164,10 +90,10 @@ func (api *settingsAPI) createSetting(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.SettingResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Setting not found"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Router /settings/{id} [put].
-func (api *settingsAPI) updateSetting(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if id == "" {
+// @Router /settings/{name} [put].
+func (api *settingsAPI) setSetting(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if name == "" {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
@@ -185,11 +111,11 @@ func (api *settingsAPI) updateSetting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setting := input.Data.Attributes
-	setting.ID = id
+	setting.Name = name
 
 	var result any
 
-	switch id {
+	switch name {
 	case "ui_config":
 		var config models.UIConfig
 		if err := json.Unmarshal(setting.Value, &config); err != nil {
@@ -207,8 +133,7 @@ func (api *settingsAPI) updateSetting(w http.ResponseWriter, r *http.Request) {
 		err = api.settingsRegistry.SetSystemConfig(&config)
 		result = &config
 	default:
-		// For any other ID, update the setting directly
-		result, err = api.settingsRegistry.Update(*setting)
+		err = registry.ErrNotFound
 	}
 
 	if err != nil {
@@ -216,7 +141,7 @@ func (api *settingsAPI) updateSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := jsonapi.NewSettingResponseWithValue(id, result)
+	resp := jsonapi.NewSettingResponseWithValue(name, result)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -232,24 +157,23 @@ func (api *settingsAPI) updateSetting(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Setting ID"
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Setting not found"
-// @Router /settings/{id} [delete].
+// @Router /settings/{name} [delete].
 func (api *settingsAPI) deleteSetting(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if id == "" {
+	name := chi.URLParam(r, "name")
+	if name == "" {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
 	var err error
 
-	switch id {
+	switch name {
 	case "ui_config":
 		err = api.settingsRegistry.RemoveUIConfig()
 	case "system_config":
 		err = api.settingsRegistry.RemoveSystemConfig()
 	default:
-		// For any other ID, delete the setting directly
-		err = api.settingsRegistry.Delete(id)
+		err = registry.ErrNotFound
 	}
 
 	if err != nil {
@@ -267,10 +191,9 @@ func Settings(settingsRegistry registry.SettingsRegistry) func(r chi.Router) {
 	}
 
 	return func(r chi.Router) {
-		r.Get("/", api.listSettings)       // GET /settings
-		r.Post("/", api.createSetting)     // POST /settings
-		r.Get("/{id}", api.getSetting)     // GET /settings/tls
-		r.Put("/{id}", api.updateSetting)  // PUT /settings/tls
-		r.Delete("/{id}", api.deleteSetting) // DELETE /settings/tls
+		r.Get("/", api.listSettings)           // GET /settings
+		r.Get("/{name}", api.getSetting)       // GET /settings/:name
+		r.Put("/{name}", api.setSetting)       // PUT /settings/:name
+		r.Delete("/{name}", api.deleteSetting) // DELETE /settings/:name
 	}
 }

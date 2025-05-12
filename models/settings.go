@@ -7,6 +7,7 @@ import (
 // Setting represents a system setting
 type Setting struct {
 	ID    string          `json:"id,omitempty"`
+	Name  string          `json:"name"`
 	Value json.RawMessage `json:"value"`
 }
 
@@ -19,8 +20,6 @@ func (s *Setting) GetID() string {
 func (s *Setting) SetID(id string) {
 	s.ID = id
 }
-
-// TLSConfig is removed as requested
 
 // UIConfig represents UI configuration settings
 type UIConfig struct {
@@ -39,5 +38,3 @@ type SystemConfig struct {
 	BackupLocation  string `json:"backup_location,omitempty"`
 	MainCurrency    string `json:"main_currency"`
 }
-
-// CurrencyConfig is removed as requested

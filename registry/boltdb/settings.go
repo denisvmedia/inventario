@@ -17,6 +17,8 @@ const (
 
 	bucketNameSettings = "settings"
 
+	idxSettingsByName = "settings_by_name"
+
 	settingIDUIConfig     = "ui_config"
 	settingIDSystemConfig = "system_config"
 )
@@ -52,12 +54,39 @@ func (r *SettingsRegistry) Create(m models.Setting) (*models.Setting, error) {
 				"field_name", "ID",
 			)
 		}
+
+		if setting.Name != "" {
+			// Check if a setting with this name already exists
+			_, err := r.base.GetIndexValue(tx, idxSettingsByName, setting.Name)
+			if err == nil {
+				// Setting with this name already exists, update it instead
+				return errkit.Wrap(registry.ErrAlreadyExists, "setting name is already used")
+			}
+			if !errors.Is(err, registry.ErrNotFound) {
+				// Any other error is a problem
+				return err
+			}
+		}
+
 		return nil
-	}, NoopHook[models.Setting, *models.Setting])
+	}, func(tx dbx.TransactionOrBucket, setting *models.Setting) error {
+		if setting.Name != "" {
+			// Save the name index
+			err := r.base.SaveIndexValue(tx, idxSettingsByName, setting.Name, setting.ID)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *SettingsRegistry) Get(id string) (*models.Setting, error) {
 	return r.registry.Get(id)
+}
+
+func (r *SettingsRegistry) GetByName(name string) (*models.Setting, error) {
+	return r.registry.GetBy(idxSettingsByName, name)
 }
 
 func (r *SettingsRegistry) List() ([]*models.Setting, error) {
@@ -65,21 +94,74 @@ func (r *SettingsRegistry) List() ([]*models.Setting, error) {
 }
 
 func (r *SettingsRegistry) Update(m models.Setting) (*models.Setting, error) {
-	return r.registry.Update(m, NoopHook[models.Setting, *models.Setting], NoopHook[models.Setting, *models.Setting])
+	var old *models.Setting
+	return r.registry.Update(m, func(tx dbx.TransactionOrBucket, setting *models.Setting) error {
+		old = setting
+		return nil
+	}, func(tx dbx.TransactionOrBucket, result *models.Setting) error {
+		if old.Name == result.Name {
+			return nil
+		}
+
+		if result.Name != "" {
+			// Check if a setting with this name already exists
+			u := &models.Setting{}
+			err := r.base.GetByIndexValue(tx, idxSettingsByName, result.Name, u)
+			switch {
+			case err == nil:
+				return errkit.Wrap(registry.ErrAlreadyExists, "setting name is already used")
+			case errors.Is(err, registry.ErrNotFound):
+				// skip, it's expected
+			case err != nil:
+				return errkit.Wrap(err, "failed to check if setting name is already used")
+			}
+
+			// Remove the old name from the index
+			if old.Name != "" {
+				err = r.base.DeleteIndexValue(tx, idxSettingsByName, old.Name)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Save the new name in the index
+			err = r.base.SaveIndexValue(tx, idxSettingsByName, result.Name, result.GetID())
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *SettingsRegistry) Delete(id string) error {
-	return r.registry.Delete(id)
+	return r.registry.Delete(id, func(tx dbx.TransactionOrBucket, setting *models.Setting) error {
+		return nil
+	}, func(tx dbx.TransactionOrBucket, setting *models.Setting) error {
+		if setting.Name != "" {
+			return r.base.DeleteIndexValue(tx, idxSettingsByName, setting.Name)
+		}
+		return nil
+	})
 }
 
 func (r *SettingsRegistry) Count() (int, error) {
 	return r.registry.Count()
 }
 
+func (r *SettingsRegistry) DeleteByName(name string) error {
+	setting, err := r.GetByName(name)
+	if err != nil {
+		return err
+	}
+	return r.Delete(setting.ID)
+}
+
 // TLS methods removed as requested
 
 func (r *SettingsRegistry) GetUIConfig() (*models.UIConfig, error) {
-	setting, err := r.Get(settingIDUIConfig)
+	setting, err := r.GetByName(settingIDUIConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -99,15 +181,26 @@ func (r *SettingsRegistry) SetUIConfig(config *models.UIConfig) error {
 	}
 
 	setting := models.Setting{
-		ID:    settingIDUIConfig,
+		Name:  settingIDUIConfig,
 		Value: value,
 	}
 
-	_, err = r.Update(setting)
+	// Try to get the setting by name first
+	existingSetting, err := r.GetByName(settingIDUIConfig)
 	if err != nil {
+		// If not found, create it
 		if errors.Is(err, registry.ErrNotFound) {
 			_, err = r.Create(setting)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
 		}
+	} else {
+		// If found, update it
+		setting.ID = existingSetting.ID
+		_, err = r.Update(setting)
 		if err != nil {
 			return err
 		}
