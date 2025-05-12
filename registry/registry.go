@@ -80,6 +80,18 @@ type ManualRegistry interface {
 	Registry[models.Manual]
 }
 
+type SettingsRegistry interface {
+	Registry[models.Setting]
+
+	GetUIConfig() (*models.UIConfig, error)
+	SetUIConfig(*models.UIConfig) error
+	RemoveUIConfig() error
+
+	GetSystemConfig() (*models.SystemConfig, error)
+	SetSystemConfig(*models.SystemConfig) error
+	RemoveSystemConfig() error
+}
+
 type Set struct {
 	LocationRegistry  LocationRegistry
 	AreaRegistry      AreaRegistry
@@ -87,6 +99,7 @@ type Set struct {
 	ImageRegistry     ImageRegistry
 	InvoiceRegistry   InvoiceRegistry
 	ManualRegistry    ManualRegistry
+	SettingsRegistry  SettingsRegistry
 }
 
 func (s *Set) Validate() error {
@@ -99,6 +112,7 @@ func (s *Set) Validate() error {
 		validation.Field(&s.ImageRegistry, validation.Required),
 		validation.Field(&s.ManualRegistry, validation.Required),
 		validation.Field(&s.InvoiceRegistry, validation.Required),
+		validation.Field(&s.SettingsRegistry, validation.Required),
 	)
 
 	return validation.ValidateStruct(s, fields...)

@@ -67,6 +67,17 @@ const routes = [
     name: 'commodity-print',
     component: () => import('../views/commodities/CommodityPrintView.vue')
   },
+  // Settings
+  {
+    path: '/settings',
+    name: 'settings',
+    component: () => import('../views/settings/SettingsListView.vue')
+  },
+  {
+    path: '/settings/:id',
+    name: 'setting-detail',
+    component: () => import('../views/settings/SettingDetailView.vue')
+  },
   // 404 - Keep this as the last route
   {
     path: '/:pathMatch(.*)*',
