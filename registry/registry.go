@@ -81,18 +81,9 @@ type ManualRegistry interface {
 }
 
 type SettingsRegistry interface {
-	Registry[models.Setting]
-
-	GetByName(name string) (*models.Setting, error)
-	DeleteByName(name string) error
-
-	GetUIConfig() (*models.UIConfig, error)
-	SetUIConfig(*models.UIConfig) error
-	RemoveUIConfig() error
-
-	GetSystemConfig() (*models.SystemConfig, error)
-	SetSystemConfig(*models.SystemConfig) error
-	RemoveSystemConfig() error
+	Get() (models.SettingsObject, error)
+	Save(models.SettingsObject) error
+	Patch(configfield string, value any) error
 }
 
 type Set struct {
