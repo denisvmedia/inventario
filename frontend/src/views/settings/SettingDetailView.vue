@@ -15,173 +15,106 @@
     <div v-else-if="error" class="error">
       {{ error }}
     </div>
-    <div v-else>
-      <!-- Removed Currency Config and TLS Config as requested -->
-
-      <!-- UI Settings -->
-      <div v-else-if="settingId === 'ui_config'" class="form">
-        <div class="form-group">
-          <label for="theme">Theme</label>
-          <select id="theme" class="form-control" v-model="uiConfig.theme">
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-            <option value="system">System</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="show-debug">Show Debug Information</label>
-          <input
-            type="checkbox"
-            id="show-debug"
-            v-model="uiConfig.show_debug_info"
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="page-size">Default Page Size</label>
-          <input
-            type="number"
-            id="page-size"
-            class="form-control"
-            v-model="uiConfig.default_page_size"
-            min="5"
-            max="100"
-          />
-        </div>
-
-        <!-- Removed Default Currency and Default Language as requested -->
-
-        <div class="form-group">
-          <label for="date-format">Date Format</label>
-          <select id="date-format" class="form-control" v-model="uiConfig.default_date_format">
-            <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-            <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-            <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-            <option value="DD.MM.YYYY">DD.MM.YYYY</option>
-          </select>
-        </div>
-
-        <div class="form-actions">
-          <button class="btn btn-secondary" @click="goBack">Cancel</button>
-          <button
-            class="btn btn-primary"
-            @click="saveUIConfig"
-            :disabled="isSubmitting"
-          >
-            {{ isSubmitting ? 'Saving...' : 'Save' }}
-          </button>
-        </div>
+    <!-- UI Settings -->
+    <div v-else-if="settingId === 'ui_config'" class="form">
+      <div class="form-group">
+        <label for="theme">Theme</label>
+        <select id="theme" class="form-control" v-model="uiConfig.theme">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="system">System</option>
+        </select>
       </div>
 
-      <!-- System Settings -->
-      <div v-else-if="settingId === 'system_config'" class="form">
-        <div class="form-group">
-          <label for="upload-limit">Upload Size Limit (bytes)</label>
-          <input
-            type="number"
-            id="upload-limit"
-            class="form-control"
-            v-model="systemConfig.upload_size_limit"
-            min="1048576"
-          />
-          <small>{{ formatBytes(systemConfig.upload_size_limit) }}</small>
-        </div>
-
-        <div class="form-group">
-          <label for="log-level">Log Level</label>
-          <select id="log-level" class="form-control" v-model="systemConfig.log_level">
-            <option value="debug">Debug</option>
-            <option value="info">Info</option>
-            <option value="warn">Warning</option>
-            <option value="error">Error</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="backup-enabled">Enable Automatic Backups</label>
-          <input
-            type="checkbox"
-            id="backup-enabled"
-            v-model="systemConfig.backup_enabled"
-          />
-        </div>
-
-        <div class="form-group" v-if="systemConfig.backup_enabled">
-          <label for="backup-interval">Backup Interval</label>
-          <select id="backup-interval" class="form-control" v-model="systemConfig.backup_interval">
-            <option value="1h">Every Hour</option>
-            <option value="6h">Every 6 Hours</option>
-            <option value="12h">Every 12 Hours</option>
-            <option value="24h">Every Day</option>
-            <option value="168h">Every Week</option>
-            <option value="720h">Every Month</option>
-          </select>
-        </div>
-
-        <div class="form-group" v-if="systemConfig.backup_enabled">
-          <label for="backup-location">Backup Location</label>
-          <input
-            type="text"
-            id="backup-location"
-            class="form-control"
-            v-model="systemConfig.backup_location"
-            placeholder="/path/to/backup/directory"
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="main-currency">Main Currency</label>
-          <select id="main-currency" class="form-control" v-model="systemConfig.main_currency">
-            <option value="USD">US Dollar (USD)</option>
-            <option value="EUR">Euro (EUR)</option>
-            <option value="GBP">British Pound (GBP)</option>
-            <option value="JPY">Japanese Yen (JPY)</option>
-            <option value="CAD">Canadian Dollar (CAD)</option>
-            <option value="AUD">Australian Dollar (AUD)</option>
-            <option value="CHF">Swiss Franc (CHF)</option>
-            <option value="CNY">Chinese Yuan (CNY)</option>
-            <option value="INR">Indian Rupee (INR)</option>
-            <option value="RUB">Russian Ruble (RUB)</option>
-          </select>
-        </div>
-
-        <div class="form-actions">
-          <button class="btn btn-secondary" @click="goBack">Cancel</button>
-          <button
-            class="btn btn-primary"
-            @click="saveSystemConfig"
-            :disabled="isSubmitting"
-          >
-            {{ isSubmitting ? 'Saving...' : 'Save' }}
-          </button>
-        </div>
+      <div class="form-group">
+        <label for="show-debug">Show Debug Information</label>
+        <input
+          type="checkbox"
+          id="show-debug"
+          v-model="uiConfig.show_debug_info"
+        />
       </div>
 
-      <!-- Custom Settings (JSON Editor) -->
-      <div v-else class="form">
-        <div class="form-group">
-          <label for="json-editor">JSON Value</label>
-          <textarea
-            id="json-editor"
-            class="form-control json-editor"
-            v-model="jsonValue"
-            :class="{ 'is-invalid': jsonError }"
-            rows="10"
-          ></textarea>
-          <div v-if="jsonError" class="error-message">{{ jsonError }}</div>
-        </div>
+      <div class="form-group">
+        <label for="page-size">Default Page Size</label>
+        <input
+          type="number"
+          id="page-size"
+          class="form-control"
+          v-model="uiConfig.default_page_size"
+          min="5"
+          max="100"
+        />
+      </div>
 
-        <div class="form-actions">
-          <button class="btn btn-secondary" @click="goBack">Cancel</button>
-          <button
-            class="btn btn-primary"
-            @click="saveCustomSetting"
-            :disabled="isSubmitting || jsonError"
-          >
-            {{ isSubmitting ? 'Saving...' : 'Save' }}
-          </button>
-        </div>
+      <div class="form-group">
+        <label for="date-format">Date Format</label>
+        <select id="date-format" class="form-control" v-model="uiConfig.default_date_format">
+          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+          <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+          <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+          <option value="DD.MM.YYYY">DD.MM.YYYY</option>
+        </select>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" @click="goBack">Cancel</button>
+        <button
+          class="btn btn-primary"
+          @click="saveUIConfig"
+          :disabled="isSubmitting"
+        >
+          {{ isSubmitting ? 'Saving...' : 'Save' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- System Settings -->
+    <div v-else-if="settingId === 'system_config'" class="form">
+      <div class="form-group">
+        <label for="main-currency">Main Currency</label>
+        <select id="main-currency" class="form-control" v-model="systemConfig.main_currency">
+          <option v-for="currency in currencies" :key="currency.id" :value="currency.id">
+            {{ JSON.parse(currency.value) }} ({{ currency.id }})
+          </option>
+        </select>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" @click="goBack">Cancel</button>
+        <button
+          class="btn btn-primary"
+          @click="saveSystemConfig"
+          :disabled="isSubmitting"
+        >
+          {{ isSubmitting ? 'Saving...' : 'Save' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Custom Settings (JSON Editor) -->
+    <div v-else class="form">
+      <div class="form-group">
+        <label for="json-editor">JSON Value</label>
+        <textarea
+          id="json-editor"
+          class="form-control json-editor"
+          v-model="jsonValue"
+          :class="{ 'is-invalid': jsonError }"
+          rows="10"
+        ></textarea>
+        <div v-if="jsonError" class="error-message">{{ jsonError }}</div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" @click="goBack">Cancel</button>
+        <button
+          class="btn btn-primary"
+          @click="saveCustomSetting"
+          :disabled="isSubmitting || jsonError"
+        >
+          {{ isSubmitting ? 'Saving...' : 'Save' }}
+        </button>
       </div>
     </div>
   </div>
@@ -202,6 +135,7 @@ const isSubmitting = ref<boolean>(false)
 const jsonValue = ref<string>('')
 const jsonError = ref<string | null>(null)
 const settingData = ref<any>(null)
+const currencies = ref<any[]>([])
 
 // Removed Currency Config and TLS Config as requested
 
@@ -248,8 +182,23 @@ watch(jsonValue, (newValue) => {
   }
 })
 
+// Fetch currencies for the dropdown
+const fetchCurrencies = async () => {
+  try {
+    const response = await settingsService.getCurrencies()
+    // Transform the array of currency codes into the expected format
+    currencies.value = response.data.map((code: string) => ({
+      id: code,
+      value: JSON.stringify(code)
+    }))
+  } catch (err) {
+    console.error('Error fetching currencies:', err)
+  }
+}
+
 onMounted(async () => {
   await loadSetting()
+  await fetchCurrencies()
 })
 
 async function loadSetting() {

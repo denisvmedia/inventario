@@ -30,12 +30,7 @@ func newSettingsRegistry() registry.SettingsRegistry {
 
 	// Add a test system config
 	must.Assert(settingsRegistry.SetSystemConfig(&models.SystemConfig{
-		UploadSizeLimit: 10485760, // 10MB
-		LogLevel:        "info",
-		BackupEnabled:   false,
-		BackupInterval:  "24h",
-		BackupLocation:  "",
-		MainCurrency:    "USD",
+		MainCurrency: "USD",
 	}))
 
 	return settingsRegistry
@@ -122,7 +117,7 @@ func TestSettingsGetSystemConfig(t *testing.T) {
 	var systemConfig models.SystemConfig
 	err = json.Unmarshal(setting.Data.Attributes.Value, &systemConfig)
 	c.Assert(err, qt.IsNil)
-	c.Assert(systemConfig.MainCurrency, qt.Equals, "USD")
+	c.Assert(string(systemConfig.MainCurrency), qt.Equals, "USD")
 }
 
 func TestSettingsUpdate(t *testing.T) {

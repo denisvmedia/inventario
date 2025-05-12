@@ -50,12 +50,7 @@ func TestSettingsRegistry_SystemConfig(t *testing.T) {
 
 	// Create a test system config
 	systemConfig := &models.SystemConfig{
-		UploadSizeLimit: 20971520, // 20MB
-		LogLevel:        "debug",
-		BackupEnabled:   true,
-		BackupInterval:  "12h",
-		BackupLocation:  "/backup",
-		MainCurrency:    "EUR",
+		MainCurrency: "EUR",
 	}
 
 	// Set the system config
@@ -68,7 +63,7 @@ func TestSettingsRegistry_SystemConfig(t *testing.T) {
 	c.Assert(retrievedConfig, qt.DeepEquals, systemConfig)
 
 	// Verify the main currency
-	c.Assert(retrievedConfig.MainCurrency, qt.Equals, "EUR")
+	c.Assert(string(retrievedConfig.MainCurrency), qt.Equals, "EUR")
 
 	// Remove the system config
 	err = r.RemoveSystemConfig()

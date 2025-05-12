@@ -80,6 +80,14 @@ const settingsService = {
 
   updateSystemConfig(config: any) {
     return this.updateSetting('system_config', config)
+  },
+
+  getCurrencies() {
+    return axios.get('/api/v1/currencies', {
+      headers: {
+        'Accept': 'application/json'
+      }
+    })
   }
 }
 

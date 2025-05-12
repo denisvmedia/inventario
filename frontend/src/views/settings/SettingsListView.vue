@@ -31,7 +31,7 @@
           <div class="settings-card" @click="navigateToSetting('system_config')">
             <div class="settings-card-content">
               <h3>System Settings</h3>
-              <p>Configure upload limits, logging, backup options, and main currency</p>
+              <p>Configure main currency</p>
             </div>
             <div class="settings-card-icon">
               <font-awesome-icon icon="chevron-right" />

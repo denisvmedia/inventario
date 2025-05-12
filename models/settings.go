@@ -31,10 +31,5 @@ type UIConfig struct {
 
 // SystemConfig represents system-wide configuration settings
 type SystemConfig struct {
-	UploadSizeLimit int64  `json:"upload_size_limit"`
-	LogLevel        string `json:"log_level"`
-	BackupEnabled   bool   `json:"backup_enabled"`
-	BackupInterval  string `json:"backup_interval,omitempty"`
-	BackupLocation  string `json:"backup_location,omitempty"`
-	MainCurrency    string `json:"main_currency"`
+	MainCurrency    Currency `json:"main_currency"`
 }

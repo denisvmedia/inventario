@@ -10,6 +10,16 @@ import (
 
 // SeedData seeds the database with example data.
 func SeedData(registrySet *registry.Set) error { //nolint:funlen // it's a seed function
+	// Create default system configuration with CZK as main currency
+	systemConfig := &models.SystemConfig{
+		MainCurrency: "CZK",
+	}
+
+	err := registrySet.SettingsRegistry.SetSystemConfig(systemConfig)
+	if err != nil {
+		return err
+	}
+
 	// Create locations
 	home, err := registrySet.LocationRegistry.Create(models.Location{
 		Name:    "Home",
