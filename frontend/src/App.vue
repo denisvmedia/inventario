@@ -35,7 +35,7 @@ const isPrintRoute = computed(() => {
 })
 </script>
 
-<style>
+<style lang="scss">
 .print-container {
   max-width: 100%;
   margin: 0;

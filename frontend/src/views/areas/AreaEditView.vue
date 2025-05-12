@@ -236,7 +236,7 @@ const navigateToArea = () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .area-edit {
   max-width: 600px;
   margin: 0 auto;
@@ -247,18 +247,18 @@ const navigateToArea = () => {
 }
 
 .breadcrumb-link {
-  color: #6c757d;
+  color: $secondary-color;
   font-size: 0.9rem;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-}
 
-.breadcrumb-link:hover {
-  color: #4CAF50;
-  text-decoration: none;
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
 }
 
 .header {
@@ -272,19 +272,19 @@ const navigateToArea = () => {
   text-align: center;
   padding: 2rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .error {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 .form {
   background: white;
   padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .form-group {
@@ -300,23 +300,23 @@ label {
 .form-control {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   font-size: 1rem;
-}
 
-.form-control:focus {
-  outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-}
+  &:focus {
+    outline: none;
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
 
-.form-control.is-invalid {
-  border-color: #dc3545;
+  &.is-invalid {
+    border-color: $danger-color;
+  }
 }
 
 .error-message {
-  color: #dc3545;
+  color: $danger-color;
   font-size: 0.875rem;
   margin-top: 0.25rem;
 }
@@ -331,53 +331,53 @@ label {
 .form-error {
   margin-top: 1rem;
   padding: 0.75rem;
-  background-color: #f8d7da;
-  color: #721c24;
-  border-radius: 4px;
+  background-color: lighten($danger-color, 40%);
+  color: $error-text-color;
+  border-radius: $default-radius;
 }
 
 .debug-info {
   margin-top: 2rem;
   padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 4px;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
   overflow: auto;
-}
 
-.debug-info pre {
-  white-space: pre-wrap;
-  font-size: 0.875rem;
+  pre {
+    white-space: pre-wrap;
+    font-size: 0.875rem;
+  }
 }
 
 .btn {
   padding: 0.5rem 1rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   font-weight: 500;
   cursor: pointer;
   border: none;
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
-}
 
-.btn-primary:hover {
-  background-color: #43a047;
+  &:hover {
+    background-color: $primary-hover-color;
+  }
 }
 
 .btn-secondary {
-  background-color: #f8f9fa;
-  color: #333;
-  border: 1px solid #ddd;
-}
+  background-color: $light-bg-color;
+  color: $text-color;
+  border: 1px solid $border-color;
 
-.btn-secondary:hover {
-  background-color: #e9ecef;
-}
-
-.btn:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
+  &:hover {
+    background-color: $light-hover-bg-color;
+  }
 }
 </style>

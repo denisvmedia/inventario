@@ -188,7 +188,7 @@ const confirmDelete = () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .file-details-overlay {
   position: fixed;
   top: 0;
@@ -204,8 +204,8 @@ const confirmDelete = () => {
 
 .file-details-modal {
   background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   width: 90%;
   max-width: 800px;
   max-height: 90vh;
@@ -219,12 +219,12 @@ const confirmDelete = () => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  border-bottom: 1px solid #dee2e6;
-}
+  border-bottom: 1px solid $border-color;
 
-.file-details-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
+  h3 {
+    margin: 0;
+    font-size: 1.25rem;
+  }
 }
 
 .close-button {
@@ -232,11 +232,11 @@ const confirmDelete = () => {
   border: none;
   font-size: 1.25rem;
   cursor: pointer;
-  color: #6c757d;
-}
+  color: $secondary-color;
 
-.close-button:hover {
-  color: #343a40;
+  &:hover {
+    color: darken($secondary-color, 10%);
+  }
 }
 
 .file-details-content {
@@ -245,10 +245,8 @@ const confirmDelete = () => {
   padding: 1rem;
   overflow-y: auto;
   flex: 1;
-}
 
-@media (min-width: 768px) {
-  .file-details-content {
+  @media (min-width: 768px) {
     flex-direction: row;
   }
 }
@@ -259,33 +257,33 @@ const confirmDelete = () => {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
   margin-bottom: 1rem;
-}
 
-@media (min-width: 768px) {
-  .file-preview-section {
+  @media (min-width: 768px) {
     margin-right: 1rem;
     margin-bottom: 0;
   }
 }
 
-.image-preview img {
-  max-width: 100%;
-  max-height: 300px;
-  object-fit: contain;
+.image-preview {
+  img {
+    max-width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+  }
 }
 
 .pdf-preview {
   width: 100%;
   height: 400px;
-}
 
-.pdf-preview iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
 }
 
 .file-icon-preview {
@@ -293,7 +291,7 @@ const confirmDelete = () => {
   align-items: center;
   justify-content: center;
   height: 200px;
-  color: #6c757d;
+  color: $secondary-color;
 }
 
 .file-info-section {
@@ -308,7 +306,7 @@ const confirmDelete = () => {
 
 .info-label {
   font-weight: 600;
-  color: #495057;
+  color: $text-color;
   margin-bottom: 0.25rem;
 }
 
@@ -321,32 +319,44 @@ const confirmDelete = () => {
   justify-content: flex-end;
   gap: 0.5rem;
   padding: 1rem;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid $border-color;
 }
 
 .btn {
   padding: 0.375rem 0.75rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   border: none;
-}
 
-.btn-primary {
-  background-color: #007bff;
-  color: white;
-}
+  &-primary {
+    background-color: $primary-color;
+    color: white;
 
-.btn-danger {
-  background-color: #dc3545;
-  color: white;
-}
+    &:hover {
+      background-color: $primary-hover-color;
+    }
+  }
 
-.btn-secondary {
-  background-color: #6c757d;
-  color: white;
+  &-danger {
+    background-color: $danger-color;
+    color: white;
+
+    &:hover {
+      background-color: $danger-hover-color;
+    }
+  }
+
+  &-secondary {
+    background-color: $secondary-color;
+    color: white;
+
+    &:hover {
+      background-color: darken($secondary-color, 10%);
+    }
+  }
 }
 </style>

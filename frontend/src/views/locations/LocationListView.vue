@@ -256,9 +256,9 @@ const deleteArea = async (id: string) => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .location-list {
-  max-width: 1200px;
+  max-width: $container-max-width;
   margin: 0 auto;
   padding: 20px;
 }
@@ -274,13 +274,13 @@ const deleteArea = async (id: string) => {
   text-align: center;
   padding: 2rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   margin-bottom: 1.5rem;
 }
 
 .error {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 .locations-list {
@@ -296,18 +296,18 @@ const deleteArea = async (id: string) => {
 
 .location-card {
   background: white;
-  border-radius: 8px;
+  border-radius: $default-radius;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $box-shadow;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   transition: box-shadow 0.2s;
   cursor: pointer;
-}
 
-.location-card:hover {
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  &:hover {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  }
 }
 
 .location-content {
@@ -323,7 +323,7 @@ const deleteArea = async (id: string) => {
 
 .location-expand-icon {
   margin-left: 1rem;
-  color: #666;
+  color: $text-color;
 }
 
 .location-actions {
@@ -333,7 +333,7 @@ const deleteArea = async (id: string) => {
 }
 
 .address {
-  color: #666;
+  color: $text-color;
   margin: 0.5rem 0 0;
   font-size: 0.9rem;
   font-style: italic;
@@ -344,9 +344,9 @@ const deleteArea = async (id: string) => {
   margin-top: 0.5rem;
   margin-left: 2rem;
   padding: 1rem;
-  background: #f9f9f9;
-  border-radius: 8px;
-  border-left: 4px solid #4CAF50;
+  background: $light-bg-color;
+  border-radius: $default-radius;
+  border-left: 4px solid $primary-color;
 }
 
 .areas-header {
@@ -354,11 +354,11 @@ const deleteArea = async (id: string) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
-}
 
-.areas-header h4 {
-  margin: 0;
-  color: #333;
+  h4 {
+    margin: 0;
+    color: $text-color;
+  }
 }
 
 .areas-list {
@@ -369,7 +369,7 @@ const deleteArea = async (id: string) => {
 
 .area-card {
   background: white;
-  border-radius: 6px;
+  border-radius: $default-radius;
   padding: 1rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   display: flex;
@@ -377,33 +377,33 @@ const deleteArea = async (id: string) => {
   align-items: center;
   cursor: pointer;
   transition: background-color 0.3s ease, box-shadow 0.3s ease;
-}
 
-.area-card:hover {
-  background-color: #f9f9f9;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  &:hover {
+    background-color: $light-bg-color;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  }
 }
 
 .area-highlight {
-  background-color: #e8f5e9 !important;
-  box-shadow: 0 0 0 2px #4CAF50 !important;
+  background-color: lighten($primary-color, 45%) !important;
+  box-shadow: 0 0 0 2px $primary-color !important;
   animation: pulse 1s ease-in-out;
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+  0% { box-shadow: 0 0 0 0 rgba($primary-color, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba($primary-color, 0); }
+  100% { box-shadow: 0 0 0 0 rgba($primary-color, 0); }
 }
 
 .area-content {
   flex: 1;
   cursor: pointer;
-}
 
-.area-content h5 {
-  margin: 0;
-  font-size: 1rem;
+  h5 {
+    margin: 0;
+    font-size: 1rem;
+  }
 }
 
 .area-actions {
@@ -414,16 +414,16 @@ const deleteArea = async (id: string) => {
 .no-areas {
   padding: 1rem;
   background: white;
-  border-radius: 6px;
+  border-radius: $default-radius;
   text-align: center;
-  color: #666;
+  color: $text-color;
 }
 
 /* Button styling */
 .btn {
   padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 4px;
+  border-radius: $default-radius;
   cursor: pointer;
   font-weight: 500;
   text-decoration: none;
@@ -431,17 +431,17 @@ const deleteArea = async (id: string) => {
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
 }
 
 .btn-secondary {
-  background-color: #6c757d;
+  background-color: $secondary-color;
   color: white;
 }
 
 .btn-danger {
-  background-color: #dc3545;
+  background-color: $danger-color;
   color: white;
 }
 

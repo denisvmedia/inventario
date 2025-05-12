@@ -215,7 +215,7 @@ const navigateToLocations = () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .area-create {
   max-width: 600px;
   margin: 0 auto;
@@ -226,17 +226,17 @@ const navigateToLocations = () => {
 }
 
 .breadcrumb-link {
-  color: #6c757d;
+  color: $secondary-color;
   font-size: 0.9rem;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-}
 
-.breadcrumb-link:hover {
-  color: #4CAF50;
-  text-decoration: none;
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
 }
 </style>

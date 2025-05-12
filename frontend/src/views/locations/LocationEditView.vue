@@ -165,7 +165,7 @@ const goBack = () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .location-edit {
   max-width: 600px;
   margin: 0 auto;
@@ -182,12 +182,12 @@ const goBack = () => {
   text-align: center;
   padding: 2rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .error {
-  color: #dc3545;
+  color: $danger-color;
 }
 
 h1 {

@@ -119,29 +119,29 @@ const uploadFiles = async () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .file-uploader {
   margin-bottom: 1.5rem;
 }
 
 .upload-area {
   position: relative;
-  border: 2px dashed #ccc;
-  border-radius: 8px;
+  border: 2px dashed $border-color;
+  border-radius: $default-radius;
   padding: 2rem;
   text-align: center;
   transition: all 0.3s ease;
-  background-color: #f9f9f9;
+  background-color: $light-bg-color;
   cursor: pointer;
-}
 
-.upload-area:hover {
-  border-color: #4CAF50;
+  &:hover {
+    border-color: $primary-color;
+  }
 }
 
 .drag-over {
-  border-color: #4CAF50;
-  background-color: #f0f9f0;
+  border-color: $primary-color;
+  background-color: lighten($primary-color, 45%);
 }
 
 .file-input {
@@ -162,13 +162,13 @@ const uploadFiles = async () => {
 
 .upload-icon {
   font-size: 2rem;
-  color: #6c757d;
+  color: $secondary-color;
   margin-bottom: 1rem;
 }
 
 .upload-text {
   margin: 0;
-  color: #555;
+  color: $text-color;
 }
 
 .upload-prompt {
@@ -179,21 +179,21 @@ const uploadFiles = async () => {
 .upload-or {
   display: block;
   margin: 0.5rem 0;
-  color: #888;
+  color: lighten($text-color, 30%);
 }
 
 .browse-button {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
   border: none;
   padding: 0.5rem 1rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   cursor: pointer;
   font-weight: 500;
-}
 
-.browse-button:hover {
-  background-color: #45a049;
+  &:hover {
+    background-color: $primary-hover-color;
+  }
 }
 
 .selected-files {
@@ -204,9 +204,9 @@ const uploadFiles = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: #f0f0f0;
+  background-color: $light-bg-color;
   padding: 0.5rem 1rem;
-  border-radius: 4px;
+  border-radius: $default-radius;
   margin-bottom: 0.5rem;
 }
 
@@ -219,7 +219,7 @@ const uploadFiles = async () => {
 .remove-file {
   background: none;
   border: none;
-  color: #dc3545;
+  color: $danger-color;
   font-size: 1.25rem;
   cursor: pointer;
   padding: 0 0.5rem;

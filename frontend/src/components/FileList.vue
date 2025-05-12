@@ -216,7 +216,7 @@ const isPdfFile = (file: any) => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .file-list {
   margin-bottom: 1.5rem;
 }
@@ -224,9 +224,9 @@ const isPdfFile = (file: any) => {
 .loading, .no-files {
   padding: 1rem;
   text-align: center;
-  color: #6c757d;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  color: $secondary-color;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
 }
 
 .files-container {
@@ -236,17 +236,17 @@ const isPdfFile = (file: any) => {
 }
 
 .file-item {
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   overflow: hidden;
   background-color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: $box-shadow;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
 
-.file-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
 }
 
 .file-preview {
@@ -254,7 +254,7 @@ const isPdfFile = (file: any) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
   overflow: hidden;
 }
 
@@ -269,9 +269,9 @@ const isPdfFile = (file: any) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
   font-size: 3rem;
-  color: #6c757d;
+  color: $secondary-color;
 }
 
 .file-info {
@@ -292,16 +292,16 @@ const isPdfFile = (file: any) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
 
-.file-name:hover .edit-icon {
-  opacity: 1;
+  &:hover .edit-icon {
+    opacity: 1;
+  }
 }
 
 .edit-icon {
   font-size: 0.8rem;
   margin-left: 0.5rem;
-  color: #6c757d;
+  color: $secondary-color;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
@@ -309,14 +309,14 @@ const isPdfFile = (file: any) => {
 .file-name-edit {
   display: flex;
   align-items: center;
-}
 
-.file-name-edit input {
-  flex: 1;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  font-size: 0.9rem;
+  input {
+    flex: 1;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid $border-color;
+    border-radius: $default-radius;
+    font-size: 0.9rem;
+  }
 }
 
 .edit-actions {

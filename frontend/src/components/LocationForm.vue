@@ -15,7 +15,7 @@
           >
           <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
         </div>
-        
+
         <div class="form-group">
           <label for="address">Address</label>
           <input
@@ -101,11 +101,11 @@ const submitForm = async () => {
     }
 
     const response = await locationService.createLocation(payload)
-    
+
     // Reset form
     form.name = ''
     form.address = ''
-    
+
     // Emit created event with the new location
     emit('created', response.data.data)
   } catch (err: any) {
@@ -139,18 +139,18 @@ const cancel = () => {
   // Reset form
   form.name = ''
   form.address = ''
-  
+
   // Emit cancel event
   emit('cancel')
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .inline-form {
   background: white;
   padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   margin-bottom: 1.5rem;
 }
 
@@ -158,6 +158,10 @@ const cancel = () => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-group {
@@ -173,23 +177,23 @@ label {
 .form-control {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   font-size: 1rem;
-}
 
-.form-control:focus {
-  outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-}
+  &:focus {
+    outline: none;
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
 
-.form-control.is-invalid {
-  border-color: #dc3545;
+  &.is-invalid {
+    border-color: $danger-color;
+  }
 }
 
 .error-message {
-  color: #dc3545;
+  color: $danger-color;
   font-size: 0.875rem;
   margin-top: 0.25rem;
 }
@@ -202,16 +206,10 @@ label {
 }
 
 .form-error {
-  color: #dc3545;
+  color: $danger-color;
   margin-top: 1rem;
   padding: 0.5rem;
-  background-color: rgba(220, 53, 69, 0.1);
-  border-radius: 4px;
-}
-
-@media (max-width: 768px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
+  background-color: rgba($danger-color, 0.1);
+  border-radius: $default-radius;
 }
 </style>

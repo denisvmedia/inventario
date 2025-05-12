@@ -88,14 +88,14 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .pdf-viewer-container {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background-color: #f8f9fa;
-  border-radius: 4px;
+  background-color: $light-bg-color;
+  border-radius: $default-radius;
   overflow: hidden;
 }
 
@@ -105,7 +105,7 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   height: 200px;
-  color: #6c757d;
+  color: $secondary-color;
   padding: 1rem;
   text-align: center;
 }
@@ -121,16 +121,16 @@ onMounted(() => {
 }
 
 .btn {
-  background-color: #4CAF50;
+  background-color: $primary-color;
   color: white;
   border: none;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: $default-radius;
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
-}
 
-.btn:hover {
-  background-color: #45a049;
+  &:hover {
+    background-color: $primary-hover-color;
+  }
 }
 </style>
