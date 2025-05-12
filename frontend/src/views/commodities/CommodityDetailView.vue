@@ -468,7 +468,14 @@ const updateInvoice = async (data: any) => {
 }
 
 const editCommodity = () => {
-  router.push(`/commodities/${commodity.value.id}/edit`)
+  // Preserve the navigation source when going to edit view
+  router.push({
+    path: `/commodities/${commodity.value.id}/edit`,
+    query: {
+      source: route.query.source,
+      areaId: route.query.areaId
+    }
+  })
 }
 
 const confirmDelete = () => {
@@ -485,7 +492,12 @@ const printCommodity = () => {
 const deleteCommodity = async () => {
   try {
     await commodityService.deleteCommodity(commodity.value.id)
-    router.push('/commodities')
+    // Navigate based on the source
+    if (sourceIsArea.value && areaId.value) {
+      router.push(`/areas/${areaId.value}`)
+    } else {
+      router.push('/commodities')
+    }
   } catch (err: any) {
     error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
   }

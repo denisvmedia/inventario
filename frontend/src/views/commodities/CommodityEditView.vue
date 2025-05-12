@@ -1,5 +1,13 @@
 <template>
   <div class="commodity-edit">
+    <div class="breadcrumb-nav">
+      <a href="#" @click.prevent="goBack" class="breadcrumb-link">
+        <font-awesome-icon icon="arrow-left" />
+        <span v-if="sourceIsArea && isDirectEdit">Back to Area</span>
+        <span v-else-if="isDirectEdit">Back to Commodities</span>
+        <span v-else>Back to Commodity</span>
+      </a>
+    </div>
     <h1>Edit Commodity</h1>
 
     <div v-if="loading" class="loading">Loading...</div>
@@ -315,7 +323,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
@@ -326,6 +334,11 @@ import { CURRENCIES, CURRENCY_CZK } from '@/constants/currencies'
 const route = useRoute()
 const router = useRouter()
 const id = route.params.id as string
+
+// Navigation source tracking
+const sourceIsArea = computed(() => route.query.source === 'area')
+const areaId = computed(() => route.query.areaId as string || '')
+const isDirectEdit = computed(() => route.query.directEdit === 'true')
 
 const commodity = ref<any>(null)
 const areas = ref<any[]>([])
@@ -508,8 +521,35 @@ const submitForm = async () => {
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
 
-    // On success, navigate to commodity details
-    router.push(`/commodities/${id}`)
+    // Handle navigation based on the edit context
+    if (isDirectEdit.value) {
+      if (sourceIsArea.value && areaId.value) {
+        // Go back to the area view with the commodity ID for highlighting
+        router.push({
+          path: `/areas/${areaId.value}`,
+          query: {
+            highlightCommodityId: id
+          }
+        })
+      } else {
+        // Go back to the commodities list with the commodity ID for highlighting
+        router.push({
+          path: '/commodities',
+          query: {
+            highlightCommodityId: id
+          }
+        })
+      }
+    } else {
+      // Navigate back to commodity details with source context preserved
+      router.push({
+        path: `/commodities/${id}`,
+        query: {
+          source: route.query.source,
+          areaId: route.query.areaId
+        }
+      })
+    }
   } catch (err: any) {
     console.error('Error updating commodity:', err)
 
@@ -542,12 +582,34 @@ const submitForm = async () => {
 }
 
 const goBack = () => {
-  // Go back to the previous page in history if available
-  if (window.history.length > 1) {
-    router.go(-1)
+  // If this was a direct edit from a list, go back to the appropriate list
+  if (isDirectEdit.value) {
+    if (sourceIsArea.value && areaId.value) {
+      // Go back to the area view with the commodity ID for highlighting
+      router.push({
+        path: `/areas/${areaId.value}`,
+        query: {
+          highlightCommodityId: id
+        }
+      })
+    } else {
+      // Go back to the commodities list with the commodity ID for highlighting
+      router.push({
+        path: '/commodities',
+        query: {
+          highlightCommodityId: id
+        }
+      })
+    }
   } else {
-    // Fallback to commodity details page
-    router.push(`/commodities/${id}`)
+    // Navigate back to commodity details with source context preserved
+    router.push({
+      path: `/commodities/${id}`,
+      query: {
+        source: route.query.source,
+        areaId: route.query.areaId
+      }
+    })
   }
 }
 
@@ -590,6 +652,25 @@ const removeUrl = (index: number) => {
   max-width: 800px;
   margin: 0 auto;
   padding: 1rem;
+}
+
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: #6c757d;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #4CAF50;
+  text-decoration: none;
 }
 
 h1 {
