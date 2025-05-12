@@ -552,9 +552,27 @@ const submitForm = async () => {
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
 
-    // On success, navigate to commodity details page
+    // On success, navigate to commodity details page with context preserved
     const newCommodityId = response.data.data.id
-    router.push(`/commodities/${newCommodityId}`)
+
+    // If coming from an area, preserve that context
+    if (areaFromUrl.value) {
+      router.push({
+        path: `/commodities/${newCommodityId}`,
+        query: {
+          source: 'area',
+          areaId: areaFromUrl.value
+        }
+      })
+    } else {
+      // Otherwise, navigate with commodities as source
+      router.push({
+        path: `/commodities/${newCommodityId}`,
+        query: {
+          source: 'commodities'
+        }
+      })
+    }
   } catch (err: any) {
     console.error('Error creating commodity:', err)
 
