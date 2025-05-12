@@ -186,11 +186,25 @@ watch(jsonValue, (newValue) => {
 const fetchCurrencies = async () => {
   try {
     const response = await settingsService.getCurrencies()
-    // Transform the array of currency codes into the expected format
-    currencies.value = response.data.map((code: string) => ({
-      id: code,
-      value: JSON.stringify(code)
-    }))
+
+    // Use Intl.DisplayNames to get currency names
+    const currencyNames = new Intl.DisplayNames(['en'], { type: 'currency' })
+
+    // Transform the array of currency codes into the expected format with names
+    currencies.value = response.data.map((code: string) => {
+      let currencyName = code
+      try {
+        // Try to get the localized currency name
+        currencyName = currencyNames.of(code)
+      } catch (e) {
+        console.warn(`Could not get display name for currency: ${code}`)
+      }
+
+      return {
+        id: code,
+        value: JSON.stringify(currencyName)
+      }
+    })
   } catch (err) {
     console.error('Error fetching currencies:', err)
   }
@@ -211,7 +225,9 @@ async function loadSetting() {
 
     if (settingId.value === 'ui_config') {
       // Parse UI config
-      const config = JSON.parse(new TextDecoder().decode(settingData.value))
+      const config = typeof settingData.value === 'string'
+        ? JSON.parse(settingData.value)
+        : settingData.value
       uiConfig.value = {
         theme: config.theme || 'light',
         show_debug_info: config.show_debug_info || false,
@@ -220,7 +236,9 @@ async function loadSetting() {
       }
     } else if (settingId.value === 'system_config') {
       // Parse System config
-      const config = JSON.parse(new TextDecoder().decode(settingData.value))
+      const config = typeof settingData.value === 'string'
+        ? JSON.parse(settingData.value)
+        : settingData.value
       systemConfig.value = {
         upload_size_limit: config.upload_size_limit || 10485760,
         log_level: config.log_level || 'info',
@@ -231,7 +249,10 @@ async function loadSetting() {
       }
     } else {
       // For custom settings, just show the raw JSON
-      jsonValue.value = JSON.stringify(JSON.parse(new TextDecoder().decode(settingData.value)), null, 2)
+      const parsedValue = typeof settingData.value === 'string'
+        ? JSON.parse(settingData.value)
+        : settingData.value
+      jsonValue.value = JSON.stringify(parsedValue, null, 2)
     }
   } catch (err: any) {
     if (err.response && err.response.status === 404) {

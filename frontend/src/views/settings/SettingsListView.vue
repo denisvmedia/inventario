@@ -38,24 +38,6 @@
             </div>
           </div>
         </div>
-
-        <div v-if="settings.length > 0" class="settings-category">
-          <h2>Custom Settings</h2>
-          <div
-            v-for="setting in settings"
-            :key="setting.id"
-            class="settings-card"
-            @click="navigateToSetting(setting.id)"
-          >
-            <div class="settings-card-content">
-              <h3>{{ formatSettingName(setting.id) }}</h3>
-              <p>Custom setting</p>
-            </div>
-            <div class="settings-card-icon">
-              <font-awesome-icon icon="chevron-right" />
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
