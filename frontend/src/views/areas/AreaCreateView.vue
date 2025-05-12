@@ -216,6 +216,8 @@ const navigateToLocations = () => {
 </script>
 
 <style lang="scss" scoped>
+@import '../../assets/main.scss';
+
 .area-create {
   max-width: 600px;
   margin: 0 auto;

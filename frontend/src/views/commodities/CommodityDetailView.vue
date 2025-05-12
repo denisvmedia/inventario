@@ -561,6 +561,8 @@ const calculatePricePerUnit = (): string => {
 </script>
 
 <style lang="scss" scoped>
+@import '../../assets/main.scss';
+
 .commodity-detail {
   max-width: $container-max-width;
   margin: 0 auto;

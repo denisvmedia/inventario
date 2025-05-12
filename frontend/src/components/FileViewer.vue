@@ -615,6 +615,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .file-viewer {
   margin-bottom: 1.5rem;
 }

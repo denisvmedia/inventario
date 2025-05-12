@@ -86,7 +86,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, markRaw, computed } from 'vue'
-import { pdfjsLib } from '../utils/pdfjs-init.js'
+import { pdfjsLib } from '../utils/pdfjs-init.ts'
 
 const props = defineProps({
   url: {
@@ -515,6 +515,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .pdf-viewer-container {
   display: flex;
   flex-direction: column;

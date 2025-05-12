@@ -662,6 +662,8 @@ const removeUrl = (index: number) => {
 </script>
 
 <style lang="scss" scoped>
+@import '../../assets/main.scss';
+
 .commodity-create {
   max-width: 800px;
   margin: 0 auto;

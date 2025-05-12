@@ -220,6 +220,8 @@ const deleteCommodity = async (id: string) => {
 </script>
 
 <style lang="scss" scoped>
+@import '../../assets/main.scss';
+
 .commodity-list {
   max-width: $container-max-width;
   margin: 0 auto;

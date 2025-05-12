@@ -237,6 +237,8 @@ const navigateToArea = () => {
 </script>
 
 <style lang="scss" scoped>
+@import '../../assets/main.scss';
+
 .area-edit {
   max-width: 600px;
   margin: 0 auto;

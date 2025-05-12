@@ -26,6 +26,8 @@ function navigateTo(path: string) {
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .home {
   max-width: $container-max-width;
   margin: 0 auto;

@@ -87,10 +87,10 @@ const submitForm = async () => {
     }
 
     const response = await areaService.createArea(payload)
-    
+
     // Reset form
     form.name = ''
-    
+
     // Emit created event with the new area
     emit('created', response.data.data)
   } catch (err: any) {
@@ -121,13 +121,15 @@ const submitForm = async () => {
 const cancel = () => {
   // Reset form
   form.name = ''
-  
+
   // Emit cancel event
   emit('cancel')
 }
 </script>
 
 <style lang="scss" scoped>
+@import '../assets/main.scss';
+
 .inline-form {
   background: white;
   padding: 1.5rem;
@@ -154,13 +156,13 @@ label {
   border: 1px solid $border-color;
   border-radius: $default-radius;
   font-size: 1rem;
-  
+
   &:focus {
     outline: none;
     border-color: $primary-color;
     box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
   }
-  
+
   &.is-invalid {
     border-color: $danger-color;
   }
