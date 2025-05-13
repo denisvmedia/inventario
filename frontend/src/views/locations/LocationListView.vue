@@ -17,7 +17,12 @@
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="locations.length === 0" class="empty">
-      No locations found. Create your first location using the button above!
+      <div class="empty-message">
+        <p>No locations found. Create your first location!</p>
+        <div class="action-button">
+          <button class="btn btn-primary" @click="showLocationForm = true">Create Location</button>
+        </div>
+      </div>
     </div>
 
     <div v-else class="locations-list">
@@ -421,31 +426,25 @@ const deleteArea = async (id: string) => {
   color: $text-color;
 }
 
-/* Button styling */
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  cursor: pointer;
-  font-weight: 500;
-  text-decoration: none;
-  display: inline-block;
+.empty-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
 }
 
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
+.empty-message p {
+  margin-bottom: 0;
+  font-size: 1.1rem;
 }
 
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
+.action-button {
+  margin-top: 0.5rem;
 }
 
-.btn-danger {
-  background-color: $danger-color;
-  color: white;
-}
+/* Use global button styles from main.scss */
+
+/* Button styles are inherited from main.scss */
 
 .btn-sm {
   padding: 0.25rem 0.5rem;

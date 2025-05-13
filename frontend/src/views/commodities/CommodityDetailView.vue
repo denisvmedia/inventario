@@ -651,6 +651,7 @@ const calculatePricePerUnit = (): string => {
 .info-row {
   display: flex;
   margin-bottom: 0.75rem;
+  align-items: center;
 }
 
 .label {
@@ -663,7 +664,6 @@ const calculatePricePerUnit = (): string => {
   font-weight: 500;
   padding: 0.25rem 0.5rem;
   border-radius: $default-radius;
-  margin-left: 0.5rem;
 
   &.in_use {
     background-color: #d4edda;

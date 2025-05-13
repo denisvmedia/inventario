@@ -2,12 +2,33 @@
   <div class="commodity-list">
     <div class="header">
       <h1>Commodities</h1>
-      <router-link to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
+      <router-link v-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
+      <router-link v-else-if="locations.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
+      <router-link v-else-if="areas.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Area First</router-link>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
-    <div v-else-if="commodities.length === 0" class="empty">No commodities found. Create your first commodity!</div>
+    <div v-else-if="commodities.length === 0" class="empty">
+      <div v-if="locations.length === 0" class="empty-message">
+        <p>No locations found. You need to create a location first before you can create commodities.</p>
+        <div class="action-button">
+          <router-link to="/locations" class="btn btn-primary">Create Location</router-link>
+        </div>
+      </div>
+      <div v-else-if="areas.length === 0" class="empty-message">
+        <p>No areas found. You need to create an area in a location before you can create commodities.</p>
+        <div class="action-button">
+          <router-link to="/locations" class="btn btn-primary">Create Area</router-link>
+        </div>
+      </div>
+      <div v-else class="empty-message">
+        <p>No commodities found. Create your first commodity!</p>
+        <div class="action-button">
+          <router-link to="/commodities/new" class="btn btn-primary">Create Commodity</router-link>
+        </div>
+      </div>
+    </div>
 
     <div v-else class="commodities-grid">
       <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" :class="{ 'highlighted': commodity.id === highlightCommodityId }" @click="viewCommodity(commodity.id)">
@@ -71,6 +92,11 @@ const mainCurrency = ref<string>('USD') // Default to USD if not set
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
 let highlightTimeout: number | null = null
+
+// Computed property to check if there are locations and areas
+const hasLocationsAndAreas = computed(() => {
+  return locations.value.length > 0 && areas.value.length > 0
+})
 
 // Map to store area and location information
 const areaMap = ref<Record<string, any>>({})
@@ -260,6 +286,22 @@ const deleteCommodity = async (id: string) => {
   color: $danger-color;
 }
 
+.empty-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.empty-message p {
+  margin-bottom: 0;
+  font-size: 1.1rem;
+}
+
+.action-button {
+  margin-top: 0.5rem;
+}
+
 .commodities-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -385,23 +427,5 @@ const deleteCommodity = async (id: string) => {
   }
 }
 
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  cursor: pointer;
-  font-weight: 500;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-}
-
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
-}
+/* Use global button styles from main.scss */
 </style>
