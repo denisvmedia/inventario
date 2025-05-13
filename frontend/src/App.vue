@@ -17,7 +17,7 @@
     </header>
 
     <!-- Debug information -->
-    <div class="debug-info" v-if="!isPrintRoute">
+    <div class="debug-info" v-if="false">
       <p>Current route: {{ $route.path }}</p>
     </div>
 

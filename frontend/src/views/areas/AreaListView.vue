@@ -7,7 +7,14 @@
 
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
-    <div v-else-if="areas.length === 0" class="empty">No areas found. Create your first area!</div>
+    <div v-else-if="areas.length === 0" class="empty">
+      <div class="empty-message">
+        <p>No areas found. Create your first area!</p>
+        <div class="action-button">
+          <router-link to="/areas/new" class="btn btn-primary">Create Area</router-link>
+        </div>
+      </div>
+    </div>
 
     <div v-else class="areas-grid">
       <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
@@ -167,23 +174,23 @@ const deleteArea = async (id: string) => {
   font-style: italic;
 }
 
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  cursor: pointer;
-  font-weight: 500;
-  text-decoration: none;
-  display: inline-block;
+.empty-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
 }
 
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
+.empty-message p {
+  margin-bottom: 0;
+  font-size: 1.1rem;
 }
 
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
+.action-button {
+  margin-top: 0.5rem;
 }
+
+/* Use global button styles from main.scss */
+
+/* Button styles are inherited from main.scss */
 </style>
