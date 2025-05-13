@@ -4,6 +4,12 @@ import router from './router'
 import './assets/main.scss'
 import { FontAwesomeIcon } from './fontawesome'
 
+// Import PrimeVue
+import PrimeVue from 'primevue/config'
+// PrimeVue 4.x uses a different structure for CSS imports
+import 'primeicons/primeicons.css'
+// No need to import theme CSS for PrimeVue 4.x as it uses a different approach
+
 // Add some debug logging
 console.log('Initializing Vue application')
 console.log('Router:', router)
@@ -22,6 +28,7 @@ app.config.errorHandler = (err, instance, info) => {
 }
 
 app.use(router)
+app.use(PrimeVue)
 
 // Register Font Awesome component globally
 app.component('font-awesome-icon', FontAwesomeIcon)

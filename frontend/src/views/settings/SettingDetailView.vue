@@ -83,11 +83,23 @@
     <div v-else-if="settingId === 'system_config'" class="form">
       <div class="form-group">
         <label for="main-currency">Main Currency</label>
-        <select id="main-currency" class="form-control" v-model="systemConfig.main_currency">
-          <option v-for="currency in currencies" :key="currency.id" :value="currency.id">
-            {{ JSON.parse(currency.value) }} ({{ currency.id }})
-          </option>
-        </select>
+        <Dropdown
+          id="main-currency"
+          v-model="systemConfig.main_currency"
+          :options="currencies"
+          optionLabel="label"
+          optionValue="id"
+          placeholder="Select a currency"
+          class="w-100 form-control currency-dropdown"
+          :filter="true"
+          :showClear="false"
+          aria-label="Currency"
+          :pt="{
+            item: { class: 'custom-dropdown-item' },
+            itemGroup: { class: 'custom-dropdown-group' },
+            list: { class: 'custom-dropdown-list' }
+          }"
+        />
       </div>
 
       <div class="form-actions">
@@ -135,6 +147,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 import NotificationBanner from '@/components/NotificationBanner.vue'
+import Dropdown from 'primevue/dropdown'
 
 const route = useRoute()
 const router = useRouter()
@@ -221,7 +234,8 @@ const fetchCurrencies = async () => {
 
       return {
         id: code,
-        value: JSON.stringify(currencyName)
+        label: `${currencyName} (${code})`,
+        value: code
       }
     })
   } catch (err) {
@@ -457,6 +471,37 @@ function formatBytes(bytes: number) {
         margin-top: 5px;
         font-size: 0.9rem;
       }
+
+      // PrimeVue Dropdown styling - basic component styling only
+      // (Global styles are in App.vue)
+      :deep(.p-dropdown) {
+        width: 100%;
+        border: 1px solid $border-color;
+        border-radius: $default-radius;
+        background-color: white;
+        transition: border-color 0.2s, box-shadow 0.2s;
+
+        .p-dropdown-label {
+          padding: 0.75rem;
+          font-size: 1rem;
+          color: $text-color;
+        }
+
+        .p-dropdown-trigger {
+          width: 3rem;
+          color: $text-secondary-color;
+        }
+
+        &:hover {
+          border-color: darken($border-color, 10%);
+        }
+
+        &:not(.p-disabled).p-focus {
+          border-color: $primary-color;
+          box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+          outline: none;
+        }
+      }
     }
 
     .form-actions {
@@ -536,6 +581,11 @@ function formatBytes(bytes: number) {
   .error {
     color: $error-color;
   }
+}
+
+// Utility class for width 100%
+.w-100 {
+  width: 100%;
 }
 
 @media (max-width: 768px) {
