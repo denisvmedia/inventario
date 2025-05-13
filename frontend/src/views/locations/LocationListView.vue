@@ -442,31 +442,9 @@ const deleteArea = async (id: string) => {
   margin-top: 0.5rem;
 }
 
-/* Button styling */
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  cursor: pointer;
-  font-weight: 500;
-  text-decoration: none;
-  display: inline-block;
-}
+/* Use global button styles from main.scss */
 
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-}
-
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
-}
-
-.btn-danger {
-  background-color: $danger-color;
-  color: white;
-}
+/* Button styles are inherited from main.scss */
 
 .btn-sm {
   padding: 0.25rem 0.5rem;

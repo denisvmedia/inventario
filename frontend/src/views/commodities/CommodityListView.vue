@@ -427,23 +427,5 @@ const deleteCommodity = async (id: string) => {
   }
 }
 
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  cursor: pointer;
-  font-weight: 500;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-}
-
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
-}
+/* Use global button styles from main.scss */
 </style>
