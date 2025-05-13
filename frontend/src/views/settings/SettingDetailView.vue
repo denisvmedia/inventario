@@ -83,7 +83,7 @@
     <div v-else-if="settingId === 'system_config'" class="form">
       <div class="form-group">
         <label for="main-currency">Main Currency</label>
-        <Dropdown
+        <Select
           id="main-currency"
           v-model="systemConfig.main_currency"
           :options="currencies"
@@ -147,7 +147,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 import NotificationBanner from '@/components/NotificationBanner.vue'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 
 const route = useRoute()
 const router = useRouter()
@@ -470,37 +470,6 @@ function formatBytes(bytes: number) {
         color: $error-color;
         margin-top: 5px;
         font-size: 0.9rem;
-      }
-
-      // PrimeVue Dropdown styling - basic component styling only
-      // (Global styles are in App.vue)
-      :deep(.p-dropdown) {
-        width: 100%;
-        border: 1px solid $border-color;
-        border-radius: $default-radius;
-        background-color: white;
-        transition: border-color 0.2s, box-shadow 0.2s;
-
-        .p-dropdown-label {
-          padding: 0.75rem;
-          font-size: 1rem;
-          color: $text-color;
-        }
-
-        .p-dropdown-trigger {
-          width: 3rem;
-          color: $text-secondary-color;
-        }
-
-        &:hover {
-          border-color: darken($border-color, 10%);
-        }
-
-        &:not(.p-disabled).p-focus {
-          border-color: $primary-color;
-          box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-          outline: none;
-        }
       }
     }
 
