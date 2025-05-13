@@ -58,7 +58,7 @@
             <span class="label">Original Price:</span>
             <span>{{ commodity.attributes.original_price }} {{ commodity.attributes.original_price_currency }}</span>
           </div>
-          <div class="info-row">
+          <div class="info-row" v-if="commodity.attributes.converted_original_price !== '0' && commodity.attributes.converted_original_price !== 0">
             <span class="label">Converted Original Price:</span>
             <span>{{ commodity.attributes.converted_original_price }} {{ mainCurrency }}</span>
           </div>
