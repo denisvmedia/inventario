@@ -135,8 +135,8 @@ func Settings(settingsRegistry registry.SettingsRegistry) func(r chi.Router) {
 	}
 
 	return func(r chi.Router) {
-		r.Get("/", api.getSettings)       // GET /settings
-		r.Put("/", api.updateSettings)    // PUT /settings
+		r.Get("/", api.getSettings)           // GET /settings
+		r.Put("/", api.updateSettings)        // PUT /settings
 		r.Patch("/{field}", api.patchSetting) // PATCH /settings/{field}
 	}
 }

@@ -38,7 +38,7 @@ func (r *SettingsRegistry) Patch(configfield string, value any) error {
 	defer r.lock.Unlock()
 
 	err := typekit.SetFieldByConfigfieldTag(&r.settings, configfield, value)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 
