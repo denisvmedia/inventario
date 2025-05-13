@@ -227,6 +227,9 @@ linters:
           - lll
           - nestif
         path: '_test\.go$'
+      # bmd exception rule (we currently use testify there)
+      - path: '_test\.go$'
+        text: 'function-result-limit:'
       - linters:
           - dupl
         path: '(jsonapi|apiserver|registry/.*)/.*\.go$'

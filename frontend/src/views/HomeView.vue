@@ -11,6 +11,10 @@
         <h2>Commodities</h2>
         <p>Manage inventory items</p>
       </div>
+      <div class="card" @click="navigateTo('/settings')">
+        <h2>Settings</h2>
+        <p>Configure application settings</p>
+      </div>
     </div>
   </div>
 </template>

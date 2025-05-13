@@ -80,6 +80,12 @@ type ManualRegistry interface {
 	Registry[models.Manual]
 }
 
+type SettingsRegistry interface {
+	Get() (models.SettingsObject, error)
+	Save(models.SettingsObject) error
+	Patch(configfield string, value any) error
+}
+
 type Set struct {
 	LocationRegistry  LocationRegistry
 	AreaRegistry      AreaRegistry
@@ -87,6 +93,7 @@ type Set struct {
 	ImageRegistry     ImageRegistry
 	InvoiceRegistry   InvoiceRegistry
 	ManualRegistry    ManualRegistry
+	SettingsRegistry  SettingsRegistry
 }
 
 func (s *Set) Validate() error {
@@ -99,6 +106,7 @@ func (s *Set) Validate() error {
 		validation.Field(&s.ImageRegistry, validation.Required),
 		validation.Field(&s.ManualRegistry, validation.Required),
 		validation.Field(&s.InvoiceRegistry, validation.Required),
+		validation.Field(&s.SettingsRegistry, validation.Required),
 	)
 
 	return validation.ValidateStruct(s, fields...)

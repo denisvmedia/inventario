@@ -205,20 +205,19 @@ func (r *Registry[T, P]) DeleteEmptyBuckets(tx dbx.TransactionOrBucket, entityID
 
 	var errs error
 	for _, bucketName := range bucketNames {
-		bucket := r.base.GetBucket(children, entityID)
+		bucket := r.base.GetBucket(children, bucketName)
 		vals, err := r.base.GetIndexValues(bucket, bucketName)
 		if err == nil && len(vals) > 0 {
 			errs = errkit.Append(
 				errs,
 				errkit.Wrap(registry.ErrCannotDelete, fmt.Sprintf("%s has %s", r.entityName, bucketName)),
 			)
-			break // no sense to continue
+			return errs // Return immediately if we find a non-empty bucket
 		}
-
-		errs = errkit.Append(errs, tx.DeleteBucket([]byte(entityID)))
 	}
 
-	return errs
+	// Only delete the bucket if all child buckets are empty
+	return nil
 }
 
 func (r *Registry[T, P]) AddChild(childEntityBucketName, entityID, childID string) error {

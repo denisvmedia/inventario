@@ -125,6 +125,14 @@ func (r *LocationRegistry) Count() (int, error) {
 
 func (r *LocationRegistry) Delete(id string) error {
 	return r.registry.Delete(id, func(tx dbx.TransactionOrBucket, location *models.Location) error {
+		areas, err := r.GetAreas(location.ID)
+		if err != nil {
+			return err
+		}
+		if len(areas) > 0 {
+			return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
+		}
+
 		return r.registry.DeleteEmptyBuckets(
 			tx,
 			location.ID,
