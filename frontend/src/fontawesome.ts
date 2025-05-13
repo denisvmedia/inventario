@@ -35,7 +35,10 @@ import {
   faSearchMinus,
   faSearchPlus,
   faCopy,
-  faUpload
+  faUpload,
+  faExclamationTriangle,
+  faExclamationCircle,
+  faCheckCircle
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -77,7 +80,10 @@ library.add(
   faSearchMinus,
   faSearchPlus,
   faCopy,
-  faUpload
+  faUpload,
+  faExclamationTriangle,
+  faExclamationCircle,
+  faCheckCircle
 )
 
 export { FontAwesomeIcon }

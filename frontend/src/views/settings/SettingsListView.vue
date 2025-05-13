@@ -4,6 +4,35 @@
       <h1>Settings</h1>
     </div>
 
+    <!-- Settings Required Banner -->
+    <div v-if="settingsRequired" class="settings-required-banner">
+      <div class="banner-icon">
+        <font-awesome-icon icon="exclamation-triangle" size="2x" />
+      </div>
+      <div class="banner-content">
+        <h2>Settings Required</h2>
+        <p>Please configure your system settings before using the application. At minimum, you need to set up:</p>
+        <ul>
+          <li>Main Currency</li>
+        </ul>
+        <p>Click on the System Settings card below to get started.</p>
+      </div>
+    </div>
+
+    <!-- Settings Success Banner -->
+    <div v-if="showSuccessMessage" class="settings-success-banner">
+      <div class="banner-icon">
+        <font-awesome-icon icon="check-circle" size="2x" />
+      </div>
+      <div class="banner-content">
+        <h2>Settings Saved</h2>
+        <p>Your settings have been successfully saved.</p>
+      </div>
+      <button class="close-button" @click="dismissSuccessMessage">
+        <font-awesome-icon icon="times" />
+      </button>
+    </div>
+
     <div v-if="loading" class="loading">
       Loading settings...
     </div>
@@ -64,14 +93,46 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import settingsService from '@/services/settingsService'
+import settingsCheckService from '@/services/settingsCheckService'
 
 const router = useRouter()
+const route = useRoute()
 const settings = ref<any>({})
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+const showSuccessMessage = ref<boolean>(false)
+
+// Check if settings are required based on query parameter
+const settingsRequired = computed(() => {
+  return route.query.required === 'true' || !settings.value.MainCurrency
+})
+
+// Watch for success query parameter
+watch(() => route.query.success, (success) => {
+  if (success === 'true') {
+    showSuccessMessage.value = true
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      showSuccessMessage.value = false
+      // Remove the success query parameter
+      if (route.query.success) {
+        router.replace({ query: { ...route.query, success: undefined } })
+      }
+    }, 5000)
+  }
+}, { immediate: true })
+
+// Function to dismiss the success message
+const dismissSuccessMessage = () => {
+  showSuccessMessage.value = false
+  // Remove the success query parameter
+  if (route.query.success) {
+    router.replace({ query: { ...route.query, success: undefined } })
+  }
+}
 
 // Filter out the built-in settings
 const builtInSettings = ['ui_config', 'system_config']
@@ -204,6 +265,98 @@ const formatSettingName = (id: string) => {
     .settings-card-icon {
       color: $secondary-color;
       margin-top: 5px;
+    }
+  }
+
+  .settings-required-banner {
+    display: flex;
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: $box-shadow;
+
+    .banner-icon {
+      color: #856404;
+      margin-right: 20px;
+      display: flex;
+      align-items: flex-start;
+      padding-top: 5px;
+    }
+
+    .banner-content {
+      flex: 1;
+
+      h2 {
+        color: #856404;
+        margin-top: 0;
+        margin-bottom: 10px;
+        font-size: 1.25rem;
+      }
+
+      p {
+        margin-bottom: 10px;
+      }
+
+      ul {
+        margin-bottom: 10px;
+        padding-left: 20px;
+      }
+
+      li {
+        margin-bottom: 5px;
+      }
+    }
+  }
+
+  .settings-success-banner {
+    display: flex;
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 8px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    box-shadow: $box-shadow;
+    position: relative;
+
+    .banner-icon {
+      color: #155724;
+      margin-right: 20px;
+      display: flex;
+      align-items: center;
+    }
+
+    .banner-content {
+      flex: 1;
+
+      h2 {
+        color: #155724;
+        margin-top: 0;
+        margin-bottom: 5px;
+        font-size: 1.25rem;
+      }
+
+      p {
+        margin-bottom: 0;
+        color: #155724;
+      }
+    }
+
+    .close-button {
+      background: none;
+      border: none;
+      color: #155724;
+      cursor: pointer;
+      padding: 5px;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      opacity: 0.7;
+
+      &:hover {
+        opacity: 1;
+      }
     }
   }
 

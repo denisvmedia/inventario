@@ -17,11 +17,22 @@
     </header>
 
     <!-- Debug information -->
-    <div class="debug-info" v-if="!isPrintRoute">
+    <div class="debug-info" v-if="!isPrintRoute && showDebugInfo">
       <p>Current route: {{ $route.path }}</p>
     </div>
 
     <main :class="{ 'container': !isPrintRoute, 'print-container': isPrintRoute }">
+      <!-- Settings required notification -->
+      <div class="notification-container" v-if="!isPrintRoute">
+        <NotificationBanner
+          v-if="showSettingsRequiredNotification"
+          type="warning"
+          :dismissible="false"
+        >
+          <strong>Settings Required:</strong> Please configure your system settings before using the application.
+        </NotificationBanner>
+      </div>
+
       <router-view />
     </main>
 
@@ -32,14 +43,51 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import NotificationBanner from './components/NotificationBanner.vue'
+import settingsCheckService from './services/settingsCheckService'
 
 const route = useRoute()
+
+// State
+const showDebugInfo = ref(false)
+const showSettingsRequiredNotification = ref(false)
 
 // Check if current route is a print route
 const isPrintRoute = computed(() => {
   return route.path.includes('/print')
+})
+
+// Check if we're on the settings page
+const isSettingsPage = computed(() => {
+  return route.path.startsWith('/settings')
+})
+
+// Watch for route changes to update notification state
+watch(() => route.query, (query) => {
+  if (query.required === 'true' && isSettingsPage.value) {
+    showSettingsRequiredNotification.value = true
+  } else {
+    showSettingsRequiredNotification.value = false
+  }
+}, { immediate: true })
+
+// Check settings on mount
+onMounted(async () => {
+  try {
+    // Load debug info setting
+    const response = await settingsCheckService.hasSettings()
+    if (!response) {
+      // If we're not already on the settings page with the required query param,
+      // we'll let the router guard handle the redirect
+      if (isSettingsPage.value) {
+        showSettingsRequiredNotification.value = true
+      }
+    }
+  } catch (error) {
+    console.error('Error checking settings:', error)
+  }
 })
 </script>
 
@@ -48,6 +96,10 @@ const isPrintRoute = computed(() => {
   max-width: 100%;
   margin: 0;
   padding: 0;
+}
+
+.notification-container {
+  margin-bottom: 1rem;
 }
 
 .header-content {

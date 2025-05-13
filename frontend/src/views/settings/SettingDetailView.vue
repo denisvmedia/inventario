@@ -15,6 +15,16 @@
     <div v-else-if="error" class="error">
       {{ error }}
     </div>
+
+    <!-- Settings Required Banner for System Settings -->
+    <div v-if="settingId === 'system_config' && isSettingsRequired" class="settings-required-banner">
+      <div class="banner-icon">
+        <font-awesome-icon icon="exclamation-triangle" />
+      </div>
+      <div class="banner-content">
+        <p><strong>Settings Required:</strong> Please configure the Main Currency to continue using the application.</p>
+      </div>
+    </div>
     <!-- UI Settings -->
     <div v-else-if="settingId === 'ui_config'" class="form">
       <div class="form-group">
@@ -124,6 +134,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
+import NotificationBanner from '@/components/NotificationBanner.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -136,6 +147,11 @@ const jsonValue = ref<string>('')
 const jsonError = ref<string | null>(null)
 const settingData = ref<any>(null)
 const currencies = ref<any[]>([])
+
+// Check if settings are required based on query parameter
+const isSettingsRequired = computed(() => {
+  return route.query.required === 'true'
+})
 
 // Removed Currency Config and TLS Config as requested
 
@@ -312,7 +328,11 @@ async function saveSystemConfig() {
 
     // Note: other system config fields are not in the settings model, so we don't update them
 
-    router.push('/settings')
+    // Redirect to settings with success message
+    router.push({
+      path: '/settings',
+      query: { success: 'true' }
+    })
   } catch (err: any) {
     error.value = 'Failed to save System config: ' + (err.message || 'Unknown error')
     console.error('Error saving System config:', err)
@@ -470,6 +490,32 @@ function formatBytes(bytes: number) {
             background-color: darken(#6c757d, 10%);
           }
         }
+      }
+    }
+  }
+
+  .settings-required-banner {
+    display: flex;
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: $box-shadow;
+
+    .banner-icon {
+      color: #856404;
+      margin-right: 15px;
+      display: flex;
+      align-items: center;
+    }
+
+    .banner-content {
+      flex: 1;
+
+      p {
+        margin: 0;
+        color: #856404;
       }
     }
   }

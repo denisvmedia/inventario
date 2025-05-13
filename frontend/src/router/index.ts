@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
+import settingsCheckService from '../services/settingsCheckService'
 
 // Define routes without using RouteRecordRaw type
 const routes = [
@@ -99,12 +100,29 @@ routes.forEach(route => {
   console.log(`- ${route.path} (${route.name})`)
 })
 
-// Add navigation guards for debugging
-router.beforeEach((to, from) => {
+// Add navigation guards for debugging and settings check
+router.beforeEach(async (to, from) => {
   console.log(`Navigation: ${from.path} -> ${to.path}`)
   console.log('To:', to)
   console.log('From:', from)
   console.log('Matched routes:', to.matched.map(record => record.path))
+
+  // Skip settings check for settings pages, print pages, and the home page
+  const isSettingsPage = to.path.startsWith('/settings')
+  const isPrintPage = to.path.includes('/print')
+  const isHomePage = to.path === '/'
+
+  if (!isSettingsPage && !isPrintPage && !isHomePage) {
+    // Check if settings exist
+    const hasSettings = await settingsCheckService.hasSettings()
+
+    if (!hasSettings) {
+      console.log('No settings found, redirecting to settings page')
+      // Add a query parameter to indicate that settings are required
+      return { path: '/settings', query: { required: 'true' } }
+    }
+  }
+
   return true
 })
 
