@@ -27,9 +27,9 @@
             <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
           </div>
           <div class="commodity-price">
-            <span class="price">{{ commodity.attributes.current_price }} {{ commodity.attributes.original_price_currency }}</span>
+            <span class="price">{{ commodity.attributes.current_price }} {{ mainCurrency }}</span>
             <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
-              {{ calculatePricePerUnit(commodity) }} {{ commodity.attributes.original_price_currency }} per unit
+              {{ calculatePricePerUnit(commodity) }} {{ mainCurrency }} per unit
             </span>
           </div>
           <div class="commodity-status">
@@ -55,6 +55,7 @@ import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
+import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 
@@ -65,6 +66,7 @@ const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+const mainCurrency = ref<string>('USD') // Default to USD if not set
 
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
@@ -127,6 +129,17 @@ const calculatePricePerUnit = (commodity: any) => {
 
 onMounted(async () => {
   try {
+    // Fetch main currency from settings
+    try {
+      const currency = await settingsService.getMainCurrency()
+      if (currency) {
+        mainCurrency.value = currency
+      }
+    } catch (settingsErr) {
+      console.error('Failed to load main currency from settings:', settingsErr)
+      // Continue with default currency
+    }
+
     // Load commodities, areas, and locations in parallel
     const [commoditiesResponse, areasResponse, locationsResponse] = await Promise.all([
       commodityService.getCommodities(),
