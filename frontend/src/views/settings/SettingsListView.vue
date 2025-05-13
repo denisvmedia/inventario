@@ -19,6 +19,20 @@
             <div class="settings-card-content">
               <h3>UI Settings</h3>
               <p>Configure theme, language, and display options</p>
+              <div class="settings-values" v-if="!loading && settings.Theme">
+                <div class="setting-value">
+                  <span class="setting-label">Theme:</span>
+                  <span class="setting-data">{{ settings.Theme }}</span>
+                </div>
+                <div class="setting-value">
+                  <span class="setting-label">Show Debug Info:</span>
+                  <span class="setting-data">{{ settings.ShowDebugInfo ? 'Yes' : 'No' }}</span>
+                </div>
+                <div class="setting-value" v-if="settings.DefaultDateFormat">
+                  <span class="setting-label">Date Format:</span>
+                  <span class="setting-data">{{ settings.DefaultDateFormat }}</span>
+                </div>
+              </div>
             </div>
             <div class="settings-card-icon">
               <font-awesome-icon icon="chevron-right" />
@@ -32,6 +46,12 @@
             <div class="settings-card-content">
               <h3>System Settings</h3>
               <p>Configure main currency</p>
+              <div class="settings-values" v-if="!loading && settings.MainCurrency">
+                <div class="setting-value">
+                  <span class="setting-label">Main Currency:</span>
+                  <span class="setting-data">{{ settings.MainCurrency }}</span>
+                </div>
+              </div>
             </div>
             <div class="settings-card-icon">
               <font-awesome-icon icon="chevron-right" />
@@ -49,7 +69,7 @@ import { useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 
 const router = useRouter()
-const settings = ref<any[]>([])
+const settings = ref<any>({})
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 
@@ -58,10 +78,10 @@ const builtInSettings = ['ui_config', 'system_config']
 
 onMounted(async () => {
   try {
-    // With the new API, we just need to check if the settings are available
-    await settingsService.getSettings()
-    // No need to filter settings as we're only showing predefined categories
-    settings.value = []
+    // Get the settings from the API
+    const response = await settingsService.getSettings()
+    // Store the settings data
+    settings.value = response.data
   } catch (err: any) {
     error.value = 'Failed to load settings: ' + (err.message || 'Unknown error')
     console.error('Error loading settings:', err)
@@ -127,7 +147,7 @@ const formatSettingName = (id: string) => {
   .settings-card {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     background-color: white;
     border-radius: 6px;
     padding: 15px;
@@ -153,14 +173,37 @@ const formatSettingName = (id: string) => {
       }
 
       p {
-        margin: 0;
+        margin: 0 0 10px 0;
         font-size: 0.9rem;
         color: $text-secondary-color;
+      }
+
+      .settings-values {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed #eee;
+
+        .setting-value {
+          display: flex;
+          margin-bottom: 5px;
+          font-size: 0.85rem;
+
+          .setting-label {
+            font-weight: 500;
+            margin-right: 5px;
+            color: $text-secondary-color;
+          }
+
+          .setting-data {
+            color: $primary-color;
+          }
+        }
       }
     }
 
     .settings-card-icon {
       color: $secondary-color;
+      margin-top: 5px;
     }
   }
 
