@@ -107,12 +107,11 @@ router.beforeEach(async (to, from) => {
   console.log('From:', from)
   console.log('Matched routes:', to.matched.map(record => record.path))
 
-  // Skip settings check for settings pages, print pages, and the home page
+  // Skip settings check for settings pages and print pages
   const isSettingsPage = to.path.startsWith('/settings')
   const isPrintPage = to.path.includes('/print')
-  const isHomePage = to.path === '/'
 
-  if (!isSettingsPage && !isPrintPage && !isHomePage) {
+  if (!isSettingsPage && !isPrintPage) {
     // Check if settings exist
     const hasSettings = await settingsCheckService.hasSettings()
 
