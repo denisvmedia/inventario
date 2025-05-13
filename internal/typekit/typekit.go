@@ -23,7 +23,7 @@ func ZeroOfType[T any](t T) (zero T) {
 
 // SetFieldByConfigfieldTag sets the struct field denoted by the "configfield" tag to the provided value if it matches.
 // ptr must be a non-nil pointer to a struct, and the function returns an error if the field is not settable or not found.
-func SetFieldByConfigfieldTag(ptr interface{}, tag string, value interface{}) error {
+func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 	v := reflect.ValueOf(ptr)
 	if v.Kind() != reflect.Ptr || v.IsNil() {
 		return errors.New("ptr must be a non-nil pointer to struct")
