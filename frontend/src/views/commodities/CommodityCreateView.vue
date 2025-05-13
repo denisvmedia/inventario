@@ -328,6 +328,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import commodityService from '@/services/commodityService'
+import areaService from '@/services/areaService'
+import locationService from '@/services/locationService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCIES, CURRENCY_CZK } from '@/constants/currencies'
@@ -391,14 +393,31 @@ onMounted(async () => {
       console.log('Area ID from URL:', areaFromUrl.value)
     }
 
-    // Fetch areas
-    const response = await axios.get('/api/v1/areas', {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
-    areas.value = response.data.data
+    // Fetch areas and locations in parallel
+    const [areasResponse, locationsResponse] = await Promise.all([
+      axios.get('/api/v1/areas', {
+        headers: {
+          'Accept': 'application/vnd.api+json'
+        }
+      }),
+      axios.get('/api/v1/locations', {
+        headers: {
+          'Accept': 'application/vnd.api+json'
+        }
+      })
+    ])
+
+    areas.value = areasResponse.data.data
+    const locations = locationsResponse.data.data
     console.log('Loaded areas:', areas.value)
+    console.log('Loaded locations:', locations)
+
+    // Check if we have locations and areas
+    if (locations.length === 0 || areas.value.length === 0) {
+      // Redirect to commodities list which will show the appropriate message
+      router.push('/commodities')
+      return
+    }
 
     // If area ID is provided in the URL, set it in the form
     if (areaFromUrl.value) {

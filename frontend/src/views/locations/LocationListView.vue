@@ -17,7 +17,9 @@
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="locations.length === 0" class="empty">
-      No locations found. Create your first location using the button above!
+      <div class="empty-message">
+        <p>No locations found. Create your first location using the button above!</p>
+      </div>
     </div>
 
     <div v-else class="locations-list">
@@ -419,6 +421,22 @@ const deleteArea = async (id: string) => {
   border-radius: $default-radius;
   text-align: center;
   color: $text-color;
+}
+
+.empty-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.empty-message p {
+  margin-bottom: 0;
+  font-size: 1.1rem;
+}
+
+.action-button {
+  margin-top: 0.5rem;
 }
 
 /* Button styling */

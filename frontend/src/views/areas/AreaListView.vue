@@ -7,7 +7,14 @@
 
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
-    <div v-else-if="areas.length === 0" class="empty">No areas found. Create your first area!</div>
+    <div v-else-if="areas.length === 0" class="empty">
+      <div class="empty-message">
+        <p>No areas found. Create your first area!</p>
+        <div class="action-button">
+          <router-link to="/areas/new" class="btn btn-primary">Create Area</router-link>
+        </div>
+      </div>
+    </div>
 
     <div v-else class="areas-grid">
       <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
@@ -165,6 +172,22 @@ const deleteArea = async (id: string) => {
 
 .location {
   font-style: italic;
+}
+
+.empty-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.empty-message p {
+  margin-bottom: 0;
+  font-size: 1.1rem;
+}
+
+.action-button {
+  margin-top: 0.5rem;
 }
 
 .btn {
