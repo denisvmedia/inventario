@@ -18,7 +18,10 @@
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="locations.length === 0" class="empty">
       <div class="empty-message">
-        <p>No locations found. Create your first location using the button above!</p>
+        <p>No locations found. Create your first location!</p>
+        <div class="action-button">
+          <button class="btn btn-primary" @click="showLocationForm = true">Create Location</button>
+        </div>
       </div>
     </div>
 
