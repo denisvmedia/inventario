@@ -17,7 +17,7 @@
     </div>
 
     <!-- Settings Required Banner for System Settings -->
-    <div v-if="settingId === 'system_config' && isSettingsRequired" class="settings-required-banner">
+    <div v-if="settingId === 'system_config' && isSettingsRequired && settingsLoaded" class="settings-required-banner">
       <div class="banner-icon">
         <font-awesome-icon icon="exclamation-triangle" />
       </div>
@@ -148,6 +148,9 @@ const jsonError = ref<string | null>(null)
 const settingData = ref<any>(null)
 const currencies = ref<any[]>([])
 
+// Track if we've loaded settings
+const settingsLoaded = ref(false)
+
 // Check if settings are required based on query parameter
 const isSettingsRequired = computed(() => {
   return route.query.required === 'true'
@@ -229,6 +232,8 @@ const fetchCurrencies = async () => {
 onMounted(async () => {
   await loadSetting()
   await fetchCurrencies()
+  // Mark settings as loaded to prevent flashing the banner
+  settingsLoaded.value = true
 })
 
 async function loadSetting() {

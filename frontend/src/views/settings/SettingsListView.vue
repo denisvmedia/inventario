@@ -5,7 +5,7 @@
     </div>
 
     <!-- Settings Required Banner -->
-    <div v-if="settingsRequired" class="settings-required-banner">
+    <div v-if="settingsRequired && settingsLoaded" class="settings-required-banner">
       <div class="banner-icon">
         <font-awesome-icon icon="exclamation-triangle" size="2x" />
       </div>
@@ -105,8 +105,15 @@ const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const showSuccessMessage = ref<boolean>(false)
 
+// Track if we've loaded settings
+const settingsLoaded = ref(false)
+
 // Check if settings are required based on query parameter
 const settingsRequired = computed(() => {
+  // Only check MainCurrency after settings have been loaded
+  if (!settingsLoaded.value) {
+    return route.query.required === 'true'
+  }
   return route.query.required === 'true' || !settings.value.MainCurrency
 })
 
@@ -148,6 +155,8 @@ onMounted(async () => {
     console.error('Error loading settings:', err)
   } finally {
     loading.value = false
+    // Mark settings as loaded to prevent flashing the banner
+    settingsLoaded.value = true
   }
 })
 

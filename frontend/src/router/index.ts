@@ -111,6 +111,12 @@ router.beforeEach(async (to, from) => {
   const isSettingsPage = to.path.startsWith('/settings')
   const isPrintPage = to.path.includes('/print')
 
+  // If we're navigating to the settings page from another page, don't check settings
+  // This prevents the banner from flashing when we already have settings
+  if (isSettingsPage && from.path !== '/') {
+    return true
+  }
+
   if (!isSettingsPage && !isPrintPage) {
     // Check if settings exist
     const hasSettings = await settingsCheckService.hasSettings()
