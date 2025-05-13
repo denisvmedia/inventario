@@ -14,7 +14,8 @@ func ZeroOfType[T any](t T) (zero T) {
 	if val.Kind() == reflect.Ptr && val.IsNil() {
 		// Create a new instance of the pointed-to type
 		newVal := reflect.New(val.Type().Elem())
-		return newVal.Interface().(T)
+		result, _ := newVal.Interface().(T)
+		return result
 	}
 
 	// For non-nil values, return a zero value of the same type
@@ -42,14 +43,14 @@ func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 				return fmt.Errorf("cannot set field %s", field.Name)
 			}
 			val := reflect.ValueOf(value)
-			// Преобразование значений с учетом указателей
-			if field.Type.Kind() == reflect.Ptr && val.Kind() != reflect.Ptr {
+			switch {
+			case field.Type.Kind() == reflect.Ptr && val.Kind() != reflect.Ptr:
 				valPtr := reflect.New(field.Type.Elem())
 				valPtr.Elem().Set(val.Convert(field.Type.Elem()))
 				fieldValue.Set(valPtr)
-			} else if field.Type.Kind() != reflect.Ptr && val.Kind() == reflect.Ptr {
+			case field.Type.Kind() != reflect.Ptr && val.Kind() == reflect.Ptr:
 				fieldValue.Set(val.Elem().Convert(field.Type))
-			} else {
+			default:
 				fieldValue.Set(val.Convert(field.Type))
 			}
 			return nil

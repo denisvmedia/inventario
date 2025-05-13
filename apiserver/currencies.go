@@ -18,7 +18,7 @@ type currenciesAPI struct{}
 // @Produce  json
 // @Success 200 {array} string "OK"
 // @Router /currencies [get].
-func (api *currenciesAPI) getCurrencies(w http.ResponseWriter, r *http.Request) {
+func (*currenciesAPI) getCurrencies(w http.ResponseWriter, _r *http.Request) { //revive:disable-line:get-return
 	// Get all supported currency codes
 	currencyCodes := currency.GetCurrencyCodes()
 

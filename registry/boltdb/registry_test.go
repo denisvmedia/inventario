@@ -51,7 +51,7 @@ func setupTestRegistry(t *testing.T) (*boltdb.Registry[testItem, *testItem], fun
 }
 
 // noopHook is a no-operation hook function for testing
-func noopHook(tx dbx.TransactionOrBucket, item *testItem) error {
+func noopHook(_tx dbx.TransactionOrBucket, _item *testItem) error {
 	return nil
 }
 

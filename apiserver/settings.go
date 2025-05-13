@@ -22,7 +22,7 @@ type settingsAPI struct {
 // @Produce  json
 // @Success 200 {object} models.SettingsObject "OK"
 // @Router /settings [get]
-func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) {
+func (api *settingsAPI) getSettings(w http.ResponseWriter, _r *http.Request) { //revive:disable-line:get-return
 	// Get current settings
 	settings, err := api.registry.Get()
 	if err != nil {
