@@ -6,80 +6,68 @@ const settingsService = {
   getSettings() {
     return axios.get(API_URL, {
       headers: {
-        'Accept': 'application/vnd.api+json'
+        'Accept': 'application/json'
       }
     })
   },
 
-  getSetting(id: string) {
-    return axios.get(`${API_URL}/${id}`, {
+  updateSettings(settings: any) {
+    return axios.put(API_URL, settings, {
       headers: {
-        'Accept': 'application/vnd.api+json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
     })
   },
 
-  createSetting(id: string, value: any) {
-    const payload = {
-      data: {
-        type: 'settings',
-        id: id,
-        attributes: {
-          value: value
-        }
-      }
-    }
-
-    return axios.post(API_URL, payload, {
+  patchSetting(field: string, value: any) {
+    return axios.patch(`${API_URL}/${field}`, value, {
       headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
-  },
-
-  updateSetting(id: string, value: any) {
-    const payload = {
-      data: {
-        type: 'settings',
-        id: id,
-        attributes: {
-          value: value
-        }
-      }
-    }
-
-    return axios.put(`${API_URL}/${id}`, payload, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
-  },
-
-  deleteSetting(id: string) {
-    return axios.delete(`${API_URL}/${id}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
     })
   },
 
   // Specific settings methods
-  getUIConfig() {
-    return this.getSetting('ui_config')
+  getTheme() {
+    return this.getSettings().then(response => {
+      return response.data.Theme || null;
+    });
   },
 
-  updateUIConfig(config: any) {
-    return this.updateSetting('ui_config', config)
+  updateTheme(theme: string) {
+    return this.patchSetting('uiconfig.theme', theme);
   },
 
-  getSystemConfig() {
-    return this.getSetting('system_config')
+  getShowDebugInfo() {
+    return this.getSettings().then(response => {
+      return response.data.ShowDebugInfo || false;
+    });
   },
 
-  updateSystemConfig(config: any) {
-    return this.updateSetting('system_config', config)
+  updateShowDebugInfo(show: boolean) {
+    return this.patchSetting('uiconfig.show_debug_info', show);
+  },
+
+  getMainCurrency() {
+    return this.getSettings().then(response => {
+      return response.data.MainCurrency || null;
+    });
+  },
+
+  updateMainCurrency(currency: string) {
+    return this.patchSetting('system.main_currency', currency);
+  },
+
+  getDefaultDateFormat() {
+    return this.getSettings().then(response => {
+      return response.data.DefaultDateFormat || null;
+    });
+  },
+
+  updateDefaultDateFormat(format: string) {
+    return this.patchSetting('uiconfig.default_date_format', format);
   },
 
   getCurrencies() {

@@ -220,65 +220,55 @@ async function loadSetting() {
   error.value = null
 
   try {
-    const response = await settingsService.getSetting(settingId.value)
-    settingData.value = response.data.data.attributes.value
+    const response = await settingsService.getSettings()
+    const settings = response.data
 
     if (settingId.value === 'ui_config') {
-      // Parse UI config
-      const config = typeof settingData.value === 'string'
-        ? JSON.parse(settingData.value)
-        : settingData.value
+      // Set UI config
       uiConfig.value = {
-        theme: config.theme || 'light',
-        show_debug_info: config.show_debug_info || false,
-        default_page_size: config.default_page_size || 20,
-        default_date_format: config.default_date_format || 'YYYY-MM-DD'
+        theme: settings.Theme || 'light',
+        show_debug_info: settings.ShowDebugInfo || false,
+        default_page_size: 20, // This is not in the settings model, using default
+        default_date_format: settings.DefaultDateFormat || 'YYYY-MM-DD'
       }
     } else if (settingId.value === 'system_config') {
-      // Parse System config
-      const config = typeof settingData.value === 'string'
-        ? JSON.parse(settingData.value)
-        : settingData.value
+      // Set System config
       systemConfig.value = {
-        upload_size_limit: config.upload_size_limit || 10485760,
-        log_level: config.log_level || 'info',
-        backup_enabled: config.backup_enabled || false,
-        backup_interval: config.backup_interval || '24h',
-        backup_location: config.backup_location || '',
-        main_currency: config.main_currency || 'USD'
+        upload_size_limit: 10485760, // Not in settings model, using default
+        log_level: 'info', // Not in settings model, using default
+        backup_enabled: false, // Not in settings model, using default
+        backup_interval: '24h', // Not in settings model, using default
+        backup_location: '', // Not in settings model, using default
+        main_currency: settings.MainCurrency || 'USD'
       }
     } else {
-      // For custom settings, just show the raw JSON
-      const parsedValue = typeof settingData.value === 'string'
-        ? JSON.parse(settingData.value)
-        : settingData.value
-      jsonValue.value = JSON.stringify(parsedValue, null, 2)
+      // For custom settings, just show empty JSON
+      jsonValue.value = '{}'
     }
   } catch (err: any) {
-    if (err.response && err.response.status === 404) {
-      // Setting doesn't exist yet, use defaults
-      if (settingId.value === 'ui_config') {
-        uiConfig.value = {
-          theme: 'light',
-          show_debug_info: false,
-          default_page_size: 20,
-          default_date_format: 'YYYY-MM-DD'
-        }
-      } else if (settingId.value === 'system_config') {
-        systemConfig.value = {
-          upload_size_limit: 10485760,
-          log_level: 'info',
-          backup_enabled: false,
-          backup_interval: '24h',
-          backup_location: '',
-          main_currency: 'USD'
-        }
-      } else {
-        jsonValue.value = '{}'
+    // Handle error
+    error.value = 'Failed to load settings: ' + (err.message || 'Unknown error')
+    console.error('Error loading settings:', err)
+
+    // Use defaults
+    if (settingId.value === 'ui_config') {
+      uiConfig.value = {
+        theme: 'light',
+        show_debug_info: false,
+        default_page_size: 20,
+        default_date_format: 'YYYY-MM-DD'
+      }
+    } else if (settingId.value === 'system_config') {
+      systemConfig.value = {
+        upload_size_limit: 10485760,
+        log_level: 'info',
+        backup_enabled: false,
+        backup_interval: '24h',
+        backup_location: '',
+        main_currency: 'USD'
       }
     } else {
-      error.value = 'Failed to load setting: ' + (err.message || 'Unknown error')
-      console.error('Error loading setting:', err)
+      jsonValue.value = '{}'
     }
   } finally {
     loading.value = false
@@ -294,7 +284,17 @@ function goBack() {
 async function saveUIConfig() {
   isSubmitting.value = true
   try {
-    await settingsService.updateUIConfig(uiConfig.value)
+    // Update theme
+    await settingsService.updateTheme(uiConfig.value.theme)
+
+    // Update show debug info
+    await settingsService.updateShowDebugInfo(uiConfig.value.show_debug_info)
+
+    // Update default date format
+    await settingsService.updateDefaultDateFormat(uiConfig.value.default_date_format)
+
+    // Note: default_page_size is not in the settings model, so we don't update it
+
     router.push('/settings')
   } catch (err: any) {
     error.value = 'Failed to save UI config: ' + (err.message || 'Unknown error')
@@ -307,7 +307,11 @@ async function saveUIConfig() {
 async function saveSystemConfig() {
   isSubmitting.value = true
   try {
-    await settingsService.updateSystemConfig(systemConfig.value)
+    // Update main currency
+    await settingsService.updateMainCurrency(systemConfig.value.main_currency)
+
+    // Note: other system config fields are not in the settings model, so we don't update them
+
     router.push('/settings')
   } catch (err: any) {
     error.value = 'Failed to save System config: ' + (err.message || 'Unknown error')
@@ -322,13 +326,14 @@ async function saveCustomSetting() {
 
   isSubmitting.value = true
   try {
-    const value = JSON.parse(jsonValue.value)
-    await settingsService.updateSetting(settingId.value, value)
-    router.push('/settings')
+    // Custom settings are not supported in the new API
+    // This is a placeholder for future implementation
+    error.value = 'Custom settings are not supported in the current version'
+    console.warn('Custom settings are not supported in the current version')
+    isSubmitting.value = false
   } catch (err: any) {
     error.value = 'Failed to save setting: ' + (err.message || 'Unknown error')
     console.error('Error saving setting:', err)
-  } finally {
     isSubmitting.value = false
   }
 }

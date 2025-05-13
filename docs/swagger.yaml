@@ -489,6 +489,17 @@ definitions:
           Example: "invoice-2023"
         type: string
     type: object
+  models.SettingsObject:
+    properties:
+      defaultDateFormat:
+        type: string
+      mainCurrency:
+        type: string
+      showDebugInfo:
+        type: boolean
+      theme:
+        type: string
+    type: object
 info:
   contact:
     email: ask@artprima.cz
@@ -1176,6 +1187,23 @@ paths:
       summary: Update a commodity
       tags:
       - commodities
+  /currencies:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get list of supported currencies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+      summary: Get supported currencies
+      tags:
+      - currencies
   /locations:
     get:
       consumes:
@@ -1314,4 +1342,67 @@ paths:
       summary: Seed database
       tags:
       - admin
+  /settings:
+    get:
+      consumes:
+      - application/json
+      description: get current settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsObject'
+      summary: Get current settings
+      tags:
+      - settings
+    put:
+      consumes:
+      - application/json
+      description: update entire settings object
+      parameters:
+      - description: Settings object
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/models.SettingsObject'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsObject'
+      summary: Update settings
+      tags:
+      - settings
+  /settings/{field}:
+    patch:
+      consumes:
+      - application/json
+      description: update a specific setting field
+      parameters:
+      - description: Setting field path (e.g., system.main_currency)
+        in: path
+        name: field
+        required: true
+        type: string
+      - description: Setting value
+        in: body
+        name: value
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsObject'
+      summary: Patch setting
+      tags:
+      - settings
 swagger: "2.0"

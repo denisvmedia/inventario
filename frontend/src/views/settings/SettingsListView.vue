@@ -58,11 +58,10 @@ const builtInSettings = ['ui_config', 'system_config']
 
 onMounted(async () => {
   try {
-    const response = await settingsService.getSettings()
-    // Filter out built-in settings that we handle separately
-    settings.value = response.data.data.filter((setting: any) =>
-      !builtInSettings.includes(setting.id)
-    )
+    // With the new API, we just need to check if the settings are available
+    await settingsService.getSettings()
+    // No need to filter settings as we're only showing predefined categories
+    settings.value = []
   } catch (err: any) {
     error.value = 'Failed to load settings: ' + (err.message || 'Unknown error')
     console.error('Error loading settings:', err)
