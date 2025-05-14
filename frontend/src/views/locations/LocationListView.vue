@@ -36,6 +36,9 @@
               </div>
             </div>
             <p v-if="location.attributes.address" class="address">{{ location.attributes.address }}</p>
+            <div v-if="!valuesLoading" class="location-value">
+              <span class="value-label">Total value:</span> {{ getLocationValue(location.id) }}
+            </div>
           </div>
           <div class="location-actions">
             <button class="btn btn-secondary btn-sm" @click.stop="editLocation(location.id)" title="Edit">
@@ -77,7 +80,7 @@
               <div class="area-content">
                 <h5>{{ area.attributes.name }}</h5>
                 <div v-if="!valuesLoading" class="area-value">
-                  {{ getAreaValue(area.id) }}
+                  <span class="value-label">Total value:</span> {{ getAreaValue(area.id) }}
                 </div>
               </div>
               <div class="area-actions">
@@ -120,6 +123,7 @@ const error = ref<string | null>(null)
 
 // Values data
 const areaTotals = ref<any[]>([])
+const locationTotals = ref<any[]>([])
 const valuesLoading = ref<boolean>(true)
 const valuesError = ref<string | null>(null)
 
@@ -160,6 +164,22 @@ async function loadValues() {
         areaTotals.value = []
       }
     }
+
+    // Store location totals - ensure it's an array
+    if (Array.isArray(data.location_totals)) {
+      locationTotals.value = data.location_totals
+    } else {
+      console.log('Location totals is not an array:', data.location_totals)
+      // Convert to array if it's an object with key-value pairs
+      if (data.location_totals && typeof data.location_totals === 'object') {
+        locationTotals.value = Object.entries(data.location_totals).map(([id, value]) => ({
+          id,
+          value
+        }))
+      } else {
+        locationTotals.value = []
+      }
+    }
   } catch (error) {
     console.error('Error loading values:', error)
     valuesError.value = 'Failed to load inventory values'
@@ -185,6 +205,32 @@ const getAreaValue = (areaId: string): string => {
     const valueAsNumber = typeof areaValue.value === 'string'
       ? parseFloat(areaValue.value)
       : areaValue.value
+
+    if (!isNaN(valueAsNumber)) {
+      return formatPrice(valueAsNumber, mainCurrency.value)
+    }
+  }
+
+  return '0.00 ' + mainCurrency.value
+}
+
+// Function to get the value for a specific location
+const getLocationValue = (locationId: string): string => {
+  if (valuesLoading.value) return 'Loading...'
+
+  // Check if locationTotals is an array
+  if (!Array.isArray(locationTotals.value)) {
+    console.error('locationTotals is not an array:', locationTotals.value)
+    return '0.00 ' + mainCurrency.value
+  }
+
+  // Find the location value in the array
+  const locationValue = locationTotals.value.find(location => location.id === locationId)
+  if (locationValue && locationValue.value) {
+    // Handle both string and number values
+    const valueAsNumber = typeof locationValue.value === 'string'
+      ? parseFloat(locationValue.value)
+      : locationValue.value
 
     if (!isNaN(valueAsNumber)) {
       return formatPrice(valueAsNumber, mainCurrency.value)
@@ -423,6 +469,13 @@ const deleteArea = async (id: string) => {
   font-style: italic;
 }
 
+.location-value {
+  font-size: 0.9rem;
+  color: $primary-color;
+  margin-top: 0.5rem;
+  font-weight: 500;
+}
+
 /* Areas styling */
 .areas-container {
   margin-top: 0.5rem;
@@ -533,6 +586,11 @@ const deleteArea = async (id: string) => {
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
+}
+
+.value-label {
+  color: $text-color;
+  font-weight: normal;
 }
 
 

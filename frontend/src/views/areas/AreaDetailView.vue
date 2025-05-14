@@ -16,7 +16,7 @@
           </h1>
           <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
           <div v-if="areaTotalValue > 0" class="total-value">
-            Total Value: <span class="value-amount">{{ formatPrice(areaTotalValue, mainCurrency) }}</span>
+            Total Value: <span class="value-amount">{{ formatPrice(areaTotalValue, getMainCurrency()) }}</span>
           </div>
         </div>
         <div class="actions">
@@ -79,7 +79,7 @@ import valueService from '@/services/valueService'
 import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
-import { formatPrice, getDisplayPrice, calculatePricePerUnit, mainCurrency as currencyServiceMainCurrency } from '@/services/currencyService'
+import { formatPrice, getDisplayPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
 
 const router = useRouter()
 const route = useRoute()
@@ -90,8 +90,7 @@ const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
-// Use the main currency from the currency service
-const mainCurrency = currencyServiceMainCurrency
+
 
 // Area total value
 const areaTotalValue = ref<number>(0)
@@ -146,12 +145,44 @@ onMounted(async () => {
     )
 
     // Get the area total value from the values response
-    const areaValues = valuesResponse.data.data.attributes.area_totals || []
-    const areaValue = areaValues.find((areaValue: any) => areaValue.id === id)
-    if (areaValue) {
-      areaTotalValue.value = parseFloat(areaValue.value)
-    } else {
-      // If no value found in the API response, calculate it from the commodities
+    try {
+      // Ensure we have a valid data structure
+      const valueAttributes = valuesResponse?.data?.data?.attributes || {}
+      const areaTotals = valueAttributes.area_totals || []
+
+      // Handle both array and object formats for area_totals
+      let areaValue = null
+      if (Array.isArray(areaTotals)) {
+        // If it's an array, use find
+        areaValue = areaTotals.find((areaValue: any) => areaValue.id === id)
+      } else if (areaTotals && typeof areaTotals === 'object') {
+        // If it's an object with key-value pairs, check if our ID exists as a key
+        if (areaTotals[id]) {
+          areaValue = {
+            id: id,
+            value: areaTotals[id]
+          }
+        }
+      }
+
+      if (areaValue) {
+        areaTotalValue.value = parseFloat(areaValue.value)
+      } else {
+        // If no value found in the API response, calculate it from the commodities
+        areaTotalValue.value = commodities.value.reduce((total: number, commodity: any) => {
+          // Only include commodities that are in use and not drafts
+          if (commodity.attributes.status === 'in_use' && !commodity.attributes.draft) {
+            const price = getDisplayPrice(commodity)
+            if (!isNaN(price)) {
+              return total + price
+            }
+          }
+          return total
+        }, 0)
+      }
+    } catch (err) {
+      console.error('Error processing area values:', err)
+      // Fallback to calculating from commodities
       areaTotalValue.value = commodities.value.reduce((total: number, commodity: any) => {
         // Only include commodities that are in use and not drafts
         if (commodity.attributes.status === 'in_use' && !commodity.attributes.draft) {
