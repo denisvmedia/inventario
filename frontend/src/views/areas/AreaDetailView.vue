@@ -26,11 +26,17 @@
 
       <div class="commodities-section" v-if="commodities.length > 0">
         <div class="section-header">
-          <h2>Commodities</h2>
+          <div class="section-title">
+            <h2>Commodities</h2>
+            <div class="filter-toggle">
+              <InputSwitch v-model="showInactiveItems" />
+              <label class="toggle-label">Show drafts & inactive items</label>
+            </div>
+          </div>
           <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
         </div>
         <div class="commodities-grid">
-          <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" :class="{
+          <div v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
             'highlighted': commodity.id === highlightCommodityId,
             'draft': commodity.attributes.draft,
             'sold': !commodity.attributes.draft && commodity.attributes.status === 'sold',
@@ -77,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
@@ -85,7 +91,7 @@ import commodityService from '@/services/commodityService'
 import valueService from '@/services/valueService'
 import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
-import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice, getDisplayPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
 
 const router = useRouter()
@@ -106,6 +112,21 @@ const valuesLoading = ref<boolean>(true)
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
 let highlightTimeout: number | null = null
+
+// Filter toggle state
+const showInactiveItems = ref(false)
+
+// Filtered commodities based on toggle state
+const filteredCommodities = computed(() => {
+  if (showInactiveItems.value) {
+    return commodities.value
+  }
+
+  return commodities.value.filter(commodity => {
+    // Show only non-draft items with status 'in_use'
+    return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
+  })
+})
 
 onMounted(async () => {
   const id = route.params.id as string
@@ -457,6 +478,29 @@ const deleteCommodity = async (id: string) => {
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid $border-color;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #f8f9fa;
+  padding: 0.5rem 0.75rem;
+  border-radius: $default-radius;
+  border: 1px solid #e9ecef;
+}
+
+.toggle-label {
+  font-size: 0.9rem;
+  margin: 0;
+  white-space: nowrap;
+  color: $text-color;
 }
 
 .commodities-grid {
