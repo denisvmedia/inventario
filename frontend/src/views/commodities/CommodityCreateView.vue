@@ -10,8 +10,6 @@
     </div>
     <h1>Create New Commodity</h1>
 
-    <div v-if="error" class="error-alert">{{ error }}</div>
-
     <CommodityForm
       ref="commodityForm"
       :initial-data="form"
@@ -27,6 +25,7 @@
       @validate="handleValidation"
     />
 
+    <div v-if="formError" class="form-error">{{ formError }}</div>
     <div v-if="debugInfo" class="debug-info">
       <h3>Debug Information</h3>
       <pre>{{ debugInfo }}</pre>
@@ -52,6 +51,7 @@ const route = useRoute()
 const commodityForm = ref(null)
 const isSubmitting = ref(false)
 const error = ref<string | null>(null)
+const formError = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
 const areas = ref<any[]>([])
 const commodityTypes = ref(COMMODITY_TYPES)
@@ -185,6 +185,7 @@ const submitForm = async (formData: any) => {
   console.log('CommodityCreateView: submitForm called with formData:', formData)
   isSubmitting.value = true
   error.value = null
+  formError.value = null
   debugInfo.value = null
 
   try {
@@ -263,13 +264,13 @@ const submitForm = async (formData: any) => {
         commodityForm.value.setErrors(apiErrors)
       }
 
-      if (Object.values(errors).some(e => e)) {
-        error.value = 'Please correct the errors above.'
+      if (Object.values(apiErrors).some(e => e)) {
+        formError.value = 'Please correct the errors above.'
       } else {
-        error.value = `Failed to create commodity: ${err.response.status} - ${JSON.stringify(err.response.data)}`
+        formError.value = `Failed to create commodity: ${err.response.status} - ${JSON.stringify(err.response.data)}`
       }
     } else {
-      error.value = 'Failed to create commodity: ' + (err.message || 'Unknown error')
+      formError.value = 'Failed to create commodity: ' + (err.message || 'Unknown error')
     }
   } finally {
     isSubmitting.value = false

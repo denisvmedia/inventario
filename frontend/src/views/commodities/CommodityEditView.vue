@@ -277,7 +277,7 @@ const submitForm = async (formData: any) => {
         commodityForm.value.setErrors(apiErrors)
       }
 
-      if (Object.values(errors).some(e => e)) {
+      if (Object.values(apiErrors).some(e => e)) {
         formError.value = 'Please correct the errors above.'
       } else {
         formError.value = `Failed to update commodity: ${err.response.status} - ${JSON.stringify(err.response.data)}`
