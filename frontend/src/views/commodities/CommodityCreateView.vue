@@ -113,6 +113,7 @@ onMounted(async () => {
     }
 
     // Fetch main currency from the store
+    // (fetched in App.vue)
     await settingsStore.fetchMainCurrency()
 
     // Fetch areas, locations, and currencies in parallel

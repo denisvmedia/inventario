@@ -113,15 +113,15 @@
           <div class="info-grid">
             <div class="info-row">
               <span class="label">Original Price:</span>
-              <span>{{ commodity.attributes.original_price }} {{ commodity.attributes.original_price_currency }}</span>
+              <span>{{ formatPrice(parseFloat(commodity.attributes.original_price) || 0, commodity.attributes.original_price_currency) }}</span>
             </div>
             <div class="info-row" v-if="commodity.attributes.converted_original_price !== '0' && commodity.attributes.converted_original_price !== 0">
               <span class="label">Converted Original Price:</span>
-              <span>{{ commodity.attributes.converted_original_price }} {{ mainCurrency }}</span>
+              <span>{{ formatPrice(parseFloat(commodity.attributes.converted_original_price) || 0, mainCurrency) }}</span>
             </div>
             <div class="info-row" v-if="!(commodity.attributes.original_price_currency === mainCurrency && parseFloat(commodity.attributes.original_price) > 0)">
               <span class="label">Current Price:</span>
-              <span>{{ commodity.attributes.current_price }} {{ mainCurrency }}</span>
+              <span>{{ formatPrice(parseFloat(commodity.attributes.current_price) || 0, mainCurrency) }}</span>
             </div>
           </div>
         </div>
@@ -197,6 +197,7 @@ import commodityService from '@/services/commodityService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import { formatPrice } from '@/utils/priceUtils'
 
 const route = useRoute()
 const router = useRouter()

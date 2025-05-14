@@ -37,16 +37,10 @@
                 </span>
                 <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
               </div>
-              <div class="commodity-price" v-if="!(commodity.attributes.original_price_currency === mainCurrency && parseFloat(commodity.attributes.original_price) > 0) && commodity.attributes.current_price">
-                <span class="price">{{ commodity.attributes.current_price }} {{ mainCurrency }}</span>
+              <div class="commodity-price">
+                <span class="price">{{ formatPrice(getDisplayPrice(commodity)) }}</span>
                 <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
-                  {{ calculatePricePerUnit(commodity) }} {{ mainCurrency }} per unit
-                </span>
-              </div>
-              <div class="commodity-price" v-else-if="commodity.attributes.original_price_currency === mainCurrency && parseFloat(commodity.attributes.original_price) > 0">
-                <span class="price">{{ commodity.attributes.original_price }} {{ commodity.attributes.original_price_currency }}</span>
-                <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
-                  {{ calculateOriginalPricePerUnit(commodity) }} {{ commodity.attributes.original_price_currency }} per unit
+                  {{ formatPrice(calculatePricePerUnit(commodity)) }} per unit
                 </span>
               </div>
               <div class="commodity-status" v-if="commodity.attributes.status">
@@ -81,6 +75,7 @@ import commodityService from '@/services/commodityService'
 import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import { formatPrice, getDisplayPrice, calculatePricePerUnit, mainCurrency as currencyServiceMainCurrency } from '@/services/currencyService'
 
 const router = useRouter()
 const route = useRoute()
@@ -91,7 +86,8 @@ const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
-const mainCurrency = ref<string>('USD') // Default to USD if not set
+// Use the main currency from the currency service
+const mainCurrency = currencyServiceMainCurrency
 
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
@@ -101,16 +97,7 @@ onMounted(async () => {
   const id = route.params.id as string
 
   try {
-    // Fetch main currency from settings
-    try {
-      const currency = await settingsService.getMainCurrency()
-      if (currency) {
-        mainCurrency.value = currency
-      }
-    } catch (settingsErr) {
-      console.error('Failed to load main currency from settings:', settingsErr)
-      // Continue with default currency
-    }
+    // Main currency is now handled by the currency service
 
     // Load area, locations, and commodities in parallel
     const [areaResponse, locationsResponse, commoditiesResponse] = await Promise.all([
@@ -208,16 +195,7 @@ const getStatusName = (statusId: string) => {
   return status ? status.name : statusId
 }
 
-// Calculate price per unit
-const calculatePricePerUnit = (commodity: any) => {
-  const price = parseFloat(commodity.attributes.current_price) || 0
-  const count = commodity.attributes.count || 1
-  if (count <= 1) return price
-
-  // Calculate price per unit and round to 2 decimal places
-  const pricePerUnit = price / count
-  return pricePerUnit.toFixed(2)
-}
+// Price utility functions are now imported from @/utils/priceUtils
 
 // Calculate original price per unit
 const calculateOriginalPricePerUnit = (commodity: any) => {

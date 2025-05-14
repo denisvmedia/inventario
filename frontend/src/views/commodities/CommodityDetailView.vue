@@ -56,19 +56,19 @@
           <h2>Price Information</h2>
           <div class="info-row">
             <span class="label">Original Price:</span>
-            <span>{{ commodity.attributes.original_price }} {{ commodity.attributes.original_price_currency }}</span>
+            <span>{{ formatPrice(parseFloat(commodity.attributes.original_price), commodity.attributes.original_price_currency) }}</span>
           </div>
           <div class="info-row" v-if="(commodity.attributes.original_price_currency !== mainCurrency) && parseFloat(commodity.attributes.converted_original_price) > 0">
             <span class="label">Converted Original Price:</span>
-            <span>{{ commodity.attributes.converted_original_price }} {{ mainCurrency }}</span>
+            <span>{{ formatPrice(parseFloat(commodity.attributes.converted_original_price)) }}</span>
           </div>
           <div class="info-row" v-if="parseFloat(commodity.attributes.current_price) > 0">
             <span class="label">Current Price:</span>
-            <span>{{ commodity.attributes.current_price }} {{ mainCurrency }}</span>
+            <span>{{ formatPrice(parseFloat(commodity.attributes.current_price)) }}</span>
           </div>
           <div class="info-row" v-if="(commodity.attributes.count || 1) > 1">
             <span class="label">Price Per Unit:</span>
-            <span>{{ calculatePricePerUnit() }} {{ mainCurrency }}</span>
+            <span>{{ formatPrice(calculatePricePerUnit(commodity)) }}</span>
           </div>
         </div>
 
@@ -215,6 +215,7 @@ import commodityService from '@/services/commodityService'
 import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import { formatPrice, calculatePricePerUnit, getDisplayPrice, mainCurrency as currencyServiceMainCurrency } from '@/services/currencyService'
 import FileUploader from '@/components/FileUploader.vue'
 import FileList from '@/components/FileList.vue'
 // import ImageViewer from '@/components/ImageViewer.vue' // Using FileViewer for all file types now
@@ -225,7 +226,8 @@ const route = useRoute()
 const commodity = ref<any>(null)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
-const mainCurrency = ref<string>('USD') // Default to USD if not set
+// Use the main currency from the currency service
+const mainCurrency = currencyServiceMainCurrency
 
 // Navigation source tracking
 const sourceIsArea = computed(() => route.query.source === 'area')
@@ -250,16 +252,7 @@ onMounted(async () => {
   const id = route.params.id as string
 
   try {
-    // Fetch main currency from settings
-    try {
-      const currency = await settingsService.getMainCurrency()
-      if (currency) {
-        mainCurrency.value = currency
-      }
-    } catch (settingsErr) {
-      console.error('Failed to load main currency from settings:', settingsErr)
-      // Continue with default currency
-    }
+    // Main currency is now handled by the currency service
 
     const response = await commodityService.getCommodity(id)
     commodity.value = response.data.data
@@ -558,18 +551,6 @@ const getStatusName = (statusId: string): string => {
 const formatDate = (date: string): string => {
   const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' }
   return new Date(date).toLocaleDateString('en-US', options)
-}
-
-const calculatePricePerUnit = (): string => {
-  if (!commodity.value) return '0.00'
-
-  const price = parseFloat(commodity.value.attributes.current_price) || 0
-  const count = commodity.value.attributes.count || 1
-  if (count <= 1) return price.toFixed(2)
-
-  // Calculate price per unit and round to 2 decimal places
-  const pricePerUnit = price / count
-  return pricePerUnit.toFixed(2)
 }
 </script>
 

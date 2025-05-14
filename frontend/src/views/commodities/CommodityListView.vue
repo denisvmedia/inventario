@@ -48,9 +48,9 @@
             <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
           </div>
           <div class="commodity-price">
-            <span class="price">{{ formatPrice(getDisplayPrice(commodity), mainCurrency) }}</span>
+            <span class="price">{{ formatPrice(getDisplayPrice(commodity)) }}</span>
             <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
-              {{ formatPrice(calculatePricePerUnit(commodity), mainCurrency) }} per unit
+              {{ formatPrice(calculatePricePerUnit(commodity)) }} per unit
             </span>
           </div>
           <div class="commodity-status">
@@ -79,6 +79,7 @@ import locationService from '@/services/locationService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import { formatPrice, calculatePricePerUnit, getDisplayPrice } from '@/services/currencyService'
 
 const router = useRouter()
 const route = useRoute()
@@ -88,9 +89,6 @@ const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
-
-// Use the main currency from the store
-const mainCurrency = computed(() => settingsStore.mainCurrency)
 
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
@@ -143,46 +141,6 @@ const getAreaName = (areaId: string) => {
 const getLocationName = (areaId: string) => {
   const locationId = areaMap.value[areaId]?.locationId
   return locationId ? locationMap.value[locationId]?.name || '' : ''
-}
-
-const formatPrice = (price: number, currency: string) => {
-  if (isNaN(price)) return 'N/A'
-  return price.toFixed(2) + ' ' + currency
-}
-
-// Calculate price per unit
-const calculatePricePerUnit = (commodity: any): number => {
-  const price = getDisplayPrice(commodity)
-  if (isNaN(price)) return NaN
-
-  const count = commodity.attributes.count || 1
-  if (count === 0) return price
-
-  // Calculate price per unit and round to 2 decimal places
-  return price / count
-}
-
-// Calculate price to display
-const getDisplayPrice = (commodity: any): number => {
-  const originalPrice = parseFloat(commodity.attributes.original_price) || 0
-  const originalPriceCurrency = commodity.attributes.original_price_currency
-  const originalPriceCurrencyIsMain = originalPriceCurrency === mainCurrency.value
-  const convertedOriginalPrice = parseFloat(commodity.attributes.converted_original_price) || 0
-  const currentPrice = parseFloat(commodity.attributes.current_price) || 0
-
-  if (currentPrice > 0) {
-    return currentPrice
-  }
-
-  if (originalPriceCurrencyIsMain && originalPrice > 0) {
-    return originalPrice
-  }
-
-  if (convertedOriginalPrice > 0) {
-    return convertedOriginalPrice
-  }
-
-  return NaN
 }
 
 onMounted(async () => {
