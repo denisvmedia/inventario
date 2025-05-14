@@ -287,7 +287,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, nextTick } from 'vue'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
@@ -394,7 +394,29 @@ const setErrors = (backendErrors) => {
         formErrors[camelKey] = backendErrors[key]
       }
     })
+
+    // If there are errors, scroll to the first one
+    if (Object.values(backendErrors).some(e => e)) {
+      scrollToFirstError()
+    }
   }
+}
+
+// Function to scroll to the first error in the form
+const scrollToFirstError = () => {
+  // Use nextTick to ensure the DOM has updated with error messages
+  nextTick(() => {
+    // Find the first element with an error message
+    const firstErrorElement = document.querySelector('.error-message')
+    if (firstErrorElement) {
+      // Find the parent form group to scroll to
+      const formGroup = firstErrorElement.closest('.form-group')
+      if (formGroup) {
+        // Scroll the form group into view with some padding at the top
+        formGroup.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }
+  })
 }
 
 // Expose the setErrors method
@@ -409,10 +431,10 @@ const validateForm = () => {
   })
 
   // Validation logic
-  // if (!formData.name.trim()) {
-  //   formErrors.name = 'Name is required'
-  //   isValid = false
-  // }
+  if (!formData.name.trim()) {
+    formErrors.name = 'Name is required'
+    isValid = false
+  }
 
   if (!formData.shortName.trim()) {
     formErrors.shortName = 'Short Name is required'
@@ -476,6 +498,12 @@ const validateForm = () => {
   }
 
   emit('validate', isValid, formErrors)
+
+  // If validation failed, scroll to the first error
+  if (!isValid) {
+    scrollToFirstError()
+  }
+
   return isValid
 }
 
