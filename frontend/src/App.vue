@@ -44,6 +44,8 @@ const isPrintRoute = computed(() => {
 </script>
 
 <style lang="scss">
+@import './assets/main.scss';
+
 .print-container {
   max-width: 100%;
   margin: 0;

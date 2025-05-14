@@ -23,18 +23,16 @@
 
       <div class="form-group">
         <label for="location">Location</label>
-        <select
+        <Select
           id="location"
           v-model="form.locationId"
-          required
-          class="form-control"
+          :options="locations"
+          optionLabel="attributes.name"
+          optionValue="id"
+          placeholder="Select a location"
+          class="w-100"
           :class="{ 'is-invalid': errors.locationId }"
-        >
-          <option value="" disabled>Select a location</option>
-          <option v-for="location in locations" :key="location.id" :value="location.id">
-            {{ location.attributes.name }}
-          </option>
-        </select>
+        />
         <div v-if="errors.locationId" class="error-message">{{ errors.locationId }}</div>
       </div>
 
@@ -60,6 +58,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
+import Select from 'primevue/select'
 
 const router = useRouter()
 const route = useRoute()
