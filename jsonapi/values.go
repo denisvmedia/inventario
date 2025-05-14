@@ -4,8 +4,6 @@ import (
 	"net/http"
 
 	"github.com/shopspring/decimal"
-
-	"github.com/denisvmedia/inventario/internal/valuation"
 )
 
 // ValueResponse represents a JSON API response for commodity values.
@@ -44,37 +42,5 @@ func NewValueResponse(globalTotal decimal.Decimal, locationTotals, areaTotals ma
 				AreaTotals:     areaTotals,
 			},
 		},
-	}
-}
-
-// DetailedValueResponse represents a JSON API response for detailed commodity values.
-type DetailedValueResponse struct {
-	Data []*DetailedValueData `json:"data"`
-}
-
-// DetailedValueData represents the data part of a JSON API response for detailed commodity values.
-type DetailedValueData struct {
-	Type       string                    `json:"type"`
-	ID         string                    `json:"id"`
-	Attributes *valuation.CommodityValue `json:"attributes"`
-}
-
-// Render implements the render.Renderer interface for DetailedValueResponse.
-func (dvr *DetailedValueResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
-// NewDetailedValueResponse creates a new DetailedValueResponse.
-func NewDetailedValueResponse(commodityValues []*valuation.CommodityValue) *DetailedValueResponse {
-	data := make([]*DetailedValueData, len(commodityValues))
-	for i, cv := range commodityValues {
-		data[i] = &DetailedValueData{
-			Type:       "commodity_values",
-			ID:         cv.CommodityID,
-			Attributes: cv,
-		}
-	}
-	return &DetailedValueResponse{
-		Data: data,
 	}
 }

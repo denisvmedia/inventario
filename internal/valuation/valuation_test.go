@@ -211,7 +211,7 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 		// Check values by location ID
 		for locationName, expectedValue := range expectedTotals {
 			locationID, ok := locationsByName[locationName]
-			c.Assert(err, qt.IsNil, qt.Commentf("Expected to find location with Name %s", locationName))
+			c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find location with Name %s", locationName))
 
 			actualValue, ok := locationTotals[locationID]
 			c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find location with ID %s", locationID))
@@ -240,9 +240,10 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		var area1ID, area2ID string
 		for _, area := range areas {
-			if area.Name == "Area 1" {
+			switch area.Name {
+			case "Area 1":
 				area1ID = area.ID
-			} else if area.Name == "Area 2" {
+			case "Area 2":
 				area2ID = area.ID
 			}
 		}
