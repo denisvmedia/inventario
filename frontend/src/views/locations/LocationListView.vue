@@ -7,6 +7,14 @@
       </button>
     </div>
 
+    <!-- Grand Total Value Display -->
+    <div v-if="!valuesLoading && globalTotal > 0" class="grand-total-card">
+      <div class="grand-total-content">
+        <h3>Total Inventory Value</h3>
+        <div class="grand-total-value">{{ formatPrice(globalTotal, mainCurrency) }}</div>
+      </div>
+    </div>
+
     <!-- Inline Location Creation Form -->
     <LocationForm
       v-if="showLocationForm"
@@ -124,6 +132,7 @@ const error = ref<string | null>(null)
 // Values data
 const areaTotals = ref<any[]>([])
 const locationTotals = ref<any[]>([])
+const globalTotal = ref<number>(0)
 const valuesLoading = ref<boolean>(true)
 const valuesError = ref<string | null>(null)
 
@@ -148,6 +157,14 @@ async function loadValues() {
   try {
     const response = await valueService.getValues()
     const data = response.data.data.attributes
+
+    // Store global total
+    if (data.global_total) {
+      // Parse the decimal string to a number
+      globalTotal.value = typeof data.global_total === 'string'
+        ? parseFloat(data.global_total)
+        : data.global_total
+    }
 
     // Store area totals - ensure it's an array
     if (Array.isArray(data.area_totals)) {
@@ -591,6 +608,32 @@ const deleteArea = async (id: string) => {
 .value-label {
   color: $text-color;
   font-weight: normal;
+}
+
+.grand-total-card {
+  background: white;
+  border-radius: $default-radius;
+  padding: 1.5rem;
+  box-shadow: $box-shadow;
+  margin-bottom: 1.5rem;
+  border-left: 4px solid $primary-color;
+}
+
+.grand-total-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.grand-total-content h3 {
+  margin: 0;
+  color: $text-color;
+}
+
+.grand-total-value {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: $primary-color;
 }
 
 
