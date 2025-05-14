@@ -26,7 +26,7 @@ type ValueAttrs struct {
 }
 
 // Render implements the render.Renderer interface for ValueResponse.
-func (vr *ValueResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (*ValueResponse) Render(_w http.ResponseWriter, _r *http.Request) error {
 	return nil
 }
 

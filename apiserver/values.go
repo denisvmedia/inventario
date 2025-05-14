@@ -23,7 +23,7 @@ type valuesAPI struct {
 // @Produce json-api
 // @Success 200 {object} jsonapi.ValueResponse "OK"
 // @Router /commodities/values [get]
-func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) {
+func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	// Create a valuator
 	valuator := valuation.NewValuator(api.registrySet)
 

@@ -204,7 +204,6 @@ func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, erro
 
 	// Calculate the total value by area
 	areaTotals := make(map[string]decimal.Decimal)
-	commodityValues := make([]*CommodityValue, 0)
 
 	for _, commodity := range commodities {
 		// Skip draft commodities
@@ -231,14 +230,6 @@ func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, erro
 			areaTotals[commodity.AreaID] = decimal.NewFromInt(0)
 		}
 		areaTotals[commodity.AreaID] = areaTotals[commodity.AreaID].Add(value)
-
-		// Add to the list of commodity values
-		commodityValues = append(commodityValues, &CommodityValue{
-			CommodityID: commodity.ID,
-			Name:        commodity.Name,
-			AreaID:      commodity.AreaID,
-			Value:       value,
-		})
 	}
 
 	return areaTotals, nil
