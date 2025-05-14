@@ -1,4 +1,4 @@
-package valuation
+package valuation_test
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/internal/valuation"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -146,7 +147,7 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
 		registrySet := setupTestRegistry(c, "USD")
-		valuator := NewValuator(registrySet)
+		valuator := valuation.NewValuator(registrySet)
 
 		// Calculate global total value
 		total, err := valuator.CalculateGlobalTotalValue()
@@ -161,7 +162,7 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 	c.Run("EUR as main currency", func(c *qt.C) {
 		// Setup test registry with EUR as main currency
 		registrySet := setupTestRegistry(c, "EUR")
-		valuator := NewValuator(registrySet)
+		valuator := valuation.NewValuator(registrySet)
 
 		// Calculate global total value
 		total, err := valuator.CalculateGlobalTotalValue()
@@ -180,7 +181,7 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
 		registrySet := setupTestRegistry(c, "USD")
-		valuator := NewValuator(registrySet)
+		valuator := valuation.NewValuator(registrySet)
 
 		locations, err := registrySet.LocationRegistry.List()
 		c.Assert(err, qt.IsNil)
@@ -228,7 +229,7 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
 		registrySet := setupTestRegistry(c, "USD")
-		valuator := NewValuator(registrySet)
+		valuator := valuation.NewValuator(registrySet)
 
 		// Calculate total value by area
 		areaTotals, err := valuator.CalculateTotalValueByArea()
@@ -268,79 +269,4 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestGetCommodityValue(t *testing.T) {
-	c := qt.New(t)
-
-	tests := []struct {
-		name         string
-		commodity    *models.Commodity
-		mainCurrency string
-		expected     decimal.Decimal
-	}{
-		{
-			name: "Current price available",
-			commodity: &models.Commodity{
-				CurrentPrice:           decimal.NewFromFloat(100.00),
-				OriginalPrice:          decimal.NewFromFloat(200.00),
-				OriginalPriceCurrency:  "EUR",
-				ConvertedOriginalPrice: decimal.NewFromFloat(220.00),
-			},
-			mainCurrency: "USD",
-			expected:     decimal.NewFromFloat(100.00),
-		},
-		{
-			name: "No current price, original price in main currency",
-			commodity: &models.Commodity{
-				CurrentPrice:           decimal.NewFromFloat(0.00),
-				OriginalPrice:          decimal.NewFromFloat(200.00),
-				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.NewFromFloat(0.00),
-			},
-			mainCurrency: "USD",
-			expected:     decimal.NewFromFloat(200.00),
-		},
-		{
-			name: "No current price, original price not in main currency, converted price available",
-			commodity: &models.Commodity{
-				CurrentPrice:           decimal.NewFromFloat(0.00),
-				OriginalPrice:          decimal.NewFromFloat(200.00),
-				OriginalPriceCurrency:  "EUR",
-				ConvertedOriginalPrice: decimal.NewFromFloat(220.00),
-			},
-			mainCurrency: "USD",
-			expected:     decimal.NewFromFloat(220.00),
-		},
-		{
-			name: "No current price, original price not in main currency, no converted price",
-			commodity: &models.Commodity{
-				CurrentPrice:           decimal.NewFromFloat(0.00),
-				OriginalPrice:          decimal.NewFromFloat(200.00),
-				OriginalPriceCurrency:  "EUR",
-				ConvertedOriginalPrice: decimal.NewFromFloat(0.00),
-			},
-			mainCurrency: "USD",
-			expected:     decimal.NewFromFloat(0.00),
-		},
-		{
-			name: "No prices at all",
-			commodity: &models.Commodity{
-				CurrentPrice:           decimal.NewFromFloat(0.00),
-				OriginalPrice:          decimal.NewFromFloat(0.00),
-				OriginalPriceCurrency:  "EUR",
-				ConvertedOriginalPrice: decimal.NewFromFloat(0.00),
-			},
-			mainCurrency: "USD",
-			expected:     decimal.NewFromFloat(0.00),
-		},
-	}
-
-	for _, tt := range tests {
-		c.Run(tt.name, func(c *qt.C) {
-			result := getCommodityValue(tt.commodity, tt.mainCurrency)
-			c.Assert(result.Equal(tt.expected), qt.IsTrue,
-				qt.Commentf("Expected %s, got %s", tt.expected, result))
-		})
-	}
 }

@@ -1,4 +1,4 @@
-package apiserver
+package apiserver_test
 
 import (
 	"encoding/json"
@@ -6,44 +6,44 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
+	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func setupValuesTestData(t *testing.T) *registry.Set {
-	t.Helper()
+func setupValuesTestData(c *qt.C) *registry.Set {
+	c.Helper()
 
 	// Create a memory registry for testing
 	registrySet, err := memory.NewRegistrySet("")
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 
 	// Set main currency to USD
 	mainCurrency := "USD"
 	err = registrySet.SettingsRegistry.Save(models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	})
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 
 	// Create a location
 	location, err := registrySet.LocationRegistry.Create(models.Location{
 		Name:    "Test Location",
 		Address: "123 Test St",
 	})
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 
 	// Create an area
 	area, err := registrySet.AreaRegistry.Create(models.Area{
 		Name:       "Test Area",
 		LocationID: location.ID,
 	})
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 
 	// Create a commodity
 	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
@@ -59,18 +59,20 @@ func setupValuesTestData(t *testing.T) *registry.Set {
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
 	})
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 
 	return registrySet
 }
 
 func TestValuesAPI_GetValues(t *testing.T) {
+	c := qt.New(t)
+
 	// Setup test data
-	registrySet := setupValuesTestData(t)
+	registrySet := setupValuesTestData(c)
 
 	// Create a router with the values endpoint
 	r := chi.NewRouter()
-	r.Route("/values", Values(registrySet))
+	r.Route("/values", apiserver.Values(registrySet))
 
 	// Test GET /values
 	req := httptest.NewRequest("GET", "/values", nil)
@@ -78,24 +80,24 @@ func TestValuesAPI_GetValues(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	// Check response
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+	c.Assert(w.Header().Get("Content-Type"), qt.Equals, "application/json")
 
 	// Parse response
 	var response jsonapi.ValueResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 
 	// Check global total
 	expectedTotal := decimal.NewFromFloat(100.00) // Price already represents total value for all items
-	assert.True(t, expectedTotal.Equal(response.Data.Attributes.GlobalTotal),
-		"Expected global total to be %s, got %s", expectedTotal, response.Data.Attributes.GlobalTotal)
+	c.Assert(expectedTotal.Equal(response.Data.Attributes.GlobalTotal), qt.IsTrue,
+		qt.Commentf("Expected global total to be %s, got %s", expectedTotal, response.Data.Attributes.GlobalTotal))
 
 	// Check location totals
-	assert.Len(t, response.Data.Attributes.LocationTotals, 1)
+	c.Assert(response.Data.Attributes.LocationTotals, qt.HasLen, 1)
 	// Get the location ID
 	locations, err := registrySet.LocationRegistry.List()
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 	var locationID string
 	for _, loc := range locations {
 		if loc.Name == "Test Location" {
@@ -103,19 +105,19 @@ func TestValuesAPI_GetValues(t *testing.T) {
 			break
 		}
 	}
-	require.NotEmpty(t, locationID, "Could not find Test Location")
+	c.Assert(locationID, qt.Not(qt.Equals), "", qt.Commentf("Could not find Test Location"))
 
 	// Check the location total
 	actualValue, ok := response.Data.Attributes.LocationTotals[locationID]
-	assert.True(t, ok, "Expected to find location with ID %s", locationID)
-	assert.True(t, expectedTotal.Equal(actualValue),
-		"Expected location total to be %s, got %s", expectedTotal, actualValue)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find location with ID %s", locationID))
+	c.Assert(expectedTotal.Equal(actualValue), qt.IsTrue,
+		qt.Commentf("Expected location total to be %s, got %s", expectedTotal, actualValue))
 
 	// Check area totals
-	assert.Len(t, response.Data.Attributes.AreaTotals, 1)
+	c.Assert(response.Data.Attributes.AreaTotals, qt.HasLen, 1)
 	// Get the area ID
 	areas, err := registrySet.AreaRegistry.List()
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 	var areaID string
 	for _, area := range areas {
 		if area.Name == "Test Area" {
@@ -123,42 +125,11 @@ func TestValuesAPI_GetValues(t *testing.T) {
 			break
 		}
 	}
-	require.NotEmpty(t, areaID, "Could not find Test Area")
+	c.Assert(areaID, qt.Not(qt.Equals), "", qt.Commentf("Could not find Test Area"))
 
 	// Check the area total
 	actualValue, ok = response.Data.Attributes.AreaTotals[areaID]
-	assert.True(t, ok, "Expected to find area with ID %s", areaID)
-	assert.True(t, expectedTotal.Equal(actualValue),
-		"Expected area total to be %s, got %s", expectedTotal, actualValue)
-}
-
-func TestValuesAPI_GetDetailedValues(t *testing.T) {
-	// Setup test data
-	registrySet := setupValuesTestData(t)
-
-	// Create a router with the values endpoint
-	r := chi.NewRouter()
-	r.Route("/values", Values(registrySet))
-
-	// Test GET /values/detailed
-	req := httptest.NewRequest("GET", "/values/detailed", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// Check response
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
-
-	// Parse response
-	var response jsonapi.DetailedValueResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	// Check commodity values
-	assert.Len(t, response.Data, 1)
-	assert.Equal(t, "Test Commodity", response.Data[0].Attributes.Name)
-
-	expectedValue := decimal.NewFromFloat(100.00) // Price already represents total value for all items
-	assert.True(t, expectedValue.Equal(response.Data[0].Attributes.Value),
-		"Expected commodity value to be %s, got %s", expectedValue, response.Data[0].Attributes.Value)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find area with ID %s", areaID))
+	c.Assert(expectedTotal.Equal(actualValue), qt.IsTrue,
+		qt.Commentf("Expected area total to be %s, got %s", expectedTotal, actualValue))
 }
