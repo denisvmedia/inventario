@@ -15,6 +15,9 @@
             {{ area.attributes.name }}
           </h1>
           <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
+          <div v-if="areaTotalValue > 0" class="total-value">
+            Total Value: <span class="value-amount">{{ formatPrice(areaTotalValue, getMainCurrency()) }}</span>
+          </div>
         </div>
         <div class="actions">
           <button class="btn btn-danger" @click="confirmDelete" title="Delete"><font-awesome-icon icon="trash" /></button>
@@ -37,10 +40,10 @@
                 </span>
                 <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
               </div>
-              <div class="commodity-price" v-if="commodity.attributes.current_price">
-                <span class="price">{{ commodity.attributes.current_price }} {{ mainCurrency }}</span>
+              <div class="commodity-price">
+                <span class="price">{{ formatPrice(getDisplayPrice(commodity)) }}</span>
                 <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
-                  {{ calculatePricePerUnit(commodity) }} {{ mainCurrency }} per unit
+                  {{ formatPrice(calculatePricePerUnit(commodity)) }} per unit
                 </span>
               </div>
               <div class="commodity-status" v-if="commodity.attributes.status">
@@ -72,9 +75,11 @@ import { useRouter, useRoute } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import commodityService from '@/services/commodityService'
+import valueService from '@/services/valueService'
 import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import { formatPrice, getDisplayPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
 
 const router = useRouter()
 const route = useRoute()
@@ -85,7 +90,11 @@ const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
-const mainCurrency = ref<string>('USD') // Default to USD if not set
+
+
+// Area total value
+const areaTotalValue = ref<number>(0)
+const valuesLoading = ref<boolean>(true)
 
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
@@ -95,22 +104,14 @@ onMounted(async () => {
   const id = route.params.id as string
 
   try {
-    // Fetch main currency from settings
-    try {
-      const currency = await settingsService.getMainCurrency()
-      if (currency) {
-        mainCurrency.value = currency
-      }
-    } catch (settingsErr) {
-      console.error('Failed to load main currency from settings:', settingsErr)
-      // Continue with default currency
-    }
+    // Main currency is now handled by the currency service
 
-    // Load area, locations, and commodities in parallel
-    const [areaResponse, locationsResponse, commoditiesResponse] = await Promise.all([
+    // Load area, locations, commodities, and values in parallel
+    const [areaResponse, locationsResponse, commoditiesResponse, valuesResponse] = await Promise.all([
       areaService.getArea(id),
       locationService.getLocations(),
-      commodityService.getCommodities()
+      commodityService.getCommodities(),
+      valueService.getValues()
     ])
 
     area.value = areaResponse.data.data
@@ -142,6 +143,57 @@ onMounted(async () => {
     commodities.value = commoditiesResponse.data.data.filter(
       (commodity: any) => commodity.attributes.area_id === id
     )
+
+    // Get the area total value from the values response
+    try {
+      // Ensure we have a valid data structure
+      const valueAttributes = valuesResponse?.data?.data?.attributes || {}
+      const areaTotals = valueAttributes.area_totals || []
+
+      // Handle both array and object formats for area_totals
+      let areaValue = null
+      if (Array.isArray(areaTotals)) {
+        // If it's an array, use find
+        areaValue = areaTotals.find((areaValue: any) => areaValue.id === id)
+      } else if (areaTotals && typeof areaTotals === 'object') {
+        // If it's an object with key-value pairs, check if our ID exists as a key
+        if (areaTotals[id]) {
+          areaValue = {
+            id: id,
+            value: areaTotals[id]
+          }
+        }
+      }
+
+      if (areaValue) {
+        areaTotalValue.value = parseFloat(areaValue.value)
+      } else {
+        // If no value found in the API response, calculate it from the commodities
+        areaTotalValue.value = commodities.value.reduce((total: number, commodity: any) => {
+          // Only include commodities that are in use and not drafts
+          if (commodity.attributes.status === 'in_use' && !commodity.attributes.draft) {
+            const price = getDisplayPrice(commodity)
+            if (!isNaN(price)) {
+              return total + price
+            }
+          }
+          return total
+        }, 0)
+      }
+    } catch (err) {
+      console.error('Error processing area values:', err)
+      // Fallback to calculating from commodities
+      areaTotalValue.value = commodities.value.reduce((total: number, commodity: any) => {
+        // Only include commodities that are in use and not drafts
+        if (commodity.attributes.status === 'in_use' && !commodity.attributes.draft) {
+          const price = getDisplayPrice(commodity)
+          if (!isNaN(price)) {
+            return total + price
+          }
+        }
+        return total
+      }, 0)
+    }
 
     loading.value = false
 
@@ -202,9 +254,11 @@ const getStatusName = (statusId: string) => {
   return status ? status.name : statusId
 }
 
-// Calculate price per unit
-const calculatePricePerUnit = (commodity: any) => {
-  const price = parseFloat(commodity.attributes.current_price) || 0
+// Price utility functions are now imported from @/utils/priceUtils
+
+// Calculate original price per unit
+const calculateOriginalPricePerUnit = (commodity: any) => {
+  const price = parseFloat(commodity.attributes.original_price) || 0
   const count = commodity.attributes.count || 1
   if (count <= 1) return price
 
@@ -351,6 +405,19 @@ const deleteCommodity = async (id: string) => {
   color: $text-color;
   font-style: italic;
   margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.total-value {
+  font-size: 1rem;
+  color: $text-color;
+  margin-top: 0.25rem;
+
+  .value-amount {
+    font-weight: bold;
+    color: $primary-color;
+    font-size: 1.1rem;
+  }
 }
 
 .actions {

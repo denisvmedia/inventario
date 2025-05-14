@@ -32,14 +32,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 const route = useRoute()
+const settingsStore = useSettingsStore()
 
 // Check if current route is a print route
 const isPrintRoute = computed(() => {
   return route.path.includes('/print')
+})
+
+// Initialize global settings when the app starts
+onMounted(async () => {
+  // Fetch main currency
+  await settingsStore.fetchMainCurrency()
 })
 </script>
 

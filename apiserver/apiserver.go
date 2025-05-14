@@ -118,6 +118,7 @@ func APIServer(params Params) http.Handler {
 		r.Route("/currencies", Currencies())
 		r.Route("/uploads", Uploads(params))
 		r.Route("/seed", Seed(params.RegistrySet))
+		r.Route("/commodities/values", Values(params.RegistrySet))
 	})
 
 	return r

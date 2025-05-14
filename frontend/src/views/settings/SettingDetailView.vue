@@ -156,11 +156,13 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
+import { useSettingsStore } from '@/stores/settingsStore'
 import NotificationBanner from '@/components/NotificationBanner.vue'
 import Select from 'primevue/select'
 
 const route = useRoute()
 const router = useRouter()
+const settingsStore = useSettingsStore()
 const settingId = computed(() => route.params.id as string)
 
 const loading = ref<boolean>(true)
@@ -410,8 +412,8 @@ async function saveSystemConfig() {
 
   isSubmitting.value = true
   try {
-    // Update main currency
-    await settingsService.updateMainCurrency(systemConfig.value.main_currency)
+    // Update main currency using the store
+    await settingsStore.updateMainCurrency(systemConfig.value.main_currency)
 
     // Note: other system config fields are not in the settings model, so we don't update them
 
