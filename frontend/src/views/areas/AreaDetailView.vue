@@ -29,8 +29,8 @@
           <div class="section-title">
             <h2>Commodities</h2>
             <div class="filter-toggle">
-              <InputSwitch v-model="hideInactiveItems" />
-              <label class="toggle-label">Hide drafts & inactive items</label>
+              <InputSwitch v-model="showInactiveItems" />
+              <label class="toggle-label">Show drafts & inactive items</label>
             </div>
           </div>
           <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
@@ -114,11 +114,11 @@ const highlightCommodityId = ref(route.query.highlightCommodityId as string || '
 let highlightTimeout: number | null = null
 
 // Filter toggle state
-const hideInactiveItems = ref(false)
+const showInactiveItems = ref(false)
 
 // Filtered commodities based on toggle state
 const filteredCommodities = computed(() => {
-  if (!hideInactiveItems.value) {
+  if (showInactiveItems.value) {
     return commodities.value
   }
 

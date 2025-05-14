@@ -9,8 +9,8 @@
       </div>
       <div class="header-actions">
         <div class="filter-toggle">
-          <InputSwitch v-model="hideInactiveItems" />
-          <label class="toggle-label">Hide drafts & inactive items</label>
+          <InputSwitch v-model="showInactiveItems" />
+          <label class="toggle-label">Show drafts & inactive items</label>
         </div>
         <router-link v-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
         <router-link v-else-if="locations.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
@@ -122,7 +122,7 @@ const highlightCommodityId = ref(route.query.highlightCommodityId as string || '
 let highlightTimeout: number | null = null
 
 // Filter toggle state
-const hideInactiveItems = ref(false)
+const showInactiveItems = ref(false)
 
 // Computed property to check if there are locations and areas
 const hasLocationsAndAreas = computed(() => {
@@ -131,7 +131,7 @@ const hasLocationsAndAreas = computed(() => {
 
 // Filtered commodities based on toggle state
 const filteredCommodities = computed(() => {
-  if (!hideInactiveItems.value) {
+  if (showInactiveItems.value) {
     return commodities.value
   }
 
