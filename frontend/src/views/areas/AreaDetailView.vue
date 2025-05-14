@@ -30,7 +30,14 @@
           <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
         </div>
         <div class="commodities-grid">
-          <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" :class="{ 'highlighted': commodity.id === highlightCommodityId, 'draft': commodity.attributes.draft }">
+          <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" :class="{
+            'highlighted': commodity.id === highlightCommodityId,
+            'draft': commodity.attributes.draft,
+            'sold': !commodity.attributes.draft && commodity.attributes.status === 'sold',
+            'lost': !commodity.attributes.draft && commodity.attributes.status === 'lost',
+            'disposed': !commodity.attributes.draft && commodity.attributes.status === 'disposed',
+            'written-off': !commodity.attributes.draft && commodity.attributes.status === 'written_off'
+          }">
             <div class="commodity-content" @click="viewCommodity(commodity.id)">
               <h3>{{ commodity.attributes.name }}</h3>
               <div class="commodity-meta">
@@ -491,6 +498,103 @@ const deleteCommodity = async (id: string) => {
     .status {
       background-color: #e2e3e5 !important;
       color: #383d41 !important;
+    }
+  }
+
+  &.sold {
+    position: relative;
+    filter: grayscale(0.8);
+
+    &::before {
+      content: 'SOLD';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: rgba(204, 229, 255, 0.8);
+      border: 3px solid rgba(0, 64, 133, 0.5);
+      padding: 0.5rem 1rem;
+      border-radius: $default-radius;
+      z-index: 1;
+      pointer-events: none;
+    }
+  }
+
+  &.lost {
+    position: relative;
+    filter: saturate(0.7);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 243, 205, 0.3);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    &::after {
+      content: '⚠️';
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      font-size: 1.5rem;
+      z-index: 2;
+      pointer-events: none;
+    }
+  }
+
+  &.disposed {
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(248, 215, 218, 0.3);
+      background-image: linear-gradient(45deg, transparent, transparent 48%, rgba(114, 28, 36, 0.2) 49%, rgba(114, 28, 36, 0.2) 51%, transparent 52%, transparent);
+      background-size: 20px 20px;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    &::after {
+      content: '🗑️';
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      font-size: 1.5rem;
+      z-index: 2;
+      pointer-events: none;
+    }
+  }
+
+  &.written-off {
+    position: relative;
+    filter: contrast(0.8);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(226, 227, 229, 0.3);
+      background-image:
+        linear-gradient(45deg, transparent, transparent 45%, rgba(56, 61, 65, 0.3) 46%, rgba(56, 61, 65, 0.3) 54%, transparent 55%, transparent),
+        linear-gradient(135deg, transparent, transparent 45%, rgba(56, 61, 65, 0.3) 46%, rgba(56, 61, 65, 0.3) 54%, transparent 55%, transparent);
+      background-size: 30px 30px;
+      z-index: 1;
+      pointer-events: none;
     }
   }
 }
