@@ -212,13 +212,10 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
-import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 import { formatPrice, calculatePricePerUnit, getDisplayPrice, getMainCurrency } from '@/services/currencyService'
 import FileUploader from '@/components/FileUploader.vue'
-import FileList from '@/components/FileList.vue'
-// import ImageViewer from '@/components/ImageViewer.vue' // Using FileViewer for all file types now
 import FileViewer from '@/components/FileViewer.vue'
 
 const router = useRouter()
@@ -226,7 +223,6 @@ const route = useRoute()
 const commodity = ref<any>(null)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
-// Use the main currency from the currency service
 
 // Navigation source tracking
 const sourceIsArea = computed(() => route.query.source === 'area')
@@ -251,8 +247,6 @@ onMounted(async () => {
   const id = route.params.id as string
 
   try {
-    // Main currency is now handled by the currency service
-
     const response = await commodityService.getCommodity(id)
     commodity.value = response.data.data
     loading.value = false
