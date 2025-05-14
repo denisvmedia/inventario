@@ -43,6 +43,7 @@ import { useRoute, useRouter } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
 import settingsService from '@/services/settingsService'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
@@ -50,6 +51,7 @@ import CommodityForm from '@/components/CommodityForm.vue'
 
 const route = useRoute()
 const router = useRouter()
+const settingsStore = useSettingsStore()
 const id = route.params.id as string
 const commodityForm = ref(null)
 
@@ -69,7 +71,9 @@ const debugInfo = ref<string | null>(null)
 const commodityTypes = ref(COMMODITY_TYPES)
 const commodityStatuses = ref(COMMODITY_STATUSES)
 const currencies = ref<any[]>([])
-const mainCurrency = ref<string>(CURRENCY_CZK)
+
+// Use the main currency from the store
+const mainCurrency = computed(() => settingsStore.mainCurrency)
 
 const form = reactive({
   name: '',
@@ -78,7 +82,7 @@ const form = reactive({
   areaId: '',
   count: 1,
   originalPrice: 0,
-  originalPriceCurrency: CURRENCY_CZK,
+  originalPriceCurrency: computed(() => settingsStore.mainCurrency).value,
   convertedOriginalPrice: 0,
   currentPrice: 0,
   serialNumber: '',
@@ -110,12 +114,14 @@ const errors = reactive({
 
 onMounted(async () => {
   try {
+    // Fetch main currency from the store
+    await settingsStore.fetchMainCurrency()
+
     // Load commodity, areas, and currencies in parallel
-    const [commodityResponse, areasResponse, currenciesResponse, mainCurrencyResponse] = await Promise.all([
+    const [commodityResponse, areasResponse, currenciesResponse] = await Promise.all([
       commodityService.getCommodity(id),
       areaService.getAreas(),
-      settingsService.getCurrencies(),
-      settingsService.getMainCurrency()
+      settingsService.getCurrencies()
     ])
 
     // Process commodity data
@@ -141,10 +147,7 @@ onMounted(async () => {
       }
     })
 
-    // Set main currency if available
-    if (mainCurrencyResponse) {
-      mainCurrency.value = mainCurrencyResponse
-    }
+    // Main currency is already set from the store
 
     // Initialize form with commodity data
     const attrs = commodity.value.attributes
