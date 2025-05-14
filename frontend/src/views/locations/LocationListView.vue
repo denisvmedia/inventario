@@ -76,6 +76,9 @@
             >
               <div class="area-content">
                 <h5>{{ area.attributes.name }}</h5>
+                <div v-if="!valuesLoading" class="area-value">
+                  {{ getAreaValue(area.id) }}
+                </div>
               </div>
               <div class="area-actions">
                 <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)" title="Edit">
@@ -97,19 +100,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
+import valueService from '@/services/valueService'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { formatPrice } from '@/services/currencyService'
 import LocationForm from '@/components/LocationForm.vue'
 import AreaForm from '@/components/AreaForm.vue'
 
 const router = useRouter()
 const route = useRoute()
+const settingsStore = useSettingsStore()
 const locations = ref<any[]>([])
 const areas = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+
+// Values data
+const areaTotals = ref<any[]>([])
+const valuesLoading = ref<boolean>(true)
+const valuesError = ref<string | null>(null)
+
+// Main currency from settings store
+const mainCurrency = computed(() => settingsStore.mainCurrency)
 
 // State for inline forms
 const showLocationForm = ref(false)
@@ -121,12 +136,74 @@ const expandedLocations = ref<string[]>([])
 // Reference to the area element to scroll to
 const areaToFocus = ref<string | null>(null)
 
+// Function to load values
+async function loadValues() {
+  valuesLoading.value = true
+  valuesError.value = null
+
+  try {
+    const response = await valueService.getValues()
+    const data = response.data.data.attributes
+
+    // Store area totals - ensure it's an array
+    if (Array.isArray(data.area_totals)) {
+      areaTotals.value = data.area_totals
+    } else {
+      console.log('Area totals is not an array:', data.area_totals)
+      // Convert to array if it's an object with key-value pairs
+      if (data.area_totals && typeof data.area_totals === 'object') {
+        areaTotals.value = Object.entries(data.area_totals).map(([id, value]) => ({
+          id,
+          value
+        }))
+      } else {
+        areaTotals.value = []
+      }
+    }
+  } catch (error) {
+    console.error('Error loading values:', error)
+    valuesError.value = 'Failed to load inventory values'
+  } finally {
+    valuesLoading.value = false
+  }
+}
+
+// Function to get the value for a specific area
+const getAreaValue = (areaId: string): string => {
+  if (valuesLoading.value) return 'Loading...'
+
+  // Check if areaTotals is an array
+  if (!Array.isArray(areaTotals.value)) {
+    console.error('areaTotals is not an array:', areaTotals.value)
+    return '0.00 ' + mainCurrency.value
+  }
+
+  // Find the area value in the array
+  const areaValue = areaTotals.value.find(area => area.id === areaId)
+  if (areaValue && areaValue.value) {
+    // Handle both string and number values
+    const valueAsNumber = typeof areaValue.value === 'string'
+      ? parseFloat(areaValue.value)
+      : areaValue.value
+
+    if (!isNaN(valueAsNumber)) {
+      return formatPrice(valueAsNumber, mainCurrency.value)
+    }
+  }
+
+  return '0.00 ' + mainCurrency.value
+}
+
 onMounted(async () => {
   try {
-    // Load locations and areas in parallel
-    const [locationsResponse, areasResponse] = await Promise.all([
+    // Make sure we have the main currency
+    await settingsStore.fetchMainCurrency()
+
+    // Load locations, areas, and values in parallel
+    const [locationsResponse, areasResponse, _] = await Promise.all([
       locationService.getLocations(),
-      areaService.getAreas()
+      areaService.getAreas(),
+      loadValues() // Load values in parallel
     ])
 
     locations.value = locationsResponse.data.data
@@ -410,6 +487,13 @@ const deleteArea = async (id: string) => {
   h5 {
     margin: 0;
     font-size: 1rem;
+  }
+
+  .area-value {
+    font-size: 0.85rem;
+    color: $primary-color;
+    margin-top: 0.25rem;
+    font-weight: 500;
   }
 }
 
