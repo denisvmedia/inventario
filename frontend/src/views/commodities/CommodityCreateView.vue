@@ -10,309 +10,26 @@
     </div>
     <h1>Create New Commodity</h1>
 
-    <form @submit.prevent="submitForm" class="form">
-      <!-- Basic Information -->
-      <div class="form-section">
-        <h2>Basic Information</h2>
+    <CommodityForm
+      ref="commodityForm"
+      :initial-data="form"
+      :areas="areas"
+      :currencies="currencies"
+      :main-currency="mainCurrency"
+      :area-from-url="areaFromUrl"
+      :is-submitting="isSubmitting"
+      submit-button-text="Create Commodity"
+      submit-button-loading-text="Creating..."
+      @submit="submitForm"
+      @cancel="cancel"
+      @validate="handleValidation"
+    />
 
-        <div class="form-group">
-          <label for="name">Name</label>
-          <input
-            type="text"
-            id="name"
-            v-model="form.name"
-            required
-            class="form-control"
-            :class="{ 'is-invalid': errors.name }"
-          >
-          <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="shortName">Short Name</label>
-          <input
-            type="text"
-            id="shortName"
-            v-model="form.shortName"
-            required
-            maxlength="20"
-            class="form-control"
-            :class="{ 'is-invalid': errors.shortName }"
-          >
-          <div v-if="errors.shortName" class="error-message">{{ errors.shortName }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="type">Type</label>
-          <Select
-            id="type"
-            v-model="form.type"
-            :options="commodityTypes"
-            optionLabel="name"
-            optionValue="id"
-            placeholder="Select a type"
-            class="w-100"
-            :class="{ 'is-invalid': errors.type }"
-          />
-          <div v-if="errors.type" class="error-message">{{ errors.type }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="area">Area</label>
-          <div v-if="areaFromUrl">
-            <input
-              type="text"
-              id="area"
-              :value="areaName"
-              disabled
-              class="form-control"
-            >
-            <input type="hidden" v-model="form.areaId">
-          </div>
-          <Select
-            v-else
-            id="area"
-            v-model="form.areaId"
-            :options="areas"
-            optionLabel="attributes.name"
-            optionValue="id"
-            placeholder="Select an area"
-            class="w-100"
-            :class="{ 'is-invalid': errors.areaId }"
-          />
-          <div v-if="errors.areaId" class="error-message">{{ errors.areaId }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="count">Count</label>
-          <input
-            type="number"
-            id="count"
-            v-model.number="form.count"
-            required
-            min="1"
-            class="form-control"
-            :class="{ 'is-invalid': errors.count }"
-          >
-          <div v-if="errors.count" class="error-message">{{ errors.count }}</div>
-        </div>
-      </div>
-
-      <!-- Price Information -->
-      <div class="form-section">
-        <h2>Price Information</h2>
-
-        <div class="form-group">
-          <label for="originalPrice">Original Price</label>
-          <input
-            type="number"
-            id="originalPrice"
-            v-model.number="form.originalPrice"
-            required
-            min="0"
-            step="0.01"
-            class="form-control"
-            :class="{ 'is-invalid': errors.originalPrice }"
-          >
-          <div v-if="errors.originalPrice" class="error-message">{{ errors.originalPrice }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="originalPriceCurrency">Original Price Currency</label>
-          <Select
-            id="originalPriceCurrency"
-            v-model="form.originalPriceCurrency"
-            :options="currencies"
-            optionLabel="label"
-            optionValue="code"
-            placeholder="Select a currency"
-            class="w-100"
-            :class="{ 'is-invalid': errors.originalPriceCurrency }"
-            :filter="true"
-          />
-          <div v-if="errors.originalPriceCurrency" class="error-message">{{ errors.originalPriceCurrency }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="convertedOriginalPrice">Converted Original Price</label>
-          <input
-            type="number"
-            id="convertedOriginalPrice"
-            v-model.number="form.convertedOriginalPrice"
-            required
-            min="0"
-            step="0.01"
-            class="form-control"
-            :class="{ 'is-invalid': errors.convertedOriginalPrice }"
-          >
-          <div v-if="errors.convertedOriginalPrice" class="error-message">{{ errors.convertedOriginalPrice }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="currentPrice">Current Price</label>
-          <input
-            type="number"
-            id="currentPrice"
-            v-model.number="form.currentPrice"
-            required
-            min="0"
-            step="0.01"
-            class="form-control"
-            :class="{ 'is-invalid': errors.currentPrice }"
-          >
-          <div v-if="errors.currentPrice" class="error-message">{{ errors.currentPrice }}</div>
-        </div>
-      </div>
-
-      <!-- Serial Numbers and Part Numbers -->
-      <div class="form-section">
-        <h2>Serial Numbers and Part Numbers</h2>
-
-        <div class="form-group">
-          <label for="serialNumber">Serial Number</label>
-          <input
-            type="text"
-            id="serialNumber"
-            v-model="form.serialNumber"
-            class="form-control"
-            :class="{ 'is-invalid': errors.serialNumber }"
-          >
-          <div v-if="errors.serialNumber" class="error-message">{{ errors.serialNumber }}</div>
-        </div>
-
-        <div class="form-group">
-          <label>Extra Serial Numbers</label>
-          <div class="array-input">
-            <div v-for="(item, index) in form.extraSerialNumbers" :key="index" class="array-item">
-              <input
-                type="text"
-                v-model="form.extraSerialNumbers[index]"
-                class="form-control"
-              >
-              <button type="button" class="btn btn-danger" @click="removeExtraSerialNumber(index)">Remove</button>
-            </div>
-            <button type="button" class="btn btn-secondary" @click="addExtraSerialNumber">Add Serial Number</button>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>Part Numbers</label>
-          <div class="array-input">
-            <div v-for="(item, index) in form.partNumbers" :key="index" class="array-item">
-              <input
-                type="text"
-                v-model="form.partNumbers[index]"
-                class="form-control"
-              >
-              <button type="button" class="btn btn-danger" @click="removePartNumber(index)">Remove</button>
-            </div>
-            <button type="button" class="btn btn-secondary" @click="addPartNumber">Add Part Number</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tags and Status -->
-      <div class="form-section">
-        <h2>Tags and Status</h2>
-
-        <div class="form-group">
-          <label>Tags</label>
-          <div class="array-input">
-            <div v-for="(item, index) in form.tags" :key="index" class="array-item">
-              <input
-                type="text"
-                v-model="form.tags[index]"
-                class="form-control"
-              >
-              <button type="button" class="btn btn-danger" @click="removeTag(index)">Remove</button>
-            </div>
-            <button type="button" class="btn btn-secondary" @click="addTag">Add Tag</button>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="status">Status</label>
-          <Select
-            id="status"
-            v-model="form.status"
-            :options="commodityStatuses"
-            optionLabel="name"
-            optionValue="id"
-            placeholder="Select a status"
-            class="w-100"
-            :class="{ 'is-invalid': errors.status }"
-          />
-          <div v-if="errors.status" class="error-message">{{ errors.status }}</div>
-        </div>
-
-        <div class="form-group">
-          <label for="purchaseDate">Purchase Date</label>
-          <input
-            type="date"
-            id="purchaseDate"
-            v-model="form.purchaseDate"
-            required
-            class="form-control"
-            :class="{ 'is-invalid': errors.purchaseDate }"
-          >
-          <div v-if="errors.purchaseDate" class="error-message">{{ errors.purchaseDate }}</div>
-        </div>
-      </div>
-
-      <!-- URLs and Comments -->
-      <div class="form-section">
-        <h2>URLs and Comments</h2>
-
-        <div class="form-group">
-          <label>URLs</label>
-          <div class="array-input">
-            <div v-for="(item, index) in form.urls" :key="index" class="array-item">
-              <input
-                type="url"
-                v-model="form.urls[index]"
-                class="form-control"
-              >
-              <button type="button" class="btn btn-danger" @click="removeUrl(index)">Remove</button>
-            </div>
-            <button type="button" class="btn btn-secondary" @click="addUrl">Add URL</button>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="comments">Comments</label>
-          <textarea
-            id="comments"
-            v-model="form.comments"
-            class="form-control"
-            :class="{ 'is-invalid': errors.comments }"
-            rows="4"
-          ></textarea>
-          <div v-if="errors.comments" class="error-message">{{ errors.comments }}</div>
-        </div>
-
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="form.draft">
-            <span>Draft</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button type="button" class="btn btn-secondary" @click="cancel">Cancel</button>
-        <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Creating...' : 'Create Commodity' }}
-        </button>
-      </div>
-
-      <div v-if="error" class="form-error">{{ error }}</div>
-
-      <!-- Debug information -->
-      <div v-if="debugInfo" class="debug-info">
-        <h3>Debug Information</h3>
-        <pre>{{ debugInfo }}</pre>
-      </div>
-    </form>
+    <div v-if="formError" class="form-error">{{ formError }}</div>
+    <div v-if="debugInfo" class="debug-info">
+      <h3>Debug Information</h3>
+      <pre>{{ debugInfo }}</pre>
+    </div>
   </div>
 </template>
 
@@ -327,12 +44,14 @@ import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
-import Select from 'primevue/select'
+import CommodityForm from '@/components/CommodityForm.vue'
 
 const router = useRouter()
 const route = useRoute()
+const commodityForm = ref(null)
 const isSubmitting = ref(false)
 const error = ref<string | null>(null)
+const formError = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
 const areas = ref<any[]>([])
 const commodityTypes = ref(COMMODITY_TYPES)
@@ -460,97 +179,13 @@ onMounted(async () => {
   }
 })
 
-const validateForm = () => {
-  let isValid = true
+// Validation is now handled by the CommodityForm component
 
-  // Reset errors
-  errors.name = ''
-  errors.shortName = ''
-  errors.type = ''
-  errors.areaId = ''
-  errors.count = ''
-  errors.originalPrice = ''
-  errors.originalPriceCurrency = ''
-  errors.convertedOriginalPrice = ''
-  errors.currentPrice = ''
-  errors.serialNumber = ''
-  errors.status = ''
-  errors.purchaseDate = ''
-  errors.comments = ''
-
-  if (!form.name.trim()) {
-    errors.name = 'Name is required'
-    isValid = false
-  }
-
-  if (!form.shortName.trim()) {
-    errors.shortName = 'Short Name is required'
-    isValid = false
-  }
-
-  if (!form.type) {
-    errors.type = 'Type is required'
-    isValid = false
-  }
-
-  if (!form.areaId) {
-    errors.areaId = 'Area is required'
-    isValid = false
-  }
-
-  if (form.count < 1) {
-    errors.count = 'Count must be at least 1'
-    isValid = false
-  }
-
-  if (form.originalPrice < 0) {
-    errors.originalPrice = 'Original Price cannot be negative'
-    isValid = false
-  }
-
-  if (!form.originalPriceCurrency) {
-    errors.originalPriceCurrency = 'Original Price Currency is required'
-    isValid = false
-  }
-
-  if (form.convertedOriginalPrice < 0) {
-    errors.convertedOriginalPrice = 'Converted Original Price cannot be negative'
-    isValid = false
-  }
-
-  if (form.currentPrice < 0) {
-    errors.currentPrice = 'Current Price cannot be negative'
-    isValid = false
-  }
-
-  if (!form.status) {
-    errors.status = 'Status is required'
-    isValid = false
-  }
-
-  if (!form.purchaseDate) {
-    errors.purchaseDate = 'Purchase Date is required'
-    isValid = false
-  }
-
-  if (form.purchaseDate! > today) {
-    errors.purchaseDate = 'Purchase Date cannot be in the future'
-    isValid = false
-  }
-
-  if (form.comments! && form.comments! > 1000) {
-    errors.comments = 'Comments cannot exceed 1000 characters'
-    isValid = false
-  }
-
-  return isValid
-}
-
-const submitForm = async () => {
-  if (!validateForm()) return
-
+const submitForm = async (formData: any) => {
+  console.log('CommodityCreateView: submitForm called with formData:', formData)
   isSubmitting.value = true
   error.value = null
+  formError.value = null
   debugInfo.value = null
 
   try {
@@ -559,24 +194,24 @@ const submitForm = async () => {
       data: {
         type: 'commodities',
         attributes: {
-          name: form.name.trim(),
-          short_name: form.shortName.trim(),
-          type: form.type,
-          area_id: form.areaId,
-          count: form.count,
-          original_price: form.originalPrice,
-          original_price_currency: form.originalPriceCurrency,
-          converted_original_price: form.convertedOriginalPrice,
-          current_price: form.currentPrice,
-          serial_number: form.serialNumber || null,
-          extra_serial_numbers: form.extraSerialNumbers.length > 0 ? form.extraSerialNumbers : null,
-          part_numbers: form.partNumbers.length > 0 ? form.partNumbers : null,
-          tags: form.tags.length > 0 ? form.tags : null,
-          status: form.status,
-          purchase_date: form.purchaseDate,
-          urls: form.urls.length > 0 ? form.urls : null,
-          comments: form.comments || null,
-          draft: form.draft
+          name: formData.name.trim(),
+          short_name: formData.shortName.trim(),
+          type: formData.type,
+          area_id: formData.areaId,
+          count: formData.count,
+          original_price: formData.originalPrice,
+          original_price_currency: formData.originalPriceCurrency,
+          converted_original_price: formData.convertedOriginalPrice,
+          current_price: formData.currentPrice,
+          serial_number: formData.serialNumber || null,
+          extra_serial_numbers: formData.extraSerialNumbers.length > 0 ? formData.extraSerialNumbers : null,
+          part_numbers: formData.partNumbers.length > 0 ? formData.partNumbers : null,
+          tags: formData.tags.length > 0 ? formData.tags : null,
+          status: formData.status,
+          purchase_date: formData.purchaseDate,
+          urls: formData.urls.length > 0 ? formData.urls : null,
+          comments: formData.comments || null,
+          draft: formData.draft
         }
       }
     }
@@ -585,13 +220,8 @@ const submitForm = async () => {
     console.log('Submitting commodity with payload:', JSON.stringify(payload, null, 2))
     debugInfo.value = `Sending: ${JSON.stringify(payload, null, 2)}`
 
-    // Make the API call
-    const response = await axios.post('/api/v1/commodities', payload, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    // Make the API call using commodityService
+    const response = await commodityService.createCommodity(payload)
 
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
@@ -629,21 +259,18 @@ const submitForm = async () => {
       // Extract validation errors if present
       const apiErrors = err.response.data.errors?.[0]?.error?.error?.data?.attributes || {}
 
-      // Map API errors to form errors
-      Object.keys(apiErrors).forEach(key => {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
-        if (errors.hasOwnProperty(camelKey)) {
-          errors[camelKey] = apiErrors[key]
-        }
-      })
+      // Set errors on the form component
+      if (commodityForm.value && commodityForm.value.setErrors) {
+        commodityForm.value.setErrors(apiErrors)
+      }
 
-      if (Object.values(errors).some(e => e)) {
-        error.value = 'Please correct the errors above.'
+      if (Object.values(apiErrors).some(e => e)) {
+        formError.value = 'Please correct the errors above.'
       } else {
-        error.value = `Failed to create commodity: ${err.response.status} - ${JSON.stringify(err.response.data)}`
+        formError.value = `Failed to create commodity: ${err.response.status} - ${JSON.stringify(err.response.data)}`
       }
     } else {
-      error.value = 'Failed to create commodity: ' + (err.message || 'Unknown error')
+      formError.value = 'Failed to create commodity: ' + (err.message || 'Unknown error')
     }
   } finally {
     isSubmitting.value = false
@@ -702,6 +329,18 @@ const addUrl = () => {
 
 const removeUrl = (index: number) => {
   form.urls.splice(index, 1)
+}
+
+const handleValidation = (isValid: boolean, validationErrors: any) => {
+  // Update our local errors object with validation errors from the form component
+  if (!isValid) {
+    Object.assign(errors, validationErrors)
+  } else {
+    // Reset errors when the form becomes valid
+    Object.keys(errors).forEach(key => {
+      errors[key] = ''
+    })
+  }
 }
 </script>
 

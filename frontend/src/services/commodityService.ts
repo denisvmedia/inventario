@@ -27,11 +27,18 @@ const commodityService = {
   },
 
   createCommodity(data: any) {
+    console.log('commodityService: createCommodity called with data:', JSON.stringify(data, null, 2))
     return axios.post(API_URL, data, {
       headers: {
         'Content-Type': 'application/vnd.api+json',
         'Accept': 'application/vnd.api+json'
       }
+    }).then(response => {
+      console.log('commodityService: createCommodity success response:', response)
+      return response
+    }).catch(error => {
+      console.error('commodityService: createCommodity error:', error)
+      throw error
     })
   },
 
