@@ -233,10 +233,55 @@
   font-weight: normal;
 }
 
+/* Ensure consistent styling between settings and commodity forms */
+.setting-detail .p-dropdown,
+.setting-detail .p-select {
+  font-size: 1rem;
+  padding: 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.setting-detail .p-dropdown:not(.p-disabled):hover,
+.setting-detail .p-select:not(.p-disabled):hover {
+  border-color: #bbb;
+}
+
+.setting-detail .p-dropdown:not(.p-disabled).p-focus,
+.setting-detail .p-select:not(.p-disabled).p-focus {
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+  outline: none;
+}
+
+/* Match the height of the dropdown to the form-control height */
+.setting-detail .p-dropdown .p-dropdown-label,
+.setting-detail .p-select .p-select-label {
+  padding: 0.75rem;
+  line-height: 1.5;
+}
+
+/* Ensure the dropdown trigger icon is properly aligned */
+.setting-detail .p-dropdown .p-dropdown-trigger,
+.setting-detail .p-select .p-select-trigger {
+  padding: 0 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Form integration */
 .form-group .p-dropdown,
 .form-group .p-select {
   width: 100%;
+}
+
+/* Invalid state styling to match form-control.is-invalid */
+.p-dropdown.is-invalid,
+.p-select.is-invalid {
+  border-color: var(--p-select-focus-border-color);
+  border-color: #dc3545 !important; /* Match danger-color from main.scss */
 }
 
 /* Filter styling */
