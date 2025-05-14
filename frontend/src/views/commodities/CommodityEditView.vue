@@ -200,37 +200,33 @@
           <!-- Extra Serial Numbers -->
           <div class="form-group">
             <label>Extra Serial Numbers</label>
-            <div v-for="(serial, index) in form.extraSerialNumbers" :key="index" class="array-input-row">
-              <input
-                type="text"
-                v-model="form.extraSerialNumbers[index]"
-                class="form-control"
-              >
-              <button type="button" class="btn btn-danger btn-sm" @click="removeExtraSerialNumber(index)">
-                Remove
-              </button>
+            <div class="array-input">
+              <div v-for="(serial, index) in form.extraSerialNumbers" :key="index" class="array-item">
+                <input
+                  type="text"
+                  v-model="form.extraSerialNumbers[index]"
+                  class="form-control"
+                >
+                <button type="button" class="btn btn-danger" @click="removeExtraSerialNumber(index)">Remove</button>
+              </div>
+              <button type="button" class="btn btn-secondary" @click="addExtraSerialNumber">Add Serial Number</button>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" @click="addExtraSerialNumber">
-              Add Serial Number
-            </button>
           </div>
 
           <!-- Part Numbers -->
           <div class="form-group">
             <label>Part Numbers</label>
-            <div v-for="(part, index) in form.partNumbers" :key="index" class="array-input-row">
-              <input
-                type="text"
-                v-model="form.partNumbers[index]"
-                class="form-control"
-              >
-              <button type="button" class="btn btn-danger btn-sm" @click="removePartNumber(index)">
-                Remove
-              </button>
+            <div class="array-input">
+              <div v-for="(part, index) in form.partNumbers" :key="index" class="array-item">
+                <input
+                  type="text"
+                  v-model="form.partNumbers[index]"
+                  class="form-control"
+                >
+                <button type="button" class="btn btn-danger" @click="removePartNumber(index)">Remove</button>
+              </div>
+              <button type="button" class="btn btn-secondary" @click="addPartNumber">Add Part Number</button>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" @click="addPartNumber">
-              Add Part Number
-            </button>
           </div>
         </div>
 
@@ -238,19 +234,18 @@
         <div class="form-section">
           <h2>Tags</h2>
           <div class="form-group">
-            <div v-for="(tag, index) in form.tags" :key="index" class="array-input-row">
-              <input
-                type="text"
-                v-model="form.tags[index]"
-                class="form-control"
-              >
-              <button type="button" class="btn btn-danger btn-sm" @click="removeTag(index)">
-                Remove
-              </button>
+            <label>Tags</label>
+            <div class="array-input">
+              <div v-for="(tag, index) in form.tags" :key="index" class="array-item">
+                <input
+                  type="text"
+                  v-model="form.tags[index]"
+                  class="form-control"
+                >
+                <button type="button" class="btn btn-danger" @click="removeTag(index)">Remove</button>
+              </div>
+              <button type="button" class="btn btn-secondary" @click="addTag">Add Tag</button>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" @click="addTag">
-              Add Tag
-            </button>
           </div>
         </div>
 
@@ -258,19 +253,18 @@
         <div class="form-section">
           <h2>URLs</h2>
           <div class="form-group">
-            <div v-for="(url, index) in form.urls" :key="index" class="array-input-row">
-              <input
-                type="url"
-                v-model="form.urls[index]"
-                class="form-control"
-              >
-              <button type="button" class="btn btn-danger btn-sm" @click="removeUrl(index)">
-                Remove
-              </button>
+            <label>URLs</label>
+            <div class="array-input">
+              <div v-for="(url, index) in form.urls" :key="index" class="array-item">
+                <input
+                  type="url"
+                  v-model="form.urls[index]"
+                  class="form-control"
+                >
+                <button type="button" class="btn btn-danger" @click="removeUrl(index)">Remove</button>
+              </div>
+              <button type="button" class="btn btn-secondary" @click="addUrl">Add URL</button>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" @click="addUrl">
-              Add URL
-            </button>
           </div>
         </div>
 
@@ -302,7 +296,7 @@
         <div class="form-actions">
           <button type="button" class="btn btn-secondary" @click="goBack">Cancel</button>
           <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
-            {{ isSubmitting ? 'Saving...' : 'Save Changes' }}
+            {{ isSubmitting ? 'Saving Commodity...' : 'Save Commodity' }}
           </button>
         </div>
 
@@ -729,19 +723,19 @@ h1 {
   border-bottom: 1px solid #eee;
 
   h2 {
-    margin-bottom: 1rem;
-    color: $text-color;
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
   }
 }
 
 .form-group {
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
 
-  label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-  }
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
 }
 
 .form-control {
@@ -751,9 +745,19 @@ h1 {
   border-radius: $default-radius;
   font-size: 1rem;
 
+  &:focus {
+    outline: none;
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
+
   &.is-invalid {
     border-color: $danger-color;
   }
+}
+
+textarea.form-control {
+  resize: vertical;
 }
 
 .error-message {
@@ -762,22 +766,21 @@ h1 {
   margin-top: 0.25rem;
 }
 
-.array-input-row {
+.array-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.array-item {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  align-items: center;
-
-  .form-control {
-    flex: 1;
-  }
 }
 
 .checkbox-label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  cursor: pointer;
 }
 
 .form-actions {
@@ -793,8 +796,11 @@ h1 {
   border-radius: $default-radius;
   cursor: pointer;
   font-weight: 500;
-  text-decoration: none;
-  display: inline-block;
+
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
 }
 
 .btn-primary {
@@ -803,8 +809,8 @@ h1 {
 }
 
 .btn-secondary {
-  background-color: $secondary-color;
-  color: white;
+  background-color: $light-bg-color;
+  color: $text-color;
 }
 
 .btn-danger {
@@ -812,14 +818,11 @@ h1 {
   color: white;
 }
 
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-}
+
 
 .form-error {
   margin-top: 1rem;
-  padding: 1rem;
+  padding: 0.75rem;
   background-color: #f8d7da;
   color: $error-text-color;
   border-radius: $default-radius;
@@ -827,15 +830,15 @@ h1 {
 
 .debug-info {
   margin-top: 2rem;
-  padding: 1rem;
   background-color: $light-bg-color;
+  padding: 1rem;
   border-radius: $default-radius;
-  overflow-x: auto;
+  border: 1px solid $border-color;
 
   pre {
-    margin: 0;
     white-space: pre-wrap;
-    word-break: break-all;
+    word-wrap: break-word;
+    overflow-x: auto;
   }
 }
 </style>
