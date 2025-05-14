@@ -7,9 +7,15 @@
           Total Value: <span class="value-amount">{{ formatPrice(globalTotal, mainCurrency) }}</span>
         </div>
       </div>
-      <router-link v-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
-      <router-link v-else-if="locations.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
-      <router-link v-else-if="areas.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Area First</router-link>
+      <div class="header-actions">
+        <div class="filter-toggle">
+          <InputSwitch v-model="showInactiveItems" />
+          <label class="toggle-label">Show drafts & inactive items</label>
+        </div>
+        <router-link v-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
+        <router-link v-else-if="locations.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
+        <router-link v-else-if="areas.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Area First</router-link>
+      </div>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
@@ -36,7 +42,7 @@
     </div>
 
     <div v-else class="commodities-grid">
-      <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" :class="{
+      <div v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
         'highlighted': commodity.id === highlightCommodityId,
         'draft': commodity.attributes.draft,
         'sold': !commodity.attributes.draft && commodity.attributes.status === 'sold',
@@ -83,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
@@ -91,7 +97,7 @@ import locationService from '@/services/locationService'
 import valueService from '@/services/valueService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
-import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice, calculatePricePerUnit, getDisplayPrice } from '@/services/currencyService'
 
 const router = useRouter()
@@ -115,9 +121,24 @@ const mainCurrency = computed(() => settingsStore.mainCurrency)
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
 let highlightTimeout: number | null = null
 
+// Filter toggle state
+const showInactiveItems = ref(false)
+
 // Computed property to check if there are locations and areas
 const hasLocationsAndAreas = computed(() => {
   return locations.value.length > 0 && areas.value.length > 0
+})
+
+// Filtered commodities based on toggle state
+const filteredCommodities = computed(() => {
+  if (showInactiveItems.value) {
+    return commodities.value
+  }
+
+  return commodities.value.filter(commodity => {
+    // Show only non-draft items with status 'in_use'
+    return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
+  })
 })
 
 // Map to store area and location information
@@ -295,6 +316,29 @@ const deleteCommodity = async (id: string) => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 2rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #f8f9fa;
+  padding: 0.5rem 0.75rem;
+  border-radius: $default-radius;
+  border: 1px solid #e9ecef;
+}
+
+.toggle-label {
+  font-size: 0.9rem;
+  margin: 0;
+  white-space: nowrap;
+  color: $text-color;
 }
 
 .header-title {
