@@ -15,6 +15,9 @@
             {{ area.attributes.name }}
           </h1>
           <p class="location-info">{{ locationName || 'No location' }}{{ locationAddress ? ` - ${locationAddress}` : '' }}</p>
+          <div v-if="areaTotalValue > 0" class="total-value">
+            Total Value: <span class="value-amount">{{ formatPrice(areaTotalValue, mainCurrency) }}</span>
+          </div>
         </div>
         <div class="actions">
           <button class="btn btn-danger" @click="confirmDelete" title="Delete"><font-awesome-icon icon="trash" /></button>
@@ -72,6 +75,7 @@ import { useRouter, useRoute } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import commodityService from '@/services/commodityService'
+import valueService from '@/services/valueService'
 import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
@@ -89,6 +93,10 @@ const locationAddress = ref<string | null>(null)
 // Use the main currency from the currency service
 const mainCurrency = currencyServiceMainCurrency
 
+// Area total value
+const areaTotalValue = ref<number>(0)
+const valuesLoading = ref<boolean>(true)
+
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
 let highlightTimeout: number | null = null
@@ -99,11 +107,12 @@ onMounted(async () => {
   try {
     // Main currency is now handled by the currency service
 
-    // Load area, locations, and commodities in parallel
-    const [areaResponse, locationsResponse, commoditiesResponse] = await Promise.all([
+    // Load area, locations, commodities, and values in parallel
+    const [areaResponse, locationsResponse, commoditiesResponse, valuesResponse] = await Promise.all([
       areaService.getArea(id),
       locationService.getLocations(),
-      commodityService.getCommodities()
+      commodityService.getCommodities(),
+      valueService.getValues()
     ])
 
     area.value = areaResponse.data.data
@@ -135,6 +144,25 @@ onMounted(async () => {
     commodities.value = commoditiesResponse.data.data.filter(
       (commodity: any) => commodity.attributes.area_id === id
     )
+
+    // Get the area total value from the values response
+    const areaValues = valuesResponse.data.data.attributes.area_totals || []
+    const areaValue = areaValues.find((areaValue: any) => areaValue.id === id)
+    if (areaValue) {
+      areaTotalValue.value = parseFloat(areaValue.value)
+    } else {
+      // If no value found in the API response, calculate it from the commodities
+      areaTotalValue.value = commodities.value.reduce((total: number, commodity: any) => {
+        // Only include commodities that are in use and not drafts
+        if (commodity.attributes.status === 'in_use' && !commodity.attributes.draft) {
+          const price = getDisplayPrice(commodity)
+          if (!isNaN(price)) {
+            return total + price
+          }
+        }
+        return total
+      }, 0)
+    }
 
     loading.value = false
 
@@ -346,6 +374,19 @@ const deleteCommodity = async (id: string) => {
   color: $text-color;
   font-style: italic;
   margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.total-value {
+  font-size: 1rem;
+  color: $text-color;
+  margin-top: 0.25rem;
+
+  .value-amount {
+    font-weight: bold;
+    color: $primary-color;
+    font-size: 1.1rem;
+  }
 }
 
 .actions {

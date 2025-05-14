@@ -1,7 +1,12 @@
 <template>
   <div class="commodity-list">
     <div class="header">
-      <h1>Commodities</h1>
+      <div class="header-title">
+        <h1>Commodities</h1>
+        <div v-if="!valuesLoading && globalTotal > 0" class="total-value">
+          Total Value: <span class="value-amount">{{ formatPrice(globalTotal, mainCurrency) }}</span>
+        </div>
+      </div>
       <router-link v-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
       <router-link v-else-if="locations.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
       <router-link v-else-if="areas.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Area First</router-link>
@@ -76,6 +81,7 @@ import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
+import valueService from '@/services/valueService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
@@ -89,6 +95,14 @@ const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+
+// Values data
+const globalTotal = ref<number>(0)
+const valuesLoading = ref<boolean>(true)
+const valuesError = ref<string | null>(null)
+
+// Main currency from settings store
+const mainCurrency = computed(() => settingsStore.mainCurrency)
 
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
@@ -143,16 +157,36 @@ const getLocationName = (areaId: string) => {
   return locationId ? locationMap.value[locationId]?.name || '' : ''
 }
 
+// Function to load total values
+async function loadValues() {
+  valuesLoading.value = true
+  valuesError.value = null
+
+  try {
+    const response = await valueService.getValues()
+    const data = response.data.data.attributes
+
+    // Parse the decimal string to a number
+    globalTotal.value = parseFloat(data.global_total)
+  } catch (error) {
+    console.error('Error loading values:', error)
+    valuesError.value = 'Failed to load inventory values'
+  } finally {
+    valuesLoading.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     // Fetch main currency from the store
     await settingsStore.fetchMainCurrency()
 
-    // Load commodities, areas, and locations in parallel
-    const [commoditiesResponse, areasResponse, locationsResponse] = await Promise.all([
+    // Load commodities, areas, locations, and values in parallel
+    const [commoditiesResponse, areasResponse, locationsResponse, _] = await Promise.all([
       commodityService.getCommodities(),
       areaService.getAreas(),
-      locationService.getLocations()
+      locationService.getLocations(),
+      loadValues() // Load values in parallel
     ])
 
     commodities.value = commoditiesResponse.data.data
@@ -252,8 +286,26 @@ const deleteCommodity = async (id: string) => {
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 2rem;
+}
+
+.header-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.total-value {
+  font-size: 1rem;
+  color: $text-color;
+  margin-top: 0.5rem;
+
+  .value-amount {
+    font-weight: bold;
+    color: $primary-color;
+    font-size: 1.1rem;
+  }
 }
 
 .loading, .error, .empty {

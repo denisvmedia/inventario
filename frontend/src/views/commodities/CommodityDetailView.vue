@@ -58,7 +58,7 @@
             <span class="label">Original Price:</span>
             <span>{{ formatPrice(parseFloat(commodity.attributes.original_price), commodity.attributes.original_price_currency) }}</span>
           </div>
-          <div class="info-row" v-if="(commodity.attributes.original_price_currency !== mainCurrency) && parseFloat(commodity.attributes.converted_original_price) > 0">
+          <div class="info-row" v-if="(commodity.attributes.original_price_currency !== getMainCurrency()) && parseFloat(commodity.attributes.converted_original_price) > 0">
             <span class="label">Converted Original Price:</span>
             <span>{{ formatPrice(parseFloat(commodity.attributes.converted_original_price)) }}</span>
           </div>
@@ -215,7 +215,7 @@ import commodityService from '@/services/commodityService'
 import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
-import { formatPrice, calculatePricePerUnit, getDisplayPrice, mainCurrency as currencyServiceMainCurrency } from '@/services/currencyService'
+import { formatPrice, calculatePricePerUnit, getDisplayPrice, getMainCurrency } from '@/services/currencyService'
 import FileUploader from '@/components/FileUploader.vue'
 import FileList from '@/components/FileList.vue'
 // import ImageViewer from '@/components/ImageViewer.vue' // Using FileViewer for all file types now
@@ -227,7 +227,6 @@ const commodity = ref<any>(null)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 // Use the main currency from the currency service
-const mainCurrency = currencyServiceMainCurrency
 
 // Navigation source tracking
 const sourceIsArea = computed(() => route.query.source === 'area')
