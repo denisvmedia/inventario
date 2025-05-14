@@ -425,6 +425,11 @@ const handleValidation = (isValid: boolean, validationErrors: any) => {
   // Update our local errors object with validation errors from the form component
   if (!isValid) {
     Object.assign(errors, validationErrors)
+  } else {
+    // Reset errors when the form becomes valid
+    Object.keys(errors).forEach(key => {
+      errors[key] = ''
+    })
   }
 }
 </script>
