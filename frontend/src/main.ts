@@ -1,12 +1,14 @@
 import { createApp } from 'vue'
 import PrimeVue from 'primevue/config';
+import Select from 'primevue/select'
 import Aura from '@primeuix/themes/aura';
-import Nora from '@primeuix/themes/nora';
-import Lara from '@primeuix/themes/lara';
-import Material from '@primeuix/themes/material';
+// import Nora from '@primeuix/themes/nora';
+// import Lara from '@primeuix/themes/lara';
+// import Material from '@primeuix/themes/material';
 import App from './App.vue'
 import router from './router'
 import './assets/main.scss'
+import './assets/primevue-dropdown.scss'
 import { FontAwesomeIcon } from './fontawesome'
 
 // Add some debug logging
@@ -28,10 +30,13 @@ app.config.errorHandler = (err, instance, info) => {
 
 app.use(router)
 app.use(PrimeVue, {
-  theme: {
-    preset: Aura
-  }
+  // unstyled: true,
+  ripple: false,
+  // theme: {
+  //   preset: Aura
+  // }
 })
+app.component('Select', Select)
 
 // Register Font Awesome component globally
 app.component('font-awesome-icon', FontAwesomeIcon)

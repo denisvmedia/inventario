@@ -94,11 +94,6 @@
           :filter="true"
           :showClear="false"
           aria-label="Currency"
-          :pt="{
-            item: { class: 'custom-dropdown-item' },
-            itemGroup: { class: 'custom-dropdown-group' },
-            list: { class: 'custom-dropdown-list' }
-          }"
         />
       </div>
 
@@ -425,91 +420,6 @@ function formatBytes(bytes: number) {
     h1 {
       margin: 0;
       color: $primary-color;
-    }
-  }
-
-  .form {
-    background-color: #f9f9f9;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-    .form-group {
-      margin-bottom: 15px;
-
-      label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: 500;
-      }
-
-      .form-control {
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 1rem;
-
-        &.is-invalid {
-          border-color: $error-color;
-        }
-      }
-
-      .json-editor {
-        font-family: monospace;
-        min-height: 200px;
-      }
-
-      small {
-        display: block;
-        margin-top: 5px;
-        color: $text-secondary-color;
-      }
-
-      .error-message {
-        color: $error-color;
-        margin-top: 5px;
-        font-size: 0.9rem;
-      }
-    }
-
-    .form-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 20px;
-
-      button {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1rem;
-        transition: background-color 0.2s;
-
-        &.btn-primary {
-          background-color: $primary-color;
-          color: white;
-
-          &:hover {
-            background-color: darken($primary-color, 10%);
-          }
-
-          &:disabled {
-            background-color: lighten($primary-color, 20%);
-            cursor: not-allowed;
-          }
-        }
-
-        &.btn-secondary {
-          background-color: #6c757d;
-          color: white;
-
-          &:hover {
-            background-color: darken(#6c757d, 10%);
-          }
-        }
-      }
     }
   }
 
