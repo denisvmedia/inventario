@@ -34,13 +34,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import settingsService from '@/services/settingsService'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
@@ -48,6 +49,7 @@ import CommodityForm from '@/components/CommodityForm.vue'
 
 const router = useRouter()
 const route = useRoute()
+const settingsStore = useSettingsStore()
 const commodityForm = ref(null)
 const isSubmitting = ref(false)
 const error = ref<string | null>(null)
@@ -59,7 +61,9 @@ const commodityStatuses = ref(COMMODITY_STATUSES)
 const currencies = ref<any[]>([])
 const areaFromUrl = ref<string | null>(null)
 const areaName = ref<string>('')
-const mainCurrency = ref<string>(CURRENCY_CZK)
+
+// Use the main currency from the store
+const mainCurrency = computed(() => settingsStore.mainCurrency)
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -70,7 +74,7 @@ const form = reactive({
   areaId: '',
   count: 1,
   originalPrice: 0,
-  originalPriceCurrency: CURRENCY_CZK,
+  originalPriceCurrency: computed(() => settingsStore.mainCurrency).value,
   convertedOriginalPrice: 0,
   currentPrice: 0,
   serialNumber: '',
@@ -108,8 +112,11 @@ onMounted(async () => {
       console.log('Area ID from URL:', areaFromUrl.value)
     }
 
-    // Fetch areas, locations, currencies, and main currency in parallel
-    const [areasResponse, locationsResponse, currenciesResponse, mainCurrencyResponse] = await Promise.all([
+    // Fetch main currency from the store
+    await settingsStore.fetchMainCurrency()
+
+    // Fetch areas, locations, and currencies in parallel
+    const [areasResponse, locationsResponse, currenciesResponse] = await Promise.all([
       axios.get('/api/v1/areas', {
         headers: {
           'Accept': 'application/vnd.api+json'
@@ -120,8 +127,7 @@ onMounted(async () => {
           'Accept': 'application/vnd.api+json'
         }
       }),
-      settingsService.getCurrencies(),
-      settingsService.getMainCurrency()
+      settingsService.getCurrencies()
     ])
 
     areas.value = areasResponse.data.data
@@ -150,11 +156,8 @@ onMounted(async () => {
 
     console.log('Loaded currencies:', currencies.value)
 
-    // Set main currency if available
-    if (mainCurrencyResponse) {
-      mainCurrency.value = mainCurrencyResponse
-      form.originalPriceCurrency = mainCurrency.value
-    }
+    // Set the form's currency to the main currency
+    form.originalPriceCurrency = mainCurrency.value
 
     // Check if we have locations and areas
     if (locations.length === 0 || areas.value.length === 0) {

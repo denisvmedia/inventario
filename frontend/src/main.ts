@@ -5,6 +5,7 @@ import Aura from '@primeuix/themes/aura';
 // import Nora from '@primeuix/themes/nora';
 // import Lara from '@primeuix/themes/lara';
 // import Material from '@primeuix/themes/material';
+import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import './assets/main.scss'
@@ -27,6 +28,10 @@ app.config.errorHandler = (err, instance, info) => {
   console.error('Error Info:', info)
   console.error('Component:', instance)
 }
+
+// Initialize Pinia
+const pinia = createPinia()
+app.use(pinia)
 
 app.use(router)
 app.use(PrimeVue, {

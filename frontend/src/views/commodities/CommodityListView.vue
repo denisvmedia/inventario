@@ -48,9 +48,9 @@
             <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
           </div>
           <div class="commodity-price">
-            <span class="price">{{ commodity.attributes.current_price }} {{ mainCurrency }}</span>
+            <span class="price">{{ formatPrice(getDisplayPrice(commodity), mainCurrency) }}</span>
             <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
-              {{ calculatePricePerUnit(commodity) }} {{ mainCurrency }} per unit
+              {{ formatPrice(calculatePricePerUnit(commodity), mainCurrency) }} per unit
             </span>
           </div>
           <div class="commodity-status">
@@ -76,18 +76,21 @@ import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
-import settingsService from '@/services/settingsService'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 
 const router = useRouter()
 const route = useRoute()
+const settingsStore = useSettingsStore()
 const commodities = ref<any[]>([])
 const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
-const mainCurrency = ref<string>('USD') // Default to USD if not set
+
+// Use the main currency from the store
+const mainCurrency = computed(() => settingsStore.mainCurrency)
 
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
@@ -142,29 +145,50 @@ const getLocationName = (areaId: string) => {
   return locationId ? locationMap.value[locationId]?.name || '' : ''
 }
 
+const formatPrice = (price: number, currency: string) => {
+  if (isNaN(price)) return 'N/A'
+  return price.toFixed(2) + ' ' + currency
+}
+
 // Calculate price per unit
-const calculatePricePerUnit = (commodity: any) => {
-  const price = parseFloat(commodity.attributes.current_price) || 0
+const calculatePricePerUnit = (commodity: any): number => {
+  const price = getDisplayPrice(commodity)
+  if (isNaN(price)) return NaN
+
   const count = commodity.attributes.count || 1
-  if (count <= 1) return price
+  if (count === 0) return price
 
   // Calculate price per unit and round to 2 decimal places
-  const pricePerUnit = price / count
-  return pricePerUnit.toFixed(2)
+  return price / count
+}
+
+// Calculate price to display
+const getDisplayPrice = (commodity: any): number => {
+  const originalPrice = parseFloat(commodity.attributes.original_price) || 0
+  const originalPriceCurrency = commodity.attributes.original_price_currency
+  const originalPriceCurrencyIsMain = originalPriceCurrency === mainCurrency.value
+  const convertedOriginalPrice = parseFloat(commodity.attributes.converted_original_price) || 0
+  const currentPrice = parseFloat(commodity.attributes.current_price) || 0
+
+  if (currentPrice > 0) {
+    return currentPrice
+  }
+
+  if (originalPriceCurrencyIsMain && originalPrice > 0) {
+    return originalPrice
+  }
+
+  if (convertedOriginalPrice > 0) {
+    return convertedOriginalPrice
+  }
+
+  return NaN
 }
 
 onMounted(async () => {
   try {
-    // Fetch main currency from settings
-    try {
-      const currency = await settingsService.getMainCurrency()
-      if (currency) {
-        mainCurrency.value = currency
-      }
-    } catch (settingsErr) {
-      console.error('Failed to load main currency from settings:', settingsErr)
-      // Continue with default currency
-    }
+    // Fetch main currency from the store
+    await settingsStore.fetchMainCurrency()
 
     // Load commodities, areas, and locations in parallel
     const [commoditiesResponse, areasResponse, locationsResponse] = await Promise.all([

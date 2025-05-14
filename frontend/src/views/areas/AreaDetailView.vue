@@ -37,10 +37,16 @@
                 </span>
                 <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
               </div>
-              <div class="commodity-price" v-if="commodity.attributes.current_price">
+              <div class="commodity-price" v-if="!(commodity.attributes.original_price_currency === mainCurrency && parseFloat(commodity.attributes.original_price) > 0) && commodity.attributes.current_price">
                 <span class="price">{{ commodity.attributes.current_price }} {{ mainCurrency }}</span>
                 <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
                   {{ calculatePricePerUnit(commodity) }} {{ mainCurrency }} per unit
+                </span>
+              </div>
+              <div class="commodity-price" v-else-if="commodity.attributes.original_price_currency === mainCurrency && parseFloat(commodity.attributes.original_price) > 0">
+                <span class="price">{{ commodity.attributes.original_price }} {{ commodity.attributes.original_price_currency }}</span>
+                <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
+                  {{ calculateOriginalPricePerUnit(commodity) }} {{ commodity.attributes.original_price_currency }} per unit
                 </span>
               </div>
               <div class="commodity-status" v-if="commodity.attributes.status">
@@ -205,6 +211,17 @@ const getStatusName = (statusId: string) => {
 // Calculate price per unit
 const calculatePricePerUnit = (commodity: any) => {
   const price = parseFloat(commodity.attributes.current_price) || 0
+  const count = commodity.attributes.count || 1
+  if (count <= 1) return price
+
+  // Calculate price per unit and round to 2 decimal places
+  const pricePerUnit = price / count
+  return pricePerUnit.toFixed(2)
+}
+
+// Calculate original price per unit
+const calculateOriginalPricePerUnit = (commodity: any) => {
+  const price = parseFloat(commodity.attributes.original_price) || 0
   const count = commodity.attributes.count || 1
   if (count <= 1) return price
 
