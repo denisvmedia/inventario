@@ -30,7 +30,14 @@
           <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
         </div>
         <div class="commodities-grid">
-          <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" :class="{ 'highlighted': commodity.id === highlightCommodityId }">
+          <div v-for="commodity in commodities" :key="commodity.id" class="commodity-card" :class="{
+            'highlighted': commodity.id === highlightCommodityId,
+            'draft': commodity.attributes.draft,
+            'sold': !commodity.attributes.draft && commodity.attributes.status === 'sold',
+            'lost': !commodity.attributes.draft && commodity.attributes.status === 'lost',
+            'disposed': !commodity.attributes.draft && commodity.attributes.status === 'disposed',
+            'written-off': !commodity.attributes.draft && commodity.attributes.status === 'written_off'
+          }">
             <div class="commodity-content" @click="viewCommodity(commodity.id)">
               <h3>{{ commodity.attributes.name }}</h3>
               <div class="commodity-meta">
@@ -46,7 +53,7 @@
                   {{ formatPrice(calculatePricePerUnit(commodity)) }} per unit
                 </span>
               </div>
-              <div class="commodity-status" v-if="commodity.attributes.status">
+              <div class="commodity-status" v-if="commodity.attributes.status" :class="{ 'with-draft': commodity.attributes.draft }">
                 <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
               </div>
             </div>
@@ -479,6 +486,118 @@ const deleteCommodity = async (id: string) => {
     box-shadow: 0 2px 10px rgba($primary-color, 0.3);
     background-color: lighten($primary-color, 45%);
   }
+
+  &.draft {
+    background: repeating-linear-gradient(45deg, #ffffff, #ffffff 5px, #eeeeee4d 5px, #eeeeee4d 7px);
+    position: relative;
+    filter: grayscale(0.8);
+
+    h3, .commodity-meta, .commodity-price, .price-per-unit {
+      color: $text-secondary-color;
+    }
+
+    .status {
+      background-color: #e2e3e5 !important;
+      color: #383d41 !important;
+    }
+  }
+
+  &.sold {
+    position: relative;
+    filter: grayscale(0.8);
+
+    &::before {
+      content: 'SOLD';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: rgba(204, 229, 255, 0.8);
+      border: 3px solid rgba(0, 64, 133, 0.5);
+      padding: 0.5rem 1rem;
+      border-radius: $default-radius;
+      z-index: 1;
+      pointer-events: none;
+    }
+  }
+
+  &.lost {
+    position: relative;
+    filter: saturate(0.7);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 243, 205, 0.3);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    &::after {
+      content: '⚠️';
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      font-size: 1.5rem;
+      z-index: 2;
+      pointer-events: none;
+    }
+  }
+
+  &.disposed {
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(248, 215, 218, 0.3);
+      background-image: linear-gradient(45deg, transparent, transparent 48%, rgba(114, 28, 36, 0.2) 49%, rgba(114, 28, 36, 0.2) 51%, transparent 52%, transparent);
+      background-size: 20px 20px;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    &::after {
+      content: '🗑️';
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      font-size: 1.5rem;
+      z-index: 2;
+      pointer-events: none;
+    }
+  }
+
+  &.written-off {
+    position: relative;
+    filter: contrast(0.95);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(226, 227, 229, 0.0375);
+      background-image:
+        linear-gradient(45deg, transparent, transparent 45%, rgba(56, 61, 65, 0.0375) 46%, rgba(56, 61, 65, 0.0375) 54%, transparent 55%, transparent),
+        linear-gradient(135deg, transparent, transparent 45%, rgba(56, 61, 65, 0.0375) 46%, rgba(56, 61, 65, 0.0375) 54%, transparent 55%, transparent);
+      background-size: 30px 30px;
+      z-index: 1;
+      pointer-events: none;
+    }
+  }
 }
 
 .commodity-content {
@@ -526,6 +645,24 @@ const deleteCommodity = async (id: string) => {
 
 .commodity-status {
   margin-top: 0.5rem;
+
+  &.with-draft {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    &::after {
+      content: 'Draft';
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: $text-secondary-color;
+      font-style: italic;
+      transform: rotate(-45deg);
+      position: absolute;
+      bottom: 0.5rem;
+      right: 0.5rem;
+    }
+  }
 }
 
 .status {
