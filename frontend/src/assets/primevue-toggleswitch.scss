@@ -1,0 +1,27 @@
+:root {
+  // Container
+  --p-toggleswitch-width: 2.75rem;
+  --p-toggleswitch-height: 1.5rem;
+
+  // Slider
+  --p-toggleswitch-border-width: 1px;
+  --p-toggleswitch-border-color: #ccc;
+  --p-toggleswitch-background: #e0e0e0;
+  --p-toggleswitch-shadow: none;
+  --p-toggleswitch-border-radius: 999px;
+  --p-toggleswitch-transition-duration: 0.2s;
+
+  // Handle
+  --p-toggleswitch-handle-size: 1rem;
+  --p-toggleswitch-handle-background: #ffffff;
+  --p-toggleswitch-handle-color: #000000;
+  --p-toggleswitch-handle-border-radius: 50%;
+  --p-toggleswitch-handle-gap: 0.125rem;
+
+  // Transition Durations
+  --p-toggleswitch-slide-duration: 0.2s;
+
+  // Focus
+  --p-toggleswitch-focus-ring-color: rgba(76, 175, 80, 0.4);
+  --p-toggleswitch-focus-ring-width: 2px;
+}
