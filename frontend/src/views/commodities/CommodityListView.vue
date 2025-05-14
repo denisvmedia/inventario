@@ -425,7 +425,7 @@ const deleteCommodity = async (id: string) => {
     &::after {
       content: '⚠️';
       position: absolute;
-      top: 1rem;
+      bottom: 1rem;
       right: 1rem;
       font-size: 1.5rem;
       z-index: 2;
@@ -453,7 +453,7 @@ const deleteCommodity = async (id: string) => {
     &::after {
       content: '🗑️';
       position: absolute;
-      top: 1rem;
+      bottom: 1rem;
       right: 1rem;
       font-size: 1.5rem;
       z-index: 2;
@@ -472,10 +472,10 @@ const deleteCommodity = async (id: string) => {
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: rgba(226, 227, 229, 0.3);
+      background-color: rgba(226, 227, 229, 0.15);
       background-image:
-        linear-gradient(45deg, transparent, transparent 45%, rgba(56, 61, 65, 0.3) 46%, rgba(56, 61, 65, 0.3) 54%, transparent 55%, transparent),
-        linear-gradient(135deg, transparent, transparent 45%, rgba(56, 61, 65, 0.3) 46%, rgba(56, 61, 65, 0.3) 54%, transparent 55%, transparent);
+        linear-gradient(45deg, transparent, transparent 45%, rgba(56, 61, 65, 0.15) 46%, rgba(56, 61, 65, 0.15) 54%, transparent 55%, transparent),
+        linear-gradient(135deg, transparent, transparent 45%, rgba(56, 61, 65, 0.15) 46%, rgba(56, 61, 65, 0.15) 54%, transparent 55%, transparent);
       background-size: 30px 30px;
       z-index: 1;
       pointer-events: none;
