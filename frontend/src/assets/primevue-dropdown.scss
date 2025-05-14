@@ -1,0 +1,258 @@
+:root {
+  /* ========== Select ========== */
+  --p-select-padding-x: 0.75rem;
+  --p-select-padding-y: 0.5rem;
+  --p-select-color: #333; /* Match text-color from main.scss */
+  --p-select-background: #ffffff;
+  --p-select-border-color: #ddd; /* Match border-color from main.scss */
+  --p-select-border-radius: 4px; /* Match default-radius from main.scss */
+  --p-select-shadow: none;
+  --p-select-hover-border-color: #bbb;
+  --p-select-focus-border-color: #4CAF50; /* Match primary-color from main.scss */
+  --p-select-focus-ring-width: 2px;
+  --p-select-focus-ring-style: solid;
+  --p-select-focus-ring-color: rgba(76, 175, 80, 0.2); /* Primary color with opacity */
+  --p-select-focus-ring-offset: 2px;
+  --p-select-disabled-background: #f8f9fa; /* Match light-bg-color from main.scss */
+  --p-select-clear-icon-color: #6c757d; /* Match text-secondary-color from main.scss */
+  --p-select-dropdown-color: #6c757d; /* Match text-secondary-color from main.scss */
+  --p-select-dropdown-width: 2.5rem;
+
+  --p-select-option-padding: 0.625rem 1rem;
+  --p-select-option-color: #333; /* Match text-color from main.scss */
+  --p-select-option-border-radius: 4px; /* Match default-radius from main.scss */
+  --p-select-option-focus-background: #e9ecef; /* Match light-hover-bg-color from main.scss */
+  --p-select-option-focus-color: #333; /* Match text-color from main.scss */
+  --p-select-option-selected-background: rgba(76, 175, 80, 0.1); /* Primary color with low opacity */
+  --p-select-option-selected-color: #43a047; /* Match primary-hover-color from main.scss */
+  --p-select-empty-message-padding: 0.75rem;
+
+  --p-select-overlay-background: #ffffff;
+  --p-select-overlay-color: #333; /* Match text-color from main.scss */
+  --p-select-overlay-border-color: #ddd; /* Match border-color from main.scss */
+  --p-select-overlay-border-radius: 4px; /* Match default-radius from main.scss */
+  --p-select-overlay-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); /* Match box-shadow from main.scss */
+
+  --p-select-list-gap: 2px;
+  --p-select-list-padding: 0.25rem;
+  --p-select-list-header-padding: 0.5rem 0.75rem 0.25rem;
+
+  /* ========== Checkmark ========== */
+  --p-select-checkmark-color: #4CAF50; /* Match primary-color from main.scss */
+  --p-select-checkmark-gutter-start: 0.5rem;
+  --p-select-checkmark-gutter-end: 0.5rem;
+
+  /* ========== Sizes ========== */
+  --p-select-sm-font-size: 0.875rem;
+  --p-select-sm-padding-y: 0.25rem;
+  --p-select-sm-padding-x: 0.5rem;
+  --p-select-lg-font-size: 1.125rem;
+  --p-select-lg-padding-y: 0.75rem;
+  --p-select-lg-padding-x: 1.25rem;
+
+  /* ========== Form Field ========== */
+  --p-form-field-padding-x: 0.75rem;
+
+  /* ========== Input Text ========== */
+  --p-inputtext-color: #333; /* Match text-color from main.scss */
+  --p-inputtext-background: #ffffff;
+  --p-inputtext-padding-x: 0.75rem;
+  --p-inputtext-padding-y: 0.5rem;
+  --p-inputtext-border-color: #ddd; /* Match border-color from main.scss */
+  --p-inputtext-transition-duration: 0.2s;
+  --p-icon-size: 1rem;
+
+  /* ========== Additional Custom Styles ========== */
+  /* These styles help match your form-control class from main.scss */
+  --p-select-focus-transition: border-color 0.2s, box-shadow 0.2s;
+  --p-select-hover-transition: border-color 0.2s;
+}
+
+/* Additional custom styling for PrimeVue Select components */
+
+/* Base select styling */
+.p-select {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
+    'Open Sans', 'Helvetica Neue', sans-serif;
+  width: 100%;
+}
+
+/* Input field styling */
+.p-select .p-select-input {
+  width: 100%;
+  padding: var(--p-select-padding-y) var(--p-select-padding-x);
+  border: 1px solid var(--p-select-border-color);
+  border-radius: var(--p-select-border-radius);
+  transition: var(--p-select-focus-transition);
+}
+
+/* Focus state */
+.p-select:not(.p-disabled).p-focus .p-select-input {
+  border-color: var(--p-select-focus-border-color);
+  box-shadow: 0 0 0 var(--p-select-focus-ring-width) var(--p-select-focus-ring-color);
+  outline: none;
+}
+
+/* Hover state */
+.p-select:not(.p-disabled):hover .p-select-input {
+  border-color: var(--p-select-hover-border-color);
+}
+
+/* Dropdown panel */
+.p-select-panel {
+  background: var(--p-select-overlay-background);
+  color: var(--p-select-overlay-color);
+  border: 1px solid var(--p-select-overlay-border-color);
+  border-radius: var(--p-select-overlay-border-radius);
+  box-shadow: var(--p-select-overlay-shadow);
+}
+
+/* Option items */
+.p-select-items {
+  padding: var(--p-select-list-padding);
+}
+
+.p-select-item {
+  padding: var(--p-select-option-padding);
+  color: var(--p-select-option-color);
+  border-radius: var(--p-select-option-border-radius);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+/* Hover state for options */
+.p-select-item:not(.p-disabled):hover {
+  background-color: var(--p-select-option-focus-background);
+  color: var(--p-select-option-focus-color);
+}
+
+/* Selected option */
+.p-select-item.p-highlight {
+  background-color: var(--p-select-option-selected-background);
+  color: var(--p-select-option-selected-color);
+}
+
+/* Empty message */
+.p-select-empty-message {
+  padding: var(--p-select-empty-message-padding);
+  color: var(--p-select-dropdown-color);
+}
+
+/* Dropdown trigger icon */
+.p-select-trigger {
+  width: var(--p-select-dropdown-width);
+  color: var(--p-select-dropdown-color);
+}
+
+/* Clear icon */
+.p-select-clear-icon {
+  color: var(--p-select-clear-icon-color);
+}
+
+/* Disabled state */
+.p-select.p-disabled .p-select-input {
+  background-color: var(--p-select-disabled-background);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Checkmark in multi-select */
+.p-select-item .p-select-item-checkmark {
+  color: var(--p-select-checkmark-color);
+  margin-right: var(--p-select-checkmark-gutter-end);
+}
+
+/* PrimeVue v4 specific class names */
+
+/* Dropdown component */
+.p-dropdown {
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
+    'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.p-dropdown-label {
+  padding: var(--p-select-padding-y) var(--p-select-padding-x);
+  color: var(--p-select-color);
+}
+
+.p-dropdown-trigger {
+  width: var(--p-select-dropdown-width);
+  color: var(--p-select-dropdown-color);
+}
+
+.p-dropdown:not(.p-disabled).p-focus {
+  border-color: var(--p-select-focus-border-color);
+  box-shadow: 0 0 0 var(--p-select-focus-ring-width) var(--p-select-focus-ring-color);
+}
+
+.p-dropdown:not(.p-disabled):hover {
+  border-color: var(--p-select-hover-border-color);
+}
+
+.p-dropdown-panel {
+  background: var(--p-select-overlay-background);
+  color: var(--p-select-overlay-color);
+  border: 1px solid var(--p-select-overlay-border-color);
+  border-radius: var(--p-select-overlay-border-radius);
+  box-shadow: var(--p-select-overlay-shadow);
+}
+
+.p-dropdown-items {
+  padding: var(--p-select-list-padding);
+}
+
+.p-dropdown-item {
+  padding: var(--p-select-option-padding);
+  color: var(--p-select-option-color);
+  border-radius: var(--p-select-option-border-radius);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.p-dropdown-item:not(.p-disabled):hover {
+  background-color: var(--p-select-option-focus-background);
+  color: var(--p-select-option-focus-color);
+}
+
+.p-dropdown-item.p-highlight {
+  background-color: var(--p-select-option-selected-background);
+  color: var(--p-select-option-selected-color);
+}
+
+/* Select component */
+.p-select-panel .p-select-items .p-select-item.p-select-option-selected {
+  background-color: var(--p-select-option-selected-background);
+  color: var(--p-select-option-selected-color);
+}
+
+/* Currency dropdown specific styling */
+.currency-dropdown .p-dropdown {
+  width: 100%;
+}
+
+.currency-dropdown .p-dropdown-label {
+  font-weight: normal;
+}
+
+/* Form integration */
+.form-group .p-dropdown,
+.form-group .p-select {
+  width: 100%;
+}
+
+/* Filter styling */
+.p-dropdown-filter-container {
+  padding: 0.5rem;
+}
+
+.p-dropdown-filter {
+  width: 100%;
+  padding: var(--p-inputtext-padding-y) var(--p-inputtext-padding-x);
+  border: 1px solid var(--p-inputtext-border-color);
+  border-radius: var(--p-select-border-radius);
+}
+
+.p-dropdown-filter:focus {
+  border-color: var(--p-select-focus-border-color);
+  outline: none;
+  box-shadow: 0 0 0 var(--p-select-focus-ring-width) var(--p-select-focus-ring-color);
+}

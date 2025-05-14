@@ -83,11 +83,18 @@
     <div v-else-if="settingId === 'system_config'" class="form">
       <div class="form-group">
         <label for="main-currency">Main Currency</label>
-        <select id="main-currency" class="form-control" v-model="systemConfig.main_currency">
-          <option v-for="currency in currencies" :key="currency.id" :value="currency.id">
-            {{ JSON.parse(currency.value) }} ({{ currency.id }})
-          </option>
-        </select>
+        <Select
+          id="main-currency"
+          v-model="systemConfig.main_currency"
+          :options="currencies"
+          optionLabel="label"
+          optionValue="id"
+          placeholder="Select a currency"
+          class="w-100 form-control currency-dropdown"
+          :filter="true"
+          :showClear="false"
+          aria-label="Currency"
+        />
       </div>
 
       <div class="form-actions">
@@ -135,6 +142,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 import NotificationBanner from '@/components/NotificationBanner.vue'
+import Select from 'primevue/select'
 
 const route = useRoute()
 const router = useRouter()
@@ -221,7 +229,8 @@ const fetchCurrencies = async () => {
 
       return {
         id: code,
-        value: JSON.stringify(currencyName)
+        label: `${currencyName} (${code})`,
+        value: code
       }
     })
   } catch (err) {
@@ -414,91 +423,6 @@ function formatBytes(bytes: number) {
     }
   }
 
-  .form {
-    background-color: #f9f9f9;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-    .form-group {
-      margin-bottom: 15px;
-
-      label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: 500;
-      }
-
-      .form-control {
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 1rem;
-
-        &.is-invalid {
-          border-color: $error-color;
-        }
-      }
-
-      .json-editor {
-        font-family: monospace;
-        min-height: 200px;
-      }
-
-      small {
-        display: block;
-        margin-top: 5px;
-        color: $text-secondary-color;
-      }
-
-      .error-message {
-        color: $error-color;
-        margin-top: 5px;
-        font-size: 0.9rem;
-      }
-    }
-
-    .form-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 20px;
-
-      button {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1rem;
-        transition: background-color 0.2s;
-
-        &.btn-primary {
-          background-color: $primary-color;
-          color: white;
-
-          &:hover {
-            background-color: darken($primary-color, 10%);
-          }
-
-          &:disabled {
-            background-color: lighten($primary-color, 20%);
-            cursor: not-allowed;
-          }
-        }
-
-        &.btn-secondary {
-          background-color: #6c757d;
-          color: white;
-
-          &:hover {
-            background-color: darken(#6c757d, 10%);
-          }
-        }
-      }
-    }
-  }
-
   .settings-required-banner {
     display: flex;
     background-color: #fff3cd;
@@ -536,6 +460,11 @@ function formatBytes(bytes: number) {
   .error {
     color: $error-color;
   }
+}
+
+// Utility class for width 100%
+.w-100 {
+  width: 100%;
 }
 
 @media (max-width: 768px) {

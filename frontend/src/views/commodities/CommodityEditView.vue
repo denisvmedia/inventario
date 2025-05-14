@@ -47,35 +47,31 @@
 
           <div class="form-group">
             <label for="type">Type</label>
-            <select
+            <Select
               id="type"
               v-model="form.type"
-              required
-              class="form-control"
+              :options="commodityTypes"
+              optionLabel="name"
+              optionValue="id"
+              placeholder="Select a type"
+              class="w-100"
               :class="{ 'is-invalid': errors.type }"
-            >
-              <option value="" disabled>Select a type</option>
-              <option v-for="type in commodityTypes" :key="type.id" :value="type.id">
-                {{ type.name }}
-              </option>
-            </select>
+            />
             <div v-if="errors.type" class="error-message">{{ errors.type }}</div>
           </div>
 
           <div class="form-group">
             <label for="area">Area</label>
-            <select
+            <Select
               id="area"
               v-model="form.areaId"
-              required
-              class="form-control"
+              :options="areas"
+              optionLabel="attributes.name"
+              optionValue="id"
+              placeholder="Select an area"
+              class="w-100"
               :class="{ 'is-invalid': errors.areaId }"
-            >
-              <option value="" disabled>Select an area</option>
-              <option v-for="area in areas" :key="area.id" :value="area.id">
-                {{ area.attributes.name }}
-              </option>
-            </select>
+            />
             <div v-if="errors.areaId" class="error-message">{{ errors.areaId }}</div>
           </div>
 
@@ -95,18 +91,16 @@
 
           <div class="form-group">
             <label for="status">Status</label>
-            <select
+            <Select
               id="status"
               v-model="form.status"
-              required
-              class="form-control"
+              :options="commodityStatuses"
+              optionLabel="name"
+              optionValue="id"
+              placeholder="Select a status"
+              class="w-100"
               :class="{ 'is-invalid': errors.status }"
-            >
-              <option value="" disabled>Select a status</option>
-              <option v-for="status in commodityStatuses" :key="status.id" :value="status.id">
-                {{ status.name }}
-              </option>
-            </select>
+            />
             <div v-if="errors.status" class="error-message">{{ errors.status }}</div>
           </div>
 
@@ -144,17 +138,17 @@
 
           <div class="form-group">
             <label for="originalPriceCurrency">Original Price Currency</label>
-            <select
+            <Select
               id="originalPriceCurrency"
               v-model="form.originalPriceCurrency"
-              class="form-control"
+              :options="currencies"
+              optionLabel="label"
+              optionValue="code"
+              placeholder="Select a currency"
+              class="w-100"
               :class="{ 'is-invalid': errors.originalPriceCurrency }"
-            >
-              <option value="" disabled>Select a currency</option>
-              <option v-for="currency in currencies" :key="currency.id" :value="currency.id">
-                {{ currency.name }}
-              </option>
-            </select>
+              :filter="true"
+            />
             <div v-if="errors.originalPriceCurrency" class="error-message">{{ errors.originalPriceCurrency }}</div>
           </div>
 
@@ -327,9 +321,11 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
+import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
-import { CURRENCIES, CURRENCY_CZK } from '@/constants/currencies'
+import { CURRENCY_CZK } from '@/constants/currencies'
+import Select from 'primevue/select'
 
 const route = useRoute()
 const router = useRouter()
@@ -350,7 +346,8 @@ const debugInfo = ref<string | null>(null)
 
 const commodityTypes = ref(COMMODITY_TYPES)
 const commodityStatuses = ref(COMMODITY_STATUSES)
-const currencies = ref(CURRENCIES)
+const currencies = ref<any[]>([])
+const mainCurrency = ref<string>(CURRENCY_CZK)
 
 const form = reactive({
   name: '',
@@ -391,14 +388,42 @@ const errors = reactive({
 
 onMounted(async () => {
   try {
-    // Load commodity and areas in parallel
-    const [commodityResponse, areasResponse] = await Promise.all([
+    // Load commodity, areas, and currencies in parallel
+    const [commodityResponse, areasResponse, currenciesResponse, mainCurrencyResponse] = await Promise.all([
       commodityService.getCommodity(id),
-      areaService.getAreas()
+      areaService.getAreas(),
+      settingsService.getCurrencies(),
+      settingsService.getMainCurrency()
     ])
 
     commodity.value = commodityResponse.data.data
     areas.value = areasResponse.data.data
+
+    // Process currencies with proper names
+    const currencyCodes = currenciesResponse.data
+    const currencyNames = new Intl.DisplayNames(['en'], { type: 'currency' })
+
+    currencies.value = currencyCodes.map((code: string) => {
+      let currencyName = code
+      try {
+        // Try to get the localized currency name
+        currencyName = currencyNames.of(code)
+      } catch (e) {
+        console.warn(`Could not get display name for currency: ${code}`)
+      }
+
+      return {
+        code: code,
+        label: `${currencyName} (${code})`
+      }
+    })
+
+    console.log('Loaded currencies:', currencies.value)
+
+    // Set main currency if available
+    if (mainCurrencyResponse) {
+      mainCurrency.value = mainCurrencyResponse
+    }
 
     // Initialize form with commodity data
     const attrs = commodity.value.attributes
