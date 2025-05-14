@@ -13,6 +13,7 @@
     <div v-if="error" class="error-alert">{{ error }}</div>
 
     <CommodityForm
+      ref="commodityForm"
       :initial-data="form"
       :areas="areas"
       :currencies="currencies"
@@ -48,6 +49,7 @@ import CommodityForm from '@/components/CommodityForm.vue'
 
 const router = useRouter()
 const route = useRoute()
+const commodityForm = ref(null)
 const isSubmitting = ref(false)
 const error = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
@@ -177,95 +179,10 @@ onMounted(async () => {
   }
 })
 
-const validateForm = () => {
-  let isValid = true
+// Validation is now handled by the CommodityForm component
 
-  // Reset errors
-  errors.name = ''
-  errors.shortName = ''
-  errors.type = ''
-  errors.areaId = ''
-  errors.count = ''
-  errors.originalPrice = ''
-  errors.originalPriceCurrency = ''
-  errors.convertedOriginalPrice = ''
-  errors.currentPrice = ''
-  errors.serialNumber = ''
-  errors.status = ''
-  errors.purchaseDate = ''
-  errors.comments = ''
-
-  if (!form.name.trim()) {
-    errors.name = 'Name is required'
-    isValid = false
-  }
-
-  if (!form.shortName.trim()) {
-    errors.shortName = 'Short Name is required'
-    isValid = false
-  }
-
-  if (!form.type) {
-    errors.type = 'Type is required'
-    isValid = false
-  }
-
-  if (!form.areaId) {
-    errors.areaId = 'Area is required'
-    isValid = false
-  }
-
-  if (form.count < 1) {
-    errors.count = 'Count must be at least 1'
-    isValid = false
-  }
-
-  if (form.originalPrice < 0) {
-    errors.originalPrice = 'Original Price cannot be negative'
-    isValid = false
-  }
-
-  if (!form.originalPriceCurrency) {
-    errors.originalPriceCurrency = 'Original Price Currency is required'
-    isValid = false
-  }
-
-  if (form.convertedOriginalPrice < 0) {
-    errors.convertedOriginalPrice = 'Converted Original Price cannot be negative'
-    isValid = false
-  }
-
-  if (form.currentPrice < 0) {
-    errors.currentPrice = 'Current Price cannot be negative'
-    isValid = false
-  }
-
-  if (!form.status) {
-    errors.status = 'Status is required'
-    isValid = false
-  }
-
-  if (!form.purchaseDate) {
-    errors.purchaseDate = 'Purchase Date is required'
-    isValid = false
-  }
-
-  if (form.purchaseDate! > today) {
-    errors.purchaseDate = 'Purchase Date cannot be in the future'
-    isValid = false
-  }
-
-  if (form.comments! && form.comments! > 1000) {
-    errors.comments = 'Comments cannot exceed 1000 characters'
-    isValid = false
-  }
-
-  return isValid
-}
-
-const submitForm = async () => {
-  if (!validateForm()) return
-
+const submitForm = async (formData: any) => {
+  console.log('CommodityCreateView: submitForm called with formData:', formData)
   isSubmitting.value = true
   error.value = null
   debugInfo.value = null
@@ -276,24 +193,24 @@ const submitForm = async () => {
       data: {
         type: 'commodities',
         attributes: {
-          name: form.name.trim(),
-          short_name: form.shortName.trim(),
-          type: form.type,
-          area_id: form.areaId,
-          count: form.count,
-          original_price: form.originalPrice,
-          original_price_currency: form.originalPriceCurrency,
-          converted_original_price: form.convertedOriginalPrice,
-          current_price: form.currentPrice,
-          serial_number: form.serialNumber || null,
-          extra_serial_numbers: form.extraSerialNumbers.length > 0 ? form.extraSerialNumbers : null,
-          part_numbers: form.partNumbers.length > 0 ? form.partNumbers : null,
-          tags: form.tags.length > 0 ? form.tags : null,
-          status: form.status,
-          purchase_date: form.purchaseDate,
-          urls: form.urls.length > 0 ? form.urls : null,
-          comments: form.comments || null,
-          draft: form.draft
+          name: formData.name.trim(),
+          short_name: formData.shortName.trim(),
+          type: formData.type,
+          area_id: formData.areaId,
+          count: formData.count,
+          original_price: formData.originalPrice,
+          original_price_currency: formData.originalPriceCurrency,
+          converted_original_price: formData.convertedOriginalPrice,
+          current_price: formData.currentPrice,
+          serial_number: formData.serialNumber || null,
+          extra_serial_numbers: formData.extraSerialNumbers.length > 0 ? formData.extraSerialNumbers : null,
+          part_numbers: formData.partNumbers.length > 0 ? formData.partNumbers : null,
+          tags: formData.tags.length > 0 ? formData.tags : null,
+          status: formData.status,
+          purchase_date: formData.purchaseDate,
+          urls: formData.urls.length > 0 ? formData.urls : null,
+          comments: formData.comments || null,
+          draft: formData.draft
         }
       }
     }
@@ -302,13 +219,8 @@ const submitForm = async () => {
     console.log('Submitting commodity with payload:', JSON.stringify(payload, null, 2))
     debugInfo.value = `Sending: ${JSON.stringify(payload, null, 2)}`
 
-    // Make the API call
-    const response = await axios.post('/api/v1/commodities', payload, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    // Make the API call using commodityService
+    const response = await commodityService.createCommodity(payload)
 
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`
@@ -346,13 +258,10 @@ const submitForm = async () => {
       // Extract validation errors if present
       const apiErrors = err.response.data.errors?.[0]?.error?.error?.data?.attributes || {}
 
-      // Map API errors to form errors
-      Object.keys(apiErrors).forEach(key => {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
-        if (errors.hasOwnProperty(camelKey)) {
-          errors[camelKey] = apiErrors[key]
-        }
-      })
+      // Set errors on the form component
+      if (commodityForm.value && commodityForm.value.setErrors) {
+        commodityForm.value.setErrors(apiErrors)
+      }
 
       if (Object.values(errors).some(e => e)) {
         error.value = 'Please correct the errors above.'

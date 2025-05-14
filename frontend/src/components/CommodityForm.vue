@@ -348,7 +348,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['submit', 'cancel', 'validate'])
+const emit = defineEmits(['submit', 'cancel', 'validate', 'update:errors'])
 
 const commodityTypes = ref(COMMODITY_TYPES)
 const commodityStatuses = ref(COMMODITY_STATUSES)
@@ -383,6 +383,23 @@ watch(() => props.areaFromUrl, (newValue) => {
   }
 }, { immediate: true })
 
+// Method to set errors from outside (for backend validation errors)
+const setErrors = (backendErrors) => {
+  // Map backend errors to form errors
+  if (backendErrors) {
+    Object.keys(backendErrors).forEach(key => {
+      // Convert snake_case to camelCase
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+      if (formErrors.hasOwnProperty(camelKey)) {
+        formErrors[camelKey] = backendErrors[key]
+      }
+    })
+  }
+}
+
+// Expose the setErrors method
+defineExpose({ setErrors })
+
 const validateForm = () => {
   let isValid = true
 
@@ -392,10 +409,10 @@ const validateForm = () => {
   })
 
   // Validation logic
-  if (!formData.name.trim()) {
-    formErrors.name = 'Name is required'
-    isValid = false
-  }
+  // if (!formData.name.trim()) {
+  //   formErrors.name = 'Name is required'
+  //   isValid = false
+  // }
 
   if (!formData.shortName.trim()) {
     formErrors.shortName = 'Short Name is required'
@@ -463,7 +480,12 @@ const validateForm = () => {
 }
 
 const onSubmit = () => {
-  if (!validateForm()) return
+  console.log('CommodityForm: onSubmit called')
+  if (!validateForm()) {
+    console.log('CommodityForm: Form validation failed')
+    return
+  }
+  console.log('CommodityForm: Form validation passed, emitting submit event with data:', formData)
   emit('submit', formData)
 }
 

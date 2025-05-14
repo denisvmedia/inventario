@@ -15,6 +15,7 @@
     <div v-else-if="!commodity" class="not-found">Commodity not found</div>
     <div v-else>
       <CommodityForm
+        ref="commodityForm"
         :initial-data="form"
         :areas="areas"
         :currencies="currencies"
@@ -50,6 +51,7 @@ import CommodityForm from '@/components/CommodityForm.vue'
 const route = useRoute()
 const router = useRouter()
 const id = route.params.id as string
+const commodityForm = ref(null)
 
 // Navigation source tracking
 const sourceIsArea = computed(() => route.query.source === 'area')
@@ -270,13 +272,10 @@ const submitForm = async (formData: any) => {
       // Extract validation errors if present
       const apiErrors = err.response.data.errors?.[0]?.error?.error?.data?.attributes || {}
 
-      // Map API errors to form errors
-      Object.keys(apiErrors).forEach(key => {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
-        if (errors.hasOwnProperty(camelKey)) {
-          errors[camelKey] = apiErrors[key]
-        }
-      })
+      // Set errors on the form component
+      if (commodityForm.value && commodityForm.value.setErrors) {
+        commodityForm.value.setErrors(apiErrors)
+      }
 
       if (Object.values(errors).some(e => e)) {
         formError.value = 'Please correct the errors above.'
