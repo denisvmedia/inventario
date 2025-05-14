@@ -29,11 +29,18 @@
     <div v-else-if="settingId === 'ui_config'" class="form">
       <div class="form-group">
         <label for="theme">Theme</label>
-        <select id="theme" class="form-control" v-model="uiConfig.theme">
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="system">System</option>
-        </select>
+        <Select
+          id="theme"
+          v-model="uiConfig.theme"
+          :options="themeOptions"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="Select a theme"
+          class="w-100"
+          :class="{ 'is-invalid': formErrors.theme }"
+          aria-label="Theme"
+        />
+        <div v-if="formErrors.theme" class="error-message">{{ formErrors.theme }}</div>
       </div>
 
       <div class="form-group">
@@ -59,12 +66,18 @@
 
       <div class="form-group">
         <label for="date-format">Date Format</label>
-        <select id="date-format" class="form-control" v-model="uiConfig.default_date_format">
-          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-          <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-          <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-          <option value="DD.MM.YYYY">DD.MM.YYYY</option>
-        </select>
+        <Select
+          id="date-format"
+          v-model="uiConfig.default_date_format"
+          :options="dateFormatOptions"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="Select a date format"
+          class="w-100"
+          :class="{ 'is-invalid': formErrors.default_date_format }"
+          aria-label="Date Format"
+        />
+        <div v-if="formErrors.default_date_format" class="error-message">{{ formErrors.default_date_format }}</div>
       </div>
 
       <div class="form-actions">
@@ -90,11 +103,13 @@
           optionLabel="label"
           optionValue="id"
           placeholder="Select a currency"
-          class="w-100 form-control currency-dropdown"
+          class="w-100"
+          :class="{ 'is-invalid': formErrors.main_currency }"
           :filter="true"
           :showClear="false"
           aria-label="Currency"
         />
+        <div v-if="formErrors.main_currency" class="error-message">{{ formErrors.main_currency }}</div>
       </div>
 
       <div class="form-actions">
@@ -156,6 +171,21 @@ const jsonError = ref<string | null>(null)
 const settingData = ref<any>(null)
 const currencies = ref<any[]>([])
 
+// Theme options
+const themeOptions = ref([
+  { id: 'light', name: 'Light' },
+  { id: 'dark', name: 'Dark' },
+  { id: 'system', name: 'System' }
+])
+
+// Date format options
+const dateFormatOptions = ref([
+  { id: 'YYYY-MM-DD', name: 'YYYY-MM-DD' },
+  { id: 'MM/DD/YYYY', name: 'MM/DD/YYYY' },
+  { id: 'DD/MM/YYYY', name: 'DD/MM/YYYY' },
+  { id: 'DD.MM.YYYY', name: 'DD.MM.YYYY' }
+])
+
 // Track if we've loaded settings
 const settingsLoaded = ref(false)
 
@@ -182,6 +212,13 @@ const systemConfig = ref({
   backup_interval: '24h',
   backup_location: '',
   main_currency: 'USD'
+})
+
+// Form validation errors
+const formErrors = ref({
+  theme: '',
+  default_date_format: '',
+  main_currency: ''
 })
 
 const settingTitle = computed(() => {
@@ -312,6 +349,27 @@ function goBack() {
 // Removed saveCurrencyConfig and saveTLSConfig functions as requested
 
 async function saveUIConfig() {
+  // Reset validation errors
+  formErrors.value.theme = ''
+  formErrors.value.default_date_format = ''
+
+  // Validate
+  let isValid = true
+
+  if (!uiConfig.value.theme) {
+    formErrors.value.theme = 'Theme is required'
+    isValid = false
+  }
+
+  if (!uiConfig.value.default_date_format) {
+    formErrors.value.default_date_format = 'Date Format is required'
+    isValid = false
+  }
+
+  if (!isValid) {
+    return
+  }
+
   isSubmitting.value = true
   try {
     // Update theme
@@ -335,6 +393,21 @@ async function saveUIConfig() {
 }
 
 async function saveSystemConfig() {
+  // Reset validation errors
+  formErrors.value.main_currency = ''
+
+  // Validate
+  let isValid = true
+
+  if (!systemConfig.value.main_currency) {
+    formErrors.value.main_currency = 'Main Currency is required'
+    isValid = false
+  }
+
+  if (!isValid) {
+    return
+  }
+
   isSubmitting.value = true
   try {
     // Update main currency
@@ -465,6 +538,13 @@ function formatBytes(bytes: number) {
 // Utility class for width 100%
 .w-100 {
   width: 100%;
+}
+
+// Error message styling to match CommodityForm.vue
+.error-message {
+  color: $danger-color;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
 }
 
 @media (max-width: 768px) {
