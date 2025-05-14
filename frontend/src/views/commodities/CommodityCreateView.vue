@@ -44,18 +44,16 @@
 
         <div class="form-group">
           <label for="type">Type</label>
-          <select
+          <Select
             id="type"
             v-model="form.type"
-            required
-            class="form-control"
+            :options="commodityTypes"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Select a type"
+            class="w-100"
             :class="{ 'is-invalid': errors.type }"
-          >
-            <option value="" disabled>Select a type</option>
-            <option v-for="type in commodityTypes" :key="type.id" :value="type.id">
-              {{ type.name }}
-            </option>
-          </select>
+          />
           <div v-if="errors.type" class="error-message">{{ errors.type }}</div>
         </div>
 
@@ -71,19 +69,17 @@
             >
             <input type="hidden" v-model="form.areaId">
           </div>
-          <select
+          <Select
             v-else
             id="area"
             v-model="form.areaId"
-            required
-            class="form-control"
+            :options="areas"
+            optionLabel="attributes.name"
+            optionValue="id"
+            placeholder="Select an area"
+            class="w-100"
             :class="{ 'is-invalid': errors.areaId }"
-          >
-            <option value="" disabled>Select an area</option>
-            <option v-for="area in areas" :key="area.id" :value="area.id">
-              {{ area.attributes.name }}
-            </option>
-          </select>
+          />
           <div v-if="errors.areaId" class="error-message">{{ errors.areaId }}</div>
         </div>
 
@@ -123,18 +119,17 @@
 
         <div class="form-group">
           <label for="originalPriceCurrency">Original Price Currency</label>
-          <select
+          <Select
             id="originalPriceCurrency"
             v-model="form.originalPriceCurrency"
-            required
-            class="form-control"
+            :options="currencies"
+            optionLabel="label"
+            optionValue="code"
+            placeholder="Select a currency"
+            class="w-100"
             :class="{ 'is-invalid': errors.originalPriceCurrency }"
-          >
-            <option value="" disabled>Select a currency</option>
-            <option v-for="currency in currencies" :key="currency.id" :value="currency.id">
-              {{ currency.name }}
-            </option>
-          </select>
+            :filter="true"
+          />
           <div v-if="errors.originalPriceCurrency" class="error-message">{{ errors.originalPriceCurrency }}</div>
         </div>
 
@@ -237,18 +232,16 @@
 
         <div class="form-group">
           <label for="status">Status</label>
-          <select
+          <Select
             id="status"
             v-model="form.status"
-            required
-            class="form-control"
+            :options="commodityStatuses"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Select a status"
+            class="w-100"
             :class="{ 'is-invalid': errors.status }"
-          >
-            <option value="" disabled>Select a status</option>
-            <option v-for="status in commodityStatuses" :key="status.id" :value="status.id">
-              {{ status.name }}
-            </option>
-          </select>
+          />
           <div v-if="errors.status" class="error-message">{{ errors.status }}</div>
         </div>
 
@@ -330,9 +323,11 @@ import axios from 'axios'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
+import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
-import { CURRENCIES, CURRENCY_CZK } from '@/constants/currencies'
+import { CURRENCY_CZK } from '@/constants/currencies'
+import Select from 'primevue/select'
 
 const router = useRouter()
 const route = useRoute()
@@ -342,9 +337,10 @@ const debugInfo = ref<string | null>(null)
 const areas = ref<any[]>([])
 const commodityTypes = ref(COMMODITY_TYPES)
 const commodityStatuses = ref(COMMODITY_STATUSES)
-const currencies = ref(CURRENCIES)
+const currencies = ref<any[]>([])
 const areaFromUrl = ref<string | null>(null)
 const areaName = ref<string>('')
+const mainCurrency = ref<string>(CURRENCY_CZK)
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -393,8 +389,8 @@ onMounted(async () => {
       console.log('Area ID from URL:', areaFromUrl.value)
     }
 
-    // Fetch areas and locations in parallel
-    const [areasResponse, locationsResponse] = await Promise.all([
+    // Fetch areas, locations, currencies, and main currency in parallel
+    const [areasResponse, locationsResponse, currenciesResponse, mainCurrencyResponse] = await Promise.all([
       axios.get('/api/v1/areas', {
         headers: {
           'Accept': 'application/vnd.api+json'
@@ -404,13 +400,42 @@ onMounted(async () => {
         headers: {
           'Accept': 'application/vnd.api+json'
         }
-      })
+      }),
+      settingsService.getCurrencies(),
+      settingsService.getMainCurrency()
     ])
 
     areas.value = areasResponse.data.data
     const locations = locationsResponse.data.data
     console.log('Loaded areas:', areas.value)
     console.log('Loaded locations:', locations)
+
+    // Process currencies with proper names
+    const currencyCodes = currenciesResponse.data
+    const currencyNames = new Intl.DisplayNames(['en'], { type: 'currency' })
+
+    currencies.value = currencyCodes.map((code: string) => {
+      let currencyName = code
+      try {
+        // Try to get the localized currency name
+        currencyName = currencyNames.of(code)
+      } catch (e) {
+        console.warn(`Could not get display name for currency: ${code}`)
+      }
+
+      return {
+        code: code,
+        label: `${currencyName} (${code})`
+      }
+    })
+
+    console.log('Loaded currencies:', currencies.value)
+
+    // Set main currency if available
+    if (mainCurrencyResponse) {
+      mainCurrency.value = mainCurrencyResponse
+      form.originalPriceCurrency = mainCurrency.value
+    }
 
     // Check if we have locations and areas
     if (locations.length === 0 || areas.value.length === 0) {
@@ -430,8 +455,8 @@ onMounted(async () => {
       }
     }
   } catch (err: any) {
-    error.value = 'Failed to load areas: ' + (err.message || 'Unknown error')
-    console.error('Failed to load areas:', err)
+    error.value = 'Failed to load data: ' + (err.message || 'Unknown error')
+    console.error('Failed to load data:', err)
   }
 })
 
