@@ -490,6 +490,7 @@ const deleteCommodity = async (id: string) => {
   &.draft {
     background: repeating-linear-gradient(45deg, #ffffff, #ffffff 5px, #eeeeee4d 5px, #eeeeee4d 7px);
     position: relative;
+    filter: grayscale(0.8);
 
     h3, .commodity-meta, .commodity-price, .price-per-unit {
       color: $text-secondary-color;
@@ -579,7 +580,7 @@ const deleteCommodity = async (id: string) => {
 
   &.written-off {
     position: relative;
-    filter: contrast(0.8);
+    filter: contrast(0.95);
 
     &::before {
       content: '';
@@ -588,10 +589,10 @@ const deleteCommodity = async (id: string) => {
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: rgba(226, 227, 229, 0.15);
+      background-color: rgba(226, 227, 229, 0.0375);
       background-image:
-        linear-gradient(45deg, transparent, transparent 45%, rgba(56, 61, 65, 0.15) 46%, rgba(56, 61, 65, 0.15) 54%, transparent 55%, transparent),
-        linear-gradient(135deg, transparent, transparent 45%, rgba(56, 61, 65, 0.15) 46%, rgba(56, 61, 65, 0.15) 54%, transparent 55%, transparent);
+        linear-gradient(45deg, transparent, transparent 45%, rgba(56, 61, 65, 0.0375) 46%, rgba(56, 61, 65, 0.0375) 54%, transparent 55%, transparent),
+        linear-gradient(135deg, transparent, transparent 45%, rgba(56, 61, 65, 0.0375) 46%, rgba(56, 61, 65, 0.0375) 54%, transparent 55%, transparent);
       background-size: 30px 30px;
       z-index: 1;
       pointer-events: none;
