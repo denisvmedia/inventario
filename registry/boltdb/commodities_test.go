@@ -14,6 +14,7 @@ import (
 
 func setupTestCommodityRegistry(t *testing.T) (*boltdb.CommodityRegistry, *boltdb.AreaRegistry, *boltdb.LocationRegistry, func()) {
 	c := qt.New(t)
+	c.Helper()
 
 	// Create a temporary directory for the test database
 	tempDir, err := os.MkdirTemp("", "boltdb-test-*")
@@ -29,8 +30,13 @@ func setupTestCommodityRegistry(t *testing.T) (*boltdb.CommodityRegistry, *boltd
 	// Create an area registry
 	areaRegistry := boltdb.NewAreaRegistry(db, locationRegistry)
 
+	// Create a settings registry
+	settingsRegistry := boltdb.NewSettingsRegistry(db)
+	err = settingsRegistry.Patch("system.main_currency", "USD")
+	c.Assert(err, qt.IsNil)
+
 	// Create a commodity registry
-	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry)
+	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry, settingsRegistry)
 
 	// Return the registries and a cleanup function
 	cleanup := func() {
@@ -43,6 +49,7 @@ func setupTestCommodityRegistry(t *testing.T) (*boltdb.CommodityRegistry, *boltd
 
 func getCommodityRegistry(t *testing.T) (registry.CommodityRegistry, *models.Commodity, func()) {
 	c := qt.New(t)
+	c.Helper()
 
 	commodityRegistry, areaRegistry, locationRegistry, cleanup := setupTestCommodityRegistry(t)
 
@@ -211,7 +218,7 @@ func TestCommodityRegistry_Create_Validation(t *testing.T) {
 	// Attempt to create the commodity in the registry and expect a validation error
 	_, err := commodityRegistry.Create(commodity)
 	c.Assert(err, qt.Not(qt.IsNil))
-	c.Assert(err.Error(), qt.Contains, "Name")
+	c.Assert(err.Error(), qt.Contains, "name")
 }
 
 func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {

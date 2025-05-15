@@ -56,7 +56,8 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 }
 
 func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
-	var commodityRegistry = memory.NewCommodityRegistry(areaRegistry)
+	settingsRegistry := memory.NewSettingsRegistry()
+	var commodityRegistry = memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
 
 	areas := must.Must(areaRegistry.List())
 

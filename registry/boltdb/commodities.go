@@ -23,13 +23,14 @@ const (
 var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
 
 type CommodityRegistry struct {
-	db           *bolt.DB
-	base         *dbx.BaseRepository[models.Commodity, *models.Commodity]
-	registry     *Registry[models.Commodity, *models.Commodity]
-	areaRegistry registry.AreaRegistry
+	db               *bolt.DB
+	base             *dbx.BaseRepository[models.Commodity, *models.Commodity]
+	registry         *Registry[models.Commodity, *models.Commodity]
+	areaRegistry     registry.AreaRegistry
+	settingsRegistry registry.SettingsRegistry
 }
 
-func NewCommodityRegistry(db *bolt.DB, areaRegistry registry.AreaRegistry) *CommodityRegistry {
+func NewCommodityRegistry(db *bolt.DB, areaRegistry registry.AreaRegistry, settingsRegistry registry.SettingsRegistry) *CommodityRegistry {
 	base := dbx.NewBaseRepository[models.Commodity, *models.Commodity](bucketNameCommodities)
 
 	return &CommodityRegistry{
@@ -41,11 +42,17 @@ func NewCommodityRegistry(db *bolt.DB, areaRegistry registry.AreaRegistry) *Comm
 			entityNameCommodity,
 			bucketNameCommoditiesChildren,
 		),
-		areaRegistry: areaRegistry,
+		areaRegistry:     areaRegistry,
+		settingsRegistry: settingsRegistry,
 	}
 }
 
 func (r *CommodityRegistry) Create(m models.Commodity) (*models.Commodity, error) {
+	err := registry.ValidateCommodity(&m, r.settingsRegistry)
+	if err != nil {
+		return nil, err
+	}
+
 	result, err := r.registry.Create(m, func(tx dbx.TransactionOrBucket, commodity *models.Commodity) error {
 		if commodity.Name == "" {
 			return errkit.WithStack(registry.ErrFieldRequired,
@@ -100,6 +107,26 @@ func (r *CommodityRegistry) List() ([]*models.Commodity, error) {
 }
 
 func (r *CommodityRegistry) Update(m models.Commodity) (*models.Commodity, error) {
+	// Get main currency from settings
+	settings, err := r.settingsRegistry.Get()
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get settings")
+	}
+
+	// Default to USD if main currency is not set
+	mainCurrency := "USD"
+	if settings.MainCurrency != nil {
+		mainCurrency = *settings.MainCurrency
+	}
+
+	// Validate that when original price is in the main currency, converted original price must be zero
+	if string(m.OriginalPriceCurrency) == mainCurrency && !m.ConvertedOriginalPrice.IsZero() {
+		return nil, errkit.Wrap(
+			models.ErrConvertedPriceNotZero,
+			"converted original price must be zero when original price is in the main currency",
+		)
+	}
+
 	var old *models.Commodity
 	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, commodity *models.Commodity) error {
 		old = commodity

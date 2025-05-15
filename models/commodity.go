@@ -1,11 +1,14 @@
 package models
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models/rules"
 )
 
@@ -80,10 +83,11 @@ func (c CommodityType) Validate() error {
 }
 
 var (
-	_ validation.Validatable = (*Commodity)(nil)
-	_ IDable                 = (*Commodity)(nil)
-	_ json.Marshaler         = (*Commodity)(nil)
-	_ json.Unmarshaler       = (*Commodity)(nil)
+	_ validation.Validatable            = (*Commodity)(nil)
+	_ validation.ValidatableWithContext = (*Commodity)(nil)
+	_ IDable                            = (*Commodity)(nil)
+	_ json.Marshaler                    = (*Commodity)(nil)
+	_ json.Unmarshaler                  = (*Commodity)(nil)
 )
 
 type Commodity struct {
@@ -111,7 +115,27 @@ type Commodity struct {
 }
 
 func (a *Commodity) Validate() error {
+	return validation.NewError("must_use_validate_with_context", "must use validate with context")
+}
+
+func (a *Commodity) ValidateWithContext(ctx context.Context) error {
+	mainCurrency, err := validationctx.MainCurrencyFromContext(ctx)
+	if errors.Is(err, validationctx.ErrMainCurrencyNotSet) {
+		return validation.NewError("main_currency_not_set", "main currency not set")
+	}
+	if err != nil {
+		return err
+	}
+
 	fields := make([]*validation.FieldRules, 0)
+
+	// Create a validation rule for price consistency
+	// When original price is in the main currency, converted original price must be zero
+	priceRule := rules.NewConvertedPriceRule(
+		string(mainCurrency),
+		string(a.OriginalPriceCurrency),
+		a.ConvertedOriginalPrice,
+	)
 
 	fields = append(fields,
 		validation.Field(&a.Name, rules.NotEmpty),
@@ -122,6 +146,8 @@ func (a *Commodity) Validate() error {
 		validation.Field(&a.PurchaseDate, rules.NotEmpty),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),
 		validation.Field(&a.URLs),
+		// Add validation for converted original price
+		validation.Field(&a.ConvertedOriginalPrice, priceRule),
 	)
 
 	return validation.ValidateStruct(a, fields...)

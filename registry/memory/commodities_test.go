@@ -126,13 +126,16 @@ func TestCommodityRegistry_Create_Validation(t *testing.T) {
 	// Create a new instance of CommodityRegistry
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	r := memory.NewCommodityRegistry(areaRegistry)
+	settingsRegistry := memory.NewSettingsRegistry()
+	err := settingsRegistry.Patch("system.main_currency", "USD")
+	c.Assert(err, qt.IsNil)
+	r := memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
 
 	// Create a test commodity without required fields
 	commodity := models.Commodity{}
 
 	// Attempt to create the commodity in the registry and expect a validation error
-	_, err := r.Create(commodity)
+	_, err = r.Create(commodity)
 	var errs validation.Errors
 	c.Assert(err, qt.ErrorAs, &errs)
 	c.Assert(errs, qt.HasLen, 6)
@@ -156,7 +159,10 @@ func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 	// Create a new instance of CommodityRegistry
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	r := memory.NewCommodityRegistry(areaRegistry)
+	settingsRegistry := memory.NewSettingsRegistry()
+	err := settingsRegistry.Patch("system.main_currency", "USD")
+	c.Assert(err, qt.IsNil)
+	r := memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
 
 	// Create a test commodity with an invalid area ID
 	commodity := models.Commodity{
@@ -169,7 +175,7 @@ func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 	}
 
 	// Attempt to create the commodity in the registry and expect an area not found error
-	_, err := r.Create(commodity)
+	_, err = r.Create(commodity)
 	c.Assert(err, qt.ErrorMatches, "area not found.*")
 }
 
@@ -179,7 +185,8 @@ func TestCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
 	// Create a new instance of CommodityRegistry
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	r := memory.NewCommodityRegistry(areaRegistry)
+	settingsRegistry := memory.NewSettingsRegistry()
+	r := memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
 
 	// Attempt to delete a non-existing commodity from the registry and expect a not found error
 	err := r.Delete("nonexistent")
@@ -189,7 +196,11 @@ func TestCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
 func getCommodityRegistry(c *qt.C) (registry.CommodityRegistry, *models.Commodity) {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	r := memory.NewCommodityRegistry(areaRegistry)
+	settingsRegistry := memory.NewSettingsRegistry()
+	err := settingsRegistry.Patch("system.main_currency", "USD")
+	c.Assert(err, qt.IsNil)
+
+	r := memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
 
 	location1, err := locationRegistry.Create(models.Location{
 		Name: "Location 1",

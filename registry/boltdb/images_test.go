@@ -14,6 +14,7 @@ import (
 
 func setupTestImageRegistry(t *testing.T) (*boltdb.ImageRegistry, *boltdb.CommodityRegistry, *boltdb.AreaRegistry, *boltdb.LocationRegistry, func()) {
 	c := qt.New(t)
+	c.Helper()
 
 	// Create a temporary directory for the test database
 	tempDir, err := os.MkdirTemp("", "boltdb-test-*")
@@ -29,8 +30,13 @@ func setupTestImageRegistry(t *testing.T) (*boltdb.ImageRegistry, *boltdb.Commod
 	// Create an area registry
 	areaRegistry := boltdb.NewAreaRegistry(db, locationRegistry)
 
+	// Create a settings registry
+	settingsRegistry := boltdb.NewSettingsRegistry(db)
+	err = settingsRegistry.Patch("system.main_currency", "USD")
+	c.Assert(err, qt.IsNil)
+
 	// Create a commodity registry
-	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry)
+	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry, settingsRegistry)
 
 	// Create an image registry
 	imageRegistry := boltdb.NewImageRegistry(db, commodityRegistry)

@@ -3,8 +3,6 @@ package memory
 import (
 	"sync"
 
-	"github.com/jellydator/validation"
-
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -16,19 +14,21 @@ type baseCommodityRegistry = Registry[models.Commodity, *models.Commodity]
 type CommodityRegistry struct {
 	*baseCommodityRegistry
 
-	areaRegistry registry.AreaRegistry
-	imagesLock   sync.RWMutex
-	images       models.CommodityImages
-	manualsLock  sync.RWMutex
-	manuals      models.CommodityManuals
-	invoicesLock sync.RWMutex
-	invoices     models.CommodityInvoices
+	areaRegistry     registry.AreaRegistry
+	settingsRegistry registry.SettingsRegistry
+	imagesLock       sync.RWMutex
+	images           models.CommodityImages
+	manualsLock      sync.RWMutex
+	manuals          models.CommodityManuals
+	invoicesLock     sync.RWMutex
+	invoices         models.CommodityInvoices
 }
 
-func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry {
+func NewCommodityRegistry(areaRegistry registry.AreaRegistry, settingsRegistry registry.SettingsRegistry) *CommodityRegistry {
 	return &CommodityRegistry{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
 		areaRegistry:          areaRegistry,
+		settingsRegistry:      settingsRegistry,
 		images:                make(models.CommodityImages),
 		manuals:               make(models.CommodityManuals),
 		invoices:              make(models.CommodityInvoices),
@@ -36,9 +36,9 @@ func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry
 }
 
 func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodity, error) {
-	err := validation.Validate(&commodity)
+	err := registry.ValidateCommodity(&commodity, r.settingsRegistry)
 	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
+		return nil, err
 	}
 
 	_, err = r.areaRegistry.Get(commodity.AreaID)
@@ -158,4 +158,39 @@ func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) error {
 	r.invoicesLock.Unlock()
 
 	return nil
+}
+
+func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodity, error) {
+	err := registry.ValidateCommodity(&commodity, r.settingsRegistry)
+	if err != nil {
+		return nil, errkit.Wrap(err, "validation failed")
+	}
+
+	// Get main currency from settings
+	settings, err := r.settingsRegistry.Get()
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get settings")
+	}
+
+	// Default to USD if main currency is not set
+	mainCurrency := "USD"
+	if settings.MainCurrency != nil {
+		mainCurrency = *settings.MainCurrency
+	}
+
+	// Validate that when original price is in the main currency, converted original price must be zero
+	if string(commodity.OriginalPriceCurrency) == mainCurrency && !commodity.ConvertedOriginalPrice.IsZero() {
+		return nil, errkit.Wrap(
+			models.ErrConvertedPriceNotZero,
+			"converted original price must be zero when original price is in the main currency",
+		)
+	}
+
+	// Call the base registry's Update method
+	updatedCommodity, err := r.baseCommodityRegistry.Update(commodity)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update commodity")
+	}
+
+	return updatedCommodity, nil
 }
