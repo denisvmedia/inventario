@@ -17,7 +17,7 @@
       <CommodityForm
         ref="commodityForm"
         :initial-data="form"
-        :areas="areas"
+        :areas="groupedAreas"
         :currencies="currencies"
         :main-currency="mainCurrency"
         :is-submitting="isSubmitting"
@@ -42,6 +42,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
+import locationService from '@/services/locationService'
 import settingsService from '@/services/settingsService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
@@ -62,6 +63,7 @@ const isDirectEdit = computed(() => route.query.directEdit === 'true')
 
 const commodity = ref<any>(null)
 const areas = ref<any[]>([])
+const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const isSubmitting = ref<boolean>(false)
@@ -74,6 +76,43 @@ const currencies = ref<any[]>([])
 
 // Use the main currency from the store
 const mainCurrency = computed(() => settingsStore.mainCurrency)
+
+// Group areas by their locations for the dropdown
+const groupedAreas = computed(() => {
+  // Create a map of locations by ID for quick lookup
+  const locationMap = new Map()
+  locations.value.forEach(location => {
+    locationMap.set(location.id, location)
+  })
+
+  // Group areas by location
+  const groupedByLocation = {}
+
+  // Create a group for each location
+  locations.value.forEach(location => {
+    groupedByLocation[location.id] = {
+      label: location.attributes.name,
+      code: location.id,
+      items: []
+    }
+  })
+
+  // Add areas to their respective location groups
+  areas.value.forEach(area => {
+    const locationId = area.attributes.location_id
+    if (groupedByLocation[locationId]) {
+      groupedByLocation[locationId].items.push({
+        id: area.id,
+        attributes: {
+          name: area.attributes.name
+        }
+      })
+    }
+  })
+
+  // Convert the object to an array of location groups
+  return Object.values(groupedByLocation).filter(group => group.items.length > 0)
+})
 
 const form = reactive({
   name: '',
@@ -117,16 +156,18 @@ onMounted(async () => {
     // Fetch main currency from the store
     await settingsStore.fetchMainCurrency()
 
-    // Load commodity, areas, and currencies in parallel
-    const [commodityResponse, areasResponse, currenciesResponse] = await Promise.all([
+    // Load commodity, areas, locations, and currencies in parallel
+    const [commodityResponse, areasResponse, locationsResponse, currenciesResponse] = await Promise.all([
       commodityService.getCommodity(id),
       areaService.getAreas(),
+      locationService.getLocations(),
       settingsService.getCurrencies()
     ])
 
     // Process commodity data
     commodity.value = commodityResponse.data.data
     areas.value = areasResponse.data.data
+    locations.value = locationsResponse.data.data
 
     // Process currencies with proper names
     const currencyCodes = currenciesResponse.data

@@ -54,11 +54,17 @@
           :options="areas"
           optionLabel="attributes.name"
           optionValue="id"
+          optionGroupLabel="label"
+          optionGroupChildren="items"
           placeholder="Select an area"
           class="w-100"
           :class="{ 'is-invalid': formErrors.areaId }"
           :disabled="!!areaFromUrl"
-        />
+        >
+          <template #optiongroup="slotProps">
+            <div class="location-group-label">{{ slotProps.option.label }}</div>
+          </template>
+        </Select>
         <div v-if="formErrors.areaId" class="error-message">{{ formErrors.areaId }}</div>
       </div>
 
@@ -563,6 +569,13 @@ const removeUrl = (index: number) => {
   padding: 2rem;
   border-radius: $default-radius;
   box-shadow: $box-shadow;
+}
+
+.location-group-label {
+  font-weight: bold;
+  padding: 0.5rem;
+  background-color: $light-bg-color;
+  border-bottom: 1px solid $border-color;
 }
 
 .form-section {
