@@ -13,7 +13,7 @@
     <CommodityForm
       ref="commodityForm"
       :initial-data="form"
-      :areas="areas"
+      :areas="groupedAreas"
       :currencies="currencies"
       :main-currency="mainCurrency"
       :area-from-url="areaFromUrl"
@@ -56,6 +56,7 @@ const error = ref<string | null>(null)
 const formError = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
 const areas = ref<any[]>([])
+const locations = ref<any[]>([])
 const commodityTypes = ref(COMMODITY_TYPES)
 const commodityStatuses = ref(COMMODITY_STATUSES)
 const currencies = ref<any[]>([])
@@ -64,6 +65,43 @@ const areaName = ref<string>('')
 
 // Use the main currency from the store
 const mainCurrency = computed(() => settingsStore.mainCurrency)
+
+// Group areas by their locations for the dropdown
+const groupedAreas = computed(() => {
+  // Create a map of locations by ID for quick lookup
+  const locationMap = new Map()
+  locations.value.forEach(location => {
+    locationMap.set(location.id, location)
+  })
+
+  // Group areas by location
+  const groupedByLocation = {}
+
+  // Create a group for each location
+  locations.value.forEach(location => {
+    groupedByLocation[location.id] = {
+      label: location.attributes.name,
+      code: location.id,
+      items: []
+    }
+  })
+
+  // Add areas to their respective location groups
+  areas.value.forEach(area => {
+    const locationId = area.attributes.location_id
+    if (groupedByLocation[locationId]) {
+      groupedByLocation[locationId].items.push({
+        id: area.id,
+        attributes: {
+          name: area.attributes.name
+        }
+      })
+    }
+  })
+
+  // Convert the object to an array of location groups
+  return Object.values(groupedByLocation).filter(group => group.items.length > 0)
+})
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -132,9 +170,9 @@ onMounted(async () => {
     ])
 
     areas.value = areasResponse.data.data
-    const locations = locationsResponse.data.data
+    locations.value = locationsResponse.data.data
     console.log('Loaded areas:', areas.value)
-    console.log('Loaded locations:', locations)
+    console.log('Loaded locations:', locations.value)
 
     // Process currencies with proper names
     const currencyCodes = currenciesResponse.data
@@ -161,7 +199,7 @@ onMounted(async () => {
     form.originalPriceCurrency = mainCurrency.value
 
     // Check if we have locations and areas
-    if (locations.length === 0 || areas.value.length === 0) {
+    if (locations.value.length === 0 || areas.value.length === 0) {
       // Redirect to commodities list which will show the appropriate message
       router.push('/commodities')
       return
