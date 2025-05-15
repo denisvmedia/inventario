@@ -128,7 +128,7 @@ func TestCommodityCreate(t *testing.T) {
 				Type:                   models.CommodityTypeElectronics,
 				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
 				OriginalPriceCurrency:  models.Currency("USD"),
-				ConvertedOriginalPrice: must.Must(decimal.NewFromString("1200.00")),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")), // to pass the validation
 				CurrentPrice:           must.Must(decimal.NewFromString("800.00")),
 				SerialNumber:           "SN123456",
 				ExtraSerialNumbers:     []string{"SN654321"},
@@ -156,8 +156,8 @@ func TestCommodityCreate(t *testing.T) {
 	handler := apiserver.APIServer(params)
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 	body := rr.Body.Bytes()
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("Body: %s", body))
 
 	c.Check(body, checkers.JSONPathEquals("$.data.type"), "commodities")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.name"), "New Commodity in Area 2")
@@ -168,7 +168,7 @@ func TestCommodityCreate(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(1))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price"), "1000")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), "USD")
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "1200")
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "0")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.current_price"), "800")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.serial_number"), "SN123456")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.extra_serial_numbers"), []any{"SN654321"})
@@ -201,7 +201,7 @@ func TestCommodityUpdate(t *testing.T) {
 				Count:                  10,
 				OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
 				OriginalPriceCurrency:  models.Currency("USD"),
-				ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")), // to pass the validation
 				CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
 				SerialNumber:           "SN654321",
 				ExtraSerialNumbers:     []string{"SN123456"},
@@ -227,8 +227,8 @@ func TestCommodityUpdate(t *testing.T) {
 	handler := apiserver.APIServer(params)
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 
 	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params).Images)
 	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
@@ -244,7 +244,7 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price"), "2000")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), "USD")
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "2400")
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "0")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.current_price"), "1800")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.serial_number"), "SN654321")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.extra_serial_numbers"), []any{"SN123456"})

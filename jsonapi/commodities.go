@@ -2,6 +2,7 @@
 package jsonapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -120,20 +121,20 @@ type CommodityData struct {
 	Attributes *models.Commodity `json:"attributes"`
 }
 
-func (cd *CommodityData) Validate() error {
+func (cd *CommodityData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&cd.Type, validation.Required, validation.In("commodities")),
 		validation.Field(&cd.Attributes, validation.Required),
 	)
-	return validation.ValidateStruct(cd, fields...)
+	return validation.ValidateStructWithContext(ctx, cd, fields...)
 }
 
 var _ render.Binder = (*CommodityRequest)(nil)
 
 // Bind binds the commodity data from the request to the CommodityRequest object.
-func (cr *CommodityRequest) Bind(_r *http.Request) error {
-	err := cr.Validate()
+func (cr *CommodityRequest) Bind(r *http.Request) error {
+	err := cr.ValidateWithContext(r.Context())
 	if err != nil {
 		return err
 	}
@@ -141,11 +142,11 @@ func (cr *CommodityRequest) Bind(_r *http.Request) error {
 	return nil
 }
 
-// Validate validates the commodity request data.
-func (cr *CommodityRequest) Validate() error {
+// ValidateWithContext validates the commodity request data.
+func (cr *CommodityRequest) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&cr.Data, validation.Required),
 	)
-	return validation.ValidateStruct(cr, fields...)
+	return validation.ValidateStructWithContext(ctx, cr, fields...)
 }

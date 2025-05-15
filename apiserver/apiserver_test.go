@@ -55,9 +55,8 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 	return areaRegistry
 }
 
-func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
-	settingsRegistry := memory.NewSettingsRegistry()
-	var commodityRegistry = memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
+func newCommodityRegistry(areaRegistry registry.AreaRegistry, settingsRegistry registry.SettingsRegistry) registry.CommodityRegistry {
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
 
 	areas := must.Must(areaRegistry.List())
 
@@ -210,12 +209,21 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 	return manualRegistry
 }
 
+func newSettingsRegistry() registry.SettingsRegistry {
+	var settingsRegistry = memory.NewSettingsRegistry()
+
+	must.Assert(settingsRegistry.Patch("system.main_currency", "USD"))
+
+	return settingsRegistry
+}
+
 func newParams() apiserver.Params {
 	var params apiserver.Params
 	params.RegistrySet = &registry.Set{}
 	params.RegistrySet.LocationRegistry = newLocationRegistry()
 	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
-	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry)
+	params.RegistrySet.SettingsRegistry = newSettingsRegistry()
+	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry, params.RegistrySet.SettingsRegistry)
 	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
