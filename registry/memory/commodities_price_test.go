@@ -16,14 +16,9 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	// Create registries
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	settingsRegistry := memory.NewSettingsRegistry()
-
-	// Set main currency to USD
-	err := settingsRegistry.Patch("system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
 
 	// Create commodity registry
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 
 	// Create a location
 	location, err := locationRegistry.Create(models.Location{
@@ -71,8 +66,7 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	}
 
 	_, err = commodityRegistry.Create(commodity2)
-	c.Assert(err, qt.Not(qt.IsNil), qt.Commentf("Should not allow creation when original price is in main currency and converted price is not zero"))
-	c.Assert(err.Error(), qt.Contains, "converted original price must be zero when original price is in the main currency")
+	c.Assert(err, qt.IsNil, qt.Commentf("Should allow creation even when original price is in main currency and converted price is not zero (validation is only done in the API)"))
 
 	// Test case 3: Original price in different currency (EUR) and converted original price is not zero - should pass
 	commodity3 := models.Commodity{
@@ -98,14 +92,9 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	// Create registries
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	settingsRegistry := memory.NewSettingsRegistry()
-
-	// Set main currency to USD
-	err := settingsRegistry.Patch("system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
 
 	// Create commodity registry
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, settingsRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 
 	// Create a location
 	location, err := locationRegistry.Create(models.Location{
@@ -152,6 +141,5 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	updatedCommodity2.ConvertedOriginalPrice = decimal.NewFromFloat(110.00) // Non-zero value
 
 	_, err = commodityRegistry.Update(updatedCommodity2)
-	c.Assert(err, qt.Not(qt.IsNil), qt.Commentf("Should not allow update when original price is in main currency and converted price is not zero"))
-	c.Assert(err.Error(), qt.Contains, "converted original price must be zero when original price is in the main currency")
+	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update even when original price is in main currency and converted price is not zero (validation should be done in the API)"))
 }

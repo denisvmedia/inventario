@@ -35,7 +35,7 @@ func NewRegistrySet(c registry.Config) (*registry.Set, error) {
 	s.LocationRegistry = NewLocationRegistry(db)
 	s.AreaRegistry = NewAreaRegistry(db, s.LocationRegistry)
 	s.SettingsRegistry = NewSettingsRegistry(db)
-	s.CommodityRegistry = NewCommodityRegistry(db, s.AreaRegistry, s.SettingsRegistry)
+	s.CommodityRegistry = NewCommodityRegistry(db, s.AreaRegistry)
 	s.ImageRegistry = NewImageRegistry(db, s.CommodityRegistry)
 	s.InvoiceRegistry = NewInvoiceRegistry(db, s.CommodityRegistry)
 	s.ManualRegistry = NewManualRegistry(db, s.CommodityRegistry)

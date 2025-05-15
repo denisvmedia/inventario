@@ -114,7 +114,7 @@ type Commodity struct {
 	Draft                  bool            `json:"draft"`
 }
 
-func (a *Commodity) Validate() error {
+func (*Commodity) Validate() error {
 	return validation.NewError("must_use_validate_with_context", "must use validate with context")
 }
 
@@ -148,6 +148,11 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&a.URLs),
 		// Add validation for converted original price
 		validation.Field(&a.ConvertedOriginalPrice, priceRule),
+		validation.Field(&a.OriginalPrice, validation.Required, validation.By(func(any) error {
+			v, _ := a.OriginalPrice.Float64()
+			return validation.Min(0.00).Exclusive().Validate(v)
+		})),
+		validation.Field(&a.OriginalPriceCurrency, rules.NotEmpty),
 	)
 
 	return validation.ValidateStruct(a, fields...)

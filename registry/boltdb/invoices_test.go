@@ -29,13 +29,8 @@ func setupTestInvoiceRegistry(t *testing.T) (*boltdb.InvoiceRegistry, *boltdb.Co
 	// Create an area registry
 	areaRegistry := boltdb.NewAreaRegistry(db, locationRegistry)
 
-	// Create a settings registry
-	settingsRegistry := boltdb.NewSettingsRegistry(db)
-	err = settingsRegistry.Patch("system.main_currency", "USD")
-	c.Assert(err, qt.IsNil)
-
 	// Create a commodity registry
-	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry, settingsRegistry)
+	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry)
 
 	// Create an invoice registry
 	invoiceRegistry := boltdb.NewInvoiceRegistry(db, commodityRegistry)

@@ -14,21 +14,19 @@ type baseCommodityRegistry = Registry[models.Commodity, *models.Commodity]
 type CommodityRegistry struct {
 	*baseCommodityRegistry
 
-	areaRegistry     registry.AreaRegistry
-	settingsRegistry registry.SettingsRegistry
-	imagesLock       sync.RWMutex
-	images           models.CommodityImages
-	manualsLock      sync.RWMutex
-	manuals          models.CommodityManuals
-	invoicesLock     sync.RWMutex
-	invoices         models.CommodityInvoices
+	areaRegistry registry.AreaRegistry
+	imagesLock   sync.RWMutex
+	images       models.CommodityImages
+	manualsLock  sync.RWMutex
+	manuals      models.CommodityManuals
+	invoicesLock sync.RWMutex
+	invoices     models.CommodityInvoices
 }
 
-func NewCommodityRegistry(areaRegistry registry.AreaRegistry, settingsRegistry registry.SettingsRegistry) *CommodityRegistry {
+func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry {
 	return &CommodityRegistry{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
 		areaRegistry:          areaRegistry,
-		settingsRegistry:      settingsRegistry,
 		images:                make(models.CommodityImages),
 		manuals:               make(models.CommodityManuals),
 		invoices:              make(models.CommodityInvoices),
@@ -36,12 +34,7 @@ func NewCommodityRegistry(areaRegistry registry.AreaRegistry, settingsRegistry r
 }
 
 func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodity, error) {
-	err := registry.ValidateCommodity(&commodity, r.settingsRegistry)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = r.areaRegistry.Get(commodity.AreaID)
+	_, err := r.areaRegistry.Get(commodity.AreaID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "area not found")
 	}
@@ -161,31 +154,6 @@ func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) error {
 }
 
 func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodity, error) {
-	err := registry.ValidateCommodity(&commodity, r.settingsRegistry)
-	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
-	}
-
-	// Get main currency from settings
-	settings, err := r.settingsRegistry.Get()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get settings")
-	}
-
-	// Default to USD if main currency is not set
-	mainCurrency := "USD"
-	if settings.MainCurrency != nil {
-		mainCurrency = *settings.MainCurrency
-	}
-
-	// Validate that when original price is in the main currency, converted original price must be zero
-	if string(commodity.OriginalPriceCurrency) == mainCurrency && !commodity.ConvertedOriginalPrice.IsZero() {
-		return nil, errkit.Wrap(
-			models.ErrConvertedPriceNotZero,
-			"converted original price must be zero when original price is in the main currency",
-		)
-	}
-
 	// Call the base registry's Update method
 	updatedCommodity, err := r.baseCommodityRegistry.Update(commodity)
 	if err != nil {

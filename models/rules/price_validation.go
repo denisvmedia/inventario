@@ -17,9 +17,9 @@ var (
 // ConvertedPriceRule validates that when the original price is in the main currency,
 // the converted original price must be zero.
 type ConvertedPriceRule struct {
-	MainCurrency      string
-	OriginalCurrency  string
-	ConvertedPrice    decimal.Decimal
+	MainCurrency     string
+	OriginalCurrency string
+	ConvertedPrice   decimal.Decimal
 }
 
 // NewConvertedPriceRule creates a new ConvertedPriceRule.
