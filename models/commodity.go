@@ -130,11 +130,12 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	// Create a validation rule for price consistency
-	// When original price is in the main currency, converted original price must be zero
-	priceRule := rules.NewConvertedPriceRule(
+	priceRule := rules.NewPriceRule(
 		string(mainCurrency),
 		string(a.OriginalPriceCurrency),
+		a.OriginalPrice,
 		a.ConvertedOriginalPrice,
+		a.CurrentPrice,
 	)
 
 	fields = append(fields,
@@ -146,11 +147,18 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&a.PurchaseDate, rules.NotEmpty),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),
 		validation.Field(&a.URLs),
-		// Add validation for converted original price
 		validation.Field(&a.ConvertedOriginalPrice, priceRule),
 		validation.Field(&a.OriginalPrice, validation.Required, validation.By(func(any) error {
 			v, _ := a.OriginalPrice.Float64()
-			return validation.Min(0.00).Exclusive().Validate(v)
+			return validation.Min(0.00).Validate(v)
+		})),
+		validation.Field(&a.ConvertedOriginalPrice, validation.Required, validation.By(func(any) error {
+			v, _ := a.OriginalPrice.Float64()
+			return validation.Min(0.00).Validate(v)
+		})),
+		validation.Field(&a.CurrentPrice, validation.Required, validation.By(func(any) error {
+			v, _ := a.OriginalPrice.Float64()
+			return validation.Min(0.00).Validate(v)
 		})),
 		validation.Field(&a.OriginalPriceCurrency, rules.NotEmpty),
 	)
