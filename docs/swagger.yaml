@@ -309,6 +309,33 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ManualsMeta'
     type: object
+  jsonapi.ValueAttrs:
+    properties:
+      area_totals:
+        additionalProperties:
+          type: number
+        type: object
+      global_total:
+        type: number
+      location_totals:
+        additionalProperties:
+          type: number
+        type: object
+    type: object
+  jsonapi.ValueData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ValueAttrs'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.ValueResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ValueData'
+    type: object
   models.Area:
     properties:
       id:
@@ -398,7 +425,7 @@ definitions:
     - CommodityTypeEquipment
     - CommodityTypeFurniture
     - CommodityTypeClothes
-    - CommodyTypeOther
+    - CommodityTypeOther
   models.Image:
     properties:
       commodity_id:
@@ -1185,6 +1212,22 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update a commodity
+      tags:
+      - commodities
+  /commodities/values:
+    get:
+      consumes:
+      - application/json
+      description: Get the total value of commodities globally, by location, and by
+        area
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ValueResponse'
+      summary: Get total value of commodities
       tags:
       - commodities
   /currencies:
