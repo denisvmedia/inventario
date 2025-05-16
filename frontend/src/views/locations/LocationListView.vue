@@ -49,10 +49,10 @@
             </div>
           </div>
           <div class="location-actions">
-            <button class="btn btn-secondary btn-sm" @click.stop="editLocation(location.id)" title="Edit">
+            <button class="btn btn-secondary btn-sm" title="Edit" @click.stop="editLocation(location.id)">
               <font-awesome-icon icon="edit" />
             </button>
-            <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteLocation(location.id)" title="Delete">
+            <button class="btn btn-danger btn-sm" title="Delete" @click.stop="confirmDeleteLocation(location.id)">
               <font-awesome-icon icon="trash" />
             </button>
           </div>
@@ -70,7 +70,7 @@
           <!-- Inline Area Creation Form -->
           <AreaForm
             v-if="showAreaFormForLocation === location.id"
-            :locationId="location.id"
+            :location-id="location.id"
             @created="handleAreaCreated"
             @cancel="showAreaFormForLocation = null"
           />
@@ -79,8 +79,8 @@
           <div v-if="getAreasForLocation(location.id).length > 0" class="areas-list">
             <div
               v-for="area in getAreasForLocation(location.id)"
-              :key="area.id"
               :id="`area-${area.id}`"
+              :key="area.id"
               class="area-card"
               :class="{ 'area-highlight': areaToFocus === area.id }"
               @click="viewArea(area.id)"
@@ -92,10 +92,10 @@
                 </div>
               </div>
               <div class="area-actions">
-                <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)" title="Edit">
+                <button class="btn btn-secondary btn-sm" title="Edit" @click.stop="editArea(area.id)">
                   <font-awesome-icon icon="edit" />
                 </button>
-                <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteArea(area.id)" title="Delete">
+                <button class="btn btn-danger btn-sm" title="Delete" @click.stop="confirmDeleteArea(area.id)">
                   <font-awesome-icon icon="trash" />
                 </button>
               </div>
@@ -263,7 +263,7 @@ onMounted(async () => {
     await settingsStore.fetchMainCurrency()
 
     // Load locations, areas, and values in parallel
-    const [locationsResponse, areasResponse, _] = await Promise.all([
+    const [locationsResponse, areasResponse] = await Promise.all([
       locationService.getLocations(),
       areaService.getAreas(),
       loadValues() // Load values in parallel

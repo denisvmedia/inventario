@@ -6,10 +6,10 @@
     </div>
     <div v-else class="files-container">
       <div v-for="file in files" :key="file.id" class="file-item">
-        <div class="file-preview" v-if="isImageFile(file)" @click="openViewer(file)">
+        <div v-if="isImageFile(file)" class="file-preview" @click="openViewer(file)">
           <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
         </div>
-        <div class="file-icon" v-else @click="openViewer(file)">
+        <div v-else class="file-icon" @click="openViewer(file)">
           <font-awesome-icon :icon="getFileIcon(file)" size="3x" />
         </div>
         <div class="file-info">
@@ -20,11 +20,11 @@
             </div>
             <div v-else class="file-name-edit">
               <input
-                type="text"
+                ref="fileNameInput"
                 v-model="editedFileName"
+                type="text"
                 @keyup.enter="saveFileName(file)"
                 @keyup.esc="cancelEditing"
-                ref="fileNameInput"
               />
               <div class="edit-actions">
                 <button class="btn btn-sm btn-success" @click="saveFileName(file)">
@@ -153,9 +153,6 @@ const saveFileName = async (file: any) => {
   }
 
   try {
-    // Create a copy of the file with the updated path
-    const updatedFile = { ...file, path: editedFileName.value }
-
     // Emit the update event with the file ID and new path
     emit('update', {
       id: file.id,

@@ -2,7 +2,7 @@ import { createApp } from 'vue'
 import PrimeVue from 'primevue/config';
 import Select from 'primevue/select'
 import InputSwitch from 'primevue/inputswitch'
-import Aura from '@primeuix/themes/aura';
+// import Aura from '@primeuix/themes/aura';
 // import Nora from '@primeuix/themes/nora';
 // import Lara from '@primeuix/themes/lara';
 // import Material from '@primeuix/themes/material';
@@ -47,7 +47,7 @@ app.component('Select', Select)
 app.component('InputSwitch', InputSwitch)
 
 // Register Font Awesome component globally
-app.component('font-awesome-icon', FontAwesomeIcon)
+app.component('FontAwesomeIcon', FontAwesomeIcon)
 
 // Mount the app
 console.log('Mounting Vue app to #app element')

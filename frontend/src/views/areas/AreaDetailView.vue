@@ -5,7 +5,7 @@
     <div v-else-if="!area" class="not-found">Area not found</div>
     <div v-else>
       <div class="breadcrumb-nav">
-        <a href="#" @click.prevent="navigateToLocations" class="breadcrumb-link">
+        <a href="#" class="breadcrumb-link" @click.prevent="navigateToLocations">
           <font-awesome-icon icon="arrow-left" /> Back to Locations
         </a>
       </div>
@@ -20,11 +20,11 @@
           </div>
         </div>
         <div class="actions">
-          <button class="btn btn-danger" @click="confirmDelete" title="Delete"><font-awesome-icon icon="trash" /></button>
+          <button class="btn btn-danger" title="Delete" @click="confirmDelete"><font-awesome-icon icon="trash" /></button>
         </div>
       </div>
 
-      <div class="commodities-section" v-if="commodities.length > 0">
+      <div v-if="commodities.length > 0" class="commodities-section">
         <div class="section-header">
           <div class="section-title">
             <h2>Commodities</h2>
@@ -36,7 +36,8 @@
           <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
         </div>
         <div class="commodities-grid">
-          <div v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
+          <div
+v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
             'highlighted': commodity.id === highlightCommodityId,
             'draft': commodity.attributes.draft,
             'sold': !commodity.attributes.draft && commodity.attributes.status === 'sold',
@@ -51,23 +52,23 @@
                   <font-awesome-icon :icon="getTypeIcon(commodity.attributes.type)" />
                   {{ getTypeName(commodity.attributes.type) }}
                 </span>
-                <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
+                <span v-if="(commodity.attributes.count || 1) > 1" class="count">×{{ commodity.attributes.count }}</span>
               </div>
               <div class="commodity-price">
                 <span class="price">{{ formatPrice(getDisplayPrice(commodity)) }}</span>
-                <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
+                <span v-if="(commodity.attributes.count || 1) > 1" class="price-per-unit">
                   {{ formatPrice(calculatePricePerUnit(commodity)) }} per unit
                 </span>
               </div>
-              <div class="commodity-status" v-if="commodity.attributes.status" :class="{ 'with-draft': commodity.attributes.draft }">
+              <div v-if="commodity.attributes.status" class="commodity-status" :class="{ 'with-draft': commodity.attributes.draft }">
                 <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
               </div>
             </div>
             <div class="commodity-actions">
-              <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)" title="Edit">
+              <button class="btn btn-secondary btn-sm" title="Edit" @click.stop="editCommodity(commodity.id)">
                 <font-awesome-icon icon="edit" />
               </button>
-              <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteCommodity(commodity.id)" title="Delete">
+              <button class="btn btn-danger btn-sm" title="Delete" @click.stop="confirmDeleteCommodity(commodity.id)">
                 <font-awesome-icon icon="trash" />
               </button>
             </div>
@@ -83,13 +84,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import commodityService from '@/services/commodityService'
 import valueService from '@/services/valueService'
-import settingsService from '@/services/settingsService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice, getDisplayPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
@@ -107,7 +107,6 @@ const locationAddress = ref<string | null>(null)
 
 // Area total value
 const areaTotalValue = ref<number>(0)
-const valuesLoading = ref<boolean>(true)
 
 // Highlight commodity if specified in the URL
 const highlightCommodityId = ref(route.query.highlightCommodityId as string || '')
@@ -284,38 +283,7 @@ const getStatusName = (statusId: string) => {
 
 // Price utility functions are now imported from @/utils/priceUtils
 
-// Calculate original price per unit
-const calculateOriginalPricePerUnit = (commodity: any) => {
-  const price = parseFloat(commodity.attributes.original_price) || 0
-  const count = commodity.attributes.count || 1
-  if (count <= 1) return price
-
-  // Calculate price per unit and round to 2 decimal places
-  const pricePerUnit = price / count
-  return pricePerUnit.toFixed(2)
-}
-
-const updateAreaName = async (newName: string) => {
-  try {
-    const payload = {
-      data: {
-        id: area.value.id,
-        type: 'areas',
-        attributes: {
-          name: newName,
-          location_id: area.value.attributes.location_id
-        }
-      }
-    }
-
-    await areaService.updateArea(area.value.id, payload)
-    // Update was successful, the model is already updated via v-model
-  } catch (err: any) {
-    error.value = 'Failed to update area name: ' + (err.message || 'Unknown error')
-    // Revert the change in the UI
-    area.value.attributes.name = area.value.attributes.name
-  }
-}
+// Note: We're using the imported calculatePricePerUnit function instead
 
 const confirmDelete = () => {
   if (confirm('Are you sure you want to delete this area?')) {
@@ -332,9 +300,7 @@ const deleteArea = async () => {
   }
 }
 
-const viewLocation = (id: string) => {
-  router.push(`/locations/${id}`)
-}
+// Navigation to location is handled by navigateToLocations function
 
 const viewCommodity = (id: string) => {
   router.push({
