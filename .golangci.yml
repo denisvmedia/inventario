@@ -226,6 +226,7 @@ linters:
           - gocyclo
           - lll
           - nestif
+          - dupl
         path: '_test\.go$'
       # bmd exception rule (we currently use testify there)
       - path: '_test\.go$'
