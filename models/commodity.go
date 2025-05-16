@@ -138,7 +138,7 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		a.CurrentPrice,
 	)
 
-	whenNotDraft := rules.WhenTrue(a.Draft)
+	whenNotDraft := rules.WhenTrue(!a.Draft) // Rule to apply rules when not draft
 
 	fields = append(fields,
 		validation.Field(&a.Name, rules.NotEmpty),
