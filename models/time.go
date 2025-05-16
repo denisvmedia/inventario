@@ -7,6 +7,7 @@ import (
 	"github.com/jellydator/validation"
 )
 
+// PDate is an alias type for a pointer to a Date.
 type PDate = *Date
 
 var (
@@ -17,8 +18,10 @@ var (
 
 const dateFormat = "2006-01-02"
 
+// Date represents a date in the format "YYYY-MM-DD".
 type Date string
 
+// MarshalJSON marshals the Date to JSON.
 func (d *Date) MarshalJSON() ([]byte, error) {
 	if d == nil {
 		return []byte("null"), nil
@@ -26,6 +29,10 @@ func (d *Date) MarshalJSON() ([]byte, error) {
 	return json.Marshal(string(*d))
 }
 
+// UnmarshalJSON unmarshals the JSON data into the Date.
+// It also validates the date format.
+// If the date is not in the correct format, it returns an error.
+// If the date is in the correct format, it sets the Date and returns nil.
 func (d *Date) UnmarshalJSON(data []byte) error {
 	var dateStr string
 	if err := json.Unmarshal(data, &dateStr); err != nil {
@@ -35,6 +42,7 @@ func (d *Date) UnmarshalJSON(data []byte) error {
 	return d.Validate()
 }
 
+// Validate checks if the date is in the correct format.
 func (d *Date) Validate() error {
 	if d == nil {
 		return nil
@@ -44,6 +52,7 @@ func (d *Date) Validate() error {
 	return err
 }
 
+// ToTime converts the Date to a time.Time. If the Date is nil, it returns a zero time.Time.
 func (d *Date) ToTime() time.Time {
 	if d == nil {
 		return time.Time{}
@@ -53,6 +62,7 @@ func (d *Date) ToTime() time.Time {
 	return result
 }
 
+// After returns true if d is after other. If both are nil, it returns false.
 func (d *Date) After(other *Date) bool {
 	if d == nil || other == nil {
 		return false
@@ -61,6 +71,7 @@ func (d *Date) After(other *Date) bool {
 	return *d > *other
 }
 
+// Before returns true if d is before other. If both are nil, it returns false.
 func (d *Date) Before(other *Date) bool {
 	if d == nil || other == nil {
 		return false
@@ -69,18 +80,21 @@ func (d *Date) Before(other *Date) bool {
 	return *d < *other
 }
 
+// Equal returns true if both dates are equal. If both are nil, it returns true.
 func (d *Date) Equal(other *Date) bool {
-	if d == nil && other != nil {
+	switch {
+	case d == nil && other == nil: // both are nil
+		return true
+	case d == nil || other == nil: // one is not nil, but the other is
+		return false
+	case *d == *other: // both are non-nil and equal
+		return true
+	default: // both are non-nil and not equal
 		return false
 	}
-
-	if d != nil && other == nil {
-		return false
-	}
-
-	return *d == *other
 }
 
+// ToPDate converts a Date to a PDate. If the Date is empty, it returns nil.
 func ToPDate(d Date) PDate {
 	if d == "" {
 		return nil
