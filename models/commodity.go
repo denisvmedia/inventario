@@ -138,29 +138,36 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		a.CurrentPrice,
 	)
 
+	whenNotDraft := rules.WhenTrue(a.Draft)
+
 	fields = append(fields,
 		validation.Field(&a.Name, rules.NotEmpty),
 		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 20)),
 		validation.Field(&a.Type, rules.NotEmpty),
 		validation.Field(&a.AreaID, rules.NotEmpty),
 		validation.Field(&a.Status, rules.NotEmpty),
-		validation.Field(&a.PurchaseDate, rules.NotEmpty),
+		validation.Field(&a.PurchaseDate, whenNotDraft.WithRules(rules.NotEmpty)),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),
 		validation.Field(&a.URLs),
-		validation.Field(&a.ConvertedOriginalPrice, priceRule),
-		validation.Field(&a.OriginalPrice, validation.Required, validation.By(func(any) error {
+		validation.Field(&a.OriginalPrice, whenNotDraft.WithRules(validation.By(func(any) error {
 			v, _ := a.OriginalPrice.Float64()
 			return validation.Min(0.00).Validate(v)
-		})),
-		validation.Field(&a.ConvertedOriginalPrice, validation.Required, validation.By(func(any) error {
+		}))),
+		validation.Field(&a.OriginalPriceCurrency, whenNotDraft.WithRules(priceRule, validation.By(func(val any) error {
+			if a.Draft {
+				return nil
+			}
+
+			return validation.Required.Validate(val)
+		}))),
+		validation.Field(&a.ConvertedOriginalPrice, whenNotDraft.WithRules(validation.Required, validation.By(func(any) error {
 			v, _ := a.OriginalPrice.Float64()
 			return validation.Min(0.00).Validate(v)
-		})),
-		validation.Field(&a.CurrentPrice, validation.Required, validation.By(func(any) error {
+		}))),
+		validation.Field(&a.CurrentPrice, whenNotDraft.WithRules(validation.Required, validation.By(func(any) error {
 			v, _ := a.OriginalPrice.Float64()
 			return validation.Min(0.00).Validate(v)
-		})),
-		validation.Field(&a.OriginalPriceCurrency, rules.NotEmpty),
+		}))),
 	)
 
 	return validation.ValidateStruct(a, fields...)

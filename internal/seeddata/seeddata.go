@@ -328,7 +328,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		RegisteredDate:        ptr.To(models.Date("2023-01-16")),
 		Tags:                  []string{"appliance", "kitchen"},
 		Comments:              "Espresso machine with milk frother",
-		Draft:                 true, // Draft status
+		Draft:                 true, // Value status
 	})
 	if err != nil {
 		return err

@@ -49,16 +49,22 @@ func NewPriceRule(mainCurrency, originalCurrency string, originalPrice, converte
 }
 
 // Validate implements the validation.Rule interface.
+// It checks the following conditions:
+// 1. If the original price is in the main currency, the converted original price must be zero.
+// 2. At least one of the prices (current, original, or converted original) must be set.
+// 3. If the original price is not in the main currency, either the converted original price or the current price must be set.
 func (r ConvertedPriceRule) Validate(_ any) error {
 	// If original currency is the main currency and converted price is not zero, return error
 	if r.OriginalCurrency == r.MainCurrency && !r.ConvertedPrice.IsZero() {
 		return ErrConvertedPriceNotZero
 	}
 
+	// If all prices are zero, return error
 	if r.CurrentPrice.IsZero() && r.OriginalPrice.IsZero() && r.ConvertedPrice.IsZero() {
 		return ErrAllPricesZero
 	}
 
+	// If original currency is not the main currency and neither converted price nor current price is set, return error
 	if r.OriginalCurrency != r.MainCurrency && r.ConvertedPrice.IsZero() && r.CurrentPrice.IsZero() {
 		return ErrNoPriceInMainCurrency
 	}

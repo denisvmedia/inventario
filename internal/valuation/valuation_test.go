@@ -146,7 +146,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 		OriginalPriceCurrency: models.Currency(nonMainCurrency),
 		CurrentPrice:          decimal.NewFromFloat(600.00),
 		Status:                models.CommodityStatusInUse,
-		Draft:                 true, // Draft
+		Draft:                 true, // Value
 		Type:                  models.CommodityTypeElectronics,
 		PurchaseDate:          models.ToPDate("2023-01-01"),
 	})
