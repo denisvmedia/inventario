@@ -266,6 +266,29 @@ const docTemplate = `{
                 }
             }
         },
+        "/commodities/values": {
+            "get": {
+                "description": "Get the total value of commodities globally, by location, and by area",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Get total value of commodities",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ValueResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/commodities/{commodityID}/images": {
             "get": {
                 "description": "get images for a commodity",
@@ -1836,6 +1859,48 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.ValueAttrs": {
+            "type": "object",
+            "properties": {
+                "area_totals": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
+                "global_total": {
+                    "type": "number"
+                },
+                "location_totals": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                }
+            }
+        },
+        "jsonapi.ValueData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ValueAttrs"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.ValueResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ValueData"
+                }
+            }
+        },
         "models.Area": {
             "type": "object",
             "properties": {
@@ -1960,7 +2025,7 @@ const docTemplate = `{
                 "CommodityTypeEquipment",
                 "CommodityTypeFurniture",
                 "CommodityTypeClothes",
-                "CommodyTypeOther"
+                "CommodityTypeOther"
             ]
         },
         "models.Image": {
