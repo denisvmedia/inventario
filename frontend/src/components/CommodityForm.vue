@@ -86,6 +86,11 @@
     <!-- Price Information -->
     <div class="form-section">
       <h2>Price Information</h2>
+      <div class="price-calculation-hint" :class="{
+        'inactive-hint': !isPriceUsedInCalculations,
+        'warning-hint': !hasSuitablePrice && isPriceUsedInCalculations
+      }" v-html="getPriceCalculationHint">
+      </div>
 
       <div class="form-group">
         <label for="originalPrice">Original Price</label>
@@ -118,7 +123,7 @@
         <div v-if="formErrors.originalPriceCurrency" class="error-message">{{ formErrors.originalPriceCurrency }}</div>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" v-if="showConvertedOriginalPrice">
         <label for="convertedOriginalPrice">Converted Original Price</label>
         <input
           type="number"
@@ -293,7 +298,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
@@ -472,7 +477,7 @@ const validateForm = () => {
     isValid = false
   }
 
-  if (formData.convertedOriginalPrice < 0) {
+  if (showConvertedOriginalPrice.value && formData.convertedOriginalPrice < 0) {
     formErrors.convertedOriginalPrice = 'Converted Original Price cannot be negative'
     isValid = false
   }
@@ -559,10 +564,112 @@ const addUrl = () => {
 const removeUrl = (index: number) => {
   formData.urls.splice(index, 1)
 }
+
+// Computed properties for price hints
+const isPriceUsedInCalculations = computed(() => {
+  return !formData.draft && formData.status === COMMODITY_STATUS_IN_USE
+})
+
+const hasSuitablePrice = computed(() => {
+  if (!isPriceUsedInCalculations.value) {
+    return false
+  }
+
+  return formData.currentPrice > 0 ||
+    (formData.originalPriceCurrency === props.mainCurrency && formData.originalPrice > 0) ||
+    formData.convertedOriginalPrice > 0
+})
+
+// Determine if we should show the converted original price field
+const showConvertedOriginalPrice = computed(() => {
+  return formData.originalPriceCurrency !== props.mainCurrency
+})
+
+// Reset converted original price when original currency is changed to main currency
+watch(() => formData.originalPriceCurrency, (newCurrency) => {
+  if (newCurrency === props.mainCurrency) {
+    formData.convertedOriginalPrice = 0
+  }
+})
+
+const priceUsedInCalculations = computed(() => {
+  if (!isPriceUsedInCalculations.value) {
+    return null
+  }
+
+  // Logic to determine which price will be used in calculations
+  // Following the same logic as in getDisplayPrice function
+  if (formData.currentPrice > 0) {
+    return 'current'
+  }
+
+  if (formData.originalPriceCurrency === props.mainCurrency && formData.originalPrice > 0) {
+    return 'original'
+  }
+
+  if (showConvertedOriginalPrice.value && formData.convertedOriginalPrice > 0) {
+    return 'converted'
+  }
+
+  return null
+})
+
+const getPriceCalculationHint = computed(() => {
+  // If the item is a draft or not in use, explain why it's excluded from calculations
+  if (formData.draft) {
+    return 'This item is a draft and will not be included in value calculations.'
+  }
+
+  if (formData.status !== COMMODITY_STATUS_IN_USE) {
+    const statusName = getStatusName(formData.status)
+    return `This item has status "${statusName}" and will not be included in value calculations.`
+  }
+
+  // Determine which price will be used in calculations
+  if (formData.currentPrice > 0) {
+    return `<strong>Current Price</strong> will be used in value calculations (in ${props.mainCurrency}).`
+  }
+
+  if (formData.originalPriceCurrency === props.mainCurrency && formData.originalPrice > 0) {
+    return `<strong>Original Price</strong> will be used in value calculations (in ${props.mainCurrency}).`
+  }
+
+  if (showConvertedOriginalPrice.value && formData.convertedOriginalPrice > 0) {
+    return `<strong>Converted Original Price</strong> will be used in value calculations (in ${props.mainCurrency}).`
+  }
+
+  const needsConvertedPrice = formData.originalPriceCurrency !== props.mainCurrency;
+  return `No suitable price found for calculations. Please enter Current Price${needsConvertedPrice ? ', Converted Original Price' : ''}, or Original Price in ${props.mainCurrency}.`
+})
+
+const getStatusName = (statusId: string) => {
+  const status = commodityStatuses.value.find(s => s.id === statusId)
+  return status ? status.name : statusId
+}
 </script>
 
 <style lang="scss" scoped>
 @import '../assets/main.scss';
+
+.price-calculation-hint {
+  font-size: 0.9rem;
+  margin: 0.5rem 0 1.5rem;
+  padding: 0.75rem;
+  border-radius: $default-radius;
+  background-color: rgba($primary-color, 0.1);
+  color: $text-color;
+  font-style: italic;
+
+  &.inactive-hint {
+    color: $danger-color;
+    background-color: rgba($danger-color, 0.1);
+  }
+
+  &.warning-hint {
+    color: #856404; /* Warning text color - dark amber */
+    background-color: #fff3cd; /* Light amber background */
+  }
+}
 
 .form {
   background: white;

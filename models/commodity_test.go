@@ -217,8 +217,8 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 	}{
 		{
 			name:            "Missing main currency",
-			modifyCommodity: func(c *models.Commodity) {},
-			modifyContext: func(ctx context.Context) context.Context {
+			modifyCommodity: func(*models.Commodity) {},
+			modifyContext: func(context.Context) context.Context {
 				return context.Background() // No currency in context
 			},
 			errorContains: "main currency not set",

@@ -78,11 +78,11 @@ func TestNotEmpty_Validate(t *testing.T) {
 			},
 			{
 				name:  "empty slice",
-				value: []int{},
+				value: make([]int, 0),
 			},
 			{
 				name:  "empty map",
-				value: map[string]int{},
+				value: make(map[string]int),
 			},
 			{
 				name:  "nil pointer",
