@@ -48,7 +48,7 @@
             <div class="settings-card-content">
               <h3>UI Settings</h3>
               <p>Configure theme, language, and display options</p>
-              <div class="settings-values" v-if="!loading && settings.Theme">
+              <div v-if="!loading && settings.Theme" class="settings-values">
                 <div class="setting-value">
                   <span class="setting-label">Theme:</span>
                   <span class="setting-data">{{ settings.Theme }}</span>
@@ -57,7 +57,7 @@
                   <span class="setting-label">Show Debug Info:</span>
                   <span class="setting-data">{{ settings.ShowDebugInfo ? 'Yes' : 'No' }}</span>
                 </div>
-                <div class="setting-value" v-if="settings.DefaultDateFormat">
+                <div v-if="settings.DefaultDateFormat" class="setting-value">
                   <span class="setting-label">Date Format:</span>
                   <span class="setting-data">{{ settings.DefaultDateFormat }}</span>
                 </div>
@@ -75,7 +75,7 @@
             <div class="settings-card-content">
               <h3>System Settings</h3>
               <p>Configure main currency</p>
-              <div class="settings-values" v-if="!loading && settings.MainCurrency">
+              <div v-if="!loading && settings.MainCurrency" class="settings-values">
                 <div class="setting-value">
                   <span class="setting-label">Main Currency:</span>
                   <span class="setting-data">{{ settings.MainCurrency }}</span>
@@ -96,7 +96,6 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import settingsService from '@/services/settingsService'
-import settingsCheckService from '@/services/settingsCheckService'
 
 const router = useRouter()
 const route = useRoute()
@@ -141,8 +140,7 @@ const dismissSuccessMessage = () => {
   }
 }
 
-// Filter out the built-in settings
-const builtInSettings = ['ui_config', 'system_config']
+
 
 onMounted(async () => {
   try {
@@ -164,12 +162,7 @@ const navigateToSetting = (id: string) => {
   router.push(`/settings/${id}`)
 }
 
-const formatSettingName = (id: string) => {
-  // Convert snake_case or kebab-case to Title Case
-  return id
-    .replace(/[-_]/g, ' ')
-    .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
-}
+
 </script>
 
 <style lang="scss" scoped>

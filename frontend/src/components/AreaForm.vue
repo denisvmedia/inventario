@@ -5,9 +5,9 @@
         <div class="form-group">
           <label for="name">Area Name</label>
           <input
-            type="text"
             id="name"
             v-model="form.name"
+            type="text"
             required
             class="form-control"
             :class="{ 'is-invalid': errors.name }"

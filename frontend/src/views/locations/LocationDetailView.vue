@@ -31,7 +31,7 @@
         <!-- Inline Area Creation Form -->
         <AreaForm
           v-if="showAreaForm"
-          :locationId="location.id"
+          :location-id="location.id"
           @created="handleAreaCreated"
           @cancel="showAreaForm = false"
         />
@@ -124,49 +124,7 @@ onMounted(async () => {
 
 
 
-const updateLocationName = async (newName: string) => {
-  try {
-    const payload = {
-      data: {
-        id: location.value.id,
-        type: 'locations',
-        attributes: {
-          name: newName,
-          address: location.value.attributes.address || ''
-        }
-      }
-    }
 
-    await locationService.updateLocation(location.value.id, payload)
-    // Update was successful, the model is already updated via v-model
-  } catch (err: any) {
-    error.value = 'Failed to update location name: ' + (err.message || 'Unknown error')
-    // Revert the change in the UI
-    location.value.attributes.name = location.value.attributes.name
-  }
-}
-
-const updateLocationAddress = async (newAddress: string) => {
-  try {
-    const payload = {
-      data: {
-        id: location.value.id,
-        type: 'locations',
-        attributes: {
-          name: location.value.attributes.name,
-          address: newAddress
-        }
-      }
-    }
-
-    await locationService.updateLocation(location.value.id, payload)
-    // Update was successful, the model is already updated via v-model
-  } catch (err: any) {
-    error.value = 'Failed to update location address: ' + (err.message || 'Unknown error')
-    // Revert the change in the UI
-    location.value.attributes.address = location.value.attributes.address
-  }
-}
 
 const confirmDelete = () => {
   if (confirm('Are you sure you want to delete this location?')) {

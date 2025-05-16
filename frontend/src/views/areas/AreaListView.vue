@@ -20,15 +20,15 @@
       <div v-for="area in areas" :key="area.id" class="area-card" @click="viewArea(area.id)">
         <div class="area-content">
           <h3>{{ area.attributes.name }}</h3>
-          <div class="area-meta" v-if="area.attributes.location_id">
+          <div v-if="area.attributes.location_id" class="area-meta">
             <span class="location">Location: {{ getLocationName(area.attributes.location_id) }}</span>
           </div>
         </div>
         <div class="area-actions">
-          <button class="btn btn-secondary btn-sm" @click.stop="editArea(area.id)" title="Edit">
+          <button class="btn btn-secondary btn-sm" title="Edit" @click.stop="editArea(area.id)">
             <font-awesome-icon icon="edit" />
           </button>
-          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(area.id)" title="Delete">
+          <button class="btn btn-danger btn-sm" title="Delete" @click.stop="confirmDelete(area.id)">
             <font-awesome-icon icon="trash" />
           </button>
         </div>

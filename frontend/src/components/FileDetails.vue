@@ -1,5 +1,5 @@
 <template>
-  <div class="file-details-overlay" v-if="file" @click.self="close">
+  <div v-if="file" class="file-details-overlay" @click.self="close">
     <div class="file-details-modal">
       <div class="file-details-header">
         <h3>File Details</h3>

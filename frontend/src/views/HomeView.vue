@@ -4,7 +4,7 @@
     <p>A modern inventory management system</p>
 
     <!-- Total Value Summary -->
-    <div class="value-summary" v-if="!settingsLoading && mainCurrency">
+    <div v-if="!settingsLoading && mainCurrency" class="value-summary">
       <div class="summary-card">
         <h2>Total Inventory Value</h2>
         <div v-if="valuesLoading" class="value-loading">
@@ -36,7 +36,7 @@
     </div>
 
     <!-- Location Values -->
-    <div class="location-values" v-if="locationTotals.length > 0">
+    <div v-if="locationTotals.length > 0" class="location-values">
       <h2>Value by Location</h2>
       <div class="values-grid">
         <div v-for="location in locationTotals" :key="location.id" class="value-item">
@@ -47,7 +47,7 @@
     </div>
 
     <!-- Area Values -->
-    <div class="area-values" v-if="areaTotals.length > 0">
+    <div v-if="areaTotals.length > 0" class="area-values">
       <h2>Value by Area</h2>
       <div class="values-grid">
         <div v-for="area in areaTotals" :key="area.id" class="value-item">

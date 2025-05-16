@@ -1,5 +1,5 @@
 <template>
-  <form @submit.prevent="onSubmit" class="form">
+  <form class="form" @submit.prevent="onSubmit">
     <!-- Basic Information -->
     <div class="form-section">
       <h2>Basic Information</h2>
@@ -7,9 +7,9 @@
       <div class="form-group">
         <label for="name">Name</label>
         <input
-          type="text"
           id="name"
           v-model="formData.name"
+          type="text"
           required
           class="form-control"
           :class="{ 'is-invalid': formErrors.name }"
@@ -20,9 +20,9 @@
       <div class="form-group">
         <label for="shortName">Short Name</label>
         <input
-          type="text"
           id="shortName"
           v-model="formData.shortName"
+          type="text"
           required
           maxlength="20"
           class="form-control"
@@ -37,8 +37,8 @@
           id="type"
           v-model="formData.type"
           :options="commodityTypes"
-          optionLabel="name"
-          optionValue="id"
+          option-label="name"
+          option-value="id"
           placeholder="Select a type"
           class="w-100"
           :class="{ 'is-invalid': formErrors.type }"
@@ -52,10 +52,10 @@
           id="areaId"
           v-model="formData.areaId"
           :options="areas"
-          optionLabel="attributes.name"
-          optionValue="id"
-          optionGroupLabel="label"
-          optionGroupChildren="items"
+          option-label="attributes.name"
+          option-value="id"
+          option-group-label="label"
+          option-group-children="items"
           placeholder="Select an area"
           class="w-100"
           :class="{ 'is-invalid': formErrors.areaId }"
@@ -71,9 +71,9 @@
       <div class="form-group">
         <label for="count">Count</label>
         <input
-          type="number"
           id="count"
           v-model.number="formData.count"
+          type="number"
           required
           min="1"
           class="form-control"
@@ -86,7 +86,8 @@
     <!-- Price Information -->
     <div class="form-section">
       <h2>Price Information</h2>
-      <div class="price-calculation-hint" :class="{
+      <div
+class="price-calculation-hint" :class="{
         'inactive-hint': !isPriceUsedInCalculations,
         'warning-hint': !hasSuitablePrice && isPriceUsedInCalculations
       }" v-html="getPriceCalculationHint">
@@ -95,9 +96,9 @@
       <div class="form-group">
         <label for="originalPrice">Original Price</label>
         <input
-          type="number"
           id="originalPrice"
           v-model.number="formData.originalPrice"
+          type="number"
           required
           min="0"
           step="0.01"
@@ -113,8 +114,8 @@
           id="originalPriceCurrency"
           v-model="formData.originalPriceCurrency"
           :options="currencies"
-          optionLabel="label"
-          optionValue="code"
+          option-label="label"
+          option-value="code"
           placeholder="Select a currency"
           class="w-100"
           :class="{ 'is-invalid': formErrors.originalPriceCurrency }"
@@ -123,12 +124,12 @@
         <div v-if="formErrors.originalPriceCurrency" class="error-message">{{ formErrors.originalPriceCurrency }}</div>
       </div>
 
-      <div class="form-group" v-if="showConvertedOriginalPrice">
+      <div v-if="showConvertedOriginalPrice" class="form-group">
         <label for="convertedOriginalPrice">Converted Original Price</label>
         <input
-          type="number"
           id="convertedOriginalPrice"
           v-model.number="formData.convertedOriginalPrice"
+          type="number"
           required
           min="0"
           step="0.01"
@@ -141,9 +142,9 @@
       <div class="form-group">
         <label for="currentPrice">Current Price</label>
         <input
-          type="number"
           id="currentPrice"
           v-model.number="formData.currentPrice"
+          type="number"
           required
           min="0"
           step="0.01"
@@ -161,9 +162,9 @@
       <div class="form-group">
         <label for="serialNumber">Serial Number</label>
         <input
-          type="text"
           id="serialNumber"
           v-model="formData.serialNumber"
+          type="text"
           class="form-control"
           :class="{ 'is-invalid': formErrors.serialNumber }"
         >
@@ -175,8 +176,8 @@
         <div class="array-input">
           <div v-for="(item, index) in formData.extraSerialNumbers" :key="index" class="array-item">
             <input
-              type="text"
               v-model="formData.extraSerialNumbers[index]"
+              type="text"
               class="form-control"
             >
             <button type="button" class="btn btn-danger" @click="removeExtraSerialNumber(index)">Remove</button>
@@ -190,8 +191,8 @@
         <div class="array-input">
           <div v-for="(item, index) in formData.partNumbers" :key="index" class="array-item">
             <input
-              type="text"
               v-model="formData.partNumbers[index]"
+              type="text"
               class="form-control"
             >
             <button type="button" class="btn btn-danger" @click="removePartNumber(index)">Remove</button>
@@ -210,8 +211,8 @@
         <div class="array-input">
           <div v-for="(item, index) in formData.tags" :key="index" class="array-item">
             <input
-              type="text"
               v-model="formData.tags[index]"
+              type="text"
               class="form-control"
             >
             <button type="button" class="btn btn-danger" @click="removeTag(index)">Remove</button>
@@ -226,8 +227,8 @@
           id="status"
           v-model="formData.status"
           :options="commodityStatuses"
-          optionLabel="name"
-          optionValue="id"
+          option-label="name"
+          option-value="id"
           placeholder="Select a status"
           class="w-100"
           :class="{ 'is-invalid': formErrors.status }"
@@ -238,9 +239,9 @@
       <div class="form-group">
         <label for="purchaseDate">Purchase Date</label>
         <input
-          type="date"
           id="purchaseDate"
           v-model="formData.purchaseDate"
+          type="date"
           required
           class="form-control"
           :class="{ 'is-invalid': formErrors.purchaseDate }"
@@ -258,8 +259,8 @@
         <div class="array-input">
           <div v-for="(item, index) in formData.urls" :key="index" class="array-item">
             <input
-              type="url"
               v-model="formData.urls[index]"
+              type="url"
               class="form-control"
             >
             <button type="button" class="btn btn-danger" @click="removeUrl(index)">Remove</button>
@@ -282,7 +283,7 @@
 
       <div class="form-group">
         <label class="checkbox-label">
-          <input type="checkbox" v-model="formData.draft">
+          <input v-model="formData.draft" type="checkbox">
           <span>Draft</span>
         </label>
       </div>
@@ -298,12 +299,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue'
+import { ref, reactive, watch, nextTick, computed } from 'vue'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
 import Select from 'primevue/select'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 const props = defineProps({
   initialData: {
@@ -592,27 +592,7 @@ watch(() => formData.originalPriceCurrency, (newCurrency) => {
   }
 })
 
-const priceUsedInCalculations = computed(() => {
-  if (!isPriceUsedInCalculations.value) {
-    return null
-  }
-
-  // Logic to determine which price will be used in calculations
-  // Following the same logic as in getDisplayPrice function
-  if (formData.currentPrice > 0) {
-    return 'current'
-  }
-
-  if (formData.originalPriceCurrency === props.mainCurrency && formData.originalPrice > 0) {
-    return 'original'
-  }
-
-  if (showConvertedOriginalPrice.value && formData.convertedOriginalPrice > 0) {
-    return 'converted'
-  }
-
-  return null
-})
+// Note: We're using getPriceCalculationHint for displaying price calculation information in the template
 
 const getPriceCalculationHint = computed(() => {
   // If the item is a draft or not in use, explain why it's excluded from calculations
