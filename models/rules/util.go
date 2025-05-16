@@ -17,6 +17,8 @@ func IsEmpty(value any) bool {
 	case reflect.String:
 		val := v.String()
 		return strings.TrimSpace(val) == ""
+	case reflect.Ptr:
+		return v.IsZero()
 	}
 
 	return false
