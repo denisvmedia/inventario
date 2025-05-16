@@ -3,6 +3,7 @@ package models_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -64,20 +65,20 @@ func TestCommodityType_IsValid_HappyPaths(t *testing.T) {
 	c := qt.New(t)
 
 	testCases := []struct {
-		name string
-		type models.CommodityType
+		name  string
+		cType models.CommodityType
 	}{
 		{"WhiteGoods", models.CommodityTypeWhiteGoods},
 		{"Electronics", models.CommodityTypeElectronics},
 		{"Equipment", models.CommodityTypeEquipment},
 		{"Furniture", models.CommodityTypeFurniture},
 		{"Clothes", models.CommodityTypeClothes},
-		{"Other", models.CommodyTypeOther},
+		{"Other", models.CommodityTypeOther},
 	}
 
 	for _, tc := range testCases {
 		c.Run(tc.name, func(c *qt.C) {
-			c.Assert(tc.type.IsValid(), qt.IsTrue)
+			c.Assert(tc.cType.IsValid(), qt.IsTrue)
 		})
 	}
 }
@@ -297,6 +298,269 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 			err := commodity.ValidateWithContext(ctx)
 
 			// Check the results
+			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err.Error(), qt.Contains, tc.errorContains)
+		})
+	}
+}
+
+func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
+	c := qt.New(t)
+
+	testCases := []struct {
+		name         string
+		commodity    models.Commodity
+		mainCurrency string
+	}{
+		{
+			name: "Main currency with zero converted price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			mainCurrency: "USD",
+		},
+		{
+			name: "Non-main currency with converted price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "EUR",
+				ConvertedOriginalPrice: decimal.NewFromFloat(110.00),
+				CurrentPrice:           decimal.NewFromFloat(105.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			mainCurrency: "USD",
+		},
+		{
+			name: "Non-main currency with only current price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "EUR",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(105.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			mainCurrency: "USD",
+		},
+	}
+
+	for _, tc := range testCases {
+		c.Run(tc.name, func(c *qt.C) {
+			ctx := validationctx.WithMainCurrency(context.Background(), tc.mainCurrency)
+			err := tc.commodity.ValidateWithContext(ctx)
+			c.Assert(err, qt.IsNil)
+		})
+	}
+}
+
+func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T) {
+	c := qt.New(t)
+
+	testCases := []struct {
+		name          string
+		commodity     models.Commodity
+		mainCurrency  string
+		errorContains string
+	}{
+		{
+			name: "Main currency with non-zero converted price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.NewFromFloat(100.00),
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			mainCurrency:  "USD",
+			errorContains: "converted original price must be zero",
+		},
+		{
+			name: "Non-main currency with zero converted price and zero current price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "EUR",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.Zero,
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			mainCurrency:  "USD",
+			errorContains: "converted original price or current price must be set",
+		},
+	}
+
+	for _, tc := range testCases {
+		c.Run(tc.name, func(c *qt.C) {
+			ctx := validationctx.WithMainCurrency(context.Background(), tc.mainCurrency)
+			err := tc.commodity.ValidateWithContext(ctx)
+
+			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err.Error(), qt.Contains, tc.errorContains)
+		})
+	}
+}
+
+func TestCommodity_ValidateWithContext_NegativePrices(t *testing.T) {
+	testCases := []struct {
+		name          string
+		commodity     models.Commodity
+		shouldBeValid bool
+		errorContains string
+	}{
+		{
+			name: "Negative original price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(-100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			shouldBeValid: false,
+			errorContains: "must be no less than 0",
+		},
+		{
+			name: "Negative original converted price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.NewFromFloat(-100.00),
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			shouldBeValid: false,
+			errorContains: "must be no less than 0",
+		},
+		{
+			name: "Negative current price",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(-90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			shouldBeValid: false,
+			errorContains: "must be no less than 0",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			ctx := validationctx.WithMainCurrency(context.Background(), "USD")
+			err := tc.commodity.ValidateWithContext(ctx)
+
+			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err.Error(), qt.Contains, tc.errorContains)
+		})
+	}
+}
+
+func TestCommodity_ValidateWithContext_NameLength(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a very long name
+	longName := strings.Repeat("a", 256)
+	longShortName := strings.Repeat("a", 30)
+
+	testCases := []struct {
+		name          string
+		commodity     models.Commodity
+		errorContains string
+	}{
+		{
+			name: "Too long name",
+			commodity: models.Commodity{
+				Name:                   longName,
+				ShortName:              "TC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			errorContains: "the length must be between",
+		},
+		{
+			name: "Too long short name",
+			commodity: models.Commodity{
+				Name:                   "Test Commodity",
+				ShortName:              longShortName,
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 "area1",
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			errorContains: "the length must be between 1 and 20",
+		},
+	}
+
+	for _, tc := range testCases {
+		c.Run(tc.name, func(c *qt.C) {
+			ctx := validationctx.WithMainCurrency(context.Background(), "USD")
+			err := tc.commodity.ValidateWithContext(ctx)
+
 			c.Assert(err, qt.Not(qt.IsNil))
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
