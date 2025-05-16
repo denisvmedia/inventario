@@ -22,17 +22,18 @@ jobs:
           GO_MOD_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
           echo "GO_MOD_VERSION=$GO_MOD_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Check go-version in workflows
+      - name: Check go-version in workflows and .golangci.yml
         run: |
           set -e
           GO_MOD_VERSION="${{ steps.go_mod_version.outputs.GO_MOD_VERSION }}"
           echo "Go version in go.mod: $GO_MOD_VERSION"
-          for wf in .github/workflows/*.yml; do
-            WF_VERSION=$(grep -A 2 'setup-go@' "$wf" | grep 'go-version:' | head -1 | awk -F\' '{print $2}' | awk -F'"' '{print $2}' | awk '{print $2}')
-            if [ -z "$WF_VERSION" ]; then
-              # Try with double quotes or colon
-              WF_VERSION=$(grep -A 2 'setup-go@' "$wf" | grep 'go-version:' | head -1 | awk -F: '{print $2}' | tr -d "'\" ")
+          # Check go-*.yml workflows, but ignore go-version-consistency.yml
+          for wf in .github/workflows/go-*.yml; do
+            if [ "$(basename "$wf")" = "go-version-consistency.yml" ]; then
+              continue
             fi
+            # Extract go-version from 'with:' section (for reusable workflows)
+            WF_VERSION=$(grep -A 2 'go-version:' "$wf" | grep 'go-version:' | head -1 | awk -F: '{print $2}' | tr -d "'\" ")
             if [ -n "$WF_VERSION" ]; then
               echo "$wf: go-version $WF_VERSION"
               if [ "$WF_VERSION" != "$GO_MOD_VERSION" ]; then
@@ -41,5 +42,15 @@ jobs:
               fi
             fi
           done
+          # Check .golangci.yml for go version
+          if [ -f .golangci.yml ]; then
+            GOLANGCI_VERSION=$(grep '^  go:' .golangci.yml | head -1 | awk -F: '{print $2}' | tr -d '"' | awk -F',' '{print $1}' | xargs)
+            if [ -n "$GOLANGCI_VERSION" ]; then
+              echo ".golangci.yml: go $GOLANGCI_VERSION"
+              if [ "$GOLANGCI_VERSION" != "$GO_MOD_VERSION" ]; then
+                echo "::error file=.golangci.yml::go version ($GOLANGCI_VERSION) does not match go.mod ($GO_MOD_VERSION)" >&2
+                exit 1
+              fi
+            fi
+          fi
         shell: bash
-
