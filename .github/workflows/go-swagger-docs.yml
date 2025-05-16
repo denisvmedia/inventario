@@ -1,4 +1,4 @@
-name: Go Test
+name: Swagger Docs Sync
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  test:
-    uses: ./.github/workflows/reusable-go-test.yml
+  swagger-docs:
+    uses: ./.github/workflows/reusable-swagger-docs.yml
     with:
       go-version: '1.24.1'
