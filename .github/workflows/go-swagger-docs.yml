@@ -12,6 +12,35 @@ permissions:
 
 jobs:
   swagger-docs:
-    uses: ./.github/workflows/reusable-swagger-docs.yml
-    with:
-      go-version: '1.24.1'
+    name: Check Swagger Docs Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+      - name: Install dependencies
+        run: go mod download
+      - name: Check swag version in go.mod
+        id: swag_version
+        run: |
+          SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)
+          if [ -z "$SWAG_VERSION" ]; then
+            echo "github.com/swaggo/swag is not in go.mod" >&2
+            exit 1
+          fi
+          echo "SWAG_VERSION=$SWAG_VERSION" >> $GITHUB_OUTPUT
+      - name: Install swag CLI
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@${{ steps.swag_version.outputs.SWAG_VERSION }}
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      - name: Regenerate Swagger docs
+        run: swag init --output docs
+      - name: Check for uncommitted changes in docs/
+        run: |
+          if ! git diff --exit-code -- docs/; then
+            echo "Swagger docs are out of sync. Please run 'swag init --output docs' and commit the changes." >&2
+            exit 1
+          fi
