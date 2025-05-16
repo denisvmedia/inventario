@@ -56,28 +56,30 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 }
 
 func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
-	var commodityRegistry = memory.NewCommodityRegistry(areaRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 
 	areas := must.Must(areaRegistry.List())
 
 	must.Must(commodityRegistry.Create(models.Commodity{
-		Name:          "Commodity 1",
-		ShortName:     "C1",
-		AreaID:        areas[0].ID,
-		Type:          models.CommodityTypeFurniture,
-		Status:        models.CommodityStatusInUse,
-		Count:         10,
-		OriginalPrice: must.Must(decimal.NewFromString("2000.00")),
+		Name:                  "Commodity 1",
+		ShortName:             "C1",
+		AreaID:                areas[0].ID,
+		Type:                  models.CommodityTypeFurniture,
+		Status:                models.CommodityStatusInUse,
+		Count:                 10,
+		OriginalPrice:         must.Must(decimal.NewFromString("2000.00")),
+		OriginalPriceCurrency: models.Currency("USD"),
 	}))
 
 	must.Must(commodityRegistry.Create(models.Commodity{
-		Name:          "Commodity 2",
-		ShortName:     "C2",
-		AreaID:        areas[0].ID,
-		Status:        models.CommodityStatusInUse,
-		Type:          models.CommodityTypeElectronics,
-		Count:         5,
-		OriginalPrice: must.Must(decimal.NewFromString("1500.00")),
+		Name:                  "Commodity 2",
+		ShortName:             "C2",
+		AreaID:                areas[0].ID,
+		Status:                models.CommodityStatusInUse,
+		Type:                  models.CommodityTypeElectronics,
+		Count:                 5,
+		OriginalPrice:         must.Must(decimal.NewFromString("1500.00")),
+		OriginalPriceCurrency: models.Currency("USD"),
 	}))
 
 	return commodityRegistry
@@ -209,11 +211,20 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 	return manualRegistry
 }
 
+func newSettingsRegistry() registry.SettingsRegistry {
+	var settingsRegistry = memory.NewSettingsRegistry()
+
+	must.Assert(settingsRegistry.Patch("system.main_currency", "USD"))
+
+	return settingsRegistry
+}
+
 func newParams() apiserver.Params {
 	var params apiserver.Params
 	params.RegistrySet = &registry.Set{}
 	params.RegistrySet.LocationRegistry = newLocationRegistry()
 	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
+	params.RegistrySet.SettingsRegistry = newSettingsRegistry()
 	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry)
 	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)

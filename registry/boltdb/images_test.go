@@ -14,6 +14,7 @@ import (
 
 func setupTestImageRegistry(t *testing.T) (*boltdb.ImageRegistry, *boltdb.CommodityRegistry, *boltdb.AreaRegistry, *boltdb.LocationRegistry, func()) {
 	c := qt.New(t)
+	c.Helper()
 
 	// Create a temporary directory for the test database
 	tempDir, err := os.MkdirTemp("", "boltdb-test-*")

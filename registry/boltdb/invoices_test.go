@@ -46,6 +46,7 @@ func setupTestInvoiceRegistry(t *testing.T) (*boltdb.InvoiceRegistry, *boltdb.Co
 
 func getInvoiceTestSetup(t *testing.T) (registry.InvoiceRegistry, *models.Commodity, func()) {
 	c := qt.New(t)
+	c.Helper()
 
 	invoiceRegistry, commodityRegistry, areaRegistry, locationRegistry, cleanup := setupTestInvoiceRegistry(t)
 

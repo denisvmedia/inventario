@@ -266,8 +266,8 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 	handler := apiserver.APIServer(params)
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	body := rr.Body.Bytes()
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("Body: %s", body))
 	c.Assert(body, checkers.JSONPathEquals("$.errors[0].error.error.data.attributes.address"), "cannot be blank")
 }
 
