@@ -1,19 +1,19 @@
 <template>
   <div class="area-create">
     <div class="breadcrumb-nav">
-      <a href="#" @click.prevent="navigateToLocations" class="breadcrumb-link">
+      <a href="#" class="breadcrumb-link" @click.prevent="navigateToLocations">
         <font-awesome-icon icon="arrow-left" /> Back to Locations
       </a>
     </div>
     <h1>Create New Area</h1>
 
-    <form @submit.prevent="submitForm" class="form">
+    <form class="form" @submit.prevent="submitForm">
       <div class="form-group">
         <label for="name">Name</label>
         <input
-          type="text"
           id="name"
           v-model="form.name"
+          type="text"
           required
           class="form-control"
           :class="{ 'is-invalid': errors.name }"
@@ -27,8 +27,8 @@
           id="location"
           v-model="form.locationId"
           :options="locations"
-          optionLabel="attributes.name"
-          optionValue="id"
+          option-label="attributes.name"
+          option-value="id"
           placeholder="Select a location"
           class="w-100"
           :class="{ 'is-invalid': errors.locationId }"

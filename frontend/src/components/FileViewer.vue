@@ -2,8 +2,8 @@
   <div class="file-viewer">
     <FileList
       :files="files"
-      :fileType="fileType"
-      :commodityId="entityId"
+      :file-type="fileType"
+      :commodity-id="entityId"
       :loading="false"
       @delete="confirmDeleteFile"
       @download="downloadFile"
@@ -16,8 +16,8 @@
     <FileDetails
       v-if="selectedFile"
       :file="selectedFile"
-      :fileType="fileType"
-      :commodityId="entityId"
+      :file-type="fileType"
+      :commodity-id="entityId"
       @close="closeFileDetails"
       @delete="confirmDeleteFile"
       @download="downloadFile"
@@ -28,20 +28,20 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 :title="currentFileName">{{ currentFileName }}</h3>
-          <button class="close-button" @click="closeViewer" title="Close">&times;</button>
+          <button class="close-button" title="Close" @click="closeViewer">&times;</button>
         </div>
         <div class="modal-body">
           <!-- Image viewer -->
           <template v-if="isImageFile(currentFile)">
-            <button v-if="files.length > 1" class="nav-button prev" @click="prevFile" title="Previous file">&lt;</button>
+            <button v-if="files.length > 1" class="nav-button prev" title="Previous file" @click="prevFile">&lt;</button>
             <div class="image-container">
               <img
+                ref="fullImage"
                 :src="currentFileUrl"
                 :alt="currentFileName"
                 class="full-image"
                 :class="{ 'zoomed': isZoomed }"
                 :style="imageStyle"
-                ref="fullImage"
                 @click="handleImageClick"
                 @mousedown="startPan"
                 @mousemove="pan"
@@ -49,12 +49,12 @@
                 @mouseleave="endPan"
               />
             </div>
-            <button v-if="files.length > 1" class="nav-button next" @click="nextFile" title="Next file">&gt;</button>
+            <button v-if="files.length > 1" class="nav-button next" title="Next file" @click="nextFile">&gt;</button>
           </template>
 
           <!-- PDF viewer -->
           <template v-else-if="isPdfFile(currentFile)">
-            <button v-if="files.length > 1" class="nav-button prev" @click="prevFile" title="Previous file">&lt;</button>
+            <button v-if="files.length > 1" class="nav-button prev" title="Previous file" @click="prevFile">&lt;</button>
             <div class="pdf-container">
               <template v-if="!pdfViewerError">
                 <PDFViewerCanvas
@@ -73,7 +73,7 @@
                 </button>
               </div>
             </div>
-            <button v-if="files.length > 1" class="nav-button next" @click="nextFile" title="Next file">&gt;</button>
+            <button v-if="files.length > 1" class="nav-button next" title="Next file" @click="nextFile">&gt;</button>
           </template>
 
           <!-- Fallback for other file types -->
@@ -106,7 +106,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import PDFViewerCanvas from './PDFViewerCanvas.vue'
-import PDFViewer from './PDFViewer.vue'
+// PDFViewer is not used, using PDFViewerCanvas instead
 import FileList from './FileList.vue'
 import FileDetails from './FileDetails.vue'
 
@@ -372,7 +372,7 @@ const handlePdfError = (error) => {
   }
 }
 
-const handleModalClick = (event) => {
+const handleModalClick = () => {
   // Only close if we're not in a dragging operation
   if (!isGlobalDragging.value) {
     closeViewer()
@@ -420,7 +420,7 @@ const toggleZoom = () => {
 }
 
 // Handle image click - differentiates between click and drag
-const handleImageClick = (event) => {
+const handleImageClick = () => {
   // Only toggle zoom if it was a click, not a drag
   if (!isDragging.value) {
     toggleZoom()
@@ -482,7 +482,7 @@ const handleGlobalMouseMove = (event) => {
 }
 
 // Global mouse up handler
-const handleGlobalMouseUp = (event) => {
+const handleGlobalMouseUp = () => {
   if (isPanning.value) {
     isPanning.value = false
 

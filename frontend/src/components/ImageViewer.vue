@@ -32,18 +32,18 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3 :title="currentImageName">{{ currentImageName }}</h3>
-          <button class="close-button" @click="closeGallery" title="Close">&times;</button>
+          <button class="close-button" title="Close" @click="closeGallery">&times;</button>
         </div>
         <div class="modal-body">
           <button v-if="images.length > 1" class="nav-button prev" @click="prevImage">&lt;</button>
           <div class="image-container">
             <img
+              ref="fullImage"
               :src="currentImageUrl"
               :alt="currentImageName"
               class="full-image"
               :class="{ 'zoomed': isZoomed }"
               :style="imageStyle"
-              ref="fullImage"
               @click="handleImageClick"
               @mousedown="startPan"
               @mousemove="pan"
@@ -207,7 +207,7 @@ const toggleZoom = () => {
 }
 
 // Handle image click - differentiates between click and drag
-const handleImageClick = (event) => {
+const handleImageClick = () => {
   // Only toggle zoom if it was a click, not a drag
   if (!isDragging.value) {
     toggleZoom()

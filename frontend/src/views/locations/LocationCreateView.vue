@@ -2,13 +2,13 @@
   <div class="location-create">
     <h1>Create New Location</h1>
 
-    <form @submit.prevent="submitForm" class="form">
+    <form class="form" @submit.prevent="submitForm">
       <div class="form-group">
         <label for="name">Name</label>
         <input
-          type="text"
           id="name"
           v-model="form.name"
+          type="text"
           required
           class="form-control"
           :class="{ 'is-invalid': errors.name }"
@@ -19,9 +19,9 @@
       <div class="form-group">
         <label for="address">Address</label>
         <input
-          type="text"
           id="address"
           v-model="form.address"
+          type="text"
           required
           class="form-control"
           :class="{ 'is-invalid': errors.address }"

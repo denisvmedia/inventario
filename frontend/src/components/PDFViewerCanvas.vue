@@ -15,18 +15,18 @@
         <div class="pdf-navigation">
           <button
             class="btn btn-sm"
-            @click="prevPage"
             :disabled="currentPage <= 1 || viewAllPages"
             title="Previous Page"
+            @click="prevPage"
           >
             <font-awesome-icon icon="chevron-left" />
           </button>
           <span class="page-info">{{ currentPage }} / {{ numPages }}</span>
           <button
             class="btn btn-sm"
-            @click="nextPage"
             :disabled="currentPage >= numPages || viewAllPages"
             title="Next Page"
+            @click="nextPage"
           >
             <font-awesome-icon icon="chevron-right" />
           </button>
@@ -35,36 +35,36 @@
           <button
             class="btn btn-sm"
             :class="{ 'btn-active': !viewAllPages }"
-            @click="setViewMode(false)"
             title="Page by Page"
+            @click="setViewMode(false)"
           >
             <font-awesome-icon icon="file" />
           </button>
           <button
             class="btn btn-sm"
             :class="{ 'btn-active': viewAllPages }"
-            @click="setViewMode(true)"
             title="View All Pages"
+            @click="setViewMode(true)"
           >
             <font-awesome-icon icon="copy" />
           </button>
         </div>
         <div class="pdf-zoom">
-          <button class="btn btn-sm" @click="zoomOut" title="Zoom Out">
+          <button class="btn btn-sm" title="Zoom Out" @click="zoomOut">
             <font-awesome-icon icon="search-minus" />
           </button>
           <span class="zoom-level">{{ Math.round(scale * 100) }}%</span>
-          <button class="btn btn-sm" @click="zoomIn" title="Zoom In">
+          <button class="btn btn-sm" title="Zoom In" @click="zoomIn">
             <font-awesome-icon icon="search-plus" />
           </button>
         </div>
-        <button class="btn btn-sm btn-primary" @click="downloadPDF" title="Download PDF">
+        <button class="btn btn-sm btn-primary" title="Download PDF" @click="downloadPDF">
           <font-awesome-icon icon="download" />
         </button>
       </div>
-      <div class="pdf-container" ref="pdfContainer">
-        <div v-if="viewAllPages" class="pdf-all-pages" ref="pdfAllPages">
-          <div v-for="n in numPages" :key="n" class="pdf-page-container" :data-page="n" ref="pageContainers">
+      <div ref="pdfContainer" class="pdf-container">
+        <div v-if="viewAllPages" ref="pdfAllPages" class="pdf-all-pages">
+          <div v-for="n in numPages" :key="n" ref="pageContainers" class="pdf-page-container" :data-page="n">
             <img v-if="pageImages[n]" :src="pageImages[n]" class="pdf-page" />
             <div v-else class="pdf-page-loading">
               <div class="spinner small"></div>
@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch, markRaw, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, markRaw } from 'vue'
 import { pdfjsLib } from '../utils/pdfjs-init.ts'
 
 const props = defineProps({

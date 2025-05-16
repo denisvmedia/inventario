@@ -5,7 +5,7 @@
     <div v-else-if="!commodity" class="not-found">Commodity not found</div>
     <div v-else>
       <div class="breadcrumb-nav">
-        <a href="#" @click.prevent="navigateBack" class="breadcrumb-link">
+        <a href="#" class="breadcrumb-link" @click.prevent="navigateBack">
           <font-awesome-icon icon="arrow-left" />
           <span v-if="sourceIsArea">Back to Area</span>
           <span v-else>Back to Commodities</span>
@@ -58,23 +58,23 @@
             <span class="label">Original Price:</span>
             <span>{{ formatPrice(parseFloat(commodity.attributes.original_price), commodity.attributes.original_price_currency) }}</span>
           </div>
-          <div class="info-row" v-if="(commodity.attributes.original_price_currency !== getMainCurrency()) && parseFloat(commodity.attributes.converted_original_price) > 0">
+          <div v-if="(commodity.attributes.original_price_currency !== getMainCurrency()) && parseFloat(commodity.attributes.converted_original_price) > 0" class="info-row">
             <span class="label">Converted Original Price:</span>
             <span>{{ formatPrice(parseFloat(commodity.attributes.converted_original_price)) }}</span>
           </div>
-          <div class="info-row" v-if="parseFloat(commodity.attributes.current_price) > 0">
+          <div v-if="parseFloat(commodity.attributes.current_price) > 0" class="info-row">
             <span class="label">Current Price:</span>
             <span>{{ formatPrice(parseFloat(commodity.attributes.current_price)) }}</span>
           </div>
-          <div class="info-row" v-if="(commodity.attributes.count || 1) > 1">
+          <div v-if="(commodity.attributes.count || 1) > 1" class="info-row">
             <span class="label">Price Per Unit:</span>
             <span>{{ formatPrice(calculatePricePerUnit(commodity)) }}</span>
           </div>
         </div>
 
-        <div class="info-card" v-if="commodity.attributes.serial_number || (commodity.attributes.extra_serial_numbers && commodity.attributes.extra_serial_numbers.length > 0) || (commodity.attributes.part_numbers && commodity.attributes.part_numbers.length > 0)">
+        <div v-if="commodity.attributes.serial_number || (commodity.attributes.extra_serial_numbers && commodity.attributes.extra_serial_numbers.length > 0) || (commodity.attributes.part_numbers && commodity.attributes.part_numbers.length > 0)" class="info-card">
           <h2>Serial Numbers and Part Numbers</h2>
-          <div class="info-row" v-if="commodity.attributes.serial_number">
+          <div v-if="commodity.attributes.serial_number" class="info-row">
             <span class="label">Serial Number:</span>
             <span>{{ commodity.attributes.serial_number }}</span>
           </div>
@@ -96,16 +96,16 @@
           </div>
         </div>
 
-        <div class="info-card" v-if="commodity.attributes.tags && commodity.attributes.tags.length > 0">
+        <div v-if="commodity.attributes.tags && commodity.attributes.tags.length > 0" class="info-card">
           <h2>Tags</h2>
           <div class="tags">
-            <span class="tag" v-for="(tag, index) in commodity.attributes.tags" :key="index">
+            <span v-for="(tag, index) in commodity.attributes.tags" :key="index" class="tag">
               {{ tag }}
             </span>
           </div>
         </div>
 
-        <div class="info-card" v-if="commodity.attributes.urls && commodity.attributes.urls.length > 0">
+        <div v-if="commodity.attributes.urls && commodity.attributes.urls.length > 0" class="info-card">
           <h2>URLs</h2>
           <ul>
             <li v-for="(url, index) in commodity.attributes.urls" :key="index">
@@ -127,7 +127,7 @@
             v-if="showImageUploader"
             :multiple="true"
             accept=".gif,.jpg,.jpeg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
-            uploadPrompt="Drag and drop images here"
+            upload-prompt="Drag and drop images here"
             @upload="uploadImages"
           />
 
@@ -135,9 +135,9 @@
           <FileViewer
             v-else
             :files="images"
-            fileType="images"
-            :entityId="commodity.id"
-            entityType="commodities"
+            file-type="images"
+            :entity-id="commodity.id"
+            entity-type="commodities"
             @delete="deleteImage"
             @update="updateImage"
             @download="downloadImage"
@@ -157,7 +157,7 @@
             v-if="showManualUploader"
             :multiple="true"
             accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
-            uploadPrompt="Drag and drop manuals here"
+            upload-prompt="Drag and drop manuals here"
             @upload="uploadManuals"
           />
 
@@ -165,9 +165,9 @@
           <FileViewer
             v-else
             :files="manuals"
-            fileType="manuals"
-            :entityId="commodity.id"
-            entityType="commodities"
+            file-type="manuals"
+            :entity-id="commodity.id"
+            entity-type="commodities"
             @delete="deleteManual"
             @update="updateManual"
             @download="downloadManual"
@@ -187,7 +187,7 @@
             v-if="showInvoiceUploader"
             :multiple="true"
             accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
-            uploadPrompt="Drag and drop invoices here"
+            upload-prompt="Drag and drop invoices here"
             @upload="uploadInvoices"
           />
 
@@ -195,9 +195,9 @@
           <FileViewer
             v-else
             :files="invoices"
-            fileType="invoices"
-            :entityId="commodity.id"
-            entityType="commodities"
+            file-type="invoices"
+            :entity-id="commodity.id"
+            entity-type="commodities"
             @delete="deleteInvoice"
             @update="updateInvoice"
             @download="downloadInvoice"
@@ -214,7 +214,7 @@ import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
-import { formatPrice, calculatePricePerUnit, getDisplayPrice, getMainCurrency } from '@/services/currencyService'
+import { formatPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
 import FileUploader from '@/components/FileUploader.vue'
 import FileViewer from '@/components/FileViewer.vue'
 

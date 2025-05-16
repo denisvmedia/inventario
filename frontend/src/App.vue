@@ -17,7 +17,7 @@
     </header>
 
     <!-- Debug information -->
-    <div class="debug-info" v-if="false">
+    <div v-if="false" class="debug-info">
       <p>Current route: {{ $route.path }}</p>
     </div>
 

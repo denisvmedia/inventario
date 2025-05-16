@@ -42,7 +42,8 @@
     </div>
 
     <div v-else class="commodities-grid">
-      <div v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
+      <div
+v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
         'highlighted': commodity.id === highlightCommodityId,
         'draft': commodity.attributes.draft,
         'sold': !commodity.attributes.draft && commodity.attributes.status === 'sold',
@@ -52,7 +53,7 @@
       }" @click="viewCommodity(commodity.id)">
         <div class="commodity-content">
           <h3>{{ commodity.attributes.name }}</h3>
-          <div class="commodity-location" v-if="commodity.attributes.area_id">
+          <div v-if="commodity.attributes.area_id" class="commodity-location">
             <span class="location-info">
               <font-awesome-icon icon="map-marker-alt" />
               {{ getLocationName(commodity.attributes.area_id) }} / {{ getAreaName(commodity.attributes.area_id) }}
@@ -63,11 +64,11 @@
               <font-awesome-icon :icon="getTypeIcon(commodity.attributes.type)" />
               {{ getTypeName(commodity.attributes.type) }}
             </span>
-            <span class="count" v-if="(commodity.attributes.count || 1) > 1">×{{ commodity.attributes.count }}</span>
+            <span v-if="(commodity.attributes.count || 1) > 1" class="count">×{{ commodity.attributes.count }}</span>
           </div>
           <div class="commodity-price">
             <span class="price">{{ formatPrice(getDisplayPrice(commodity)) }}</span>
-            <span class="price-per-unit" v-if="(commodity.attributes.count || 1) > 1">
+            <span v-if="(commodity.attributes.count || 1) > 1" class="price-per-unit">
               {{ formatPrice(calculatePricePerUnit(commodity)) }} per unit
             </span>
           </div>
@@ -76,10 +77,10 @@
           </div>
         </div>
         <div class="commodity-actions">
-          <button class="btn btn-secondary btn-sm" @click.stop="editCommodity(commodity.id)" title="Edit">
+          <button class="btn btn-secondary btn-sm" title="Edit" @click.stop="editCommodity(commodity.id)">
             <font-awesome-icon icon="edit" />
           </button>
-          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(commodity.id)" title="Delete">
+          <button class="btn btn-danger btn-sm" title="Delete" @click.stop="confirmDelete(commodity.id)">
             <font-awesome-icon icon="trash" />
           </button>
         </div>
@@ -89,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
@@ -210,7 +211,7 @@ onMounted(async () => {
     await settingsStore.fetchMainCurrency()
 
     // Load commodities, areas, locations, and values in parallel
-    const [commoditiesResponse, areasResponse, locationsResponse, _] = await Promise.all([
+    const [commoditiesResponse, areasResponse, locationsResponse] = await Promise.all([
       commodityService.getCommodities(),
       areaService.getAreas(),
       locationService.getLocations(),

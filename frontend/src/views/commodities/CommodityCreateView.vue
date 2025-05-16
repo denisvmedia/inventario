@@ -1,10 +1,10 @@
 <template>
   <div class="commodity-create">
     <div class="breadcrumb-nav">
-      <a v-if="areaFromUrl" href="#" @click.prevent="navigateToArea" class="breadcrumb-link">
+      <a v-if="areaFromUrl" href="#" class="breadcrumb-link" @click.prevent="navigateToArea">
         <font-awesome-icon icon="arrow-left" /> Back to Area
       </a>
-      <a v-else href="#" @click.prevent="navigateToCommodities" class="breadcrumb-link">
+      <a v-else href="#" class="breadcrumb-link" @click.prevent="navigateToCommodities">
         <font-awesome-icon icon="arrow-left" /> Back to Commodities
       </a>
     </div>
@@ -38,13 +38,9 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import commodityService from '@/services/commodityService'
-import areaService from '@/services/areaService'
-import locationService from '@/services/locationService'
 import settingsService from '@/services/settingsService'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { COMMODITY_TYPES } from '@/constants/commodityTypes'
-import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
-import { CURRENCY_CZK } from '@/constants/currencies'
+import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import CommodityForm from '@/components/CommodityForm.vue'
 
 const router = useRouter()
@@ -57,8 +53,7 @@ const formError = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
 const areas = ref<any[]>([])
 const locations = ref<any[]>([])
-const commodityTypes = ref(COMMODITY_TYPES)
-const commodityStatuses = ref(COMMODITY_STATUSES)
+
 const currencies = ref<any[]>([])
 const areaFromUrl = ref<string | null>(null)
 const areaName = ref<string>('')
@@ -183,7 +178,9 @@ onMounted(async () => {
       try {
         // Try to get the localized currency name
         currencyName = currencyNames.of(code)
-      } catch (e) {
+      /* eslint-disable no-unused-vars */
+      } catch (_) {
+      /* eslint-enable no-unused-vars */
         console.warn(`Could not get display name for currency: ${code}`)
       }
 
@@ -341,37 +338,7 @@ const cancel = () => {
   }
 }
 
-const addExtraSerialNumber = () => {
-  form.extraSerialNumbers.push('')
-}
 
-const removeExtraSerialNumber = (index: number) => {
-  form.extraSerialNumbers.splice(index, 1)
-}
-
-const addPartNumber = () => {
-  form.partNumbers.push('')
-}
-
-const removePartNumber = (index: number) => {
-  form.partNumbers.splice(index, 1)
-}
-
-const addTag = () => {
-  form.tags.push('')
-}
-
-const removeTag = (index: number) => {
-  form.tags.splice(index, 1)
-}
-
-const addUrl = () => {
-  form.urls.push('')
-}
-
-const removeUrl = (index: number) => {
-  form.urls.splice(index, 1)
-}
 
 const handleValidation = (isValid: boolean, validationErrors: any) => {
   // Update our local errors object with validation errors from the form component

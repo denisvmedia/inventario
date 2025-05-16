@@ -1,7 +1,7 @@
 <template>
   <div class="commodity-edit">
     <div class="breadcrumb-nav">
-      <a href="#" @click.prevent="goBack" class="breadcrumb-link">
+      <a href="#" class="breadcrumb-link" @click.prevent="goBack">
         <font-awesome-icon icon="arrow-left" />
         <span v-if="sourceIsArea && isDirectEdit">Back to Area</span>
         <span v-else-if="isDirectEdit">Back to Commodities</span>
@@ -45,9 +45,7 @@ import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import settingsService from '@/services/settingsService'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { COMMODITY_TYPES } from '@/constants/commodityTypes'
-import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
-import { CURRENCY_CZK } from '@/constants/currencies'
+import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import CommodityForm from '@/components/CommodityForm.vue'
 
 const route = useRoute()
@@ -70,8 +68,7 @@ const isSubmitting = ref<boolean>(false)
 const formError = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
 
-const commodityTypes = ref(COMMODITY_TYPES)
-const commodityStatuses = ref(COMMODITY_STATUSES)
+
 const currencies = ref<any[]>([])
 
 // Use the main currency from the store
@@ -178,7 +175,9 @@ onMounted(async () => {
       try {
         // Try to get the localized currency name
         currencyName = currencyNames.of(code)
-      } catch (e) {
+      /* eslint-disable no-unused-vars */
+      } catch (_) {
+      /* eslint-enable no-unused-vars */
         console.warn(`Could not get display name for currency: ${code}`)
       }
 

@@ -4,11 +4,11 @@
     <div class="print-toolbar">
       <div class="toolbar-section">
         <label>
-          <input type="radio" v-model="colorMode" value="color" name="colorMode" />
+          <input v-model="colorMode" type="radio" value="color" name="colorMode" />
           Color
         </label>
         <label>
-          <input type="radio" v-model="colorMode" value="bw" name="colorMode" />
+          <input v-model="colorMode" type="radio" value="bw" name="colorMode" />
           Black & White
         </label>
       </div>
@@ -16,8 +16,8 @@
       <div class="toolbar-section" :class="{ disabled: colorMode === 'bw' }">
         <label>
           <input
-            type="radio"
             v-model="imageColorMode"
+            type="radio"
             value="color"
             name="imageColorMode"
             :disabled="colorMode === 'bw'"
@@ -26,8 +26,8 @@
         </label>
         <label>
           <input
-            type="radio"
             v-model="imageColorMode"
+            type="radio"
             value="bw"
             name="imageColorMode"
             :disabled="colorMode === 'bw'"
@@ -66,15 +66,15 @@
         </div>
 
         <div class="info-section location-area-info">
-          <div class="info-row" v-if="location">
+          <div v-if="location" class="info-row">
             <span class="label">Location:</span>
             <span>{{ location.attributes.name }}</span>
           </div>
-          <div class="info-row" v-if="location && location.attributes.address">
+          <div v-if="location && location.attributes.address" class="info-row">
             <span class="label">Address:</span>
             <span>{{ location.attributes.address }}</span>
           </div>
-          <div class="info-row" v-if="area">
+          <div v-if="area" class="info-row">
             <span class="label">Area:</span>
             <span>{{ area.attributes.name }}</span>
           </div>
@@ -115,21 +115,21 @@
               <span class="label">Original Price:</span>
               <span>{{ formatPrice(parseFloat(commodity.attributes.original_price) || 0, commodity.attributes.original_price_currency) }}</span>
             </div>
-            <div class="info-row" v-if="commodity.attributes.converted_original_price !== '0' && commodity.attributes.converted_original_price !== 0">
+            <div v-if="commodity.attributes.converted_original_price !== '0' && commodity.attributes.converted_original_price !== 0" class="info-row">
               <span class="label">Converted Original Price:</span>
               <span>{{ formatPrice(parseFloat(commodity.attributes.converted_original_price) || 0, mainCurrency) }}</span>
             </div>
-            <div class="info-row" v-if="!(commodity.attributes.original_price_currency === mainCurrency && parseFloat(commodity.attributes.original_price) > 0)">
+            <div v-if="!(commodity.attributes.original_price_currency === mainCurrency && parseFloat(commodity.attributes.original_price) > 0)" class="info-row">
               <span class="label">Current Price:</span>
               <span>{{ formatPrice(parseFloat(commodity.attributes.current_price) || 0, mainCurrency) }}</span>
             </div>
           </div>
         </div>
 
-        <div class="info-section" v-if="commodity.attributes.serial_number || (commodity.attributes.extra_serial_numbers && commodity.attributes.extra_serial_numbers.length > 0) || (commodity.attributes.part_numbers && commodity.attributes.part_numbers.length > 0)">
+        <div v-if="commodity.attributes.serial_number || (commodity.attributes.extra_serial_numbers && commodity.attributes.extra_serial_numbers.length > 0) || (commodity.attributes.part_numbers && commodity.attributes.part_numbers.length > 0)" class="info-section">
           <h2>Serial Numbers and Part Numbers</h2>
           <div class="info-grid">
-            <div class="info-row" v-if="commodity.attributes.serial_number">
+            <div v-if="commodity.attributes.serial_number" class="info-row">
               <span class="label">Serial Number:</span>
               <span>{{ commodity.attributes.serial_number }}</span>
             </div>
@@ -152,16 +152,16 @@
           </div>
         </div>
 
-        <div class="info-section" v-if="commodity.attributes.tags && commodity.attributes.tags.length > 0">
+        <div v-if="commodity.attributes.tags && commodity.attributes.tags.length > 0" class="info-section">
           <h2>Tags</h2>
           <div class="tags">
-            <span class="tag" v-for="(tag, index) in commodity.attributes.tags" :key="index">
+            <span v-for="(tag, index) in commodity.attributes.tags" :key="index" class="tag">
               {{ tag }}
             </span>
           </div>
         </div>
 
-        <div class="info-section" v-if="commodity.attributes.urls && commodity.attributes.urls.length > 0">
+        <div v-if="commodity.attributes.urls && commodity.attributes.urls.length > 0" class="info-section">
           <h2>URLs</h2>
           <ul>
             <li v-for="(url, index) in commodity.attributes.urls" :key="index">
@@ -171,7 +171,7 @@
         </div>
 
         <!-- Images Section -->
-        <div class="info-section" v-if="images.length > 0">
+        <div v-if="images.length > 0" class="info-section">
           <div class="images-container" :class="[`layout-${imageLayout}`]">
             <div v-for="image in images" :key="image.id" class="image-item">
               <img
@@ -192,7 +192,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
@@ -200,7 +200,7 @@ import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 import { formatPrice } from '@/utils/priceUtils'
 
 const route = useRoute()
-const router = useRouter()
+
 const settingsStore = useSettingsStore()
 const commodity = ref<any>(null)
 const location = ref<any>(null)

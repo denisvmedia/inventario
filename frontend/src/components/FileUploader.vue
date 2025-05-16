@@ -1,17 +1,18 @@
 <template>
   <div class="file-uploader">
-    <div class="upload-area"
+    <div
+class="upload-area"
+         :class="{ 'drag-over': isDragOver }"
          @dragover.prevent="onDragOver"
          @dragleave.prevent="onDragLeave"
-         @drop.prevent="onDrop"
-         :class="{ 'drag-over': isDragOver }">
+         @drop.prevent="onDrop">
       <input
-        type="file"
         ref="fileInput"
-        @change="onFileSelected"
+        type="file"
         :multiple="multiple"
         :accept="accept"
         class="file-input"
+        @change="onFileSelected"
       />
       <div class="upload-content">
         <div class="upload-icon">
@@ -31,7 +32,7 @@
         <button class="remove-file" @click="removeFile(index)">×</button>
       </div>
       <div class="upload-actions">
-        <button class="btn btn-primary" @click="uploadFiles" :disabled="isUploading">
+        <button class="btn btn-primary" :disabled="isUploading" @click="uploadFiles">
           {{ isUploading ? 'Uploading...' : 'Upload Files' }}
         </button>
       </div>

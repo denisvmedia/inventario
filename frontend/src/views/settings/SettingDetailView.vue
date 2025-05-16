@@ -33,8 +33,8 @@
           id="theme"
           v-model="uiConfig.theme"
           :options="themeOptions"
-          optionLabel="name"
-          optionValue="id"
+          option-label="name"
+          option-value="id"
           placeholder="Select a theme"
           class="w-100"
           :class="{ 'is-invalid': formErrors.theme }"
@@ -46,19 +46,19 @@
       <div class="form-group">
         <label for="show-debug">Show Debug Information</label>
         <input
-          type="checkbox"
           id="show-debug"
           v-model="uiConfig.show_debug_info"
+          type="checkbox"
         />
       </div>
 
       <div class="form-group">
         <label for="page-size">Default Page Size</label>
         <input
-          type="number"
           id="page-size"
-          class="form-control"
           v-model="uiConfig.default_page_size"
+          type="number"
+          class="form-control"
           min="5"
           max="100"
         />
@@ -70,8 +70,8 @@
           id="date-format"
           v-model="uiConfig.default_date_format"
           :options="dateFormatOptions"
-          optionLabel="name"
-          optionValue="id"
+          option-label="name"
+          option-value="id"
           placeholder="Select a date format"
           class="w-100"
           :class="{ 'is-invalid': formErrors.default_date_format }"
@@ -84,8 +84,8 @@
         <button class="btn btn-secondary" @click="goBack">Cancel</button>
         <button
           class="btn btn-primary"
-          @click="saveUIConfig"
           :disabled="isSubmitting"
+          @click="saveUIConfig"
         >
           {{ isSubmitting ? 'Saving...' : 'Save' }}
         </button>
@@ -100,13 +100,13 @@
           id="main-currency"
           v-model="systemConfig.main_currency"
           :options="currencies"
-          optionLabel="label"
-          optionValue="id"
+          option-label="label"
+          option-value="id"
           placeholder="Select a currency"
           class="w-100"
           :class="{ 'is-invalid': formErrors.main_currency }"
           :filter="true"
-          :showClear="false"
+          :show-clear="false"
           aria-label="Currency"
         />
         <div v-if="formErrors.main_currency" class="error-message">{{ formErrors.main_currency }}</div>
@@ -116,8 +116,8 @@
         <button class="btn btn-secondary" @click="goBack">Cancel</button>
         <button
           class="btn btn-primary"
-          @click="saveSystemConfig"
           :disabled="isSubmitting"
+          @click="saveSystemConfig"
         >
           {{ isSubmitting ? 'Saving...' : 'Save' }}
         </button>
@@ -130,8 +130,8 @@
         <label for="json-editor">JSON Value</label>
         <textarea
           id="json-editor"
-          class="form-control json-editor"
           v-model="jsonValue"
+          class="form-control json-editor"
           :class="{ 'is-invalid': jsonError }"
           rows="10"
         ></textarea>
@@ -142,8 +142,8 @@
         <button class="btn btn-secondary" @click="goBack">Cancel</button>
         <button
           class="btn btn-primary"
-          @click="saveCustomSetting"
           :disabled="isSubmitting || jsonError"
+          @click="saveCustomSetting"
         >
           {{ isSubmitting ? 'Saving...' : 'Save' }}
         </button>
@@ -157,7 +157,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 import { useSettingsStore } from '@/stores/settingsStore'
-import NotificationBanner from '@/components/NotificationBanner.vue'
+
 import Select from 'primevue/select'
 
 const route = useRoute()
@@ -170,7 +170,7 @@ const error = ref<string | null>(null)
 const isSubmitting = ref<boolean>(false)
 const jsonValue = ref<string>('')
 const jsonError = ref<string | null>(null)
-const settingData = ref<any>(null)
+
 const currencies = ref<any[]>([])
 
 // Theme options
@@ -262,7 +262,9 @@ const fetchCurrencies = async () => {
       try {
         // Try to get the localized currency name
         currencyName = currencyNames.of(code)
-      } catch (e) {
+      /* eslint-disable no-unused-vars */
+      } catch (_) {
+      /* eslint-enable no-unused-vars */
         console.warn(`Could not get display name for currency: ${code}`)
       }
 
@@ -454,15 +456,7 @@ function formatSettingName(id: string) {
     .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
 }
 
-function formatBytes(bytes: number) {
-  if (bytes === 0) return '0 Bytes'
 
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
 </script>
 
 <style lang="scss" scoped>
