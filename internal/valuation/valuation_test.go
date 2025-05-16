@@ -14,6 +14,14 @@ import (
 
 // setupTestRegistry creates a test registry with test data
 func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
+	c.Helper()
+
+	nonMainCurrency := "USD"
+
+	if mainCurrency == "USD" {
+		nonMainCurrency = "EUR"
+	}
+
 	// Create a memory registry for testing
 	registrySet, err := memory.NewRegistrySet("")
 	c.Assert(err, qt.IsNil)
@@ -56,15 +64,17 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 
 	// Create commodities
 	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
-		Name:         "Commodity 1",
-		ShortName:    "C1",
-		AreaID:       area1.ID,
-		Count:        2,
-		CurrentPrice: decimal.NewFromFloat(100.00),
-		Status:       models.CommodityStatusInUse,
-		Draft:        false,
-		Type:         models.CommodityTypeElectronics,
-		PurchaseDate: models.ToPDate("2023-01-01"),
+		Name:                  "Commodity 1",
+		ShortName:             "C1",
+		AreaID:                area1.ID,
+		Count:                 2,
+		OriginalPrice:         decimal.NewFromFloat(100.00),
+		OriginalPriceCurrency: models.Currency(mainCurrency),
+		CurrentPrice:          decimal.NewFromFloat(100.00), // 100
+		Status:                models.CommodityStatusInUse,
+		Draft:                 false,
+		Type:                  models.CommodityTypeElectronics,
+		PurchaseDate:          models.ToPDate("2023-01-01"),
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -73,12 +83,13 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 		ShortName:             "C2",
 		AreaID:                area1.ID,
 		Count:                 1,
-		OriginalPrice:         decimal.NewFromFloat(200.00),
-		OriginalPriceCurrency: "USD",
-		Status:                models.CommodityStatusInUse,
-		Draft:                 false,
-		Type:                  models.CommodityTypeElectronics,
-		PurchaseDate:          models.ToPDate("2023-01-01"),
+		OriginalPrice:         decimal.NewFromFloat(200.00), // 0: invalid
+		OriginalPriceCurrency: models.Currency(nonMainCurrency),
+		// no converted price and no current price, so it should not be counted
+		Status:       models.CommodityStatusInUse,
+		Draft:        false,
+		Type:         models.CommodityTypeElectronics,
+		PurchaseDate: models.ToPDate("2023-01-01"),
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -87,9 +98,9 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 		ShortName:              "C3",
 		AreaID:                 area2.ID,
 		Count:                  3,
-		OriginalPrice:          decimal.NewFromFloat(300.00),
-		OriginalPriceCurrency:  "EUR",
-		ConvertedOriginalPrice: decimal.NewFromFloat(330.00),
+		OriginalPrice:          decimal.NewFromFloat(300.00), // 300
+		OriginalPriceCurrency:  models.Currency(mainCurrency),
+		ConvertedOriginalPrice: decimal.NewFromFloat(0),
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
 		Type:                   models.CommodityTypeElectronics,
@@ -97,13 +108,13 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(models.Commodity{ // 400
 		Name:                  "Commodity 4",
 		ShortName:             "C4",
 		AreaID:                area2.ID,
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(400.00),
-		OriginalPriceCurrency: "EUR",
+		OriginalPriceCurrency: models.Currency(mainCurrency),
 		Status:                models.CommodityStatusInUse,
 		Draft:                 false,
 		Type:                  models.CommodityTypeElectronics,
@@ -111,29 +122,33 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
-		Name:         "Commodity 5",
-		ShortName:    "C5",
-		AreaID:       area3.ID,
-		Count:        1,
-		CurrentPrice: decimal.NewFromFloat(500.00),
-		Status:       models.CommodityStatusSold, // Not in use
-		Draft:        false,
-		Type:         models.CommodityTypeElectronics,
-		PurchaseDate: models.ToPDate("2023-01-01"),
+	_, err = registrySet.CommodityRegistry.Create(models.Commodity{ // 0: sold
+		Name:                  "Commodity 5",
+		ShortName:             "C5",
+		AreaID:                area3.ID,
+		Count:                 1,
+		OriginalPrice:         decimal.NewFromFloat(500.00),
+		OriginalPriceCurrency: models.Currency(nonMainCurrency),
+		CurrentPrice:          decimal.NewFromFloat(500.00),
+		Status:                models.CommodityStatusSold, // Not in use
+		Draft:                 false,
+		Type:                  models.CommodityTypeElectronics,
+		PurchaseDate:          models.ToPDate("2023-01-01"),
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
-		Name:         "Commodity 6",
-		ShortName:    "C6",
-		AreaID:       area3.ID,
-		Count:        1,
-		CurrentPrice: decimal.NewFromFloat(600.00),
-		Status:       models.CommodityStatusInUse,
-		Draft:        true, // Draft
-		Type:         models.CommodityTypeElectronics,
-		PurchaseDate: models.ToPDate("2023-01-01"),
+	_, err = registrySet.CommodityRegistry.Create(models.Commodity{ // 0: draft
+		Name:                  "Commodity 6",
+		ShortName:             "C6",
+		AreaID:                area3.ID,
+		Count:                 1,
+		OriginalPrice:         decimal.NewFromFloat(600.00),
+		OriginalPriceCurrency: models.Currency(nonMainCurrency),
+		CurrentPrice:          decimal.NewFromFloat(600.00),
+		Status:                models.CommodityStatusInUse,
+		Draft:                 true, // Value
+		Type:                  models.CommodityTypeElectronics,
+		PurchaseDate:          models.ToPDate("2023-01-01"),
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -153,8 +168,8 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 		total, err := valuator.CalculateGlobalTotalValue()
 		c.Assert(err, qt.IsNil)
 
-		// Expected total: 100 + 200 + 330 = 630 (prices already represent total value for all items)
-		expectedTotal := decimal.NewFromFloat(630.00)
+		// Expected total: 100 + 300 + 400 = 800 (prices already represent total value for all items)
+		expectedTotal := decimal.NewFromFloat(800.00)
 		c.Assert(total.Equal(expectedTotal), qt.IsTrue, qt.Commentf("Expected total to be %s, got %s", expectedTotal, total))
 	})
 
@@ -201,8 +216,8 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 		// Location 1: 100 + 200 = 300
 		// Location 2: 330 + 0 = 330 (Commodity 4 has no valid price in USD)
 		expectedTotals := map[string]decimal.Decimal{
-			"Location 1": decimal.NewFromFloat(300.00),
-			"Location 2": decimal.NewFromFloat(330.00),
+			"Location 1": decimal.NewFromFloat(100.00),
+			"Location 2": decimal.NewFromFloat(700.00),
 		}
 
 		// Check that we have the expected number of totals
@@ -253,8 +268,8 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 		// Area 2: 330 = 330
 		// Area 3: (0) = 0 (No valid commodities in Area 3 with USD as main currency)
 		expectedTotals := map[string]decimal.Decimal{
-			area1ID: decimal.NewFromFloat(300.00),
-			area2ID: decimal.NewFromFloat(330.00),
+			area1ID: decimal.NewFromFloat(100.00),
+			area2ID: decimal.NewFromFloat(700.00),
 		}
 
 		// Check that we have the expected number of totals

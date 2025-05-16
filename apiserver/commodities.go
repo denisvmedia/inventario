@@ -12,6 +12,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -100,6 +101,13 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 // @Router /commodities [post].
 func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.CommodityRequest
+
+	r, err := requestWithMainCurrency(r, api.registrySet.SettingsRegistry)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
 		return
@@ -183,6 +191,12 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /commodities/{id} [put].
 func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Request) {
+	r, err := requestWithMainCurrency(r, api.registrySet.SettingsRegistry)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
 		unprocessableEntityError(w, r, nil)
@@ -882,4 +896,19 @@ func Commodities(params Params) func(r chi.Router) {
 		})
 		r.Post("/", api.createCommodity) // POST /commodities
 	}
+}
+
+func requestWithMainCurrency(r *http.Request, settingsRegistry registry.SettingsRegistry) (*http.Request, error) {
+	settings, err := settingsRegistry.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	if settings.MainCurrency == nil {
+		return nil, registry.ErrMainCurrencyNotSet
+	}
+
+	ctx := validationctx.WithMainCurrency(r.Context(), *settings.MainCurrency)
+
+	return r.WithContext(ctx), nil
 }

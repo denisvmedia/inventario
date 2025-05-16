@@ -9,7 +9,7 @@ import (
 )
 
 // SeedData seeds the database with example data.
-func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's a seed function
+func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
 	// Create default system configuration with CZK as main currency
 	systemConfig := models.SettingsObject{
 		MainCurrency: ptr.To("CZK"),
@@ -328,7 +328,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 		RegisteredDate:        ptr.To(models.Date("2023-01-16")),
 		Tags:                  []string{"appliance", "kitchen"},
 		Comments:              "Espresso machine with milk frother",
-		Draft:                 true, // Draft status
+		Draft:                 true, // Value status
 	})
 	if err != nil {
 		return err

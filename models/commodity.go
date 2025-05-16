@@ -1,11 +1,14 @@
 package models
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models/rules"
 )
 
@@ -80,10 +83,11 @@ func (c CommodityType) Validate() error {
 }
 
 var (
-	_ validation.Validatable = (*Commodity)(nil)
-	_ IDable                 = (*Commodity)(nil)
-	_ json.Marshaler         = (*Commodity)(nil)
-	_ json.Unmarshaler       = (*Commodity)(nil)
+	_ validation.Validatable            = (*Commodity)(nil)
+	_ validation.ValidatableWithContext = (*Commodity)(nil)
+	_ IDable                            = (*Commodity)(nil)
+	_ json.Marshaler                    = (*Commodity)(nil)
+	_ json.Unmarshaler                  = (*Commodity)(nil)
 )
 
 type Commodity struct {
@@ -110,8 +114,31 @@ type Commodity struct {
 	Draft                  bool            `json:"draft"`
 }
 
-func (a *Commodity) Validate() error {
+func (*Commodity) Validate() error {
+	return validation.NewError("must_use_validate_with_context", "must use validate with context")
+}
+
+func (a *Commodity) ValidateWithContext(ctx context.Context) error {
+	mainCurrency, err := validationctx.MainCurrencyFromContext(ctx)
+	if errors.Is(err, validationctx.ErrMainCurrencyNotSet) {
+		return validation.NewError("main_currency_not_set", "main currency not set")
+	}
+	if err != nil {
+		return err
+	}
+
 	fields := make([]*validation.FieldRules, 0)
+
+	// Create a validation rule for price consistency
+	priceRule := rules.NewPriceRule(
+		string(mainCurrency),
+		string(a.OriginalPriceCurrency),
+		a.OriginalPrice,
+		a.ConvertedOriginalPrice,
+		a.CurrentPrice,
+	)
+
+	whenNotDraft := rules.WhenTrue(a.Draft)
 
 	fields = append(fields,
 		validation.Field(&a.Name, rules.NotEmpty),
@@ -119,9 +146,28 @@ func (a *Commodity) Validate() error {
 		validation.Field(&a.Type, rules.NotEmpty),
 		validation.Field(&a.AreaID, rules.NotEmpty),
 		validation.Field(&a.Status, rules.NotEmpty),
-		validation.Field(&a.PurchaseDate, rules.NotEmpty),
+		validation.Field(&a.PurchaseDate, whenNotDraft.WithRules(rules.NotEmpty)),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),
 		validation.Field(&a.URLs),
+		validation.Field(&a.OriginalPrice, whenNotDraft.WithRules(validation.By(func(any) error {
+			v, _ := a.OriginalPrice.Float64()
+			return validation.Min(0.00).Validate(v)
+		}))),
+		validation.Field(&a.OriginalPriceCurrency, whenNotDraft.WithRules(priceRule, validation.By(func(val any) error {
+			if a.Draft {
+				return nil
+			}
+
+			return validation.Required.Validate(val)
+		}))),
+		validation.Field(&a.ConvertedOriginalPrice, whenNotDraft.WithRules(validation.Required, validation.By(func(any) error {
+			v, _ := a.OriginalPrice.Float64()
+			return validation.Min(0.00).Validate(v)
+		}))),
+		validation.Field(&a.CurrentPrice, whenNotDraft.WithRules(validation.Required, validation.By(func(any) error {
+			v, _ := a.OriginalPrice.Float64()
+			return validation.Min(0.00).Validate(v)
+		}))),
 	)
 
 	return validation.ValidateStruct(a, fields...)

@@ -3,8 +3,6 @@ package memory
 import (
 	"sync"
 
-	"github.com/jellydator/validation"
-
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -36,12 +34,7 @@ func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry
 }
 
 func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodity, error) {
-	err := validation.Validate(&commodity)
-	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
-	}
-
-	_, err = r.areaRegistry.Get(commodity.AreaID)
+	_, err := r.areaRegistry.Get(commodity.AreaID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "area not found")
 	}
@@ -158,4 +151,14 @@ func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) error {
 	r.invoicesLock.Unlock()
 
 	return nil
+}
+
+func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodity, error) {
+	// Call the base registry's Update method
+	updatedCommodity, err := r.baseCommodityRegistry.Update(commodity)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update commodity")
+	}
+
+	return updatedCommodity, nil
 }

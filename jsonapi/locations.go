@@ -1,6 +1,7 @@
 package jsonapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -95,17 +96,17 @@ type LocationData struct {
 	Attributes *models.Location `json:"attributes"`
 }
 
-func (ld *LocationData) Validate() error {
+func (ld *LocationData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&ld.Type, validation.Required, validation.In("locations")),
 		validation.Field(&ld.Attributes, validation.Required),
 	)
-	return validation.ValidateStruct(ld, fields...)
+	return validation.ValidateStructWithContext(ctx, ld, fields...)
 }
 
-func (lr *LocationRequest) Bind(_r *http.Request) error {
-	err := lr.Validate()
+func (lr *LocationRequest) Bind(r *http.Request) error {
+	err := lr.ValidateWithContext(r.Context())
 	if err != nil {
 		return err
 	}
@@ -115,10 +116,8 @@ func (lr *LocationRequest) Bind(_r *http.Request) error {
 	return nil
 }
 
-func (lr *LocationRequest) Validate() error {
+func (lr *LocationRequest) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
-	fields = append(fields,
-		validation.Field(&lr.Data, validation.Required),
-	)
-	return validation.ValidateStruct(lr, fields...)
+	fields = append(fields, validation.Field(&lr.Data, validation.Required))
+	return validation.ValidateStructWithContext(ctx, lr, fields...)
 }
