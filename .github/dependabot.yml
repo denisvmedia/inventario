@@ -9,6 +9,9 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
   - package-ecosystem: "npm" # See documentation for possible values
     directory: "/fe" # Location of package manifests
     schedule:
