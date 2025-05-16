@@ -12,6 +12,16 @@ permissions:
 
 jobs:
   test:
-    uses: ./.github/workflows/reusable-go-test.yml
-    with:
-      go-version: '1.24.1'
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+      - name: Install dependencies
+        run: go mod download
+      - name: Run tests
+        run: go test -v ./...
