@@ -27,9 +27,9 @@ var (
 	)
 )
 
-// ConvertedPriceRule validates that when the original price is in the main currency,
+// PriceRule validates that when the original price is in the main currency,
 // the converted original price must be zero.
-type ConvertedPriceRule struct {
+type PriceRule struct {
 	MainCurrency     string
 	OriginalCurrency string
 	OriginalPrice    decimal.Decimal
@@ -37,9 +37,9 @@ type ConvertedPriceRule struct {
 	CurrentPrice     decimal.Decimal
 }
 
-// NewPriceRule creates a new ConvertedPriceRule.
-func NewPriceRule(mainCurrency, originalCurrency string, originalPrice, convertedPrice, currentPrice decimal.Decimal) ConvertedPriceRule {
-	return ConvertedPriceRule{
+// NewPriceRule creates a new PriceRule.
+func NewPriceRule(mainCurrency, originalCurrency string, originalPrice, convertedPrice, currentPrice decimal.Decimal) PriceRule {
+	return PriceRule{
 		MainCurrency:     mainCurrency,
 		OriginalCurrency: originalCurrency,
 		ConvertedPrice:   convertedPrice,
@@ -53,7 +53,7 @@ func NewPriceRule(mainCurrency, originalCurrency string, originalPrice, converte
 // 1. If the original price is in the main currency, the converted original price must be zero.
 // 2. At least one of the prices (current, original, or converted original) must be set.
 // 3. If the original price is not in the main currency, either the converted original price or the current price must be set.
-func (r ConvertedPriceRule) Validate(_ any) error {
+func (r PriceRule) Validate(_ any) error {
 	// If original currency is the main currency and converted price is not zero, return error
 	if r.OriginalCurrency == r.MainCurrency && !r.ConvertedPrice.IsZero() {
 		return ErrConvertedPriceNotZero

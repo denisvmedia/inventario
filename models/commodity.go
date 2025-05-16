@@ -59,7 +59,7 @@ const (
 	CommodityTypeEquipment   CommodityType = "equipment"
 	CommodityTypeFurniture   CommodityType = "furniture"
 	CommodityTypeClothes     CommodityType = "clothes"
-	CommodyTypeOther         CommodityType = "other"
+	CommodityTypeOther       CommodityType = "other"
 )
 
 func (c CommodityType) IsValid() bool {
@@ -69,7 +69,7 @@ func (c CommodityType) IsValid() bool {
 		CommodityTypeEquipment,
 		CommodityTypeFurniture,
 		CommodityTypeClothes,
-		CommodyTypeOther:
+		CommodityTypeOther:
 		return true
 	}
 	return false
@@ -141,7 +141,7 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 	whenNotDraft := rules.WhenTrue(!a.Draft) // Rule to apply rules when not draft
 
 	fields = append(fields,
-		validation.Field(&a.Name, rules.NotEmpty),
+		validation.Field(&a.Name, rules.NotEmpty, validation.Length(1, 255)),
 		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 20)),
 		validation.Field(&a.Type, rules.NotEmpty),
 		validation.Field(&a.AreaID, rules.NotEmpty),
@@ -161,11 +161,11 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 			return validation.Required.Validate(val)
 		}))),
 		validation.Field(&a.ConvertedOriginalPrice, whenNotDraft.WithRules(validation.Required, validation.By(func(any) error {
-			v, _ := a.OriginalPrice.Float64()
+			v, _ := a.ConvertedOriginalPrice.Float64()
 			return validation.Min(0.00).Validate(v)
 		}))),
 		validation.Field(&a.CurrentPrice, whenNotDraft.WithRules(validation.Required, validation.By(func(any) error {
-			v, _ := a.OriginalPrice.Float64()
+			v, _ := a.CurrentPrice.Float64()
 			return validation.Min(0.00).Validate(v)
 		}))),
 	)
