@@ -12,6 +12,24 @@ updates:
     allow:
       - dependency-type: "direct"
       - dependency-type: "indirect"
+    groups:
+      cloud-sdks:
+        patterns:
+          - "cloud.google.com/*"
+          - "github.com/Azure/azure-sdk-for-go/*"
+          - "github.com/Azure/go-autorest/*"
+          - "github.com/aws/aws-sdk-go"
+          - "github.com/aws/aws-sdk-go-v2"
+          - "github.com/aws/aws-sdk-go-v2/*"
+          - "github.com/digitalocean/*"
+          - "github.com/minio/minio-go/*"
+      golang:
+        patterns:
+          - "golang.org/x/*"
+          - "google.golang.org/*"
+      openapi:
+        patterns:
+          - "github.com/go-openapi/*"
   - package-ecosystem: "npm" # See documentation for possible values
     directory: "/frontend" # Location of package manifests
     schedule:
