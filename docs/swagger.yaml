@@ -1436,8 +1436,7 @@ paths:
         in: body
         name: value
         required: true
-        schema:
-          type: object
+        schema: {}
       produces:
       - application/json
       responses:
