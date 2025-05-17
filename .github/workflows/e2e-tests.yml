@@ -42,10 +42,6 @@ jobs:
       - name: Install e2e dependencies
         run: cd e2e && npm ci
 
-      # Install system dependencies for Playwright
-      - name: Set up Playwright
-        uses: microsoft/playwright-github-action@v1
-
       # Install browsers with all system dependencies
       - name: Install Playwright browsers
         run: cd e2e && npx playwright install --with-deps
