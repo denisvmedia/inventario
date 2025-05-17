@@ -548,7 +548,7 @@ const formatDate = (date: string): string => {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/main.scss';
+@use '@/assets/main.scss' as *;
 
 .commodity-detail {
   max-width: $container-max-width;
@@ -604,7 +604,7 @@ const formatDate = (date: string): string => {
   grid-template-columns: 1fr;
   gap: 1.5rem;
 
-  @media (min-width: 768px) {
+  @media (width >= 768px) {
     grid-template-columns: 1fr 1fr;
   }
 }

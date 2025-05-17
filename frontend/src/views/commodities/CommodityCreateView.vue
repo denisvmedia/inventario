@@ -354,7 +354,7 @@ const handleValidation = (isValid: boolean, validationErrors: any) => {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/main.scss';
+@use '@/assets/main.scss' as *;
 
 .commodity-create {
   max-width: 800px;
@@ -456,7 +456,7 @@ textarea.form-control {
   font-weight: 500;
 
   &:disabled {
-    background-color: #cccccc;
+    background-color: #ccc;
     cursor: not-allowed;
   }
 }

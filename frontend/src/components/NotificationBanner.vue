@@ -62,7 +62,7 @@ if (props.autoClose > 0) {
 </script>
 
 <style lang="scss" scoped>
-@import '@/assets/main.scss';
+@use '@/assets/variables' as *;
 
 .notification-banner {
   display: flex;
@@ -72,25 +72,25 @@ if (props.autoClose > 0) {
   margin-bottom: 1rem;
   border-radius: $default-radius;
   box-shadow: $box-shadow;
-  
+
   &.info {
     background-color: #cce5ff;
     border: 1px solid #b8daff;
     color: #004085;
   }
-  
+
   &.warning {
     background-color: #fff3cd;
     border: 1px solid #ffeeba;
     color: #856404;
   }
-  
+
   &.error {
     background-color: #f8d7da;
     border: 1px solid #f5c6cb;
     color: #721c24;
   }
-  
+
   &.success {
     background-color: #d4edda;
     border: 1px solid #c3e6cb;
@@ -119,7 +119,7 @@ if (props.autoClose > 0) {
   padding: 0.25rem;
   margin-left: 0.5rem;
   opacity: 0.7;
-  
+
   &:hover {
     opacity: 1;
   }

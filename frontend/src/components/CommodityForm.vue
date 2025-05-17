@@ -629,7 +629,7 @@ const getStatusName = (statusId: string) => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use '@/assets/variables' as *;
 
 .price-calculation-hint {
   font-size: 0.9rem;
@@ -750,7 +750,7 @@ textarea.form-control {
   font-weight: 500;
 
   &:disabled {
-    background-color: #cccccc;
+    background-color: #ccc;
     cursor: not-allowed;
   }
 }

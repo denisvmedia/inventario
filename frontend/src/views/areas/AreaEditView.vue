@@ -233,7 +233,8 @@ const navigateToLocations = () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/main.scss';
+@use 'sass:color';
+@use '@/assets/main' as *;
 
 .area-edit {
   max-width: 600px;
@@ -329,7 +330,7 @@ label {
 .form-error {
   margin-top: 1rem;
   padding: 0.75rem;
-  background-color: lighten($danger-color, 40%);
+  background-color: color.adjust($danger-color, $lightness: 40%);
   color: $error-text-color;
   border-radius: $default-radius;
 }

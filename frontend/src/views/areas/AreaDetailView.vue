@@ -352,7 +352,8 @@ const deleteCommodity = async (id: string) => {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/main.scss';
+@use 'sass:color';
+@use '@/assets/main.scss' as *;
 
 .area-detail {
   max-width: $container-max-width;
@@ -475,166 +476,12 @@ const deleteCommodity = async (id: string) => {
   gap: 1.5rem;
 }
 
-.commodity-card {
-  background: white;
-  border-radius: $default-radius;
-  padding: 1.5rem;
-  box-shadow: $box-shadow;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-
-  &:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  }
-
-  &.highlighted {
-    border-left: 4px solid $primary-color;
-    box-shadow: 0 2px 10px rgba($primary-color, 0.3);
-    background-color: lighten($primary-color, 45%);
-  }
-
-  &.draft {
-    background: repeating-linear-gradient(45deg, #ffffff, #ffffff 5px, #eeeeee4d 5px, #eeeeee4d 7px);
-    position: relative;
-    filter: grayscale(0.8);
-
-    h3, .commodity-meta, .commodity-price, .price-per-unit {
-      color: $text-secondary-color;
-    }
-
-    .status {
-      background-color: #e2e3e5 !important;
-      color: #383d41 !important;
-    }
-  }
-
-  &.sold {
-    position: relative;
-    filter: grayscale(0.8);
-
-    &::before {
-      content: 'SOLD';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-45deg);
-      font-size: 2.5rem;
-      font-weight: bold;
-      color: rgba(204, 229, 255, 0.8);
-      border: 3px solid rgba(0, 64, 133, 0.5);
-      padding: 0.5rem 1rem;
-      border-radius: $default-radius;
-      z-index: 1;
-      pointer-events: none;
-    }
-  }
-
-  &.lost {
-    position: relative;
-    filter: saturate(0.7);
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: rgba(255, 243, 205, 0.3);
-      z-index: 1;
-      pointer-events: none;
-    }
-
-    &::after {
-      content: '⚠️';
-      position: absolute;
-      bottom: 1rem;
-      right: 1rem;
-      font-size: 1.5rem;
-      z-index: 2;
-      pointer-events: none;
-    }
-  }
-
-  &.disposed {
-    position: relative;
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: rgba(248, 215, 218, 0.3);
-      background-image: linear-gradient(45deg, transparent, transparent 48%, rgba(114, 28, 36, 0.2) 49%, rgba(114, 28, 36, 0.2) 51%, transparent 52%, transparent);
-      background-size: 20px 20px;
-      z-index: 1;
-      pointer-events: none;
-    }
-
-    &::after {
-      content: '🗑️';
-      position: absolute;
-      bottom: 1rem;
-      right: 1rem;
-      font-size: 1.5rem;
-      z-index: 2;
-      pointer-events: none;
-    }
-  }
-
-  &.written-off {
-    position: relative;
-    filter: contrast(0.95);
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: rgba(226, 227, 229, 0.0375);
-      background-image:
-        linear-gradient(45deg, transparent, transparent 45%, rgba(56, 61, 65, 0.0375) 46%, rgba(56, 61, 65, 0.0375) 54%, transparent 55%, transparent),
-        linear-gradient(135deg, transparent, transparent 45%, rgba(56, 61, 65, 0.0375) 46%, rgba(56, 61, 65, 0.0375) 54%, transparent 55%, transparent);
-      background-size: 30px 30px;
-      z-index: 1;
-      pointer-events: none;
-    }
-  }
-}
-
-.commodity-content {
-  flex: 1;
-  cursor: pointer;
-}
-
-.commodity-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-left: 1rem;
-  cursor: pointer;
-}
-
 .commodity-meta {
   display: flex;
   justify-content: space-between;
   margin-top: 0.5rem;
   font-size: 0.9rem;
   color: $text-color;
-}
-
-.type {
-  font-style: italic;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .commodity-price {
@@ -651,28 +498,6 @@ const deleteCommodity = async (id: string) => {
   font-style: italic;
   color: $text-color;
   margin-top: 0.25rem;
-}
-
-.commodity-status {
-  margin-top: 0.5rem;
-
-  &.with-draft {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    &::after {
-      content: 'Draft';
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: $text-secondary-color;
-      font-style: italic;
-      transform: rotate(-45deg);
-      position: absolute;
-      bottom: 0.5rem;
-      right: 0.5rem;
-    }
-  }
 }
 
 .status {
@@ -705,6 +530,173 @@ const deleteCommodity = async (id: string) => {
   &.written_off {
     background-color: #e2e3e5;
     color: #383d41;
+  }
+}
+
+.commodity-card {
+  background: white;
+  border-radius: $default-radius;
+  padding: 1.5rem;
+  box-shadow: $box-shadow;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgb(0 0 0 / 10%);
+  }
+
+  &.highlighted {
+    border-left: 4px solid $primary-color;
+    box-shadow: 0 2px 10px rgba($primary-color, 0.3);
+    background-color: color.adjust($primary-color, $lightness: 45%);
+  }
+
+  &.draft {
+    background: repeating-linear-gradient(45deg, #fff, #fff 5px, #eeeeee4d 5px, #eeeeee4d 7px);
+    position: relative;
+    filter: grayscale(0.8);
+
+    h3, .commodity-meta, .commodity-price, .price-per-unit {
+      color: $text-secondary-color;
+    }
+
+    .status {
+      background-color: #e2e3e5 !important;
+      color: #383d41 !important;
+    }
+  }
+
+  &.sold {
+    position: relative;
+    filter: grayscale(0.8);
+
+    &::before {
+      content: 'SOLD';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: rgb(204 229 255 / 80%);
+      border: 3px solid rgb(0 64 133 / 50%);
+      padding: 0.5rem 1rem;
+      border-radius: $default-radius;
+      z-index: 1;
+      pointer-events: none;
+    }
+  }
+
+  &.lost {
+    position: relative;
+    filter: saturate(0.7);
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-color: rgb(255 243 205 / 30%);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    &::after {
+      content: '⚠️';
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      font-size: 1.5rem;
+      z-index: 2;
+      pointer-events: none;
+    }
+  }
+
+  &.disposed {
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-color: rgb(248 215 218 / 30%);
+      background-image: linear-gradient(45deg, transparent, transparent 48%, rgb(114 28 36 / 20%) 49%, rgb(114 28 36 / 20%) 51%, transparent 52%, transparent);
+      background-size: 20px 20px;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    &::after {
+      content: '🗑️';
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      font-size: 1.5rem;
+      z-index: 2;
+      pointer-events: none;
+    }
+  }
+
+  &.written-off {
+    position: relative;
+    filter: contrast(0.95);
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-color: rgb(226 227 229 / 3.75%);
+      background-image:
+        linear-gradient(45deg, transparent, transparent 45%, rgb(56 61 65 / 3.75%) 46%, rgb(56 61 65 / 3.75%) 54%, transparent 55%, transparent),
+        linear-gradient(135deg, transparent, transparent 45%, rgb(56 61 65 / 3.75%) 46%, rgb(56 61 65 / 3.75%) 54%, transparent 55%, transparent);
+      background-size: 30px 30px;
+      z-index: 1;
+      pointer-events: none;
+    }
+  }
+}
+
+.commodity-content {
+  flex: 1;
+  cursor: pointer;
+}
+
+.commodity-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 1rem;
+  cursor: pointer;
+}
+
+.type {
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.commodity-status {
+  margin-top: 0.5rem;
+
+  &.with-draft {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    &::after {
+      content: 'Draft';
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: $text-secondary-color;
+      font-style: italic;
+      transform: rotate(-45deg);
+      position: absolute;
+      bottom: 0.5rem;
+      right: 0.5rem;
+    }
   }
 }
 
@@ -746,11 +738,11 @@ const deleteCommodity = async (id: string) => {
 }
 
 .test-result {
-  background-color: lighten($primary-color, 40%);
+  background-color: color.adjust($primary-color, $lightness: 40%);
 }
 
 .test-error {
-  background-color: lighten($danger-color, 40%);
+  background-color: color.adjust($danger-color, $lightness: 40%);
 }
 
 pre {

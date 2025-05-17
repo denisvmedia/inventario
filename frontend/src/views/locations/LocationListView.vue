@@ -402,7 +402,8 @@ const deleteArea = async (id: string) => {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/main.scss';
+@use 'sass:color';
+@use '@/assets/main' as *;
 
 .location-list {
   max-width: $container-max-width;
@@ -453,7 +454,7 @@ const deleteArea = async (id: string) => {
   cursor: pointer;
 
   &:hover {
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 5px 15px rgb(0 0 0 / 10%);
   }
 }
 
@@ -525,7 +526,7 @@ const deleteArea = async (id: string) => {
   background: white;
   border-radius: $default-radius;
   padding: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -534,12 +535,12 @@ const deleteArea = async (id: string) => {
 
   &:hover {
     background-color: $light-bg-color;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 5px rgb(0 0 0 / 15%);
   }
 }
 
 .area-highlight {
-  background-color: lighten($primary-color, 45%) !important;
+  background-color: color.adjust($primary-color, $lightness: 45%) !important;
   box-shadow: 0 0 0 2px $primary-color !important;
   animation: pulse 1s ease-in-out;
 }
