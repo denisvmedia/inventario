@@ -31,10 +31,10 @@ export default defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
-    
+
     /* Take screenshot on failure */
     screenshot: 'only-on-failure',
-    
+
     /* Record video on failure */
     video: 'on-first-retry',
   },
@@ -56,8 +56,12 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    // We'll handle this separately in our setup scripts
-    reuseExistingServer: true,
-  },
+  // webServer: {
+  //   // We'll handle this separately in our setup scripts
+  //   reuseExistingServer: true,
+  // },
+
+  /* Global setup and teardown */
+  globalSetup: './setup/global-setup.ts',
+  globalTeardown: './setup/global-teardown.ts',
 });
