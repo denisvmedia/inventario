@@ -9,8 +9,9 @@ export const useConfirmationStore = defineStore('confirmation', () => {
   const confirmLabel = ref('Confirm');
   const cancelLabel = ref('Cancel');
   const confirmButtonClass = ref('primary');
-  
+
   // Callback functions
+  // eslint-disable-next-line no-unused-vars
   let resolvePromise: ((value: boolean) => void) | null = null;
 
   // Actions
@@ -27,10 +28,10 @@ export const useConfirmationStore = defineStore('confirmation', () => {
     confirmLabel.value = options.confirmLabel || 'Confirm';
     cancelLabel.value = options.cancelLabel || 'Cancel';
     confirmButtonClass.value = options.confirmButtonClass || 'primary';
-    
+
     // Show the dialog
     isVisible.value = true;
-    
+
     // Return a promise that will be resolved when the user confirms or cancels
     return new Promise<boolean>((resolve) => {
       resolvePromise = resolve;
@@ -65,7 +66,7 @@ export const useConfirmationStore = defineStore('confirmation', () => {
     confirmLabel,
     cancelLabel,
     confirmButtonClass,
-    
+
     // Actions
     show,
     hide,
