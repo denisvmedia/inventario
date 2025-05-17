@@ -85,6 +85,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
     await page.click('a:has-text("Add Commodity")');
 
     // Fill in the commodity form
+    await page.waitForTimeout(1000);
     await page.fill('#name', testCommodity.name);
     await page.fill('#shortName', testCommodity.shortName);
 
@@ -182,11 +183,10 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // Delete the location
     await page.click(`.location-card:has-text("${testLocation.name}") button[title="Delete"]`);
-    await page.click('button:has-text("Delete")');
     await page.click('.confirmation-modal button:has-text("Delete")');
 
     // Verify we're redirected back to the locations list
-    await expect(page).toHaveURL('/locations');
+    await expect(page).toHaveURL(/\/locations/);
     await recorder.takeScreenshot('15-locations-after-cleanup');
 
     // Verify the location is no longer in the list

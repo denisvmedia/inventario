@@ -1,7 +1,8 @@
 <template>
   <div class="app">
     <!-- Global confirmation dialog component -->
-    <ConfirmationDialog />
+    <ConfirmationDialog>
+    </ConfirmationDialog>
     <header v-if="!isPrintRoute">
       <div class="header-content">
         <div class="logo-container">

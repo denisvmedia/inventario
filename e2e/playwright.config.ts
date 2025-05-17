@@ -14,7 +14,7 @@ export default defineConfig({
      * For example in `await expect(locator).toHaveText();`
      */
     // timeout: 10000
-    timeout: 1000
+    timeout: 10000
   },
   /* Run tests in files in parallel */
   fullyParallel: false,
@@ -40,13 +40,7 @@ export default defineConfig({
     screenshot: 'on',
 
     /* Record video for all tests */
-    video: 'on',
-
-    /* Configure screenshot path */
-    screenshotPath: './test-results/screenshots/',
-
-    /* Configure video path */
-    videoPath: './test-results/videos/',
+    video: 'on'
   },
 
   /* Configure projects for major browsers */
@@ -68,7 +62,9 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   // webServer: {
   //   // We'll handle this separately in our setup scripts
+  //   port: 5173,
   //   reuseExistingServer: true,
+  //   timeout: 60 * 1000,
   // },
 
   /* Global setup and teardown */

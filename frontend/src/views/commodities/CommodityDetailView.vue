@@ -204,6 +204,18 @@
           />
         </div>
       </div>
+
+      <!-- Commodity Delete Confirmation Dialog -->
+      <Confirmation
+        v-model:visible="showDeleteDialog"
+        title="Confirm Delete"
+        message="Are you sure you want to delete this commodity?"
+        confirm-label="Delete"
+        cancel-label="Cancel"
+        confirm-button-class="danger"
+        confirmationIcon="exclamation-triangle"
+        @confirm="onConfirmDelete"
+      />
     </div>
   </div>
 </template>
@@ -215,9 +227,9 @@ import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 import { formatPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
-import { confirmDelete as confirmDeleteUtil } from '@/utils/confirmationUtil'
 import FileUploader from '@/components/FileUploader.vue'
 import FileViewer from '@/components/FileViewer.vue'
+import Confirmation from "@/components/Confirmation.vue";
 
 const router = useRouter()
 const route = useRoute()
@@ -478,11 +490,15 @@ const editCommodity = () => {
   })
 }
 
-const confirmDelete = async () => {
-  const confirmed = await confirmDeleteUtil('commodity')
-  if (confirmed) {
-    deleteCommodity()
-  }
+const showDeleteDialog = ref(false)
+
+const confirmDelete = () => {
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  deleteCommodity()
+  showDeleteDialog.value = false
 }
 
 const printCommodity = () => {

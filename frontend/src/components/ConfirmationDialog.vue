@@ -56,7 +56,7 @@ const onCancel = () => {
 
 .confirmation-content {
   margin: 1rem 0;
-  
+
   p {
     margin: 0;
     line-height: 1.5;

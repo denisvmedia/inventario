@@ -109,42 +109,30 @@
     </div>
 
     <!-- Location Delete Confirmation Dialog -->
-    <Dialog
+    <Confirmation
       v-model:visible="showDeleteLocationDialog"
-      header="Confirm Delete"
-      :modal="true"
-      class="confirmation-modal p-confirm-dialog-danger"
-    >
-      <div class="confirmation-content">
-        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
-        <div class="confirmation-message">
-          <p>Are you sure you want to delete this location? This will also delete all areas within this location.</p>
-        </div>
-      </div>
-      <template #footer>
-        <button class="btn btn-secondary" @click="onCancelDeleteLocation">Cancel</button>
-        <button class="btn btn-danger" @click="onConfirmDeleteLocation">Delete</button>
-      </template>
-    </Dialog>
+      title="Confirm Delete"
+      message="Are you sure you want to delete this location?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDeleteLocation"
+      @cancel="onCancelDeleteLocation"
+    />
 
     <!-- Area Delete Confirmation Dialog -->
-    <Dialog
+    <Confirmation
       v-model:visible="showDeleteAreaDialog"
-      header="Confirm Delete"
-      :modal="true"
-      class="confirmation-modal p-confirm-dialog-danger"
-    >
-      <div class="confirmation-content">
-        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
-        <div class="confirmation-message">
-          <p>Are you sure you want to delete this area?</p>
-        </div>
-      </div>
-      <template #footer>
-        <button class="btn btn-secondary" @click="onCancelDeleteArea">Cancel</button>
-        <button class="btn btn-danger" @click="onConfirmDeleteArea">Delete</button>
-      </template>
-    </Dialog>
+      title="Confirm Delete"
+      message="Are you sure you want to delete this area?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDeleteArea"
+      @cancel="onCancelDeleteArea"
+    />
   </div>
 </template>
 
@@ -158,6 +146,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { formatPrice } from '@/services/currencyService'
 import LocationForm from '@/components/LocationForm.vue'
 import AreaForm from '@/components/AreaForm.vue'
+import Confirmation from "@/components/Confirmation.vue";
 
 const router = useRouter()
 const route = useRoute()

@@ -1,5 +1,6 @@
 import { test as base } from '@playwright/test';
-import { TestRecorder } from '../utils/test-recorder';
+import { TestRecorder } from '../utils/test-recorder.js';
+import waitOn from 'wait-on';
 
 // Define the type for our custom fixtures
 type AppFixtures = {
@@ -12,6 +13,14 @@ type AppFixtures = {
 export const test = base.extend<AppFixtures>({
   // Setup the application stack before tests
   page: async ({ page }, use) => {
+    await waitOn({
+      resources: ['http://localhost:5173'],
+      timeout: 15000,
+      interval: 250,
+      window: 1000,
+      tcpTimeout: 1000,
+    });
+
     // The stack should already be running via the e2e:stack command
     // We just need to navigate to the base URL
     await page.goto('/');
