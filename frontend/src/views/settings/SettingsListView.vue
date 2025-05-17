@@ -166,7 +166,7 @@ const navigateToSetting = (id: string) => {
 </script>
 
 <style lang="scss" scoped>
-@import '@/assets/main.scss';
+@use '@/assets/main' as *;
 
 .settings-list {
   max-width: $container-max-width;
@@ -195,7 +195,7 @@ const navigateToSetting = (id: string) => {
     background-color: #f9f9f9;
     border-radius: 8px;
     padding: 15px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
 
     h2 {
       margin-top: 0;
@@ -215,13 +215,13 @@ const navigateToSetting = (id: string) => {
     border-radius: 6px;
     padding: 15px;
     margin-bottom: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
 
     &:hover {
       transform: translateY(-2px);
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 6px rgb(0 0 0 / 10%);
     }
 
     &:last-child {
@@ -230,13 +230,13 @@ const navigateToSetting = (id: string) => {
 
     .settings-card-content {
       h3 {
-        margin: 0 0 5px 0;
+        margin: 0 0 5px;
         font-size: 1rem;
         color: $text-color;
       }
 
       p {
-        margin: 0 0 10px 0;
+        margin: 0 0 10px;
         font-size: 0.9rem;
         color: $text-secondary-color;
       }
@@ -375,7 +375,7 @@ const navigateToSetting = (id: string) => {
   }
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .settings-list {
     .settings-categories {
       grid-template-columns: 1fr;

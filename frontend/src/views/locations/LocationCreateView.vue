@@ -162,7 +162,7 @@ const cancel = () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/main.scss';
+@use '@/assets/main' as *;
 
 .location-create {
   max-width: 600px;

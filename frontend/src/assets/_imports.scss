@@ -1,0 +1,5 @@
+// This file contains all the imports needed for components
+// Use @use instead of @import to follow modern SCSS best practices
+
+@use 'variables' as *;
+@use 'main' as *;

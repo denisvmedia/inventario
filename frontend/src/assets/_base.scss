@@ -1,0 +1,42 @@
+@use 'variables' as *;
+
+/* App layout styles */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+header {
+  background-color: $secondary-color;
+  color: white;
+  padding: 1rem;
+}
+
+nav {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+}
+
+nav a.router-link-active {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+main {
+  flex: 1;
+  padding: 2rem 0;
+}
+
+footer {
+  background-color: $secondary-color;
+  color: white;
+  padding: 1rem;
+  text-align: center;
+}

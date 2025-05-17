@@ -173,7 +173,8 @@ const handleAreaCreated = (newArea: any) => {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/main.scss';
+@use 'sass:color';
+@use '@/assets/main' as *;
 
 .location-detail {
   max-width: $container-max-width;
@@ -256,7 +257,7 @@ const handleAreaCreated = (newArea: any) => {
 
   &:hover {
     transform: translateY(-5px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 5px 15px rgb(0 0 0 / 10%);
   }
 }
 
@@ -333,11 +334,11 @@ const handleAreaCreated = (newArea: any) => {
 }
 
 .test-result {
-  background-color: lighten($primary-color, 40%);
+  background-color: color.adjust($primary-color, $lightness: 40%);
 }
 
 .test-error {
-  background-color: lighten($danger-color, 40%);
+  background-color: color.adjust($danger-color, $lightness: 40%);
 }
 
 pre {

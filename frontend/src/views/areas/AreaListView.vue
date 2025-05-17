@@ -97,7 +97,7 @@ const deleteArea = async (id: string) => {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/main.scss';
+@use '@/assets/main' as *;
 
 .area-list {
   max-width: $container-max-width;
@@ -143,7 +143,7 @@ const deleteArea = async (id: string) => {
 
   &:hover {
     transform: translateY(-5px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 5px 15px rgb(0 0 0 / 10%);
   }
 }
 

@@ -116,7 +116,7 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use '@/assets/main.scss' as *;
 
 .home {
   max-width: $container-max-width;
@@ -180,7 +180,7 @@ h2 {
 
   &:hover {
     transform: translateY(-5px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
   }
 
   h2 {

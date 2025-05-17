@@ -146,7 +146,7 @@ const cancel = () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use '@/assets/main.scss' as *;
 
 .inline-form {
   background: white;
@@ -161,7 +161,7 @@ const cancel = () => {
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
 
-  @media (max-width: 768px) {
+  @media (width <= 768px) {
     grid-template-columns: 1fr;
   }
 }

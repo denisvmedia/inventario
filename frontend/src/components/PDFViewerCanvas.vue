@@ -515,7 +515,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use '@/assets/variables' as *;
 
 .pdf-viewer-container {
   display: flex;
@@ -545,7 +545,7 @@ onBeforeUnmount(() => {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid rgba(0, 0, 0, 0.1);
+  border: 4px solid rgb(0 0 0 / 10%);
   border-radius: 50%;
   border-top-color: $primary-color;
   animation: spin 1s ease-in-out infinite;
@@ -598,7 +598,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0; /* Prevent controls from shrinking */
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .pdf-controls {
     justify-content: flex-start;
     padding: 0.75rem 0.5rem;
@@ -633,7 +633,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   background-color: $light-hover-bg-color;
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 0 10px rgb(0 0 0 / 10%);
   padding: 1rem;
   width: 100%;
 }
@@ -642,7 +642,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  background-color: rgba(255, 255, 255, 0.7);
+  background-color: rgb(255 255 255 / 70%);
   border: none;
   border-radius: 50%;
   width: 40px;
@@ -654,15 +654,15 @@ onBeforeUnmount(() => {
   cursor: pointer;
   z-index: 10;
   transition: background-color 0.2s ease;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-
-  &:hover:not(:disabled) {
-    background-color: rgba(255, 255, 255, 0.9);
-  }
+  box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
+    background-color: rgb(255 255 255 / 90%);
   }
 }
 
@@ -718,13 +718,13 @@ onBeforeUnmount(() => {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
 
-  &:hover:not(:disabled) {
-    background-color: $light-hover-bg-color;
-  }
-
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
+    background-color: $light-hover-bg-color;
   }
 
   &-sm {

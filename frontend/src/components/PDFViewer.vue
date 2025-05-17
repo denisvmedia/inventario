@@ -89,7 +89,7 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use '@/assets/main.scss' as *;
 
 .pdf-viewer-container {
   display: flex;

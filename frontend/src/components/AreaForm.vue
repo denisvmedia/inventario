@@ -128,7 +128,7 @@ const cancel = () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use '@/assets/main.scss' as *;
 
 .inline-form {
   background: white;

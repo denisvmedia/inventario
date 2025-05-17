@@ -1,3 +1,5 @@
+@use 'variables' as *;
+
 :root {
   // ========== General Dimensions ==========
   --p-toggleswitch-width: 2.75rem;
@@ -25,8 +27,8 @@
 
   // ========== Handle (Thumb) ==========
   --p-toggleswitch-handle-size: 1rem;
-  --p-toggleswitch-handle-background: #ffffff;
-  --p-toggleswitch-handle-color: #000000;
+  --p-toggleswitch-handle-background: #fff;
+  --p-toggleswitch-handle-color: #000;
   --p-toggleswitch-handle-border-radius: 50%;
   --p-toggleswitch-gap: 0.125rem;
 
@@ -35,16 +37,16 @@
   --p-toggleswitch-handle-hover-color: #000;
 
   // ===== Checked (Handle) =====
-  --p-toggleswitch-handle-checked-background: #ffffff;
-  --p-toggleswitch-handle-checked-color: #000000;
+  --p-toggleswitch-handle-checked-background: #fff;
+  --p-toggleswitch-handle-checked-color: #000;
 
   // ===== Checked + Hover (Handle) =====
-  --p-toggleswitch-handle-checked-hover-background: #ffffff;
-  --p-toggleswitch-handle-checked-hover-color: #000000;
+  --p-toggleswitch-handle-checked-hover-background: #fff;
+  --p-toggleswitch-handle-checked-hover-color: #000;
 
   // ========== Focus Ring ==========
   --p-toggleswitch-focus-ring-width: 2px;
-  --p-toggleswitch-focus-ring-color: rgba(76, 175, 80, 0.4);
+  --p-toggleswitch-focus-ring-color: rgb(76 175 80 / 40%);
 
   // ========== Transitions ==========
   --p-toggleswitch-transition-duration: 0.2s;

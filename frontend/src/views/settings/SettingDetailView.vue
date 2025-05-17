@@ -460,7 +460,7 @@ function formatSettingName(id: string) {
 </script>
 
 <style lang="scss" scoped>
-@import '@/assets/main.scss';
+@use '@/assets/main.scss' as *;
 
 .setting-detail {
   max-width: $container-max-width;
@@ -531,6 +531,44 @@ function formatSettingName(id: string) {
   }
 }
 
+/* Ensure consistent styling between settings and commodity forms */
+.setting-detail .p-dropdown,
+.setting-detail .p-select {
+  font-size: 1rem;
+  padding: 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.setting-detail .p-dropdown:not(.p-disabled):hover,
+.setting-detail .p-select:not(.p-disabled):hover {
+  border-color: #bbb;
+}
+
+.setting-detail .p-dropdown:not(.p-disabled).p-focus,
+.setting-detail .p-select:not(.p-disabled).p-focus {
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgb(76 175 80 / 20%);
+  outline: none;
+}
+
+/* Match the height of the dropdown to the form-control height */
+.setting-detail .p-dropdown .p-dropdown-label,
+.setting-detail .p-select .p-select-label {
+  padding: 0.75rem;
+  line-height: 1.5;
+}
+
+/* Ensure the dropdown trigger icon is properly aligned */
+.setting-detail .p-dropdown .p-dropdown-trigger,
+.setting-detail .p-select .p-select-trigger {
+  padding: 0 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 // Utility class for width 100%
 .w-100 {
   width: 100%;
@@ -543,7 +581,7 @@ function formatSettingName(id: string) {
   margin-top: 0.25rem;
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .setting-detail {
     .form-actions {
       flex-direction: column;
