@@ -15,16 +15,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Install system dependencies for Playwright
+      - name: Install Playwright system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-1 libgraphene-1.0-0 libwoff1 libopus0 \
+          libwebp7 libevent-2.1-7 libvpx7 libharfbuzz-icu0 libsecret-1-0 \
+          libhyphen0 libgstgl-1.0-0 libgstreamer-plugins-base1.0-0 \
+          libgstreamer-gl1.0-0 libgstreamer1.0-0 libgstcodecparsers-1.0-0 \
+          libgstfft-1.0-0 libmanette-0.2-0 libgles2 libasound2
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.1'
           cache: true
 
+      # Install system dependencies for Playwright
+      - name: Install Playwright system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-1 libgraphene-1.0-0 libwoff1 libopus0 \
+          libwebp7 libevent-2.1-7 libvpx7 libharfbuzz-icu0 libsecret-1-0 \
+          libhyphen0 libgstgl-1.0-0 libgstreamer-plugins-base1.0-0 \
+          libgstreamer-gl1.0-0 libgstreamer1.0-0 libgstcodecparsers-1.0-0 \
+          libgstfft-1.0-0 libmanette-0.2-0 libgles2 libasound2
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: ${{ steps.node.outputs.version }}
           cache: 'npm'
           cache-dependency-path: |
             frontend/package-lock.json
