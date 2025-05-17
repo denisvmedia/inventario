@@ -86,6 +86,25 @@ v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-ca
         </div>
       </div>
     </div>
+
+    <!-- Commodity Delete Confirmation Dialog -->
+    <Dialog
+      v-model:visible="showDeleteDialog"
+      header="Confirm Delete"
+      :modal="true"
+      class="confirmation-modal p-confirm-dialog-danger"
+    >
+      <div class="confirmation-content">
+        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
+        <div class="confirmation-message">
+          <p>Are you sure you want to delete this commodity?</p>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="onCancelDelete">Cancel</button>
+        <button class="btn btn-danger" @click="onConfirmDelete">Delete</button>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -286,10 +305,25 @@ const editCommodity = (id: string) => {
   })
 }
 
+const commodityToDelete = ref<string | null>(null)
+const showDeleteDialog = ref(false)
+
 const confirmDelete = (id: string) => {
-  if (confirm('Are you sure you want to delete this commodity?')) {
-    deleteCommodity(id)
+  commodityToDelete.value = id
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  if (commodityToDelete.value) {
+    deleteCommodity(commodityToDelete.value)
+    showDeleteDialog.value = false
+    commodityToDelete.value = null
   }
+}
+
+const onCancelDelete = () => {
+  showDeleteDialog.value = false
+  commodityToDelete.value = null
 }
 
 const deleteCommodity = async (id: string) => {

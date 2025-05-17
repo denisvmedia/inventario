@@ -34,6 +34,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Area Delete Confirmation Dialog -->
+    <Dialog
+      v-model:visible="showDeleteDialog"
+      header="Confirm Delete"
+      :modal="true"
+      class="confirmation-modal p-confirm-dialog-danger"
+    >
+      <div class="confirmation-content">
+        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
+        <div class="confirmation-message">
+          <p>Are you sure you want to delete this area?</p>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="onCancelDelete">Cancel</button>
+        <button class="btn btn-danger" @click="onConfirmDelete">Delete</button>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -79,10 +98,25 @@ const editArea = (id: string) => {
   router.push(`/areas/${id}/edit`)
 }
 
+const areaToDelete = ref<string | null>(null)
+const showDeleteDialog = ref(false)
+
 const confirmDelete = (id: string) => {
-  if (confirm('Are you sure you want to delete this area?')) {
-    deleteArea(id)
+  areaToDelete.value = id
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  if (areaToDelete.value) {
+    deleteArea(areaToDelete.value)
+    showDeleteDialog.value = false
+    areaToDelete.value = null
   }
+}
+
+const onCancelDelete = () => {
+  showDeleteDialog.value = false
+  areaToDelete.value = null
 }
 
 const deleteArea = async (id: string) => {

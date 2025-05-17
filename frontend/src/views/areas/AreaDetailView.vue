@@ -80,6 +80,44 @@ v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-ca
         <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary">Add Commodity</router-link>
       </div>
     </div>
+
+    <!-- Area Delete Confirmation Dialog -->
+    <Dialog
+      v-model:visible="showDeleteDialog"
+      header="Confirm Delete"
+      :modal="true"
+      class="confirmation-modal p-confirm-dialog-danger"
+    >
+      <div class="confirmation-content">
+        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
+        <div class="confirmation-message">
+          <p>Are you sure you want to delete this area?</p>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="onCancelDelete">Cancel</button>
+        <button class="btn btn-danger" @click="onConfirmDelete">Delete</button>
+      </template>
+    </Dialog>
+
+    <!-- Commodity Delete Confirmation Dialog -->
+    <Dialog
+      v-model:visible="showDeleteCommodityDialog"
+      header="Confirm Delete"
+      :modal="true"
+      class="confirmation-modal p-confirm-dialog-danger"
+    >
+      <div class="confirmation-content">
+        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
+        <div class="confirmation-message">
+          <p>Are you sure you want to delete this commodity?</p>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="onCancelDeleteCommodity">Cancel</button>
+        <button class="btn btn-danger" @click="onConfirmDeleteCommodity">Delete</button>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -285,10 +323,19 @@ const getStatusName = (statusId: string) => {
 
 // Note: We're using the imported calculatePricePerUnit function instead
 
+const showDeleteDialog = ref(false)
+
 const confirmDelete = () => {
-  if (confirm('Are you sure you want to delete this area?')) {
-    deleteArea()
-  }
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  deleteArea()
+  showDeleteDialog.value = false
+}
+
+const onCancelDelete = () => {
+  showDeleteDialog.value = false
 }
 
 const deleteArea = async () => {
@@ -323,10 +370,25 @@ const editCommodity = (id: string) => {
   })
 }
 
+const commodityToDelete = ref<string | null>(null)
+const showDeleteCommodityDialog = ref(false)
+
 const confirmDeleteCommodity = (id: string) => {
-  if (confirm('Are you sure you want to delete this commodity?')) {
-    deleteCommodity(id)
+  commodityToDelete.value = id
+  showDeleteCommodityDialog.value = true
+}
+
+const onConfirmDeleteCommodity = () => {
+  if (commodityToDelete.value) {
+    deleteCommodity(commodityToDelete.value)
+    showDeleteCommodityDialog.value = false
+    commodityToDelete.value = null
   }
+}
+
+const onCancelDeleteCommodity = () => {
+  showDeleteCommodityDialog.value = false
+  commodityToDelete.value = null
 }
 
 const navigateToLocations = () => {

@@ -53,20 +53,10 @@ test.describe('Commodity Simple CRUD Operations', () => {
     await recorder.takeScreenshot('03-location-created');
 
     // Click on the location card to expand it
-    const locationCard = page.locator(`.location-card:has-text("${testLocation.name}")`);
-    await locationCard.click();
+    // await page.click(`.location-card:has-text("${testLocation.name}")`);
 
     // STEP 2: CREATE AREA - Create a new area in-place in the location list view
     console.log('Step 2: Creating a new area');
-    // We should still be on the locations list page
-    await expect(page).toHaveURL('/locations');
-
-    // Click on the location name to expand it
-    await page.click(`h3:has-text("${testLocation.name}")`);
-
-    // Wait for the areas section to be visible after location expansion
-    await page.waitForSelector('.areas-header');
-    await recorder.takeScreenshot('04-location-expanded');
 
     // Click the Add Area button within the expanded location
     await page.click('.areas-header button:has-text("Add Area")');
@@ -170,7 +160,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
     await page.click('.confirmation-modal button:has-text("Delete")');
 
     // Verify we're redirected back to the commodities list
-    await expect(page).toHaveURL('/commodities');
+    await expect(page).toHaveURL(/\/areas\/[a-zA-Z0-9-]+/);
     await recorder.takeScreenshot('13-commodities-after-delete');
 
     // Verify the commodity is no longer in the list
@@ -179,23 +169,25 @@ test.describe('Commodity Simple CRUD Operations', () => {
     // STEP 7: CLEANUP - Delete the area and location
     console.log('Step 7: Cleaning up - deleting the area and location');
     // Navigate back to the location detail page
-    await page.goto('/locations');
-    await locationCard.click();
+    await page.click(`.breadcrumb-link:has-text("Back to Locations")`);
+
+    // Wait for the areas section to be visible after location expansion
+    await page.waitForSelector('.areas-header');
+    await recorder.takeScreenshot('14-location-expanded');
 
     // Delete the area
     const areaCard = page.locator(`.area-card:has-text("${testArea.name}")`);
-    if (await areaCard.isVisible()) {
-      await areaCard.locator('.delete-icon').click();
-      await page.click('.confirmation-modal button:has-text("Delete")');
-    }
+    await areaCard.locator('.area-actions button[title="Delete"]').click();
+    await page.click('.confirmation-modal button:has-text("Delete")');
 
     // Delete the location
+    await page.click(`.location-card:has-text("${testLocation.name}") button[title="Delete"]`);
     await page.click('button:has-text("Delete")');
     await page.click('.confirmation-modal button:has-text("Delete")');
 
     // Verify we're redirected back to the locations list
     await expect(page).toHaveURL('/locations');
-    await recorder.takeScreenshot('14-locations-after-cleanup');
+    await recorder.takeScreenshot('15-locations-after-cleanup');
 
     // Verify the location is no longer in the list
     await expect(page.locator(`.location-card:has-text("${testLocation.name}")`)).not.toBeVisible();

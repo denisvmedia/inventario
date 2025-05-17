@@ -215,6 +215,7 @@ import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
 import { formatPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
+import { confirmDelete as confirmDeleteUtil } from '@/utils/confirmationUtil'
 import FileUploader from '@/components/FileUploader.vue'
 import FileViewer from '@/components/FileViewer.vue'
 
@@ -477,8 +478,9 @@ const editCommodity = () => {
   })
 }
 
-const confirmDelete = () => {
-  if (confirm('Are you sure you want to delete this commodity?')) {
+const confirmDelete = async () => {
+  const confirmed = await confirmDeleteUtil('commodity')
+  if (confirmed) {
     deleteCommodity()
   }
 }

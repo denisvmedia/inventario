@@ -11,9 +11,14 @@ $error-color: #dc3545;
 $border-color: #ddd;
 $text-color: #333;
 $text-secondary-color: #6c757d;
+$box-shadow-color: rgb(0 0 0 / 10%);
+$mask-background-color: rgb(0 0 0 / 0.5);
 
 // Layout variables
 $container-max-width: 1200px;
 $container-min-width: 800px;
-$box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
+$box-shadow: 0 2px 8px $box-shadow-color;
 $default-radius: 4px;
+
+// Effect variables
+$mask-background-transition: 0.2s;

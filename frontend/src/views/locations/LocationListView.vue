@@ -107,6 +107,44 @@
         </div>
       </div>
     </div>
+
+    <!-- Location Delete Confirmation Dialog -->
+    <Dialog
+      v-model:visible="showDeleteLocationDialog"
+      header="Confirm Delete"
+      :modal="true"
+      class="confirmation-modal p-confirm-dialog-danger"
+    >
+      <div class="confirmation-content">
+        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
+        <div class="confirmation-message">
+          <p>Are you sure you want to delete this location? This will also delete all areas within this location.</p>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="onCancelDeleteLocation">Cancel</button>
+        <button class="btn btn-danger" @click="onConfirmDeleteLocation">Delete</button>
+      </template>
+    </Dialog>
+
+    <!-- Area Delete Confirmation Dialog -->
+    <Dialog
+      v-model:visible="showDeleteAreaDialog"
+      header="Confirm Delete"
+      :modal="true"
+      class="confirmation-modal p-confirm-dialog-danger"
+    >
+      <div class="confirmation-content">
+        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
+        <div class="confirmation-message">
+          <p>Are you sure you want to delete this area?</p>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="onCancelDeleteArea">Cancel</button>
+        <button class="btn btn-danger" @click="onConfirmDeleteArea">Delete</button>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -337,10 +375,25 @@ const editLocation = (id: string) => {
   router.push(`/locations/${id}/edit`)
 }
 
+const locationToDelete = ref<string | null>(null)
+const showDeleteLocationDialog = ref(false)
+
 const confirmDeleteLocation = (id: string) => {
-  if (confirm('Are you sure you want to delete this location? This will also delete all areas within this location.')) {
-    deleteLocation(id)
+  locationToDelete.value = id
+  showDeleteLocationDialog.value = true
+}
+
+const onConfirmDeleteLocation = () => {
+  if (locationToDelete.value) {
+    deleteLocation(locationToDelete.value)
+    showDeleteLocationDialog.value = false
+    locationToDelete.value = null
   }
+}
+
+const onCancelDeleteLocation = () => {
+  showDeleteLocationDialog.value = false
+  locationToDelete.value = null
 }
 
 const deleteLocation = async (id: string) => {
@@ -384,10 +437,25 @@ const editArea = (id: string) => {
   router.push(`/areas/${id}/edit`)
 }
 
+const areaToDelete = ref<string | null>(null)
+const showDeleteAreaDialog = ref(false)
+
 const confirmDeleteArea = (id: string) => {
-  if (confirm('Are you sure you want to delete this area?')) {
-    deleteArea(id)
+  areaToDelete.value = id
+  showDeleteAreaDialog.value = true
+}
+
+const onConfirmDeleteArea = () => {
+  if (areaToDelete.value) {
+    deleteArea(areaToDelete.value)
+    showDeleteAreaDialog.value = false
+    areaToDelete.value = null
   }
+}
+
+const onCancelDeleteArea = () => {
+  showDeleteAreaDialog.value = false
+  areaToDelete.value = null
 }
 
 const deleteArea = async (id: string) => {

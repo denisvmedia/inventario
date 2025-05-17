@@ -100,6 +100,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete Confirmation Dialog -->
+    <Dialog
+      v-model:visible="showDeleteConfirmation"
+      :header="'Confirm Delete'"
+      :modal="true"
+      class="confirmation-modal p-confirm-dialog-danger"
+    >
+      <div class="confirmation-content">
+        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
+        <div class="confirmation-message">
+          <p>Are you sure you want to delete this {{ fileType.slice(0, -1) }}?</p>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="cancelDelete">Cancel</button>
+        <button class="btn btn-danger" @click="confirmDelete">Delete</button>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -520,15 +539,32 @@ const downloadCurrentFile = () => {
 }
 
 // Delete functions
-const confirmDeleteFile = (file: any) => {
-  // Show confirmation dialog
-  if (confirm(`Are you sure you want to delete this ${props.fileType.slice(0, -1)}?`)) {
-    // Emit delete event to parent
-    emit('delete', file)
+const fileToDelete = ref<any>(null)
+const showDeleteConfirmation = ref(false)
 
-    // Handle UI updates after deletion
-    handlePostDeleteUI(file)
-  }
+const confirmDeleteFile = (file: any) => {
+  // Store the file to delete and show the confirmation dialog
+  fileToDelete.value = file
+  showDeleteConfirmation.value = true
+}
+
+const confirmDelete = () => {
+  if (!fileToDelete.value) return
+
+  // Emit delete event to parent
+  emit('delete', fileToDelete.value)
+
+  // Handle UI updates after deletion
+  handlePostDeleteUI(fileToDelete.value)
+
+  // Close the dialog
+  showDeleteConfirmation.value = false
+  fileToDelete.value = null
+}
+
+const cancelDelete = () => {
+  showDeleteConfirmation.value = false
+  fileToDelete.value = null
 }
 
 // Handle UI updates after a file is deleted

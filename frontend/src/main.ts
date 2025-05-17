@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import PrimeVue from 'primevue/config';
 import Select from 'primevue/select'
 import InputSwitch from 'primevue/inputswitch'
+import Dialog from 'primevue/dialog'
 // import Aura from '@primeuix/themes/aura';
 // import Nora from '@primeuix/themes/nora';
 // import Lara from '@primeuix/themes/lara';
@@ -12,6 +13,7 @@ import router from './router'
 import './assets/main.scss'
 import './assets/primevue-dropdown.scss'
 import './assets/primevue-toggleswitch.scss'
+import './assets/primevue-dialog.scss'
 import { FontAwesomeIcon } from './fontawesome'
 
 // Add some debug logging
@@ -45,6 +47,7 @@ app.use(PrimeVue, {
 })
 app.component('Select', Select)
 app.component('InputSwitch', InputSwitch)
+app.component('Dialog', Dialog)
 
 // Register Font Awesome component globally
 app.component('FontAwesomeIcon', FontAwesomeIcon)
