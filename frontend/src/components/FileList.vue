@@ -214,7 +214,15 @@ const isPdfFile = (file: any) => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use '@/assets/main.scss' as *;
+
+.edit-icon {
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+  color: $secondary-color;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
 
 .file-list {
   margin-bottom: 1.5rem;
@@ -244,7 +252,7 @@ const isPdfFile = (file: any) => {
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 8px rgb(0 0 0 / 10%);
   }
 }
 
@@ -283,7 +291,8 @@ const isPdfFile = (file: any) => {
 
 .file-name {
   font-weight: 500;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -295,14 +304,6 @@ const isPdfFile = (file: any) => {
   &:hover .edit-icon {
     opacity: 1;
   }
-}
-
-.edit-icon {
-  font-size: 0.8rem;
-  margin-left: 0.5rem;
-  color: $secondary-color;
-  opacity: 0;
-  transition: opacity 0.2s ease;
 }
 
 .file-name-edit {

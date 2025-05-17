@@ -18,7 +18,7 @@ function goHome() {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use '@/assets/main.scss' as *;
 
 .not-found {
   max-width: 800px;

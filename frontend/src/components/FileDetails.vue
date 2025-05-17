@@ -189,15 +189,13 @@ const confirmDelete = () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use 'sass:color';
+@use '@/assets/variables' as *;
 
 .file-details-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background-color: rgb(0 0 0 / 50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -237,7 +235,7 @@ const confirmDelete = () => {
   color: $secondary-color;
 
   &:hover {
-    color: darken($secondary-color, 10%);
+    color: color.adjust($secondary-color, $lightness: -10%);
   }
 }
 
@@ -248,7 +246,7 @@ const confirmDelete = () => {
   overflow-y: auto;
   flex: 1;
 
-  @media (min-width: 768px) {
+  @media (width >= 768px) {
     flex-direction: row;
   }
 }
@@ -263,7 +261,7 @@ const confirmDelete = () => {
   border-radius: $default-radius;
   margin-bottom: 1rem;
 
-  @media (min-width: 768px) {
+  @media (width >= 768px) {
     margin-right: 1rem;
     margin-bottom: 0;
   }
@@ -357,7 +355,7 @@ const confirmDelete = () => {
     color: white;
 
     &:hover {
-      background-color: darken($secondary-color, 10%);
+      background-color: color.adjust($secondary-color, $lightness: -10%);
     }
   }
 }

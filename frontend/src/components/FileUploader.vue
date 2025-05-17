@@ -121,7 +121,8 @@ const uploadFiles = async () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use 'sass:color';
+@use '@/assets/variables' as *;
 
 .file-uploader {
   margin-bottom: 1.5rem;
@@ -144,7 +145,7 @@ const uploadFiles = async () => {
 
 .drag-over {
   border-color: $primary-color;
-  background-color: lighten($primary-color, 45%);
+  background-color: color.adjust($primary-color, $lightness: 45%);
 }
 
 .file-input {
@@ -182,7 +183,7 @@ const uploadFiles = async () => {
 .upload-or {
   display: block;
   margin: 0.5rem 0;
-  color: lighten($text-color, 30%);
+  color: color.adjust($text-color, $lightness: 30%);
 }
 
 .browse-button {

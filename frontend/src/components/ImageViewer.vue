@@ -313,7 +313,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use 'sass:color';
+@use '@/assets/variables' as *;
 
 .image-viewer {
   margin-bottom: 1.5rem;
@@ -343,7 +344,7 @@ onBeforeUnmount(() => {
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 8px rgb(0 0 0 / 10%);
   }
 }
 
@@ -370,7 +371,8 @@ onBeforeUnmount(() => {
 .file-name {
   font-weight: 500;
   margin-bottom: 0.5rem;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -388,7 +390,7 @@ onBeforeUnmount(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.9);
+  background-color: rgb(0 0 0 / 90%);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -438,7 +440,7 @@ onBeforeUnmount(() => {
   margin-left: 0.5rem;
 
   &:hover {
-    color: darken($secondary-color, 10%);
+    color: color.adjust($secondary-color, $lightness: -10%);
   }
 }
 
@@ -482,7 +484,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  background-color: rgba(255, 255, 255, 0.5);
+  background-color: rgb(255 255 255 / 50%);
   border: none;
   border-radius: 50%;
   width: 40px;
@@ -496,7 +498,7 @@ onBeforeUnmount(() => {
   transition: background-color 0.2s ease;
 
   &:hover {
-    background-color: rgba(255, 255, 255, 0.8);
+    background-color: rgb(255 255 255 / 80%);
   }
 
   &.prev {

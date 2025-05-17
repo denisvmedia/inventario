@@ -615,7 +615,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/main.scss';
+@use 'sass:color';
+@use '@/assets/variables' as *;
 
 .file-viewer {
   margin-bottom: 1.5rem;
@@ -645,7 +646,7 @@ onBeforeUnmount(() => {
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 8px rgb(0 0 0 / 10%);
   }
 }
 
@@ -682,7 +683,8 @@ onBeforeUnmount(() => {
 .file-name {
   font-weight: 500;
   margin-bottom: 0.5rem;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -700,7 +702,7 @@ onBeforeUnmount(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgb(0 0 0 / 50%);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -710,7 +712,7 @@ onBeforeUnmount(() => {
 .modal-content {
   background-color: white;
   border-radius: $default-radius;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 20px rgb(0 0 0 / 15%);
   width: 90%;
   max-width: 1200px;
   max-height: 90vh;
@@ -746,7 +748,7 @@ onBeforeUnmount(() => {
   margin-left: 0.5rem;
 
   &:hover {
-    color: darken($secondary-color, 10%);
+    color: color.adjust($secondary-color, $lightness: -10%);
   }
 }
 
@@ -819,7 +821,7 @@ onBeforeUnmount(() => {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid rgba(0, 0, 0, 0.1);
+  border: 4px solid rgb(0 0 0 / 10%);
   border-radius: 50%;
   border-top-color: $primary-color;
   animation: spin 1s ease-in-out infinite;
@@ -861,7 +863,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  background-color: rgba(255, 255, 255, 0.5);
+  background-color: rgb(255 255 255 / 50%);
   color: $text-color;
   border: none;
   border-radius: 50%;
@@ -877,10 +879,10 @@ onBeforeUnmount(() => {
   box-shadow: $box-shadow;
 
   &:hover {
-    background-color: rgba(255, 255, 255, 0.8);
+    background-color: rgb(255 255 255 / 80%);
   }
 
-  @media (max-width: 768px) {
+  @media (width <= 768px) {
     width: 30px;
     height: 30px;
     font-size: 1.2rem;

@@ -1,9 +1,11 @@
+@use 'variables' as *;
+
 :root {
   /* ========== Select ========== */
   --p-select-padding-x: 0.75rem;
   --p-select-padding-y: 0.5rem;
   --p-select-color: #333; /* Match text-color from main.scss */
-  --p-select-background: #ffffff;
+  --p-select-background: #fff;
   --p-select-border-color: #ddd; /* Match border-color from main.scss */
   --p-select-border-radius: 4px; /* Match default-radius from main.scss */
   --p-select-shadow: none;
@@ -11,28 +13,25 @@
   --p-select-focus-border-color: #4CAF50; /* Match primary-color from main.scss */
   --p-select-focus-ring-width: 2px;
   --p-select-focus-ring-style: solid;
-  --p-select-focus-ring-color: rgba(76, 175, 80, 0.2); /* Primary color with opacity */
+  --p-select-focus-ring-color: rgb(76 175 80 / 20%); /* Primary color with opacity */
   --p-select-focus-ring-offset: 2px;
   --p-select-disabled-background: #f8f9fa; /* Match light-bg-color from main.scss */
   --p-select-clear-icon-color: #6c757d; /* Match text-secondary-color from main.scss */
   --p-select-dropdown-color: #6c757d; /* Match text-secondary-color from main.scss */
   --p-select-dropdown-width: 2.5rem;
-
   --p-select-option-padding: 0.625rem 1rem;
   --p-select-option-color: #333; /* Match text-color from main.scss */
   --p-select-option-border-radius: 4px; /* Match default-radius from main.scss */
   --p-select-option-focus-background: #e9ecef; /* Match light-hover-bg-color from main.scss */
   --p-select-option-focus-color: #333; /* Match text-color from main.scss */
-  --p-select-option-selected-background: rgba(76, 175, 80, 0.1); /* Primary color with low opacity */
+  --p-select-option-selected-background: rgb(76 175 80 / 10%); /* Primary color with low opacity */
   --p-select-option-selected-color: #43a047; /* Match primary-hover-color from main.scss */
   --p-select-empty-message-padding: 0.75rem;
-
-  --p-select-overlay-background: #ffffff;
+  --p-select-overlay-background: #fff;
   --p-select-overlay-color: #333; /* Match text-color from main.scss */
   --p-select-overlay-border-color: #ddd; /* Match border-color from main.scss */
   --p-select-overlay-border-radius: 4px; /* Match default-radius from main.scss */
-  --p-select-overlay-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); /* Match box-shadow from main.scss */
-
+  --p-select-overlay-shadow: 0 2px 8px rgb(0 0 0 / 10%); /* Match box-shadow from main.scss */
   --p-select-list-gap: 2px;
   --p-select-list-padding: 0.25rem;
   --p-select-list-header-padding: 0.5rem 0.75rem 0.25rem;
@@ -55,7 +54,7 @@
 
   /* ========== Input Text ========== */
   --p-inputtext-color: #333; /* Match text-color from main.scss */
-  --p-inputtext-background: #ffffff;
+  --p-inputtext-background: #fff;
   --p-inputtext-padding-x: 0.75rem;
   --p-inputtext-padding-y: 0.5rem;
   --p-inputtext-border-color: #ddd; /* Match border-color from main.scss */
@@ -63,6 +62,7 @@
   --p-icon-size: 1rem;
 
   /* ========== Additional Custom Styles ========== */
+
   /* These styles help match your form-control class from main.scss */
   --p-select-focus-transition: border-color 0.2s, box-shadow 0.2s;
   --p-select-hover-transition: border-color 0.2s;
@@ -84,6 +84,13 @@
   border: 1px solid var(--p-select-border-color);
   border-radius: var(--p-select-border-radius);
   transition: var(--p-select-focus-transition);
+}
+
+/* Disabled state */
+.p-select.p-disabled .p-select-input {
+  background-color: var(--p-select-disabled-background);
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Focus state */
@@ -148,12 +155,7 @@
   color: var(--p-select-clear-icon-color);
 }
 
-/* Disabled state */
-.p-select.p-disabled .p-select-input {
-  background-color: var(--p-select-disabled-background);
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+
 
 /* Checkmark in multi-select */
 .p-select-item .p-select-item-checkmark {
@@ -224,64 +226,12 @@
   color: var(--p-select-option-selected-color);
 }
 
-/* Currency dropdown specific styling */
-.currency-dropdown .p-dropdown {
-  width: 100%;
-}
-
-.currency-dropdown .p-dropdown-label {
-  font-weight: normal;
-}
-
-/* Ensure consistent styling between settings and commodity forms */
-.setting-detail .p-dropdown,
-.setting-detail .p-select {
-  font-size: 1rem;
-  padding: 0;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.setting-detail .p-dropdown:not(.p-disabled):hover,
-.setting-detail .p-select:not(.p-disabled):hover {
-  border-color: #bbb;
-}
-
-.setting-detail .p-dropdown:not(.p-disabled).p-focus,
-.setting-detail .p-select:not(.p-disabled).p-focus {
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-  outline: none;
-}
-
-/* Match the height of the dropdown to the form-control height */
-.setting-detail .p-dropdown .p-dropdown-label,
-.setting-detail .p-select .p-select-label {
-  padding: 0.75rem;
-  line-height: 1.5;
-}
-
-/* Ensure the dropdown trigger icon is properly aligned */
-.setting-detail .p-dropdown .p-dropdown-trigger,
-.setting-detail .p-select .p-select-trigger {
-  padding: 0 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Form integration */
-.form-group .p-dropdown,
-.form-group .p-select {
-  width: 100%;
-}
-
 /* Invalid state styling to match form-control.is-invalid */
 .p-dropdown.is-invalid,
 .p-select.is-invalid {
   border-color: var(--p-select-focus-border-color);
-  border-color: #dc3545 !important; /* Match danger-color from main.scss */
+
+  // border-color: #dc3545 !important; /* Match danger-color from main.scss */
 }
 
 /* Filter styling */

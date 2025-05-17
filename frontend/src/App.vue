@@ -52,7 +52,7 @@ onMounted(async () => {
 </script>
 
 <style lang="scss">
-@import './assets/main.scss';
+@use './assets/main.scss' as *;
 
 .print-container {
   max-width: 100%;
@@ -84,7 +84,7 @@ onMounted(async () => {
   }
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .header-content {
     flex-direction: column;
     align-items: center;

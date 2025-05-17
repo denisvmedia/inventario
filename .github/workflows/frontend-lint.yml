@@ -38,5 +38,9 @@ jobs:
         working-directory: frontend
 
       - name: Run ESLint
-        run: npm run lint
+        run: npm run lint:js
+        working-directory: frontend
+
+      - name: Run stylelint
+        run: npm run lint:styles
         working-directory: frontend
