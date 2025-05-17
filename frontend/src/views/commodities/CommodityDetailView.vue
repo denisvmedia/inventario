@@ -25,60 +25,60 @@
       <div class="commodity-info">
         <div class="info-card">
           <h2>Basic Information</h2>
-          <div class="info-row">
+          <div class="info-row commodity-short-name">
             <span class="label">Short Name:</span>
             <span>{{ commodity.attributes.short_name }}</span>
           </div>
-          <div class="info-row">
+          <div class="info-row commodity-type">
             <span class="label">Type:</span>
             <span class="type-with-icon">
               <font-awesome-icon :icon="getTypeIcon(commodity.attributes.type)" />
               {{ getTypeName(commodity.attributes.type) }}
             </span>
           </div>
-          <div class="info-row">
+          <div class="info-row commodity-count">
             <span class="label">Count:</span>
             <span>{{ commodity.attributes.count || 1 }}</span>
           </div>
-          <div class="info-row">
+          <div class="info-row commodity-status">
             <span class="label">Status:</span>
             <span class="status" :class="commodity.attributes.status">
               {{ getStatusName(commodity.attributes.status) }}
             </span>
           </div>
-          <div class="info-row">
+          <div class="info-row commodity-purchase-date">
             <span class="label">Purchase Date:</span>
             <span>{{ formatDate(commodity.attributes.purchase_date) }}</span>
           </div>
         </div>
 
-        <div class="info-card">
+        <div class="info-card commodity-price-information">
           <h2>Price Information</h2>
-          <div class="info-row">
+          <div class="info-row commodity-original-price">
             <span class="label">Original Price:</span>
             <span>{{ formatPrice(parseFloat(commodity.attributes.original_price), commodity.attributes.original_price_currency) }}</span>
           </div>
-          <div v-if="(commodity.attributes.original_price_currency !== getMainCurrency()) && parseFloat(commodity.attributes.converted_original_price) > 0" class="info-row">
+          <div v-if="(commodity.attributes.original_price_currency !== getMainCurrency()) && parseFloat(commodity.attributes.converted_original_price) > 0" class="info-row commodity-converted-original-price">
             <span class="label">Converted Original Price:</span>
             <span>{{ formatPrice(parseFloat(commodity.attributes.converted_original_price)) }}</span>
           </div>
-          <div v-if="parseFloat(commodity.attributes.current_price) > 0" class="info-row">
+          <div v-if="parseFloat(commodity.attributes.current_price) > 0" class="info-row commodity-current-price">
             <span class="label">Current Price:</span>
             <span>{{ formatPrice(parseFloat(commodity.attributes.current_price)) }}</span>
           </div>
-          <div v-if="(commodity.attributes.count || 1) > 1" class="info-row">
+          <div v-if="(commodity.attributes.count || 1) > 1" class="info-row commodity-price-per-unit">
             <span class="label">Price Per Unit:</span>
             <span>{{ formatPrice(calculatePricePerUnit(commodity)) }}</span>
           </div>
         </div>
 
-        <div v-if="commodity.attributes.serial_number || (commodity.attributes.extra_serial_numbers && commodity.attributes.extra_serial_numbers.length > 0) || (commodity.attributes.part_numbers && commodity.attributes.part_numbers.length > 0)" class="info-card">
+        <div v-if="commodity.attributes.serial_number || (commodity.attributes.extra_serial_numbers && commodity.attributes.extra_serial_numbers.length > 0) || (commodity.attributes.part_numbers && commodity.attributes.part_numbers.length > 0)" class="info-card commodity-serial-and-part-numbers">
           <h2>Serial Numbers and Part Numbers</h2>
-          <div v-if="commodity.attributes.serial_number" class="info-row">
+          <div v-if="commodity.attributes.serial_number" class="info-row commodity-serial-number">
             <span class="label">Serial Number:</span>
             <span>{{ commodity.attributes.serial_number }}</span>
           </div>
-          <div v-if="commodity.attributes.extra_serial_numbers && commodity.attributes.extra_serial_numbers.length > 0">
+          <div v-if="commodity.attributes.extra_serial_numbers && commodity.attributes.extra_serial_numbers.length > 0" class="commodity-extra-serial-numbers">
             <h3>Extra Serial Numbers</h3>
             <ul>
               <li v-for="(serial, index) in commodity.attributes.extra_serial_numbers" :key="index">
@@ -86,7 +86,7 @@
               </li>
             </ul>
           </div>
-          <div v-if="commodity.attributes.part_numbers && commodity.attributes.part_numbers.length > 0">
+          <div v-if="commodity.attributes.part_numbers && commodity.attributes.part_numbers.length > 0" class="commodity-part-numbers">
             <h3>Part Numbers</h3>
             <ul>
               <li v-for="(part, index) in commodity.attributes.part_numbers" :key="index">
@@ -96,7 +96,7 @@
           </div>
         </div>
 
-        <div v-if="commodity.attributes.tags && commodity.attributes.tags.length > 0" class="info-card">
+        <div v-if="commodity.attributes.tags && commodity.attributes.tags.length > 0" class="info-card commodity-tags">
           <h2>Tags</h2>
           <div class="tags">
             <span v-for="(tag, index) in commodity.attributes.tags" :key="index" class="tag">
@@ -105,7 +105,7 @@
           </div>
         </div>
 
-        <div v-if="commodity.attributes.urls && commodity.attributes.urls.length > 0" class="info-card">
+        <div v-if="commodity.attributes.urls && commodity.attributes.urls.length > 0" class="info-card commodity-urls">
           <h2>URLs</h2>
           <ul>
             <li v-for="(url, index) in commodity.attributes.urls" :key="index">
@@ -115,7 +115,7 @@
         </div>
 
         <!-- Images Section -->
-        <div class="info-card full-width">
+        <div class="info-card full-width commodity-images">
           <div class="section-header">
             <h2>Images</h2>
             <button class="btn btn-sm btn-primary" @click="showImageUploader = !showImageUploader">
@@ -145,7 +145,7 @@
         </div>
 
         <!-- Manuals Section -->
-        <div class="info-card full-width">
+        <div class="info-card full-width commodity-manuals">
           <div class="section-header">
             <h2>Manuals</h2>
             <button class="btn btn-sm btn-primary" @click="showManualUploader = !showManualUploader">
@@ -175,7 +175,7 @@
         </div>
 
         <!-- Invoices Section -->
-        <div class="info-card full-width">
+        <div class="info-card full-width commodity-invoices">
           <div class="section-header">
             <h2>Invoices</h2>
             <button class="btn btn-sm btn-primary" @click="showInvoiceUploader = !showInvoiceUploader">
