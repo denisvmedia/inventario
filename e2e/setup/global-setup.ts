@@ -1,4 +1,4 @@
-import { startStack } from './setup-stack';
+import { startStack } from './setup-stack.js';
 import { FullConfig } from '@playwright/test';
 
 async function globalSetup(config: FullConfig) {

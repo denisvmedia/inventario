@@ -1,4 +1,4 @@
-import { stopStack } from './setup-stack';
+import { stopStack } from './setup-stack.js';
 import { FullConfig } from '@playwright/test';
 
 async function globalTeardown(config: FullConfig) {

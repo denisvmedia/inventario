@@ -1,8 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import axios from 'axios';
 import { resolve, dirname } from 'path';
-import { promisify } from 'util';
-import { mkdir } from 'fs/promises';
 import { fileURLToPath } from 'url';
 
 // Sleep utility

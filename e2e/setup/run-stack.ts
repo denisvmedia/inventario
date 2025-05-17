@@ -1,4 +1,4 @@
-import { startStack, stopStack } from './setup-stack';
+import { startStack, stopStack } from './setup-stack.js';
 
 async function main() {
   try {

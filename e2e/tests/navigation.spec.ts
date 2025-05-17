@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { test } from '../fixtures/app-fixture';
+import { test } from '../fixtures/app-fixture.js';
 
 test.describe('Application Navigation', () => {
   test('should load the home page', async ({ page }) => {

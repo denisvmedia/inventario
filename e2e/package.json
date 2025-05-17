@@ -7,15 +7,20 @@
   "scripts": {
     "stack": "cross-env START_STACK=true tsx setup/run-stack.ts",
     "test": "playwright test",
+    "test:record": "playwright test --config=playwright.config.ts",
+    "test:recorder": "playwright test fixture-recorder.spec.ts",
+    "test:screenshots": "playwright test screenshots-example.spec.ts",
     "install-browsers": "playwright install",
     "ui": "playwright test --ui",
-    "report": "playwright show-report"
+    "report": "playwright show-report",
+    "clean:artifacts": "rimraf test-results"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.1",
     "@types/node": "^20.11.30",
     "axios": "^1.6.7",
     "cross-env": "^7.0.3",
+    "rimraf": "^5.0.5",
     "tsx": "^4.7.1",
     "typescript": "^5.4.3"
   },

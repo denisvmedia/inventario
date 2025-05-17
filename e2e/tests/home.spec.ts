@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { test } from '../fixtures/app-fixture';
+import { test } from '../fixtures/app-fixture.js';
 
 test.describe('Home Page', () => {
   test('should display total inventory value', async ({ page }) => {
