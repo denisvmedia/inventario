@@ -68,6 +68,32 @@
           <pre>{{ testError }}</pre>
         </div>
       </div>
+
+      <!-- Location Delete Confirmation Dialog -->
+      <Confirmation
+        v-model:visible="showDeleteDialog"
+        title="Confirm Delete"
+        message="Are you sure you want to delete this location?"
+        confirm-label="Delete"
+        cancel-label="Cancel"
+        confirm-button-class="danger"
+        confirmationIcon="exclamation-triangle"
+        @confirm="onConfirmDelete"
+        @cancel="onCancelDelete"
+      />
+
+      <!-- Area Delete Confirmation Dialog -->
+      <Confirmation
+        v-model:visible="showDeleteAreaDialog"
+        title="Confirm Delete"
+        message="Are you sure you want to delete this area?"
+        confirm-label="Delete"
+        cancel-label="Cancel"
+        confirm-button-class="danger"
+        confirmationIcon="exclamation-triangle"
+        @confirm="onConfirmDeleteArea"
+        @cancel="onCancelDeleteArea"
+      />
     </div>
   </div>
 </template>
@@ -78,6 +104,7 @@ import { useRoute, useRouter } from 'vue-router'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import AreaForm from '@/components/AreaForm.vue'
+import Confirmation from "@/components/Confirmation.vue";
 
 
 const route = useRoute()
@@ -126,10 +153,19 @@ onMounted(async () => {
 
 
 
+const showDeleteDialog = ref(false)
+
 const confirmDelete = () => {
-  if (confirm('Are you sure you want to delete this location?')) {
-    deleteLocation()
-  }
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  deleteLocation()
+  showDeleteDialog.value = false
+}
+
+const onCancelDelete = () => {
+  showDeleteDialog.value = false
 }
 
 const deleteLocation = async () => {
@@ -149,10 +185,25 @@ const editArea = (id: string) => {
   router.push(`/areas/${id}/edit`)
 }
 
+const areaToDelete = ref<string | null>(null)
+const showDeleteAreaDialog = ref(false)
+
 const confirmDeleteArea = (id: string) => {
-  if (confirm('Are you sure you want to delete this area?')) {
-    deleteArea(id)
+  areaToDelete.value = id
+  showDeleteAreaDialog.value = true
+}
+
+const onConfirmDeleteArea = () => {
+  if (areaToDelete.value) {
+    deleteArea(areaToDelete.value)
+    showDeleteAreaDialog.value = false
+    areaToDelete.value = null
   }
+}
+
+const onCancelDeleteArea = () => {
+  showDeleteAreaDialog.value = false
+  areaToDelete.value = null
 }
 
 const deleteArea = async (id: string) => {

@@ -86,6 +86,19 @@ v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-ca
         </div>
       </div>
     </div>
+
+    <!-- Commodity Delete Confirmation Dialog -->
+    <Confirmation
+      v-model:visible="showDeleteDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this commodity?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDelete"
+      @cancel="onCancelDelete"
+    />
   </div>
 </template>
 
@@ -100,6 +113,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice, calculatePricePerUnit, getDisplayPrice } from '@/services/currencyService'
+import Confirmation from "@/components/Confirmation.vue";
 
 const router = useRouter()
 const route = useRoute()
@@ -286,10 +300,25 @@ const editCommodity = (id: string) => {
   })
 }
 
+const commodityToDelete = ref<string | null>(null)
+const showDeleteDialog = ref(false)
+
 const confirmDelete = (id: string) => {
-  if (confirm('Are you sure you want to delete this commodity?')) {
-    deleteCommodity(id)
+  commodityToDelete.value = id
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  if (commodityToDelete.value) {
+    deleteCommodity(commodityToDelete.value)
+    showDeleteDialog.value = false
+    commodityToDelete.value = null
   }
+}
+
+const onCancelDelete = () => {
+  showDeleteDialog.value = false
+  commodityToDelete.value = null
 }
 
 const deleteCommodity = async (id: string) => {
