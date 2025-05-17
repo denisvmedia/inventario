@@ -35,11 +35,41 @@ jobs:
       - name: Install Playwright system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-1 libgraphene-1.0-0 libwoff1 libopus0 \
-          libwebp7 libevent-2.1-7 libvpx7 libharfbuzz-icu0 libsecret-1-0 \
-          libhyphen0 libgstgl-1.0-0 libgstreamer-plugins-base1.0-0 \
-          libgstreamer-gl1.0-0 libgstreamer1.0-0 libgstcodecparsers-1.0-0 \
-          libgstfft-1.0-0 libmanette-0.2-0 libgles2 libasound2
+          sudo apt-get install -y --no-install-recommends \
+            libasound2 \
+            libatk1.0-0 \
+            libcairo2 \
+            libcups2 \
+            libdbus-1-3 \
+            libexpat1 \
+            libfontconfig1 \
+            libgbm1 \
+            libgcc1 \
+            libglib2.0-0 \
+            libgtk-3-0 \
+            libnspr4 \
+            libnss3 \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libstdc++6 \
+            libx11-6 \
+            libx11-xcb1 \
+            libxcb1 \
+            libxcomposite1 \
+            libxcursor1 \
+            libxdamage1 \
+            libxext6 \
+            libxfixes3 \
+            libxi6 \
+            libxrandr2 \
+            libxrender1 \
+            libxss1 \
+            libxtst6 \
+            libgstreamer-plugins-base1.0-0 \
+            libgstreamer1.0-0 \
+            fonts-noto-color-emoji \
+            fonts-freefont-ttf \
+            xvfb
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
