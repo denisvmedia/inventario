@@ -30,3 +30,48 @@ export const uploadFile = async (page: Page, recorder: TestRecorder, selectorBas
     await expect(page.locator(`${selectorBase} .file-item`)).toBeVisible();
     await recorder.takeScreenshot(`${screenshotBase}-displayed`);
 };
+
+export const downloadFile = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {
+    // First get the file item that should be visible now
+    const fileItem = page.locator(`${selector} .file-item`).first();
+    await expect(fileItem).toBeVisible();
+
+    // Click the download button within the file item - adjust this selector based on your UI
+    const downloadPromise = page.waitForEvent('download');
+    await fileItem.locator('.file-actions .btn-primary').click();
+
+    // Wait for the download to complete with timeout
+    const download = await downloadPromise;
+
+    // Get the suggested filename
+    const suggestedFilename = download.suggestedFilename();
+    console.log(`Downloaded file: ${suggestedFilename}`);
+
+    // Save to a temp path to verify it exists
+    const filePath = await download.path();
+    expect(filePath).toBeTruthy();
+
+    // Take screenshot after download
+    await recorder.takeScreenshot(`${fileType}-download-success`);
+    console.log(`${fileType} downloaded successfully`);
+};
+
+export const deleteFile = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {
+    // Get the file item
+    const fileItem = page.locator(`${selector} .file-item`).first();
+    await expect(fileItem).toBeVisible();
+
+    // Find and click the delete button
+    await fileItem.locator('.file-actions .btn-danger').click();
+
+    await recorder.takeScreenshot(`file-delete-${fileType}-confirm`);
+    await page.click('.confirmation-modal button:has-text("Delete")');
+    await recorder.takeScreenshot(`filed-delete-${fileType}-deleted`);
+
+    // Verify file is no longer visible
+    await expect(page.locator(`${selector} .file-item`)).not.toBeVisible();
+
+    // Take screenshot after deletion
+    await recorder.takeScreenshot(`${fileType}-deletion-success`);
+    console.log(`${fileType} deleted successfully`);
+};

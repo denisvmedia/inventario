@@ -6,7 +6,7 @@ import {createLocation} from "./includes/locations.js";
 import {createArea, verifyAreaHasCommodities} from "./includes/areas.js";
 import {createCommodity, verifyCommodityDetails} from "./includes/commodities.js";
 import {FROM_LOCATIONS_AREA, navitateTo, TO_AREA_COMMODITIES, TO_LOCATIONS} from "./includes/navigate.js";
-import {uploadFile} from "./includes/uploads.js";
+import {deleteFile, downloadFile, uploadFile} from "./includes/uploads.js";
 
 test.describe('File Uploads and Properties Tests', () => {
   // Test data with timestamps to ensure uniqueness
@@ -84,34 +84,14 @@ test.describe('File Uploads and Properties Tests', () => {
     // STEP 9: TEST FILE DOWNLOAD - Verify that files can be downloaded
     console.log(`Step ${step++}: Testing file downloads`);
 
-// For each file type, test downloads
+  // For each file type, test downloads
     for (const { selector, fileType } of [
       { selector: '.commodity-images', fileType: 'image' },
       { selector: '.commodity-manuals', fileType: 'manual' },
       { selector: '.commodity-invoices', fileType: 'invoice' }
     ]) {
-      // First get the file item that should be visible now
-      const fileItem = page.locator(`${selector} .file-item`).first();
-      await expect(fileItem).toBeVisible();
-
-      // Click the download button within the file item - adjust this selector based on your UI
-      const downloadPromise = page.waitForEvent('download');
-      await fileItem.locator('.file-actions .btn-primary').click();
-
-      // Wait for the download to complete with timeout
-      const download = await downloadPromise;
-
-      // Get the suggested filename
-      const suggestedFilename = download.suggestedFilename();
-      console.log(`Downloaded file: ${suggestedFilename}`);
-
-      // Save to a temp path to verify it exists
-      const filePath = await download.path();
-      expect(filePath).toBeTruthy();
-
-      // Take screenshot after download
-      await recorder.takeScreenshot(`${fileType}-download-success`);
-      console.log(`${fileType} downloaded successfully`);
+      console.log(`Testing download for ${fileType}`);
+      await downloadFile(page, recorder, selector, fileType);
     }
 
     // STEP 10: TEST PDF VIEWER - Verify that PDFs can be viewed
@@ -122,5 +102,14 @@ test.describe('File Uploads and Properties Tests', () => {
 
     // STEP 12: CLEANUP - Delete the test image, manual, and invoice
     console.log(`Step ${step++}: Cleaning up - deleting the test files`);
+    // For each file type, delete files
+    for (const { selector, fileType } of [
+      { selector: '.commodity-images', fileType: 'image' },
+      { selector: '.commodity-manuals', fileType: 'manual' },
+      { selector: '.commodity-invoices', fileType: 'invoice' }
+    ]) {
+      console.log(`Deleting ${fileType}`);
+      await deleteFile(page, recorder, selector, fileType);
+    }
   });
 });
