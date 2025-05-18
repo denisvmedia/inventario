@@ -37,50 +37,90 @@ test.describe('File Uploads and Properties Tests', () => {
   const testInvoicePath = path.join('fixtures', 'files', 'invoice.pdf');
 
   test('should upload and validate image, manual, and invoice files', async ({ page, recorder }) => {
+    let step = 1;
+
     // STEP 1: CREATE LOCATION - First create a location
-    console.log('Step 1: Creating a new location');
+    console.log(`Step ${step++}: Creating a new location`);
     await navitateTo(page, TO_LOCATIONS);
     await createLocation(page, recorder, testLocation);
 
     // STEP 2: CREATE AREA - Create a new area
-    console.log('Step 2: Creating a new area');
+    console.log(`Step ${step++}: Creating a new area`);
     await createArea(page, recorder, testArea)
 
     // STEP 3: CREATE COMMODITY - Create a new commodity
-    console.log('Step 3: Creating a new commodity');
+    console.log(`Step ${step++}: Creating a new commodity`);
     await navitateTo(page, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
     await createCommodity(page, recorder, testCommodity);
 
     // STEP 4: READ - Verify the commodity details
-    console.log('Step 4: Verifying the commodity details');
+    console.log(`Step ${step++}: Verifying the commodity details`);
     await verifyCommodityDetails(page, testCommodity);
 
     // STEP 5: UPLOAD IMAGE - Upload an image to the commodity
-    console.log('Step 5: Uploading an image');
+    console.log(`Step ${step++}: Uploading an image`);
     await uploadFile(page, recorder, '.commodity-images', testImagePath);
 
     // STEP 6: UPLOAD MANUAL - Upload a manual to the commodity
-    console.log('Step 6: Uploading a manual');
+    console.log(`Step ${step++}: Uploading a manual`);
     await uploadFile(page, recorder, '.commodity-manuals', testManualPath);
 
     // STEP 7: UPLOAD INVOICE - Upload an invoice to the commodity
-    console.log('Step 7: Uploading an invoice');
+    console.log(`Step ${step++}: Uploading an invoice`);
     await uploadFile(page, recorder, '.commodity-invoices', testInvoicePath);
 
     // STEP 8: Check file properties by looking at displayed information
-    console.log('Step 9: Testing file properties dialog');
+    console.log(`Step ${step++}: Testing file properties dialog`);
+
+    // Wait to ensure all uploads are processed and displayed
+    await page.waitForTimeout(1000);
+
+    // Verify files are visible in the UI
+    for (const selector of ['.commodity-images', '.commodity-manuals', '.commodity-invoices']) {
+      await expect(page.locator(`${selector} .file-item`)).toBeVisible();
+    }
 
     // STEP 9: TEST FILE DOWNLOAD - Verify that files can be downloaded
-    console.log('Step 10: Testing file downloads');
+    console.log(`Step ${step++}: Testing file downloads`);
+
+// For each file type, test downloads
+    for (const { selector, fileType } of [
+      { selector: '.commodity-images', fileType: 'image' },
+      { selector: '.commodity-manuals', fileType: 'manual' },
+      { selector: '.commodity-invoices', fileType: 'invoice' }
+    ]) {
+      // First get the file item that should be visible now
+      const fileItem = page.locator(`${selector} .file-item`).first();
+      await expect(fileItem).toBeVisible();
+
+      // Click the download button within the file item - adjust this selector based on your UI
+      const downloadPromise = page.waitForEvent('download');
+      await fileItem.locator('.file-actions .btn-primary').click();
+
+      // Wait for the download to complete with timeout
+      const download = await downloadPromise;
+
+      // Get the suggested filename
+      const suggestedFilename = download.suggestedFilename();
+      console.log(`Downloaded file: ${suggestedFilename}`);
+
+      // Save to a temp path to verify it exists
+      const filePath = await download.path();
+      expect(filePath).toBeTruthy();
+
+      // Take screenshot after download
+      await recorder.takeScreenshot(`${fileType}-download-success`);
+      console.log(`${fileType} downloaded successfully`);
+    }
 
     // STEP 10: TEST PDF VIEWER - Verify that PDFs can be viewed
-    console.log('Step 11: Testing PDF viewer');
+    console.log(`Step ${step++}: Testing PDF viewer`);
 
     // STEP 11: TEST Image viewer - Verify that images can be viewed
-    console.log('Step 12: Testing image viewer');
+    console.log(`Step ${step++}: Testing image viewer`);
 
     // STEP 12: CLEANUP - Delete the test image, manual, and invoice
-    console.log('Step 13: Cleaning up - deleting the test files');
+    console.log(`Step ${step++}: Cleaning up - deleting the test files`);
   });
 });
