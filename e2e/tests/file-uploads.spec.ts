@@ -72,15 +72,15 @@ test.describe('File Uploads and Properties Tests', () => {
     console.log('Step 9: Testing file properties dialog');
 
     // STEP 9: TEST FILE DOWNLOAD - Verify that files can be downloaded
-    console.log('Step 9: Testing file downloads');
+    console.log('Step 10: Testing file downloads');
 
     // STEP 10: TEST PDF VIEWER - Verify that PDFs can be viewed
-    console.log('Step 10: Testing PDF viewer');
+    console.log('Step 11: Testing PDF viewer');
 
     // STEP 11: TEST Image viewer - Verify that images can be viewed
-    console.log('Step 11: Testing image viewer');
+    console.log('Step 12: Testing image viewer');
 
     // STEP 12: CLEANUP - Delete the test image, manual, and invoice
-    console.log('Step 12: Cleaning up - deleting the test files');
+    console.log('Step 13: Cleaning up - deleting the test files');
   });
 });
