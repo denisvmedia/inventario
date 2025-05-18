@@ -36,16 +36,15 @@
           <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
         </div>
         <div class="commodities-grid">
-          <div
-v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
+          <div v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
             'highlighted': commodity.id === highlightCommodityId,
             'draft': commodity.attributes.draft,
             'sold': !commodity.attributes.draft && commodity.attributes.status === 'sold',
             'lost': !commodity.attributes.draft && commodity.attributes.status === 'lost',
             'disposed': !commodity.attributes.draft && commodity.attributes.status === 'disposed',
             'written-off': !commodity.attributes.draft && commodity.attributes.status === 'written_off'
-          }">
-            <div class="commodity-content" @click="viewCommodity(commodity.id)">
+          }" @click="viewCommodity(commodity.id)">
+            <div class="commodity-content">
               <h3>{{ commodity.attributes.name }}</h3>
               <div class="commodity-meta">
                 <span class="type">
