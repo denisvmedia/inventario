@@ -75,3 +75,36 @@ export const deleteFile = async (page: Page, recorder: TestRecorder, selector: s
     await recorder.takeScreenshot(`${fileType}-deletion-success`);
     console.log(`${fileType} deleted successfully`);
 };
+
+export const fileinfo = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {
+    // Get the file item
+    const fileItem = page.locator(`${selector} .file-item`).first();
+    await expect(fileItem).toBeVisible();
+
+    // Click the details/info button
+    await fileItem.locator('.file-actions button.btn-info').click();
+    await recorder.takeScreenshot(`${fileType}-details-dialog`);
+
+    // Verify the dialog is displayed
+    const detailsDialog = page.locator('.file-details-modal');
+    await expect(detailsDialog).toBeVisible();
+
+    // Verify file name and original name are displayed
+    await expect(detailsDialog.locator('.file-name')).toBeVisible();
+    await expect(detailsDialog.locator('.file-original-name')).toBeVisible();
+
+    // Verify appropriate preview is shown based on file type
+    if (fileType === 'image') {
+        // For images, verify an actual image is displayed
+        await expect(detailsDialog.locator('.image-preview img')).toBeVisible();
+    } else {
+        // For PDFs, verify the PDF icon is displayed
+        await expect(detailsDialog.locator('.file-icon-preview .fa-file-pdf')).toBeVisible();
+    }
+
+    // Close the dialog
+    await detailsDialog.locator('button.action-close').click();
+    await expect(detailsDialog).not.toBeVisible();
+
+    await recorder.takeScreenshot(`${fileType}-details-closed`);
+};

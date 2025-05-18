@@ -6,7 +6,7 @@ import {createLocation} from "./includes/locations.js";
 import {createArea, verifyAreaHasCommodities} from "./includes/areas.js";
 import {createCommodity, verifyCommodityDetails} from "./includes/commodities.js";
 import {FROM_LOCATIONS_AREA, navitateTo, TO_AREA_COMMODITIES, TO_LOCATIONS} from "./includes/navigate.js";
-import {deleteFile, downloadFile, uploadFile} from "./includes/uploads.js";
+import {deleteFile, downloadFile, fileinfo, uploadFile} from "./includes/uploads.js";
 
 test.describe('File Uploads and Properties Tests', () => {
   // Test data with timestamps to ensure uniqueness
@@ -80,37 +80,7 @@ test.describe('File Uploads and Properties Tests', () => {
       { selector: '.commodity-invoices', fileType: 'invoice' }
     ]) {
       console.log(`Testing file details for ${fileType}`);
-
-      // Get the file item
-      const fileItem = page.locator(`${selector} .file-item`).first();
-      await expect(fileItem).toBeVisible();
-
-      // Click the details/info button
-      await fileItem.locator('.file-actions button.btn-info').click();
-      await recorder.takeScreenshot(`${fileType}-details-dialog`);
-
-      // Verify the dialog is displayed
-      const detailsDialog = page.locator('.file-details-modal');
-      await expect(detailsDialog).toBeVisible();
-
-      // Verify file name and original name are displayed
-      await expect(detailsDialog.locator('.file-name')).toBeVisible();
-      await expect(detailsDialog.locator('.file-original-name')).toBeVisible();
-
-      // Verify appropriate preview is shown based on file type
-      if (fileType === 'image') {
-        // For images, verify an actual image is displayed
-        await expect(detailsDialog.locator('.image-preview img')).toBeVisible();
-      } else {
-        // For PDFs, verify the PDF icon is displayed
-        await expect(detailsDialog.locator('.file-icon-preview .fa-file-pdf')).toBeVisible();
-      }
-
-      // Close the dialog
-      await detailsDialog.locator('button.action-close').click();
-      await expect(detailsDialog).not.toBeVisible();
-
-      await recorder.takeScreenshot(`${fileType}-details-closed`);
+      await fileinfo(page, recorder, selector, fileType);
     }
 
     // Wait to ensure all uploads are processed and displayed
@@ -124,7 +94,7 @@ test.describe('File Uploads and Properties Tests', () => {
     // STEP 9: TEST FILE DOWNLOAD - Verify that files can be downloaded
     console.log(`Step ${step++}: Testing file downloads`);
 
-  // For each file type, test downloads
+    // For each file type, test downloads
     for (const { selector, fileType } of [
       { selector: '.commodity-images', fileType: 'image' },
       { selector: '.commodity-manuals', fileType: 'manual' },
@@ -139,6 +109,75 @@ test.describe('File Uploads and Properties Tests', () => {
 
     // STEP 11: TEST Image viewer - Verify that images can be viewed
     console.log(`Step ${step++}: Testing image viewer`);
+
+    // Get the image file item
+    const imageFileItem = page.locator('.commodity-images .file-item').first();
+    await expect(imageFileItem).toBeVisible();
+
+    // Click the file preview to open the image viewer
+    await imageFileItem.locator('.file-preview').click();
+    await recorder.takeScreenshot('image-viewer-opened');
+
+    // Verify the modal dialog is visible
+    const imageViewerModal = page.locator('.file-modal');
+    await expect(imageViewerModal).toBeVisible();
+
+    // Verify the image is displayed
+    const previewImage = imageViewerModal.locator('.image-container img');
+    await expect(previewImage).toBeVisible();
+
+    // Verify image name is in the dialog title
+    const modalTitle = imageViewerModal.locator('.modal-header h3');
+    await expect(modalTitle).toBeVisible();
+    await expect(modalTitle).toHaveText(/.+/); // Title should contain text
+
+    const imageCursorInitial = await previewImage.evaluate((img) => img.style.cursor);
+    expect(imageCursorInitial).toEqual('zoom-in');
+
+    // Test zoom in functionality
+    // test click zooms in
+    await previewImage.click();
+    // check if previewImage has class .zoomed
+    await page.waitForSelector('.image-container img.zoomed');
+    // wait for selector that will check image cursor grab
+    await page.waitForSelector('.image-container img[style*="cursor: grab"]');
+
+    await page.waitForSelector('.image-container img.zoomed');
+    const imageCursorZoomed = await previewImage.evaluate((img) => img.style.cursor);
+    expect(imageCursorZoomed).toEqual('grab');
+    await recorder.takeScreenshot('image-zoomed-in');
+
+    // read img style attribute
+    const imageStyleOriginal = await previewImage.evaluate((img) => img.style.transform);
+    console.log(`Image style: ${imageStyleOriginal}`);
+
+    // Test dragging the zoomed image
+    await page.mouse.move(400, 300);
+    await page.mouse.down();
+    await page.waitForSelector('.image-container img[style*="cursor: grabbing"]');
+    console.log("Cursor is changed to grabbing. Dragging image...")
+    await page.mouse.move(500, 350);
+    await page.mouse.up();
+    await page.waitForSelector('.image-container img[style*="cursor: grab"]');
+    console.log("Cursor is changed to grab.");
+    // compare imageStyleOriginal with current image style
+    const imageStyleAfterDrag = await previewImage.evaluate((img) => img.style.transform);
+    console.log(`Image style after drag: ${imageStyleAfterDrag}`);
+    expect(imageStyleAfterDrag).not.toEqual(imageStyleOriginal);
+    await recorder.takeScreenshot('image-dragged');
+
+    // Test zoom out functionality
+    console.log("Clicking image to zoom out...")
+    await previewImage.click();
+    await page.waitForSelector('.image-container img[style*="cursor: zoom-in"]');
+    console.log("Cursor is changed to zoom-in.");
+    await recorder.takeScreenshot('image-zoomed-out');
+
+    // Test closing the dialog
+    const closeButton = imageViewerModal.locator('.file-actions .btn-secondary');
+    await closeButton.click();
+    await expect(imageViewerModal).not.toBeVisible();
+    await recorder.takeScreenshot('image-viewer-closed');
 
     // STEP 12: CLEANUP - Delete the test image, manual, and invoice
     console.log(`Step ${step++}: Cleaning up - deleting the test files`);
