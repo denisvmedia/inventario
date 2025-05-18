@@ -42,6 +42,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
   const updatedCommodity = {
     name: `Updated Commodity ${timestamp}`,
     shortName: 'UpdCom',
+    type: 'Electronics',
     count: 2,
     originalPrice: 200
   };
