@@ -1,7 +1,6 @@
 <template>
   <div class="file-uploader">
-    <div
-class="upload-area"
+    <div class="upload-area"
          :class="{ 'drag-over': isDragOver }"
          @dragover.prevent="onDragOver"
          @dragleave.prevent="onDragLeave"

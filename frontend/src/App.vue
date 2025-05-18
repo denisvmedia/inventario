@@ -1,5 +1,8 @@
 <template>
   <div class="app">
+    <!-- Global confirmation dialog component -->
+    <ConfirmationDialog>
+    </ConfirmationDialog>
     <header v-if="!isPrintRoute">
       <div class="header-content">
         <div class="logo-container">
@@ -35,6 +38,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
+import ConfirmationDialog from '@/components/ConfirmationDialog.vue'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()

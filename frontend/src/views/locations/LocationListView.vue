@@ -107,6 +107,32 @@
         </div>
       </div>
     </div>
+
+    <!-- Location Delete Confirmation Dialog -->
+    <Confirmation
+      v-model:visible="showDeleteLocationDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this location?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDeleteLocation"
+      @cancel="onCancelDeleteLocation"
+    />
+
+    <!-- Area Delete Confirmation Dialog -->
+    <Confirmation
+      v-model:visible="showDeleteAreaDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this area?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDeleteArea"
+      @cancel="onCancelDeleteArea"
+    />
   </div>
 </template>
 
@@ -120,6 +146,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { formatPrice } from '@/services/currencyService'
 import LocationForm from '@/components/LocationForm.vue'
 import AreaForm from '@/components/AreaForm.vue'
+import Confirmation from "@/components/Confirmation.vue";
 
 const router = useRouter()
 const route = useRoute()
@@ -337,10 +364,25 @@ const editLocation = (id: string) => {
   router.push(`/locations/${id}/edit`)
 }
 
+const locationToDelete = ref<string | null>(null)
+const showDeleteLocationDialog = ref(false)
+
 const confirmDeleteLocation = (id: string) => {
-  if (confirm('Are you sure you want to delete this location? This will also delete all areas within this location.')) {
-    deleteLocation(id)
+  locationToDelete.value = id
+  showDeleteLocationDialog.value = true
+}
+
+const onConfirmDeleteLocation = () => {
+  if (locationToDelete.value) {
+    deleteLocation(locationToDelete.value)
+    showDeleteLocationDialog.value = false
+    locationToDelete.value = null
   }
+}
+
+const onCancelDeleteLocation = () => {
+  showDeleteLocationDialog.value = false
+  locationToDelete.value = null
 }
 
 const deleteLocation = async (id: string) => {
@@ -384,10 +426,25 @@ const editArea = (id: string) => {
   router.push(`/areas/${id}/edit`)
 }
 
+const areaToDelete = ref<string | null>(null)
+const showDeleteAreaDialog = ref(false)
+
 const confirmDeleteArea = (id: string) => {
-  if (confirm('Are you sure you want to delete this area?')) {
-    deleteArea(id)
+  areaToDelete.value = id
+  showDeleteAreaDialog.value = true
+}
+
+const onConfirmDeleteArea = () => {
+  if (areaToDelete.value) {
+    deleteArea(areaToDelete.value)
+    showDeleteAreaDialog.value = false
+    areaToDelete.value = null
   }
+}
+
+const onCancelDeleteArea = () => {
+  showDeleteAreaDialog.value = false
+  areaToDelete.value = null
 }
 
 const deleteArea = async (id: string) => {

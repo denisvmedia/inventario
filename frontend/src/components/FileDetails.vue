@@ -21,32 +21,32 @@
 
         <!-- Details section -->
         <div class="file-info-section">
-          <div class="file-info-item">
+          <div class="file-info-item file-id">
             <div class="info-label">ID:</div>
             <div class="info-value">{{ file.id }}</div>
           </div>
 
-          <div class="file-info-item">
+          <div class="file-info-item file-name">
             <div class="info-label">File Name:</div>
             <div class="info-value">{{ file.path }}{{ file.ext }}</div>
           </div>
 
-          <div class="file-info-item">
+          <div class="file-info-item file-original-name">
             <div class="info-label">Original Name:</div>
             <div class="info-value">{{ file.original_path }}</div>
           </div>
 
-          <div class="file-info-item">
+          <div class="file-info-item file-object-type">
             <div class="info-label">Object Type:</div>
             <div class="info-value">{{ objectType }}</div>
           </div>
 
-          <div class="file-info-item">
+          <div class="file-info-item file-mime-type">
             <div class="info-label">File Type:</div>
             <div class="info-value">{{ file.mime_type }}</div>
           </div>
 
-          <div class="file-info-item">
+          <div class="file-info-item file-extension">
             <div class="info-label">Extension:</div>
             <div class="info-value">{{ file.ext }}</div>
           </div>
@@ -54,13 +54,13 @@
       </div>
 
       <div class="file-details-actions">
-        <button class="btn btn-primary" @click="downloadFile">
+        <button class="btn btn-primary action-download" @click="downloadFile">
           <font-awesome-icon icon="download" /> Download
         </button>
-        <button class="btn btn-danger" @click="confirmDelete">
+        <button class="btn btn-danger action-delete" @click="confirmDelete">
           <font-awesome-icon icon="trash" /> Delete
         </button>
-        <button class="btn btn-secondary" @click="close">
+        <button class="btn btn-secondary action-close" @click="close">
           <font-awesome-icon icon="times" /> Close
         </button>
       </div>
