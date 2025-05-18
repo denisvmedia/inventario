@@ -5,7 +5,8 @@ node_modules/
 .vite/
 
 # Build output
-dist/
+dist/*
+!dist/.gitkeep
 *.local
 
 # Logs
