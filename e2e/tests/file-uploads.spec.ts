@@ -6,7 +6,7 @@ import {createLocation} from "./includes/locations.js";
 import {createArea, verifyAreaHasCommodities} from "./includes/areas.js";
 import {createCommodity, verifyCommodityDetails} from "./includes/commodities.js";
 import {FROM_LOCATIONS_AREA, navitateTo, TO_AREA_COMMODITIES, TO_LOCATIONS} from "./includes/navigate.js";
-import {deleteFile, downloadFile, uploadFile} from "./includes/uploads.js";
+import {deleteFile, downloadFile, fileinfo, imageviewer, uploadFile} from "./includes/uploads.js";
 
 test.describe('File Uploads and Properties Tests', () => {
   // Test data with timestamps to ensure uniqueness
@@ -80,37 +80,7 @@ test.describe('File Uploads and Properties Tests', () => {
       { selector: '.commodity-invoices', fileType: 'invoice' }
     ]) {
       console.log(`Testing file details for ${fileType}`);
-
-      // Get the file item
-      const fileItem = page.locator(`${selector} .file-item`).first();
-      await expect(fileItem).toBeVisible();
-
-      // Click the details/info button
-      await fileItem.locator('.file-actions button.btn-info').click();
-      await recorder.takeScreenshot(`${fileType}-details-dialog`);
-
-      // Verify the dialog is displayed
-      const detailsDialog = page.locator('.file-details-modal');
-      await expect(detailsDialog).toBeVisible();
-
-      // Verify file name and original name are displayed
-      await expect(detailsDialog.locator('.file-name')).toBeVisible();
-      await expect(detailsDialog.locator('.file-original-name')).toBeVisible();
-
-      // Verify appropriate preview is shown based on file type
-      if (fileType === 'image') {
-        // For images, verify an actual image is displayed
-        await expect(detailsDialog.locator('.image-preview img')).toBeVisible();
-      } else {
-        // For PDFs, verify the PDF icon is displayed
-        await expect(detailsDialog.locator('.file-icon-preview .fa-file-pdf')).toBeVisible();
-      }
-
-      // Close the dialog
-      await detailsDialog.locator('button.action-close').click();
-      await expect(detailsDialog).not.toBeVisible();
-
-      await recorder.takeScreenshot(`${fileType}-details-closed`);
+      await fileinfo(page, recorder, selector, fileType);
     }
 
     // Wait to ensure all uploads are processed and displayed
@@ -124,7 +94,7 @@ test.describe('File Uploads and Properties Tests', () => {
     // STEP 9: TEST FILE DOWNLOAD - Verify that files can be downloaded
     console.log(`Step ${step++}: Testing file downloads`);
 
-  // For each file type, test downloads
+    // For each file type, test downloads
     for (const { selector, fileType } of [
       { selector: '.commodity-images', fileType: 'image' },
       { selector: '.commodity-manuals', fileType: 'manual' },
@@ -136,9 +106,109 @@ test.describe('File Uploads and Properties Tests', () => {
 
     // STEP 10: TEST PDF VIEWER - Verify that PDFs can be viewed
     console.log(`Step ${step++}: Testing PDF viewer`);
+    await page.click('.commodity-manuals .file-item .file-preview');
+    await page.waitForSelector('.file-modal', { state: 'visible' });
+    await recorder.takeScreenshot('pdf-viewer-opened');
+
+    // Test paginated mode (default)
+    const nextButton = page.locator('.pdf-navigation-next');
+    const prevButton = page.locator('.pdf-navigation-prev');
+    const pageIndicator = page.locator('.page-info');
+
+    // Check initial page info
+    await expect(pageIndicator).toBeVisible();
+    const initialPageText = await pageIndicator.textContent();
+    console.log(`Initial page text: ${initialPageText}`);
+    expect(initialPageText).toMatch(/1 \/ \d+/);
+
+    // Extract total pages
+    const totalPagesMatch = initialPageText?.match(/\/ (\d+)/) ?? [];
+    const totalPages = totalPagesMatch ? parseInt(totalPagesMatch[1] || '0') : 0;
+
+    // Test pagination if multiple pages
+    if (totalPages > 1) {
+      console.log(`Total pages: ${totalPages}`);
+      await nextButton.click();
+      await expect(pageIndicator).toContainText('2 /');
+      await recorder.takeScreenshot('pdf-viewer-page-2');
+
+      await prevButton.click();
+      await expect(pageIndicator).toContainText('1 /');
+    } else {
+      console.log('Only one page, skipping pagination test');
+    }
+
+    // Test container scrollability
+    console.log('Testing container scrollability');
+    const pdfContainer = page.locator('.pdf-view > .pdf-container');
+    await expect(pdfContainer).toBeVisible();
+    const initialScrollTop = await pdfContainer.evaluate(el => el.scrollTop);
+    await pdfContainer.evaluate(el => el.scrollBy(0, 100));
+    const afterScrollTop = await pdfContainer.evaluate(el => el.scrollTop);
+    expect(afterScrollTop).toBeGreaterThan(initialScrollTop);
+
+    // Test zoom in paginated mode
+    const zoomInButton = page.locator('.pdf-zoom-in');
+    const zoomOutButton = page.locator('.pdf-zoom-out');
+
+    console.log('Testing zoom in/out in paginated mode');
+    await zoomInButton.click();
+    await recorder.takeScreenshot('pdf-viewer-zoomed-in');
+    await zoomOutButton.click();
+
+    // Switch to "view all pages" mode
+    const pdfViewModeAllPages = page.locator('.pdf-view-mode-all-pages');
+    console.log('Switching to view all pages mode');
+    await pdfViewModeAllPages.click();
+    await recorder.takeScreenshot('pdf-viewer-all-pages-mode');
+
+    // Verify pagination buttons are disabled in all-pages mode
+    console.log('Verifying pagination buttons are disabled in all-pages mode');
+    await expect(nextButton).toBeDisabled();
+    await expect(prevButton).toBeDisabled();
+
+    // Page indicator should still show pages info
+    await expect(pageIndicator).toContainText(`/ ${totalPages}`);
+
+    // Test scrolling updates current page in all-pages mode
+    if (totalPages > 1) {
+      console.log('Testing scrolling updates current page in all-pages mode');
+
+      // Get height of a single page
+      const pageHeight = await page.evaluate(() => {
+        const firstPage = document.querySelector('.pdf-page') as HTMLElement;
+
+        return firstPage ? firstPage.offsetHeight : 0;
+      });
+
+      // Scroll to second page
+      await pdfContainer.evaluate((el, height) => {
+        el.scrollTop = height + 10;
+      }, pageHeight);
+
+      console.log('Scrolling to second page...');
+      // Wait for page indicator to update
+      await page.waitForFunction(
+        () => document.querySelector('.page-info')?.textContent?.includes('2 /'),
+        { timeout: 5000 }
+      );
+
+      await recorder.takeScreenshot('pdf-viewer-scrolled-to-page-2');
+    }
+
+    // Test zoom in all-pages mode
+    console.log('Testing zoom in/out in all-pages mode');
+    await zoomInButton.click();
+    await recorder.takeScreenshot('pdf-viewer-all-pages-zoomed-in');
+
+    // Close the viewer
+    console.log('Closing the PDF viewer');
+    await page.click('.file-modal .btn-secondary');
+    await expect(page.locator('.file-modal')).toBeHidden();
 
     // STEP 11: TEST Image viewer - Verify that images can be viewed
     console.log(`Step ${step++}: Testing image viewer`);
+    await imageviewer(page, recorder);
 
     // STEP 12: CLEANUP - Delete the test image, manual, and invoice
     console.log(`Step ${step++}: Cleaning up - deleting the test files`);

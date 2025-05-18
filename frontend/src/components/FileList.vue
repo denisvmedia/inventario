@@ -6,10 +6,10 @@
     </div>
     <div v-else class="files-container">
       <div v-for="file in files" :key="file.id" class="file-item">
-        <div v-if="isImageFile(file)" class="file-preview" @click="openViewer(file)">
+        <div v-if="isImageFile(file)" class="file-preview image-preview" @click="openViewer(file)">
           <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
         </div>
-        <div v-else class="file-icon" @click="openViewer(file)">
+        <div v-else class="file-preview file-icon" @click="openViewer(file)">
           <font-awesome-icon :icon="getFileIcon(file)" size="3x" />
         </div>
         <div class="file-info">
@@ -262,23 +262,21 @@ const isPdfFile = (file: any) => {
   align-items: center;
   justify-content: center;
   background-color: $light-bg-color;
-  overflow: hidden;
+
+  &.file-icon {
+    font-size: 3rem;
+    color: $secondary-color;
+  }
+
+  &.image-preview {
+    overflow: hidden;
+  }
 }
 
 .preview-image {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-}
-
-.file-icon {
-  height: 150px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: $light-bg-color;
-  font-size: 3rem;
-  color: $secondary-color;
 }
 
 .file-info {
