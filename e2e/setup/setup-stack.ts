@@ -36,6 +36,16 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
+  // create uploads directory if it doesn't exist
+  try {
+    const { mkdir } = await import('fs/promises');
+    await mkdir(`${projectRoot}/uploads`, { recursive: true });
+    console.log(`Created uploads directory in ${projectRoot}`);
+  } catch (error) {
+    console.error('Error creating uploads directory:', error);
+    throw error;
+  }
+
   console.log('Executing: go run main.go run');
   backendProcess = spawn('go', ['run', 'main.go', 'run'], {
     cwd: projectRoot,
