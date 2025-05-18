@@ -14,7 +14,7 @@
       <div class="pdf-controls">
         <div class="pdf-navigation">
           <button
-            class="btn btn-sm"
+            class="btn btn-sm pdf-navigation-prev"
             :disabled="currentPage <= 1 || viewAllPages"
             title="Previous Page"
             @click="prevPage"
@@ -23,7 +23,7 @@
           </button>
           <span class="page-info">{{ currentPage }} / {{ numPages }}</span>
           <button
-            class="btn btn-sm"
+            class="btn btn-sm pdf-navigation-next"
             :disabled="currentPage >= numPages || viewAllPages"
             title="Next Page"
             @click="nextPage"
@@ -33,7 +33,7 @@
         </div>
         <div class="pdf-view-mode">
           <button
-            class="btn btn-sm"
+            class="btn btn-sm pdf-view-mode-paged"
             :class="{ 'btn-active': !viewAllPages }"
             title="Page by Page"
             @click="setViewMode(false)"
@@ -41,7 +41,7 @@
             <font-awesome-icon icon="file" />
           </button>
           <button
-            class="btn btn-sm"
+            class="btn btn-sm pdf-view-mode-all-pages"
             :class="{ 'btn-active': viewAllPages }"
             title="View All Pages"
             @click="setViewMode(true)"
@@ -50,11 +50,11 @@
           </button>
         </div>
         <div class="pdf-zoom">
-          <button class="btn btn-sm" title="Zoom Out" @click="zoomOut">
+          <button class="btn btn-sm pdf-zoom-out" title="Zoom Out" @click="zoomOut">
             <font-awesome-icon icon="search-minus" />
           </button>
           <span class="zoom-level">{{ Math.round(scale * 100) }}%</span>
-          <button class="btn btn-sm" title="Zoom In" @click="zoomIn">
+          <button class="btn btn-sm pdf-zoom-in" title="Zoom In" @click="zoomIn">
             <font-awesome-icon icon="search-plus" />
           </button>
         </div>
