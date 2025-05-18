@@ -101,9 +101,9 @@ func APIServer(params Params) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	//r.Get("/", func(w http.ResponseWriter, _r *http.Request) {
+	// r.Get("/", func(w http.ResponseWriter, _r *http.Request) {
 	//	w.Write([]byte("Welcome to Inventario!"))
-	//})
+	// })
 	//
 	// RESTy routes for "swagger" resource
 	r.Mount("/swagger", swagger.Handler(
