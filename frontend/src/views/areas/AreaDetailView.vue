@@ -36,16 +36,15 @@
           <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary btn-sm"><font-awesome-icon icon="plus" /> New</router-link>
         </div>
         <div class="commodities-grid">
-          <div
-v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
+          <div v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-card" :class="{
             'highlighted': commodity.id === highlightCommodityId,
             'draft': commodity.attributes.draft,
             'sold': !commodity.attributes.draft && commodity.attributes.status === 'sold',
             'lost': !commodity.attributes.draft && commodity.attributes.status === 'lost',
             'disposed': !commodity.attributes.draft && commodity.attributes.status === 'disposed',
             'written-off': !commodity.attributes.draft && commodity.attributes.status === 'written_off'
-          }">
-            <div class="commodity-content" @click="viewCommodity(commodity.id)">
+          }" @click="viewCommodity(commodity.id)">
+            <div class="commodity-content">
               <h3>{{ commodity.attributes.name }}</h3>
               <div class="commodity-meta">
                 <span class="type">
@@ -80,6 +79,32 @@ v-for="commodity in filteredCommodities" :key="commodity.id" class="commodity-ca
         <router-link :to="`/commodities/new?area=${area.id}`" class="btn btn-primary">Add Commodity</router-link>
       </div>
     </div>
+
+    <!-- Area Delete Confirmation Dialog -->
+    <Confirmation
+      v-model:visible="showDeleteDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this area?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDelete"
+      @cancel="onCancelDelete"
+    />
+
+    <!-- Commodity Delete Confirmation Dialog -->
+    <Confirmation
+      v-model:visible="showDeleteCommodityDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this commodity?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDeleteCommodity"
+      @cancel="onCancelDeleteCommodity"
+    />
   </div>
 </template>
 
@@ -93,6 +118,7 @@ import valueService from '@/services/valueService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice, getDisplayPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
+import Confirmation from "@/components/Confirmation.vue";
 
 const router = useRouter()
 const route = useRoute()
@@ -285,10 +311,19 @@ const getStatusName = (statusId: string) => {
 
 // Note: We're using the imported calculatePricePerUnit function instead
 
+const showDeleteDialog = ref(false)
+
 const confirmDelete = () => {
-  if (confirm('Are you sure you want to delete this area?')) {
-    deleteArea()
-  }
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  deleteArea()
+  showDeleteDialog.value = false
+}
+
+const onCancelDelete = () => {
+  showDeleteDialog.value = false
 }
 
 const deleteArea = async () => {
@@ -323,10 +358,25 @@ const editCommodity = (id: string) => {
   })
 }
 
+const commodityToDelete = ref<string | null>(null)
+const showDeleteCommodityDialog = ref(false)
+
 const confirmDeleteCommodity = (id: string) => {
-  if (confirm('Are you sure you want to delete this commodity?')) {
-    deleteCommodity(id)
+  commodityToDelete.value = id
+  showDeleteCommodityDialog.value = true
+}
+
+const onConfirmDeleteCommodity = () => {
+  if (commodityToDelete.value) {
+    deleteCommodity(commodityToDelete.value)
+    showDeleteCommodityDialog.value = false
+    commodityToDelete.value = null
   }
+}
+
+const onCancelDeleteCommodity = () => {
+  showDeleteCommodityDialog.value = false
+  commodityToDelete.value = null
 }
 
 const navigateToLocations = () => {

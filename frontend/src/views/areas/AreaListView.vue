@@ -34,6 +34,19 @@
         </div>
       </div>
     </div>
+
+    <!-- Area Delete Confirmation Dialog -->
+    <Confirmation
+      v-model:visible="showDeleteDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this area?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDelete"
+      @cancel="onCancelDelete"
+    />
   </div>
 </template>
 
@@ -42,6 +55,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
+import Confirmation from "@/components/Confirmation.vue";
 
 const router = useRouter()
 const areas = ref<any[]>([])
@@ -79,10 +93,25 @@ const editArea = (id: string) => {
   router.push(`/areas/${id}/edit`)
 }
 
+const areaToDelete = ref<string | null>(null)
+const showDeleteDialog = ref(false)
+
 const confirmDelete = (id: string) => {
-  if (confirm('Are you sure you want to delete this area?')) {
-    deleteArea(id)
+  areaToDelete.value = id
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  if (areaToDelete.value) {
+    deleteArea(areaToDelete.value)
+    showDeleteDialog.value = false
+    areaToDelete.value = null
   }
+}
+
+const onCancelDelete = () => {
+  showDeleteDialog.value = false
+  areaToDelete.value = null
 }
 
 const deleteArea = async (id: string) => {
