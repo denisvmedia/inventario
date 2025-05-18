@@ -34,6 +34,10 @@ updates:
     directory: "/frontend" # Location of package manifests
     schedule:
       interval: "weekly"
+  - package-ecosystem: "npm" # See documentation for possible values
+    directory: "/e2e" # Location of package manifests
+    schedule:
+      interval: "weekly"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
