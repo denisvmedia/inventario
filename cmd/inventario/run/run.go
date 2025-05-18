@@ -36,7 +36,7 @@ func getFileURL(path string) string {
 	if strings.Contains(absPath, ":") {
 		absPath = "/" + absPath // Ensure the drive letter is prefixed with a slash
 	}
-	return "file://" + absPath
+	return "file://" + absPath + "?create_dir=1"
 }
 
 var runFlags = map[string]cobraflags.Flag{

@@ -139,3 +139,7 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+require github.com/denisvmedia/inventario/frontend v0.0.0
+
+replace github.com/denisvmedia/inventario/frontend => .\frontend
