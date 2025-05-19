@@ -1,6 +1,8 @@
 package mimekit
 
 import (
+	"mime"
+
 	"github.com/gabriel-vasile/mimetype"
 )
 
@@ -47,5 +49,17 @@ func DocContentTypes() []string {
 }
 
 func ExtensionByMime(mimeType string) string {
-	return mimetype.Lookup(mimeType).Extension()
+	m := mimetype.Lookup(mimeType)
+	if m == nil {
+		return ".unknown"
+	}
+
+	return m.Extension()
+}
+
+func FormatContentDisposition(filename string) string {
+	params := map[string]string{
+		"filename": filename,
+	}
+	return mime.FormatMediaType("attachment", params)
 }
