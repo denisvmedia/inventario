@@ -149,11 +149,11 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&a.PurchaseDate, whenNotDraft.WithRules(rules.NotEmpty)),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),
 		validation.Field(&a.URLs),
-		validation.Field(&a.OriginalPrice, whenNotDraft.WithRules(validation.By(func(any) error {
+		validation.Field(&a.OriginalPrice, whenNotDraft.WithRules(priceRule, validation.By(func(any) error {
 			v, _ := a.OriginalPrice.Float64()
 			return validation.Min(0.00).Validate(v)
 		}))),
-		validation.Field(&a.OriginalPriceCurrency, whenNotDraft.WithRules(priceRule, validation.By(func(val any) error {
+		validation.Field(&a.OriginalPriceCurrency, whenNotDraft.WithRules(validation.By(func(val any) error {
 			if a.Draft {
 				return nil
 			}
