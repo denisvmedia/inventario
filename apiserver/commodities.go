@@ -12,6 +12,8 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/internal/mimekit"
+	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -522,7 +524,8 @@ func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", mime.TypeByExtension(image.Ext))
 	// Use Path + Ext for the downloaded filename
 	filename := image.Path + image.Ext
-	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	attachmentHeader := mimekit.FormatContentDisposition(filename)
+	w.Header().Set("Content-Disposition", attachmentHeader)
 
 	if _, err := io.Copy(w, file); err != nil {
 		internalServerError(w, r, err)
@@ -566,7 +569,8 @@ func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", mime.TypeByExtension(invoice.Ext))
 	// Use Path + Ext for the downloaded filename
 	filename := invoice.Path + invoice.Ext
-	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	attachmentHeader := mimekit.FormatContentDisposition(filename)
+	w.Header().Set("Content-Disposition", attachmentHeader)
 
 	if _, err := io.Copy(w, file); err != nil {
 		internalServerError(w, r, err)
@@ -610,7 +614,8 @@ func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", mime.TypeByExtension(manual.Ext))
 	// Use Path + Ext for the downloaded filename
 	filename := manual.Path + manual.Ext
-	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	attachmentHeader := mimekit.FormatContentDisposition(filename)
+	w.Header().Set("Content-Disposition", attachmentHeader)
 
 	if _, err := io.Copy(w, file); err != nil {
 		internalServerError(w, r, err)
@@ -746,7 +751,7 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Only update the Path field
-	image.Path = input.Data.Attributes.Path
+	image.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 
 	updatedImage, err := api.registrySet.ImageRegistry.Update(*image)
 	if err != nil {
@@ -795,7 +800,7 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Only update the Path field
-	invoice.Path = input.Data.Attributes.Path
+	invoice.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 
 	updatedInvoice, err := api.registrySet.InvoiceRegistry.Update(*invoice)
 	if err != nil {
@@ -844,7 +849,7 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Only update the Path field
-	manual.Path = input.Data.Attributes.Path
+	manual.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 
 	updatedManual, err := api.registrySet.ManualRegistry.Update(*manual)
 	if err != nil {

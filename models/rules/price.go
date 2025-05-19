@@ -59,10 +59,11 @@ func (r PriceRule) Validate(_ any) error {
 		return ErrConvertedPriceNotZero
 	}
 
+	// Allow all zeroes (the commodity is not counted as valuable)
 	// If all prices are zero, return error
-	if r.CurrentPrice.IsZero() && r.OriginalPrice.IsZero() && r.ConvertedPrice.IsZero() {
-		return ErrAllPricesZero
-	}
+	// if r.CurrentPrice.IsZero() && r.OriginalPrice.IsZero() && r.ConvertedPrice.IsZero() {
+	//	return ErrAllPricesZero
+	// }
 
 	// If original currency is not the main currency and neither converted price nor current price is set, return error
 	if r.OriginalCurrency != r.MainCurrency && r.ConvertedPrice.IsZero() && r.CurrentPrice.IsZero() {
