@@ -36,14 +36,11 @@ func GetEmojiName(r rune) string {
 // It also replaces all emoji with their short name wrapped in underscores.
 func CleanFilename(name string) string {
 	// Remove BOM
-	if strings.HasPrefix(name, "\uFEFF") {
-		name = strings.TrimPrefix(name, "\uFEFF")
-	}
+	name = strings.TrimPrefix(name, "\uFEFF")
 
 	// Iterate over all runes and exclude the unwanted ones
 	var b strings.Builder
-	runes := []rune(name)
-	for _, r := range runes {
+	for _, r := range name {
 		if r == utf8.RuneError {
 			continue
 		}
@@ -82,8 +79,5 @@ func isRuneSafe(r rune) bool {
 	case '<', '>', ':', '"', '/', '\\', '|', '?', '*':
 		return false // зарезервированные
 	}
-	if !unicode.IsGraphic(r) {
-		return false
-	}
-	return true
+	return unicode.IsGraphic(r)
 }
