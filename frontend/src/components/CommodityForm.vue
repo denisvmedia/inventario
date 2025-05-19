@@ -299,7 +299,7 @@ class="price-calculation-hint" :class="{
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, nextTick, computed } from 'vue'
+import { ref, reactive, watch, nextTick, computed, toRaw } from 'vue'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
@@ -364,7 +364,7 @@ const emit = defineEmits(['submit', 'cancel', 'validate', 'update:errors'])
 const commodityTypes = ref(COMMODITY_TYPES)
 const commodityStatuses = ref(COMMODITY_STATUSES)
 
-const formData = reactive({ ...props.initialData })
+const formData = reactive(structuredClone(toRaw(props.initialData)))
 const formErrors = reactive({
   name: '',
   shortName: '',
@@ -384,7 +384,7 @@ const formErrors = reactive({
 // Watch for changes in initialData
 watch(() => props.initialData, (newValue) => {
   // Update formData with new values
-  Object.assign(formData, newValue)
+  Object.assign(formData, structuredClone(newValue))
 }, { deep: true })
 
 // Watch for areaFromUrl changes

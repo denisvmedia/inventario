@@ -229,9 +229,8 @@
 /* Invalid state styling to match form-control.is-invalid */
 .p-dropdown.is-invalid,
 .p-select.is-invalid {
-  border-color: var(--p-select-focus-border-color);
-
-  // border-color: #dc3545 !important; /* Match danger-color from main.scss */
+  // border-color: var(--p-select-focus-border-color);
+  border-color: $danger-color !important; /* Match danger-color from main.scss */
 }
 
 /* Filter styling */
