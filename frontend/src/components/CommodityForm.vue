@@ -299,7 +299,7 @@ class="price-calculation-hint" :class="{
 </template>
 
 <script setup lang="ts">
-import {ref, reactive, watch, nextTick, computed, toRaw} from 'vue'
+import { ref, reactive, watch, nextTick, computed, toRaw } from 'vue'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
