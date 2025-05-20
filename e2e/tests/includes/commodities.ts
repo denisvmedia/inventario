@@ -27,6 +27,45 @@ export async function createCommodity(page: Page, recorder: TestRecorder,testCom
     // Set purchase date
     await page.fill('#purchaseDate', testCommodity.purchaseDate);
 
+    // Add serial number if provided
+    if (testCommodity.serialNumber) {
+        await page.fill('#serialNumber', testCommodity.serialNumber);
+    }
+
+    // Add extra serial numbers if provided
+    if (testCommodity.extraSerialNumbers && testCommodity.extraSerialNumbers.length > 0) {
+        for (let i = 0; i < testCommodity.extraSerialNumbers.length; i++) {
+            console.log(`Adding extra serial number ${i + 1}`);
+            await page.click('button:has-text("Add Serial Number")');
+            console.log(`Filling in extra serial number ${i + 1}`);
+            await page.fill(`.array-input:has(button:has-text("Add Serial Number")) .array-item:nth-child(${i + 1}) input`, testCommodity.extraSerialNumbers[i]);
+        }
+    }
+
+    // Add part numbers if provided
+    if (testCommodity.partNumbers && testCommodity.partNumbers.length > 0) {
+        for (let i = 0; i < testCommodity.partNumbers.length; i++) {
+            await page.click('button:has-text("Add Part Number")');
+            await page.fill(`.array-input:has(button:has-text("Add Part Number")) .array-item:nth-child(${i + 1}) input`, testCommodity.partNumbers[i]);
+        }
+    }
+
+    // Add tags if provided
+    if (testCommodity.tags && testCommodity.tags.length > 0) {
+        for (let i = 0; i < testCommodity.tags.length; i++) {
+            await page.click('button:has-text("Add Tag")');
+            await page.fill(`.array-input:has(button:has-text("Add Tag")) .array-item:nth-child(${i + 1}) input`, testCommodity.tags[i]);
+        }
+    }
+
+    // Add URLs if provided
+    if (testCommodity.urls && testCommodity.urls.length > 0) {
+        for (let i = 0; i < testCommodity.urls.length; i++) {
+            await page.click('button:has-text("Add URL")');
+            await page.fill(`.array-input:has(button:has-text("Add URL")) .array-item:nth-child(${i + 1}) input`, testCommodity.urls[i]);
+        }
+    }
+
     await recorder.takeScreenshot('commodity-create-02-form-filled');
 
     // Submit the form
@@ -44,6 +83,39 @@ export async function verifyCommodityDetails(page: Page, testCommodity: any) {
     await expect(page.locator('.commodity-type')).toContainText(testCommodity.type);
     await expect(page.locator('.commodity-count')).toContainText(testCommodity.count.toString());
     await expect(page.locator('.commodity-original-price')).toContainText(testCommodity.originalPrice.toString());
+
+    // Verify serial number if provided
+    if (testCommodity.serialNumber) {
+        await expect(page.locator('.commodity-serial-number')).toContainText(testCommodity.serialNumber);
+    }
+
+    // Verify extra serial numbers if provided
+    if (testCommodity.extraSerialNumbers && testCommodity.extraSerialNumbers.length > 0) {
+        for (const serialNumber of testCommodity.extraSerialNumbers) {
+            await expect(page.locator('.commodity-extra-serial-numbers')).toContainText(serialNumber);
+        }
+    }
+
+    // Verify part numbers if provided
+    if (testCommodity.partNumbers && testCommodity.partNumbers.length > 0) {
+        for (const partNumber of testCommodity.partNumbers) {
+            await expect(page.locator('.commodity-part-numbers')).toContainText(partNumber);
+        }
+    }
+
+    // Verify tags if provided
+    if (testCommodity.tags && testCommodity.tags.length > 0) {
+        for (const tag of testCommodity.tags) {
+            await expect(page.locator('.commodity-tags')).toContainText(tag);
+        }
+    }
+
+    // Verify URLs if provided
+    if (testCommodity.urls && testCommodity.urls.length > 0) {
+        for (const url of testCommodity.urls) {
+            await expect(page.locator('.commodity-urls')).toContainText(url);
+        }
+    }
 }
 
 export async function editCommodity(page: Page, recorder: TestRecorder, updatedCommodity: any, buttonSelector?: string|boolean) {
@@ -67,6 +139,71 @@ export async function editCommodity(page: Page, recorder: TestRecorder, updatedC
     await page.fill('#shortName', updatedCommodity.shortName);
     await page.fill('#count', updatedCommodity.count.toString());
     await page.fill('#originalPrice', updatedCommodity.originalPrice.toString());
+
+    // Update serial number if provided
+    if (updatedCommodity.serialNumber !== undefined) {
+        await page.fill('#serialNumber', updatedCommodity.serialNumber);
+    }
+
+    // Handle extra serial numbers if provided
+    if (updatedCommodity.extraSerialNumbers !== undefined) {
+        // First, remove existing extra serial numbers
+        const existingSerialNumbers = await page.$$('.array-input:has(button:has-text("Add Serial Number")) .array-item');
+        for (let i = existingSerialNumbers.length - 1; i >= 0; i--) {
+            await page.click(`.array-input:has(button:has-text("Add Serial Number")) .array-item:nth-child(${i + 1}) button:has-text("Remove")`);
+        }
+
+        // Then add new ones
+        for (let i = 0; i < updatedCommodity.extraSerialNumbers.length; i++) {
+            await page.click('button:has-text("Add Serial Number")');
+            await page.fill(`.array-input:has(button:has-text("Add Serial Number")) .array-item:nth-child(${i + 1}) input`, updatedCommodity.extraSerialNumbers[i]);
+        }
+    }
+
+    // Handle part numbers if provided
+    if (updatedCommodity.partNumbers !== undefined) {
+        // First, remove existing part numbers
+        const existingPartNumbers = await page.$$('.array-input:has(button:has-text("Add Part Number")) .array-item');
+        for (let i = existingPartNumbers.length - 1; i >= 0; i--) {
+            await page.click(`.array-input:has(button:has-text("Add Part Number")) .array-item:nth-child(${i + 1}) button:has-text("Remove")`);
+        }
+
+        // Then add new ones
+        for (let i = 0; i < updatedCommodity.partNumbers.length; i++) {
+            await page.click('button:has-text("Add Part Number")');
+            await page.fill(`.array-input:has(button:has-text("Add Part Number")) .array-item:nth-child(${i + 1}) input`, updatedCommodity.partNumbers[i]);
+        }
+    }
+
+    // Handle tags if provided
+    if (updatedCommodity.tags !== undefined) {
+        // First, remove existing tags
+        const existingTags = await page.$$('.array-input:has(button:has-text("Add Tag")) .array-item');
+        for (let i = existingTags.length - 1; i >= 0; i--) {
+            await page.click(`.array-input:has(button:has-text("Add Tag")) .array-item:nth-child(${i + 1}) button:has-text("Remove")`);
+        }
+
+        // Then add new ones
+        for (let i = 0; i < updatedCommodity.tags.length; i++) {
+            await page.click('button:has-text("Add Tag")');
+            await page.fill(`.array-input:has(button:has-text("Add Tag")) .array-item:nth-child(${i + 1}) input`, updatedCommodity.tags[i]);
+        }
+    }
+
+    // Handle URLs if provided
+    if (updatedCommodity.urls !== undefined) {
+        // First, remove existing URLs
+        const existingUrls = await page.$$('.array-input:has(button:has-text("Add URL")) .array-item');
+        for (let i = existingUrls.length - 1; i >= 0; i--) {
+            await page.click(`.array-input:has(button:has-text("Add URL")) .array-item:nth-child(${i + 1}) button:has-text("Remove")`);
+        }
+
+        // Then add new ones
+        for (let i = 0; i < updatedCommodity.urls.length; i++) {
+            await page.click('button:has-text("Add URL")');
+            await page.fill(`.array-input:has(button:has-text("Add URL")) .array-item:nth-child(${i + 1}) input`, updatedCommodity.urls[i]);
+        }
+    }
 
     await recorder.takeScreenshot('commodity-edit-02-edit-form-filled');
 

@@ -36,7 +36,12 @@ test.describe('Commodity Simple CRUD Operations', () => {
     originalPrice: 100,
     originalPriceCurrency: 'CZK',
     purchaseDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
-    status: 'In Use'
+    status: 'In Use',
+    serialNumber: `SN-${timestamp}`,
+    extraSerialNumbers: [`ESN1-${timestamp}`, `ESN2-${timestamp}`],
+    partNumbers: [`PN-${timestamp}`],
+    tags: ['test', 'example', 'e2e'],
+    urls: ['https://example.com/product']
   };
 
   const updatedCommodity = {
@@ -44,7 +49,12 @@ test.describe('Commodity Simple CRUD Operations', () => {
     shortName: 'UpdCom',
     type: 'Electronics',
     count: 2,
-    originalPrice: 200
+    originalPrice: 200,
+    serialNumber: `Updated-SN-${timestamp}`,
+    extraSerialNumbers: [`Updated-ESN-${timestamp}`],
+    partNumbers: [`Updated-PN-${timestamp}`, `Additional-PN-${timestamp}`],
+    tags: ['updated', 'modified'],
+    urls: ['https://example.com/updated', 'https://example.com/documentation']
   };
 
   test('should perform full CRUD operations on a commodity', async ({ page, recorder }) => {
