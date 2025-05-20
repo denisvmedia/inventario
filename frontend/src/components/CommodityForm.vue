@@ -5,7 +5,7 @@
       <h2>Basic Information</h2>
 
       <div class="form-group">
-        <label for="name">Name</label>
+        <label for="name">Name <span class="required-field">*</span></label>
         <input
           id="name"
           v-model="formData.name"
@@ -13,12 +13,13 @@
           required
           class="form-control"
           :class="{ 'is-invalid': formErrors.name }"
+          placeholder="Enter the full name of the commodity"
         >
         <div v-if="formErrors.name" class="error-message">{{ formErrors.name }}</div>
       </div>
 
       <div class="form-group">
-        <label for="shortName">Short Name</label>
+        <label for="shortName">Short Name <span class="required-field">*</span></label>
         <input
           id="shortName"
           v-model="formData.shortName"
@@ -27,12 +28,13 @@
           maxlength="20"
           class="form-control"
           :class="{ 'is-invalid': formErrors.shortName }"
+          placeholder="Enter a short identifier (max 20 chars)"
         >
         <div v-if="formErrors.shortName" class="error-message">{{ formErrors.shortName }}</div>
       </div>
 
       <div class="form-group">
-        <label for="type">Type</label>
+        <label for="type">Type <span class="required-field">*</span></label>
         <Select
           id="type"
           v-model="formData.type"
@@ -47,7 +49,7 @@
       </div>
 
       <div class="form-group">
-        <label for="areaId">Area</label>
+        <label for="areaId">Area <span class="required-field">*</span></label>
         <Select
           id="areaId"
           v-model="formData.areaId"
@@ -69,7 +71,7 @@
       </div>
 
       <div class="form-group">
-        <label for="count">Count</label>
+        <label for="count">Count <span class="required-field">*</span></label>
         <input
           id="count"
           v-model.number="formData.count"
@@ -78,6 +80,7 @@
           min="1"
           class="form-control"
           :class="{ 'is-invalid': formErrors.count }"
+          placeholder="Enter quantity (minimum 1)"
         >
         <div v-if="formErrors.count" class="error-message">{{ formErrors.count }}</div>
       </div>
@@ -104,6 +107,7 @@ class="price-calculation-hint" :class="{
           step="0.01"
           class="form-control"
           :class="{ 'is-invalid': formErrors.originalPrice }"
+          placeholder="Enter the purchase price (minimum 0)"
         >
         <div v-if="formErrors.originalPrice" class="error-message">{{ formErrors.originalPrice }}</div>
       </div>
@@ -135,12 +139,13 @@ class="price-calculation-hint" :class="{
           step="0.01"
           class="form-control"
           :class="{ 'is-invalid': formErrors.convertedOriginalPrice }"
+          placeholder="Enter the price converted to main currency"
         >
         <div v-if="formErrors.convertedOriginalPrice" class="error-message">{{ formErrors.convertedOriginalPrice }}</div>
       </div>
 
       <div class="form-group">
-        <label for="currentPrice">Current Price</label>
+        <label for="currentPrice">Current Price <span class="required-field">*</span></label>
         <input
           id="currentPrice"
           v-model.number="formData.currentPrice"
@@ -150,6 +155,7 @@ class="price-calculation-hint" :class="{
           step="0.01"
           class="form-control"
           :class="{ 'is-invalid': formErrors.currentPrice }"
+          placeholder="Enter the current estimated value"
         >
         <div v-if="formErrors.currentPrice" class="error-message">{{ formErrors.currentPrice }}</div>
       </div>
@@ -167,6 +173,7 @@ class="price-calculation-hint" :class="{
           type="text"
           class="form-control"
           :class="{ 'is-invalid': formErrors.serialNumber }"
+          placeholder="Enter the main serial number if available"
         >
         <div v-if="formErrors.serialNumber" class="error-message">{{ formErrors.serialNumber }}</div>
       </div>
@@ -179,6 +186,7 @@ class="price-calculation-hint" :class="{
               v-model="formData.extraSerialNumbers[index]"
               type="text"
               class="form-control"
+              placeholder="Enter additional serial number"
             >
             <button type="button" class="btn btn-danger" @click="removeExtraSerialNumber(index)">Remove</button>
           </div>
@@ -194,6 +202,7 @@ class="price-calculation-hint" :class="{
               v-model="formData.partNumbers[index]"
               type="text"
               class="form-control"
+              placeholder="Enter part or model number"
             >
             <button type="button" class="btn btn-danger" @click="removePartNumber(index)">Remove</button>
           </div>
@@ -214,6 +223,7 @@ class="price-calculation-hint" :class="{
               v-model="formData.tags[index]"
               type="text"
               class="form-control"
+              placeholder="Enter a tag for categorization"
             >
             <button type="button" class="btn btn-danger" @click="removeTag(index)">Remove</button>
           </div>
@@ -222,7 +232,7 @@ class="price-calculation-hint" :class="{
       </div>
 
       <div class="form-group">
-        <label for="status">Status</label>
+        <label for="status">Status <span class="required-field">*</span></label>
         <Select
           id="status"
           v-model="formData.status"
@@ -237,7 +247,7 @@ class="price-calculation-hint" :class="{
       </div>
 
       <div class="form-group">
-        <label for="purchaseDate">Purchase Date</label>
+        <label for="purchaseDate">Purchase Date <span class="required-field">*</span></label>
         <input
           id="purchaseDate"
           v-model="formData.purchaseDate"
@@ -245,6 +255,7 @@ class="price-calculation-hint" :class="{
           required
           class="form-control"
           :class="{ 'is-invalid': formErrors.purchaseDate }"
+          placeholder="Select the date of purchase"
         >
         <div v-if="formErrors.purchaseDate" class="error-message">{{ formErrors.purchaseDate }}</div>
       </div>
@@ -262,6 +273,7 @@ class="price-calculation-hint" :class="{
               v-model="formData.urls[index]"
               type="url"
               class="form-control"
+              placeholder="Enter a relevant URL (e.g., product page, manual)"
             >
             <button type="button" class="btn btn-danger" @click="removeUrl(index)">Remove</button>
           </div>
@@ -277,6 +289,7 @@ class="price-calculation-hint" :class="{
           class="form-control"
           :class="{ 'is-invalid': formErrors.comments }"
           rows="4"
+          placeholder="Enter any additional notes or comments about this item (max 1000 characters)"
         ></textarea>
         <div v-if="formErrors.comments" class="error-message">{{ formErrors.comments }}</div>
       </div>
@@ -773,5 +786,10 @@ textarea.form-control {
 .btn-sm {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
+}
+
+.required-field {
+  color: $danger-color;
+  margin-left: 0.25rem;
 }
 </style>
