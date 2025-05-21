@@ -361,25 +361,6 @@ const goBack = () => {
   padding: 1rem;
 }
 
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
-
-.breadcrumb-link {
-  color: $secondary-color;
-  font-size: 0.9rem;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: color 0.2s;
-
-  &:hover {
-    color: $primary-color;
-    text-decoration: none;
-  }
-}
-
 h1 {
   margin-bottom: 2rem;
 }

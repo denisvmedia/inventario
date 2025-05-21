@@ -170,39 +170,7 @@ const cancel = () => {
   margin-bottom: 1rem;
 }
 
-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  font-size: 1rem;
-
-  &:focus {
-    outline: none;
-    border-color: $primary-color;
-    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-  }
-
-  &.is-invalid {
-    border-color: $danger-color;
-  }
-}
-
-.error-message {
-  color: $danger-color;
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
-
 .form-actions {
-  display: flex;
-  justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
 }

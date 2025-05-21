@@ -46,6 +46,16 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
+  // create dist directory if it doesn't exist (required to build backend)
+  try {
+    const { mkdir } = await import('fs/promises');
+    await mkdir(`${frontendRoot}/dist`, { recursive: true });
+    console.log(`Created dist directory in ${frontendRoot}`);
+  } catch (error) {
+    console.error('Error creating dist directory:', error);
+    throw error;
+  }
+
   console.log('Executing: go run main.go run');
   backendProcess = spawn('go', ['run', 'main.go', 'run'], {
     cwd: projectRoot,

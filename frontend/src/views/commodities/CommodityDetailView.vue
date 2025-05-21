@@ -574,25 +574,6 @@ const formatDate = (date: string): string => {
   padding: 20px;
 }
 
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
-
-.breadcrumb-link {
-  color: $secondary-color;
-  font-size: 0.9rem;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: color 0.2s;
-
-  &:hover {
-    color: $primary-color;
-    text-decoration: none;
-  }
-}
-
 .header {
   display: flex;
   justify-content: space-between;
@@ -713,27 +694,6 @@ const formatDate = (date: string): string => {
   font-weight: 500;
   cursor: pointer;
   border: none;
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-danger {
-  background-color: $danger-color;
-  color: white;
-  border: none;
-  cursor: pointer;
 }
 
 .btn-sm {
