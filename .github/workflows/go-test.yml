@@ -23,5 +23,7 @@ jobs:
           cache: true
       - name: Install dependencies
         run: go mod download
+      - name: Create dist directory
+        run: mkdir -p frontend/dist
       - name: Run tests
-        run: go test -v ./...
+        run: go test -v -race ./...
