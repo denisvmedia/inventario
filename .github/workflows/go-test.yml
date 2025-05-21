@@ -27,3 +27,4 @@ jobs:
         run: mkdir -p frontend/dist && echo "" > frontend/dist/inventario.txt
       - name: Run tests
         run: go test -v -race ./...
+        working-directory: go

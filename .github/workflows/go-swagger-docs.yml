@@ -38,9 +38,11 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Regenerate Swagger docs
         run: swag init --output docs
+        working-directory: go
       - name: Check for uncommitted changes in docs/
         run: |
           if ! git diff --exit-code -- docs/; then
             echo "Swagger docs are out of sync. Please run 'swag init --output docs' and commit the changes." >&2
             exit 1
           fi
+        working-directory: go
