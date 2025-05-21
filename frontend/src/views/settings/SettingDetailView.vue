@@ -569,11 +569,6 @@ function formatSettingName(id: string) {
   justify-content: center;
 }
 
-// Utility class for width 100%
-.w-100 {
-  width: 100%;
-}
-
 // Error message styling to match CommodityForm.vue
 .error-message {
   color: $danger-color;

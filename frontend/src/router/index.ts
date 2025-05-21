@@ -26,12 +26,6 @@ const routes = [
     name: 'location-edit',
     component: () => import('../views/locations/LocationEditView.vue')
   },
-  // Keep area routes for backward compatibility
-  {
-    path: '/areas/new',
-    name: 'area-create',
-    component: () => import('../views/areas/AreaCreateView.vue')
-  },
   {
     path: '/areas/:id',
     name: 'area-detail',

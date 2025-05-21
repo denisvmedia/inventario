@@ -190,7 +190,7 @@ class="price-calculation-hint" :class="{
             >
             <button type="button" class="btn btn-danger" @click="removeExtraSerialNumber(index)">Remove</button>
           </div>
-          <button type="button" class="btn btn-secondary" @click="addExtraSerialNumber">Add Serial Number</button>
+          <button type="button" class="btn btn-secondary btn-secondary-alt" @click="addExtraSerialNumber">Add Serial Number</button>
         </div>
       </div>
 
@@ -206,7 +206,7 @@ class="price-calculation-hint" :class="{
             >
             <button type="button" class="btn btn-danger" @click="removePartNumber(index)">Remove</button>
           </div>
-          <button type="button" class="btn btn-secondary" @click="addPartNumber">Add Part Number</button>
+          <button type="button" class="btn btn-secondary btn-secondary-alt" @click="addPartNumber">Add Part Number</button>
         </div>
       </div>
     </div>
@@ -227,7 +227,7 @@ class="price-calculation-hint" :class="{
             >
             <button type="button" class="btn btn-danger" @click="removeTag(index)">Remove</button>
           </div>
-          <button type="button" class="btn btn-secondary" @click="addTag">Add Tag</button>
+          <button type="button" class="btn btn-secondary btn-secondary-alt" @click="addTag">Add Tag</button>
         </div>
       </div>
 
@@ -277,7 +277,7 @@ class="price-calculation-hint" :class="{
             >
             <button type="button" class="btn btn-danger" @click="removeUrl(index)">Remove</button>
           </div>
-          <button type="button" class="btn btn-secondary" @click="addUrl">Add URL</button>
+          <button type="button" class="btn btn-secondary btn-secondary-alt" @click="addUrl">Add URL</button>
         </div>
       </div>
 
@@ -303,7 +303,7 @@ class="price-calculation-hint" :class="{
     </div>
 
     <div class="form-actions">
-      <button type="button" class="btn btn-secondary" @click="onCancel">Cancel</button>
+      <button type="button" class="btn btn-secondary btn-secondary-alt" @click="onCancel">Cancel</button>
       <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
         {{ isSubmitting ? submitButtonLoadingText : submitButtonText }}
       </button>
@@ -693,44 +693,6 @@ const getStatusName = (statusId: string) => {
   margin-bottom: 1.5rem;
 }
 
-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  font-size: 1rem;
-
-  &:focus {
-    outline: none;
-    border-color: $primary-color;
-    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-  }
-
-  &.is-invalid {
-    border-color: $danger-color;
-  }
-}
-
-.w-100 {
-  width: 100%;
-}
-
-textarea.form-control {
-  resize: vertical;
-}
-
-.error-message {
-  color: $danger-color;
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
-
 .array-input {
   display: flex;
   flex-direction: column;
@@ -749,33 +711,7 @@ textarea.form-control {
 }
 
 .form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
   margin-top: 2rem;
-}
-
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  cursor: pointer;
-  font-weight: 500;
-
-  &:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-  }
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-}
-
-.btn-secondary {
-  background-color: $light-bg-color;
-  color: $text-color;
 }
 
 .btn-danger {
