@@ -362,25 +362,6 @@ const handleValidation = (isValid: boolean, validationErrors: any) => {
   padding: 1rem;
 }
 
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
-
-.breadcrumb-link {
-  color: $secondary-color;
-  font-size: 0.9rem;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: color 0.2s;
-
-  &:hover {
-    color: $primary-color;
-    text-decoration: none;
-  }
-}
-
 h1 {
   margin-bottom: 2rem;
 }
@@ -405,75 +386,6 @@ h1 {
 
 .form-group {
   margin-bottom: 1.5rem;
-}
-
-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  font-size: 1rem;
-
-  &:focus {
-    outline: none;
-    border-color: $primary-color;
-    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-  }
-
-  &.is-invalid {
-    border-color: $danger-color;
-  }
-}
-
-textarea.form-control {
-  resize: vertical;
-}
-
-.error-message {
-  color: $danger-color;
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  cursor: pointer;
-  font-weight: 500;
-
-  &:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-  }
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-}
-
-.btn-secondary {
-  background-color: $light-bg-color;
-  color: $text-color;
-}
-
-.btn-danger {
-  background-color: $danger-color;
-  color: white;
 }
 
 .form-error {

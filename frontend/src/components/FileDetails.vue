@@ -323,40 +323,9 @@ const confirmDelete = () => {
 }
 
 .btn {
-  padding: 0.375rem 0.75rem;
-  border-radius: $default-radius;
-  font-weight: 500;
-  cursor: pointer;
   display: inline-flex;
+  padding: 0.375rem 0.75rem;
   align-items: center;
   gap: 0.5rem;
-  border: none;
-
-  &-primary {
-    background-color: $primary-color;
-    color: white;
-
-    &:hover {
-      background-color: $primary-hover-color;
-    }
-  }
-
-  &-danger {
-    background-color: $danger-color;
-    color: white;
-
-    &:hover {
-      background-color: $danger-hover-color;
-    }
-  }
-
-  &-secondary {
-    background-color: $secondary-color;
-    color: white;
-
-    &:hover {
-      background-color: color.adjust($secondary-color, $lightness: -10%);
-    }
-  }
 }
 </style>

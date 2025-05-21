@@ -350,33 +350,5 @@ label {
 
 .btn {
   padding: 0.5rem 1rem;
-  border-radius: $default-radius;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-
-  &:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
-  }
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-
-  &:hover {
-    background-color: $primary-hover-color;
-  }
-}
-
-.btn-secondary {
-  background-color: $light-bg-color;
-  color: $text-color;
-  border: 1px solid $border-color;
-
-  &:hover {
-    background-color: $light-hover-bg-color;
-  }
 }
 </style>

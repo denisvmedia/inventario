@@ -56,7 +56,7 @@ onMounted(async () => {
 </script>
 
 <style lang="scss">
-@use './assets/main.scss' as *;
+// @use './assets/main.scss' as *;
 
 .print-container {
   max-width: 100%;

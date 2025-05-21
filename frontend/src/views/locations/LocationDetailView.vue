@@ -18,8 +18,6 @@
         </div>
       </div>
 
-
-
       <div class="areas-section">
         <div class="section-header">
           <h2>Areas</h2>
@@ -53,19 +51,6 @@
         </div>
         <div v-else class="no-areas">
           <p>No areas found for this location. Use the button above to add your first area.</p>
-        </div>
-      </div>
-
-      <!-- Test API Results Section -->
-      <div v-if="testResult || testError" class="test-section">
-        <h2>API Test Results</h2>
-        <div v-if="testResult" class="test-result">
-          <h3>Success:</h3>
-          <pre>{{ testResult }}</pre>
-        </div>
-        <div v-if="testError" class="test-error">
-          <h3>Error:</h3>
-          <pre>{{ testError }}</pre>
         </div>
       </div>
 
@@ -106,19 +91,12 @@ import areaService from '@/services/areaService'
 import AreaForm from '@/components/AreaForm.vue'
 import Confirmation from "@/components/Confirmation.vue";
 
-
 const route = useRoute()
 const router = useRouter()
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const location = ref<any>(null)
 const areas = ref<any[]>([])
-
-
-
-// Test API variables
-const testResult = ref('')
-const testError = ref('')
 
 // State for inline forms
 const showAreaForm = ref(false)
@@ -333,20 +311,6 @@ const handleAreaCreated = (newArea: any) => {
   border-bottom: 1px solid $border-color;
 }
 
-.test-section {
-  margin-bottom: 2rem;
-  background: white;
-  border-radius: $default-radius;
-  padding: 1.5rem;
-  box-shadow: $box-shadow;
-
-  h2 {
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid $border-color;
-  }
-}
-
 .btn-primary {
   background-color: $primary-color;
   color: white;
@@ -357,39 +321,11 @@ const handleAreaCreated = (newArea: any) => {
   margin-top: 1rem;
 }
 
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-danger {
-  background-color: $danger-color;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
   margin-top: 0;
   border-radius: $default-radius;
-}
-
-.test-result, .test-error {
-  margin-top: 1rem;
-  padding: 1rem;
-  border-radius: $default-radius;
-}
-
-.test-result {
-  background-color: color.adjust($primary-color, $lightness: 40%);
-}
-
-.test-error {
-  background-color: color.adjust($danger-color, $lightness: 40%);
 }
 
 pre {

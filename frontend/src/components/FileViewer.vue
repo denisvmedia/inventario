@@ -945,27 +945,6 @@ onBeforeUnmount(() => {
   color: $secondary-color;
 }
 
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-danger {
-  background-color: $danger-color;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-secondary {
-  background-color: $secondary-color;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
