@@ -46,10 +46,11 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
-  // create dist directory if it doesn't exist (required to build backend)
+  // create dist directory and a file in it if it doesn't exist (required to build backend)
   try {
-    const { mkdir } = await import('fs/promises');
+    const { mkdir, writeFile } = await import('fs/promises');
     await mkdir(`${frontendRoot}/dist`, { recursive: true });
+    await writeFile(`${frontendRoot}/dist/.gitkeep`, '');
     console.log(`Created dist directory in ${frontendRoot}`);
   } catch (error) {
     console.error('Error creating dist directory:', error);
