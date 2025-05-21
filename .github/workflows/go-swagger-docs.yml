@@ -33,6 +33,7 @@ jobs:
             exit 1
           fi
           echo "SWAG_VERSION=$SWAG_VERSION" >> $GITHUB_OUTPUT
+        working-directory: go
       - name: Install swag CLI
         run: |
           go install github.com/swaggo/swag/cmd/swag@${{ steps.swag_version.outputs.SWAG_VERSION }}
