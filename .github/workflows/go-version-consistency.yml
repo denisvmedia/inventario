@@ -23,6 +23,12 @@ jobs:
           echo "GO_MOD_VERSION=$GO_MOD_VERSION" >> $GITHUB_OUTPUT
         working-directory: go
 
+      - name: Extract go version from .golangci.yml
+        id: golangci_version
+        run: |
+          GOLANGCI_VERSION=$(grep '^  go:' .golangci.yml | head -1 | awk -F: '{print $2}' | tr -d '"' | awk -F',' '{print $1}' | xargs)
+          echo "GOLANGCI_VERSION=$GOLANGCI_VERSION" >> $GITHUB_OUTPUT
+
       - name: Check go-version in workflows and .golangci.yml
         run: |
           set -e
@@ -43,9 +49,11 @@ jobs:
               fi
             fi
           done
-          # Check .golangci.yml for go version
-          if [ -f .golangci.yml ]; then
-            GOLANGCI_VERSION=$(grep '^  go:' .golangci.yml | head -1 | awk -F: '{print $2}' | tr -d '"' | awk -F',' '{print $1}' | xargs)
+
+          GO_MOD_VERSION="${{ steps.golangci_version.outputs.GOLANGCI_VERSION }}"
+          echo "Go version in .golangci.yml: $GO_MOD_VERSION"
+          # Check go/.golangci.yml for go version
+          if [ -f go/.golangci.yml ]; then
             if [ -n "$GOLANGCI_VERSION" ]; then
               echo ".golangci.yml: go $GOLANGCI_VERSION"
               if [ "$GOLANGCI_VERSION" != "$GO_MOD_VERSION" ]; then
@@ -55,4 +63,3 @@ jobs:
             fi
           fi
         shell: bash
-        working-directory: go
