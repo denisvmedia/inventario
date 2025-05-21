@@ -24,6 +24,6 @@ jobs:
       - name: Install dependencies
         run: go mod download
       - name: Create dist directory
-        run: mkdir -p frontend/dist && echo "" > frontend/dist/.gitkeep
+        run: mkdir -p frontend/dist && echo "" > frontend/dist/inventario.txt
       - name: Run tests
         run: go test -v -race ./...

@@ -50,7 +50,7 @@ export async function startBackend(): Promise<void> {
   try {
     const { mkdir, writeFile } = await import('fs/promises');
     await mkdir(`${frontendRoot}/dist`, { recursive: true });
-    await writeFile(`${frontendRoot}/dist/.gitkeep`, '');
+    await writeFile(`${frontendRoot}/dist/inventario.txt`, '');
     console.log(`Created dist directory in ${frontendRoot}`);
   } catch (error) {
     console.error('Error creating dist directory:', error);
