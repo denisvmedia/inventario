@@ -15,6 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = resolve(__dirname, '../..');
 const frontendRoot = resolve(projectRoot, 'frontend');
+const backendRoot = resolve(projectRoot, 'go');
 
 /**
  * Start the backend server
@@ -26,11 +27,11 @@ export async function startBackend(): Promise<void> {
   // Check if main.go exists
   try {
     const { existsSync } = await import('fs');
-    if (!existsSync(`${projectRoot}/main.go`)) {
-      console.error(`Error: main.go not found in ${projectRoot}`);
-      throw new Error(`main.go not found in ${projectRoot}`);
+    if (!existsSync(`${backendRoot}/main.go`)) {
+      console.error(`Error: main.go not found in ${backendRoot}`);
+      throw new Error(`main.go not found in ${backendRoot}`);
     }
-    console.log(`Found main.go in ${projectRoot}`);
+    console.log(`Found main.go in ${backendRoot}`);
   } catch (error) {
     console.error('Error checking for main.go:', error);
     throw error;
@@ -57,9 +58,19 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
+  console.log('Downloading go modules')
+  try {
+    const { execSync } = await import('child_process');
+    execSync('go mod download', { cwd: backendRoot });
+    console.log('Downloaded go modules');
+  } catch (error) {
+    console.error('Error downloading go modules:', error);
+    throw error;
+  }
+
   console.log('Executing: go run main.go run');
   backendProcess = spawn('go', ['run', 'main.go', 'run'], {
-    cwd: projectRoot,
+    cwd: backendRoot,
     stdio: 'pipe',
     shell: true,
   });

@@ -3,6 +3,7 @@ GO_CMD=go
 BINARY_NAME=inventario
 BIN_DIR=bin
 FRONTEND_DIR=frontend
+BACKEND_DIR=go
 
 # Detect OS for platform-specific commands
 ifeq ($(OS),Windows_NT)
@@ -46,7 +47,7 @@ build: build-frontend build-backend
 .PHONY: build-backend
 build-backend:
 	$(call MKDIR,$(BIN_DIR))
-	$(GO_CMD) build -o $(BINARY_PATH) .
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -o ../$(BINARY_PATH) .
 
 # Build the frontend
 .PHONY: build-frontend
@@ -77,7 +78,7 @@ endif
 # Run Go tests
 .PHONY: test-go
 test-go:
-	$(GO_CMD) test -v ./...
+	$(CD) $(FRONTEND_DIR) && $(GO_CMD) test -v ./...
 
 # Run frontend tests
 .PHONY: test-frontend
@@ -102,7 +103,7 @@ seed-db:
 # Lint Go code
 .PHONY: lint-go
 lint-go:
-	golangci-lint run
+	$(CD) $(BACKEND_DIR) && golangci-lint run
 
 # Lint frontend code
 .PHONY: lint-frontend
@@ -122,6 +123,7 @@ clean:
 # Install dependencies
 .PHONY: deps
 deps:
+	$(CD) $(BACKEND_DIR)
 	$(GO_CMD) mod download
 	$(GO_CMD) mod tidy
 	$(CD) $(FRONTEND_DIR) && npm install

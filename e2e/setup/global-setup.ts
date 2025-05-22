@@ -7,7 +7,7 @@ async function globalSetup(config: FullConfig) {
     resources: ['http://localhost:5173'],
     delay: 100, // минимальная задержка перед стартом (мс)
     interval: 250, // интервал между попытками
-    timeout: 10000, // сколько максимум ждать (мс)
+    timeout: 30000, // сколько максимум ждать (мс)
     tcpTimeout: 1000, // timeout на один tcp-коннект
     window: 1000 // сколько должно пройти успешных проверок подряд
   });
