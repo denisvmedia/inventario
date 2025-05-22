@@ -23,7 +23,9 @@ jobs:
           cache: true
       - name: Install dependencies
         run: go mod download
+        working-directory: go
       - name: Create dist directory
         run: mkdir -p frontend/dist && echo "" > frontend/dist/inventario.txt
       - name: Run tests
         run: go test -v -race ./...
+        working-directory: go
