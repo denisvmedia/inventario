@@ -58,6 +58,16 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
+  console.log('Downloading go modules')
+  try {
+    const { execSync } = await import('child_process');
+    execSync('go mod download', { cwd: backendRoot });
+    console.log('Downloaded go modules');
+  } catch (error) {
+    console.error('Error downloading go modules:', error);
+    throw error;
+  }
+
   console.log('Executing: go run main.go run');
   backendProcess = spawn('go', ['run', 'main.go', 'run'], {
     cwd: backendRoot,
