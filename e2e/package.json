@@ -32,10 +32,10 @@
     "typescript": "^5.4.3"
   },
   "engines": {
-    "node": ">=22.15.1"
+    "node": ">=22.16.0"
   },
   "volta": {
-    "node": "22.15.1",
+    "node": "22.16.0",
     "npm": "11.4.0"
   },
   "dependencies": {
