@@ -65,7 +65,7 @@
       <div ref="pdfContainer" class="pdf-container">
         <div v-if="viewAllPages" ref="pdfAllPages" class="pdf-all-pages">
           <div v-for="n in numPages" :key="n" ref="pageContainers" class="pdf-page-container" :data-page="n">
-            <img v-if="pageImages[n]" :src="pageImages[n]" class="pdf-page" />
+            <img v-if="pageImages[n]" :src="pageImages[n]" class="pdf-page" alt="" />
             <div v-else class="pdf-page-loading">
               <div class="spinner small"></div>
             </div>
@@ -73,7 +73,7 @@
         </div>
         <div v-else class="pdf-single-page">
           <div class="pdf-page-container">
-            <img v-if="pageImages[currentPage]" :src="pageImages[currentPage]" class="pdf-page" />
+            <img v-if="pageImages[currentPage]" :src="pageImages[currentPage]" class="pdf-page" alt="" />
             <div v-else class="pdf-page-loading">
               <div class="spinner small"></div>
             </div>
@@ -84,7 +84,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, markRaw } from 'vue'
 import { pdfjsLib } from '../utils/pdfjs-init.ts'
 
@@ -161,7 +161,7 @@ const loadPDF = async () => {
 
     // If viewing all pages, start rendering other pages
     if (viewAllPages.value) {
-      loadAllPages()
+      await loadAllPages()
     }
 
     loading.value = false
@@ -226,7 +226,7 @@ const setViewMode = async (allPages) => {
 
   if (allPages) {
     // When switching to all pages view, start loading all pages
-    loadAllPages()
+    await loadAllPages()
 
     // Set up observer to track visible pages
     setTimeout(() => {
@@ -258,7 +258,7 @@ const loadAllPages = async () => {
 
   // Start rendering pages if not already rendering
   if (!isRendering.value) {
-    processRenderQueue()
+    await processRenderQueue()
   }
 
   // Set up the page observer after a short delay to ensure pages are in the DOM
@@ -281,7 +281,7 @@ const processRenderQueue = async () => {
 
   // Continue processing the queue
   if (pageRenderQueue.value.length > 0) {
-    processRenderQueue()
+    await processRenderQueue()
   }
 }
 
@@ -305,7 +305,7 @@ const renderPage = async (pageNum) => {
     const viewport = markRaw(page.getViewport({ scale: scale.value }))
 
     // Create a canvas for rendering
-    const canvas = document.createElement('canvas')
+    const canvas = document.createElement('canvas') as HTMLCanvasElement;
     canvas.width = viewport.width
     canvas.height = viewport.height
 
@@ -320,17 +320,14 @@ const renderPage = async (pageNum) => {
     const renderTask = markRaw(page.render(renderContext))
     await renderTask.promise
 
-    // Convert the canvas to an image data URL
-    const imageUrl = canvas.toDataURL('image/png')
-
-    // Store the image URL
-    pageImages.value[pageNum] = imageUrl
+    // Convert the canvas to an image data URL and store the image URL
+    pageImages.value[pageNum] = canvas.toDataURL('image/png')
 
     isRendering.value = false
 
     // Continue processing the queue
     if (pageRenderQueue.value.length > 0) {
-      processRenderQueue()
+      await processRenderQueue()
     }
   } catch (err) {
     console.error('Error rendering page:', err)
@@ -341,7 +338,7 @@ const renderPage = async (pageNum) => {
 
     // Continue processing the queue despite error
     if (pageRenderQueue.value.length > 0) {
-      processRenderQueue()
+      await processRenderQueue()
     }
   }
 }
@@ -391,7 +388,7 @@ const zoomIn = async () => {
 
   // If viewing all pages, start rendering other pages
   if (viewAllPages.value) {
-    loadAllPages()
+    await loadAllPages()
   }
 }
 
@@ -410,7 +407,7 @@ const zoomOut = async () => {
 
   // If viewing all pages, start rendering other pages
   if (viewAllPages.value) {
-    loadAllPages()
+    await loadAllPages()
   }
 }
 

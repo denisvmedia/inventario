@@ -10,7 +10,10 @@
     "lint:js": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx",
     "lint:js:fix": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
     "lint:styles": "stylelint \"src/**/*.{scss,vue}\"",
-    "lint:styles:fix": "stylelint \"src/**/*.{scss,vue}\" --fix"
+    "lint:styles:fix": "stylelint \"src/**/*.{scss,vue}\" --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
@@ -33,7 +36,9 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@vitejs/plugin-vue": "^5.2.4",
+    "@vitest/coverage-v8": "^3.1.4",
     "@vue/eslint-config-typescript": "^14.0.0",
+    "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.7.0",
     "eslint": "^9.27.0",
     "eslint-config-prettier": "^10.1.5",
@@ -48,6 +53,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.32.1",
     "vite": "^6.3.5",
+    "vitest": "^3.1.4",
     "vue-eslint-parser": "^10.1.3"
   },
   "engines": {
