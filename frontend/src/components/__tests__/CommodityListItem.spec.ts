@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CommodityListItem from '../CommodityListItem.vue'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
@@ -92,12 +92,12 @@ describe('CommodityListItem.vue', () => {
     })
 
     it('does not render the count when equal to 1', () => {
-      const commodity = { 
-        ...mockCommodity, 
-        attributes: { 
-          ...mockCommodity.attributes, 
-          count: 1 
-        } 
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          count: 1
+        }
       }
       const wrapper = createWrapper({ commodity })
       expect(wrapper.find('.count').exists()).toBe(false)
@@ -146,72 +146,72 @@ describe('CommodityListItem.vue', () => {
     })
 
     it('adds draft class when commodity is a draft', () => {
-      const commodity = { 
-        ...mockCommodity, 
-        attributes: { 
-          ...mockCommodity.attributes, 
-          draft: true 
-        } 
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          draft: true
+        }
       }
       const wrapper = createWrapper({ commodity })
       expect(wrapper.classes()).toContain('draft')
     })
 
     it('adds sold class when commodity status is sold', () => {
-      const commodity = { 
-        ...mockCommodity, 
-        attributes: { 
-          ...mockCommodity.attributes, 
-          status: 'sold' 
-        } 
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          status: 'sold'
+        }
       }
       const wrapper = createWrapper({ commodity })
       expect(wrapper.classes()).toContain('sold')
     })
 
     it('adds lost class when commodity status is lost', () => {
-      const commodity = { 
-        ...mockCommodity, 
-        attributes: { 
-          ...mockCommodity.attributes, 
-          status: 'lost' 
-        } 
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          status: 'lost'
+        }
       }
       const wrapper = createWrapper({ commodity })
       expect(wrapper.classes()).toContain('lost')
     })
 
     it('adds disposed class when commodity status is disposed', () => {
-      const commodity = { 
-        ...mockCommodity, 
-        attributes: { 
-          ...mockCommodity.attributes, 
-          status: 'disposed' 
-        } 
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          status: 'disposed'
+        }
       }
       const wrapper = createWrapper({ commodity })
       expect(wrapper.classes()).toContain('disposed')
     })
 
     it('adds written-off class when commodity status is written_off', () => {
-      const commodity = { 
-        ...mockCommodity, 
-        attributes: { 
-          ...mockCommodity.attributes, 
-          status: 'written_off' 
-        } 
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          status: 'written_off'
+        }
       }
       const wrapper = createWrapper({ commodity })
       expect(wrapper.classes()).toContain('written-off')
     })
 
     it('adds with-draft class to status when commodity is a draft', () => {
-      const commodity = { 
-        ...mockCommodity, 
-        attributes: { 
-          ...mockCommodity.attributes, 
-          draft: true 
-        } 
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          draft: true
+        }
       }
       const wrapper = createWrapper({ commodity })
       expect(wrapper.find('.commodity-status').classes()).toContain('with-draft')
@@ -223,7 +223,7 @@ describe('CommodityListItem.vue', () => {
     it('emits view-commodity event when clicking on the commodity card', async () => {
       const wrapper = createWrapper()
       await wrapper.find('.commodity-card').trigger('click')
-      
+
       expect(wrapper.emitted('view-commodity')).toBeTruthy()
       expect(wrapper.emitted('view-commodity')![0]).toEqual(['commodity-1'])
     })
@@ -231,7 +231,7 @@ describe('CommodityListItem.vue', () => {
     it('emits edit-commodity event when clicking on the edit button', async () => {
       const wrapper = createWrapper()
       await wrapper.findAll('button')[0].trigger('click')
-      
+
       expect(wrapper.emitted('edit-commodity')).toBeTruthy()
       expect(wrapper.emitted('edit-commodity')![0]).toEqual(['commodity-1'])
     })
@@ -239,22 +239,22 @@ describe('CommodityListItem.vue', () => {
     it('emits confirm-delete-commodity event when clicking on the delete button', async () => {
       const wrapper = createWrapper()
       await wrapper.findAll('button')[1].trigger('click')
-      
+
       expect(wrapper.emitted('confirm-delete-commodity')).toBeTruthy()
       expect(wrapper.emitted('confirm-delete-commodity')![0]).toEqual(['commodity-1'])
     })
 
     it('stops event propagation when clicking on action buttons', async () => {
       const wrapper = createWrapper()
-      
+
       // Mock the stopPropagation method
       const stopPropagation = vi.fn()
-      
+
       // Trigger click with mocked event
       await wrapper.findAll('button')[0].trigger('click.stop', {
         stopPropagation
       })
-      
+
       // Check that stopPropagation was called
       expect(stopPropagation).toHaveBeenCalled()
     })
@@ -264,10 +264,10 @@ describe('CommodityListItem.vue', () => {
   describe('Helper Functions', () => {
     it('returns correct type icon based on commodity type', () => {
       const wrapper = createWrapper()
-      
+
       // Access the component instance
       const vm = wrapper.vm as any
-      
+
       expect(vm.getTypeIcon('white_goods')).toBe('blender')
       expect(vm.getTypeIcon('electronics')).toBe('laptop')
       expect(vm.getTypeIcon('equipment')).toBe('tools')
@@ -279,40 +279,40 @@ describe('CommodityListItem.vue', () => {
 
     it('returns correct type name based on commodity type', () => {
       const wrapper = createWrapper()
-      
+
       // Access the component instance
       const vm = wrapper.vm as any
-      
+
       expect(vm.getTypeName('electronics')).toBe('Electronics')
       expect(vm.getTypeName('unknown')).toBe('unknown') // Fallback to type ID
     })
 
     it('returns correct status name based on commodity status', () => {
       const wrapper = createWrapper()
-      
+
       // Access the component instance
       const vm = wrapper.vm as any
-      
+
       expect(vm.getStatusName('in_use')).toBe('In Use')
       expect(vm.getStatusName('unknown')).toBe('unknown') // Fallback to status ID
     })
 
     it('returns correct area name based on area ID', () => {
       const wrapper = createWrapper()
-      
+
       // Access the component instance
       const vm = wrapper.vm as any
-      
+
       expect(vm.getAreaName('area-1')).toBe('Test Area')
       expect(vm.getAreaName('unknown')).toBe('Unknown Area') // Fallback
     })
 
     it('returns correct location name based on area ID', () => {
       const wrapper = createWrapper()
-      
+
       // Access the component instance
       const vm = wrapper.vm as any
-      
+
       expect(vm.getLocationName('area-1')).toBe('Test Location')
       expect(vm.getLocationName('unknown')).toBe('Unknown Location') // Fallback
     })
@@ -321,33 +321,33 @@ describe('CommodityListItem.vue', () => {
   // Edge cases
   describe('Edge Cases', () => {
     it('handles missing area_id', () => {
-      const commodity = { 
-        ...mockCommodity, 
-        attributes: { 
-          ...mockCommodity.attributes, 
-          area_id: undefined 
-        } 
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          area_id: undefined
+        }
       }
       const wrapper = createWrapper({ commodity })
-      
+
       // Should not render location info even if showLocation is true
       expect(wrapper.find('.commodity-location').exists()).toBe(false)
     })
 
     it('handles missing area in areaMap', () => {
-      const wrapper = createWrapper({ 
-        commodity: { 
-          ...mockCommodity, 
-          attributes: { 
-            ...mockCommodity.attributes, 
-            area_id: 'non-existent-area' 
-          } 
-        } 
+      const wrapper = createWrapper({
+        commodity: {
+          ...mockCommodity,
+          attributes: {
+            ...mockCommodity.attributes,
+            area_id: 'non-existent-area'
+          }
+        }
       })
-      
+
       // Access the component instance
       const vm = wrapper.vm as any
-      
+
       expect(vm.getAreaName('non-existent-area')).toBe('Unknown Area')
       expect(vm.getLocationName('non-existent-area')).toBe('Unknown Location')
     })
@@ -359,12 +359,12 @@ describe('CommodityListItem.vue', () => {
           locationId: 'non-existent-location'
         }
       }
-      
+
       const wrapper = createWrapper({ areaMap })
-      
+
       // Access the component instance
       const vm = wrapper.vm as any
-      
+
       expect(vm.getLocationName('area-1')).toBe('Unknown Location')
     })
   })

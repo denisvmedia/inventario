@@ -1,16 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import FileViewer from '../FileViewer.vue'
 import FileList from '../FileList.vue'
 import FileDetails from '../FileDetails.vue'
-import PDFViewerCanvas from '../PDFViewerCanvas.vue'
 
 // Mock Vue's nextTick function to prevent focus errors
 vi.mock('vue', async () => {
   const actual = await vi.importActual('vue')
   return {
     ...actual,
-    nextTick: vi.fn().mockImplementation(callback => {
+    nextTick: vi.fn().mockImplementation(() => {
       // Skip the callback to avoid focus errors
       return Promise.resolve()
     })
@@ -712,7 +711,7 @@ describe('FileViewer.vue', () => {
 
       // Mock the setTimeout function
       const originalSetTimeout = window.setTimeout
-      window.setTimeout = vi.fn((callback, time) => {
+      window.setTimeout = vi.fn((callback) => {
         callback()
         return 1
       })

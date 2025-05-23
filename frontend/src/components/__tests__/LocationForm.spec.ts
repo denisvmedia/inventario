@@ -214,6 +214,7 @@ describe('LocationForm.vue', () => {
       await wrapper.find('input#address').setValue('123 Test Street')
 
       // Create a promise that we can resolve later
+      // eslint-disable-next-line no-unused-vars
       let resolvePromise: (value: any) => void
       const promise = new Promise((resolve) => {
         resolvePromise = resolve

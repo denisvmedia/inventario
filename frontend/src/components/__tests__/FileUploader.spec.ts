@@ -7,7 +7,7 @@ vi.mock('vue', async () => {
   const actual = await vi.importActual('vue')
   return {
     ...actual,
-    nextTick: vi.fn().mockImplementation(callback => {
+    nextTick: vi.fn().mockImplementation(() => {
       // Skip the callback to avoid focus errors
       return Promise.resolve()
     })
@@ -271,7 +271,7 @@ describe('FileUploader.vue', () => {
       })
 
       // Spy on the addFiles method
-      const addFilesSpy = vi.spyOn(wrapper.vm, 'addFiles')
+      vi.spyOn(wrapper.vm, 'addFiles')
 
       await wrapper.find('.file-input').trigger('change')
 

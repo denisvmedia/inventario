@@ -1,15 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import FileList from '../FileList.vue'
 
-import * as Vue from 'vue'
 
 // Mock Vue's nextTick function to prevent focus errors
 vi.mock('vue', async () => {
   const actual = await vi.importActual('vue')
   return {
     ...actual,
-    nextTick: vi.fn().mockImplementation(callback => {
+    nextTick: vi.fn().mockImplementation(() => {
       // Skip the callback to avoid focus errors
       return Promise.resolve()
     })

@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest'
+import { mount } from '@vue/test-utils'
 import CommodityForm from '../CommodityForm.vue'
-import { COMMODITY_TYPES } from '@/constants/commodityTypes'
-import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
-import { CURRENCY_CZK, CURRENCY_USD } from '@/constants/currencies'
+import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
+import { CURRENCY_CZK } from '@/constants/currencies'
 
 // Mock PrimeVue components
 vi.mock('primevue/select', () => ({
