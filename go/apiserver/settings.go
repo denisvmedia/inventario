@@ -57,6 +57,21 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if main currency is being changed
+	if settings.MainCurrency != nil {
+		currentSettings, err := api.registry.Get()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// If main currency is already set and the new value is different, return an error
+		if currentSettings.MainCurrency != nil && *currentSettings.MainCurrency != "" && *settings.MainCurrency != *currentSettings.MainCurrency {
+			http.Error(w, registry.ErrMainCurrencyAlreadySet.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+	}
+
 	// Save the settings
 	if err := api.registry.Save(settings); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -96,6 +111,21 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	if field == "" {
 		http.Error(w, "Field path is required", http.StatusBadRequest)
 		return
+	}
+
+	// Check if trying to update main currency
+	if field == "system.main_currency" {
+		currentSettings, err := api.registry.Get()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// If main currency is already set, prevent changing it
+		if currentSettings.MainCurrency != nil && *currentSettings.MainCurrency != "" {
+			http.Error(w, registry.ErrMainCurrencyAlreadySet.Error(), http.StatusUnprocessableEntity)
+			return
+		}
 	}
 
 	// Decode the request body into a value

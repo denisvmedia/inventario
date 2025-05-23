@@ -108,15 +108,19 @@
           :filter="true"
           :show-clear="false"
           aria-label="Currency"
+          :disabled="isMainCurrencySet"
         />
         <div v-if="formErrors.main_currency" class="error-message">{{ formErrors.main_currency }}</div>
+        <div v-if="isMainCurrencySet" class="currency-locked-message">
+          <font-awesome-icon icon="lock" /> Main currency is locked and cannot be changed once set.
+        </div>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" @click="goBack">Cancel</button>
         <button
           class="btn btn-primary"
-          :disabled="isSubmitting"
+          :disabled="isSubmitting || (isMainCurrencySet && systemConfig.main_currency === originalMainCurrency)"
           @click="saveSystemConfig"
         >
           {{ isSubmitting ? 'Saving...' : 'Save' }}
@@ -216,6 +220,10 @@ const systemConfig = ref({
   main_currency: 'USD'
 })
 
+// Track if main currency is already set
+const isMainCurrencySet = ref<boolean>(false)
+const originalMainCurrency = ref<string>('')
+
 // Form validation errors
 const formErrors = ref({
   theme: '',
@@ -311,6 +319,14 @@ async function loadSetting() {
         backup_interval: '24h', // Not in settings model, using default
         backup_location: '', // Not in settings model, using default
         main_currency: settings.MainCurrency || 'USD'
+      }
+
+      // Check if main currency is already set
+      if (settings.MainCurrency && settings.MainCurrency !== '') {
+        isMainCurrencySet.value = true
+        originalMainCurrency.value = settings.MainCurrency
+      } else {
+        isMainCurrencySet.value = false
       }
     } else {
       // For custom settings, just show empty JSON
@@ -412,6 +428,18 @@ async function saveSystemConfig() {
     return
   }
 
+  // If main currency is already set and hasn't changed, just go back to settings
+  if (isMainCurrencySet.value && systemConfig.value.main_currency === originalMainCurrency.value) {
+    router.push('/settings')
+    return
+  }
+
+  // If main currency is already set and has changed, show error and prevent saving
+  if (isMainCurrencySet.value && systemConfig.value.main_currency !== originalMainCurrency.value) {
+    formErrors.value.main_currency = 'Main currency cannot be changed once it has been set'
+    return
+  }
+
   isSubmitting.value = true
   try {
     // Update main currency using the store
@@ -425,7 +453,16 @@ async function saveSystemConfig() {
       query: { success: 'true' }
     })
   } catch (err: any) {
-    error.value = 'Failed to save System config: ' + (err.message || 'Unknown error')
+    // Check if this is the specific error about main currency already being set
+    if (err.response && err.response.status === 422 &&
+        err.response.data && err.response.data.includes('main currency already set')) {
+      formErrors.value.main_currency = 'Main currency has already been set and cannot be changed'
+      // Update UI to reflect that main currency is now set
+      isMainCurrencySet.value = true
+      originalMainCurrency.value = systemConfig.value.main_currency
+    } else {
+      error.value = 'Failed to save System config: ' + (err.message || 'Unknown error')
+    }
     console.error('Error saving System config:', err)
   } finally {
     isSubmitting.value = false
@@ -574,6 +611,17 @@ function formatSettingName(id: string) {
   color: $danger-color;
   font-size: 0.875rem;
   margin-top: 0.25rem;
+}
+
+// Currency locked message styling
+.currency-locked-message {
+  color: $secondary-color;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-style: italic;
 }
 
 @media (width <= 768px) {

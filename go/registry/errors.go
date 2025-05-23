@@ -12,5 +12,6 @@ var (
 	ErrAlreadyExists    = errors.New("already exists")
 	ErrBadDataStructure = errors.New("bad data structure")
 
-	ErrMainCurrencyNotSet = errors.New("main currency not set")
+	ErrMainCurrencyNotSet      = errors.New("main currency not set")
+	ErrMainCurrencyAlreadySet = errors.New("main currency already set and cannot be changed")
 )

@@ -106,3 +106,66 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(*finalSettings.Theme, qt.Equals, newTheme)
 	c.Assert(*finalSettings.ShowDebugInfo, qt.Equals, showDebugInfo)
 }
+
+func TestMainCurrencyRestriction(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a memory registry for testing
+	registrySet, err := memory.NewRegistrySet("")
+	c.Assert(err, qt.IsNil)
+
+	// Create a router with the settings endpoint
+	r := chi.NewRouter()
+	r.Route("/settings", apiserver.Settings(registrySet.SettingsRegistry))
+
+	// First, set the main currency to USD
+	currency := "USD"
+	testSettings := models.SettingsObject{
+		MainCurrency: &currency,
+	}
+	settingsJSON, err := json.Marshal(testSettings)
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest("PUT", "/settings", bytes.NewReader(settingsJSON))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+
+	// Now try to change the main currency to EUR using PUT
+	newCurrency := "EUR"
+	testSettings.MainCurrency = &newCurrency
+	settingsJSON, err = json.Marshal(testSettings)
+	c.Assert(err, qt.IsNil)
+
+	req = httptest.NewRequest("PUT", "/settings", bytes.NewReader(settingsJSON))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Should get an error
+	c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity)
+
+	// Try to change the main currency to EUR using PATCH
+	currencyJSON, err := json.Marshal(newCurrency)
+	c.Assert(err, qt.IsNil)
+
+	req = httptest.NewRequest("PATCH", "/settings/system.main_currency", bytes.NewReader(currencyJSON))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Should get an error
+	c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity)
+
+	// Verify the main currency is still USD
+	req = httptest.NewRequest("GET", "/settings", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+
+	var retrievedSettings models.SettingsObject
+	err = json.Unmarshal(w.Body.Bytes(), &retrievedSettings)
+	c.Assert(err, qt.IsNil)
+	c.Assert(*retrievedSettings.MainCurrency, qt.Equals, currency) // Should still be USD
+}
+

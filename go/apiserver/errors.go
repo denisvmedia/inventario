@@ -60,6 +60,8 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, registry.ErrNotFound):
 		return NewNotFoundError(err)
+	case errors.Is(err, registry.ErrMainCurrencyAlreadySet):
+		return NewUnprocessableEntityError(err)
 	default:
 		log.WithError(err).Error("internal server error")
 		return NewInternalServerError(err)

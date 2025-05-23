@@ -35,9 +35,17 @@ export const useSettingsStore = defineStore('settings', () => {
     try {
       await settingsService.updateMainCurrency(currency)
       mainCurrency.value = currency
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update main currency:', err)
-      error.value = 'Failed to update main currency'
+
+      // Check if this is the specific error about main currency already being set
+      if (err.response && err.response.status === 422 &&
+          err.response.data && err.response.data.includes('main currency already set')) {
+        error.value = 'Main currency has already been set and cannot be changed'
+      } else {
+        error.value = 'Failed to update main currency'
+      }
+
       throw err
     } finally {
       isLoading.value = false
