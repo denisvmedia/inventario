@@ -62,6 +62,26 @@ export default [
     }
   },
 
+  // Vitest configuration files
+  {
+    files: ['vitest.config.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        ecmaVersion: 2021,
+        sourceType: 'module',
+        project: './tsconfig.vitest.json'
+      },
+      globals: sharedGlobals
+    },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
+      '@typescript-eslint/no-unused-vars': 'warn'
+    }
+  },
+
   // Standalone TypeScript files
   {
     files: ['**/*.ts', '**/*.tsx'],
