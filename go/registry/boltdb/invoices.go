@@ -1,8 +1,11 @@
 package boltdb
 
 import (
+	"context"
+
 	bolt "go.etcd.io/bbolt"
 
+	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/boltdb/dbx"
@@ -40,33 +43,33 @@ func NewInvoiceRegistry(db *bolt.DB, commodityRegistry registry.CommodityRegistr
 	}
 }
 
-func (r *InvoiceRegistry) Create(m models.Invoice) (*models.Invoice, error) {
+func (r *InvoiceRegistry) Create(ctx context.Context, m models.Invoice) (*models.Invoice, error) {
 	result, err := r.registry.Create(m, func(_tx dbx.TransactionOrBucket, _invoice *models.Invoice) error {
 		return nil
 	}, func(_tx dbx.TransactionOrBucket, _invoice *models.Invoice) error {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to create invoice")
 	}
 
-	err = r.commodityRegistry.AddInvoice(result.CommodityID, result.ID)
+	err = r.commodityRegistry.AddInvoice(ctx, result.CommodityID, result.ID)
 	if err != nil {
-		return result, err
+		return result, errkit.Wrap(err, "failed to add invoice to commodity")
 	}
 
 	return result, nil
 }
 
-func (r *InvoiceRegistry) Get(id string) (*models.Invoice, error) {
+func (r *InvoiceRegistry) Get(_ context.Context, id string) (*models.Invoice, error) {
 	return r.registry.Get(id)
 }
 
-func (r *InvoiceRegistry) List() ([]*models.Invoice, error) {
+func (r *InvoiceRegistry) List(_ context.Context) ([]*models.Invoice, error) {
 	return r.registry.List()
 }
 
-func (r *InvoiceRegistry) Update(m models.Invoice) (*models.Invoice, error) {
+func (r *InvoiceRegistry) Update(_ context.Context, m models.Invoice) (*models.Invoice, error) {
 	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, _invoice *models.Invoice) error {
 		return nil
 	}, func(_tx dbx.TransactionOrBucket, _result *models.Invoice) error {
@@ -74,7 +77,7 @@ func (r *InvoiceRegistry) Update(m models.Invoice) (*models.Invoice, error) {
 	})
 }
 
-func (r *InvoiceRegistry) Delete(id string) error {
+func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 	var commodityID string
 	err := r.registry.Delete(id, func(_tx dbx.TransactionOrBucket, invoice *models.Invoice) error {
 		commodityID = invoice.CommodityID
@@ -83,17 +86,17 @@ func (r *InvoiceRegistry) Delete(id string) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete invoice")
 	}
 
-	err = r.commodityRegistry.DeleteInvoice(commodityID, id)
+	err = r.commodityRegistry.DeleteInvoice(ctx, commodityID, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to remove invoice from commodity")
 	}
 
 	return nil
 }
 
-func (r *InvoiceRegistry) Count() (int, error) {
+func (r *InvoiceRegistry) Count(_ context.Context) (int, error) {
 	return r.registry.Count()
 }

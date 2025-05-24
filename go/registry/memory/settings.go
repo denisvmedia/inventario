@@ -1,8 +1,10 @@
 package memory
 
 import (
+	"context"
 	"sync"
 
+	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/typekit"
 	"github.com/denisvmedia/inventario/models"
 )
@@ -18,14 +20,14 @@ func NewSettingsRegistry() *SettingsRegistry {
 	}
 }
 
-func (r *SettingsRegistry) Get() (models.SettingsObject, error) {
+func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
 	return r.settings, nil
 }
 
-func (r *SettingsRegistry) Save(settings models.SettingsObject) error {
+func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObject) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -33,13 +35,13 @@ func (r *SettingsRegistry) Save(settings models.SettingsObject) error {
 	return nil
 }
 
-func (r *SettingsRegistry) Patch(configfield string, value any) error {
+func (r *SettingsRegistry) Patch(ctx context.Context, configfield string, value any) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	err := typekit.SetFieldByConfigfieldTag(&r.settings, configfield, value)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to patch settings")
 	}
 
 	return nil

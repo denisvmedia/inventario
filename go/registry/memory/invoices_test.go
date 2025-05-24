@@ -1,6 +1,7 @@
 package memory_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -13,6 +14,7 @@ import (
 
 func TestInvoiceRegistry_Create(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of InvoiceRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
@@ -30,18 +32,19 @@ func TestInvoiceRegistry_Create(t *testing.T) {
 	}
 
 	// Create a new invoice in the registry
-	createdInvoice, err := r.Create(invoice)
+	createdInvoice, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdInvoice, qt.Not(qt.IsNil))
 
 	// Verify the count of invoices in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
 
 func TestInvoiceRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of InvoiceRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
@@ -59,25 +62,26 @@ func TestInvoiceRegistry_Delete(t *testing.T) {
 	}
 
 	// Create a new invoice in the registry
-	createdInvoice, err := r.Create(invoice)
+	createdInvoice, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 
 	// Delete the invoice from the registry
-	err = r.Delete(createdInvoice.ID)
+	err = r.Delete(ctx, createdInvoice.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the invoice is no longer present in the registry
-	_, err = r.Get(createdInvoice.ID)
+	_, err = r.Get(ctx, createdInvoice.ID)
 	c.Assert(err, qt.Equals, registry.ErrNotFound)
 
 	// Verify the count of invoices in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }
 
 func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of InvoiceRegistry
 	commodityRegistry, _ := getCommodityRegistry(c)
@@ -85,7 +89,7 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 
 	// Create a test invoice without required fields
 	invoice := models.Invoice{}
-	_, err := r.Create(invoice)
+	_, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.Not(qt.IsNil))
 	var errs validation.Errors
 	c.Assert(err, qt.ErrorAs, &errs)
@@ -104,13 +108,14 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 		CommodityID: "invalid",
 	}
 	// Attempt to create the invoice in the registry and expect a validation error
-	_, err = r.Create(invoice)
+	_, err = r.Create(ctx, invoice)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	c.Assert(err, qt.ErrorMatches, "commodity not found.*")
 }
 
 func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of InvoiceRegistry
 	commodityRegistry, _ := getCommodityRegistry(c)
@@ -128,6 +133,6 @@ func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	}
 
 	// Attempt to create the invoice in the registry and expect a commodity not found error
-	_, err := r.Create(invoice)
+	_, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.ErrorMatches, "commodity not found.*")
 }

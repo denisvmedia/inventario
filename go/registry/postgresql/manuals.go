@@ -27,9 +27,7 @@ func NewManualRegistry(pool *pgxpool.Pool, commodityRegistry registry.CommodityR
 	}
 }
 
-func (r *ManualRegistry) Create(manual models.Manual) (*models.Manual, error) {
-	ctx := context.Background()
-
+func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
 	// Validate the manual
 	err := validation.Validate(&manual)
 	if err != nil {
@@ -37,7 +35,7 @@ func (r *ManualRegistry) Create(manual models.Manual) (*models.Manual, error) {
 	}
 
 	// Check if the commodity exists
-	_, err = r.commodityRegistry.Get(manual.CommodityID)
+	_, err = r.commodityRegistry.Get(ctx, manual.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
@@ -57,7 +55,7 @@ func (r *ManualRegistry) Create(manual models.Manual) (*models.Manual, error) {
 	}
 
 	// Add the manual to the commodity
-	err = r.commodityRegistry.AddManual(manual.CommodityID, manual.ID)
+	err = r.commodityRegistry.AddManual(ctx, manual.CommodityID, manual.ID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to add manual to commodity")
 	}
@@ -65,8 +63,7 @@ func (r *ManualRegistry) Create(manual models.Manual) (*models.Manual, error) {
 	return &manual, nil
 }
 
-func (r *ManualRegistry) Get(id string) (*models.Manual, error) {
-	ctx := context.Background()
+func (r *ManualRegistry) Get(ctx context.Context, id string) (*models.Manual, error) {
 	var manual models.Manual
 	manual.File = &models.File{}
 
@@ -86,8 +83,7 @@ func (r *ManualRegistry) Get(id string) (*models.Manual, error) {
 	return &manual, nil
 }
 
-func (r *ManualRegistry) List() ([]*models.Manual, error) {
-	ctx := context.Background()
+func (r *ManualRegistry) List(ctx context.Context) ([]*models.Manual, error) {
 	var manuals []*models.Manual
 
 	// Query the database for all manuals
@@ -117,9 +113,7 @@ func (r *ManualRegistry) List() ([]*models.Manual, error) {
 	return manuals, nil
 }
 
-func (r *ManualRegistry) Update(manual models.Manual) (*models.Manual, error) {
-	ctx := context.Background()
-
+func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*models.Manual, error) {
 	// Validate the manual
 	err := validation.Validate(&manual)
 	if err != nil {
@@ -127,13 +121,13 @@ func (r *ManualRegistry) Update(manual models.Manual) (*models.Manual, error) {
 	}
 
 	// Check if the manual exists
-	existingManual, err := r.Get(manual.ID)
+	existingManual, err := r.Get(ctx, manual.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if the commodity exists
-	_, err = r.commodityRegistry.Get(manual.CommodityID)
+	_, err = r.commodityRegistry.Get(ctx, manual.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
@@ -148,13 +142,13 @@ func (r *ManualRegistry) Update(manual models.Manual) (*models.Manual, error) {
 	// If the commodity ID has changed, update the commodity references
 	if existingManual.CommodityID != manual.CommodityID {
 		// Remove the manual from the old commodity
-		err = r.commodityRegistry.DeleteManual(existingManual.CommodityID, manual.ID)
+		err = r.commodityRegistry.DeleteManual(ctx, existingManual.CommodityID, manual.ID)
 		if err != nil {
 			return nil, err
 		}
 
 		// Add the manual to the new commodity
-		err = r.commodityRegistry.AddManual(manual.CommodityID, manual.ID)
+		err = r.commodityRegistry.AddManual(ctx, manual.CommodityID, manual.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -179,11 +173,9 @@ func (r *ManualRegistry) Update(manual models.Manual) (*models.Manual, error) {
 	return &manual, nil
 }
 
-func (r *ManualRegistry) Delete(id string) error {
-	ctx := context.Background()
-
+func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
 	// Check if the manual exists
-	manual, err := r.Get(id)
+	manual, err := r.Get(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -205,7 +197,7 @@ func (r *ManualRegistry) Delete(id string) error {
 	}
 
 	// Remove the manual from the commodity
-	err = r.commodityRegistry.DeleteManual(manual.CommodityID, id)
+	err = r.commodityRegistry.DeleteManual(ctx, manual.CommodityID, id)
 	if err != nil {
 		return err
 	}
@@ -219,8 +211,7 @@ func (r *ManualRegistry) Delete(id string) error {
 	return nil
 }
 
-func (r *ManualRegistry) Count() (int, error) {
-	ctx := context.Background()
+func (r *ManualRegistry) Count(ctx context.Context) (int, error) {
 	var count int
 
 	// Query the database for the count

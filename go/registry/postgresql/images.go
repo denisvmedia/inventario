@@ -27,9 +27,7 @@ func NewImageRegistry(pool *pgxpool.Pool, commodityRegistry registry.CommodityRe
 	}
 }
 
-func (r *ImageRegistry) Create(image models.Image) (*models.Image, error) {
-	ctx := context.Background()
-
+func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models.Image, error) {
 	// Validate the image
 	err := validation.Validate(&image)
 	if err != nil {
@@ -37,7 +35,7 @@ func (r *ImageRegistry) Create(image models.Image) (*models.Image, error) {
 	}
 
 	// Check if the commodity exists
-	_, err = r.commodityRegistry.Get(image.CommodityID)
+	_, err = r.commodityRegistry.Get(ctx, image.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
@@ -57,7 +55,7 @@ func (r *ImageRegistry) Create(image models.Image) (*models.Image, error) {
 	}
 
 	// Add the image to the commodity
-	err = r.commodityRegistry.AddImage(image.CommodityID, image.ID)
+	err = r.commodityRegistry.AddImage(ctx, image.CommodityID, image.ID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to add image to commodity")
 	}
@@ -65,8 +63,7 @@ func (r *ImageRegistry) Create(image models.Image) (*models.Image, error) {
 	return &image, nil
 }
 
-func (r *ImageRegistry) Get(id string) (*models.Image, error) {
-	ctx := context.Background()
+func (r *ImageRegistry) Get(ctx context.Context, id string) (*models.Image, error) {
 	var image models.Image
 	image.File = &models.File{}
 
@@ -86,8 +83,7 @@ func (r *ImageRegistry) Get(id string) (*models.Image, error) {
 	return &image, nil
 }
 
-func (r *ImageRegistry) List() ([]*models.Image, error) {
-	ctx := context.Background()
+func (r *ImageRegistry) List(ctx context.Context) ([]*models.Image, error) {
 	var images []*models.Image
 
 	// Query the database for all images
@@ -117,9 +113,7 @@ func (r *ImageRegistry) List() ([]*models.Image, error) {
 	return images, nil
 }
 
-func (r *ImageRegistry) Update(image models.Image) (*models.Image, error) {
-	ctx := context.Background()
-
+func (r *ImageRegistry) Update(ctx context.Context, image models.Image) (*models.Image, error) {
 	// Validate the image
 	err := validation.Validate(&image)
 	if err != nil {
@@ -127,13 +121,13 @@ func (r *ImageRegistry) Update(image models.Image) (*models.Image, error) {
 	}
 
 	// Check if the image exists
-	existingImage, err := r.Get(image.ID)
+	existingImage, err := r.Get(ctx, image.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if the commodity exists
-	_, err = r.commodityRegistry.Get(image.CommodityID)
+	_, err = r.commodityRegistry.Get(ctx, image.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
@@ -148,13 +142,13 @@ func (r *ImageRegistry) Update(image models.Image) (*models.Image, error) {
 	// If the commodity ID has changed, update the commodity references
 	if existingImage.CommodityID != image.CommodityID {
 		// Remove the image from the old commodity
-		err = r.commodityRegistry.DeleteImage(existingImage.CommodityID, image.ID)
+		err = r.commodityRegistry.DeleteImage(ctx, existingImage.CommodityID, image.ID)
 		if err != nil {
 			return nil, err
 		}
 
 		// Add the image to the new commodity
-		err = r.commodityRegistry.AddImage(image.CommodityID, image.ID)
+		err = r.commodityRegistry.AddImage(ctx, image.CommodityID, image.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -179,11 +173,9 @@ func (r *ImageRegistry) Update(image models.Image) (*models.Image, error) {
 	return &image, nil
 }
 
-func (r *ImageRegistry) Delete(id string) error {
-	ctx := context.Background()
-
+func (r *ImageRegistry) Delete(ctx context.Context, id string) error {
 	// Check if the image exists
-	image, err := r.Get(id)
+	image, err := r.Get(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -205,7 +197,7 @@ func (r *ImageRegistry) Delete(id string) error {
 	}
 
 	// Remove the image from the commodity
-	err = r.commodityRegistry.DeleteImage(image.CommodityID, id)
+	err = r.commodityRegistry.DeleteImage(ctx, image.CommodityID, id)
 	if err != nil {
 		return err
 	}
@@ -219,8 +211,7 @@ func (r *ImageRegistry) Delete(id string) error {
 	return nil
 }
 
-func (r *ImageRegistry) Count() (int, error) {
-	ctx := context.Background()
+func (r *ImageRegistry) Count(ctx context.Context) (int, error) {
 	var count int
 
 	// Query the database for the count

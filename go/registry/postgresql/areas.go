@@ -27,9 +27,7 @@ func NewAreaRegistry(pool *pgxpool.Pool, locationRegistry registry.LocationRegis
 	}
 }
 
-func (r *AreaRegistry) Create(area models.Area) (*models.Area, error) {
-	ctx := context.Background()
-
+func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	// Validate the area
 	err := validation.Validate(&area)
 	if err != nil {
@@ -37,7 +35,7 @@ func (r *AreaRegistry) Create(area models.Area) (*models.Area, error) {
 	}
 
 	// Check if the location exists
-	_, err = r.locationRegistry.Get(area.LocationID)
+	_, err = r.locationRegistry.Get(ctx, area.LocationID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "location not found")
 	}
@@ -57,7 +55,7 @@ func (r *AreaRegistry) Create(area models.Area) (*models.Area, error) {
 	}
 
 	// Add the area to the location
-	err = r.locationRegistry.AddArea(area.LocationID, area.ID)
+	err = r.locationRegistry.AddArea(ctx, area.LocationID, area.ID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to add area to location")
 	}
@@ -65,8 +63,7 @@ func (r *AreaRegistry) Create(area models.Area) (*models.Area, error) {
 	return &area, nil
 }
 
-func (r *AreaRegistry) Get(id string) (*models.Area, error) {
-	ctx := context.Background()
+func (r *AreaRegistry) Get(ctx context.Context, id string) (*models.Area, error) {
 	var area models.Area
 
 	// Query the database for the area
@@ -85,8 +82,7 @@ func (r *AreaRegistry) Get(id string) (*models.Area, error) {
 	return &area, nil
 }
 
-func (r *AreaRegistry) List() ([]*models.Area, error) {
-	ctx := context.Background()
+func (r *AreaRegistry) List(ctx context.Context) ([]*models.Area, error) {
 	var areas []*models.Area
 
 	// Query the database for all areas
@@ -115,9 +111,7 @@ func (r *AreaRegistry) List() ([]*models.Area, error) {
 	return areas, nil
 }
 
-func (r *AreaRegistry) Update(area models.Area) (*models.Area, error) {
-	ctx := context.Background()
-
+func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Area, error) {
 	// Validate the area
 	err := validation.Validate(&area)
 	if err != nil {
@@ -125,21 +119,21 @@ func (r *AreaRegistry) Update(area models.Area) (*models.Area, error) {
 	}
 
 	// Check if the area exists
-	existingArea, err := r.Get(area.ID)
+	existingArea, err := r.Get(ctx, area.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if the location exists
-	_, err = r.locationRegistry.Get(area.LocationID)
+	_, err = r.locationRegistry.Get(ctx, area.LocationID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "location not found")
 	}
 
 	// If the location ID has changed, update the location references
 	if existingArea.LocationID != area.LocationID {
-		// Get the commodities in the area
-		commodities, err := r.GetCommodities(area.ID)
+		// Get the commodities in the area (for validation)
+		_, err := r.GetCommodities(ctx, area.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +146,7 @@ func (r *AreaRegistry) Update(area models.Area) (*models.Area, error) {
 		defer tx.Rollback(ctx)
 
 		// Remove the area from the old location
-		err = r.locationRegistry.DeleteArea(existingArea.LocationID, area.ID)
+		err = r.locationRegistry.DeleteArea(ctx, existingArea.LocationID, area.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -168,7 +162,7 @@ func (r *AreaRegistry) Update(area models.Area) (*models.Area, error) {
 		}
 
 		// Add the area to the new location
-		err = r.locationRegistry.AddArea(area.LocationID, area.ID)
+		err = r.locationRegistry.AddArea(ctx, area.LocationID, area.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -193,17 +187,15 @@ func (r *AreaRegistry) Update(area models.Area) (*models.Area, error) {
 	return &area, nil
 }
 
-func (r *AreaRegistry) Delete(id string) error {
-	ctx := context.Background()
-
+func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	// Check if the area exists
-	area, err := r.Get(id)
+	area, err := r.Get(ctx, id)
 	if err != nil {
 		return err
 	}
 
 	// Check if the area has commodities
-	commodities, err := r.GetCommodities(id)
+	commodities, err := r.GetCommodities(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -228,7 +220,7 @@ func (r *AreaRegistry) Delete(id string) error {
 	}
 
 	// Remove the area from the location
-	err = r.locationRegistry.DeleteArea(area.LocationID, id)
+	err = r.locationRegistry.DeleteArea(ctx, area.LocationID, id)
 	if err != nil {
 		return err
 	}
@@ -242,8 +234,7 @@ func (r *AreaRegistry) Delete(id string) error {
 	return nil
 }
 
-func (r *AreaRegistry) Count() (int, error) {
-	ctx := context.Background()
+func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 	var count int
 
 	// Query the database for the count
@@ -258,11 +249,9 @@ func (r *AreaRegistry) Count() (int, error) {
 	return count, nil
 }
 
-func (r *AreaRegistry) AddCommodity(areaID, commodityID string) error {
-	ctx := context.Background()
-
+func (r *AreaRegistry) AddCommodity(ctx context.Context, areaID, commodityID string) error {
 	// Check if the area exists
-	_, err := r.Get(areaID)
+	_, err := r.Get(ctx, areaID)
 	if err != nil {
 		return err
 	}
@@ -284,12 +273,11 @@ func (r *AreaRegistry) AddCommodity(areaID, commodityID string) error {
 	return nil
 }
 
-func (r *AreaRegistry) GetCommodities(areaID string) ([]string, error) {
-	ctx := context.Background()
+func (r *AreaRegistry) GetCommodities(ctx context.Context, areaID string) ([]string, error) {
 	var commodities []string
 
 	// Check if the area exists
-	_, err := r.Get(areaID)
+	_, err := r.Get(ctx, areaID)
 	if err != nil {
 		return nil, err
 	}
@@ -321,11 +309,9 @@ func (r *AreaRegistry) GetCommodities(areaID string) ([]string, error) {
 	return commodities, nil
 }
 
-func (r *AreaRegistry) DeleteCommodity(areaID, commodityID string) error {
-	ctx := context.Background()
-
+func (r *AreaRegistry) DeleteCommodity(ctx context.Context, areaID, commodityID string) error {
 	// Check if the area exists
-	_, err := r.Get(areaID)
+	_, err := r.Get(ctx, areaID)
 	if err != nil {
 		return err
 	}

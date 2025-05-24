@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"sync"
 
 	"github.com/go-extras/go-kit/must"
@@ -31,48 +32,54 @@ func NewAreaRegistry(locationRegistry registry.LocationRegistry) *AreaRegistry {
 	}
 }
 
-func (r *AreaRegistry) Create(area models.Area) (*models.Area, error) {
+func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	err := validation.Validate(&area)
 	if err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
 	}
 
-	_, err = r.locationRegistry.Get(area.LocationID)
+	_, err = r.locationRegistry.Get(ctx, area.LocationID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "location not found")
 	}
 
-	newArea, err := r.baseAreaRegistry.Create(area)
+	newArea, err := r.baseAreaRegistry.Create(ctx, area)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create area")
 	}
 
-	err = r.locationRegistry.AddArea(area.LocationID, newArea.ID)
-
-	return newArea, err
-}
-
-func (r *AreaRegistry) Delete(id string) error {
-	area, err := r.baseAreaRegistry.Get(id)
+	err = r.locationRegistry.AddArea(ctx, area.LocationID, newArea.ID)
 	if err != nil {
-		return err
+		return nil, errkit.Wrap(err, "failed to add area to location")
 	}
 
-	if len(must.Must(r.GetCommodities(id))) > 0 {
+	return newArea, nil
+}
+
+func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
+	area, err := r.baseAreaRegistry.Get(ctx, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get area")
+	}
+
+	if len(must.Must(r.GetCommodities(ctx, id))) > 0 {
 		return errkit.Wrap(registry.ErrCannotDelete, "area has commodities")
 	}
 
-	err = r.baseAreaRegistry.Delete(id)
+	err = r.baseAreaRegistry.Delete(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete area")
 	}
 
-	err = r.locationRegistry.DeleteArea(area.LocationID, id)
+	err = r.locationRegistry.DeleteArea(ctx, area.LocationID, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete area from location")
+	}
 
-	return err
+	return nil
 }
 
-func (r *AreaRegistry) AddCommodity(areaID, commodityID string) error {
+func (r *AreaRegistry) AddCommodity(_ context.Context, areaID, commodityID string) error {
 	r.commoditiesLock.Lock()
 	r.commodities[areaID] = append(r.commodities[areaID], commodityID)
 	r.commoditiesLock.Unlock()
@@ -80,7 +87,7 @@ func (r *AreaRegistry) AddCommodity(areaID, commodityID string) error {
 	return nil
 }
 
-func (r *AreaRegistry) GetCommodities(areaID string) ([]string, error) {
+func (r *AreaRegistry) GetCommodities(_ context.Context, areaID string) ([]string, error) {
 	r.commoditiesLock.RLock()
 	commodities := make([]string, len(r.commodities[areaID]))
 	copy(commodities, r.commodities[areaID])
@@ -89,7 +96,7 @@ func (r *AreaRegistry) GetCommodities(areaID string) ([]string, error) {
 	return commodities, nil
 }
 
-func (r *AreaRegistry) DeleteCommodity(areaID, commodityID string) error {
+func (r *AreaRegistry) DeleteCommodity(_ context.Context, areaID, commodityID string) error {
 	r.commoditiesLock.Lock()
 	for i, foundCommodityID := range r.commodities[areaID] {
 		if foundCommodityID == commodityID {

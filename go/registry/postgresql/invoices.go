@@ -27,9 +27,7 @@ func NewInvoiceRegistry(pool *pgxpool.Pool, commodityRegistry registry.Commodity
 	}
 }
 
-func (r *InvoiceRegistry) Create(invoice models.Invoice) (*models.Invoice, error) {
-	ctx := context.Background()
-
+func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
 	// Validate the invoice
 	err := validation.Validate(&invoice)
 	if err != nil {
@@ -37,7 +35,7 @@ func (r *InvoiceRegistry) Create(invoice models.Invoice) (*models.Invoice, error
 	}
 
 	// Check if the commodity exists
-	_, err = r.commodityRegistry.Get(invoice.CommodityID)
+	_, err = r.commodityRegistry.Get(ctx, invoice.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
@@ -57,7 +55,7 @@ func (r *InvoiceRegistry) Create(invoice models.Invoice) (*models.Invoice, error
 	}
 
 	// Add the invoice to the commodity
-	err = r.commodityRegistry.AddInvoice(invoice.CommodityID, invoice.ID)
+	err = r.commodityRegistry.AddInvoice(ctx, invoice.CommodityID, invoice.ID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to add invoice to commodity")
 	}
@@ -65,8 +63,7 @@ func (r *InvoiceRegistry) Create(invoice models.Invoice) (*models.Invoice, error
 	return &invoice, nil
 }
 
-func (r *InvoiceRegistry) Get(id string) (*models.Invoice, error) {
-	ctx := context.Background()
+func (r *InvoiceRegistry) Get(ctx context.Context, id string) (*models.Invoice, error) {
 	var invoice models.Invoice
 	invoice.File = &models.File{}
 
@@ -86,8 +83,7 @@ func (r *InvoiceRegistry) Get(id string) (*models.Invoice, error) {
 	return &invoice, nil
 }
 
-func (r *InvoiceRegistry) List() ([]*models.Invoice, error) {
-	ctx := context.Background()
+func (r *InvoiceRegistry) List(ctx context.Context) ([]*models.Invoice, error) {
 	var invoices []*models.Invoice
 
 	// Query the database for all invoices
@@ -117,9 +113,7 @@ func (r *InvoiceRegistry) List() ([]*models.Invoice, error) {
 	return invoices, nil
 }
 
-func (r *InvoiceRegistry) Update(invoice models.Invoice) (*models.Invoice, error) {
-	ctx := context.Background()
-
+func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
 	// Validate the invoice
 	err := validation.Validate(&invoice)
 	if err != nil {
@@ -127,13 +121,13 @@ func (r *InvoiceRegistry) Update(invoice models.Invoice) (*models.Invoice, error
 	}
 
 	// Check if the invoice exists
-	existingInvoice, err := r.Get(invoice.ID)
+	existingInvoice, err := r.Get(ctx, invoice.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if the commodity exists
-	_, err = r.commodityRegistry.Get(invoice.CommodityID)
+	_, err = r.commodityRegistry.Get(ctx, invoice.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
@@ -148,13 +142,13 @@ func (r *InvoiceRegistry) Update(invoice models.Invoice) (*models.Invoice, error
 	// If the commodity ID has changed, update the commodity references
 	if existingInvoice.CommodityID != invoice.CommodityID {
 		// Remove the invoice from the old commodity
-		err = r.commodityRegistry.DeleteInvoice(existingInvoice.CommodityID, invoice.ID)
+		err = r.commodityRegistry.DeleteInvoice(ctx, existingInvoice.CommodityID, invoice.ID)
 		if err != nil {
 			return nil, err
 		}
 
 		// Add the invoice to the new commodity
-		err = r.commodityRegistry.AddInvoice(invoice.CommodityID, invoice.ID)
+		err = r.commodityRegistry.AddInvoice(ctx, invoice.CommodityID, invoice.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -179,11 +173,9 @@ func (r *InvoiceRegistry) Update(invoice models.Invoice) (*models.Invoice, error
 	return &invoice, nil
 }
 
-func (r *InvoiceRegistry) Delete(id string) error {
-	ctx := context.Background()
-
+func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 	// Check if the invoice exists
-	invoice, err := r.Get(id)
+	invoice, err := r.Get(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -205,7 +197,7 @@ func (r *InvoiceRegistry) Delete(id string) error {
 	}
 
 	// Remove the invoice from the commodity
-	err = r.commodityRegistry.DeleteInvoice(invoice.CommodityID, id)
+	err = r.commodityRegistry.DeleteInvoice(ctx, invoice.CommodityID, id)
 	if err != nil {
 		return err
 	}
@@ -219,8 +211,7 @@ func (r *InvoiceRegistry) Delete(id string) error {
 	return nil
 }
 
-func (r *InvoiceRegistry) Count() (int, error) {
-	ctx := context.Background()
+func (r *InvoiceRegistry) Count(ctx context.Context) (int, error) {
 	var count int
 
 	// Query the database for the count

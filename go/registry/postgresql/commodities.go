@@ -7,8 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jellydator/validation"
-	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -29,9 +27,7 @@ func NewCommodityRegistry(pool *pgxpool.Pool, areaRegistry registry.AreaRegistry
 	}
 }
 
-func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodity, error) {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Validate the commodity
 	err := commodity.ValidateWithContext(ctx)
 	if err != nil {
@@ -39,7 +35,7 @@ func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodit
 	}
 
 	// Check if the area exists
-	_, err = r.areaRegistry.Get(commodity.AreaID)
+	_, err = r.areaRegistry.Get(ctx, commodity.AreaID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "area not found")
 	}
@@ -73,17 +69,17 @@ func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodit
 	// Insert the commodity into the database
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO commodities (
-			id, name, short_name, type, area_id, count, 
+			id, name, short_name, type, area_id, count,
 			original_price, original_price_currency, converted_original_price, current_price,
 			serial_number, extra_serial_numbers, part_numbers, tags, status,
 			purchase_date, registered_date, last_modified_date, urls, comments, draft
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, 
+			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10,
 			$11, $12, $13, $14, $15,
 			$16, $17, $18, $19, $20, $21
 		)
-	`, 
+	`,
 		commodity.ID, commodity.Name, commodity.ShortName, commodity.Type, commodity.AreaID, commodity.Count,
 		commodity.OriginalPrice, commodity.OriginalPriceCurrency, commodity.ConvertedOriginalPrice, commodity.CurrentPrice,
 		commodity.SerialNumber, extraSerialNumbers, partNumbers, tags, commodity.Status,
@@ -94,7 +90,7 @@ func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodit
 	}
 
 	// Add the commodity to the area
-	err = r.areaRegistry.AddCommodity(commodity.AreaID, commodity.ID)
+	err = r.areaRegistry.AddCommodity(ctx, commodity.AreaID, commodity.ID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to add commodity to area")
 	}
@@ -102,15 +98,14 @@ func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodit
 	return &commodity, nil
 }
 
-func (r *CommodityRegistry) Get(id string) (*models.Commodity, error) {
-	ctx := context.Background()
+func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodity, error) {
 	var commodity models.Commodity
 	var extraSerialNumbersJSON, partNumbersJSON, tagsJSON, urlsJSON []byte
 
 	// Query the database for the commodity
 	err := r.pool.QueryRow(ctx, `
-		SELECT 
-			id, name, short_name, type, area_id, count, 
+		SELECT
+			id, name, short_name, type, area_id, count,
 			original_price, original_price_currency, converted_original_price, current_price,
 			serial_number, extra_serial_numbers, part_numbers, tags, status,
 			purchase_date, registered_date, last_modified_date, urls, comments, draft
@@ -146,14 +141,13 @@ func (r *CommodityRegistry) Get(id string) (*models.Commodity, error) {
 	return &commodity, nil
 }
 
-func (r *CommodityRegistry) List() ([]*models.Commodity, error) {
-	ctx := context.Background()
+func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, error) {
 	var commodities []*models.Commodity
 
 	// Query the database for all commodities
 	rows, err := r.pool.Query(ctx, `
-		SELECT 
-			id, name, short_name, type, area_id, count, 
+		SELECT
+			id, name, short_name, type, area_id, count,
 			original_price, original_price_currency, converted_original_price, current_price,
 			serial_number, extra_serial_numbers, part_numbers, tags, status,
 			purchase_date, registered_date, last_modified_date, urls, comments, draft
@@ -202,9 +196,7 @@ func (r *CommodityRegistry) List() ([]*models.Commodity, error) {
 	return commodities, nil
 }
 
-func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodity, error) {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Validate the commodity
 	err := commodity.ValidateWithContext(ctx)
 	if err != nil {
@@ -212,13 +204,13 @@ func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodit
 	}
 
 	// Check if the commodity exists
-	existingCommodity, err := r.Get(commodity.ID)
+	existingCommodity, err := r.Get(ctx, commodity.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if the area exists
-	_, err = r.areaRegistry.Get(commodity.AreaID)
+	_, err = r.areaRegistry.Get(ctx, commodity.AreaID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "area not found")
 	}
@@ -254,13 +246,13 @@ func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodit
 	// If the area ID has changed, update the area references
 	if existingCommodity.AreaID != commodity.AreaID {
 		// Remove the commodity from the old area
-		err = r.areaRegistry.DeleteCommodity(existingCommodity.AreaID, commodity.ID)
+		err = r.areaRegistry.DeleteCommodity(ctx, existingCommodity.AreaID, commodity.ID)
 		if err != nil {
 			return nil, err
 		}
 
 		// Add the commodity to the new area
-		err = r.areaRegistry.AddCommodity(commodity.AreaID, commodity.ID)
+		err = r.areaRegistry.AddCommodity(ctx, commodity.AreaID, commodity.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -269,13 +261,13 @@ func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodit
 	// Update the commodity in the database
 	_, err = tx.Exec(ctx, `
 		UPDATE commodities
-		SET 
-			name = $1, short_name = $2, type = $3, area_id = $4, count = $5, 
+		SET
+			name = $1, short_name = $2, type = $3, area_id = $4, count = $5,
 			original_price = $6, original_price_currency = $7, converted_original_price = $8, current_price = $9,
 			serial_number = $10, extra_serial_numbers = $11, part_numbers = $12, tags = $13, status = $14,
 			purchase_date = $15, registered_date = $16, last_modified_date = $17, urls = $18, comments = $19, draft = $20
 		WHERE id = $21
-	`, 
+	`,
 		commodity.Name, commodity.ShortName, commodity.Type, commodity.AreaID, commodity.Count,
 		commodity.OriginalPrice, commodity.OriginalPriceCurrency, commodity.ConvertedOriginalPrice, commodity.CurrentPrice,
 		commodity.SerialNumber, extraSerialNumbers, partNumbers, tags, commodity.Status,
@@ -295,11 +287,9 @@ func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodit
 	return &commodity, nil
 }
 
-func (r *CommodityRegistry) Delete(id string) error {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	// Check if the commodity exists
-	commodity, err := r.Get(id)
+	commodity, err := r.Get(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -321,7 +311,7 @@ func (r *CommodityRegistry) Delete(id string) error {
 	}
 
 	// Remove the commodity from the area
-	err = r.areaRegistry.DeleteCommodity(commodity.AreaID, id)
+	err = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
 	if err != nil {
 		return err
 	}
@@ -335,8 +325,7 @@ func (r *CommodityRegistry) Delete(id string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) Count() (int, error) {
-	ctx := context.Background()
+func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 	var count int
 
 	// Query the database for the count
@@ -353,11 +342,9 @@ func (r *CommodityRegistry) Count() (int, error) {
 
 // File-related methods
 
-func (r *CommodityRegistry) AddImage(commodityID, imageID string) error {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) AddImage(ctx context.Context, commodityID, imageID string) error {
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return err
 	}
@@ -379,12 +366,11 @@ func (r *CommodityRegistry) AddImage(commodityID, imageID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) GetImages(commodityID string) ([]string, error) {
-	ctx := context.Background()
+func (r *CommodityRegistry) GetImages(ctx context.Context, commodityID string) ([]string, error) {
 	var images []string
 
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return nil, err
 	}
@@ -416,11 +402,9 @@ func (r *CommodityRegistry) GetImages(commodityID string) ([]string, error) {
 	return images, nil
 }
 
-func (r *CommodityRegistry) DeleteImage(commodityID, imageID string) error {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) DeleteImage(ctx context.Context, commodityID, imageID string) error {
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return err
 	}
@@ -453,11 +437,9 @@ func (r *CommodityRegistry) DeleteImage(commodityID, imageID string) error {
 
 // Similar implementations for manuals and invoices
 
-func (r *CommodityRegistry) AddManual(commodityID, manualID string) error {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) AddManual(ctx context.Context, commodityID, manualID string) error {
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return err
 	}
@@ -479,12 +461,11 @@ func (r *CommodityRegistry) AddManual(commodityID, manualID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) GetManuals(commodityID string) ([]string, error) {
-	ctx := context.Background()
+func (r *CommodityRegistry) GetManuals(ctx context.Context, commodityID string) ([]string, error) {
 	var manuals []string
 
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return nil, err
 	}
@@ -516,11 +497,9 @@ func (r *CommodityRegistry) GetManuals(commodityID string) ([]string, error) {
 	return manuals, nil
 }
 
-func (r *CommodityRegistry) DeleteManual(commodityID, manualID string) error {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) DeleteManual(ctx context.Context, commodityID, manualID string) error {
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return err
 	}
@@ -551,11 +530,9 @@ func (r *CommodityRegistry) DeleteManual(commodityID, manualID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) AddInvoice(commodityID, invoiceID string) error {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) AddInvoice(ctx context.Context, commodityID, invoiceID string) error {
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return err
 	}
@@ -577,12 +554,11 @@ func (r *CommodityRegistry) AddInvoice(commodityID, invoiceID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) GetInvoices(commodityID string) ([]string, error) {
-	ctx := context.Background()
+func (r *CommodityRegistry) GetInvoices(ctx context.Context, commodityID string) ([]string, error) {
 	var invoices []string
 
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return nil, err
 	}
@@ -614,11 +590,9 @@ func (r *CommodityRegistry) GetInvoices(commodityID string) ([]string, error) {
 	return invoices, nil
 }
 
-func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) error {
-	ctx := context.Background()
-
+func (r *CommodityRegistry) DeleteInvoice(ctx context.Context, commodityID, invoiceID string) error {
 	// Check if the commodity exists
-	_, err := r.Get(commodityID)
+	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return err
 	}

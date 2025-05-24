@@ -35,8 +35,7 @@ func NewRegistry[T any, P registry.PIDable[T]](
 }
 
 // Create creates a new entity in the registry
-func (r *Registry[T, P]) Create(item T) (P, error) {
-	ctx := context.Background()
+func (r *Registry[T, P]) Create(ctx context.Context, item T) (P, error) {
 	result := P(&item)
 	result.SetID(uuid.New().String())
 
@@ -57,8 +56,7 @@ func (r *Registry[T, P]) Create(item T) (P, error) {
 }
 
 // Get retrieves an entity from the registry by ID
-func (r *Registry[T, P]) Get(id string) (P, error) {
-	ctx := context.Background()
+func (r *Registry[T, P]) Get(ctx context.Context, id string) (P, error) {
 	var result P
 	var data []byte
 
@@ -84,8 +82,7 @@ func (r *Registry[T, P]) Get(id string) (P, error) {
 }
 
 // List returns all entities in the registry
-func (r *Registry[T, P]) List() ([]*T, error) {
-	ctx := context.Background()
+func (r *Registry[T, P]) List(ctx context.Context) ([]*T, error) {
 	var results []*T
 
 	// Query the database for all items
@@ -122,8 +119,7 @@ func (r *Registry[T, P]) List() ([]*T, error) {
 }
 
 // Update updates an entity in the registry
-func (r *Registry[T, P]) Update(item T) (P, error) {
-	ctx := context.Background()
+func (r *Registry[T, P]) Update(ctx context.Context, item T) (P, error) {
 	result := P(&item)
 	id := result.GetID()
 
@@ -157,9 +153,7 @@ func (r *Registry[T, P]) Update(item T) (P, error) {
 }
 
 // Delete removes an entity from the registry
-func (r *Registry[T, P]) Delete(id string) error {
-	ctx := context.Background()
-
+func (r *Registry[T, P]) Delete(ctx context.Context, id string) error {
 	// Check if the item exists
 	exists, err := r.exists(ctx, id)
 	if err != nil {
@@ -180,8 +174,7 @@ func (r *Registry[T, P]) Delete(id string) error {
 }
 
 // Count returns the number of entities in the registry
-func (r *Registry[T, P]) Count() (int, error) {
-	ctx := context.Background()
+func (r *Registry[T, P]) Count(ctx context.Context) (int, error) {
 	var count int
 
 	// Query the database for the count

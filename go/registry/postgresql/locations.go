@@ -25,13 +25,11 @@ func NewLocationRegistry(pool *pgxpool.Pool) *LocationRegistry {
 	}
 }
 
-func (r *LocationRegistry) Create(location models.Location) (*models.Location, error) {
-	ctx := context.Background()
-
-	// Validate the location
-	err := validation.Validate(&location)
-	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
+func (r *LocationRegistry) Create(ctx context.Context, location models.Location) (*models.Location, error) {
+	if location.Name == "" {
+		return nil, errkit.WithStack(registry.ErrFieldRequired,
+			"field_name", "Name",
+		)
 	}
 
 	// Generate a new ID
@@ -40,7 +38,7 @@ func (r *LocationRegistry) Create(location models.Location) (*models.Location, e
 	}
 
 	// Insert the location into the database
-	_, err = r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
 		INSERT INTO locations (id, name, address)
 		VALUES ($1, $2, $3)
 	`, location.ID, location.Name, location.Address)
@@ -51,8 +49,7 @@ func (r *LocationRegistry) Create(location models.Location) (*models.Location, e
 	return &location, nil
 }
 
-func (r *LocationRegistry) Get(id string) (*models.Location, error) {
-	ctx := context.Background()
+func (r *LocationRegistry) Get(ctx context.Context, id string) (*models.Location, error) {
 	var location models.Location
 
 	// Query the database for the location
@@ -71,8 +68,7 @@ func (r *LocationRegistry) Get(id string) (*models.Location, error) {
 	return &location, nil
 }
 
-func (r *LocationRegistry) List() ([]*models.Location, error) {
-	ctx := context.Background()
+func (r *LocationRegistry) List(ctx context.Context) ([]*models.Location, error) {
 	var locations []*models.Location
 
 	// Query the database for all locations
@@ -101,9 +97,7 @@ func (r *LocationRegistry) List() ([]*models.Location, error) {
 	return locations, nil
 }
 
-func (r *LocationRegistry) Update(location models.Location) (*models.Location, error) {
-	ctx := context.Background()
-
+func (r *LocationRegistry) Update(ctx context.Context, location models.Location) (*models.Location, error) {
 	// Validate the location
 	err := validation.Validate(&location)
 	if err != nil {
@@ -111,7 +105,7 @@ func (r *LocationRegistry) Update(location models.Location) (*models.Location, e
 	}
 
 	// Check if the location exists
-	_, err = r.Get(location.ID)
+	_, err = r.Get(ctx, location.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -129,17 +123,15 @@ func (r *LocationRegistry) Update(location models.Location) (*models.Location, e
 	return &location, nil
 }
 
-func (r *LocationRegistry) Delete(id string) error {
-	ctx := context.Background()
-
+func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 	// Check if the location exists
-	_, err := r.Get(id)
+	_, err := r.Get(ctx, id)
 	if err != nil {
 		return err
 	}
 
 	// Check if the location has areas
-	areas, err := r.GetAreas(id)
+	areas, err := r.GetAreas(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -159,8 +151,7 @@ func (r *LocationRegistry) Delete(id string) error {
 	return nil
 }
 
-func (r *LocationRegistry) Count() (int, error) {
-	ctx := context.Background()
+func (r *LocationRegistry) Count(ctx context.Context) (int, error) {
 	var count int
 
 	// Query the database for the count
@@ -175,11 +166,9 @@ func (r *LocationRegistry) Count() (int, error) {
 	return count, nil
 }
 
-func (r *LocationRegistry) AddArea(locationID, areaID string) error {
-	ctx := context.Background()
-
+func (r *LocationRegistry) AddArea(ctx context.Context, locationID, areaID string) error {
 	// Check if the location exists
-	_, err := r.Get(locationID)
+	_, err := r.Get(ctx, locationID)
 	if err != nil {
 		return err
 	}
@@ -201,12 +190,11 @@ func (r *LocationRegistry) AddArea(locationID, areaID string) error {
 	return nil
 }
 
-func (r *LocationRegistry) GetAreas(locationID string) ([]string, error) {
-	ctx := context.Background()
+func (r *LocationRegistry) GetAreas(ctx context.Context, locationID string) ([]string, error) {
 	var areas []string
 
 	// Check if the location exists
-	_, err := r.Get(locationID)
+	_, err := r.Get(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
@@ -238,11 +226,9 @@ func (r *LocationRegistry) GetAreas(locationID string) ([]string, error) {
 	return areas, nil
 }
 
-func (r *LocationRegistry) DeleteArea(locationID, areaID string) error {
-	ctx := context.Background()
-
+func (r *LocationRegistry) DeleteArea(ctx context.Context, locationID, areaID string) error {
 	// Check if the location exists
-	_, err := r.Get(locationID)
+	_, err := r.Get(ctx, locationID)
 	if err != nil {
 		return err
 	}

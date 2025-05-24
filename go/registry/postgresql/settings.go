@@ -28,8 +28,7 @@ func NewSettingsRegistry(pool *pgxpool.Pool) *SettingsRegistry {
 	}
 }
 
-func (r *SettingsRegistry) Get() (models.SettingsObject, error) {
-	ctx := context.Background()
+func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, error) {
 	var settings models.SettingsObject
 	var data []byte
 
@@ -55,11 +54,9 @@ func (r *SettingsRegistry) Get() (models.SettingsObject, error) {
 	return settings, nil
 }
 
-func (r *SettingsRegistry) Save(settings models.SettingsObject) error {
-	ctx := context.Background()
-
+func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObject) error {
 	// Check if the main currency is being changed
-	currentSettings, err := r.Get()
+	currentSettings, err := r.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -90,11 +87,9 @@ func (r *SettingsRegistry) Save(settings models.SettingsObject) error {
 	return nil
 }
 
-func (r *SettingsRegistry) Patch(configfield string, value any) error {
-	ctx := context.Background()
-
+func (r *SettingsRegistry) Patch(ctx context.Context, configfield string, value any) error {
 	// Get the current settings
-	settings, err := r.Get()
+	settings, err := r.Get(ctx)
 	if err != nil {
 		return err
 	}

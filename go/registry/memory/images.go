@@ -1,6 +1,8 @@
 package memory
 
 import (
+	"context"
+
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -24,23 +26,23 @@ func NewImageRegistry(commodityRegistry registry.CommodityRegistry) *ImageRegist
 	}
 }
 
-func (r *ImageRegistry) Create(image models.Image) (*models.Image, error) {
+func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models.Image, error) {
 	err := validation.Validate(&image)
 	if err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
 	}
 
-	_, err = r.commodityRegistry.Get(image.CommodityID)
+	_, err = r.commodityRegistry.Get(ctx, image.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
 
-	newImage, err := r.baseImageRegistry.Create(image)
+	newImage, err := r.baseImageRegistry.Create(ctx, image)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create image")
 	}
 
-	err = r.commodityRegistry.AddImage(image.CommodityID, newImage.ID)
+	err = r.commodityRegistry.AddImage(ctx, image.CommodityID, newImage.ID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed adding image")
 	}
@@ -48,16 +50,21 @@ func (r *ImageRegistry) Create(image models.Image) (*models.Image, error) {
 	return newImage, nil
 }
 
-func (r *ImageRegistry) Delete(id string) error {
-	image, err := r.baseImageRegistry.Get(id)
+func (r *ImageRegistry) Delete(ctx context.Context, id string) error {
+	image, err := r.baseImageRegistry.Get(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to get image")
 	}
 
-	err = r.baseImageRegistry.Delete(id)
+	err = r.baseImageRegistry.Delete(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete image")
 	}
 
-	return r.commodityRegistry.DeleteImage(image.CommodityID, id)
+	err = r.commodityRegistry.DeleteImage(ctx, image.CommodityID, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete image from commodity")
+	}
+
+	return nil
 }

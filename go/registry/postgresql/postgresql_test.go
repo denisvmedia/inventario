@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	qt "github.com/frankban/quicktest"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgresql"
@@ -30,7 +30,6 @@ func TestPostgreSQLRegistration(t *testing.T) {
 
 // TestParsePostgreSQLURL tests the ParsePostgreSQLURL function
 func TestParsePostgreSQLURL(t *testing.T) {
-	c := qt.New(t)
 
 	// Test cases
 	testCases := []struct {
@@ -112,7 +111,7 @@ func TestPostgreSQLIntegration(t *testing.T) {
 	c.Assert(registrySet, qt.Not(qt.IsNil))
 
 	// Validate the registry set
-	err = registrySet.Validate()
+	err = registrySet.ValidateWithContext(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Check that all registries are created

@@ -2,11 +2,9 @@ package postgresql
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -168,16 +166,7 @@ func InitSchemaForTesting(pool *pgxpool.Pool) error {
 
 // ParsePostgreSQLURL parses a PostgreSQL URL and returns a connection string
 func ParsePostgreSQLURL(u *url.URL) string {
-	// Format: postgresql://username:password@host:port/database?param1=value1&param2=value2
-	connStr := fmt.Sprintf("postgres://%s", u.Host)
-
-	if u.Path != "" {
-		connStr = fmt.Sprintf("%s%s", connStr, u.Path)
-	}
-
-	if u.RawQuery != "" {
-		connStr = fmt.Sprintf("%s?%s", connStr, u.RawQuery)
-	}
-
-	return connStr
+	cp := *u // shallow copy
+	cp.Scheme = "postgres"
+	return cp.String()
 }
