@@ -66,7 +66,7 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.imageRegistry.Create(models.Image{
+		img, err := api.imageRegistry.Create(r.Context(), models.Image{
 			CommodityID: entityID,
 			File: &models.File{
 				Path:         pathWithoutExt, // Just the filename without extension
@@ -113,7 +113,7 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.manualRegistry.Create(models.Manual{
+		img, err := api.manualRegistry.Create(r.Context(), models.Manual{
 			CommodityID: entityID,
 			File: &models.File{
 				Path:         pathWithoutExt, // Just the filename without extension
@@ -160,7 +160,7 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.invoiceRegistry.Create(models.Invoice{
+		img, err := api.invoiceRegistry.Create(r.Context(), models.Invoice{
 			CommodityID: entityID,
 			File: &models.File{
 				Path:         pathWithoutExt, // Just the filename without extension

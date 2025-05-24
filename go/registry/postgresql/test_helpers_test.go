@@ -12,6 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgresql"
+	"github.com/denisvmedia/inventario/registry/postgresql/migrations"
 )
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -58,8 +59,8 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 	`)
 	c.Assert(err, qt.IsNil)
 
-	// Initialize schema
-	err = postgresql.InitSchemaForTesting(pool)
+	// Initialize schema by running migrations directly
+	err = migrations.RunMigrations(context.Background(), pool)
 	c.Assert(err, qt.IsNil)
 
 	cleanup := func() {

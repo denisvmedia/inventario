@@ -2,6 +2,7 @@ package postgresql
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/registry"
+	pgmigrations "github.com/denisvmedia/inventario/registry/postgresql/migrations"
 )
 
 const Name = "postgresql"
@@ -59,7 +61,7 @@ func NewRegistrySet(c registry.Config) (*registry.Set, error) {
 	}
 
 	// Initialize the database schema
-	if err := initSchema(pool); err != nil {
+	if err := checkSchemaInited(pool); err != nil {
 		return nil, errkit.Wrap(err, "failed to initialize database schema")
 	}
 
@@ -75,93 +77,18 @@ func NewRegistrySet(c registry.Config) (*registry.Set, error) {
 	return s, nil
 }
 
-// initSchema initializes the database schema if it doesn't exist
-func initSchema(pool *pgxpool.Pool) error {
-	return InitSchemaForTesting(pool)
-}
+// checkSchemaInited checks if the database schema is up-to-date
+func checkSchemaInited(pool *pgxpool.Pool) error {
+	upToDate, err := pgmigrations.CheckMigrationsApplied(context.Background(), pool)
+	if err != nil {
+		return errkit.Wrap(err, "failed to check migrations")
+	}
 
-// InitSchemaForTesting initializes the database schema for testing
-// This is exported for use in tests
-func InitSchemaForTesting(pool *pgxpool.Pool) error {
-	ctx := context.Background()
+	if !upToDate {
+		return errors.New("database schema is not up-to-date, please run migrations")
+	}
 
-	// Create tables if they don't exist
-	_, err := pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS locations (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			address TEXT NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS areas (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE
-		);
-
-		CREATE TABLE IF NOT EXISTS commodities (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			short_name TEXT,
-			type TEXT NOT NULL,
-			area_id TEXT NOT NULL REFERENCES areas(id) ON DELETE CASCADE,
-			count INTEGER NOT NULL DEFAULT 1,
-			original_price DECIMAL(15,2),
-			original_price_currency TEXT,
-			converted_original_price DECIMAL(15,2),
-			current_price DECIMAL(15,2),
-			serial_number TEXT,
-			extra_serial_numbers JSONB,
-			part_numbers JSONB,
-			tags JSONB,
-			status TEXT NOT NULL,
-			purchase_date TEXT,
-			registered_date TEXT,
-			last_modified_date TEXT,
-			urls JSONB,
-			comments TEXT,
-			draft BOOLEAN NOT NULL DEFAULT FALSE
-		);
-
-		CREATE TABLE IF NOT EXISTS images (
-			id TEXT PRIMARY KEY,
-			commodity_id TEXT NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,
-			path TEXT NOT NULL,
-			original_path TEXT NOT NULL,
-			ext TEXT NOT NULL,
-			mime_type TEXT NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS invoices (
-			id TEXT PRIMARY KEY,
-			commodity_id TEXT NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,
-			path TEXT NOT NULL,
-			original_path TEXT NOT NULL,
-			ext TEXT NOT NULL,
-			mime_type TEXT NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS manuals (
-			id TEXT PRIMARY KEY,
-			commodity_id TEXT NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,
-			path TEXT NOT NULL,
-			original_path TEXT NOT NULL,
-			ext TEXT NOT NULL,
-			mime_type TEXT NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS settings (
-			id TEXT PRIMARY KEY DEFAULT 'settings',
-			data JSONB NOT NULL
-		);
-
-		-- Insert default settings if they don't exist
-		INSERT INTO settings (id, data)
-		VALUES ('settings', '{}')
-		ON CONFLICT (id) DO NOTHING;
-	`)
-
-	return err
+	return nil
 }
 
 // ParsePostgreSQLURL parses a PostgreSQL URL and returns a connection string
