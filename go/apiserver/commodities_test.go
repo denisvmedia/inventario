@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +22,7 @@ func TestCommoditiesList(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities", nil)
 	c.Assert(err, qt.IsNil)
@@ -61,7 +62,7 @@ func TestCommodityGet(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID, nil)
@@ -110,7 +111,7 @@ func TestCommodityCreate(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List())
+	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[1]
 
 	urls := []*models.URL{
@@ -186,7 +187,7 @@ func TestCommodityUpdate(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	obj := &jsonapi.CommodityRequest{
@@ -265,7 +266,7 @@ func TestCommodityDelete(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+commodity.ID, nil)
@@ -302,7 +303,7 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	wrongAreaID := "wrong-area-id"
@@ -352,14 +353,14 @@ func TestCommodityListImages(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
-	imageIDs, err := params.RegistrySet.CommodityRegistry.GetImages(commodity.ID)
+	imageIDs, err := params.RegistrySet.CommodityRegistry.GetImages(context.Background(), commodity.ID)
 	c.Assert(err, qt.IsNil)
 	expectedImages := make([]*models.Image, 0, len(imageIDs))
 	for _, id := range imageIDs {
-		expectedImages = append(expectedImages, must.Must(params.RegistrySet.ImageRegistry.Get(id)))
+		expectedImages = append(expectedImages, must.Must(params.RegistrySet.ImageRegistry.Get(context.Background(), id)))
 	}
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images", nil)
@@ -384,14 +385,14 @@ func TestCommodityListInvoices(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
-	invoiceIDs, err := params.RegistrySet.CommodityRegistry.GetInvoices(commodity.ID)
+	invoiceIDs, err := params.RegistrySet.CommodityRegistry.GetInvoices(context.Background(), commodity.ID)
 	c.Assert(err, qt.IsNil)
 	expectedInvoices := make([]*models.Invoice, 0, len(invoiceIDs))
 	for _, id := range invoiceIDs {
-		expectedInvoices = append(expectedInvoices, must.Must(params.RegistrySet.InvoiceRegistry.Get(id)))
+		expectedInvoices = append(expectedInvoices, must.Must(params.RegistrySet.InvoiceRegistry.Get(context.Background(), id)))
 	}
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices", nil)
@@ -416,14 +417,14 @@ func TestCommodityListManuals(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
-	manualIDs, err := params.RegistrySet.CommodityRegistry.GetManuals(commodity.ID)
+	manualIDs, err := params.RegistrySet.CommodityRegistry.GetManuals(context.Background(), commodity.ID)
 	c.Assert(err, qt.IsNil)
 	expectedManuals := make([]*models.Manual, 0, len(manualIDs))
 	for _, id := range manualIDs {
-		expectedManuals = append(expectedManuals, must.Must(params.RegistrySet.ManualRegistry.Get(id)))
+		expectedManuals = append(expectedManuals, must.Must(params.RegistrySet.ManualRegistry.Get(context.Background(), id)))
 	}
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals", nil)

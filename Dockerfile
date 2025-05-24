@@ -1,4 +1,5 @@
 # Multi-stage Dockerfile for Inventario
+# Supports both production and testing builds
 
 # Stage 1: Build frontend
 FROM node:22.16.0-alpine AS frontend-builder
@@ -17,11 +18,15 @@ COPY frontend/ ./
 # Build frontend
 RUN npm run build
 
-# Stage 2: Build backend
-FROM golang:1.24.1-alpine AS backend-builder
+# Stage 2: Base Go environment
+FROM golang:1.24.1-alpine AS go-base
 
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+# Install common dependencies
+RUN apk add --no-cache \
+    git \
+    ca-certificates \
+    tzdata \
+    curl
 
 WORKDIR /app
 
@@ -41,11 +46,31 @@ COPY go/ ./
 # Copy built frontend from previous stage
 COPY --from=frontend-builder /app/frontend/dist ../frontend/dist/
 
-# Build the application
+# Stage 3: Production builder
+FROM go-base AS backend-builder
+
+# Build the application for production
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o inventario .
 
-# Stage 3: Runtime
-FROM alpine:latest
+# Stage 4: Test environment
+FROM go-base AS test-runner
+
+# Install additional test dependencies
+RUN apk add --no-cache \
+    postgresql-client \
+    make
+
+# Create test directories
+RUN mkdir -p /tmp/test-uploads /app/test-data
+
+# Set working directory for tests
+WORKDIR /app/go
+
+# Default command for tests (can be overridden)
+CMD ["go", "test", "-v", "./..."]
+
+# Stage 5: Production runtime
+FROM alpine:latest AS production
 
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates tzdata curl

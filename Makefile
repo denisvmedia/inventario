@@ -169,27 +169,77 @@ deps:
 	$(GO_CMD) mod tidy
 	$(CD) $(FRONTEND_DIR) && npm install
 
-# Docker operations
+# Production Docker operations
 .PHONY: docker-build
 docker-build:
-	docker build -t inventario:latest .
+	docker build --target production -t inventario:latest .
 
 .PHONY: docker-up
 docker-up:
-	docker-compose up -d
+	docker-compose --profile production up -d
 
 .PHONY: docker-down
 docker-down:
-	docker-compose down
+	docker-compose --profile production down
 
 .PHONY: docker-logs
 docker-logs:
-	docker-compose logs -f
+	docker-compose --profile production logs -f
 
 .PHONY: docker-clean
 docker-clean:
-	docker-compose down -v
+	docker-compose --profile production down -v
 	docker system prune -f
+
+# Development Docker operations
+.PHONY: docker-dev-up
+docker-dev-up:
+	docker-compose --profile dev up -d
+
+.PHONY: docker-dev-down
+docker-dev-down:
+	docker-compose --profile dev down
+
+.PHONY: docker-dev-logs
+docker-dev-logs:
+	docker-compose --profile dev logs -f
+
+# Test Docker operations
+.PHONY: docker-test-build
+docker-test-build:
+	docker build --target test-runner -t inventario:test .
+
+.PHONY: docker-test-up
+docker-test-up:
+	docker-compose --profile test up -d postgres-test
+
+.PHONY: docker-test-down
+docker-test-down:
+	docker-compose --profile test down
+
+.PHONY: docker-test-clean
+docker-test-clean:
+	docker-compose --profile test down -v
+	docker rmi inventario:test 2>/dev/null || true
+
+.PHONY: docker-test-migrate
+docker-test-migrate:
+	@echo "Running database migrations in Docker..."
+	docker-compose --profile test run --rm inventario-migrate
+
+.PHONY: docker-test-go
+docker-test-go:
+	@echo "Running Go tests in Docker..."
+	docker-compose --profile test run --rm inventario-test
+
+.PHONY: docker-test-go-postgresql
+docker-test-go-postgresql:
+	@echo "Running PostgreSQL tests in Docker..."
+	docker-compose --profile test run --rm inventario-test-postgresql
+
+.PHONY: docker-test-logs
+docker-test-logs:
+	docker-compose --profile test logs -f
 
 # Generate help
 .PHONY: help
@@ -216,11 +266,22 @@ ifeq ($(OS),Windows_NT)
 	@echo   lint-frontend    - Lint frontend code
 	@echo   clean            - Clean build artifacts
 	@echo   deps             - Install dependencies
-	@echo   docker-build     - Build Docker image
-	@echo   docker-up        - Start Docker services
-	@echo   docker-down      - Stop Docker services
-	@echo   docker-logs      - View Docker logs
-	@echo   docker-clean     - Clean Docker containers and volumes
+	@echo   docker-build     - Build Docker image for production
+	@echo   docker-up        - Start Docker services (production)
+	@echo   docker-down      - Stop Docker services (production)
+	@echo   docker-logs      - View Docker logs (production)
+	@echo   docker-clean     - Clean Docker containers and volumes (production)
+	@echo   docker-dev-up    - Start Docker services (development)
+	@echo   docker-dev-down  - Stop Docker services (development)
+	@echo   docker-dev-logs  - View Docker logs (development)
+	@echo   docker-test-build - Build Docker test image
+	@echo   docker-test-up   - Start Docker test database
+	@echo   docker-test-down - Stop Docker test services
+	@echo   docker-test-clean - Clean Docker test containers and volumes
+	@echo   docker-test-migrate - Run database migrations in Docker
+	@echo   docker-test-go   - Run Go tests in Docker
+	@echo   docker-test-go-postgresql - Run PostgreSQL tests in Docker
+	@echo   docker-test-logs - View Docker test logs
 else
 	@echo "Available commands:"
 	@echo "  all              - Build everything (default)"
@@ -243,9 +304,20 @@ else
 	@echo "  lint-frontend    - Lint frontend code"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  deps             - Install dependencies"
-	@echo "  docker-build     - Build Docker image"
-	@echo "  docker-up        - Start Docker services"
-	@echo "  docker-down      - Stop Docker services"
-	@echo "  docker-logs      - View Docker logs"
-	@echo "  docker-clean     - Clean Docker containers and volumes"
+	@echo "  docker-build     - Build Docker image for production"
+	@echo "  docker-up        - Start Docker services (production)"
+	@echo "  docker-down      - Stop Docker services (production)"
+	@echo "  docker-logs      - View Docker logs (production)"
+	@echo "  docker-clean     - Clean Docker containers and volumes (production)"
+	@echo "  docker-dev-up    - Start Docker services (development)"
+	@echo "  docker-dev-down  - Stop Docker services (development)"
+	@echo "  docker-dev-logs  - View Docker logs (development)"
+	@echo "  docker-test-build - Build Docker test image"
+	@echo "  docker-test-up   - Start Docker test database"
+	@echo "  docker-test-down - Stop Docker test services"
+	@echo "  docker-test-clean - Clean Docker test containers and volumes"
+	@echo "  docker-test-migrate - Run database migrations in Docker"
+	@echo "  docker-test-go   - Run Go tests in Docker"
+	@echo "  docker-test-go-postgresql - Run PostgreSQL tests in Docker"
+	@echo "  docker-test-logs - View Docker test logs"
 endif
