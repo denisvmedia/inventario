@@ -1,6 +1,7 @@
 package boltdb
 
 import (
+	"context"
 	"errors"
 
 	bolt "go.etcd.io/bbolt"
@@ -45,7 +46,7 @@ func NewAreaRegistry(db *bolt.DB, locationRegistry registry.LocationRegistry) *A
 	}
 }
 
-func (r *AreaRegistry) Create(m models.Area) (*models.Area, error) {
+func (r *AreaRegistry) Create(ctx context.Context, m models.Area) (*models.Area, error) {
 	result, err := r.registry.Create(m, func(tx dbx.TransactionOrBucket, area *models.Area) error {
 		if area.Name == "" {
 			return errkit.WithStack(registry.ErrFieldRequired,
@@ -58,14 +59,13 @@ func (r *AreaRegistry) Create(m models.Area) (*models.Area, error) {
 			return errkit.Wrap(registry.ErrAlreadyExists, "area name is already used")
 		}
 		if !errors.Is(err, registry.ErrNotFound) {
-			// any other error is a problem
-			return err
+			return errkit.Wrap(err, "failed to check if area name is already used")
 		}
 		return nil
 	}, func(tx dbx.TransactionOrBucket, area *models.Area) error {
 		err := r.base.SaveIndexValue(tx, idxAreasByName, area.Name, area.ID)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to save area name")
 		}
 
 		r.base.GetOrCreateBucket(tx, bucketNameAreasChildren, area.ID)
@@ -74,30 +74,31 @@ func (r *AreaRegistry) Create(m models.Area) (*models.Area, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to create area")
 	}
 
-	err = r.locationRegistry.AddArea(result.LocationID, result.ID)
+	err = r.locationRegistry.AddArea(ctx, result.LocationID, result.ID)
 	if err != nil {
-		return result, err
+		return result, errkit.Wrap(err, "failed to add area to location")
 	}
 
 	return result, nil
 }
 
-func (r *AreaRegistry) Get(id string) (result *models.Area, err error) {
+func (r *AreaRegistry) Get(_ context.Context, id string) (result *models.Area, err error) {
 	return r.registry.Get(id)
 }
 
-func (r *AreaRegistry) GetOneByName(name string) (result *models.Area, err error) {
+// TODO: unused? non-interfaced?
+func (r *AreaRegistry) GetOneByName(_ context.Context, name string) (result *models.Area, err error) {
 	return r.registry.GetBy(idxAreasByName, name)
 }
 
-func (r *AreaRegistry) List() (results []*models.Area, err error) {
+func (r *AreaRegistry) List(_ context.Context) (results []*models.Area, err error) {
 	return r.registry.List()
 }
 
-func (r *AreaRegistry) Update(m models.Area) (result *models.Area, err error) {
+func (r *AreaRegistry) Update(_ context.Context, m models.Area) (result *models.Area, err error) {
 	var old *models.Area
 	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, area *models.Area) error {
 		old = area
@@ -120,22 +121,22 @@ func (r *AreaRegistry) Update(m models.Area) (result *models.Area, err error) {
 
 		err = r.base.DeleteIndexValue(tx, idxAreasByName, old.Name)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to delete old area name")
 		}
 		err = r.base.SaveIndexValue(tx, idxAreasByName, result.Name, result.GetID())
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to save new area name")
 		}
 
 		return nil
 	})
 }
 
-func (r *AreaRegistry) Count() (int, error) {
+func (r *AreaRegistry) Count(_ context.Context) (int, error) {
 	return r.registry.Count()
 }
 
-func (r *AreaRegistry) Delete(id string) error {
+func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	var locationID string
 	err := r.registry.Delete(id, func(tx dbx.TransactionOrBucket, area *models.Area) error {
 		locationID = area.LocationID
@@ -148,25 +149,25 @@ func (r *AreaRegistry) Delete(id string) error {
 		return r.base.DeleteIndexValue(tx, idxAreasByName, result.Name)
 	})
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete area")
 	}
 
-	err = r.locationRegistry.DeleteArea(locationID, id)
+	err = r.locationRegistry.DeleteArea(ctx, locationID, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete area from location")
 	}
 
 	return nil
 }
 
-func (r *AreaRegistry) AddCommodity(areaID, commodityID string) error {
+func (r *AreaRegistry) AddCommodity(_ context.Context, areaID, commodityID string) error {
 	return r.registry.AddChild(bucketNameCommodities, areaID, commodityID)
 }
 
-func (r *AreaRegistry) GetCommodities(areaID string) ([]string, error) {
+func (r *AreaRegistry) GetCommodities(_ context.Context, areaID string) ([]string, error) {
 	return r.registry.GetChildren(bucketNameCommodities, areaID)
 }
 
-func (r *AreaRegistry) DeleteCommodity(areaID, commodityID string) error {
+func (r *AreaRegistry) DeleteCommodity(_ context.Context, areaID, commodityID string) error {
 	return r.registry.DeleteChild(bucketNameCommodities, areaID, commodityID)
 }

@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"sync"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -33,37 +34,42 @@ func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry
 	}
 }
 
-func (r *CommodityRegistry) Create(commodity models.Commodity) (*models.Commodity, error) {
-	_, err := r.areaRegistry.Get(commodity.AreaID)
+func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	_, err := r.areaRegistry.Get(ctx, commodity.AreaID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "area not found")
 	}
 
-	newCommodity, err := r.baseCommodityRegistry.Create(commodity)
+	newCommodity, err := r.baseCommodityRegistry.Create(ctx, commodity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create commodity")
 	}
 
-	err = r.areaRegistry.AddCommodity(commodity.AreaID, newCommodity.ID)
+	err = r.areaRegistry.AddCommodity(ctx, commodity.AreaID, newCommodity.ID)
 
 	return newCommodity, err
 }
 
-func (r *CommodityRegistry) Delete(id string) error {
-	commodity, err := r.baseCommodityRegistry.Get(id)
+func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
+	commodity, err := r.baseCommodityRegistry.Get(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to get commodity")
 	}
 
-	err = r.baseCommodityRegistry.Delete(id)
+	err = r.baseCommodityRegistry.Delete(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete commodity")
 	}
 
-	return r.areaRegistry.DeleteCommodity(commodity.AreaID, id)
+	err = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete commodity from area")
+	}
+
+	return nil
 }
 
-func (r *CommodityRegistry) AddImage(commodityID, imageID string) error {
+func (r *CommodityRegistry) AddImage(ctx context.Context, commodityID, imageID string) error {
 	r.imagesLock.Lock()
 	r.images[commodityID] = append(r.images[commodityID], imageID)
 	r.imagesLock.Unlock()
@@ -71,7 +77,7 @@ func (r *CommodityRegistry) AddImage(commodityID, imageID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) GetImages(commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetImages(ctx context.Context, commodityID string) ([]string, error) {
 	r.imagesLock.RLock()
 	images := make([]string, len(r.images[commodityID]))
 	copy(images, r.images[commodityID])
@@ -80,7 +86,7 @@ func (r *CommodityRegistry) GetImages(commodityID string) ([]string, error) {
 	return images, nil
 }
 
-func (r *CommodityRegistry) DeleteImage(commodityID, imageID string) error {
+func (r *CommodityRegistry) DeleteImage(ctx context.Context, commodityID, imageID string) error {
 	r.imagesLock.Lock()
 	for i, foundImageID := range r.images[commodityID] {
 		if foundImageID == imageID {
@@ -93,7 +99,7 @@ func (r *CommodityRegistry) DeleteImage(commodityID, imageID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) AddManual(commodityID, manualID string) error {
+func (r *CommodityRegistry) AddManual(ctx context.Context, commodityID, manualID string) error {
 	r.manualsLock.Lock()
 	r.manuals[commodityID] = append(r.manuals[commodityID], manualID)
 	r.manualsLock.Unlock()
@@ -101,7 +107,7 @@ func (r *CommodityRegistry) AddManual(commodityID, manualID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) GetManuals(commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetManuals(ctx context.Context, commodityID string) ([]string, error) {
 	r.manualsLock.RLock()
 	manuals := make([]string, len(r.manuals[commodityID]))
 	copy(manuals, r.manuals[commodityID])
@@ -110,7 +116,7 @@ func (r *CommodityRegistry) GetManuals(commodityID string) ([]string, error) {
 	return manuals, nil
 }
 
-func (r *CommodityRegistry) DeleteManual(commodityID, manualID string) error {
+func (r *CommodityRegistry) DeleteManual(ctx context.Context, commodityID, manualID string) error {
 	r.manualsLock.Lock()
 	for i, foundManualID := range r.manuals[commodityID] {
 		if foundManualID == manualID {
@@ -123,7 +129,7 @@ func (r *CommodityRegistry) DeleteManual(commodityID, manualID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) AddInvoice(commodityID, invoiceID string) error {
+func (r *CommodityRegistry) AddInvoice(ctx context.Context, commodityID, invoiceID string) error {
 	r.invoicesLock.Lock()
 	r.invoices[commodityID] = append(r.invoices[commodityID], invoiceID)
 	r.invoicesLock.Unlock()
@@ -131,7 +137,7 @@ func (r *CommodityRegistry) AddInvoice(commodityID, invoiceID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) GetInvoices(commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetInvoices(ctx context.Context, commodityID string) ([]string, error) {
 	r.invoicesLock.RLock()
 	invoices := make([]string, len(r.invoices[commodityID]))
 	copy(invoices, r.invoices[commodityID])
@@ -140,7 +146,7 @@ func (r *CommodityRegistry) GetInvoices(commodityID string) ([]string, error) {
 	return invoices, nil
 }
 
-func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) error {
+func (r *CommodityRegistry) DeleteInvoice(ctx context.Context, commodityID, invoiceID string) error {
 	r.invoicesLock.Lock()
 	for i, foundInvoiceID := range r.invoices[commodityID] {
 		if foundInvoiceID == invoiceID {
@@ -153,9 +159,9 @@ func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) Update(commodity models.Commodity) (*models.Commodity, error) {
+func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Call the base registry's Update method
-	updatedCommodity, err := r.baseCommodityRegistry.Update(commodity)
+	updatedCommodity, err := r.baseCommodityRegistry.Update(ctx, commodity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update commodity")
 	}

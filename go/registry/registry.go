@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"context"
+
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models"
@@ -18,54 +20,54 @@ type IDable interface {
 
 type Registry[T any] interface {
 	// Create creates a new T in the registry.
-	Create(T) (*T, error)
+	Create(context.Context, T) (*T, error)
 
 	// Get returns a T from the registry.
-	Get(id string) (*T, error)
+	Get(ctx context.Context, id string) (*T, error)
 
 	// List returns a list of Ts from the registry.
-	List() ([]*T, error)
+	List(context.Context) ([]*T, error)
 
 	// Update updates a T in the registry.
-	Update(T) (*T, error)
+	Update(context.Context, T) (*T, error)
 
 	// Delete deletes a T from the registry.
-	Delete(id string) error
+	Delete(ctx context.Context, id string) error
 
 	// Count returns the number of Ts in the registry.
-	Count() (int, error)
+	Count(context.Context) (int, error)
 }
 
 type AreaRegistry interface {
 	Registry[models.Area]
 
-	AddCommodity(areaID, commodityID string) error
-	GetCommodities(areaID string) ([]string, error)
-	DeleteCommodity(areaID, commodityID string) error
+	AddCommodity(ctx context.Context, areaID, commodityID string) error
+	GetCommodities(ctx context.Context, areaID string) ([]string, error)
+	DeleteCommodity(ctx context.Context, areaID, commodityID string) error
 }
 
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 
-	AddImage(commodityID, imageID string) error
-	GetImages(commodityID string) ([]string, error)
-	DeleteImage(commodityID, imageID string) error
+	AddImage(ctx context.Context, commodityID, imageID string) error
+	GetImages(ctx context.Context, commodityID string) ([]string, error)
+	DeleteImage(ctx context.Context, commodityID, imageID string) error
 
-	AddManual(commodityID, manualID string) error
-	GetManuals(commodityID string) ([]string, error)
-	DeleteManual(commodityID, manualID string) error
+	AddManual(ctx context.Context, commodityID, manualID string) error
+	GetManuals(ctx context.Context, commodityID string) ([]string, error)
+	DeleteManual(ctx context.Context, commodityID, manualID string) error
 
-	AddInvoice(commodityID, invoiceID string) error
-	GetInvoices(commodityID string) ([]string, error)
-	DeleteInvoice(commodityID, invoiceID string) error
+	AddInvoice(ctx context.Context, commodityID, invoiceID string) error
+	GetInvoices(ctx context.Context, commodityID string) ([]string, error)
+	DeleteInvoice(ctx context.Context, commodityID, invoiceID string) error
 }
 
 type LocationRegistry interface {
 	Registry[models.Location]
 
-	AddArea(locationID, areaID string) error
-	GetAreas(locationID string) ([]string, error)
-	DeleteArea(locationID, areaID string) error
+	AddArea(ctx context.Context, locationID, areaID string) error
+	GetAreas(ctx context.Context, locationID string) ([]string, error)
+	DeleteArea(ctx context.Context, locationID, areaID string) error
 }
 
 type ImageRegistry interface {
@@ -81,9 +83,9 @@ type ManualRegistry interface {
 }
 
 type SettingsRegistry interface {
-	Get() (models.SettingsObject, error)
-	Save(models.SettingsObject) error
-	Patch(configfield string, value any) error
+	Get(ctx context.Context) (models.SettingsObject, error)
+	Save(context.Context, models.SettingsObject) error
+	Patch(ctx context.Context, configfield string, value any) error
 }
 
 type Set struct {
@@ -96,7 +98,7 @@ type Set struct {
 	SettingsRegistry  SettingsRegistry
 }
 
-func (s *Set) Validate() error {
+func (s *Set) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
@@ -109,5 +111,5 @@ func (s *Set) Validate() error {
 		validation.Field(&s.SettingsRegistry, validation.Required),
 	)
 
-	return validation.ValidateStruct(s, fields...)
+	return validation.ValidateStructWithContext(ctx, s, fields...)
 }

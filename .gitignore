@@ -23,3 +23,8 @@
 /sample/
 /.db
 /bin/*
+
+# Docker volumes and data
+/.docker/
+.env
+docker-compose.override.yaml

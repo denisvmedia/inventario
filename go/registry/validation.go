@@ -18,7 +18,8 @@ import (
 // or if the commodity fails validation.
 func ValidateCommodity(commodity *models.Commodity, settingsRegistry SettingsRegistry) error {
 	// Get main currency from settings
-	settings, err := settingsRegistry.Get()
+	ctx := context.Background()
+	settings, err := settingsRegistry.Get(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get settings")
 	}
@@ -30,7 +31,6 @@ func ValidateCommodity(commodity *models.Commodity, settingsRegistry SettingsReg
 	mainCurrency := *settings.MainCurrency
 
 	// First, validate the commodity using standard validation
-	ctx := context.Background()
 	ctx = validationctx.WithMainCurrency(ctx, mainCurrency)
 	err = validation.ValidateWithContext(ctx, commodity)
 

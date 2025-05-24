@@ -4,6 +4,8 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario"
 	"github.com/denisvmedia/inventario/registry/boltdb"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/registry/migrations"
+	"github.com/denisvmedia/inventario/registry/postgresql"
 )
 
 // @title Inventario API
@@ -21,6 +23,8 @@ import (
 func registerDBBackends() {
 	boltdb.Register()
 	memory.Register()
+	postgresql.Register()
+	migrations.RegisterMigrators()
 }
 
 func main() {

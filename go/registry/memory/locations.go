@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"sync"
 
 	"github.com/go-extras/go-kit/must"
@@ -27,25 +28,25 @@ func NewLocationRegistry() *LocationRegistry {
 	}
 }
 
-func (r *LocationRegistry) Delete(id string) error {
-	_, err := r.baseLocationRegistry.Get(id)
+func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
+	_, err := r.baseLocationRegistry.Get(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to get location")
 	}
 
-	if len(must.Must(r.GetAreas(id))) > 0 {
+	if len(must.Must(r.GetAreas(ctx, id))) > 0 {
 		return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
 	}
 
-	err = r.baseLocationRegistry.Delete(id)
+	err = r.baseLocationRegistry.Delete(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete location")
 	}
 
 	return nil
 }
 
-func (r *LocationRegistry) AddArea(locationID, areaID string) error {
+func (r *LocationRegistry) AddArea(_ context.Context, locationID, areaID string) error {
 	r.areasLock.Lock()
 	r.areas[locationID] = append(r.areas[locationID], areaID)
 	r.areasLock.Unlock()
@@ -53,7 +54,7 @@ func (r *LocationRegistry) AddArea(locationID, areaID string) error {
 	return nil
 }
 
-func (r *LocationRegistry) GetAreas(locationID string) ([]string, error) {
+func (r *LocationRegistry) GetAreas(_ context.Context, locationID string) ([]string, error) {
 	r.areasLock.RLock()
 	areas := make([]string, len(r.areas[locationID]))
 	copy(areas, r.areas[locationID])
@@ -62,7 +63,7 @@ func (r *LocationRegistry) GetAreas(locationID string) ([]string, error) {
 	return areas, nil
 }
 
-func (r *LocationRegistry) DeleteArea(locationID, areaID string) error {
+func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID string) error {
 	r.areasLock.Lock()
 	for i, foundAreaID := range r.areas[locationID] {
 		if foundAreaID == areaID {

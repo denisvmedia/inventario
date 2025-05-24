@@ -1,6 +1,8 @@
 package memory
 
 import (
+	"context"
+
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -24,39 +26,45 @@ func NewInvoiceRegistry(commodityRegistry registry.CommodityRegistry) *InvoiceRe
 	}
 }
 
-func (r *InvoiceRegistry) Create(invoice models.Invoice) (*models.Invoice, error) {
+func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
 	err := validation.Validate(&invoice)
 	if err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
 	}
 
-	_, err = r.commodityRegistry.Get(invoice.CommodityID)
+	_, err = r.commodityRegistry.Get(ctx, invoice.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
 
-	newInvoice, err := r.baseInvoiceRegistry.Create(invoice)
+	newInvoice, err := r.baseInvoiceRegistry.Create(ctx, invoice)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create invoice")
 	}
 
-	r.commodityRegistry.AddInvoice(invoice.CommodityID, newInvoice.ID)
+	err = r.commodityRegistry.AddInvoice(ctx, invoice.CommodityID, newInvoice.ID)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed adding invoice")
+	}
 
-	return newInvoice, err
+	return newInvoice, nil
 }
 
-func (r *InvoiceRegistry) Delete(id string) error {
-	invoice, err := r.baseInvoiceRegistry.Get(id)
+func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
+	invoice, err := r.baseInvoiceRegistry.Get(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to get invoice")
 	}
 
-	err = r.baseInvoiceRegistry.Delete(id)
+	err = r.baseInvoiceRegistry.Delete(ctx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete invoice")
 	}
 
-	r.commodityRegistry.DeleteInvoice(invoice.CommodityID, id)
+	err = r.commodityRegistry.DeleteInvoice(ctx, invoice.CommodityID, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete invoice from commodity")
+	}
 
 	return nil
 }

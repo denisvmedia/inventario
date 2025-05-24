@@ -42,13 +42,13 @@ func (s *BaseRepository[_, P]) GetAll(tx TransactionOrBucket, typ P) (results []
 		elem := typekit.ZeroOfType(typ)
 		err := json.Unmarshal(v, &elem)
 		if err != nil {
-			return err
+			return errkit.Wrap(ErrFailedToUnmarshalJSON, err.Error())
 		}
 		results = append(results, elem)
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to get all entities")
 	}
 
 	return results, nil
@@ -69,18 +69,16 @@ func (s *BaseRepository[_, _]) Exists(tx TransactionOrBucket, id string) bool {
 
 func (s *BaseRepository[_, _]) GetInterface(tx TransactionOrBucket, id string, m any) (err error) {
 	if tx == nil || (reflect.ValueOf(tx).Kind() == reflect.Ptr && reflect.ValueOf(tx).IsNil()) {
-		// return errkit.Wrap(ErrNotFound, "bucket or transaction does not exist")
-		return ErrNotFound
+		return errkit.Wrap(ErrNotFound, "bucket or transaction does not exist")
 	}
 
 	b := tx.Bucket([]byte(s.bucket))
 	if b == nil {
-		// return errkit.Wrap(ErrNotFound, "bucket does not exist")
-		return ErrNotFound
+		return errkit.Wrap(ErrNotFound, "bucket does not exist")
 	}
 	v := b.Get([]byte(id))
 	if v == nil {
-		return ErrNotFound
+		return errkit.Wrap(ErrNotFound, "entity not found")
 	}
 	err = json.Unmarshal(v, m)
 	if err != nil {
@@ -92,7 +90,7 @@ func (s *BaseRepository[_, _]) GetInterface(tx TransactionOrBucket, id string, m
 func (s *BaseRepository[_, P]) Get(tx TransactionOrBucket, id string, m P) (err error) {
 	err = s.GetInterface(tx, id, m)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to get entity")
 	}
 	m.SetID(id)
 	return nil
@@ -105,11 +103,11 @@ func (s *BaseRepository[_, P]) GetByIndexValue(tx TransactionOrBucket, idx, key 
 
 	id, err := s.GetIndexValue(tx, idx, key)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to get entity")
 	}
 	err = s.Get(tx, id, m)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to get entity")
 	}
 	return nil
 }
@@ -204,7 +202,7 @@ func (*BaseRepository[_, _]) GetIndexValues(tx TransactionOrBucket, idx string) 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to get index values")
 	}
 
 	return results, nil
@@ -212,7 +210,7 @@ func (*BaseRepository[_, _]) GetIndexValues(tx TransactionOrBucket, idx string) 
 
 func (s *BaseRepository[_, _]) GetIndexValue(tx TransactionOrBucket, idx, key string) (string, error) {
 	v, err := s.GetIndexValueBytes(tx, idx, []byte(key))
-	return string(v), err
+	return string(v), errkit.Wrap(err, "failed to get index value")
 }
 
 func (*BaseRepository[_, _]) GetIndexValueBytes(tx TransactionOrBucket, idx string, key []byte) (val []byte, err error) {
@@ -226,7 +224,7 @@ func (*BaseRepository[_, _]) GetIndexValueBytes(tx TransactionOrBucket, idx stri
 	}
 	v := b.Get(key)
 	if v == nil {
-		return nil, ErrNotFound
+		return nil, errkit.WithStack(ErrNotFound)
 	}
 	return v, nil
 }
@@ -243,13 +241,13 @@ func (s *BaseRepository[_, _]) SetInterface(tx TransactionOrBucket, id string, m
 
 	buf, err := json.Marshal(m)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to marshal entity")
 	}
 
 	// Persist bytes to bucket.
 	err = b.Put([]byte(id), buf)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to save entity")
 	}
 
 	return nil
@@ -276,13 +274,13 @@ func (s *BaseRepository[_, P]) Save(tx TransactionOrBucket, entity P) error {
 	// Marshal data into bytes.
 	buf, err := json.Marshal(entity)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to marshal entity")
 	}
 
 	// Persist bytes to bucket.
 	err = b.Put([]byte(entity.GetID()), buf)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to save entity")
 	}
 
 	return nil
@@ -305,7 +303,7 @@ func (*BaseRepository[_, _]) SaveIndexValueBytes(tx TransactionOrBucket, idx str
 	// Persist bytes to bucket.
 	err = b.Put(key, val)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to save index value")
 	}
 
 	return nil
@@ -324,7 +322,7 @@ func (s *BaseRepository[_, _]) Delete(tx TransactionOrBucket, id string) error {
 	// Persist bytes to bucket.
 	err = b.Delete([]byte(id))
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete entity")
 	}
 
 	return nil
@@ -337,11 +335,11 @@ func (s *BaseRepository[_, _]) DeleteByIndexValue(tx TransactionOrBucket, idx, k
 
 	id, err := s.GetIndexValue(tx, idx, key)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to get entity")
 	}
 	err = s.Delete(tx, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete entity")
 	}
 	return nil
 }
@@ -359,7 +357,7 @@ func (*BaseRepository[_, _]) DeleteIndexValue(tx TransactionOrBucket, idx, name 
 	// Persist bytes to users bucket.
 	err = b.Delete([]byte(name))
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete index value")
 	}
 
 	return nil

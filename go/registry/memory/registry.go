@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"sync"
 
 	"github.com/google/uuid"
@@ -20,7 +21,7 @@ func NewRegistry[T any, P registry.PIDable[T]]() *Registry[T, P] {
 	}
 }
 
-func (r *Registry[T, P]) Create(item T) (P, error) {
+func (r *Registry[T, P]) Create(_ context.Context, item T) (P, error) {
 	iitem := P(&item)
 	iitem.SetID(uuid.New().String())
 
@@ -31,7 +32,7 @@ func (r *Registry[T, P]) Create(item T) (P, error) {
 	return iitem, nil
 }
 
-func (r *Registry[_, P]) Get(id string) (P, error) {
+func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
 	r.lock.RLock()
 	item, ok := r.items.Get(id)
 	r.lock.RUnlock()
@@ -42,7 +43,7 @@ func (r *Registry[_, P]) Get(id string) (P, error) {
 	return &vitem, nil
 }
 
-func (r *Registry[_, P]) List() ([]P, error) {
+func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
 	items := make([]P, 0, r.items.Len())
 	r.lock.RLock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
@@ -53,7 +54,7 @@ func (r *Registry[_, P]) List() ([]P, error) {
 	return items, nil
 }
 
-func (r *Registry[T, P]) Update(item T) (P, error) {
+func (r *Registry[T, P]) Update(_ context.Context, item T) (P, error) {
 	iitem := P(&item)
 
 	r.lock.Lock()
@@ -68,14 +69,14 @@ func (r *Registry[T, P]) Update(item T) (P, error) {
 	return &item, nil
 }
 
-func (r *Registry[_, _]) Delete(id string) error {
+func (r *Registry[_, _]) Delete(_ context.Context, id string) error {
 	r.lock.Lock()
 	r.items.Delete(id)
 	r.lock.Unlock()
 	return nil
 }
 
-func (r *Registry[_, _]) Count() (int, error) {
+func (r *Registry[_, _]) Count(_ context.Context) (int, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	return r.items.Len(), nil
