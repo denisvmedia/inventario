@@ -1,0 +1,67 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: inventario-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-inventario}
+      POSTGRES_USER: ${POSTGRES_USER:-inventario}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventario_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - ./.docker/postgresql:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inventario} -d ${POSTGRES_DB:-inventario}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Inventario Application
+  inventario:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inventario-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      INVENTARIO_DB_DSN: "postgresql://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+
+      # Server configuration
+      INVENTARIO_ADDR: "${INVENTARIO_ADDR:-:3333}"
+      INVENTARIO_UPLOAD_LOCATION: "${INVENTARIO_UPLOAD_LOCATION:-file:///app/uploads?create_dir=1}"
+
+      # Optional: Additional environment variables
+      TZ: ${TZ:-UTC}
+    volumes:
+      # Persistent storage for uploads and data
+      - ./.docker/inventario/uploads:/app/uploads
+      - ./.docker/inventario/data:/app/data
+    ports:
+      - "${INVENTARIO_PORT:-3333}:3333"
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/api/v1/settings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  inventario-network:
+    driver: bridge
+
+volumes:
+  # Named volumes for easier management (optional, using bind mounts above)
+  postgres-data:
+  inventario-uploads:
+  inventario-data:

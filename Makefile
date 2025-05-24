@@ -141,6 +141,28 @@ deps:
 	$(GO_CMD) mod tidy
 	$(CD) $(FRONTEND_DIR) && npm install
 
+# Docker operations
+.PHONY: docker-build
+docker-build:
+	docker build -t inventario:latest .
+
+.PHONY: docker-up
+docker-up:
+	docker-compose up -d
+
+.PHONY: docker-down
+docker-down:
+	docker-compose down
+
+.PHONY: docker-logs
+docker-logs:
+	docker-compose logs -f
+
+.PHONY: docker-clean
+docker-clean:
+	docker-compose down -v
+	docker system prune -f
+
 # Generate help
 .PHONY: help
 help:
@@ -164,6 +186,11 @@ ifeq ($(OS),Windows_NT)
 	@echo   lint-frontend    - Lint frontend code
 	@echo   clean            - Clean build artifacts
 	@echo   deps             - Install dependencies
+	@echo   docker-build     - Build Docker image
+	@echo   docker-up        - Start Docker services
+	@echo   docker-down      - Stop Docker services
+	@echo   docker-logs      - View Docker logs
+	@echo   docker-clean     - Clean Docker containers and volumes
 else
 	@echo "Available commands:"
 	@echo "  all              - Build everything (default)"
@@ -184,4 +211,9 @@ else
 	@echo "  lint-frontend    - Lint frontend code"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  deps             - Install dependencies"
+	@echo "  docker-build     - Build Docker image"
+	@echo "  docker-up        - Start Docker services"
+	@echo "  docker-down      - Stop Docker services"
+	@echo "  docker-logs      - View Docker logs"
+	@echo "  docker-clean     - Clean Docker containers and volumes"
 endif
