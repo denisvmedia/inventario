@@ -35,6 +35,14 @@ SERVER_ADDR=:3333
 UPLOAD_LOCATION=file://$(CURRENT_DIR)/uploads?create_dir=1
 DB_DSN=memory://
 
+# Database configuration examples
+# Memory database (default)
+# DB_DSN=memory://
+# BoltDB database
+# DB_DSN=boltdb://$(CURRENT_DIR)/data/inventario.db
+# PostgreSQL database
+# DB_DSN=postgresql://postgres:password@localhost:5432/inventario
+
 # Default target
 .PHONY: all
 all: build
@@ -58,6 +66,11 @@ build-frontend:
 .PHONY: run-backend
 run-backend: build-backend
 	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn $(DB_DSN)
+
+# Run the backend server with PostgreSQL
+.PHONY: run-backend-postgres
+run-backend-postgres: build-backend
+	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn postgresql://postgres:password@localhost:5432/inventario
 
 # Run the frontend dev server
 .PHONY: run-frontend
@@ -138,6 +151,7 @@ ifeq ($(OS),Windows_NT)
 	@echo   build-backend    - Build only the backend
 	@echo   build-frontend   - Build only the frontend
 	@echo   run-backend      - Run the backend server
+	@echo   run-backend-postgres - Run the backend server with PostgreSQL
 	@echo   run-frontend     - Run the frontend dev server
 	@echo   run-dev          - Run both servers concurrently (for development)
 	@echo   test             - Run all tests
@@ -157,6 +171,7 @@ else
 	@echo "  build-backend    - Build only the backend"
 	@echo "  build-frontend   - Build only the frontend"
 	@echo "  run-backend      - Run the backend server"
+	@echo "  run-backend-postgres - Run the backend server with PostgreSQL"
 	@echo "  run-frontend     - Run the frontend dev server"
 	@echo "  run-dev          - Run both servers concurrently (for development)"
 	@echo "  test             - Run all tests"

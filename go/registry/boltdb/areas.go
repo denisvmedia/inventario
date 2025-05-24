@@ -89,6 +89,7 @@ func (r *AreaRegistry) Get(id string) (result *models.Area, err error) {
 	return r.registry.Get(id)
 }
 
+// TODO: unused? non-interfaced?
 func (r *AreaRegistry) GetOneByName(name string) (result *models.Area, err error) {
 	return r.registry.GetBy(idxAreasByName, name)
 }

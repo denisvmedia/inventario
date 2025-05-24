@@ -24,6 +24,39 @@ Note, the project is still under development.
 
 Inventario is a Go application with a frontend built using web technologies. The following instructions will help you set up and run the application on your system.
 
+## Database Support
+
+Inventario supports multiple database backends:
+
+- **Memory**: In-memory database (default, data is lost when the application is restarted)
+- **BoltDB**: Embedded key-value store (data is persisted to disk)
+- **PostgreSQL**: Full-featured SQL database (recommended for production use)
+
+You can specify the database to use with the `--db-dsn` flag when running the application:
+
+```bash
+# Memory database (default)
+./inventario run --db-dsn memory://
+
+# BoltDB database
+./inventario run --db-dsn boltdb://path/to/data/inventario.db
+
+# PostgreSQL database
+./inventario run --db-dsn postgresql://username:password@localhost:5432/inventario
+```
+
+For PostgreSQL, you need to create the database before running the application:
+
+```bash
+# Create the database
+createdb inventario
+
+# Or using psql
+psql -c "CREATE DATABASE inventario;"
+```
+
+The application will automatically create the necessary tables and indexes when it starts.
+
 ### Prerequisites
 
 - **Go**: Version 1.24 or higher
@@ -36,10 +69,10 @@ Inventario is a Go application with a frontend built using web technologies. The
    ```bash
    # Install Homebrew if not already installed
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   
+
    # Install Go
    brew install go
-   
+
    # Install Volta (Node.js version manager)
    brew install volta
    ```
@@ -71,7 +104,7 @@ Inventario is a Go application with a frontend built using web technologies. The
    # Install Go (Ubuntu/Debian example)
    sudo apt update
    sudo apt install golang-go
-   
+
    # Install Volta (Node.js version manager)
    curl https://get.volta.sh | bash
    source ~/.bashrc  # or restart your terminal
