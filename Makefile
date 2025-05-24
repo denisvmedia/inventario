@@ -88,10 +88,38 @@ else
 	$(MAKE) -j2 run-backend run-frontend
 endif
 
-# Run Go tests
+# Run Go tests (excluding PostgreSQL)
 .PHONY: test-go
 test-go:
-	$(CD) $(FRONTEND_DIR) && $(GO_CMD) test -v ./...
+ifeq ($(OS),Windows_NT)
+	$(CD) $(BACKEND_DIR) && for /f %%i in ('$(GO_CMD) list ./... ^| findstr /v "registry/postgresql"') do $(GO_CMD) test -v %%i
+else
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v $$($(GO_CMD) list ./... | grep -v '/registry/postgresql')
+endif
+
+# Run PostgreSQL registry tests
+.PHONY: test-go-postgresql
+test-go-postgresql:
+	@echo "Running PostgreSQL registry tests..."
+ifeq ($(OS),Windows_NT)
+	@if not defined POSTGRES_TEST_DSN ( \
+		echo ❌ POSTGRES_TEST_DSN environment variable is not set && \
+		echo    Example: set POSTGRES_TEST_DSN=postgres://user:password@localhost:5432/inventario_test?sslmode=disable && \
+		exit /b 1 \
+	)
+else
+	@if [ -z "$(POSTGRES_TEST_DSN)" ]; then \
+		echo "❌ POSTGRES_TEST_DSN environment variable is not set"; \
+		echo "   Example: export POSTGRES_TEST_DSN='postgres://user:password@localhost:5432/inventario_test?sslmode=disable'"; \
+		exit 1; \
+	fi
+endif
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgresql/...
+
+# Run all Go tests including PostgreSQL
+.PHONY: test-go-all
+test-go-all:
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./...
 
 # Run frontend tests
 .PHONY: test-frontend
@@ -177,7 +205,9 @@ ifeq ($(OS),Windows_NT)
 	@echo   run-frontend     - Run the frontend dev server
 	@echo   run-dev          - Run both servers concurrently (for development)
 	@echo   test             - Run all tests
-	@echo   test-go          - Run Go tests
+	@echo   test-go          - Run Go tests (excluding PostgreSQL)
+	@echo   test-go-postgresql - Run PostgreSQL registry tests
+	@echo   test-go-all      - Run all Go tests including PostgreSQL
 	@echo   test-frontend    - Run frontend tests
 	@echo   test-e2e         - Run end-to-end tests
 	@echo   seed-db          - Seed the database with test data
@@ -202,7 +232,9 @@ else
 	@echo "  run-frontend     - Run the frontend dev server"
 	@echo "  run-dev          - Run both servers concurrently (for development)"
 	@echo "  test             - Run all tests"
-	@echo "  test-go          - Run Go tests"
+	@echo "  test-go          - Run Go tests (excluding PostgreSQL)"
+	@echo "  test-go-postgresql - Run PostgreSQL registry tests"
+	@echo "  test-go-all      - Run all Go tests including PostgreSQL"
 	@echo "  test-frontend    - Run frontend tests"
 	@echo "  test-e2e         - Run end-to-end tests"
 	@echo "  seed-db          - Seed the database with test data"
