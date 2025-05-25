@@ -3,8 +3,6 @@ package memory
 import (
 	"context"
 
-	"github.com/jellydator/validation"
-
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -27,12 +25,7 @@ func NewInvoiceRegistry(commodityRegistry registry.CommodityRegistry) *InvoiceRe
 }
 
 func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
-	err := validation.Validate(&invoice)
-	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
-	}
-
-	_, err = r.commodityRegistry.Get(ctx, invoice.CommodityID)
+	_, err := r.commodityRegistry.Get(ctx, invoice.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}

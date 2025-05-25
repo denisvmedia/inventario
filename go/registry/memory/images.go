@@ -3,8 +3,6 @@ package memory
 import (
 	"context"
 
-	"github.com/jellydator/validation"
-
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -27,12 +25,7 @@ func NewImageRegistry(commodityRegistry registry.CommodityRegistry) *ImageRegist
 }
 
 func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models.Image, error) {
-	err := validation.Validate(&image)
-	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
-	}
-
-	_, err = r.commodityRegistry.Get(ctx, image.CommodityID)
+	_, err := r.commodityRegistry.Get(ctx, image.CommodityID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "commodity not found")
 	}
