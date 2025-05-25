@@ -27,43 +27,43 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	c.Assert(err, qt.IsNil)
 
 	// Set main currency
-	err = registrySet.SettingsRegistry.Save(context.Background(), models.SettingsObject{
+	err = registrySet.SettingsRegistry.Save(c.Context(), models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create locations
-	location1, err := registrySet.LocationRegistry.Create(context.Background(), models.Location{
+	location1, err := registrySet.LocationRegistry.Create(c.Context(), models.Location{
 		Name: "Location 1",
 	})
 	c.Assert(err, qt.IsNil)
 
-	location2, err := registrySet.LocationRegistry.Create(context.Background(), models.Location{
+	location2, err := registrySet.LocationRegistry.Create(c.Context(), models.Location{
 		Name: "Location 2",
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create areas
-	area1, err := registrySet.AreaRegistry.Create(context.Background(), models.Area{
+	area1, err := registrySet.AreaRegistry.Create(c.Context(), models.Area{
 		Name:       "Area 1",
 		LocationID: location1.ID,
 	})
 	c.Assert(err, qt.IsNil)
 
-	area2, err := registrySet.AreaRegistry.Create(context.Background(), models.Area{
+	area2, err := registrySet.AreaRegistry.Create(c.Context(), models.Area{
 		Name:       "Area 2",
 		LocationID: location2.ID,
 	})
 	c.Assert(err, qt.IsNil)
 
-	area3, err := registrySet.AreaRegistry.Create(context.Background(), models.Area{
+	area3, err := registrySet.AreaRegistry.Create(c.Context(), models.Area{
 		Name:       "Area 3",
 		LocationID: location2.ID,
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create commodities
-	_, err = registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(c.Context(), models.Commodity{
 		Name:                  "Commodity 1",
 		ShortName:             "C1",
 		AreaID:                area1.ID,
@@ -78,7 +78,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(c.Context(), models.Commodity{
 		Name:                  "Commodity 2",
 		ShortName:             "C2",
 		AreaID:                area1.ID,
@@ -93,7 +93,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(c.Context(), models.Commodity{
 		Name:                   "Commodity 3",
 		ShortName:              "C3",
 		AreaID:                 area2.ID,
@@ -108,7 +108,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{ // 400
+	_, err = registrySet.CommodityRegistry.Create(c.Context(), models.Commodity{ // 400
 		Name:                  "Commodity 4",
 		ShortName:             "C4",
 		AreaID:                area2.ID,
@@ -122,7 +122,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{ // 0: sold
+	_, err = registrySet.CommodityRegistry.Create(c.Context(), models.Commodity{ // 0: sold
 		Name:                  "Commodity 5",
 		ShortName:             "C5",
 		AreaID:                area3.ID,
@@ -137,7 +137,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{ // 0: draft
+	_, err = registrySet.CommodityRegistry.Create(c.Context(), models.Commodity{ // 0: draft
 		Name:                  "Commodity 6",
 		ShortName:             "C6",
 		AreaID:                area3.ID,
@@ -198,7 +198,7 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 		registrySet := setupTestRegistry(c, "USD")
 		valuator := valuation.NewValuator(registrySet)
 
-		locations, err := registrySet.LocationRegistry.List(context.Background())
+		locations, err := registrySet.LocationRegistry.List(c.Context())
 		c.Assert(err, qt.IsNil)
 
 		locationsByName := map[string]string{
@@ -251,7 +251,7 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		// Get area IDs from the registry
-		areas, err := registrySet.AreaRegistry.List(context.Background())
+		areas, err := registrySet.AreaRegistry.List(c.Context())
 		c.Assert(err, qt.IsNil)
 		var area1ID, area2ID string
 		for _, area := range areas {

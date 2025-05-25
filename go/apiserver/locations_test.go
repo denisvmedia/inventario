@@ -25,21 +25,21 @@ func TestLocationsDelete(t *testing.T) {
 		RegistrySet: &registry.Set{},
 	}
 	params.RegistrySet.LocationRegistry = newLocationRegistry()
-	locations := must.Must(params.RegistrySet.LocationRegistry.List())
+	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 
 	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+locations[0].ID, nil)
 	c.Assert(err, qt.IsNil)
 
 	rr := httptest.NewRecorder()
 
-	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count()) - 1
+	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count(c.Context())) - 1
 
 	handler := apiserver.APIServer(params)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
 
-	cnt, err := params.RegistrySet.LocationRegistry.Count()
+	cnt, err := params.RegistrySet.LocationRegistry.Count(c.Context())
 	c.Assert(err, qt.IsNil)
 	c.Assert(cnt, qt.Equals, expectedCount)
 }
@@ -68,7 +68,7 @@ func TestLocationsCreate(t *testing.T) {
 			LocationRegistry: newLocationRegistry(),
 		},
 	}
-	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count()) + 1
+	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count(c.Context())) + 1
 
 	handler := apiserver.APIServer(params)
 	handler.ServeHTTP(rr, req)
@@ -80,7 +80,7 @@ func TestLocationsCreate(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), "Address New")
 	c.Assert(body, checkers.JSONPathMatches("$.data.id", qt.Matches), "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$")
 
-	cnt, err := params.RegistrySet.LocationRegistry.Count()
+	cnt, err := params.RegistrySet.LocationRegistry.Count(c.Context())
 	c.Assert(err, qt.IsNil)
 	c.Assert(cnt, qt.Equals, expectedCount)
 }
@@ -93,7 +93,7 @@ func TestLocationsGet(t *testing.T) {
 	}
 	params.RegistrySet.LocationRegistry = newLocationRegistry()
 	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
-	locations := must.Must(params.RegistrySet.LocationRegistry.List())
+	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID, nil)
@@ -112,7 +112,7 @@ func TestLocationsGet(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), location.Name)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), location.Address)
 
-	areas, err := params.RegistrySet.LocationRegistry.GetAreas(location.ID)
+	areas, err := params.RegistrySet.LocationRegistry.GetAreas(c.Context(), location.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(body, checkers.JSONPathMatches("$.data.attributes.areas", qt.HasLen), len(areas))
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.areas[0]"), areas[0])
@@ -127,7 +127,7 @@ func TestLocationsList(t *testing.T) {
 			LocationRegistry: newLocationRegistry(),
 		},
 	}
-	expectedLocations := must.Must(params.RegistrySet.LocationRegistry.List())
+	expectedLocations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
 	c.Assert(err, qt.IsNil)
@@ -157,7 +157,7 @@ func TestLocationsUpdate(t *testing.T) {
 			LocationRegistry: newLocationRegistry(),
 		},
 	}
-	locations := must.Must(params.RegistrySet.LocationRegistry.List())
+	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
@@ -242,7 +242,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 			LocationRegistry: newLocationRegistry(),
 		},
 	}
-	locations := must.Must(params.RegistrySet.LocationRegistry.List())
+	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
@@ -279,7 +279,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 			LocationRegistry: newLocationRegistry(),
 		},
 	}
-	locations := must.Must(params.RegistrySet.LocationRegistry.List())
+	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 	anotherLocation := locations[1]
 
@@ -395,7 +395,7 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 			LocationRegistry: newLocationRegistry(),
 		},
 	}
-	locations := must.Must(params.RegistrySet.LocationRegistry.List())
+	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	// This test simulates the issue where the frontend sends a nested data structure
@@ -441,7 +441,7 @@ func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 			LocationRegistry: newLocationRegistry(),
 		},
 	}
-	locations := must.Must(params.RegistrySet.LocationRegistry.List())
+	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	// This is the correct structure

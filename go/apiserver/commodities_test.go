@@ -449,7 +449,7 @@ func TestCommodityDeleteImage(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	imageID := "image-id-to-delete"
 
@@ -468,7 +468,7 @@ func TestCommodityDeleteInvoice(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	invoiceID := "invoice-id-to-delete"
 
@@ -487,7 +487,7 @@ func TestCommodityDeleteManual(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	manualID := "manual-id-to-delete"
 
@@ -506,8 +506,8 @@ func TestDownloadImage(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
-	expectedImage := must.Must(params.RegistrySet.ImageRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	expectedImage := must.Must(params.RegistrySet.ImageRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	imageID := expectedImage[0].ID
 	imageExt := expectedImage[0].Ext
@@ -547,8 +547,8 @@ func TestDownloadInvoice(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
-	expectedInvoices := must.Must(params.RegistrySet.InvoiceRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	expectedInvoices := must.Must(params.RegistrySet.InvoiceRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	invoiceID := expectedInvoices[0].ID
 	invoiceExt := expectedInvoices[0].Ext
@@ -588,8 +588,8 @@ func TestDownloadManual(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
-	expectedManuals := must.Must(params.RegistrySet.ManualRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	expectedManuals := must.Must(params.RegistrySet.ManualRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	manualID := expectedManuals[0].ID
 	manualExt := expectedManuals[0].Ext
@@ -629,8 +629,8 @@ func TestGetImageData(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
-	expectedImages := must.Must(params.RegistrySet.ImageRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	expectedImages := must.Must(params.RegistrySet.ImageRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	imageID := expectedImages[0].ID
 
@@ -645,7 +645,7 @@ func TestGetImageData(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	expectedImage := must.Must(params.RegistrySet.ImageRegistry.Get(imageID))
+	expectedImage := must.Must(params.RegistrySet.ImageRegistry.Get(c.Context(), imageID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "images")
 	c.Check(body, checkers.JSONPathEquals("$.id"), expectedImage.ID)
@@ -658,7 +658,7 @@ func TestGetImageData_ImageNotFound(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	nonExistentImageID := "non-existent-image-id"
 
@@ -677,8 +677,8 @@ func TestGetInvoiceData(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
-	expectedInvoices := must.Must(params.RegistrySet.InvoiceRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	expectedInvoices := must.Must(params.RegistrySet.InvoiceRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	invoiceID := expectedInvoices[0].ID
 
@@ -693,7 +693,7 @@ func TestGetInvoiceData(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	expectedInvoice := must.Must(params.RegistrySet.InvoiceRegistry.Get(invoiceID))
+	expectedInvoice := must.Must(params.RegistrySet.InvoiceRegistry.Get(c.Context(), invoiceID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "invoices")
 	c.Check(body, checkers.JSONPathEquals("$.id"), expectedInvoice.ID)
@@ -706,7 +706,7 @@ func TestGetInvoiceData_InvoiceNotFound(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	nonExistentInvoiceID := "non-existent-invoice-id"
 
@@ -725,8 +725,8 @@ func TestGetManualsData(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
-	expectedManuals := must.Must(params.RegistrySet.ManualRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	expectedManuals := must.Must(params.RegistrySet.ManualRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	manualID := expectedManuals[0].ID
 
@@ -741,7 +741,7 @@ func TestGetManualsData(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	expectedManual := must.Must(params.RegistrySet.ManualRegistry.Get(manualID))
+	expectedManual := must.Must(params.RegistrySet.ManualRegistry.Get(c.Context(), manualID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "manuals")
 	c.Check(body, checkers.JSONPathEquals("$.id"), expectedManual.ID)
@@ -754,7 +754,7 @@ func TestGetManualsData_ManualNotFound(t *testing.T) {
 	c := qt.New(t)
 
 	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List())
+	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	nonExistentManualID := "non-existent-manual-id"
 
@@ -770,21 +770,21 @@ func TestGetManualsData_ManualNotFound(t *testing.T) {
 }
 
 func getCommodityMeta(c *qt.C, params apiserver.Params) *jsonapi.CommodityMeta {
-	expectedImages, err := params.RegistrySet.ImageRegistry.List()
+	expectedImages, err := params.RegistrySet.ImageRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	images := make([]string, 0, len(expectedImages))
 	for _, image := range expectedImages {
 		images = append(images, image.ID)
 	}
 
-	expectedInvoices, err := params.RegistrySet.InvoiceRegistry.List()
+	expectedInvoices, err := params.RegistrySet.InvoiceRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	invoices := make([]string, 0, len(expectedInvoices))
 	for _, invoice := range expectedInvoices {
 		invoices = append(invoices, invoice.ID)
 	}
 
-	expectedManuals, err := params.RegistrySet.ManualRegistry.List()
+	expectedManuals, err := params.RegistrySet.ManualRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	manuals := make([]string, 0, len(expectedManuals))
 	for _, manual := range expectedManuals {

@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/go-extras/go-kit/must"
-	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -33,12 +32,7 @@ func NewAreaRegistry(locationRegistry registry.LocationRegistry) *AreaRegistry {
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
-	err := validation.Validate(&area)
-	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
-	}
-
-	_, err = r.locationRegistry.Get(ctx, area.LocationID)
+	_, err := r.locationRegistry.Get(ctx, area.LocationID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "location not found")
 	}
