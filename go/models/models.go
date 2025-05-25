@@ -2,6 +2,9 @@ package models
 
 import (
 	"context"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 
 	"github.com/jellydator/validation"
 )
@@ -78,4 +81,25 @@ func (i *EntityID) SetID(id string) {
 func WithID[T IDable](id string, i T) T {
 	i.SetID(id)
 	return i
+}
+
+type ValuerSlice[T any] []T
+
+func (s *ValuerSlice[T]) Scan(src any) error {
+	if src == nil {
+		*s = nil
+		return nil
+	}
+	bytes, ok := src.([]byte)
+	if !ok {
+		return fmt.Errorf("cannot scan type %T into StringSlice", src)
+	}
+	return json.Unmarshal(bytes, s)
+}
+
+func (s ValuerSlice[T]) Value() (driver.Value, error) {
+	if s == nil {
+		return nil, nil
+	}
+	return json.Marshal(s)
 }

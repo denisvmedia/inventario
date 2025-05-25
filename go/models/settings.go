@@ -11,6 +11,10 @@ type Setting struct {
 	Value any    `db:"value"`
 }
 
+type JSONBValue struct {
+	Data any
+}
+
 type SettingName string
 
 var _ = must.Must(typekit.StructToMap(&SettingsObject{}))

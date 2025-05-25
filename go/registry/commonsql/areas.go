@@ -36,7 +36,7 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the location exists
@@ -83,7 +83,7 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the area exists
@@ -115,7 +115,7 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the area exists
@@ -157,7 +157,7 @@ func (r *AreaRegistry) AddCommodity(ctx context.Context, areaID, commodityID str
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the area exists
@@ -195,7 +195,7 @@ func (r *AreaRegistry) GetCommodities(ctx context.Context, areaID string) ([]str
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	return r.getCommodities(ctx, tx, areaID)
@@ -226,7 +226,7 @@ func (r *AreaRegistry) DeleteCommodity(ctx context.Context, areaID, commodityID 
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the area exists

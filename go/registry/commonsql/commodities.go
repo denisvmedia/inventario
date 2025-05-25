@@ -36,7 +36,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the area exists
@@ -128,7 +128,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -160,7 +160,7 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -195,7 +195,7 @@ func (r *CommodityRegistry) AddImage(ctx context.Context, commodityID, imageID s
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -233,7 +233,7 @@ func (r *CommodityRegistry) GetImages(ctx context.Context, commodityID string) (
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	return r.getImages(ctx, tx, commodityID)
@@ -264,7 +264,7 @@ func (r *CommodityRegistry) DeleteImage(ctx context.Context, commodityID, imageI
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -297,7 +297,7 @@ func (r *CommodityRegistry) AddManual(ctx context.Context, commodityID, manualID
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -335,7 +335,7 @@ func (r *CommodityRegistry) GetManuals(ctx context.Context, commodityID string) 
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	return r.getManuals(ctx, tx, commodityID)
@@ -366,7 +366,7 @@ func (r *CommodityRegistry) DeleteManual(ctx context.Context, commodityID, manua
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -399,7 +399,7 @@ func (r *CommodityRegistry) AddInvoice(ctx context.Context, commodityID, invoice
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -437,7 +437,7 @@ func (r *CommodityRegistry) GetInvoices(ctx context.Context, commodityID string)
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	return r.getInvoices(ctx, tx, commodityID)
@@ -468,7 +468,7 @@ func (r *CommodityRegistry) DeleteInvoice(ctx context.Context, commodityID, invo
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists

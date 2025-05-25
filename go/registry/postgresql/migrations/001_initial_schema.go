@@ -3,7 +3,7 @@ package migrations
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 )
 
 // InitialSchemaMigration returns the initial schema migration
@@ -11,8 +11,8 @@ func InitialSchemaMigration() *Migration {
 	return &Migration{
 		Version:     1,
 		Description: "Initial schema",
-		Up: func(ctx context.Context, pool *pgxpool.Pool) error {
-			_, err := pool.Exec(ctx, `
+		Up: func(ctx context.Context, tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `
 				CREATE TABLE IF NOT EXISTS locations (
 					id TEXT PRIMARY KEY,
 					name TEXT NOT NULL,
@@ -77,19 +77,14 @@ func InitialSchemaMigration() *Migration {
 				);
 
 				CREATE TABLE IF NOT EXISTS settings (
-					id TEXT PRIMARY KEY DEFAULT 'settings',
-					data JSONB NOT NULL
+					name TEXT PRIMARY KEY,
+					value JSONB NOT NULL
 				);
-
-				-- Insert default settings if they don't exist
-				INSERT INTO settings (id, data)
-				VALUES ('settings', '{}')
-				ON CONFLICT (id) DO NOTHING;
 			`)
 			return err
 		},
-		Down: func(ctx context.Context, pool *pgxpool.Pool) error {
-			_, err := pool.Exec(ctx, `
+		Down: func(ctx context.Context, tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `
 				DROP TABLE IF EXISTS settings;
 				DROP TABLE IF EXISTS manuals;
 				DROP TABLE IF EXISTS invoices;

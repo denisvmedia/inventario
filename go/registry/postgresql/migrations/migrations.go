@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -15,8 +16,8 @@ import (
 type Migration struct {
 	Version     int
 	Description string
-	Up          func(ctx context.Context, pool *pgxpool.Pool) error
-	Down        func(ctx context.Context, pool *pgxpool.Pool) error
+	Up          func(ctx context.Context, tx pgx.Tx) error
+	Down        func(ctx context.Context, tx pgx.Tx) error
 }
 
 // Migrator handles database migrations
@@ -96,7 +97,7 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 		}
 
 		// Apply migration
-		if err := migration.Up(ctx, m.pool); err != nil {
+		if err := migration.Up(ctx, tx); err != nil {
 			_ = tx.Rollback(ctx)
 			return errkit.Wrap(err, fmt.Sprintf("failed to apply migration %d", migration.Version))
 		}
@@ -181,7 +182,7 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 		}
 
 		// Apply migration
-		if err := migration.Down(ctx, m.pool); err != nil {
+		if err := migration.Down(ctx, tx); err != nil {
 			_ = tx.Rollback(ctx)
 			return errkit.Wrap(err, fmt.Sprintf("failed to revert migration %d", migration.Version))
 		}

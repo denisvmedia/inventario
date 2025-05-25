@@ -84,7 +84,7 @@ func (r *LocationRegistry) Update(ctx context.Context, location models.Location)
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the location exists
@@ -108,7 +108,7 @@ func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the location exists
@@ -150,7 +150,7 @@ func (r *LocationRegistry) AddArea(ctx context.Context, locationID, areaID strin
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the location exists
@@ -188,7 +188,7 @@ func (r *LocationRegistry) GetAreas(ctx context.Context, locationID string) ([]s
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	return r.getAreas(ctx, tx, locationID)
@@ -219,7 +219,7 @@ func (r *LocationRegistry) DeleteArea(ctx context.Context, locationID, areaID st
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the location exists

@@ -36,7 +36,7 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -82,7 +82,7 @@ func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the invoice exists
@@ -114,7 +114,7 @@ func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the invoice exists

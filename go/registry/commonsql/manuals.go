@@ -36,7 +36,7 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the commodity exists
@@ -82,7 +82,7 @@ func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*mod
 		return nil, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the manual exists
@@ -114,7 +114,7 @@ func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
-		err = errors.Join(RollbackOrCommit(tx, err))
+		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
 	// Check if the manual exists

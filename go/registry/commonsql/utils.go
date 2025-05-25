@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"reflect"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/internal/typekit"
 )
 
 type txOrPool interface {
@@ -40,21 +42,13 @@ func TransactionFromContext(ctx context.Context) sqlx.ExtContext {
 }
 
 func InsertEntity(ctx context.Context, db sqlx.ExtContext, table string, entity any) error {
-	t := reflect.TypeOf(entity)
-	v := reflect.ValueOf(entity)
-
 	var fields []string
 	var placeholders []string
 	params := map[string]any{}
 
-	for i := 0; i < t.NumField(); i++ {
-		dbTag := t.Field(i).Tag.Get("db")
-		if dbTag == "" {
-			continue
-		}
-		fields = append(fields, dbTag)
-		placeholders = append(placeholders, ":"+dbTag)
-		params[dbTag] = v.Field(i).Interface()
+	err := typekit.ExtractDBFields(entity, &fields, &placeholders, params)
+	if err != nil {
+		return errkit.Wrap(err, "failed to extract fields")
 	}
 
 	query := fmt.Sprintf(
@@ -64,36 +58,44 @@ func InsertEntity(ctx context.Context, db sqlx.ExtContext, table string, entity 
 		strings.Join(placeholders, ", "),
 	)
 
-	_, err := sqlx.NamedExecContext(ctx, db, query, params)
-	return err
+	_, err = sqlx.NamedExecContext(ctx, db, query, params)
+	if err != nil {
+		return errkit.Wrap(err, "failed to insert entity")
+	}
+
+	return nil
 }
 
 func UpdateEntityByField(ctx context.Context, db sqlx.ExtContext, table, field, value string, entity any) error {
-	t := reflect.TypeOf(entity)
-	v := reflect.ValueOf(entity)
-
 	var fields []string
+	var placeholders []string
 	params := map[string]any{}
 
-	for i := 0; i < t.NumField(); i++ {
-		dbTag := t.Field(i).Tag.Get("db")
-		if dbTag == "" {
-			continue
-		}
-		fields = append(fields, fmt.Sprintf("%s = :%s", dbTag, dbTag))
-		params[dbTag] = v.Field(i).Interface()
+	err := typekit.ExtractDBFields(entity, &fields, &placeholders, params)
+	if err != nil {
+		return errkit.Wrap(err, "failed to extract fields")
+	}
+
+	// Convert fields to update format
+	var updateFields []string
+	for _, fieldName := range fields {
+		updateFields = append(updateFields, fmt.Sprintf("%s = :%s", fieldName, fieldName))
 	}
 
 	query := fmt.Sprintf(
 		"UPDATE %s SET %s WHERE %s = :entity_field_value",
 		table,
-		strings.Join(fields, ", "),
+		strings.Join(updateFields, ", "),
 		field,
 	)
 	params["entity_field_value"] = value
 
-	_, err := sqlx.NamedExecContext(ctx, db, query, params)
-	return err
+	_, err = sqlx.NamedExecContext(ctx, db, query, params)
+	if err != nil {
+		return errkit.Wrap(err, "failed to update entity")
+	}
+
+	return nil
 }
 
 func ScanEntityByField[T any, P *T](ctx context.Context, db sqlx.ExtContext, table, field, value string, entity P) error {
@@ -158,7 +160,7 @@ func ScanEntitiesByField[T any](ctx context.Context, db sqlx.ExtContext, table, 
 }
 
 func DeleteEntityByField(ctx context.Context, db sqlx.ExtContext, table, field, value string) error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE %s = $1 LIMIT 1", table, field)
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s = $1", table, field)
 
 	_, err := db.ExecContext(ctx, query, value)
 	return err
