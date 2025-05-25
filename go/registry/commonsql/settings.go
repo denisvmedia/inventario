@@ -46,9 +46,12 @@ func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, erro
 		if err != nil {
 			return models.SettingsObject{}, errkit.Wrap(err, "failed to unmarshal setting value")
 		}
-		err = settings.Set(setting.Name, value)
-		if err != nil {
-			return settings, errkit.Wrap(errkit.WithFields(err, "setting_name", setting.Name), "failed to set settings object value")
+		// Skip nil values - they shouldn't be set on the struct
+		if value != nil {
+			err = settings.Set(setting.Name, value)
+			if err != nil {
+				return settings, errkit.Wrap(errkit.WithFields(err, "setting_name", setting.Name), "failed to set settings object value")
+			}
 		}
 	}
 
@@ -68,6 +71,10 @@ func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObj
 	settingsMap := settings.ToMap()
 
 	for settingName, settingValue := range settingsMap {
+		// Skip nil values - we don't want to store them in the database
+		if settingValue == nil {
+			continue
+		}
 		var sv settingType
 		err := ScanEntityByField(ctx, tx, r.tableNames.Settings(), "name", settingName, &sv)
 		if errors.Is(err, ErrNotFound) {
@@ -97,6 +104,13 @@ func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObj
 }
 
 func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settingValue any) error {
+	// Validate the setting name by trying to set it on a temporary settings object
+	var tempSettings models.SettingsObject
+	err := tempSettings.Set(settingName, settingValue)
+	if err != nil {
+		return errkit.Wrap(err, "invalid setting name")
+	}
+
 	// Begin a transaction (atomic operation)
 	tx, err := r.dbx.Beginx()
 	if err != nil {

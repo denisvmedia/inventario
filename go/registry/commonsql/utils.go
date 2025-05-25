@@ -7,38 +7,15 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/typekit"
 )
 
-type txOrPool interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-}
-
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()
-}
-
-type txKey string
-
-const txKeyVal txKey = "tx"
-
-func ContextWithTransaction(ctx context.Context, tx sqlx.ExtContext) context.Context {
-	return context.WithValue(ctx, txKeyVal, tx)
-}
-
-func TransactionFromContext(ctx context.Context) sqlx.ExtContext {
-	tx, ok := ctx.Value(txKeyVal).(sqlx.ExtContext)
-	if !ok {
-		return nil
-	}
-	return tx
 }
 
 func InsertEntity(ctx context.Context, db sqlx.ExtContext, table string, entity any) error {
