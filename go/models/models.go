@@ -1,6 +1,8 @@
 package models
 
 import (
+	"context"
+
 	"github.com/jellydator/validation"
 )
 
@@ -25,22 +27,26 @@ var (
 type File struct {
 	// Path is the filename without extension. This is the only field that can be modified by the user.
 	// Example: "invoice-2023"
-	Path string `json:"path"`
+	Path string `json:"path" db:"path"`
 
 	// OriginalPath is the original filename as uploaded by the user.
 	// Example: "invoice.pdf"
-	OriginalPath string `json:"original_path"`
+	OriginalPath string `json:"original_path" db:"original_path"`
 
 	// Ext is the file extension including the dot.
 	// Example: ".pdf"
-	Ext string `json:"ext"`
+	Ext string `json:"ext" db:"ext"`
 
 	// MIMEType is the MIME type of the file.
 	// Example: "application/pdf"
-	MIMEType string `json:"mime_type"`
+	MIMEType string `json:"mime_type" db:"mime_type"`
 }
 
 func (i *File) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (i *File) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
@@ -50,7 +56,7 @@ func (i *File) Validate() error {
 		validation.Field(&i.MIMEType, validation.Required),
 	)
 
-	return validation.ValidateStruct(i, fields...)
+	return validation.ValidateStructWithContext(ctx, i, fields...)
 }
 
 var (
@@ -58,7 +64,7 @@ var (
 )
 
 type EntityID struct {
-	ID string `json:"id"`
+	ID string `json:"id" db:"id"`
 }
 
 func (i *EntityID) GetID() string {

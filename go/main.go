@@ -20,15 +20,22 @@ import (
 
 // @BasePath /api/v1
 
-func registerDBBackends() {
+func registerDBBackends() (cleanup func() error) {
 	boltdb.Register()
 	memory.Register()
-	postgresql.Register()
+	cleanup = postgresql.Register()
 	migrations.RegisterMigrators()
+
+	return cleanup
 }
 
 func main() {
-	registerDBBackends()
-
+	cleanup := registerDBBackends()
+	defer func() {
+		err := cleanup()
+		if err != nil {
+			panic(err)
+		}
+	}()
 	inventario.Execute()
 }

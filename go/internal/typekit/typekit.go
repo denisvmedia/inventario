@@ -40,7 +40,7 @@ func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 		if field.Tag.Get("configfield") == tag {
 			fieldValue := v.Field(i)
 			if !fieldValue.CanSet() {
-				return fmt.Errorf("cannot set field %s", field.Name)
+				return fmt.Errorf("cannot set field %q: %w", field.Name, ErrUnsettableField)
 			}
 			val := reflect.ValueOf(value)
 			switch {
@@ -56,5 +56,66 @@ func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("no field with configfield tag %q found", tag)
+	return fmt.Errorf("cannot set field %q: %w", tag, ErrNoFieldWithTag)
+}
+
+func GetFieldByConfigfieldTag[T any](ptr T, tag string) (any, error) {
+	v := reflect.ValueOf(ptr)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return nil, errors.New("ptr must be a non-nil pointer to struct")
+	}
+	v = v.Elem()
+	if v.Kind() != reflect.Struct {
+		return nil, errors.New("ptr must point to a struct")
+	}
+	t := v.Type()
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.Tag.Get("configfield") == tag {
+			fieldValue := v.Field(i)
+			if !fieldValue.CanInterface() {
+				return nil, fmt.Errorf("cannot access field %s", field.Name)
+			}
+			return fieldValue.Interface(), nil
+		}
+	}
+	return nil, fmt.Errorf("no field with configfield tag %q found", tag)
+}
+
+// StructToMap converts a struct to a map.
+// Only exported fields are included.
+// No deep conversion is done (i.e. if a field is a struct, it's not converted to a map).
+func StructToMap[T any](ptr T) (map[string]any, error) {
+	v := reflect.ValueOf(ptr)
+	switch v.Kind() {
+	case reflect.Ptr:
+		if v.IsNil() {
+			return nil, errors.New("ptr must be a non-nil pointer to struct")
+		}
+		v = v.Elem()
+		if v.Kind() != reflect.Struct {
+			return nil, errors.New("ptr must point to a struct")
+		}
+	case reflect.Struct:
+		// v is already a struct, no need to do anything
+	default:
+		return nil, errors.New("ptr must be a pointer to struct")
+	}
+
+	t := v.Type()
+
+	result := make(map[string]any)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
+		fieldValue := v.Field(i)
+		if !fieldValue.CanInterface() {
+			return nil, fmt.Errorf("cannot access field %s", field.Name)
+		}
+		result[field.Tag.Get("configfield")] = fieldValue.Interface()
+	}
+	return result, nil
 }

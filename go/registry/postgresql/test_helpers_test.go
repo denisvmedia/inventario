@@ -2,6 +2,7 @@ package postgresql_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgresql"
-	"github.com/denisvmedia/inventario/registry/postgresql/migrations"
+
 )
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -37,6 +38,126 @@ func skipIfNoPostgreSQL(t *testing.T) string {
 	return dsn
 }
 
+// applyMigrationsDirectly applies migrations directly using SQL
+func applyMigrationsDirectly(pool *pgxpool.Pool) error {
+	// Create schema_migrations table
+	_, err := pool.Exec(context.Background(), `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version INTEGER PRIMARY KEY,
+			description TEXT NOT NULL,
+			applied_at TIMESTAMP NOT NULL
+		);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Apply initial schema migration
+	_, err = pool.Exec(context.Background(), `
+		CREATE TABLE IF NOT EXISTS locations (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			address TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS areas (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE
+		);
+
+		CREATE TABLE IF NOT EXISTS commodities (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			short_name TEXT,
+			type TEXT NOT NULL,
+			area_id TEXT NOT NULL REFERENCES areas(id) ON DELETE CASCADE,
+			count INTEGER NOT NULL DEFAULT 1,
+			original_price DECIMAL(15,2),
+			original_price_currency TEXT,
+			converted_original_price DECIMAL(15,2),
+			current_price DECIMAL(15,2),
+			serial_number TEXT,
+			extra_serial_numbers JSONB,
+			part_numbers JSONB,
+			tags JSONB,
+			status TEXT NOT NULL,
+			purchase_date TEXT,
+			registered_date TEXT,
+			last_modified_date TEXT,
+			urls JSONB,
+			comments TEXT,
+			draft BOOLEAN NOT NULL DEFAULT FALSE
+		);
+
+		CREATE TABLE IF NOT EXISTS images (
+			id TEXT PRIMARY KEY,
+			commodity_id TEXT NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,
+			path TEXT NOT NULL,
+			original_path TEXT NOT NULL,
+			ext TEXT NOT NULL,
+			mime_type TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS invoices (
+			id TEXT PRIMARY KEY,
+			commodity_id TEXT NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,
+			path TEXT NOT NULL,
+			original_path TEXT NOT NULL,
+			ext TEXT NOT NULL,
+			mime_type TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS manuals (
+			id TEXT PRIMARY KEY,
+			commodity_id TEXT NOT NULL REFERENCES commodities(id) ON DELETE CASCADE,
+			path TEXT NOT NULL,
+			original_path TEXT NOT NULL,
+			ext TEXT NOT NULL,
+			mime_type TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS settings (
+			id TEXT PRIMARY KEY DEFAULT 'settings',
+			data JSONB NOT NULL
+		);
+
+		-- Insert default settings if they don't exist
+		INSERT INTO settings (id, data)
+		VALUES ('settings', '{}')
+		ON CONFLICT (id) DO NOTHING;
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Record migration as applied
+	_, err = pool.Exec(context.Background(), `
+		INSERT INTO schema_migrations (version, description, applied_at)
+		VALUES (1, 'Initial schema', NOW())
+		ON CONFLICT (version) DO NOTHING;
+	`)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// logActiveConnections logs the number of active connections for debugging
+func logActiveConnections(pool *pgxpool.Pool) {
+	if pool == nil {
+		return
+	}
+
+	var count int
+	err := pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()").Scan(&count)
+	if err == nil {
+		fmt.Printf("Active connections: %d\n", count)
+	}
+}
+
 // setupTestDB creates a clean test database with initialized schema.
 // Returns the connection pool and a cleanup function.
 func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
@@ -56,15 +177,18 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 		DROP TABLE IF EXISTS areas CASCADE;
 		DROP TABLE IF EXISTS locations CASCADE;
 		DROP TABLE IF EXISTS settings CASCADE;
+		DROP TABLE IF EXISTS schema_migrations CASCADE;
 	`)
 	c.Assert(err, qt.IsNil)
 
-	// Initialize schema by running migrations directly
-	err = migrations.RunMigrations(context.Background(), pool)
+	// Initialize schema by applying migrations directly
+	err = applyMigrationsDirectly(pool)
 	c.Assert(err, qt.IsNil)
 
 	cleanup := func() {
-		pool.Close()
+		if pool != nil {
+			pool.Close()
+		}
 	}
 
 	return pool, cleanup
@@ -89,7 +213,12 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 		DROP TABLE IF EXISTS areas CASCADE;
 		DROP TABLE IF EXISTS locations CASCADE;
 		DROP TABLE IF EXISTS settings CASCADE;
+		DROP TABLE IF EXISTS schema_migrations CASCADE;
 	`)
+	c.Assert(err, qt.IsNil)
+
+	// Initialize schema by applying migrations directly
+	err = applyMigrationsDirectly(pool)
 	c.Assert(err, qt.IsNil)
 
 	// Create registry set (this will initialize schema)
@@ -97,7 +226,9 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	c.Assert(err, qt.IsNil)
 
 	cleanup := func() {
-		pool.Close()
+		if pool != nil {
+			pool.Close()
+		}
 	}
 
 	return registrySet, cleanup
@@ -133,9 +264,22 @@ func createTestArea(c *qt.C, areaRegistry registry.AreaRegistry, locationID stri
 	return createdArea
 }
 
-// createTestCommodity creates a test commodity for use in tests.
-func createTestCommodity(c *qt.C, commodityRegistry registry.CommodityRegistry, areaID string) *models.Commodity {
+// setupMainCurrency sets up the main currency for tests
+func setupMainCurrency(c *qt.C, settingsRegistry registry.SettingsRegistry) {
 	ctx := context.Background()
+
+	// Set main currency to USD
+	err := settingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	c.Assert(err, qt.IsNil)
+}
+
+// createTestCommodity creates a test commodity for use in tests.
+func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *models.Commodity {
+	ctx := context.Background()
+
+	// Ensure main currency is set
+	setupMainCurrency(c, registrySet.SettingsRegistry)
+
 	commodity := models.Commodity{
 		Name:                   "Test Commodity",
 		ShortName:              "TC",
@@ -153,7 +297,7 @@ func createTestCommodity(c *qt.C, commodityRegistry registry.CommodityRegistry, 
 		Draft:                  false,
 	}
 
-	createdCommodity, err := commodityRegistry.Create(ctx, commodity)
+	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdCommodity, qt.IsNotNil)
 
@@ -225,7 +369,7 @@ func createTestManual(c *qt.C, manualRegistry registry.ManualRegistry, commodity
 func setupTestHierarchy(c *qt.C, registrySet *registry.Set) (*models.Location, *models.Area, *models.Commodity) {
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.ID)
-	commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.ID)
+	commodity := createTestCommodity(c, registrySet, area.ID)
 
 	return location, area, commodity
 }

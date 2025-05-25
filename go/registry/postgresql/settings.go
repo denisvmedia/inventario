@@ -117,12 +117,13 @@ func (r *SettingsRegistry) Patch(ctx context.Context, configfield string, value 
 		return errkit.Wrap(err, "failed to marshal settings")
 	}
 
-	// Update the settings in the database
+	// Upsert the settings in the database
 	_, err = r.pool.Exec(ctx, `
-		UPDATE settings
-		SET data = $1
-		WHERE id = $2
-	`, data, settingsID)
+		INSERT INTO settings (id, data)
+		VALUES ($1, $2)
+		ON CONFLICT (id) DO UPDATE
+		SET data = $2
+	`, settingsID, data)
 	if err != nil {
 		return errkit.Wrap(err, "failed to update settings")
 	}

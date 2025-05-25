@@ -1,4 +1,4 @@
-package postgresql_test
+package commonsql_test
 
 import (
 	"context"
@@ -9,29 +9,29 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-// TestManualRegistry_Create_HappyPath tests successful manual creation scenarios.
-func TestManualRegistry_Create_HappyPath(t *testing.T) {
+// TestInvoiceRegistry_Create_HappyPath tests successful invoice creation scenarios.
+func TestInvoiceRegistry_Create_HappyPath(t *testing.T) {
 	testCases := []struct {
-		name   string
-		manual models.Manual
+		name    string
+		invoice models.Invoice
 	}{
 		{
-			name: "basic manual",
-			manual: models.Manual{
+			name: "basic invoice",
+			invoice: models.Invoice{
 				File: &models.File{
-					Path:         "test-manual",
-					OriginalPath: "test-manual.pdf",
+					Path:         "test-invoice",
+					OriginalPath: "test-invoice.pdf",
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
 			},
 		},
 		{
-			name: "manual with special characters",
-			manual: models.Manual{
+			name: "invoice with special characters",
+			invoice: models.Invoice{
 				File: &models.File{
-					Path:         "manual-café",
-					OriginalPath: "manual café.pdf",
+					Path:         "factura-café",
+					OriginalPath: "factura café.pdf",
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
@@ -51,40 +51,40 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 			location := createTestLocation(c, registrySet.LocationRegistry)
 			area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
 			commodity := createTestCommodity(c, registrySet, area.GetID())
-			tc.manual.CommodityID = commodity.GetID()
+			tc.invoice.CommodityID = commodity.GetID()
 
-			// Create manual
-			createdManual, err := registrySet.ManualRegistry.Create(ctx, tc.manual)
+			// Create invoice
+			createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, tc.invoice)
 			c.Assert(err, qt.IsNil)
-			c.Assert(createdManual, qt.IsNotNil)
-			c.Assert(createdManual.GetID(), qt.Not(qt.Equals), "")
-			c.Assert(createdManual.CommodityID, qt.Equals, tc.manual.CommodityID)
-			c.Assert(createdManual.File.Path, qt.Equals, tc.manual.File.Path)
-			c.Assert(createdManual.File.OriginalPath, qt.Equals, tc.manual.File.OriginalPath)
-			c.Assert(createdManual.File.Ext, qt.Equals, tc.manual.File.Ext)
-			c.Assert(createdManual.File.MIMEType, qt.Equals, tc.manual.File.MIMEType)
+			c.Assert(createdInvoice, qt.IsNotNil)
+			c.Assert(createdInvoice.GetID(), qt.Not(qt.Equals), "")
+			c.Assert(createdInvoice.CommodityID, qt.Equals, tc.invoice.CommodityID)
+			c.Assert(createdInvoice.File.Path, qt.Equals, tc.invoice.File.Path)
+			c.Assert(createdInvoice.File.OriginalPath, qt.Equals, tc.invoice.File.OriginalPath)
+			c.Assert(createdInvoice.File.Ext, qt.Equals, tc.invoice.File.Ext)
+			c.Assert(createdInvoice.File.MIMEType, qt.Equals, tc.invoice.File.MIMEType)
 
 			// Verify count
-			count, err := registrySet.ManualRegistry.Count(ctx)
+			count, err := registrySet.InvoiceRegistry.Count(ctx)
 			c.Assert(err, qt.IsNil)
 			c.Assert(count, qt.Equals, 1)
 		})
 	}
 }
 
-// TestManualRegistry_Create_UnhappyPath tests manual creation error scenarios.
-func TestManualRegistry_Create_UnhappyPath(t *testing.T) {
+// TestInvoiceRegistry_Create_UnhappyPath tests invoice creation error scenarios.
+func TestInvoiceRegistry_Create_UnhappyPath(t *testing.T) {
 	testCases := []struct {
-		name   string
-		manual models.Manual
+		name    string
+		invoice models.Invoice
 	}{
 		{
 			name: "empty commodity ID",
-			manual: models.Manual{
+			invoice: models.Invoice{
 				CommodityID: "",
 				File: &models.File{
-					Path:         "test-manual",
-					OriginalPath: "test-manual.pdf",
+					Path:         "test-invoice",
+					OriginalPath: "test-invoice.pdf",
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
@@ -92,11 +92,11 @@ func TestManualRegistry_Create_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "non-existent commodity ID",
-			manual: models.Manual{
+			invoice: models.Invoice{
 				CommodityID: "non-existent-commodity",
 				File: &models.File{
-					Path:         "test-manual",
-					OriginalPath: "test-manual.pdf",
+					Path:         "test-invoice",
+					OriginalPath: "test-invoice.pdf",
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
@@ -104,18 +104,18 @@ func TestManualRegistry_Create_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "nil file",
-			manual: models.Manual{
+			invoice: models.Invoice{
 				CommodityID: "some-commodity-id",
 				File:        nil,
 			},
 		},
 		{
 			name: "empty path",
-			manual: models.Manual{
+			invoice: models.Invoice{
 				CommodityID: "some-commodity-id",
 				File: &models.File{
 					Path:         "",
-					OriginalPath: "test-manual.pdf",
+					OriginalPath: "test-invoice.pdf",
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
@@ -132,27 +132,27 @@ func TestManualRegistry_Create_UnhappyPath(t *testing.T) {
 			defer cleanup()
 
 			// For valid commodity ID tests, create test hierarchy
-			if tc.manual.CommodityID != "" && tc.manual.CommodityID != "non-existent-commodity" {
+			if tc.invoice.CommodityID != "" && tc.invoice.CommodityID != "non-existent-commodity" {
 				location := createTestLocation(c, registrySet.LocationRegistry)
 				area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
 				commodity := createTestCommodity(c, registrySet, area.GetID())
-				tc.manual.CommodityID = commodity.GetID()
+				tc.invoice.CommodityID = commodity.GetID()
 			}
 
-			// Attempt to create invalid manual
-			_, err := registrySet.ManualRegistry.Create(ctx, tc.manual)
+			// Attempt to create invalid invoice
+			_, err := registrySet.InvoiceRegistry.Create(ctx, tc.invoice)
 			c.Assert(err, qt.IsNotNil)
 
 			// Verify count remains zero
-			count, err := registrySet.ManualRegistry.Count(ctx)
+			count, err := registrySet.InvoiceRegistry.Count(ctx)
 			c.Assert(err, qt.IsNil)
 			c.Assert(count, qt.Equals, 0)
 		})
 	}
 }
 
-// TestManualRegistry_Get_HappyPath tests successful manual retrieval scenarios.
-func TestManualRegistry_Get_HappyPath(t *testing.T) {
+// TestInvoiceRegistry_Get_HappyPath tests successful invoice retrieval scenarios.
+func TestInvoiceRegistry_Get_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -163,22 +163,22 @@ func TestManualRegistry_Get_HappyPath(t *testing.T) {
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	manual := createTestManual(c, registrySet.ManualRegistry, commodity.GetID())
+	invoice := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
-	// Get the manual
-	retrievedManual, err := registrySet.ManualRegistry.Get(ctx, manual.GetID())
+	// Get the invoice
+	retrievedInvoice, err := registrySet.InvoiceRegistry.Get(ctx, invoice.GetID())
 	c.Assert(err, qt.IsNil)
-	c.Assert(retrievedManual, qt.IsNotNil)
-	c.Assert(retrievedManual.GetID(), qt.Equals, manual.GetID())
-	c.Assert(retrievedManual.CommodityID, qt.Equals, manual.CommodityID)
-	c.Assert(retrievedManual.File.Path, qt.Equals, manual.File.Path)
-	c.Assert(retrievedManual.File.OriginalPath, qt.Equals, manual.File.OriginalPath)
-	c.Assert(retrievedManual.File.Ext, qt.Equals, manual.File.Ext)
-	c.Assert(retrievedManual.File.MIMEType, qt.Equals, manual.File.MIMEType)
+	c.Assert(retrievedInvoice, qt.IsNotNil)
+	c.Assert(retrievedInvoice.GetID(), qt.Equals, invoice.GetID())
+	c.Assert(retrievedInvoice.CommodityID, qt.Equals, invoice.CommodityID)
+	c.Assert(retrievedInvoice.File.Path, qt.Equals, invoice.File.Path)
+	c.Assert(retrievedInvoice.File.OriginalPath, qt.Equals, invoice.File.OriginalPath)
+	c.Assert(retrievedInvoice.File.Ext, qt.Equals, invoice.File.Ext)
+	c.Assert(retrievedInvoice.File.MIMEType, qt.Equals, invoice.File.MIMEType)
 }
 
-// TestManualRegistry_Get_UnhappyPath tests manual retrieval error scenarios.
-func TestManualRegistry_Get_UnhappyPath(t *testing.T) {
+// TestInvoiceRegistry_Get_UnhappyPath tests invoice retrieval error scenarios.
+func TestInvoiceRegistry_Get_UnhappyPath(t *testing.T) {
 	testCases := []struct {
 		name string
 		id   string
@@ -205,16 +205,16 @@ func TestManualRegistry_Get_UnhappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			// Try to get non-existent manual
-			_, err := registrySet.ManualRegistry.Get(ctx, tc.id)
+			// Try to get non-existent invoice
+			_, err := registrySet.InvoiceRegistry.Get(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err, qt.ErrorMatches, ".*not found.*")
 		})
 	}
 }
 
-// TestManualRegistry_Update_HappyPath tests successful manual update scenarios.
-func TestManualRegistry_Update_HappyPath(t *testing.T) {
+// TestInvoiceRegistry_Update_HappyPath tests successful invoice update scenarios.
+func TestInvoiceRegistry_Update_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -225,37 +225,37 @@ func TestManualRegistry_Update_HappyPath(t *testing.T) {
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	manual := createTestManual(c, registrySet.ManualRegistry, commodity.GetID())
+	invoice := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
-	// Update the manual
-	manual.File.Path = "updated-manual"
+	// Update the invoice
+	invoice.File.Path = "updated-invoice"
 
-	updatedManual, err := registrySet.ManualRegistry.Update(ctx, *manual)
+	updatedInvoice, err := registrySet.InvoiceRegistry.Update(ctx, *invoice)
 	c.Assert(err, qt.IsNil)
-	c.Assert(updatedManual, qt.IsNotNil)
-	c.Assert(updatedManual.GetID(), qt.Equals, manual.GetID())
-	c.Assert(updatedManual.File.Path, qt.Equals, "updated-manual")
+	c.Assert(updatedInvoice, qt.IsNotNil)
+	c.Assert(updatedInvoice.GetID(), qt.Equals, invoice.GetID())
+	c.Assert(updatedInvoice.File.Path, qt.Equals, "updated-invoice")
 
 	// Verify the update persisted
-	retrievedManual, err := registrySet.ManualRegistry.Get(ctx, manual.GetID())
+	retrievedInvoice, err := registrySet.InvoiceRegistry.Get(ctx, invoice.GetID())
 	c.Assert(err, qt.IsNil)
-	c.Assert(retrievedManual.File.Path, qt.Equals, "updated-manual")
+	c.Assert(retrievedInvoice.File.Path, qt.Equals, "updated-invoice")
 }
 
-// TestManualRegistry_Update_UnhappyPath tests manual update error scenarios.
-func TestManualRegistry_Update_UnhappyPath(t *testing.T) {
+// TestInvoiceRegistry_Update_UnhappyPath tests invoice update error scenarios.
+func TestInvoiceRegistry_Update_UnhappyPath(t *testing.T) {
 	testCases := []struct {
-		name   string
-		manual models.Manual
+		name    string
+		invoice models.Invoice
 	}{
 		{
-			name: "non-existent manual",
-			manual: models.Manual{
+			name: "non-existent invoice",
+			invoice: models.Invoice{
 				EntityID:    models.EntityID{ID: "non-existent-id"},
 				CommodityID: "some-commodity-id",
 				File: &models.File{
-					Path:         "test-manual",
-					OriginalPath: "test-manual.pdf",
+					Path:         "test-invoice",
+					OriginalPath: "test-invoice.pdf",
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
@@ -263,12 +263,12 @@ func TestManualRegistry_Update_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "empty path",
-			manual: models.Manual{
+			invoice: models.Invoice{
 				EntityID:    models.EntityID{ID: "some-id"},
 				CommodityID: "some-commodity-id",
 				File: &models.File{
 					Path:         "",
-					OriginalPath: "test-manual.pdf",
+					OriginalPath: "test-invoice.pdf",
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
@@ -285,14 +285,14 @@ func TestManualRegistry_Update_UnhappyPath(t *testing.T) {
 			defer cleanup()
 
 			// Try to update with invalid data
-			_, err := registrySet.ManualRegistry.Update(ctx, tc.manual)
+			_, err := registrySet.InvoiceRegistry.Update(ctx, tc.invoice)
 			c.Assert(err, qt.IsNotNil)
 		})
 	}
 }
 
-// TestManualRegistry_Delete_HappyPath tests successful manual deletion scenarios.
-func TestManualRegistry_Delete_HappyPath(t *testing.T) {
+// TestInvoiceRegistry_Delete_HappyPath tests successful invoice deletion scenarios.
+func TestInvoiceRegistry_Delete_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -303,29 +303,29 @@ func TestManualRegistry_Delete_HappyPath(t *testing.T) {
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	manual := createTestManual(c, registrySet.ManualRegistry, commodity.GetID())
+	invoice := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
-	// Verify manual exists
-	_, err := registrySet.ManualRegistry.Get(ctx, manual.GetID())
+	// Verify invoice exists
+	_, err := registrySet.InvoiceRegistry.Get(ctx, invoice.GetID())
 	c.Assert(err, qt.IsNil)
 
-	// Delete the manual
-	err = registrySet.ManualRegistry.Delete(ctx, manual.GetID())
+	// Delete the invoice
+	err = registrySet.InvoiceRegistry.Delete(ctx, invoice.GetID())
 	c.Assert(err, qt.IsNil)
 
-	// Verify manual is deleted
-	_, err = registrySet.ManualRegistry.Get(ctx, manual.GetID())
+	// Verify invoice is deleted
+	_, err = registrySet.InvoiceRegistry.Get(ctx, invoice.GetID())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err, qt.ErrorMatches, ".*not found.*")
 
 	// Verify count is zero
-	count, err := registrySet.ManualRegistry.Count(ctx)
+	count, err := registrySet.InvoiceRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }
 
-// TestManualRegistry_Delete_UnhappyPath tests manual deletion error scenarios.
-func TestManualRegistry_Delete_UnhappyPath(t *testing.T) {
+// TestInvoiceRegistry_Delete_UnhappyPath tests invoice deletion error scenarios.
+func TestInvoiceRegistry_Delete_UnhappyPath(t *testing.T) {
 	testCases := []struct {
 		name string
 		id   string
@@ -352,15 +352,15 @@ func TestManualRegistry_Delete_UnhappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			// Try to delete non-existent manual
-			err := registrySet.ManualRegistry.Delete(ctx, tc.id)
+			// Try to delete non-existent invoice
+			err := registrySet.InvoiceRegistry.Delete(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
 		})
 	}
 }
 
-// TestManualRegistry_List_HappyPath tests successful manual listing scenarios.
-func TestManualRegistry_List_HappyPath(t *testing.T) {
+// TestInvoiceRegistry_List_HappyPath tests successful invoice listing scenarios.
+func TestInvoiceRegistry_List_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -368,44 +368,44 @@ func TestManualRegistry_List_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	// Test empty list
-	manuals, err := registrySet.ManualRegistry.List(ctx)
+	invoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(manuals, qt.HasLen, 0)
+	c.Assert(invoices, qt.HasLen, 0)
 
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	manual1 := createTestManual(c, registrySet.ManualRegistry, commodity.GetID())
+	invoice1 := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
-	manual2 := models.Manual{
+	invoice2 := models.Invoice{
 		CommodityID: commodity.GetID(),
 		File: &models.File{
-			Path:         "second-manual",
-			OriginalPath: "second-manual.pdf",
+			Path:         "second-invoice",
+			OriginalPath: "second-invoice.pdf",
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
 	}
-	createdManual2, err := registrySet.ManualRegistry.Create(ctx, manual2)
+	createdInvoice2, err := registrySet.InvoiceRegistry.Create(ctx, invoice2)
 	c.Assert(err, qt.IsNil)
 
-	// List all manuals
-	manuals, err = registrySet.ManualRegistry.List(ctx)
+	// List all invoices
+	invoices, err = registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(manuals, qt.HasLen, 2)
+	c.Assert(invoices, qt.HasLen, 2)
 
-	// Verify manuals are in the list
-	manualIDs := make(map[string]bool)
-	for _, manual := range manuals {
-		manualIDs[manual.GetID()] = true
+	// Verify invoices are in the list
+	invoiceIDs := make(map[string]bool)
+	for _, invoice := range invoices {
+		invoiceIDs[invoice.GetID()] = true
 	}
-	c.Assert(manualIDs[manual1.GetID()], qt.IsTrue)
-	c.Assert(manualIDs[createdManual2.GetID()], qt.IsTrue)
+	c.Assert(invoiceIDs[invoice1.GetID()], qt.IsTrue)
+	c.Assert(invoiceIDs[createdInvoice2.GetID()], qt.IsTrue)
 }
 
-// TestManualRegistry_Count_HappyPath tests successful manual counting scenarios.
-func TestManualRegistry_Count_HappyPath(t *testing.T) {
+// TestInvoiceRegistry_Count_HappyPath tests successful invoice counting scenarios.
+func TestInvoiceRegistry_Count_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -413,7 +413,7 @@ func TestManualRegistry_Count_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	// Test empty count
-	count, err := registrySet.ManualRegistry.Count(ctx)
+	count, err := registrySet.InvoiceRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 
@@ -421,32 +421,32 @@ func TestManualRegistry_Count_HappyPath(t *testing.T) {
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	createTestManual(c, registrySet.ManualRegistry, commodity.GetID())
+	createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
-	count, err = registrySet.ManualRegistry.Count(ctx)
+	count, err = registrySet.InvoiceRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 
-	// Create another manual
-	manual2 := models.Manual{
+	// Create another invoice
+	invoice2 := models.Invoice{
 		CommodityID: commodity.GetID(),
 		File: &models.File{
-			Path:         "second-manual",
-			OriginalPath: "second-manual.pdf",
+			Path:         "second-invoice",
+			OriginalPath: "second-invoice.pdf",
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
 	}
-	_, err = registrySet.ManualRegistry.Create(ctx, manual2)
+	_, err = registrySet.InvoiceRegistry.Create(ctx, invoice2)
 	c.Assert(err, qt.IsNil)
 
-	count, err = registrySet.ManualRegistry.Count(ctx)
+	count, err = registrySet.InvoiceRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 2)
 }
 
-// TestManualRegistry_CascadeDelete tests that deleting a commodity cascades to manuals.
-func TestManualRegistry_CascadeDelete(t *testing.T) {
+// TestInvoiceRegistry_CascadeDelete tests that deleting a commodity cascades to invoices.
+func TestInvoiceRegistry_CascadeDelete(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -457,23 +457,23 @@ func TestManualRegistry_CascadeDelete(t *testing.T) {
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	manual := createTestManual(c, registrySet.ManualRegistry, commodity.GetID())
+	invoice := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
-	// Verify manual exists
-	_, err := registrySet.ManualRegistry.Get(ctx, manual.GetID())
+	// Verify invoice exists
+	_, err := registrySet.InvoiceRegistry.Get(ctx, invoice.GetID())
 	c.Assert(err, qt.IsNil)
 
-	// Delete the commodity (should cascade to manual)
+	// Delete the commodity (should cascade to invoice)
 	err = registrySet.CommodityRegistry.Delete(ctx, commodity.GetID())
 	c.Assert(err, qt.IsNil)
 
-	// Verify manual is also deleted due to cascade
-	_, err = registrySet.ManualRegistry.Get(ctx, manual.GetID())
+	// Verify invoice is also deleted due to cascade
+	_, err = registrySet.InvoiceRegistry.Get(ctx, invoice.GetID())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err, qt.ErrorMatches, ".*not found.*")
 
 	// Verify count is zero
-	count, err := registrySet.ManualRegistry.Count(ctx)
+	count, err := registrySet.InvoiceRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }

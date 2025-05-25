@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -39,11 +40,15 @@ func (d *Date) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*d = Date(dateStr)
-	return d.Validate()
+	return d.ValidateWithContext(context.Background())
 }
 
 // Validate checks if the date is in the correct format.
 func (d *Date) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (d *Date) ValidateWithContext(_ context.Context) error {
 	if d == nil {
 		return nil
 	}

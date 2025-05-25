@@ -1,4 +1,4 @@
-package postgresql_test
+package commonsql_test
 
 import (
 	"context"

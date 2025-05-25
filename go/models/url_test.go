@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -52,7 +53,16 @@ func TestURL_String(t *testing.T) {
 	c.Assert(url.String(), qt.Equals, "https://example.com/path?query=value#fragment")
 }
 
-func TestURL_Validate_HappyPath(t *testing.T) {
+func TestURL_Validate(t *testing.T) {
+	c := qt.New(t)
+
+	url := &models.URL{}
+	err := url.Validate()
+	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err.Error(), qt.Equals, "must use validate with context")
+}
+
+func TestURL_ValidateWithContext_HappyPath(t *testing.T) {
 	testCases := []struct {
 		name string
 		url  *models.URL
@@ -87,13 +97,14 @@ func TestURL_Validate_HappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			err := tc.url.Validate()
+			ctx := context.Background()
+			err := tc.url.ValidateWithContext(ctx)
 			c.Assert(err, qt.IsNil)
 		})
 	}
 }
 
-func TestURL_Validate_UnhappyPath(t *testing.T) {
+func TestURL_ValidateWithContext_UnhappyPath(t *testing.T) {
 	testCases := []struct {
 		name          string
 		url           *models.URL
@@ -125,7 +136,8 @@ func TestURL_Validate_UnhappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			err := tc.url.Validate()
+			ctx := context.Background()
+			err := tc.url.ValidateWithContext(ctx)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})

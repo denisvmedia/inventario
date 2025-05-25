@@ -50,7 +50,7 @@ func TestInvoiceRegistry_Create_HappyPath(t *testing.T) {
 			// Create test hierarchy
 			location := createTestLocation(c, registrySet.LocationRegistry)
 			area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-			commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.GetID())
+			commodity := createTestCommodity(c, registrySet, area.GetID())
 			tc.invoice.CommodityID = commodity.GetID()
 
 			// Create invoice
@@ -135,7 +135,7 @@ func TestInvoiceRegistry_Create_UnhappyPath(t *testing.T) {
 			if tc.invoice.CommodityID != "" && tc.invoice.CommodityID != "non-existent-commodity" {
 				location := createTestLocation(c, registrySet.LocationRegistry)
 				area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-				commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.GetID())
+				commodity := createTestCommodity(c, registrySet, area.GetID())
 				tc.invoice.CommodityID = commodity.GetID()
 			}
 
@@ -162,7 +162,7 @@ func TestInvoiceRegistry_Get_HappyPath(t *testing.T) {
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
 	invoice := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
 	// Get the invoice
@@ -224,7 +224,7 @@ func TestInvoiceRegistry_Update_HappyPath(t *testing.T) {
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
 	invoice := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
 	// Update the invoice
@@ -302,7 +302,7 @@ func TestInvoiceRegistry_Delete_HappyPath(t *testing.T) {
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
 	invoice := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
 	// Verify invoice exists
@@ -375,7 +375,7 @@ func TestInvoiceRegistry_List_HappyPath(t *testing.T) {
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
 	invoice1 := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
 	invoice2 := models.Invoice{
@@ -420,7 +420,7 @@ func TestInvoiceRegistry_Count_HappyPath(t *testing.T) {
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
 	createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
 	count, err = registrySet.InvoiceRegistry.Count(ctx)
@@ -456,7 +456,7 @@ func TestInvoiceRegistry_CascadeDelete(t *testing.T) {
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet.LocationRegistry)
 	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet.CommodityRegistry, area.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
 	invoice := createTestInvoice(c, registrySet.InvoiceRegistry, commodity.GetID())
 
 	// Verify invoice exists

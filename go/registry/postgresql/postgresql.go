@@ -7,74 +7,86 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/commonsql"
 	pgmigrations "github.com/denisvmedia/inventario/registry/postgresql/migrations"
 )
 
 const Name = "postgresql"
 
-func Register() {
-	registry.Register(Name, NewRegistrySet)
+func Register() (cleanup func() error) {
+	newFn, cleanup := NewRegistrySet()
+	registry.Register(Name, newFn)
+	return cleanup
 }
 
-func NewRegistrySet(c registry.Config) (*registry.Set, error) {
-	parsed, err := c.Parse()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to parse config DSN")
-	}
+func NewRegistrySet() (registrySetFunc func(c registry.Config) (registrySet *registry.Set, err error), cleanup func() error) {
+	doCleanup := func() error { return nil }
+	fn := func() error { return doCleanup() }
 
-	if parsed.Scheme != Name {
-		return nil, errkit.Wrap(registry.ErrInvalidConfig, "invalid scheme")
-	}
+	return func(c registry.Config) (registrySet *registry.Set, err error) {
+		parsed, err := c.Parse()
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to parse config DSN")
+		}
 
-	// Create a connection pool
-	poolConfig, err := pgxpool.ParseConfig(string(c))
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to parse PostgreSQL connection string")
-	}
+		if parsed.Scheme != Name {
+			return nil, errkit.Wrap(registry.ErrInvalidConfig, "invalid scheme")
+		}
 
-	// Set some reasonable defaults if not specified
-	if poolConfig.MaxConns == 0 {
-		poolConfig.MaxConns = 10
-	}
-	if poolConfig.MinConns == 0 {
-		poolConfig.MinConns = 2
-	}
-	if poolConfig.MaxConnLifetime == 0 {
-		poolConfig.MaxConnLifetime = 1 * time.Hour
-	}
-	if poolConfig.MaxConnIdleTime == 0 {
-		poolConfig.MaxConnIdleTime = 30 * time.Minute
-	}
+		// Create a connection pool
+		poolConfig, err := pgxpool.ParseConfig(string(c))
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to parse PostgreSQL connection string")
+		}
 
-	// Create the connection pool
-	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create PostgreSQL connection pool")
-	}
+		// Set some reasonable defaults if not specified
+		if poolConfig.MaxConns == 0 {
+			poolConfig.MaxConns = 10
+		}
+		if poolConfig.MinConns == 0 {
+			poolConfig.MinConns = 2
+		}
+		if poolConfig.MaxConnLifetime == 0 {
+			poolConfig.MaxConnLifetime = 1 * time.Hour
+		}
+		if poolConfig.MaxConnIdleTime == 0 {
+			poolConfig.MaxConnIdleTime = 30 * time.Minute
+		}
 
-	// Test the connection
-	if err := pool.Ping(context.Background()); err != nil {
-		return nil, errkit.Wrap(err, "failed to connect to PostgreSQL")
-	}
+		// Create the connection pool
+		pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to create PostgreSQL connection pool")
+		}
 
-	// Initialize the database schema
-	if err := checkSchemaInited(pool); err != nil {
-		return nil, errkit.Wrap(err, "failed to initialize database schema")
-	}
+		// Test the connection
+		if err := pool.Ping(context.Background()); err != nil {
+			return nil, errkit.Wrap(err, "failed to connect to PostgreSQL")
+		}
 
-	s := &registry.Set{}
-	s.LocationRegistry = NewLocationRegistry(pool)
-	s.AreaRegistry = NewAreaRegistry(pool, s.LocationRegistry)
-	s.SettingsRegistry = NewSettingsRegistry(pool)
-	s.CommodityRegistry = NewCommodityRegistry(pool, s.AreaRegistry)
-	s.ImageRegistry = NewImageRegistry(pool, s.CommodityRegistry)
-	s.InvoiceRegistry = NewInvoiceRegistry(pool, s.CommodityRegistry)
-	s.ManualRegistry = NewManualRegistry(pool, s.CommodityRegistry)
+		// Initialize the database schema
+		if err := checkSchemaInited(pool); err != nil {
+			return nil, errkit.Wrap(err, "failed to initialize database schema")
+		}
 
-	return s, nil
+		// Create sqlx DB wrapper from pgxpool
+		sqlDB := stdlib.OpenDBFromPool(pool)
+		sqlxDB := sqlx.NewDb(sqlDB, "pgx")
+		s := commonsql.NewRegistrySet(sqlxDB)
+
+		doCleanup = func() error {
+			err := sqlxDB.Close()
+			pool.Close()
+			return err
+		}
+
+		return s, nil
+	}, fn
 }
 
 // checkSchemaInited checks if the database schema is up-to-date

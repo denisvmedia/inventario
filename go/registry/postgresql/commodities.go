@@ -16,34 +16,40 @@ import (
 var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
 
 type CommodityRegistry struct {
-	pool         *pgxpool.Pool
-	areaRegistry registry.AreaRegistry
+	pool             *pgxpool.Pool
+	areaRegistry     registry.AreaRegistry
+	settingsRegistry registry.SettingsRegistry
 }
 
-func NewCommodityRegistry(pool *pgxpool.Pool, areaRegistry registry.AreaRegistry) *CommodityRegistry {
+func NewCommodityRegistry(pool *pgxpool.Pool, areaRegistry registry.AreaRegistry, settingsRegistry registry.SettingsRegistry) *CommodityRegistry {
 	return &CommodityRegistry{
-		pool:         pool,
-		areaRegistry: areaRegistry,
+		pool:             pool,
+		areaRegistry:     areaRegistry,
+		settingsRegistry: settingsRegistry,
 	}
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
-	// Validate the commodity
-	err := commodity.ValidateWithContext(ctx)
-	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
+	if commodity.Name == "" {
+		return nil, errkit.WithStack(registry.ErrFieldRequired,
+			"field_name", "Name",
+		)
 	}
 
 	// Check if the area exists
-	_, err = r.areaRegistry.Get(ctx, commodity.AreaID)
+	_, err := r.areaRegistry.Get(ctx, commodity.AreaID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "area not found")
 	}
 
-	// Generate a new ID
-	if commodity.ID == "" {
-		commodity.SetID(generateID())
+	_, err = r.GetByName(ctx, commodity.Name)
+	switch {
+	case err == nil:
+		return nil, errors.New("commodity name is already used")
+	
 	}
+
+	commodity.SetID(generateID())
 
 	// Convert arrays to JSON
 	extraSerialNumbers, err := json.Marshal(commodity.ExtraSerialNumbers)
@@ -141,6 +147,49 @@ func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodi
 	return &commodity, nil
 }
 
+func (r *CommodityRegistry) GetByName(ctx context.Context, name string) (*models.Commodity, error) {
+	var commodity models.Commodity
+	var extraSerialNumbersJSON, partNumbersJSON, tagsJSON, urlsJSON []byte
+
+	// Query the database for the commodity
+	err := r.pool.QueryRow(ctx, `
+		SELECT
+			id, name, short_name, type, area_id, count,
+			original_price, original_price_currency, converted_original_price, current_price,
+			serial_number, extra_serial_numbers, part_numbers, tags, status,
+			purchase_date, registered_date, last_modified_date, urls, comments, draft
+		FROM commodities
+		WHERE name = $1
+	`, id).Scan(
+		&commodity.ID, &commodity.Name, &commodity.ShortName, &commodity.Type, &commodity.AreaID, &commodity.Count,
+		&commodity.OriginalPrice, &commodity.OriginalPriceCurrency, &commodity.ConvertedOriginalPrice, &commodity.CurrentPrice,
+		&commodity.SerialNumber, &extraSerialNumbersJSON, &partNumbersJSON, &tagsJSON, &commodity.Status,
+		&commodity.PurchaseDate, &commodity.RegisteredDate, &commodity.LastModifiedDate, &urlsJSON, &commodity.Comments, &commodity.Draft,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errkit.Wrap(registry.ErrNotFound, "commodity not found")
+		}
+		return nil, errkit.Wrap(err, "failed to get commodity")
+	}
+
+	// Unmarshal JSON arrays
+	if err := json.Unmarshal(extraSerialNumbersJSON, &commodity.ExtraSerialNumbers); err != nil {
+		return nil, errkit.Wrap(err, "failed to unmarshal extra serial numbers")
+	}
+	if err := json.Unmarshal(partNumbersJSON, &commodity.PartNumbers); err != nil {
+		return nil, errkit.Wrap(err, "failed to unmarshal part numbers")
+	}
+	if err := json.Unmarshal(tagsJSON, &commodity.Tags); err != nil {
+		return nil, errkit.Wrap(err, "failed to unmarshal tags")
+	}
+	if err := json.Unmarshal(urlsJSON, &commodity.URLs); err != nil {
+		return nil, errkit.Wrap(err, "failed to unmarshal URLs")
+	}
+
+	return &commodity, nil
+}
+
 func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, error) {
 	var commodities []*models.Commodity
 
@@ -197,17 +246,20 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 }
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
-	// Validate the commodity
-	err := commodity.ValidateWithContext(ctx)
-	if err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
-	}
-
 	// Check if the commodity exists
-	existingCommodity, err := r.Get(ctx, commodity.ID)
+	_, err := r.Get(ctx, commodity.ID)
 	if err != nil {
 		return nil, err
 	}
+
+	// Begin a transaction
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer tx.Rollback(ctx)
+
+	ctx = ContextWithTransaction(ctx, tx)
 
 	// Check if the area exists
 	_, err = r.areaRegistry.Get(ctx, commodity.AreaID)
@@ -234,28 +286,6 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	urls, err := json.Marshal(commodity.URLs)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to marshal URLs")
-	}
-
-	// Begin a transaction
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer tx.Rollback(ctx)
-
-	// If the area ID has changed, update the area references
-	if existingCommodity.AreaID != commodity.AreaID {
-		// Remove the commodity from the old area
-		err = r.areaRegistry.DeleteCommodity(ctx, existingCommodity.AreaID, commodity.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		// Add the commodity to the new area
-		err = r.areaRegistry.AddCommodity(ctx, commodity.AreaID, commodity.ID)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	// Update the commodity in the database
@@ -288,12 +318,6 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 }
 
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
-	// Check if the commodity exists
-	commodity, err := r.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-
 	// Begin a transaction
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -308,12 +332,6 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	`, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete commodity")
-	}
-
-	// Remove the commodity from the area
-	err = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
-	if err != nil {
-		return err
 	}
 
 	// Commit the transaction
@@ -409,20 +427,6 @@ func (r *CommodityRegistry) DeleteImage(ctx context.Context, commodityID, imageI
 		return err
 	}
 
-	// Check if the image exists and has the correct commodity ID
-	var count int
-	err = r.pool.QueryRow(ctx, `
-		SELECT COUNT(*)
-		FROM images
-		WHERE id = $1 AND commodity_id = $2
-	`, imageID, commodityID).Scan(&count)
-	if err != nil {
-		return errkit.Wrap(err, "failed to check image")
-	}
-	if count == 0 {
-		return errkit.Wrap(registry.ErrNotFound, "image not found or does not belong to this commodity")
-	}
-
 	// Delete the image from the database
 	_, err = r.pool.Exec(ctx, `
 		DELETE FROM images
@@ -434,8 +438,6 @@ func (r *CommodityRegistry) DeleteImage(ctx context.Context, commodityID, imageI
 
 	return nil
 }
-
-// Similar implementations for manuals and invoices
 
 func (r *CommodityRegistry) AddManual(ctx context.Context, commodityID, manualID string) error {
 	// Check if the commodity exists
@@ -502,20 +504,6 @@ func (r *CommodityRegistry) DeleteManual(ctx context.Context, commodityID, manua
 	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return err
-	}
-
-	// Check if the manual exists and has the correct commodity ID
-	var count int
-	err = r.pool.QueryRow(ctx, `
-		SELECT COUNT(*)
-		FROM manuals
-		WHERE id = $1 AND commodity_id = $2
-	`, manualID, commodityID).Scan(&count)
-	if err != nil {
-		return errkit.Wrap(err, "failed to check manual")
-	}
-	if count == 0 {
-		return errkit.Wrap(registry.ErrNotFound, "manual not found or does not belong to this commodity")
 	}
 
 	// Delete the manual from the database
@@ -595,20 +583,6 @@ func (r *CommodityRegistry) DeleteInvoice(ctx context.Context, commodityID, invo
 	_, err := r.Get(ctx, commodityID)
 	if err != nil {
 		return err
-	}
-
-	// Check if the invoice exists and has the correct commodity ID
-	var count int
-	err = r.pool.QueryRow(ctx, `
-		SELECT COUNT(*)
-		FROM invoices
-		WHERE id = $1 AND commodity_id = $2
-	`, invoiceID, commodityID).Scan(&count)
-	if err != nil {
-		return errkit.Wrap(err, "failed to check invoice")
-	}
-	if count == 0 {
-		return errkit.Wrap(registry.ErrNotFound, "invoice not found or does not belong to this commodity")
 	}
 
 	// Delete the invoice from the database

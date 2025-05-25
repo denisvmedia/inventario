@@ -66,8 +66,14 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 func (r *AreaRegistry) Get(ctx context.Context, id string) (*models.Area, error) {
 	var area models.Area
 
+	var tx txOrPool
+	tx = TransactionFromContext(ctx)
+	if tx == nil {
+		tx = r.pool
+	}
+
 	// Query the database for the area
-	err := r.pool.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT id, name, location_id
 		FROM areas
 		WHERE id = $1
@@ -189,7 +195,7 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 
 func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	// Check if the area exists
-	area, err := r.Get(ctx, id)
+	_, err := r.Get(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -203,12 +209,19 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(registry.ErrCannotDelete, "area has commodities")
 	}
 
-	// Begin a transaction
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+	var tx pgx.Tx
+	tx = TransactionFromContext(ctx)
+	if tx == nil {
+		txp, err := r.pool.Begin(ctx)
+		if err != nil {
+			return errkit.Wrap(err, "failed to begin transaction")
+		}
+		defer txp.Rollback(ctx)
+
+		tx = txp
 	}
-	defer tx.Rollback(ctx)
+
+	// Begin a transaction
 
 	// Delete the area from the database
 	_, err = tx.Exec(ctx, `
@@ -219,11 +232,8 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(err, "failed to delete area")
 	}
 
-	// Remove the area from the location
-	err = r.locationRegistry.DeleteArea(ctx, area.LocationID, id)
-	if err != nil {
-		return err
-	}
+	// Note: No need to call locationRegistry.DeleteArea since we already deleted the area
+	// and the foreign key constraint will handle the relationship
 
 	// Commit the transaction
 	err = tx.Commit(ctx)
@@ -316,9 +326,15 @@ func (r *AreaRegistry) DeleteCommodity(ctx context.Context, areaID, commodityID 
 		return err
 	}
 
+	var tx txOrPool
+	tx = TransactionFromContext(ctx)
+	if tx == nil {
+		tx = r.pool
+	}
+
 	// Check if the commodity exists and has the correct area ID
 	var count int
-	err = r.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM commodities
 		WHERE id = $1 AND area_id = $2
@@ -331,7 +347,7 @@ func (r *AreaRegistry) DeleteCommodity(ctx context.Context, areaID, commodityID 
 	}
 
 	// Delete the commodity from the database
-	_, err = r.pool.Exec(ctx, `
+	_, err = tx.Exec(ctx, `
 		DELETE FROM commodities
 		WHERE id = $1 AND area_id = $2
 	`, commodityID, areaID)

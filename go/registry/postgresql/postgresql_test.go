@@ -17,7 +17,11 @@ func TestPostgreSQLRegistration(t *testing.T) {
 	c := qt.New(t)
 
 	// Register the PostgreSQL registry
-	postgresql.Register()
+	cleanup := postgresql.Register()
+	c.Cleanup(func() {
+		err := cleanup()
+		c.Assert(err, qt.IsNil)
+	})
 
 	// Get the registry
 	registries := registry.Registries()

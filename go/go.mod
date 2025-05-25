@@ -19,6 +19,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.14.2
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/jellydator/validation v1.1.0
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/mrosales/emoji-go v1.1.0
 	github.com/rs/cors v1.11.1
 	github.com/shopspring/decimal v1.4.0
