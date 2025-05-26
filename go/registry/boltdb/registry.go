@@ -12,10 +12,6 @@ import (
 
 type HookFn[T any, P registry.PIDable[T]] func(dbx.TransactionOrBucket, P) error
 
-func NoopHook[T any, P registry.PIDable[T]](P) error {
-	return nil
-}
-
 type Registry[T any, P registry.PIDable[T]] struct {
 	db                 *bolt.DB
 	base               *dbx.BaseRepository[T, P]
@@ -43,24 +39,24 @@ func (r *Registry[T, P]) Create(m T, before, after HookFn[T, P]) (P, error) {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		err := before(tx, result)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to create entity")
 		}
 
 		result.SetID("") // ignore the id
 		err = r.base.Save(tx, result)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to create entity")
 		}
 
 		err = after(tx, result)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to create entity")
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to create entity")
 	}
 
 	return result, nil
@@ -77,7 +73,7 @@ func (r *Registry[T, P]) Get(id string) (result P, err error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to get entity")
 	}
 
 	return result, nil
@@ -94,7 +90,7 @@ func (r *Registry[T, P]) GetBy(idx, value string) (result P, err error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to get entity")
 	}
 
 	return result, nil
@@ -104,14 +100,14 @@ func (r *Registry[T, P]) List() (results []P, err error) {
 	err = r.db.View(func(tx *bolt.Tx) error {
 		val, err := r.base.GetAll(tx, P(new(T)))
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to list entities")
 		}
 		results = val
 		return nil
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to list entities")
 	}
 
 	return results, nil
@@ -124,28 +120,28 @@ func (r *Registry[T, P]) Update(m T, before, after HookFn[T, P]) (result P, err 
 
 		err := r.base.Get(tx, result.GetID(), old)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to update entity")
 		}
 
 		err = before(tx, result)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to update entity")
 		}
 
 		err = r.base.Save(tx, result)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to update entity")
 		}
 
 		err = after(tx, result)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to update entity")
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to update entity")
 	}
 
 	return result, nil
@@ -158,13 +154,13 @@ func (r *Registry[T, P]) Count() (int, error) {
 		var err error
 		cnt, err = r.base.Count(tx)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to count entities")
 		}
 
 		return nil
 	})
 	if err != nil {
-		return 0, err
+		return 0, errkit.Wrap(err, "failed to count entities")
 	}
 
 	return cnt, nil
@@ -175,22 +171,22 @@ func (r *Registry[T, P]) Delete(id string, before, after HookFn[T, P]) error {
 		m := P(new(T))
 		err := r.base.Get(tx, id, m)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to delete entity")
 		}
 
 		err = before(tx, m)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to delete entity")
 		}
 
 		err = r.base.Delete(tx, id)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to delete entity")
 		}
 
 		err = after(tx, m)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to delete entity")
 		}
 
 		return nil
@@ -212,7 +208,7 @@ func (r *Registry[T, P]) DeleteEmptyBuckets(tx dbx.TransactionOrBucket, entityID
 				errs,
 				errkit.Wrap(registry.ErrCannotDelete, fmt.Sprintf("%s has %s", r.entityName, bucketName)),
 			)
-			return errs // Return immediately if we find a non-empty bucket
+			return errkit.WithStack(errs) // Return immediately if we find a non-empty bucket
 		}
 	}
 
@@ -225,7 +221,7 @@ func (r *Registry[T, P]) AddChild(childEntityBucketName, entityID, childID strin
 		m := P(new(T))
 		err := r.base.Get(tx, entityID, m)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to get entity")
 		}
 
 		children := r.base.GetBucket(tx, r.childrenBucketName, m.GetID())
@@ -235,7 +231,7 @@ func (r *Registry[T, P]) AddChild(childEntityBucketName, entityID, childID strin
 
 		err = r.base.SaveIndexValue(children, childEntityBucketName, childID, childID)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, fmt.Sprintf("failed to add %s", childEntityBucketName))
 		}
 
 		return nil
@@ -249,7 +245,7 @@ func (r *Registry[T, P]) GetChildren(childEntityBucketName, entityID string) ([]
 		m := P(new(T))
 		err := r.base.Get(tx, entityID, m)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to get entity")
 		}
 
 		children := r.base.GetBucket(tx, r.childrenBucketName, m.GetID())
@@ -265,7 +261,7 @@ func (r *Registry[T, P]) GetChildren(childEntityBucketName, entityID string) ([]
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, fmt.Sprintf("failed to get %s", childEntityBucketName))
 	}
 
 	areas := make([]string, 0, len(values))
@@ -282,7 +278,7 @@ func (r *Registry[T, P]) DeleteChild(childEntityBucketName, entityID, childID st
 		m := P(new(T))
 		err := r.base.Get(tx, entityID, m)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to get entity")
 		}
 
 		children := r.base.GetBucket(tx, r.childrenBucketName, m.GetID())
@@ -292,7 +288,7 @@ func (r *Registry[T, P]) DeleteChild(childEntityBucketName, entityID, childID st
 
 		err = r.base.DeleteIndexValue(children, childEntityBucketName, childID)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, fmt.Sprintf("failed to delete %s", childEntityBucketName))
 		}
 
 		return nil

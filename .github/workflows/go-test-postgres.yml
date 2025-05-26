@@ -1,0 +1,55 @@
+name: Go Test PostgreSQL
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  test-postgres:
+    name: test-postgres
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: inventario_test
+          POSTGRES_USER: inventario_test
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.3'
+          cache: true
+      - name: Install dependencies
+        run: go mod download
+        working-directory: go
+      - name: Create dist directory
+        run: mkdir -p frontend/dist && echo "" > frontend/dist/inventario.txt
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U inventario_test; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+      - name: Run PostgreSQL registry tests
+        env:
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
+        run: go test -v -race ./registry/commonsql/...
+        working-directory: go

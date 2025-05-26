@@ -1,7 +1,6 @@
 package boltdb_test
 
 import (
-	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -28,8 +27,7 @@ func setupTestRegistry(t *testing.T) (*boltdb.Registry[testItem, *testItem], fun
 	c := qt.New(t)
 
 	// Create a temporary directory for the test database
-	tempDir, err := os.MkdirTemp("", "boltdb-test-*")
-	c.Assert(err, qt.IsNil)
+	tempDir := c.TempDir()
 
 	// Create a new database in the temporary directory
 	db, err := dbx.NewDB(tempDir, "test.db").Open()
@@ -43,8 +41,8 @@ func setupTestRegistry(t *testing.T) (*boltdb.Registry[testItem, *testItem], fun
 
 	// Return the registry and a cleanup function
 	cleanup := func() {
-		db.Close()
-		os.RemoveAll(tempDir)
+		err = db.Close()
+		c.Assert(err, qt.IsNil)
 	}
 
 	return r, cleanup

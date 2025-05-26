@@ -1,6 +1,7 @@
 package boltdb
 
 import (
+	"context"
 	"errors"
 
 	bolt "go.etcd.io/bbolt"
@@ -45,7 +46,7 @@ func NewCommodityRegistry(db *bolt.DB, areaRegistry registry.AreaRegistry) *Comm
 	}
 }
 
-func (r *CommodityRegistry) Create(m models.Commodity) (*models.Commodity, error) {
+func (r *CommodityRegistry) Create(ctx context.Context, m models.Commodity) (*models.Commodity, error) {
 	result, err := r.registry.Create(m, func(tx dbx.TransactionOrBucket, commodity *models.Commodity) error {
 		if commodity.Name == "" {
 			return errkit.WithStack(registry.ErrFieldRequired,
@@ -59,13 +60,13 @@ func (r *CommodityRegistry) Create(m models.Commodity) (*models.Commodity, error
 		}
 		if !errors.Is(err, registry.ErrNotFound) {
 			// any other error is a problem
-			return err
+			return errkit.Wrap(err, "failed to check if commodity name is already used")
 		}
 		return nil
 	}, func(tx dbx.TransactionOrBucket, commodity *models.Commodity) error {
 		err := r.base.SaveIndexValue(tx, idxCommoditiesByName, commodity.Name, commodity.ID)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to save commodity name")
 		}
 
 		r.base.GetOrCreateBucket(tx, bucketNameCommoditiesChildren, commodity.ID)
@@ -76,30 +77,30 @@ func (r *CommodityRegistry) Create(m models.Commodity) (*models.Commodity, error
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errkit.Wrap(err, "failed to create commodity")
 	}
 
-	err = r.areaRegistry.AddCommodity(result.AreaID, result.ID)
+	err = r.areaRegistry.AddCommodity(ctx, result.AreaID, result.ID)
 	if err != nil {
-		return result, err
+		return result, errkit.Wrap(err, "failed to add commodity to area")
 	}
 
 	return result, nil
 }
 
-func (r *CommodityRegistry) Get(id string) (*models.Commodity, error) {
+func (r *CommodityRegistry) Get(_ context.Context, id string) (*models.Commodity, error) {
 	return r.registry.Get(id)
 }
 
-func (r *CommodityRegistry) GetOneByName(name string) (result *models.Commodity, err error) {
+func (r *CommodityRegistry) GetOneByName(_ context.Context, name string) (result *models.Commodity, err error) {
 	return r.registry.GetBy(idxCommoditiesByName, name)
 }
 
-func (r *CommodityRegistry) List() ([]*models.Commodity, error) {
+func (r *CommodityRegistry) List(_ context.Context) ([]*models.Commodity, error) {
 	return r.registry.List()
 }
 
-func (r *CommodityRegistry) Update(m models.Commodity) (*models.Commodity, error) {
+func (r *CommodityRegistry) Update(_ context.Context, m models.Commodity) (*models.Commodity, error) {
 	var old *models.Commodity
 	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, commodity *models.Commodity) error {
 		old = commodity
@@ -122,18 +123,18 @@ func (r *CommodityRegistry) Update(m models.Commodity) (*models.Commodity, error
 
 		err = r.base.DeleteIndexValue(tx, idxCommoditiesByName, old.Name)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to delete old commodity name")
 		}
 		err = r.base.SaveIndexValue(tx, idxCommoditiesByName, result.Name, result.GetID())
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to save new commodity name")
 		}
 
 		return nil
 	})
 }
 
-func (r *CommodityRegistry) Delete(id string) error {
+func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	var areaID string
 	err := r.registry.Delete(id, func(tx dbx.TransactionOrBucket, commodity *models.Commodity) error {
 		areaID = commodity.AreaID
@@ -148,53 +149,53 @@ func (r *CommodityRegistry) Delete(id string) error {
 		return r.base.DeleteIndexValue(tx, idxCommoditiesByName, result.Name)
 	})
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete commodity")
 	}
 
-	err = r.areaRegistry.DeleteCommodity(areaID, id)
+	err = r.areaRegistry.DeleteCommodity(ctx, areaID, id)
 	if err != nil {
-		return err
+		return errkit.Wrap(err, "failed to delete commodity from area")
 	}
 
 	return nil
 }
 
-func (r *CommodityRegistry) Count() (int, error) {
+func (r *CommodityRegistry) Count(_ context.Context) (int, error) {
 	return r.registry.Count()
 }
 
-func (r *CommodityRegistry) AddImage(commodityID, imageID string) error {
+func (r *CommodityRegistry) AddImage(_ context.Context, commodityID, imageID string) error {
 	return r.registry.AddChild(bucketNameImages, commodityID, imageID)
 }
 
-func (r *CommodityRegistry) GetImages(commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetImages(_ context.Context, commodityID string) ([]string, error) {
 	return r.registry.GetChildren(bucketNameImages, commodityID)
 }
 
-func (r *CommodityRegistry) DeleteImage(commodityID, imageID string) error {
+func (r *CommodityRegistry) DeleteImage(_ context.Context, commodityID, imageID string) error {
 	return r.registry.DeleteChild(bucketNameImages, commodityID, imageID)
 }
 
-func (r *CommodityRegistry) AddManual(commodityID, manualID string) error {
+func (r *CommodityRegistry) AddManual(_ context.Context, commodityID, manualID string) error {
 	return r.registry.AddChild(bucketNameManuals, commodityID, manualID)
 }
 
-func (r *CommodityRegistry) GetManuals(commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetManuals(_ context.Context, commodityID string) ([]string, error) {
 	return r.registry.GetChildren(bucketNameManuals, commodityID)
 }
 
-func (r *CommodityRegistry) DeleteManual(commodityID, manualID string) error {
+func (r *CommodityRegistry) DeleteManual(_ context.Context, commodityID, manualID string) error {
 	return r.registry.DeleteChild(bucketNameManuals, commodityID, manualID)
 }
 
-func (r *CommodityRegistry) AddInvoice(commodityID, invoiceID string) error {
+func (r *CommodityRegistry) AddInvoice(_ context.Context, commodityID, invoiceID string) error {
 	return r.registry.AddChild(bucketNameInvoices, commodityID, invoiceID)
 }
 
-func (r *CommodityRegistry) GetInvoices(commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetInvoices(_ context.Context, commodityID string) ([]string, error) {
 	return r.registry.GetChildren(bucketNameInvoices, commodityID)
 }
 
-func (r *CommodityRegistry) DeleteInvoice(commodityID, invoiceID string) error {
+func (r *CommodityRegistry) DeleteInvoice(_ context.Context, commodityID, invoiceID string) error {
 	return r.registry.DeleteChild(bucketNameInvoices, commodityID, invoiceID)
 }

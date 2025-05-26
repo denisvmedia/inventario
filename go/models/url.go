@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -28,7 +29,11 @@ func (u *URL) String() string {
 	return (*url.URL)(u).String()
 }
 
-func (u *URL) Validate() error {
+func (*URL) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (u *URL) ValidateWithContext(_ context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,

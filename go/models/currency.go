@@ -1,6 +1,8 @@
 package models
 
 import (
+	"context"
+
 	"github.com/jellydator/validation"
 	"golang.org/x/text/currency"
 )
@@ -16,7 +18,11 @@ func (c Currency) IsValid() bool {
 	return err == nil
 }
 
-func (c Currency) Validate() error {
+func (Currency) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (c Currency) ValidateWithContext(_ context.Context) error {
 	_, err := currency.ParseISO(string(c))
 	return err
 }

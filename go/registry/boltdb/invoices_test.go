@@ -1,7 +1,7 @@
 package boltdb_test
 
 import (
-	"os"
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -16,8 +16,7 @@ func setupTestInvoiceRegistry(t *testing.T) (*boltdb.InvoiceRegistry, *boltdb.Co
 	c := qt.New(t)
 
 	// Create a temporary directory for the test database
-	tempDir, err := os.MkdirTemp("", "boltdb-test-*")
-	c.Assert(err, qt.IsNil)
+	tempDir := c.TempDir()
 
 	// Create a new database in the temporary directory
 	db, err := dbx.NewDB(tempDir, "test.db").Open()
@@ -37,8 +36,8 @@ func setupTestInvoiceRegistry(t *testing.T) (*boltdb.InvoiceRegistry, *boltdb.Co
 
 	// Return the registries and a cleanup function
 	cleanup := func() {
-		db.Close()
-		os.RemoveAll(tempDir)
+		err = db.Close()
+		c.Assert(err, qt.IsNil)
 	}
 
 	return invoiceRegistry, commodityRegistry, areaRegistry, locationRegistry, cleanup
@@ -47,15 +46,16 @@ func setupTestInvoiceRegistry(t *testing.T) (*boltdb.InvoiceRegistry, *boltdb.Co
 func getInvoiceTestSetup(t *testing.T) (registry.InvoiceRegistry, *models.Commodity, func()) {
 	c := qt.New(t)
 	c.Helper()
+	ctx := context.Background()
 
 	invoiceRegistry, commodityRegistry, areaRegistry, locationRegistry, cleanup := setupTestInvoiceRegistry(t)
 
-	location1, err := locationRegistry.Create(models.Location{
+	location1, err := locationRegistry.Create(ctx, models.Location{
 		Name: "Location 1",
 	})
 	c.Assert(err, qt.IsNil)
 
-	area1, err := areaRegistry.Create(models.Area{
+	area1, err := areaRegistry.Create(ctx, models.Area{
 		Name:       "Area 1",
 		LocationID: location1.ID,
 	})
@@ -70,7 +70,7 @@ func getInvoiceTestSetup(t *testing.T) (registry.InvoiceRegistry, *models.Commod
 		Count:     1,
 	}
 
-	createdCommodity, err := commodityRegistry.Create(commodity)
+	createdCommodity, err := commodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdCommodity, qt.Not(qt.IsNil))
 
@@ -79,6 +79,7 @@ func getInvoiceTestSetup(t *testing.T) (registry.InvoiceRegistry, *models.Commod
 
 func TestInvoiceRegistry_Create(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of InvoiceRegistry
 	r, createdCommodity, cleanup := getInvoiceTestSetup(t)
@@ -96,18 +97,19 @@ func TestInvoiceRegistry_Create(t *testing.T) {
 	}
 
 	// Create a new invoice in the registry
-	createdInvoice, err := r.Create(invoice)
+	createdInvoice, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdInvoice, qt.Not(qt.IsNil))
 
 	// Verify the count of invoices in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
 
 func TestInvoiceRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of InvoiceRegistry
 	r, createdCommodity, cleanup := getInvoiceTestSetup(t)
@@ -125,25 +127,26 @@ func TestInvoiceRegistry_Delete(t *testing.T) {
 	}
 
 	// Create a new invoice in the registry
-	createdInvoice, err := r.Create(invoice)
+	createdInvoice, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 
 	// Delete the invoice from the registry
-	err = r.Delete(createdInvoice.ID)
+	err = r.Delete(ctx, createdInvoice.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the invoice is no longer present in the registry
-	_, err = r.Get(createdInvoice.ID)
+	_, err = r.Get(ctx, createdInvoice.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Verify the count of invoices in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }
 
 func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of InvoiceRegistry
 	r, _, cleanup := getInvoiceTestSetup(t)
@@ -151,12 +154,13 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 
 	// Create a test invoice without required fields
 	invoice := models.Invoice{}
-	_, err := r.Create(invoice)
+	_, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.Not(qt.IsNil))
 }
 
 func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of InvoiceRegistry
 	r, _, cleanup := getInvoiceTestSetup(t)
@@ -174,6 +178,6 @@ func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	}
 
 	// Attempt to create the invoice in the registry and expect a commodity not found error
-	_, err := r.Create(invoice)
+	_, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.Not(qt.IsNil))
 }

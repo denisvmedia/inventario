@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -28,20 +29,31 @@ func TestCurrency_IsValid(t *testing.T) {
 }
 
 func TestCurrency_Validate(t *testing.T) {
+	c := qt.New(t)
+
+	currency := models.Currency("USD")
+	err := currency.Validate()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err, qt.ErrorIs, models.ErrMustUseValidateWithContext)
+}
+
+func TestCurrency_ValidateWithContext(t *testing.T) {
 	t.Run("valid currency code", func(t *testing.T) {
 		c := qt.New(t)
 
-		c.Assert(models.Currency("USD").Validate(), qt.IsNil)
-		c.Assert(models.Currency("EUR").Validate(), qt.IsNil)
-		c.Assert(models.Currency("JPY").Validate(), qt.IsNil)
+		ctx := context.Background()
+		c.Assert(models.Currency("USD").ValidateWithContext(ctx), qt.IsNil)
+		c.Assert(models.Currency("EUR").ValidateWithContext(ctx), qt.IsNil)
+		c.Assert(models.Currency("JPY").ValidateWithContext(ctx), qt.IsNil)
 	})
 
 	t.Run("invalid currency code", func(t *testing.T) {
 		c := qt.New(t)
 
-		c.Assert(models.Currency("").Validate(), qt.IsNotNil)
-		c.Assert(models.Currency("FOO").Validate(), qt.IsNotNil)
-		c.Assert(models.Currency("US").Validate(), qt.IsNotNil)
-		c.Assert(models.Currency("USDD").Validate(), qt.IsNotNil)
+		ctx := context.Background()
+		c.Assert(models.Currency("").ValidateWithContext(ctx), qt.IsNotNil)
+		c.Assert(models.Currency("FOO").ValidateWithContext(ctx), qt.IsNotNil)
+		c.Assert(models.Currency("US").ValidateWithContext(ctx), qt.IsNotNil)
+		c.Assert(models.Currency("USDD").ValidateWithContext(ctx), qt.IsNotNil)
 	})
 }

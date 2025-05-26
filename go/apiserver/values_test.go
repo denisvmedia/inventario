@@ -26,27 +26,27 @@ func setupValuesTestData(c *qt.C) *registry.Set {
 
 	// Set main currency to USD
 	mainCurrency := "USD"
-	err = registrySet.SettingsRegistry.Save(models.SettingsObject{
+	err = registrySet.SettingsRegistry.Save(c.Context(), models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create a location
-	location, err := registrySet.LocationRegistry.Create(models.Location{
+	location, err := registrySet.LocationRegistry.Create(c.Context(), models.Location{
 		Name:    "Test Location",
 		Address: "123 Test St",
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create an area
-	area, err := registrySet.AreaRegistry.Create(models.Area{
+	area, err := registrySet.AreaRegistry.Create(c.Context(), models.Area{
 		Name:       "Test Area",
 		LocationID: location.ID,
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create a commodity
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(c.Context(), models.Commodity{
 		Name:                   "Test Commodity",
 		ShortName:              "TC",
 		Type:                   models.CommodityTypeElectronics,
@@ -96,7 +96,7 @@ func TestValuesAPI_GetValues(t *testing.T) {
 	// Check location totals
 	c.Assert(response.Data.Attributes.LocationTotals, qt.HasLen, 1)
 	// Get the location ID
-	locations, err := registrySet.LocationRegistry.List()
+	locations, err := registrySet.LocationRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	var locationID string
 	for _, loc := range locations {
@@ -116,7 +116,7 @@ func TestValuesAPI_GetValues(t *testing.T) {
 	// Check area totals
 	c.Assert(response.Data.Attributes.AreaTotals, qt.HasLen, 1)
 	// Get the area ID
-	areas, err := registrySet.AreaRegistry.List()
+	areas, err := registrySet.AreaRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	var areaID string
 	for _, area := range areas {

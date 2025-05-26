@@ -1,6 +1,8 @@
 package seeddata
 
 import (
+	"context"
+
 	"github.com/go-extras/go-kit/ptr"
 	"github.com/shopspring/decimal"
 
@@ -10,18 +12,20 @@ import (
 
 // SeedData seeds the database with example data.
 func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
+	ctx := context.Background()
+
 	// Create default system configuration with CZK as main currency
 	systemConfig := models.SettingsObject{
 		MainCurrency: ptr.To("CZK"),
 	}
 
-	err := registrySet.SettingsRegistry.Save(systemConfig)
+	err := registrySet.SettingsRegistry.Save(ctx, systemConfig)
 	if err != nil {
 		return err
 	}
 
 	// Create locations
-	home, err := registrySet.LocationRegistry.Create(models.Location{
+	home, err := registrySet.LocationRegistry.Create(ctx, models.Location{
 		Name:    "Home",
 		Address: "123 Main St, Anytown, USA",
 	})
@@ -29,7 +33,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	office, err := registrySet.LocationRegistry.Create(models.Location{
+	office, err := registrySet.LocationRegistry.Create(ctx, models.Location{
 		Name:    "Office",
 		Address: "456 Business Ave, Worktown, USA",
 	})
@@ -37,7 +41,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	storage, err := registrySet.LocationRegistry.Create(models.Location{
+	storage, err := registrySet.LocationRegistry.Create(ctx, models.Location{
 		Name:    "Storage Unit",
 		Address: "789 Storage Blvd, Storeville, USA",
 	})
@@ -46,7 +50,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create areas for Home
-	livingRoom, err := registrySet.AreaRegistry.Create(models.Area{
+	livingRoom, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Living Room",
 		LocationID: home.ID,
 	})
@@ -54,7 +58,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	kitchen, err := registrySet.AreaRegistry.Create(models.Area{
+	kitchen, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Kitchen",
 		LocationID: home.ID,
 	})
@@ -62,7 +66,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	bedroom, err := registrySet.AreaRegistry.Create(models.Area{
+	bedroom, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Bedroom",
 		LocationID: home.ID,
 	})
@@ -71,7 +75,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create areas for Office
-	workDesk, err := registrySet.AreaRegistry.Create(models.Area{
+	workDesk, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Work Desk",
 		LocationID: office.ID,
 	})
@@ -79,7 +83,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	conferenceRoom, err := registrySet.AreaRegistry.Create(models.Area{
+	conferenceRoom, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Conference Room",
 		LocationID: office.ID,
 	})
@@ -88,7 +92,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create areas for Storage
-	unitA, err := registrySet.AreaRegistry.Create(models.Area{
+	unitA, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Unit A",
 		LocationID: storage.ID,
 	})
@@ -97,7 +101,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create commodities for Living Room
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Smart TV",
 		ShortName:              "TV",
 		Type:                   models.CommodityTypeElectronics,
@@ -118,7 +122,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Sofa",
 		ShortName:              "Sofa",
 		Type:                   models.CommodityTypeFurniture,
@@ -140,7 +144,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create commodities for Kitchen
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Refrigerator",
 		ShortName:              "Fridge",
 		Type:                   models.CommodityTypeWhiteGoods,
@@ -161,7 +165,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Microwave Oven",
 		ShortName:              "Microwave",
 		Type:                   models.CommodityTypeWhiteGoods,
@@ -183,7 +187,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create commodities for Bedroom
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Bed Frame",
 		ShortName:              "Bed",
 		Type:                   models.CommodityTypeFurniture,
@@ -205,7 +209,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create commodities for Work Desk
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Laptop",
 		ShortName:              "Laptop",
 		Type:                   models.CommodityTypeElectronics,
@@ -227,7 +231,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Monitor",
 		ShortName:              "Monitor",
 		Type:                   models.CommodityTypeElectronics,
@@ -251,7 +255,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create commodities for Conference Room
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Projector",
 		ShortName:              "Projector",
 		Type:                   models.CommodityTypeElectronics,
@@ -273,7 +277,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create commodities for Storage Unit
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Winter Clothes",
 		ShortName:             "Winter",
 		Type:                  models.CommodityTypeClothes,
@@ -292,7 +296,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		return err
 	}
 
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Camping Equipment",
 		ShortName:              "Camping",
 		Type:                   models.CommodityTypeEquipment,
@@ -313,7 +317,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create a new draft commodity with CZK as original currency
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Coffee Machine",
 		ShortName:             "Coffee",
 		Type:                  models.CommodityTypeWhiteGoods,
@@ -335,7 +339,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Create a commodity with original price in USD but no current price, only converted price
-	_, err = registrySet.CommodityRegistry.Create(models.Commodity{
+	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Desk Chair",
 		ShortName:              "Chair",
 		Type:                   models.CommodityTypeFurniture,

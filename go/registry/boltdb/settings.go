@@ -1,6 +1,7 @@
 package boltdb
 
 import (
+	"context"
 	"encoding/json"
 
 	bolt "go.etcd.io/bbolt"
@@ -28,7 +29,7 @@ func NewSettingsRegistry(db *bolt.DB) *SettingsRegistry {
 	}
 }
 
-func (r *SettingsRegistry) Get() (models.SettingsObject, error) {
+func (r *SettingsRegistry) Get(_ context.Context) (models.SettingsObject, error) {
 	var settings models.SettingsObject
 
 	err := r.db.View(func(tx *bolt.Tx) error {
@@ -54,7 +55,7 @@ func (r *SettingsRegistry) Get() (models.SettingsObject, error) {
 	return settings, nil
 }
 
-func (r *SettingsRegistry) Save(settings models.SettingsObject) error {
+func (r *SettingsRegistry) Save(_ context.Context, settings models.SettingsObject) error {
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists([]byte(bucketNameSettings))
 		if err != nil {
@@ -75,7 +76,7 @@ func (r *SettingsRegistry) Save(settings models.SettingsObject) error {
 	})
 }
 
-func (r *SettingsRegistry) Patch(configfield string, value any) error {
+func (r *SettingsRegistry) Patch(_ context.Context, configfield string, value any) error {
 	return r.db.Update(func(tx *bolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists([]byte(bucketNameSettings))
 		if err != nil {

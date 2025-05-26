@@ -1,6 +1,7 @@
 package boltdb
 
 import (
+	"context"
 	"errors"
 
 	bolt "go.etcd.io/bbolt"
@@ -43,7 +44,7 @@ func NewLocationRegistry(db *bolt.DB) *LocationRegistry {
 	}
 }
 
-func (r *LocationRegistry) Create(m models.Location) (*models.Location, error) {
+func (r *LocationRegistry) Create(_ context.Context, m models.Location) (*models.Location, error) {
 	return r.registry.Create(m, func(tx dbx.TransactionOrBucket, location *models.Location) error {
 		if location.Name == "" {
 			return errkit.WithStack(registry.ErrFieldRequired,
@@ -57,13 +58,13 @@ func (r *LocationRegistry) Create(m models.Location) (*models.Location, error) {
 		}
 		if !errors.Is(err, registry.ErrNotFound) {
 			// any other error is a problem
-			return err
+			return errkit.Wrap(err, "failed to check if location name is already used")
 		}
 		return nil
 	}, func(tx dbx.TransactionOrBucket, location *models.Location) error {
 		err := r.base.SaveIndexValue(tx, idxLocationsByName, location.Name, location.ID)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to create location")
 		}
 
 		r.base.GetOrCreateBucket(tx, bucketNameLocationsChildren, location.ID)
@@ -73,19 +74,19 @@ func (r *LocationRegistry) Create(m models.Location) (*models.Location, error) {
 	})
 }
 
-func (r *LocationRegistry) Get(id string) (result *models.Location, err error) {
+func (r *LocationRegistry) Get(_ context.Context, id string) (result *models.Location, err error) {
 	return r.registry.Get(id)
 }
 
-func (r *LocationRegistry) GetOneByName(name string) (result *models.Location, err error) {
+func (r *LocationRegistry) GetOneByName(_ context.Context, name string) (result *models.Location, err error) {
 	return r.registry.GetBy(idxLocationsByName, name)
 }
 
-func (r *LocationRegistry) List() (results []*models.Location, err error) {
+func (r *LocationRegistry) List(_ context.Context) (results []*models.Location, err error) {
 	return r.registry.List()
 }
 
-func (r *LocationRegistry) Update(m models.Location) (result *models.Location, err error) {
+func (r *LocationRegistry) Update(_ context.Context, m models.Location) (result *models.Location, err error) {
 	var old *models.Location
 	return r.registry.Update(m, func(_tx dbx.TransactionOrBucket, location *models.Location) error {
 		old = location
@@ -108,26 +109,26 @@ func (r *LocationRegistry) Update(m models.Location) (result *models.Location, e
 
 		err = r.base.DeleteIndexValue(tx, idxLocationsByName, old.Name)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to update location")
 		}
 		err = r.base.SaveIndexValue(tx, idxLocationsByName, result.Name, result.GetID())
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to update location")
 		}
 
 		return nil
 	})
 }
 
-func (r *LocationRegistry) Count() (int, error) {
+func (r *LocationRegistry) Count(_ context.Context) (int, error) {
 	return r.registry.Count()
 }
 
-func (r *LocationRegistry) Delete(id string) error {
+func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 	return r.registry.Delete(id, func(tx dbx.TransactionOrBucket, location *models.Location) error {
-		areas, err := r.GetAreas(location.ID)
+		areas, err := r.GetAreas(ctx, location.ID)
 		if err != nil {
-			return err
+			return errkit.Wrap(err, "failed to get areas")
 		}
 		if len(areas) > 0 {
 			return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
@@ -143,14 +144,14 @@ func (r *LocationRegistry) Delete(id string) error {
 	})
 }
 
-func (r *LocationRegistry) AddArea(locationID, areaID string) error {
+func (r *LocationRegistry) AddArea(_ context.Context, locationID, areaID string) error {
 	return r.registry.AddChild(bucketNameAreas, locationID, areaID)
 }
 
-func (r *LocationRegistry) GetAreas(locationID string) ([]string, error) {
+func (r *LocationRegistry) GetAreas(_ context.Context, locationID string) ([]string, error) {
 	return r.registry.GetChildren(bucketNameAreas, locationID)
 }
 
-func (r *LocationRegistry) DeleteArea(locationID, areaID string) error {
+func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID string) error {
 	return r.registry.DeleteChild(bucketNameAreas, locationID, areaID)
 }

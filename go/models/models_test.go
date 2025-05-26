@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -9,7 +10,16 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-func TestFile_Validate_HappyPath(t *testing.T) {
+func TestFile_Validate(t *testing.T) {
+	c := qt.New(t)
+
+	file := &models.File{}
+	err := file.Validate()
+	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err.Error(), qt.Equals, "must use validate with context")
+}
+
+func TestFile_ValidateWithContext_HappyPath(t *testing.T) {
 	t.Run("valid file", func(t *testing.T) {
 		c := qt.New(t)
 
@@ -20,12 +30,13 @@ func TestFile_Validate_HappyPath(t *testing.T) {
 			MIMEType:     "application/pdf",
 		}
 
-		err := file.Validate()
+		ctx := context.Background()
+		err := file.ValidateWithContext(ctx)
 		c.Assert(err, qt.IsNil)
 	})
 }
 
-func TestFile_Validate_UnhappyPaths(t *testing.T) {
+func TestFile_ValidateWithContext_UnhappyPaths(t *testing.T) {
 	testCases := []struct {
 		name          string
 		file          models.File
@@ -62,7 +73,8 @@ func TestFile_Validate_UnhappyPaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			err := tc.file.Validate()
+			ctx := context.Background()
+			err := tc.file.ValidateWithContext(ctx)
 			c.Assert(err, qt.Not(qt.IsNil))
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})

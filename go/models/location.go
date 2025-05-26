@@ -1,6 +1,8 @@
 package models
 
 import (
+	"context"
+
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models/rules"
@@ -13,11 +15,15 @@ var (
 
 type Location struct {
 	EntityID
-	Name    string `json:"name"`
-	Address string `json:"address"`
+	Name    string `json:"name" db:"name"`
+	Address string `json:"address" db:"address"`
 }
 
-func (a *Location) Validate() error {
+func (*Location) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (a *Location) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
@@ -25,5 +31,5 @@ func (a *Location) Validate() error {
 		validation.Field(&a.Address, rules.NotEmpty),
 	)
 
-	return validation.ValidateStruct(a, fields...)
+	return validation.ValidateStructWithContext(ctx, a, fields...)
 }

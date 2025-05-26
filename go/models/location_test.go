@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -9,7 +10,16 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-func TestLocation_Validate_HappyPath(t *testing.T) {
+func TestLocation_Validate(t *testing.T) {
+	c := qt.New(t)
+
+	location := &models.Location{}
+	err := location.Validate()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err, qt.ErrorIs, models.ErrMustUseValidateWithContext)
+}
+
+func TestLocation_ValidateWithContext_HappyPath(t *testing.T) {
 	t.Run("valid location", func(t *testing.T) {
 		c := qt.New(t)
 
@@ -18,12 +28,13 @@ func TestLocation_Validate_HappyPath(t *testing.T) {
 			Address: "123 Test Street",
 		}
 
-		err := location.Validate()
+		ctx := context.Background()
+		err := location.ValidateWithContext(ctx)
 		c.Assert(err, qt.IsNil)
 	})
 }
 
-func TestLocation_Validate_UnhappyPaths(t *testing.T) {
+func TestLocation_ValidateWithContext_UnhappyPaths(t *testing.T) {
 	testCases := []struct {
 		name          string
 		location      models.Location
@@ -50,8 +61,9 @@ func TestLocation_Validate_UnhappyPaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			err := tc.location.Validate()
-			c.Assert(err, qt.Not(qt.IsNil))
+			ctx := context.Background()
+			err := tc.location.ValidateWithContext(ctx)
+			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
 	}

@@ -23,7 +23,7 @@ type locationsAPI struct {
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
 // @Router /locations [get].
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
-	locations, _ := api.locationRegistry.List()
+	locations, _ := api.locationRegistry.List(r.Context())
 
 	if err := render.Render(w, r, jsonapi.NewLocationsResponse(locations, len(locations))); err != nil {
 		internalServerError(w, r, err)
@@ -47,7 +47,7 @@ func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { /
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(location.ID)
+	areas, err := api.locationRegistry.GetAreas(r.Context(), location.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -81,13 +81,13 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		unprocessableEntityError(w, r, err)
 		return
 	}
-	location, err := api.locationRegistry.Create(*input.Data.Attributes)
+	location, err := api.locationRegistry.Create(r.Context(), *input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(location.ID)
+	areas, err := api.locationRegistry.GetAreas(r.Context(), location.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -122,7 +122,7 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := api.locationRegistry.Delete(location.ID)
+	err := api.locationRegistry.Delete(r.Context(), location.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -160,13 +160,13 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	newLocation, err := api.locationRegistry.Update(*input.Data.Attributes)
+	newLocation, err := api.locationRegistry.Update(r.Context(), *input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(location.ID)
+	areas, err := api.locationRegistry.GetAreas(r.Context(), location.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return

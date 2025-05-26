@@ -34,7 +34,7 @@ type commoditiesAPI struct {
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
-	commodities, _ := api.registrySet.CommodityRegistry.List()
+	commodities, _ := api.registrySet.CommodityRegistry.List(r.Context())
 
 	if err := render.Render(w, r, jsonapi.NewCommoditiesResponse(commodities, len(commodities))); err != nil {
 		internalServerError(w, r, err)
@@ -59,19 +59,19 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var imagesError string
-	images, err := api.registrySet.CommodityRegistry.GetImages(commodity.ID)
+	images, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
 	if err != nil {
 		imagesError = err.Error()
 	}
 
 	var manualsError string
-	manuals, err := api.registrySet.CommodityRegistry.GetManuals(commodity.ID)
+	manuals, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
 	if err != nil {
 		manualsError = err.Error()
 	}
 
 	var invoicesError string
-	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(commodity.ID)
+	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
 	if err != nil {
 		invoicesError = err.Error()
 	}
@@ -115,26 +115,26 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	commodity, err := api.registrySet.CommodityRegistry.Create(*input.Data.Attributes)
+	commodity, err := api.registrySet.CommodityRegistry.Create(r.Context(), *input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	var imagesError string
-	images, err := api.registrySet.CommodityRegistry.GetImages(commodity.ID)
+	images, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
 	if err != nil {
 		imagesError = err.Error()
 	}
 
 	var manualsError string
-	manuals, err := api.registrySet.CommodityRegistry.GetManuals(commodity.ID)
+	manuals, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
 	if err != nil {
 		manualsError = err.Error()
 	}
 
 	var invoicesError string
-	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(commodity.ID)
+	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
 	if err != nil {
 		invoicesError = err.Error()
 	}
@@ -171,7 +171,7 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := api.registrySet.CommodityRegistry.Delete(commodity.ID)
+	err := api.registrySet.CommodityRegistry.Delete(r.Context(), commodity.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -218,26 +218,26 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 
 	input.Data.Attributes.ID = input.Data.ID
 
-	updatedCommodity, err := api.registrySet.CommodityRegistry.Update(*input.Data.Attributes)
+	updatedCommodity, err := api.registrySet.CommodityRegistry.Update(r.Context(), *input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	var imagesError string
-	images, err := api.registrySet.CommodityRegistry.GetImages(commodity.ID)
+	images, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
 	if err != nil {
 		imagesError = err.Error()
 	}
 
 	var manualsError string
-	manuals, err := api.registrySet.CommodityRegistry.GetManuals(commodity.ID)
+	manuals, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
 	if err != nil {
 		manualsError = err.Error()
 	}
 
 	var invoicesError string
-	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(commodity.ID)
+	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
 	if err != nil {
 		invoicesError = err.Error()
 	}
@@ -274,13 +274,13 @@ func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var images []*models.Image
-	imageIDs, err := api.registrySet.CommodityRegistry.GetImages(commodity.ID)
+	imageIDs, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 	for _, id := range imageIDs {
-		img, err := api.registrySet.ImageRegistry.Get(id)
+		img, err := api.registrySet.ImageRegistry.Get(r.Context(), id)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -312,13 +312,13 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var invoices []*models.Invoice
-	invoiceIDs, err := api.registrySet.CommodityRegistry.GetInvoices(commodity.ID)
+	invoiceIDs, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 	for _, id := range invoiceIDs {
-		invoice, err := api.registrySet.InvoiceRegistry.Get(id)
+		invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), id)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -350,13 +350,13 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var manuals []*models.Manual
-	manualIDs, err := api.registrySet.CommodityRegistry.GetManuals(commodity.ID)
+	manualIDs, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 	for _, id := range manualIDs {
-		manual, err := api.registrySet.ManualRegistry.Get(id)
+		manual, err := api.registrySet.ManualRegistry.Get(r.Context(), id)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -390,7 +390,7 @@ func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	imageID := chi.URLParam(r, "imageID")
-	image, err := api.registrySet.ImageRegistry.Get(imageID)
+	image, err := api.registrySet.ImageRegistry.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -401,7 +401,7 @@ func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = api.registrySet.ImageRegistry.Delete(imageID)
+	err = api.registrySet.ImageRegistry.Delete(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -429,7 +429,7 @@ func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request)
 	}
 
 	invoiceID := chi.URLParam(r, "invoiceID")
-	invoice, err := api.registrySet.InvoiceRegistry.Get(invoiceID)
+	invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -440,7 +440,7 @@ func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err = api.registrySet.InvoiceRegistry.Delete(invoiceID)
+	err = api.registrySet.InvoiceRegistry.Delete(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -468,7 +468,7 @@ func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) 
 	}
 
 	manualID := chi.URLParam(r, "manualID")
-	manual, err := api.registrySet.ManualRegistry.Get(manualID)
+	manual, err := api.registrySet.ManualRegistry.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -479,7 +479,7 @@ func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = api.registrySet.ManualRegistry.Delete(manualID)
+	err = api.registrySet.ManualRegistry.Delete(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -508,7 +508,7 @@ func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request)
 	}
 
 	imageID := chi.URLParam(r, "imageID")
-	image, err := api.registrySet.ImageRegistry.Get(imageID)
+	image, err := api.registrySet.ImageRegistry.Get(r.Context(), imageID)
 	if err != nil || image.CommodityID != commodity.ID {
 		http.NotFound(w, r)
 		return
@@ -553,7 +553,7 @@ func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Reques
 	}
 
 	invoiceID := chi.URLParam(r, "invoiceID")
-	invoice, err := api.registrySet.InvoiceRegistry.Get(invoiceID)
+	invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), invoiceID)
 	if err != nil || invoice.CommodityID != commodity.ID {
 		http.NotFound(w, r)
 		return
@@ -598,7 +598,7 @@ func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request
 	}
 
 	manualID := chi.URLParam(r, "manualID")
-	manual, err := api.registrySet.ManualRegistry.Get(manualID)
+	manual, err := api.registrySet.ManualRegistry.Get(r.Context(), manualID)
 	if err != nil || manual.CommodityID != commodity.ID {
 		http.NotFound(w, r)
 		return
@@ -648,7 +648,7 @@ func (api *commoditiesAPI) getDownloadFile(ctx context.Context, originalPath str
 func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	imageID := chi.URLParam(r, "imageID")
 
-	image, err := api.registrySet.ImageRegistry.Get(imageID)
+	image, err := api.registrySet.ImageRegistry.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -676,7 +676,7 @@ func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) 
 func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	invoiceID := chi.URLParam(r, "invoiceID")
 
-	invoice, err := api.registrySet.InvoiceRegistry.Get(invoiceID)
+	invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -704,7 +704,7 @@ func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request
 func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	manualID := chi.URLParam(r, "manualID")
 
-	manual, err := api.registrySet.ManualRegistry.Get(manualID)
+	manual, err := api.registrySet.ManualRegistry.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -744,7 +744,7 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	image, err := api.registrySet.ImageRegistry.Get(imageID)
+	image, err := api.registrySet.ImageRegistry.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -753,7 +753,7 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 	// Only update the Path field
 	image.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 
-	updatedImage, err := api.registrySet.ImageRegistry.Update(*image)
+	updatedImage, err := api.registrySet.ImageRegistry.Update(r.Context(), *image)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -793,7 +793,7 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	invoice, err := api.registrySet.InvoiceRegistry.Get(invoiceID)
+	invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -802,7 +802,7 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 	// Only update the Path field
 	invoice.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 
-	updatedInvoice, err := api.registrySet.InvoiceRegistry.Update(*invoice)
+	updatedInvoice, err := api.registrySet.InvoiceRegistry.Update(r.Context(), *invoice)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -842,7 +842,7 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	manual, err := api.registrySet.ManualRegistry.Get(manualID)
+	manual, err := api.registrySet.ManualRegistry.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -851,7 +851,7 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 	// Only update the Path field
 	manual.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 
-	updatedManual, err := api.registrySet.ManualRegistry.Update(*manual)
+	updatedManual, err := api.registrySet.ManualRegistry.Update(r.Context(), *manual)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -904,7 +904,7 @@ func Commodities(params Params) func(r chi.Router) {
 }
 
 func requestWithMainCurrency(r *http.Request, settingsRegistry registry.SettingsRegistry) (*http.Request, error) {
-	settings, err := settingsRegistry.Get()
+	settings, err := settingsRegistry.Get(r.Context())
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -9,7 +10,16 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-func TestInvoice_Validate_HappyPath(t *testing.T) {
+func TestInvoice_Validate(t *testing.T) {
+	c := qt.New(t)
+
+	invoice := &models.Invoice{}
+	err := invoice.Validate()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err, qt.ErrorIs, models.ErrMustUseValidateWithContext)
+}
+
+func TestInvoice_ValidateWithContext_HappyPath(t *testing.T) {
 	t.Run("valid invoice", func(t *testing.T) {
 		c := qt.New(t)
 
@@ -23,12 +33,13 @@ func TestInvoice_Validate_HappyPath(t *testing.T) {
 			},
 		}
 
-		err := invoice.Validate()
+		ctx := context.Background()
+		err := invoice.ValidateWithContext(ctx)
 		c.Assert(err, qt.IsNil)
 	})
 }
 
-func TestInvoice_Validate_UnhappyPaths(t *testing.T) {
+func TestInvoice_ValidateWithContext_UnhappyPaths(t *testing.T) {
 	testCases := []struct {
 		name          string
 		invoice       models.Invoice
@@ -55,8 +66,9 @@ func TestInvoice_Validate_UnhappyPaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			err := tc.invoice.Validate()
-			c.Assert(err, qt.Not(qt.IsNil))
+			ctx := context.Background()
+			err := tc.invoice.ValidateWithContext(ctx)
+			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
 	}
