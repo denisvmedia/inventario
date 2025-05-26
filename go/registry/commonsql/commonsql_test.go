@@ -1,6 +1,7 @@
 package commonsql_test
 
 import (
+	"net/url"
 	"os"
 	"testing"
 
@@ -19,9 +20,18 @@ func skipIfNoPostgreSQL(t *testing.T) string {
 	t.Helper()
 
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
+	// if dsn == "" {
+	//	dsn = "postgresql://inventario:inventario_password@localhost:5432/inventario?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
+	// }
 	if dsn == "" {
-		dsn = "postgresql://inventario:inventario_password@localhost:5432/inventario?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
+		t.Skip("Skipping PostgreSQL tests: POSTGRES_TEST_DSN environment variable not set")
 	}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Skipf("Skipping PostgreSQL tests: failed to parse DSN: %v", err)
+	}
+	dsn = postgresql.ParsePostgreSQLURL(u)
 
 	// Test connection
 	pool, err := pgxpool.New(t.Context(), dsn)
