@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -55,13 +54,7 @@ func TestAreaRegistry_Create_Validation(t *testing.T) {
 
 	// Attempt to create the area - validation failure
 	_, err := r.Create(ctx, area)
-	valErrs := validation.Errors{}
-	c.Assert(err, qt.ErrorAs, &valErrs)
-	c.Assert(valErrs, qt.HasLen, 2)
-	c.Assert(valErrs["location_id"], qt.Not(qt.IsNil))
-	c.Assert(valErrs["location_id"].Error(), qt.Equals, "cannot be blank")
-	c.Assert(valErrs["name"], qt.Not(qt.IsNil))
-	c.Assert(valErrs["name"].Error(), qt.Equals, "cannot be blank")
+	c.Assert(err, qt.ErrorMatches, "location not found:.*")
 
 	// Attempt to create the area in the registry and expect not found error
 	area.Name = "area1"

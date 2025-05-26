@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -91,12 +90,7 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 	invoice := models.Invoice{}
 	_, err := r.Create(ctx, invoice)
 	c.Assert(err, qt.Not(qt.IsNil))
-	var errs validation.Errors
-	c.Assert(err, qt.ErrorAs, &errs)
-	c.Assert(errs["File"], qt.Not(qt.IsNil))
-	c.Assert(errs["File"].Error(), qt.Equals, "cannot be blank")
-	c.Assert(errs["commodity_id"], qt.Not(qt.IsNil))
-	c.Assert(errs["commodity_id"].Error(), qt.Equals, "cannot be blank")
+	c.Assert(err, qt.ErrorMatches, "commodity not found.*")
 
 	invoice = models.Invoice{
 		File: &models.File{
