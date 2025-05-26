@@ -1,10 +1,9 @@
 module github.com/denisvmedia/inventario
 
-go 1.24.1
+go 1.24.3
 
-require github.com/denisvmedia/inventario/frontend v0.0.0
-
-replace github.com/denisvmedia/inventario/frontend => ../frontend
+// require github.com/denisvmedia/inventario/frontend v0.0.0
+// replace github.com/denisvmedia/inventario/frontend => ../frontend
 
 require (
 	github.com/bojanz/currency v1.3.1
@@ -17,7 +16,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.14.2
-	github.com/jackc/pgx/v5 v5.5.5
+	github.com/jackc/pgx/v5 v5.7.5
 	github.com/jellydator/validation v1.1.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mrosales/emoji-go v1.1.0
@@ -104,8 +103,8 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jackc/puddle/v2 v2.2.1 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect

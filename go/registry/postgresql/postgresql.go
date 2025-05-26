@@ -35,7 +35,7 @@ func NewRegistrySet() (registrySetFunc func(c registry.Config) (registrySet *reg
 		}
 
 		if parsed.Scheme != Name {
-			return nil, errkit.Wrap(registry.ErrInvalidConfig, "invalid scheme")
+			return nil, errkit.Wrap(errkit.WithFields(registry.ErrInvalidConfig, errkit.Fields{"expected": Name, "got": parsed.Scheme}), "invalid scheme")
 		}
 
 		// Create a connection pool

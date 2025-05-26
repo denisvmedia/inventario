@@ -21,7 +21,7 @@ func generateID() string {
 func InsertEntity(ctx context.Context, db sqlx.ExtContext, table string, entity any) error {
 	var fields []string
 	var placeholders []string
-	params := map[string]any{}
+	params := make(map[string]any)
 
 	err := typekit.ExtractDBFields(entity, &fields, &placeholders, params)
 	if err != nil {
@@ -46,7 +46,7 @@ func InsertEntity(ctx context.Context, db sqlx.ExtContext, table string, entity 
 func UpdateEntityByField(ctx context.Context, db sqlx.ExtContext, table, field, value string, entity any) error {
 	var fields []string
 	var placeholders []string
-	params := map[string]any{}
+	params := make(map[string]any)
 
 	err := typekit.ExtractDBFields(entity, &fields, &placeholders, params)
 	if err != nil {

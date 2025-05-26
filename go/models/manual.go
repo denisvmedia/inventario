@@ -17,7 +17,7 @@ type Manual struct {
 	*File
 }
 
-func (m *Manual) Validate() error {
+func (*Manual) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 

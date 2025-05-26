@@ -50,23 +50,23 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	commodity.SetID(generateID())
 
 	//// Convert arrays to JSON
-	//extraSerialNumbers, err := json.Marshal(commodity.ExtraSerialNumbers)
-	//if err != nil {
+	// extraSerialNumbers, err := json.Marshal(commodity.ExtraSerialNumbers)
+	// if err != nil {
 	//	return nil, errkit.Wrap(err, "failed to marshal extra serial numbers")
 	//}
 	//
-	//partNumbers, err := json.Marshal(commodity.PartNumbers)
-	//if err != nil {
+	// partNumbers, err := json.Marshal(commodity.PartNumbers)
+	// if err != nil {
 	//	return nil, errkit.Wrap(err, "failed to marshal part numbers")
 	//}
 	//
-	//tags, err := json.Marshal(commodity.Tags)
-	//if err != nil {
+	// tags, err := json.Marshal(commodity.Tags)
+	// if err != nil {
 	//	return nil, errkit.Wrap(err, "failed to marshal tags")
 	//}
 	//
-	//urls, err := json.Marshal(commodity.URLs)
-	//if err != nil {
+	// urls, err := json.Marshal(commodity.URLs)
+	// if err != nil {
 	//	return nil, errkit.Wrap(err, "failed to marshal URLs")
 	//}
 
@@ -80,16 +80,16 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 
 func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodity, error) {
 	//// Unmarshal JSON arrays
-	//if err := json.Unmarshal(extraSerialNumbersJSON, &commodity.ExtraSerialNumbers); err != nil {
+	// if err := json.Unmarshal(extraSerialNumbersJSON, &commodity.ExtraSerialNumbers); err != nil {
 	//	return nil, errkit.Wrap(err, "failed to unmarshal extra serial numbers")
 	//}
-	//if err := json.Unmarshal(partNumbersJSON, &commodity.PartNumbers); err != nil {
+	// if err := json.Unmarshal(partNumbersJSON, &commodity.PartNumbers); err != nil {
 	//	return nil, errkit.Wrap(err, "failed to unmarshal part numbers")
 	//}
-	//if err := json.Unmarshal(tagsJSON, &commodity.Tags); err != nil {
+	// if err := json.Unmarshal(tagsJSON, &commodity.Tags); err != nil {
 	//	return nil, errkit.Wrap(err, "failed to unmarshal tags")
 	//}
-	//if err := json.Unmarshal(urlsJSON, &commodity.URLs); err != nil {
+	// if err := json.Unmarshal(urlsJSON, &commodity.URLs); err != nil {
 	//	return nil, errkit.Wrap(err, "failed to unmarshal URLs")
 	//}
 

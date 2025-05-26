@@ -17,7 +17,7 @@ type Invoice struct {
 	*File
 }
 
-func (i *Invoice) Validate() error {
+func (*Invoice) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 

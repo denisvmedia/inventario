@@ -117,7 +117,7 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 			return errkit.Wrap(err, fmt.Sprintf("failed to commit transaction for migration %d", migration.Version))
 		}
 
-		fmt.Printf("Applied migration %d: %s\n", migration.Version, migration.Description)
+		fmt.Printf("Applied migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
 	}
 
 	return nil
@@ -202,7 +202,7 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 			return errkit.Wrap(err, fmt.Sprintf("failed to commit transaction for migration reversion %d", migration.Version))
 		}
 
-		fmt.Printf("Reverted migration %d: %s\n", migration.Version, migration.Description)
+		fmt.Printf("Reverted migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
 	}
 
 	return nil

@@ -45,7 +45,7 @@ type File struct {
 	MIMEType string `json:"mime_type" db:"mime_type"`
 }
 
-func (i *File) Validate() error {
+func (*File) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 

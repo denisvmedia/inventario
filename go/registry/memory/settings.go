@@ -20,14 +20,14 @@ func NewSettingsRegistry() *SettingsRegistry {
 	}
 }
 
-func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, error) {
+func (r *SettingsRegistry) Get(_ context.Context) (models.SettingsObject, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
 	return r.settings, nil
 }
 
-func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObject) error {
+func (r *SettingsRegistry) Save(_ context.Context, settings models.SettingsObject) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 

@@ -18,7 +18,7 @@ func (c Currency) IsValid() bool {
 	return err == nil
 }
 
-func (c Currency) Validate() error {
+func (Currency) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 

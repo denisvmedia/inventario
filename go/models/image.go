@@ -17,7 +17,7 @@ type Image struct {
 	*File
 }
 
-func (i *Image) Validate() error {
+func (*Image) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 

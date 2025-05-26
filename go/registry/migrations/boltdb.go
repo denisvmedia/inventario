@@ -17,11 +17,11 @@ func NewBoltDBMigrator(_ string) (Migrator, error) {
 }
 
 // RunMigrations returns an error for BoltDB as migrations are not implemented
-func (m *BoltDBMigrator) RunMigrations(_ context.Context) error {
+func (*BoltDBMigrator) RunMigrations(_ context.Context) error {
 	return ErrNotImplemented
 }
 
 // CheckMigrationsApplied returns an error for BoltDB as migrations are not implemented
-func (m *BoltDBMigrator) CheckMigrationsApplied(_ context.Context) (bool, error) {
+func (*BoltDBMigrator) CheckMigrationsApplied(_ context.Context) (bool, error) {
 	return false, ErrNotImplemented
 }

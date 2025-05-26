@@ -19,7 +19,7 @@ type Area struct {
 	LocationID string `json:"location_id" db:"location_id"`
 }
 
-func (a *Area) Validate() error {
+func (*Area) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 

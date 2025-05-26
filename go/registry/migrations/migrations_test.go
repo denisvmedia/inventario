@@ -33,7 +33,7 @@ func TestRegister(t *testing.T) {
 	}
 
 	// Create test migrator function
-	testMigratorFunc := func(dsn string) (migrations.Migrator, error) {
+	testMigratorFunc := func(_dsn string) (migrations.Migrator, error) {
 		return nil, nil
 	}
 
@@ -313,8 +313,8 @@ func TestGetMigratorUnhappyPath(t *testing.T) {
 
 // mockMigrator is a mock implementation of the Migrator interface for testing
 type mockMigrator struct {
-	runMigrationsFunc          func(ctx context.Context) error
-	checkMigrationsAppliedFunc func(ctx context.Context) (bool, error)
+	runMigrationsFunc          func(_ctx context.Context) error
+	checkMigrationsAppliedFunc func(_ctx context.Context) (bool, error)
 }
 
 func (m *mockMigrator) RunMigrations(ctx context.Context) error {
@@ -527,7 +527,9 @@ func TestPostgreSQLMigrator(t *testing.T) {
 	c.Assert(migrator, qt.IsNotNil)
 
 	// Verify the migrator implements the Migrator interface
-	var _ migrations.Migrator = migrator
+	var imigrator migrations.Migrator //nolint:staticcheck // we want to check the interface
+	imigrator = migrator
+	_ = imigrator
 }
 
 // TestCheckMigrationsAppliedHappyPath tests the CheckMigrationsApplied function happy path
@@ -572,12 +574,12 @@ func TestCheckMigrationsAppliedHappyPath(t *testing.T) {
 			}
 
 			// Register test migrator
-			migrations.Register(tt.migratorName, func(dsn string) (migrations.Migrator, error) {
+			migrations.Register(tt.migratorName, func(_dsn string) (migrations.Migrator, error) {
 				return &mockMigrator{
 					runMigrationsFunc: func(ctx context.Context) error {
 						return nil
 					},
-					checkMigrationsAppliedFunc: func(ctx context.Context) (bool, error) {
+					checkMigrationsAppliedFunc: func(_ctx context.Context) (bool, error) {
 						return tt.expectedApplied, nil
 					},
 				}, nil
@@ -616,12 +618,12 @@ func TestCheckMigrationsAppliedUnhappyPath(t *testing.T) {
 			name: "check error",
 			dsn:  "test://localhost",
 			setupFunc: func() {
-				migrations.Register("test", func(dsn string) (migrations.Migrator, error) {
+				migrations.Register("test", func(_dsn string) (migrations.Migrator, error) {
 					return &mockMigrator{
-						runMigrationsFunc: func(ctx context.Context) error {
+						runMigrationsFunc: func(_ctx context.Context) error {
 							return nil
 						},
-						checkMigrationsAppliedFunc: func(ctx context.Context) (bool, error) {
+						checkMigrationsAppliedFunc: func(_ctx context.Context) (bool, error) {
 							return false, errors.New("check error")
 						},
 					}, nil

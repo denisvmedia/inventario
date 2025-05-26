@@ -44,7 +44,7 @@ func (d *Date) UnmarshalJSON(data []byte) error {
 }
 
 // Validate checks if the date is in the correct format.
-func (d *Date) Validate() error {
+func (*Date) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 

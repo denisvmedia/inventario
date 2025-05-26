@@ -69,7 +69,7 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *CommodityRegistry) AddImage(ctx context.Context, commodityID, imageID string) error {
+func (r *CommodityRegistry) AddImage(_ context.Context, commodityID, imageID string) error {
 	r.imagesLock.Lock()
 	r.images[commodityID] = append(r.images[commodityID], imageID)
 	r.imagesLock.Unlock()
@@ -77,7 +77,7 @@ func (r *CommodityRegistry) AddImage(ctx context.Context, commodityID, imageID s
 	return nil
 }
 
-func (r *CommodityRegistry) GetImages(ctx context.Context, commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetImages(_ context.Context, commodityID string) ([]string, error) {
 	r.imagesLock.RLock()
 	images := make([]string, len(r.images[commodityID]))
 	copy(images, r.images[commodityID])
@@ -86,7 +86,7 @@ func (r *CommodityRegistry) GetImages(ctx context.Context, commodityID string) (
 	return images, nil
 }
 
-func (r *CommodityRegistry) DeleteImage(ctx context.Context, commodityID, imageID string) error {
+func (r *CommodityRegistry) DeleteImage(_ context.Context, commodityID, imageID string) error {
 	r.imagesLock.Lock()
 	for i, foundImageID := range r.images[commodityID] {
 		if foundImageID == imageID {
@@ -99,7 +99,7 @@ func (r *CommodityRegistry) DeleteImage(ctx context.Context, commodityID, imageI
 	return nil
 }
 
-func (r *CommodityRegistry) AddManual(ctx context.Context, commodityID, manualID string) error {
+func (r *CommodityRegistry) AddManual(_ context.Context, commodityID, manualID string) error {
 	r.manualsLock.Lock()
 	r.manuals[commodityID] = append(r.manuals[commodityID], manualID)
 	r.manualsLock.Unlock()
@@ -107,7 +107,7 @@ func (r *CommodityRegistry) AddManual(ctx context.Context, commodityID, manualID
 	return nil
 }
 
-func (r *CommodityRegistry) GetManuals(ctx context.Context, commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetManuals(_ context.Context, commodityID string) ([]string, error) {
 	r.manualsLock.RLock()
 	manuals := make([]string, len(r.manuals[commodityID]))
 	copy(manuals, r.manuals[commodityID])
@@ -116,7 +116,7 @@ func (r *CommodityRegistry) GetManuals(ctx context.Context, commodityID string) 
 	return manuals, nil
 }
 
-func (r *CommodityRegistry) DeleteManual(ctx context.Context, commodityID, manualID string) error {
+func (r *CommodityRegistry) DeleteManual(_ context.Context, commodityID, manualID string) error {
 	r.manualsLock.Lock()
 	for i, foundManualID := range r.manuals[commodityID] {
 		if foundManualID == manualID {
@@ -129,7 +129,7 @@ func (r *CommodityRegistry) DeleteManual(ctx context.Context, commodityID, manua
 	return nil
 }
 
-func (r *CommodityRegistry) AddInvoice(ctx context.Context, commodityID, invoiceID string) error {
+func (r *CommodityRegistry) AddInvoice(_ context.Context, commodityID, invoiceID string) error {
 	r.invoicesLock.Lock()
 	r.invoices[commodityID] = append(r.invoices[commodityID], invoiceID)
 	r.invoicesLock.Unlock()
@@ -137,7 +137,7 @@ func (r *CommodityRegistry) AddInvoice(ctx context.Context, commodityID, invoice
 	return nil
 }
 
-func (r *CommodityRegistry) GetInvoices(ctx context.Context, commodityID string) ([]string, error) {
+func (r *CommodityRegistry) GetInvoices(_ context.Context, commodityID string) ([]string, error) {
 	r.invoicesLock.RLock()
 	invoices := make([]string, len(r.invoices[commodityID]))
 	copy(invoices, r.invoices[commodityID])
@@ -146,7 +146,7 @@ func (r *CommodityRegistry) GetInvoices(ctx context.Context, commodityID string)
 	return invoices, nil
 }
 
-func (r *CommodityRegistry) DeleteInvoice(ctx context.Context, commodityID, invoiceID string) error {
+func (r *CommodityRegistry) DeleteInvoice(_ context.Context, commodityID, invoiceID string) error {
 	r.invoicesLock.Lock()
 	for i, foundInvoiceID := range r.invoices[commodityID] {
 		if foundInvoiceID == invoiceID {

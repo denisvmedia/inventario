@@ -306,7 +306,7 @@ func TestGetFieldByConfigfieldTag_AdditionalTypes(t *testing.T) {
 		SliceValue   []string        `configfield:"slice"`
 		MapValue     map[string]int  `configfield:"map"`
 		StructValue  struct{ X int } `configfield:"struct"`
-		InterfaceVal interface{}     `configfield:"interface"`
+		InterfaceVal any             `configfield:"interface"`
 	}
 
 	c.Run("complex types", func(c *qt.C) {
@@ -577,7 +577,7 @@ func TestStructToMap_ComplexTypes(t *testing.T) {
 		SliceValue   []string          `configfield:"slice"`
 		MapValue     map[string]int    `configfield:"map"`
 		StructValue  struct{ X int }   `configfield:"struct"`
-		InterfaceVal interface{}       `configfield:"interface"`
+		InterfaceVal any               `configfield:"interface"`
 		ChannelVal   chan int          `configfield:"channel"`
 		FuncVal      func() string     `configfield:"func"`
 		ArrayVal     [3]int            `configfield:"array"`
@@ -755,7 +755,7 @@ func TestStructToMap_EdgeCases(t *testing.T) {
 	// Test with struct containing mixed exported/unexported fields
 	c.Run("mixed exported and unexported fields", func(c *qt.C) {
 		type MixedStruct struct {
-			ExportedField   string `configfield:"exported"`
+			ExportedField string `configfield:"exported"`
 			//revive:disable-next-line:struct-tag
 			unexportedField string `configfield:"unexported"` //nolint:unused // it's a test
 			AnotherExported int    `configfield:"another"`
@@ -1036,11 +1036,11 @@ func TestExtractDBFields_EdgeCases(t *testing.T) {
 	// Test with complex field types
 	c.Run("complex field types", func(c *qt.C) {
 		type ComplexEntity struct {
-			ID       int                `db:"id"`
-			Metadata map[string]string  `db:"metadata"`
-			Tags     []string           `db:"tags"`
+			ID       int                  `db:"id"`
+			Metadata map[string]string    `db:"metadata"`
+			Tags     []string             `db:"tags"`
 			Config   struct{ Debug bool } `db:"config"`
-			Score    *float64           `db:"score"`
+			Score    *float64             `db:"score"`
 		}
 
 		score := 95.5
@@ -1284,12 +1284,12 @@ func TestExtractDBFields_SpecialCases(t *testing.T) {
 		})
 	})
 
-	// Test with interface{} fields
+	// Test with any fields
 	c.Run("interface fields", func(c *qt.C) {
 		type InterfaceEntity struct {
-			ID    int         `db:"id"`
-			Data  interface{} `db:"data"`
-			Value interface{} `db:"value"`
+			ID    int `db:"id"`
+			Data  any `db:"data"`
+			Value any `db:"value"`
 		}
 
 		entity := InterfaceEntity{
@@ -1314,11 +1314,11 @@ func TestExtractDBFields_SpecialCases(t *testing.T) {
 		})
 	})
 
-	// Test with nil interface{} fields
+	// Test with nil any fields
 	c.Run("nil interface fields", func(c *qt.C) {
 		type NilInterfaceEntity struct {
-			ID   int         `db:"id"`
-			Data interface{} `db:"data"`
+			ID   int `db:"id"`
+			Data any `db:"data"`
 		}
 
 		entity := NilInterfaceEntity{
