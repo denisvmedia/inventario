@@ -5,7 +5,7 @@
 # Examples:
 #   ./scripts/run-tests.sh                          # Run all tests
 #   ./scripts/run-tests.sh inventario-test          # Run all tests
-#   ./scripts/run-tests.sh inventario-test-postgresql  # Run only PostgreSQL tests
+#   ./scripts/run-tests.sh inventario-test-postgres  # Run only PostgreSQL tests
 
 set -e
 

@@ -12,12 +12,12 @@ Main test runner scripts that automatically handle database creation and cleanup
 # Windows PowerShell
 .\scripts\run-tests.ps1                          # Run all tests
 .\scripts\run-tests.ps1 inventario-test          # Run all tests (explicit)
-.\scripts\run-tests.ps1 inventario-test-postgresql  # Run only PostgreSQL tests
+.\scripts\run-tests.ps1 inventario-test-postgres  # Run only PostgreSQL tests
 
 # Linux/macOS Bash
 ./scripts/run-tests.sh                          # Run all tests
 ./scripts/run-tests.sh inventario-test          # Run all tests (explicit)
-./scripts/run-tests.sh inventario-test-postgresql  # Run only PostgreSQL tests
+./scripts/run-tests.sh inventario-test-postgres  # Run only PostgreSQL tests
 ```
 
 **Features:**

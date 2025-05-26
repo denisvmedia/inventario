@@ -505,7 +505,7 @@ func TestRegisterMigrators(t *testing.T) {
 	migrations.RegisterMigrators()
 
 	// Check that all expected migrators are registered
-	expectedTypes := []string{"memory", "boltdb", "postgresql"}
+	expectedTypes := []string{"memory", "boltdb", "postgres"}
 	migrators := migrations.Migrators()
 
 	for _, dbType := range expectedTypes {
@@ -522,7 +522,7 @@ func TestPostgreSQLMigrator(t *testing.T) {
 	// It doesn't test the actual migration functionality, which would require a database connection
 
 	// Create a PostgreSQL migrator
-	migrator, err := migrations.NewPostgreSQLMigrator("postgresql://localhost:5432/testdb")
+	migrator, err := migrations.NewPostgreSQLMigrator("postgres://localhost:5432/testdb")
 	c.Assert(err, qt.IsNil)
 	c.Assert(migrator, qt.IsNotNil)
 

@@ -40,14 +40,14 @@ docker-compose --profile test run --rm inventario-test
 
 ```bash
 # Using Make
-make docker-test-go-postgresql
+make docker-test-go-postgres
 
 # Using Docker Compose directly
-docker-compose --profile test run --rm inventario-test-postgresql
+docker-compose --profile test run --rm inventario-test-postgres
 
 # Using helper script
-.\scripts\docker-test-run.ps1 -TestType postgresql
-./scripts/docker-test-run.sh --type postgresql
+.\scripts\docker-test-run.ps1 -TestType postgres
+./scripts/docker-test-run.sh --type postgres
 ```
 
 ## Available Commands
@@ -61,7 +61,7 @@ docker-compose --profile test run --rm inventario-test-postgresql
 | `make docker-test-down` | Stop test services |
 | `make docker-test-clean` | Clean up test containers and images |
 | `make docker-test-go` | Run all Go tests in Docker |
-| `make docker-test-go-postgresql` | Run PostgreSQL tests in Docker |
+| `make docker-test-go-postgres` | Run PostgreSQL tests in Docker |
 | `make docker-test-logs` | View test container logs |
 
 ### Docker Compose Commands
@@ -77,7 +77,7 @@ docker-compose --profile test up -d postgres-test
 docker-compose --profile test run --rm inventario-test
 
 # Run PostgreSQL tests only
-docker-compose --profile test run --rm inventario-test-postgresql
+docker-compose --profile test run --rm inventario-test-postgres
 
 # View logs
 docker-compose --profile test logs
@@ -95,7 +95,7 @@ docker-compose --profile test down -v
 .\scripts\docker-test-run.ps1
 
 # Run specific test type
-.\scripts\docker-test-run.ps1 -TestType postgresql
+.\scripts\docker-test-run.ps1 -TestType postgres
 
 # Build image and run tests
 .\scripts\docker-test-run.ps1 -Build
@@ -117,7 +117,7 @@ docker-compose --profile test down -v
 ./scripts/docker-test-run.sh
 
 # Run specific test type
-./scripts/docker-test-run.sh --type postgresql
+./scripts/docker-test-run.sh --type postgres
 
 # Build image and run tests
 ./scripts/docker-test-run.sh --build
@@ -170,7 +170,7 @@ The test setup uses these environment variables:
 
 1. **postgres-test**: PostgreSQL 15 Alpine with test database
 2. **inventario-test**: Full test runner for all Go tests
-3. **inventario-test-postgresql**: Specialized runner for PostgreSQL tests only
+3. **inventario-test-postgres**: Specialized runner for PostgreSQL tests only
 
 ## Advantages
 
@@ -230,7 +230,7 @@ docker-compose -f docker-compose.test.yml ps
 docker-compose -f docker-compose.test.yml exec postgres-test psql -U inventario_test -d inventario_test
 
 # Run tests with custom command
-docker-compose -f docker-compose.test.yml run --rm inventario-test go test -v ./registry/postgresql/... -run TestSpecificFunction
+docker-compose -f docker-compose.test.yml run --rm inventario-test go test -v ./registry/postgres/... -run TestSpecificFunction
 ```
 
 ## Integration with CI/CD

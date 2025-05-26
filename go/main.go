@@ -5,7 +5,7 @@ import (
 	"github.com/denisvmedia/inventario/registry/boltdb"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/registry/migrations"
-	"github.com/denisvmedia/inventario/registry/postgresql"
+	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
 // @title Inventario API
@@ -23,7 +23,7 @@ import (
 func registerDBBackends() (cleanup func() error) {
 	boltdb.Register()
 	memory.Register()
-	cleanup = postgresql.Register()
+	cleanup = postgres.Register()
 	migrations.RegisterMigrators()
 
 	return cleanup

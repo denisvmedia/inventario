@@ -26,7 +26,7 @@ var migrateFlags = map[string]cobraflags.Flag{
 	dbDSNFlag: &cobraflags.StringFlag{
 		Name:  dbDSNFlag,
 		Value: "",
-		Usage: "Database DSN (required). Supported types: postgresql://, memory://, boltdb://",
+		Usage: "Database DSN (required). Supported types: postgres://, memory://, boltdb://",
 	},
 }
 

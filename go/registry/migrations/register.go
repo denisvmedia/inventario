@@ -4,5 +4,5 @@ package migrations
 func RegisterMigrators() {
 	Register("memory", NewMemoryMigrator)
 	Register("boltdb", NewBoltDBMigrator)
-	Register("postgresql", NewPostgreSQLMigrator)
+	Register("postgres", NewPostgreSQLMigrator)
 }

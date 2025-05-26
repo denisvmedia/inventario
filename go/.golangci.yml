@@ -235,7 +235,7 @@ linters:
           - dupl
         path: '(jsonapi|apiserver|registry/.*)/.*\.go$'
       # Allow migration filenames to have numbers at the beginning
-      - path: 'registry/postgresql/migrations/.*\.go$'
+      - path: 'registry/postgres/migrations/.*\.go$'
         text: 'filename-format:'
     paths:
       - 'drivertest/.*\.go$'

@@ -142,7 +142,7 @@ case "${TEST_TYPE,,}" in
         docker-compose --profile test run --rm inventario-test
         ;;
     *)
-        echo "❌ Invalid test type: $TEST_TYPE. Valid options: all, postgresql, go"
+        echo "❌ Invalid test type: $TEST_TYPE. Valid options: all, postgres, go"
         exit 1
         ;;
 esac

@@ -1,4 +1,4 @@
-package postgresql
+package postgres
 
 import (
 	"context"
@@ -13,10 +13,10 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/commonsql"
-	pgmigrations "github.com/denisvmedia/inventario/registry/postgresql/migrations"
+	pgmigrations "github.com/denisvmedia/inventario/registry/postgres/migrations"
 )
 
-const Name = "postgresql"
+const Name = "postgres"
 
 func Register() (cleanup func() error) {
 	newFn, cleanup := NewRegistrySet()

@@ -6,7 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
-	pgmigrations "github.com/denisvmedia/inventario/registry/postgresql/migrations"
+	pgmigrations "github.com/denisvmedia/inventario/registry/postgres/migrations"
 )
 
 // PostgreSQLMigrator implements the Migrator interface for PostgreSQL

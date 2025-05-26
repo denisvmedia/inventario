@@ -15,7 +15,7 @@ The application has comprehensive unit tests for the PostgreSQL registry impleme
    - No external dependencies required
    - Fast execution for basic CI/CD
 
-2. **PostgreSQL Tests** (`.github/workflows/go-test-postgresql.yml`)
+2. **PostgreSQL Tests** (`.github/workflows/go-test-postgres.yml`)
    - Runs only PostgreSQL registry tests
    - Uses PostgreSQL service container
    - Comprehensive database integration testing
@@ -65,19 +65,19 @@ Use the provided setup scripts for easy configuration:
 **Windows (PowerShell):**
 ```powershell
 # Using Docker (recommended)
-.\scripts\setup-postgresql-test.ps1 -UseDocker
+.\scripts\setup-postgres-test.ps1 -UseDocker
 
 # Using local PostgreSQL
-.\scripts\setup-postgresql-test.ps1
+.\scripts\setup-postgres-test.ps1
 ```
 
 **Linux/macOS (Bash):**
 ```bash
 # Using Docker (recommended)
-./scripts/setup-postgresql-test.sh --use-docker
+./scripts/setup-postgres-test.sh --use-docker
 
 # Using local PostgreSQL
-./scripts/setup-postgresql-test.sh
+./scripts/setup-postgres-test.sh
 ```
 
 These scripts will automatically:
@@ -111,7 +111,7 @@ set POSTGRES_TEST_DSN=postgres://inventario_test:test_password@localhost:5432/in
 
 ```bash
 # Run only PostgreSQL tests
-make test-go-postgresql
+make test-go-postgres
 
 # Run all Go tests (excluding PostgreSQL)
 make test-go
@@ -125,7 +125,7 @@ make test-go-all
 ```bash
 # Run only PostgreSQL tests
 cd go
-go test -v ./registry/postgresql/...
+go test -v ./registry/postgres/...
 
 # Run all tests excluding PostgreSQL
 cd go
@@ -164,7 +164,7 @@ make test-go
 
 # Test the PostgreSQL workflow (requires PostgreSQL)
 export POSTGRES_TEST_DSN="postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
-make test-go-postgresql
+make test-go-postgres
 ```
 
 ## Troubleshooting

@@ -11,8 +11,8 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgresql"
-	pgmigrations "github.com/denisvmedia/inventario/registry/postgresql/migrations"
+	"github.com/denisvmedia/inventario/registry/postgres"
+	pgmigrations "github.com/denisvmedia/inventario/registry/postgres/migrations"
 )
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -21,7 +21,7 @@ func skipIfNoPostgreSQL(t *testing.T) string {
 
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	// if dsn == "" {
-	//	dsn = "postgresql://inventario:inventario_password@localhost:5432/inventario?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
+	//	dsn = "postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
 	// }
 	if dsn == "" {
 		t.Skip("Skipping PostgreSQL tests: POSTGRES_TEST_DSN environment variable not set")
@@ -31,7 +31,7 @@ func skipIfNoPostgreSQL(t *testing.T) string {
 	if err != nil {
 		t.Skipf("Skipping PostgreSQL tests: failed to parse DSN: %v", err)
 	}
-	dsn = postgresql.ParsePostgreSQLURL(u)
+	dsn = postgres.ParsePostgreSQLURL(u)
 
 	// Test connection
 	pool, err := pgxpool.New(t.Context(), dsn)
@@ -75,8 +75,8 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	err = pgmigrations.RunMigrations(t.Context(), pool)
 	c.Assert(err, qt.IsNil)
 
-	// Create registry set using the postgresql package
-	registrySetFunc, cleanup := postgresql.NewRegistrySet()
+	// Create registry set using the postgres package
+	registrySetFunc, cleanup := postgres.NewRegistrySet()
 	registrySet, err := registrySetFunc(registry.Config(dsn))
 	c.Assert(err, qt.IsNil)
 
