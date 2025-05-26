@@ -41,7 +41,7 @@ DB_DSN=memory://
 # BoltDB database
 # DB_DSN=boltdb://$(CURRENT_DIR)/data/inventario.db
 # PostgreSQL database
-# DB_DSN=postgresql://postgres:password@localhost:5432/inventario
+# DB_DSN=postgres://postgres:password@localhost:5432/inventario
 
 # Default target
 .PHONY: all
@@ -70,7 +70,7 @@ run-backend: build-backend
 # Run the backend server with PostgreSQL
 .PHONY: run-backend-postgres
 run-backend-postgres: build-backend
-	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn postgresql://postgres:password@localhost:5432/inventario
+	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn postgres://postgres:password@localhost:5432/inventario
 
 # Run the frontend dev server
 .PHONY: run-frontend
@@ -92,14 +92,14 @@ endif
 .PHONY: test-go
 test-go:
 ifeq ($(OS),Windows_NT)
-	$(CD) $(BACKEND_DIR) && for /f %%i in ('$(GO_CMD) list ./... ^| findstr /v "registry/postgresql"') do $(GO_CMD) test -v %%i
+	$(CD) $(BACKEND_DIR) && for /f %%i in ('$(GO_CMD) list ./... ^| findstr /v "registry/postgres"') do $(GO_CMD) test -v %%i
 else
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v $$($(GO_CMD) list ./... | grep -v '/registry/postgresql')
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v $$($(GO_CMD) list ./... | grep -v '/registry/postgres')
 endif
 
 # Run PostgreSQL registry tests
-.PHONY: test-go-postgresql
-test-go-postgresql:
+.PHONY: test-go-postgres
+test-go-postgres:
 	@echo "Running PostgreSQL registry tests..."
 ifeq ($(OS),Windows_NT)
 	@if not defined POSTGRES_TEST_DSN ( \
@@ -114,7 +114,7 @@ else
 		exit 1; \
 	fi
 endif
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgresql/...
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgres/...
 
 # Run all Go tests including PostgreSQL
 .PHONY: test-go-all
@@ -232,10 +232,10 @@ docker-test-go:
 	@echo "Running Go tests in Docker..."
 	docker-compose --profile test run --rm inventario-test
 
-.PHONY: docker-test-go-postgresql
-docker-test-go-postgresql:
+.PHONY: docker-test-go-postgres
+docker-test-go-postgres:
 	@echo "Running PostgreSQL tests in Docker..."
-	docker-compose --profile test run --rm inventario-test-postgresql
+	docker-compose --profile test run --rm inventario-test-postgres
 
 .PHONY: docker-test-logs
 docker-test-logs:
@@ -256,7 +256,7 @@ ifeq ($(OS),Windows_NT)
 	@echo   run-dev          - Run both servers concurrently (for development)
 	@echo   test             - Run all tests
 	@echo   test-go          - Run Go tests (excluding PostgreSQL)
-	@echo   test-go-postgresql - Run PostgreSQL registry tests
+	@echo   test-go-postgres - Run PostgreSQL registry tests
 	@echo   test-go-all      - Run all Go tests including PostgreSQL
 	@echo   test-frontend    - Run frontend tests
 	@echo   test-e2e         - Run end-to-end tests
@@ -280,7 +280,7 @@ ifeq ($(OS),Windows_NT)
 	@echo   docker-test-clean - Clean Docker test containers and volumes
 	@echo   docker-test-migrate - Run database migrations in Docker
 	@echo   docker-test-go   - Run Go tests in Docker
-	@echo   docker-test-go-postgresql - Run PostgreSQL tests in Docker
+	@echo   docker-test-go-postgres - Run PostgreSQL tests in Docker
 	@echo   docker-test-logs - View Docker test logs
 else
 	@echo "Available commands:"
@@ -294,7 +294,7 @@ else
 	@echo "  run-dev          - Run both servers concurrently (for development)"
 	@echo "  test             - Run all tests"
 	@echo "  test-go          - Run Go tests (excluding PostgreSQL)"
-	@echo "  test-go-postgresql - Run PostgreSQL registry tests"
+	@echo "  test-go-postgres - Run PostgreSQL registry tests"
 	@echo "  test-go-all      - Run all Go tests including PostgreSQL"
 	@echo "  test-frontend    - Run frontend tests"
 	@echo "  test-e2e         - Run end-to-end tests"
@@ -318,6 +318,6 @@ else
 	@echo "  docker-test-clean - Clean Docker test containers and volumes"
 	@echo "  docker-test-migrate - Run database migrations in Docker"
 	@echo "  docker-test-go   - Run Go tests in Docker"
-	@echo "  docker-test-go-postgresql - Run PostgreSQL tests in Docker"
+	@echo "  docker-test-go-postgres - Run PostgreSQL tests in Docker"
 	@echo "  docker-test-logs - View Docker test logs"
 endif

@@ -192,7 +192,7 @@ Example production override:
 services:
   inventario:
     environment:
-      INVENTARIO_DB_DSN: "postgresql://user:pass@prod-db:5432/inventario"
+      INVENTARIO_DB_DSN: "postgres://user:pass@prod-db:5432/inventario"
       INVENTARIO_UPLOAD_LOCATION: "s3://my-bucket/uploads?region=us-east-1"
     deploy:
       resources:

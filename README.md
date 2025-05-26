@@ -42,7 +42,7 @@ You can specify the database to use with the `--db-dsn` flag when running the ap
 ./inventario run --db-dsn boltdb://path/to/data/inventario.db
 
 # PostgreSQL database
-./inventario run --db-dsn postgresql://username:password@localhost:5432/inventario
+./inventario run --db-dsn postgres://username:password@localhost:5432/inventario
 ```
 
 For PostgreSQL, you need to create the database before running the application:

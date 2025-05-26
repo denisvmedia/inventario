@@ -34,7 +34,7 @@ services:
         condition: service_healthy
     environment:
       # Database configuration
-      INVENTARIO_DB_DSN: "postgresql://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
 
       # Server configuration
       INVENTARIO_ADDR: "${INVENTARIO_ADDR:-:3333}"
@@ -114,7 +114,7 @@ services:
         condition: service_healthy
     environment:
       # PostgreSQL test configuration
-      POSTGRES_TEST_DSN: "postgresql://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"
+      POSTGRES_TEST_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"
     networks:
       - inventario-test-network
     volumes:
@@ -122,7 +122,7 @@ services:
       - ./go:/app/go:ro
     working_dir: /app/go
     # Run migrations
-    command: ["go", "run", ".", "migrate", "--db-dsn=postgresql://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"]
+    command: ["go", "run", ".", "migrate", "--db-dsn=postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"]
     # Automatically remove container after stopping
     restart: "no"
 
@@ -141,14 +141,14 @@ services:
         condition: service_completed_successfully
     environment:
       # PostgreSQL test configuration
-      POSTGRES_TEST_DSN: "postgresql://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"
+      POSTGRES_TEST_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"
 
       # Test configuration
       GO_TEST_TIMEOUT: "${GO_TEST_TIMEOUT:-10m}"
       GO_TEST_VERBOSE: "${GO_TEST_VERBOSE:-true}"
 
       # Application configuration for tests
-      INVENTARIO_DB_DSN: "postgresql://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
       INVENTARIO_ADDR: ":3333"
       INVENTARIO_UPLOAD_LOCATION: "file:///tmp/test-uploads?create_dir=1"
 
@@ -169,13 +169,13 @@ services:
     restart: "no"
 
   # Inventario PostgreSQL-only Test Runner
-  inventario-test-postgresql:
+  inventario-test-postgres:
     profiles: ["test"]
     build:
       context: .
       dockerfile: Dockerfile
       target: test-runner
-    container_name: inventario-postgresql-test-runner
+    container_name: inventario-postgres-test-runner
     depends_on:
       postgres-test:
         condition: service_healthy
@@ -183,7 +183,7 @@ services:
         condition: service_completed_successfully
     environment:
       # PostgreSQL test configuration
-      POSTGRES_TEST_DSN: "postgresql://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
+      POSTGRES_TEST_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
 
       # Test configuration
       GO_TEST_TIMEOUT: "${GO_TEST_TIMEOUT:-10m}"
@@ -198,7 +198,7 @@ services:
       - ./go:/app/go:ro
     working_dir: /app/go
     # Command runs only PostgreSQL tests (sequential to avoid connection issues)
-    command: ["go", "test", "-v", "-timeout", "${GO_TEST_TIMEOUT:-10m}", "-p", "1", "./registry/postgresql/..."]
+    command: ["go", "test", "-v", "-timeout", "${GO_TEST_TIMEOUT:-10m}", "-p", "1", "./registry/postgres/..."]
     # Automatically remove container after stopping
     restart: "no"
 
