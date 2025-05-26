@@ -51,8 +51,8 @@ jobs:
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
 
-          # Wait for the stack to be ready (30 seconds should be enough)
-          sleep 30
+          # Wait for stack to be ready
+          npx wait-on http://localhost:5173
 
           # Run the tests
           cd e2e && npm run test
