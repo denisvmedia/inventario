@@ -2,6 +2,8 @@
 package valuation
 
 import (
+	"context"
+
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
@@ -44,8 +46,10 @@ func NewValuator(registrySet *registry.Set) *Valuator {
 
 // GetMainCurrency returns the main currency from settings, defaulting to USD if not set.
 func (v *Valuator) GetMainCurrency() (string, error) {
+	ctx := context.Background()
+
 	// Get settings to determine main currency
-	settings, err := v.SettingsRegistry.Get()
+	settings, err := v.SettingsRegistry.Get(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -68,6 +72,8 @@ func (v *Valuator) GetMainCurrency() (string, error) {
 // 5. If no current price and original price is not in main currency, uses converted original price
 // 6. If none of the above conditions are met, the commodity is not counted
 func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
+	ctx := context.Background()
+
 	// Get main currency
 	mainCurrency, err := v.GetMainCurrency()
 	if err != nil {
@@ -75,13 +81,13 @@ func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
 	}
 
 	// Get all commodities
-	commodities, err := v.CommodityRegistry.List()
+	commodities, err := v.CommodityRegistry.List(ctx)
 	if err != nil {
 		return decimal.Zero, err
 	}
 
 	// Get all areas
-	areas, err := v.AreaRegistry.List()
+	areas, err := v.AreaRegistry.List(ctx)
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -124,6 +130,8 @@ func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
 
 // CalculateTotalValueByLocation calculates the total value of commodities grouped by location.
 func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, error) {
+	ctx := context.Background()
+
 	// Get main currency
 	mainCurrency, err := v.GetMainCurrency()
 	if err != nil {
@@ -131,13 +139,13 @@ func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, 
 	}
 
 	// Get all commodities
-	commodities, err := v.CommodityRegistry.List()
+	commodities, err := v.CommodityRegistry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get all areas
-	areas, err := v.AreaRegistry.List()
+	areas, err := v.AreaRegistry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +198,8 @@ func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, 
 
 // CalculateTotalValueByArea calculates the total value of commodities grouped by area.
 func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, error) {
+	ctx := context.Background()
+
 	// Get main currency
 	mainCurrency, err := v.GetMainCurrency()
 	if err != nil {
@@ -197,7 +207,7 @@ func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, erro
 	}
 
 	// Get all commodities
-	commodities, err := v.CommodityRegistry.List()
+	commodities, err := v.CommodityRegistry.List(ctx)
 	if err != nil {
 		return nil, err
 	}

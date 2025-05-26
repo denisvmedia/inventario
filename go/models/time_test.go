@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -10,12 +11,22 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-func TestDate_Validate_HappyPath(t *testing.T) {
+func TestDate_Validate(t *testing.T) {
+	c := qt.New(t)
+
+	date := models.Date("2023-01-01")
+	err := date.Validate()
+	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err.Error(), qt.Equals, "must use validate with context")
+}
+
+func TestDate_ValidateWithContext_HappyPath(t *testing.T) {
 	t.Run("valid date", func(t *testing.T) {
 		c := qt.New(t)
 
 		date := models.Date("2023-01-01")
-		err := date.Validate()
+		ctx := context.Background()
+		err := date.ValidateWithContext(ctx)
 		c.Assert(err, qt.IsNil)
 	})
 
@@ -23,12 +34,13 @@ func TestDate_Validate_HappyPath(t *testing.T) {
 		c := qt.New(t)
 
 		var date *models.Date
-		err := date.Validate()
+		ctx := context.Background()
+		err := date.ValidateWithContext(ctx)
 		c.Assert(err, qt.IsNil)
 	})
 }
 
-func TestDate_Validate_UnhappyPaths(t *testing.T) {
+func TestDate_ValidateWithContext_UnhappyPaths(t *testing.T) {
 	testCases := []struct {
 		name string
 		date models.Date
@@ -51,7 +63,8 @@ func TestDate_Validate_UnhappyPaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			err := tc.date.Validate()
+			ctx := context.Background()
+			err := tc.date.ValidateWithContext(ctx)
 			c.Assert(err, qt.Not(qt.IsNil))
 		})
 	}

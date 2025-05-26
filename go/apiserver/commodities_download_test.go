@@ -28,7 +28,7 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a manual with the original path
-	commodity := must.Must(params.RegistrySet.CommodityRegistry.List())[0]
+	commodity := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))[0]
 	manual := models.Manual{
 		CommodityID: commodity.ID,
 		File: &models.File{
@@ -38,7 +38,7 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 			MIMEType:     "application/pdf",
 		},
 	}
-	createdManual := must.Must(params.RegistrySet.ManualRegistry.Create(manual))
+	createdManual := must.Must(params.RegistrySet.ManualRegistry.Create(context.Background(), manual))
 
 	// Test downloading the file
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+createdManual.ID+".pdf", nil)

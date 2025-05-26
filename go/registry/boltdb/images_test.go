@@ -1,7 +1,7 @@
 package boltdb_test
 
 import (
-	"os"
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -17,8 +17,7 @@ func setupTestImageRegistry(t *testing.T) (*boltdb.ImageRegistry, *boltdb.Commod
 	c.Helper()
 
 	// Create a temporary directory for the test database
-	tempDir, err := os.MkdirTemp("", "boltdb-test-*")
-	c.Assert(err, qt.IsNil)
+	tempDir := c.TempDir()
 
 	// Create a new database in the temporary directory
 	db, err := dbx.NewDB(tempDir, "test.db").Open()
@@ -38,8 +37,8 @@ func setupTestImageRegistry(t *testing.T) (*boltdb.ImageRegistry, *boltdb.Commod
 
 	// Return the registries and a cleanup function
 	cleanup := func() {
-		db.Close()
-		os.RemoveAll(tempDir)
+		err = db.Close()
+		c.Assert(err, qt.IsNil)
 	}
 
 	return imageRegistry, commodityRegistry, areaRegistry, locationRegistry, cleanup
@@ -47,15 +46,16 @@ func setupTestImageRegistry(t *testing.T) (*boltdb.ImageRegistry, *boltdb.Commod
 
 func getImageTestSetup(t *testing.T) (registry.ImageRegistry, *models.Commodity, func()) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	imageRegistry, commodityRegistry, areaRegistry, locationRegistry, cleanup := setupTestImageRegistry(t)
 
-	location1, err := locationRegistry.Create(models.Location{
+	location1, err := locationRegistry.Create(ctx, models.Location{
 		Name: "Location 1",
 	})
 	c.Assert(err, qt.IsNil)
 
-	area1, err := areaRegistry.Create(models.Area{
+	area1, err := areaRegistry.Create(ctx, models.Area{
 		Name:       "Area 1",
 		LocationID: location1.ID,
 	})
@@ -70,7 +70,7 @@ func getImageTestSetup(t *testing.T) (registry.ImageRegistry, *models.Commodity,
 		Count:     1,
 	}
 
-	createdCommodity, err := commodityRegistry.Create(commodity)
+	createdCommodity, err := commodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdCommodity, qt.Not(qt.IsNil))
 
@@ -79,6 +79,7 @@ func getImageTestSetup(t *testing.T) (registry.ImageRegistry, *models.Commodity,
 
 func TestImageRegistry_Create(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of ImageRegistry
 	r, createdCommodity, cleanup := getImageTestSetup(t)
@@ -96,18 +97,19 @@ func TestImageRegistry_Create(t *testing.T) {
 	}
 
 	// Create a new image in the registry
-	createdImage, err := r.Create(image)
+	createdImage, err := r.Create(ctx, image)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdImage, qt.Not(qt.IsNil))
 
 	// Verify the count of images in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
 
 func TestImageRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of ImageRegistry
 	r, createdCommodity, cleanup := getImageTestSetup(t)
@@ -125,25 +127,26 @@ func TestImageRegistry_Delete(t *testing.T) {
 	}
 
 	// Create a new image in the registry
-	createdImage, err := r.Create(image)
+	createdImage, err := r.Create(ctx, image)
 	c.Assert(err, qt.IsNil)
 
 	// Delete the image from the registry
-	err = r.Delete(createdImage.ID)
+	err = r.Delete(ctx, createdImage.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the image is no longer present in the registry
-	_, err = r.Get(createdImage.ID)
+	_, err = r.Get(ctx, createdImage.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Verify the count of images in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }
 
 func TestImageRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of ImageRegistry
 	r, _, cleanup := getImageTestSetup(t)
@@ -151,12 +154,13 @@ func TestImageRegistry_Create_Validation(t *testing.T) {
 
 	// Create a test image without required fields
 	image := models.Image{}
-	_, err := r.Create(image)
+	_, err := r.Create(ctx, image)
 	c.Assert(err, qt.Not(qt.IsNil))
 }
 
 func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of ImageRegistry
 	r, _, cleanup := getImageTestSetup(t)
@@ -174,6 +178,6 @@ func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
 	}
 
 	// Attempt to create the image in the registry and expect a commodity not found error
-	_, err := r.Create(image)
+	_, err := r.Create(ctx, image)
 	c.Assert(err, qt.Not(qt.IsNil))
 }

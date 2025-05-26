@@ -2,7 +2,7 @@ version: "2"
 
 run:
   concurrency: 8
-  go: "1.24.1"
+  go: "1.24.3"
 
 linters:
   default: none
@@ -234,6 +234,9 @@ linters:
       - linters:
           - dupl
         path: '(jsonapi|apiserver|registry/.*)/.*\.go$'
+      # Allow migration filenames to have numbers at the beginning
+      - path: 'registry/postgres/migrations/.*\.go$'
+        text: 'filename-format:'
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'

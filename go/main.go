@@ -4,6 +4,8 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario"
 	"github.com/denisvmedia/inventario/registry/boltdb"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/registry/migrations"
+	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
 // @title Inventario API
@@ -18,13 +20,22 @@ import (
 
 // @BasePath /api/v1
 
-func registerDBBackends() {
+func registerDBBackends() (cleanup func() error) {
 	boltdb.Register()
 	memory.Register()
+	cleanup = postgres.Register()
+	migrations.RegisterMigrators()
+
+	return cleanup
 }
 
 func main() {
-	registerDBBackends()
-
+	cleanup := registerDBBackends()
+	defer func() {
+		err := cleanup()
+		if err != nil {
+			panic(err)
+		}
+	}()
 	inventario.Execute()
 }

@@ -1,10 +1,10 @@
 package memory_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -13,6 +13,7 @@ import (
 
 func TestMemoryAreaRegistry_Create(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of LocationRegistry
 	locationRegistry := memory.NewLocationRegistry()
@@ -23,25 +24,26 @@ func TestMemoryAreaRegistry_Create(t *testing.T) {
 
 	// Create a new location in the location registry
 	var location models.Location
-	createdLocation, err := locationRegistry.Create(location)
+	createdLocation, err := locationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 	area.LocationID = createdLocation.GetID()
 	area.Name = "area1"
 
 	// Create a new area in the registry
-	createdArea, err := r.Create(area)
+	createdArea, err := r.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdArea, qt.Not(qt.IsNil))
 	c.Assert(createdArea.LocationID, qt.Equals, area.LocationID)
 
 	// Verify the count of areas in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
 
 func TestAreaRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of LocationRegistry
 	locationRegistry := memory.NewLocationRegistry()
@@ -51,25 +53,20 @@ func TestAreaRegistry_Create_Validation(t *testing.T) {
 	var area models.Area
 
 	// Attempt to create the area - validation failure
-	_, err := r.Create(area)
-	valErrs := validation.Errors{}
-	c.Assert(err, qt.ErrorAs, &valErrs)
-	c.Assert(valErrs, qt.HasLen, 2)
-	c.Assert(valErrs["location_id"], qt.Not(qt.IsNil))
-	c.Assert(valErrs["location_id"].Error(), qt.Equals, "cannot be blank")
-	c.Assert(valErrs["name"], qt.Not(qt.IsNil))
-	c.Assert(valErrs["name"].Error(), qt.Equals, "cannot be blank")
+	_, err := r.Create(ctx, area)
+	c.Assert(err, qt.ErrorMatches, "location not found:.*")
 
 	// Attempt to create the area in the registry and expect not found error
 	area.Name = "area1"
 	area.LocationID = "location1"
-	_, err = r.Create(area)
+	_, err = r.Create(ctx, area)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	c.Assert(err, qt.ErrorMatches, "location not found.*")
 }
 
 func TestAreaRegistry_Commodities(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of AreaRegistry
 	locationRegistry := memory.NewLocationRegistry()
@@ -80,30 +77,33 @@ func TestAreaRegistry_Commodities(t *testing.T) {
 
 	// Create a new location in the location registry
 	var location models.Location
-	createdLocation, err := locationRegistry.Create(location)
+	createdLocation, err := locationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 	area.LocationID = createdLocation.GetID()
 	area.Name = "area1"
 
 	// Create a new area in the registry
-	createdArea, err := r.Create(area)
+	createdArea, err := r.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	// Add a commodity to the area
-	r.AddCommodity(createdArea.ID, "commodity1")
-	r.AddCommodity(createdArea.ID, "commodity2")
+	err = r.AddCommodity(ctx, createdArea.ID, "commodity1")
+	c.Assert(err, qt.IsNil)
+	err = r.AddCommodity(ctx, createdArea.ID, "commodity2")
+	c.Assert(err, qt.IsNil)
 
 	// Get the commodities of the area
-	commodities, err := r.GetCommodities(createdArea.ID)
+	commodities, err := r.GetCommodities(ctx, createdArea.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities, qt.Contains, "commodity1")
 	c.Assert(commodities, qt.Contains, "commodity2")
 
 	// Delete a commodity from the area
-	r.DeleteCommodity(createdArea.ID, "commodity1")
+	err = r.DeleteCommodity(ctx, createdArea.ID, "commodity1")
+	c.Assert(err, qt.IsNil)
 
 	// Verify that the deleted commodity is not present in the area's commodities
-	commodities, err = r.GetCommodities(createdArea.ID)
+	commodities, err = r.GetCommodities(ctx, createdArea.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities, qt.Not(qt.Contains), "commodity1")
 	c.Assert(commodities, qt.Contains, "commodity2")
@@ -111,6 +111,7 @@ func TestAreaRegistry_Commodities(t *testing.T) {
 
 func TestAreaRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of AreaRegistry
 	locationRegistry := memory.NewLocationRegistry()
@@ -121,33 +122,33 @@ func TestAreaRegistry_Delete(t *testing.T) {
 
 	// Create a new location in the location registry
 	var location models.Location
-	createdLocation, err := locationRegistry.Create(location)
+	createdLocation, err := locationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 	area.LocationID = createdLocation.GetID()
 	area.Name = "area1"
 
 	// Create a new area in the registry
-	createdArea, err := r.Create(area)
+	createdArea, err := r.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the area is there
-	_, err = r.Get(createdArea.ID)
+	_, err = r.Get(ctx, createdArea.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Delete a non-existing area from the registry
-	err = r.Delete("non-existing")
+	err = r.Delete(ctx, "non-existing")
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Delete the area from the registry
-	err = r.Delete(createdArea.ID)
+	err = r.Delete(ctx, createdArea.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the area is deleted
-	_, err = r.Get(createdArea.ID)
+	_, err = r.Get(ctx, createdArea.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Verify the count of areas in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }

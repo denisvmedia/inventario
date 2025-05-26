@@ -168,4 +168,3 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(*retrievedSettings.MainCurrency, qt.Equals, currency) // Should still be USD
 }
-

@@ -22,9 +22,9 @@ type settingsAPI struct {
 // @Produce  json
 // @Success 200 {object} models.SettingsObject "OK"
 // @Router /settings [get]
-func (api *settingsAPI) getSettings(w http.ResponseWriter, _r *http.Request) { //revive:disable-line:get-return
+func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	// Get current settings
-	settings, err := api.registry.Get()
+	settings, err := api.registry.Get(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -59,7 +59,7 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 
 	// Check if main currency is being changed
 	if settings.MainCurrency != nil {
-		currentSettings, err := api.registry.Get()
+		currentSettings, err := api.registry.Get(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -73,13 +73,13 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save the settings
-	if err := api.registry.Save(settings); err != nil {
+	if err := api.registry.Save(r.Context(), settings); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Get the updated settings
-	updatedSettings, err := api.registry.Get()
+	updatedSettings, err := api.registry.Get(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -115,7 +115,7 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 
 	// Check if trying to update main currency
 	if field == "system.main_currency" {
-		currentSettings, err := api.registry.Get()
+		currentSettings, err := api.registry.Get(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -136,13 +136,13 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Patch the setting
-	if err := api.registry.Patch(field, value); err != nil {
+	if err := api.registry.Patch(r.Context(), field, value); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Get the updated settings
-	updatedSettings, err := api.registry.Get()
+	updatedSettings, err := api.registry.Get(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

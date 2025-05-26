@@ -92,30 +92,30 @@ var (
 
 type Commodity struct {
 	EntityID
-	Name                   string          `json:"name"`
-	ShortName              string          `json:"short_name"`
-	Type                   CommodityType   `json:"type"`
-	AreaID                 string          `json:"area_id"`
-	Count                  int             `json:"count"`
-	OriginalPrice          decimal.Decimal `json:"original_price"`
-	OriginalPriceCurrency  Currency        `json:"original_price_currency"`
-	ConvertedOriginalPrice decimal.Decimal `json:"converted_original_price"`
-	CurrentPrice           decimal.Decimal `json:"current_price"`
-	SerialNumber           string          `json:"serial_number"`
-	ExtraSerialNumbers     []string        `json:"extra_serial_numbers"`
-	PartNumbers            []string        `json:"part_numbers"`
-	Tags                   []string        `json:"tags"`
-	Status                 CommodityStatus `json:"status"`
-	PurchaseDate           PDate           `json:"purchase_date"`
-	RegisteredDate         PDate           `json:"registered_date"`
-	LastModifiedDate       PDate           `json:"last_modified_date"`
-	URLs                   []*URL          `json:"urls" swaggertype:"string"`
-	Comments               string          `json:"comments"`
-	Draft                  bool            `json:"draft"`
+	Name                   string              `json:"name" db:"name"`
+	ShortName              string              `json:"short_name" db:"short_name"`
+	Type                   CommodityType       `json:"type" db:"type"`
+	AreaID                 string              `json:"area_id" db:"area_id"`
+	Count                  int                 `json:"count" db:"count"`
+	OriginalPrice          decimal.Decimal     `json:"original_price" db:"original_price"`
+	OriginalPriceCurrency  Currency            `json:"original_price_currency" db:"original_price_currency"`
+	ConvertedOriginalPrice decimal.Decimal     `json:"converted_original_price" db:"converted_original_price"`
+	CurrentPrice           decimal.Decimal     `json:"current_price" db:"current_price"`
+	SerialNumber           string              `json:"serial_number" db:"serial_number"`
+	ExtraSerialNumbers     ValuerSlice[string] `json:"extra_serial_numbers" db:"extra_serial_numbers"`
+	PartNumbers            ValuerSlice[string] `json:"part_numbers" db:"part_numbers"`
+	Tags                   ValuerSlice[string] `json:"tags" db:"tags"`
+	Status                 CommodityStatus     `json:"status" db:"status"`
+	PurchaseDate           PDate               `json:"purchase_date" db:"purchase_date"`
+	RegisteredDate         PDate               `json:"registered_date" db:"registered_date"`
+	LastModifiedDate       PDate               `json:"last_modified_date" db:"last_modified_date"`
+	URLs                   ValuerSlice[*URL]   `json:"urls" swaggertype:"string" db:"urls"`
+	Comments               string              `json:"comments" db:"comments"`
+	Draft                  bool                `json:"draft" db:"draft"`
 }
 
 func (*Commodity) Validate() error {
-	return validation.NewError("must_use_validate_with_context", "must use validate with context")
+	return ErrMustUseValidateWithContext
 }
 
 func (a *Commodity) ValidateWithContext(ctx context.Context) error {
@@ -170,7 +170,7 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		}))),
 	)
 
-	return validation.ValidateStruct(a, fields...)
+	return validation.ValidateStructWithContext(ctx, a, fields...)
 }
 
 func (a *Commodity) MarshalJSON() ([]byte, error) {

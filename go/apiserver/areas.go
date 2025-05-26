@@ -35,7 +35,7 @@ type areasAPI struct {
 // @Success 200 {object} jsonapi.AreasResponse "OK"
 // @Router /areas [get].
 func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
-	areas, _ := api.areaRegistry.List()
+	areas, _ := api.areaRegistry.List(r.Context())
 
 	if err := render.Render(w, r, jsonapi.NewAreasResponse(areas, len(areas))); err != nil {
 		internalServerError(w, r, err)
@@ -84,7 +84,7 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	area, err := api.areaRegistry.Create(*input.Data.Attributes)
+	area, err := api.areaRegistry.Create(r.Context(), *input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -114,7 +114,7 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := api.areaRegistry.Delete(area.ID)
+	err := api.areaRegistry.Delete(r.Context(), area.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -153,7 +153,7 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newArea, err := api.areaRegistry.Update(*input.Data.Attributes)
+	newArea, err := api.areaRegistry.Update(r.Context(), *input.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

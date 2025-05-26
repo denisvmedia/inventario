@@ -1,10 +1,10 @@
 package memory_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -13,6 +13,7 @@ import (
 
 func TestImageRegistry_Create(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of ImageRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
@@ -30,18 +31,19 @@ func TestImageRegistry_Create(t *testing.T) {
 	}
 
 	// Create a new image in the registry
-	createdImage, err := r.Create(image)
+	createdImage, err := r.Create(ctx, image)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdImage, qt.Not(qt.IsNil))
 
 	// Verify the count of images in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
 
 func TestImageRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of ImageRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
@@ -59,25 +61,26 @@ func TestImageRegistry_Delete(t *testing.T) {
 	}
 
 	// Create a new image in the registry
-	createdImage, err := r.Create(image)
+	createdImage, err := r.Create(ctx, image)
 	c.Assert(err, qt.IsNil)
 
 	// Delete the image from the registry
-	err = r.Delete(createdImage.ID)
+	err = r.Delete(ctx, createdImage.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the image is no longer present in the registry
-	_, err = r.Get(createdImage.ID)
+	_, err = r.Get(ctx, createdImage.ID)
 	c.Assert(err, qt.Equals, registry.ErrNotFound)
 
 	// Verify the count of images in the registry
-	count, err := r.Count()
+	count, err := r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }
 
 func TestImageRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of ImageRegistry
 	commodityRegistry, _ := getCommodityRegistry(c)
@@ -85,14 +88,9 @@ func TestImageRegistry_Create_Validation(t *testing.T) {
 
 	// Create a test image without required fields
 	image := models.Image{}
-	_, err := r.Create(image)
+	_, err := r.Create(ctx, image)
 	c.Assert(err, qt.Not(qt.IsNil))
-	var errs validation.Errors
-	c.Assert(err, qt.ErrorAs, &errs)
-	c.Assert(errs["File"], qt.Not(qt.IsNil))
-	c.Assert(errs["File"].Error(), qt.Equals, "cannot be blank")
-	c.Assert(errs["commodity_id"], qt.Not(qt.IsNil))
-	c.Assert(errs["commodity_id"].Error(), qt.Equals, "cannot be blank")
+	c.Assert(err, qt.ErrorMatches, "commodity not found:.*")
 
 	image = models.Image{
 		File: &models.File{
@@ -104,13 +102,14 @@ func TestImageRegistry_Create_Validation(t *testing.T) {
 		CommodityID: "invalid",
 	}
 	// Attempt to create the image in the registry and expect a validation error
-	_, err = r.Create(image)
+	_, err = r.Create(ctx, image)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	c.Assert(err, qt.ErrorMatches, "commodity not found.*")
 }
 
 func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 
 	// Create a new instance of ImageRegistry
 	commodityRegistry, _ := getCommodityRegistry(c)
@@ -128,6 +127,6 @@ func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
 	}
 
 	// Attempt to create the image in the registry and expect a commodity not found error
-	_, err := r.Create(image)
+	_, err := r.Create(ctx, image)
 	c.Assert(err, qt.ErrorMatches, "commodity not found.*")
 }

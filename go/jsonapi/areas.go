@@ -1,6 +1,7 @@
 package jsonapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -89,17 +90,17 @@ type AreaData struct {
 	Attributes *models.Area `json:"attributes"`
 }
 
-func (lr *AreaData) Validate() error {
+func (lr *AreaData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&lr.Type, validation.Required, validation.In("areas")),
 		validation.Field(&lr.Attributes, validation.Required),
 	)
-	return validation.ValidateStruct(lr, fields...)
+	return validation.ValidateStructWithContext(ctx, lr, fields...)
 }
 
-func (lr *AreaRequest) Bind(_r *http.Request) error {
-	err := lr.Validate()
+func (lr *AreaRequest) Bind(r *http.Request) error {
+	err := lr.ValidateWithContext(r.Context())
 	if err != nil {
 		return err
 	}
@@ -109,10 +110,10 @@ func (lr *AreaRequest) Bind(_r *http.Request) error {
 	return nil
 }
 
-func (lr *AreaRequest) Validate() error {
+func (lr *AreaRequest) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&lr.Data, validation.Required),
 	)
-	return validation.ValidateStruct(lr, fields...)
+	return validation.ValidateStructWithContext(ctx, lr, fields...)
 }

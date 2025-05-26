@@ -1,6 +1,8 @@
 package models
 
 import (
+	"context"
+
 	"github.com/jellydator/validation"
 )
 
@@ -11,11 +13,15 @@ var (
 
 type Manual struct {
 	EntityID
-	CommodityID string `json:"commodity_id"`
+	CommodityID string `json:"commodity_id" db:"commodity_id"`
 	*File
 }
 
-func (m *Manual) Validate() error {
+func (*Manual) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (m *Manual) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
@@ -23,5 +29,5 @@ func (m *Manual) Validate() error {
 		validation.Field(&m.File, validation.Required),
 	)
 
-	return validation.ValidateStruct(m, fields...)
+	return validation.ValidateStructWithContext(ctx, m, fields...)
 }

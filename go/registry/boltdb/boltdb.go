@@ -21,7 +21,7 @@ func NewRegistrySet(c registry.Config) (*registry.Set, error) {
 	}
 
 	if parsed.Scheme != Name {
-		return nil, errkit.Wrap(registry.ErrInvalidConfig, "invalid scheme")
+		return nil, errkit.Wrap(errkit.WithFields(registry.ErrInvalidConfig, errkit.Fields{"expected": Name, "got": parsed.Scheme}), "invalid scheme")
 	}
 
 	fpath := filepath.Join(parsed.Host, parsed.Path)

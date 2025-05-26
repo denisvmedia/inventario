@@ -1,0 +1,221 @@
+services:
+  # PostgreSQL Database (Production)
+  postgres:
+    image: postgres:15-alpine
+    container_name: inventario-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-inventario}
+      POSTGRES_USER: ${POSTGRES_USER:-inventario}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventario_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - ./.docker/postgresql:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inventario} -d ${POSTGRES_DB:-inventario}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Inventario Application (Production)
+  inventario:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: inventario-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+
+      # Server configuration
+      INVENTARIO_ADDR: "${INVENTARIO_ADDR:-:3333}"
+      INVENTARIO_UPLOAD_LOCATION: "${INVENTARIO_UPLOAD_LOCATION:-file:///app/uploads?create_dir=1}"
+
+      # Optional: Additional environment variables
+      TZ: ${TZ:-UTC}
+    volumes:
+      # Persistent storage for uploads and data
+      - ./.docker/inventario/uploads:/app/uploads
+      - ./.docker/inventario/data:/app/data
+    ports:
+      - "${INVENTARIO_PORT:-3333}:3333"
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/api/v1/settings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Test Database
+  postgres-test:
+    profiles: ["test"]
+    image: postgres:15-alpine
+    container_name: inventario-postgres-test
+    environment:
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-inventario_test}
+      POSTGRES_USER: ${POSTGRES_TEST_USER:-inventario_test}
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-test_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "${POSTGRES_TEST_PORT:-5433}:5432"  # Use different port to avoid conflicts
+    networks:
+      - inventario-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_TEST_USER:-inventario_test} -d ${POSTGRES_TEST_DB:-inventario_test}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Use tmpfs for faster tests and no persistence
+    tmpfs:
+      - /var/lib/postgresql/data
+    # Automatically remove container after stopping
+    restart: "no"
+    # PostgreSQL configuration for testing
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=64MB
+      -c effective_cache_size=128MB
+      -c maintenance_work_mem=32MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=8MB
+      -c default_statistics_target=50
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=100
+      -c work_mem=2MB
+      -c min_wal_size=512MB
+      -c max_wal_size=1GB
+      -c max_worker_processes=4
+      -c max_parallel_workers_per_gather=1
+      -c max_parallel_workers=4
+      -c max_parallel_maintenance_workers=1
+
+  # Database Migration Service (Test)
+  inventario-migrate:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test-runner
+    container_name: inventario-migrate-runner
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    environment:
+      # PostgreSQL test configuration
+      POSTGRES_TEST_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"
+    networks:
+      - inventario-test-network
+    volumes:
+      # Mount source code for development testing
+      - ./go:/app/go:ro
+    working_dir: /app/go
+    # Run migrations
+    command: ["go", "run", ".", "migrate", "--db-dsn=postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"]
+    # Automatically remove container after stopping
+    restart: "no"
+
+  # Inventario Test Runner
+  inventario-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test-runner
+    container_name: inventario-test-runner
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      inventario-migrate:
+        condition: service_completed_successfully
+    environment:
+      # PostgreSQL test configuration
+      POSTGRES_TEST_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"
+
+      # Test configuration
+      GO_TEST_TIMEOUT: "${GO_TEST_TIMEOUT:-10m}"
+      GO_TEST_VERBOSE: "${GO_TEST_VERBOSE:-true}"
+
+      # Application configuration for tests
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
+      INVENTARIO_ADDR: ":3333"
+      INVENTARIO_UPLOAD_LOCATION: "file:///tmp/test-uploads?create_dir=1"
+
+      # Test environment
+      TZ: UTC
+    networks:
+      - inventario-test-network
+    volumes:
+      # Mount source code for development testing
+      - ./go:/app/go:ro
+      - ./frontend:/app/frontend:ro
+      # Temporary upload location
+      - /tmp/test-uploads
+    working_dir: /app/go
+    # Default command runs all tests
+    command: ["go", "test", "-v", "-timeout", "${GO_TEST_TIMEOUT:-10m}", "./..."]
+    # Automatically remove container after stopping
+    restart: "no"
+
+  # Inventario PostgreSQL-only Test Runner
+  inventario-test-postgres:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test-runner
+    container_name: inventario-postgres-test-runner
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      inventario-migrate:
+        condition: service_completed_successfully
+    environment:
+      # PostgreSQL test configuration
+      POSTGRES_TEST_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
+
+      # Test configuration
+      GO_TEST_TIMEOUT: "${GO_TEST_TIMEOUT:-10m}"
+      GO_TEST_VERBOSE: "${GO_TEST_VERBOSE:-true}"
+
+      # Test environment
+      TZ: UTC
+    networks:
+      - inventario-test-network
+    volumes:
+      # Mount source code for development testing
+      - ./go:/app/go:ro
+    working_dir: /app/go
+    # Command runs only PostgreSQL tests (sequential to avoid connection issues)
+    command: ["go", "test", "-v", "-timeout", "${GO_TEST_TIMEOUT:-10m}", "-p", "1", "./registry/postgres/..."]
+    # Automatically remove container after stopping
+    restart: "no"
+
+networks:
+  # Production network
+  inventario-network:
+    driver: bridge
+
+  # Test network
+  inventario-test-network:
+    driver: bridge
+
+volumes:
+  # Named volumes for easier management (optional, using bind mounts above)
+  postgres-data:
+  inventario-uploads:
+  inventario-data:
+
+  # Test volumes (optional, using tmpfs above)
+  postgres-test-data:

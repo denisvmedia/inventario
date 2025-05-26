@@ -1,6 +1,8 @@
 package models
 
 import (
+	"context"
+
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models/rules"
@@ -12,20 +14,16 @@ var (
 )
 
 type Area struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	LocationID string `json:"location_id"`
+	EntityID
+	Name       string `json:"name" db:"name"`
+	LocationID string `json:"location_id" db:"location_id"`
 }
 
-func (a *Area) GetID() string {
-	return a.ID
+func (*Area) Validate() error {
+	return ErrMustUseValidateWithContext
 }
 
-func (a *Area) SetID(id string) {
-	a.ID = id
-}
-
-func (a *Area) Validate() error {
+func (a *Area) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
@@ -33,5 +31,5 @@ func (a *Area) Validate() error {
 		validation.Field(&a.Name, rules.NotEmpty),
 	)
 
-	return validation.ValidateStruct(a, fields...)
+	return validation.ValidateStructWithContext(ctx, a, fields...)
 }

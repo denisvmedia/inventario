@@ -22,12 +22,12 @@ const uploadLocation = "file://uploads?memfs=1&create_dir=1"
 func newLocationRegistry() registry.LocationRegistry {
 	var locationsRegistry = memory.NewLocationRegistry()
 
-	must.Must(locationsRegistry.Create(models.Location{
+	must.Must(locationsRegistry.Create(context.Background(), models.Location{
 		Name:    "Location 1",
 		Address: "Address 1",
 	}))
 
-	must.Must(locationsRegistry.Create(models.Location{
+	must.Must(locationsRegistry.Create(context.Background(), models.Location{
 		Name:    "Location 2",
 		Address: "Address 2",
 	}))
@@ -38,16 +38,16 @@ func newLocationRegistry() registry.LocationRegistry {
 func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRegistry {
 	var areaRegistry = memory.NewAreaRegistry(locationRegistry)
 
-	locations := must.Must(locationRegistry.List())
+	locations := must.Must(locationRegistry.List(context.Background()))
 
-	must.Must(areaRegistry.Create(models.Area{
-		ID:         "1",
+	must.Must(areaRegistry.Create(context.Background(), models.Area{
+		EntityID:   models.EntityID{ID: "1"},
 		Name:       "Area 1",
 		LocationID: locations[0].ID,
 	}))
 
-	must.Must(areaRegistry.Create(models.Area{
-		ID:         "2",
+	must.Must(areaRegistry.Create(context.Background(), models.Area{
+		EntityID:   models.EntityID{ID: "2"},
 		Name:       "Area 2",
 		LocationID: locations[0].ID,
 	}))
@@ -58,9 +58,9 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
 	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 
-	areas := must.Must(areaRegistry.List())
+	areas := must.Must(areaRegistry.List(context.Background()))
 
-	must.Must(commodityRegistry.Create(models.Commodity{
+	must.Must(commodityRegistry.Create(context.Background(), models.Commodity{
 		Name:                  "Commodity 1",
 		ShortName:             "C1",
 		AreaID:                areas[0].ID,
@@ -71,7 +71,7 @@ func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.Commodity
 		OriginalPriceCurrency: models.Currency("USD"),
 	}))
 
-	must.Must(commodityRegistry.Create(models.Commodity{
+	must.Must(commodityRegistry.Create(context.Background(), models.Commodity{
 		Name:                  "Commodity 2",
 		ShortName:             "C2",
 		AreaID:                areas[0].ID,
@@ -88,7 +88,7 @@ func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.Commodity
 func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.ImageRegistry {
 	var imageRegistry = memory.NewImageRegistry(commodityRegistry)
 
-	commodities := must.Must(commodityRegistry.List())
+	commodities := must.Must(commodityRegistry.List(context.Background()))
 
 	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
 	defer b.Close()
@@ -97,7 +97,7 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 		panic(err)
 	}
 
-	must.Must(imageRegistry.Create(models.Image{
+	must.Must(imageRegistry.Create(context.Background(), models.Image{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "image1",     // Without extension
@@ -114,7 +114,7 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 		panic(err)
 	}
 
-	must.Must(imageRegistry.Create(models.Image{
+	must.Must(imageRegistry.Create(context.Background(), models.Image{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "image2",     // Without extension
@@ -130,7 +130,7 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.InvoiceRegistry {
 	var invoiceRegistry = memory.NewInvoiceRegistry(commodityRegistry)
 
-	commodities := must.Must(commodityRegistry.List())
+	commodities := must.Must(commodityRegistry.List(context.Background()))
 
 	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
 	defer b.Close()
@@ -139,7 +139,7 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 		panic(err)
 	}
 
-	must.Must(invoiceRegistry.Create(models.Invoice{
+	must.Must(invoiceRegistry.Create(context.Background(), models.Invoice{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "invoice1",     // Without extension
@@ -156,7 +156,7 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 		panic(err)
 	}
 
-	must.Must(invoiceRegistry.Create(models.Invoice{
+	must.Must(invoiceRegistry.Create(context.Background(), models.Invoice{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "invoice2",     // Without extension
@@ -172,7 +172,7 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.ManualRegistry {
 	var manualRegistry = memory.NewManualRegistry(commodityRegistry)
 
-	commodities := must.Must(commodityRegistry.List())
+	commodities := must.Must(commodityRegistry.List(context.Background()))
 
 	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
 	defer b.Close()
@@ -181,7 +181,7 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 		panic(err)
 	}
 
-	must.Must(manualRegistry.Create(models.Manual{
+	must.Must(manualRegistry.Create(context.Background(), models.Manual{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "manual1",     // Without extension
@@ -198,7 +198,7 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 		panic(err)
 	}
 
-	must.Must(manualRegistry.Create(models.Manual{
+	must.Must(manualRegistry.Create(context.Background(), models.Manual{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "manual2",     // Without extension
@@ -214,7 +214,7 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 func newSettingsRegistry() registry.SettingsRegistry {
 	var settingsRegistry = memory.NewSettingsRegistry()
 
-	must.Assert(settingsRegistry.Patch("system.main_currency", "USD"))
+	must.Assert(settingsRegistry.Patch(context.Background(), "system.main_currency", "USD"))
 
 	return settingsRegistry
 }
