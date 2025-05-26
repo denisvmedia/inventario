@@ -20,6 +20,7 @@
 
 # Dev files
 /uploads/
+/go/uploads/
 /sample/
 /.db
 /bin/*
