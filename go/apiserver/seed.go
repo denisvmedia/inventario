@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/internal/seeddata"
+	"github.com/denisvmedia/inventario/debug/seeddata"
 	"github.com/denisvmedia/inventario/registry"
 )
 

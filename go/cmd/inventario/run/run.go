@@ -1,6 +1,7 @@
 package run
 
 import (
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
@@ -67,9 +69,14 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	srv := &httpserver.APIServer{}
 	bindAddr := runFlags[addrFlag].GetString()
 	dsn := runFlags[dbDSNFlag].GetString()
+	parsedDSN := must.Must(registry.Config(dsn).Parse())
+	if parsedDSN.User != nil {
+		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
+	}
+
 	log.WithFields(log.Fields{
 		addrFlag:  bindAddr,
-		dbDSNFlag: dsn,
+		dbDSNFlag: parsedDSN.String(),
 	}).Info("Starting server")
 
 	var params apiserver.Params
@@ -88,6 +95,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 
 	params.RegistrySet = registrySet
 	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
+	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 
 	err = validation.Validate(params)
 	if err != nil {
