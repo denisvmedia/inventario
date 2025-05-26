@@ -95,8 +95,8 @@ func TestAreaCreate(t *testing.T) {
 	handler := apiserver.APIServer(params)
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 	body := rr.Body.Bytes()
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("Body: %s", string(body)))
 	c.Assert(body, checkers.JSONPathEquals("$.data.type"), "areas")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "New Area in location 2")
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.location_id"), location.ID)
