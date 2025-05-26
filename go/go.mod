@@ -2,8 +2,9 @@ module github.com/denisvmedia/inventario
 
 go 1.24.3
 
-// require github.com/denisvmedia/inventario/frontend v0.0.0
-// replace github.com/denisvmedia/inventario/frontend => ../frontend
+require github.com/denisvmedia/inventario/frontend v0.0.0
+
+replace github.com/denisvmedia/inventario/frontend => ../frontend
 
 require (
 	github.com/bojanz/currency v1.3.1

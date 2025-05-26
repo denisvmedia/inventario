@@ -69,7 +69,7 @@ func TestRegisterPanic(t *testing.T) {
 	}
 
 	// Create test migrator function
-	testMigratorFunc := func(dsn string) (migrations.Migrator, error) {
+	testMigratorFunc := func(_dsn string) (migrations.Migrator, error) {
 		return nil, nil
 	}
 
@@ -126,7 +126,7 @@ func TestUnregister(t *testing.T) {
 
 			// Register if needed
 			if tt.registerFirst {
-				testMigratorFunc := func(dsn string) (migrations.Migrator, error) {
+				testMigratorFunc := func(_dsn string) (migrations.Migrator, error) {
 					return nil, nil
 				}
 				migrations.Register("test", testMigratorFunc)
@@ -166,10 +166,10 @@ func TestMigrators(t *testing.T) {
 	}
 
 	// Create test migrator functions
-	testMigratorFunc1 := func(dsn string) (migrations.Migrator, error) {
+	testMigratorFunc1 := func(_dsn string) (migrations.Migrator, error) {
 		return nil, nil
 	}
-	testMigratorFunc2 := func(dsn string) (migrations.Migrator, error) {
+	testMigratorFunc2 := func(_dsn string) (migrations.Migrator, error) {
 		return nil, nil
 	}
 
@@ -211,10 +211,10 @@ func TestMigratorNames(t *testing.T) {
 	}
 
 	// Create test migrator functions
-	testMigratorFunc1 := func(dsn string) (migrations.Migrator, error) {
+	testMigratorFunc1 := func(_dsn string) (migrations.Migrator, error) {
 		return nil, nil
 	}
-	testMigratorFunc2 := func(dsn string) (migrations.Migrator, error) {
+	testMigratorFunc2 := func(_dsn string) (migrations.Migrator, error) {
 		return nil, nil
 	}
 
@@ -252,7 +252,7 @@ func TestGetMigratorHappyPath(t *testing.T) {
 	}
 
 	// Create a test migrator function
-	testMigratorFunc := func(dsn string) (migrations.Migrator, error) {
+	testMigratorFunc := func(_dsn string) (migrations.Migrator, error) {
 		return nil, nil
 	}
 
@@ -348,12 +348,12 @@ func TestRunMigrationsHappyPath(t *testing.T) {
 	}
 
 	// Register successful migrator
-	migrations.Register("success", func(dsn string) (migrations.Migrator, error) {
+	migrations.Register("success", func(_dsn string) (migrations.Migrator, error) {
 		return &mockMigrator{
-			runMigrationsFunc: func(ctx context.Context) error {
+			runMigrationsFunc: func(_ctx context.Context) error {
 				return nil
 			},
-			checkMigrationsAppliedFunc: func(ctx context.Context) (bool, error) {
+			checkMigrationsAppliedFunc: func(_ctx context.Context) (bool, error) {
 				return true, nil
 			},
 		}, nil
@@ -382,7 +382,7 @@ func TestRunMigrationsUnhappyPath(t *testing.T) {
 			name: "migrator creation error",
 			dsn:  "error://localhost",
 			setupFunc: func() {
-				migrations.Register("error", func(dsn string) (migrations.Migrator, error) {
+				migrations.Register("error", func(_dsn string) (migrations.Migrator, error) {
 					return nil, errors.New("migrator creation error")
 				})
 			},
@@ -392,12 +392,12 @@ func TestRunMigrationsUnhappyPath(t *testing.T) {
 			name: "migration execution error",
 			dsn:  "test://localhost",
 			setupFunc: func() {
-				migrations.Register("test", func(dsn string) (migrations.Migrator, error) {
+				migrations.Register("test", func(_dsn string) (migrations.Migrator, error) {
 					return &mockMigrator{
-						runMigrationsFunc: func(ctx context.Context) error {
+						runMigrationsFunc: func(_ctx context.Context) error {
 							return errors.New("migration error")
 						},
-						checkMigrationsAppliedFunc: func(ctx context.Context) (bool, error) {
+						checkMigrationsAppliedFunc: func(_ctx context.Context) (bool, error) {
 							return false, nil
 						},
 					}, nil
@@ -576,7 +576,7 @@ func TestCheckMigrationsAppliedHappyPath(t *testing.T) {
 			// Register test migrator
 			migrations.Register(tt.migratorName, func(_dsn string) (migrations.Migrator, error) {
 				return &mockMigrator{
-					runMigrationsFunc: func(ctx context.Context) error {
+					runMigrationsFunc: func(_ctx context.Context) error {
 						return nil
 					},
 					checkMigrationsAppliedFunc: func(_ctx context.Context) (bool, error) {
@@ -609,7 +609,7 @@ func TestCheckMigrationsAppliedUnhappyPath(t *testing.T) {
 			name: "migrator creation error",
 			dsn:  "error://localhost",
 			setupFunc: func() {
-				migrations.Register("error", func(dsn string) (migrations.Migrator, error) {
+				migrations.Register("error", func(_dsn string) (migrations.Migrator, error) {
 					return nil, errors.New("migrator creation error")
 				})
 			},

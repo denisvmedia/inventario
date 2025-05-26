@@ -288,6 +288,7 @@ func TestGetFieldByConfigfieldTag_ErrorCases(t *testing.T) {
 	c.Run("unexported field access", func(c *qt.C) {
 		type TestConfigWithUnexported struct {
 			Name       string `configfield:"name"`
+			//revive:disable-next-line:struct-tag
 			unexported string `configfield:"hidden"` //nolint:unused // it's a test
 		}
 		config := &TestConfigWithUnexported{Name: "test"}

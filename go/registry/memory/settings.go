@@ -35,7 +35,7 @@ func (r *SettingsRegistry) Save(_ context.Context, settings models.SettingsObjec
 	return nil
 }
 
-func (r *SettingsRegistry) Patch(ctx context.Context, configfield string, value any) error {
+func (r *SettingsRegistry) Patch(_ctx context.Context, configfield string, value any) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 

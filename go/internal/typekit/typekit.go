@@ -120,41 +120,57 @@ func StructToMap[T any](ptr T) (map[string]any, error) {
 	return result, nil
 }
 
-// extractDBFields recursively extracts fields with db tags from a struct, including embedded structs.
-func extractDBFields(t reflect.Type, v reflect.Value, fields *[]string, placeholders *[]string, params map[string]any) error {
+// validateAndDereferenceStruct validates that v is a struct or a pointer to a struct,
+// and returns the dereferenced value if it's a pointer.
+func validateAndDereferenceStruct(v reflect.Value) (reflect.Value, error) {
 	switch v.Kind() {
 	case reflect.Ptr:
 		if v.IsNil() {
-			return errors.New("ptr must be a non-nil pointer to struct")
+			return reflect.Value{}, errors.New("ptr must be a non-nil pointer to struct")
 		}
 		v = v.Elem()
 		if v.Kind() != reflect.Struct {
-			return errors.New("ptr must point to a struct")
+			return reflect.Value{}, errors.New("ptr must point to a struct")
 		}
 	case reflect.Struct:
 		// v is already a struct, no need to do anything
 	default:
-		return errors.New("ptr must be a pointer to struct")
+		return reflect.Value{}, errors.New("ptr must be a pointer to struct")
+	}
+	return v, nil
+}
+
+// handleEmbeddedStruct processes an embedded struct field and extracts its DB fields.
+func handleEmbeddedStruct(field reflect.StructField, fieldValue reflect.Value, fields, placeholders *[]string, params map[string]any) error {
+	// Handle embedded structs (anonymous fields)
+	if field.Type.Kind() == reflect.Struct {
+		return extractDBFields(field.Type, fieldValue, fields, placeholders, params)
+	}
+
+	// Handle pointer to embedded structs
+	if field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct && !fieldValue.IsNil() {
+		return extractDBFields(field.Type.Elem(), fieldValue.Elem(), fields, placeholders, params)
+	}
+
+	return nil
+}
+
+// extractDBFields recursively extracts fields with db tags from a struct, including embedded structs.
+func extractDBFields(t reflect.Type, v reflect.Value, fields, placeholders *[]string, params map[string]any) error {
+	var err error
+	v, err = validateAndDereferenceStruct(v)
+	if err != nil {
+		return err
 	}
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		fieldValue := v.Field(i)
 
-		// Handle embedded structs (anonymous fields)
-		if field.Anonymous && field.Type.Kind() == reflect.Struct {
-			if err := extractDBFields(field.Type, fieldValue, fields, placeholders, params); err != nil {
+		// Handle embedded structs
+		if field.Anonymous {
+			if err := handleEmbeddedStruct(field, fieldValue, fields, placeholders, params); err != nil {
 				return err
-			}
-			continue
-		}
-
-		// Handle pointer to embedded structs
-		if field.Anonymous && field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct {
-			if !fieldValue.IsNil() {
-				if err := extractDBFields(field.Type.Elem(), fieldValue.Elem(), fields, placeholders, params); err != nil {
-					return err
-				}
 			}
 			continue
 		}
@@ -174,7 +190,7 @@ func extractDBFields(t reflect.Type, v reflect.Value, fields *[]string, placehol
 }
 
 // ExtractDBFields extracts fields with db tags from a struct, including embedded structs.
-func ExtractDBFields(entity any, fields *[]string, placeholders *[]string, params map[string]any) error {
+func ExtractDBFields(entity any, fields, placeholders *[]string, params map[string]any) error {
 	t := reflect.TypeOf(entity)
 	v := reflect.ValueOf(entity)
 
