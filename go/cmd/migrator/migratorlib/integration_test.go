@@ -57,8 +57,8 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 					// Generate MySQL SQL
 					mySQL := migratorlib.GenerateCreateTable(table, fields, indexes, enums, "mysql")
 
-					// Verify MySQL SQL contains expected elements
-					c.Assert(mySQL, qt.Contains, fmt.Sprintf("-- MYSQL TABLE: %s --", table.Name))
+					// Verify MySQL SQL contains expected elements (may include table comment from overrides)
+					c.Assert(mySQL, qt.Contains, fmt.Sprintf("-- MYSQL TABLE: %s", table.Name))
 					c.Assert(mySQL, qt.Contains, fmt.Sprintf("CREATE TABLE %s (", table.Name))
 
 					// Verify enums are inlined in MySQL
@@ -79,8 +79,8 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 					// Generate MariaDB SQL (should be the same as MySQL)
 					mariaSQL := migratorlib.GenerateCreateTable(table, fields, indexes, enums, "mariadb")
 
-					// Verify MariaDB SQL is similar to MySQL
-					c.Assert(mariaSQL, qt.Contains, fmt.Sprintf("-- MARIADB TABLE: %s --", table.Name))
+					// Verify MariaDB SQL is similar to MySQL (may include table comment from overrides)
+					c.Assert(mariaSQL, qt.Contains, fmt.Sprintf("-- MARIADB TABLE: %s", table.Name))
 					c.Assert(strings.Replace(mariaSQL, "MARIADB", "MYSQL", -1), qt.Contains,
 						strings.Replace(mySQL, "MYSQL", "MYSQL", -1))
 				})

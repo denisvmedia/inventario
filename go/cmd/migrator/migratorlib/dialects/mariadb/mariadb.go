@@ -1,28 +1,31 @@
 package mariadb
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/constants"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
+	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
 )
 
-// Generator handles MariaDB-specific SQL generation
+// Generator handles MariaDB-specific SQL generation using AST
 type Generator struct {
 	*base.Generator
+	renderer *renderers.MariaDBRenderer
 }
 
 // New creates a new MariaDB generator
 func New() *Generator {
 	return &Generator{
 		Generator: base.NewGenerator(constants.PlatformTypeMariaDB),
+		renderer:  renderers.NewMariaDBRenderer(),
 	}
 }
 
-// processFieldType processes field type for MariaDB, handling enums appropriately
-func (g *Generator) processFieldType(field types.SchemaField, enums []types.GlobalEnum) string {
+// convertFieldToColumn converts a SchemaField to an AST ColumnNode for MariaDB
+func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
 	ftype := field.Type
 
 	// Check for platform-specific type override (MariaDB-specific first, then MySQL fallback)
@@ -42,137 +45,198 @@ func (g *Generator) processFieldType(field types.SchemaField, enums []types.Glob
 		if ftype == en.Name {
 			// MariaDB defines enum inline like MySQL
 			if len(en.Values) > 0 {
-				return fmt.Sprintf(constants.PartialMariaDBMysqlEnumSQL, strings.Join(base.QuoteList(en.Values), constants.SepCommaSpace))
+				quotedValues := base.QuoteList(en.Values)
+				ftype = "ENUM(" + strings.Join(quotedValues, ", ") + ")"
 			}
 			break
 		}
 	}
 
-	return ftype
-}
+	// Create column node
+	column := ast.NewColumn(field.Name, ftype)
 
-// generateTableOptions generates MariaDB-specific table options
-func (g *Generator) generateTableOptions(table types.TableDirective) string {
-	// Try MariaDB-specific options first
-	dialectAttrs, ok := table.Overrides[constants.PlatformTypeMariaDB]
-	if !ok {
-		// Fallback to MySQL options if no MariaDB-specific ones
-		dialectAttrs, ok = table.Overrides[constants.PlatformTypeMySQL]
-		if !ok {
-			return ""
-		}
-	}
-
-	var options []string
-
-	// Handle ENGINE option
-	if engine, ok := dialectAttrs["engine"]; ok {
-		options = append(options, fmt.Sprintf("ENGINE=%s", engine))
-	}
-
-	// Handle COMMENT option
-	if comment, ok := dialectAttrs["comment"]; ok {
-		options = append(options, fmt.Sprintf("COMMENT='%s'", comment))
-	}
-
-	// Add any other platform-specific options
-	for k, v := range dialectAttrs {
-		if k != "engine" && k != "comment" && k != "type" {
-			options = append(options, fmt.Sprintf("%s=%s", k, v))
-		}
-	}
-
-	if len(options) > 0 {
-		return constants.SepSpace + strings.Join(options, constants.SepSpace)
-	}
-
-	return ""
-}
-
-// GenerateCreateTable generates CREATE TABLE SQL for MariaDB
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
-	var buf strings.Builder
-
-	// Add table comment
-	buf.WriteString(g.GenerateTableComment(table.Name))
-
-	// MariaDB doesn't need separate enum type definitions - they're inline like MySQL
-
-	// Start CREATE TABLE statement
-	fmt.Fprintf(&buf, constants.PartialCreateTableBeginSQL, table.Name)
-
-	var lines []string
-
-	// Process fields
-	for _, f := range fields {
-		if f.StructName != table.StructName {
-			continue
-		}
-
-		ftype := g.processFieldType(f, enums)
-		line := g.GenerateFieldLine(f, ftype)
-		lines = append(lines, line)
-	}
-
-	// Add composite primary key if needed
-	if pk := g.GeneratePrimaryKey(table); pk != "" {
-		lines = append(lines, pk)
-	}
-
-	// Add foreign keys
-	fks := g.GenerateForeignKeys(table, fields)
-	lines = append(lines, fks...)
-
-	// Close table definition with MariaDB-specific options
-	fmt.Fprintln(&buf, strings.Join(lines, constants.SepCommaNL))
-
-	// Add MariaDB-specific table options
-	tableOptions := g.generateTableOptions(table)
-	if tableOptions != "" {
-		fmt.Fprint(&buf, constants.PartialClosingBracketSQL)
-		fmt.Fprint(&buf, tableOptions)
-		fmt.Fprintln(&buf, constants.SepSemicolon)
+	// Set column properties
+	if field.Primary {
+		column.SetPrimary()
 	} else {
-		fmt.Fprintln(&buf, constants.PartialClosingBracketWithSemicolonSQL)
+		if !field.Nullable {
+			column.SetNotNull()
+		}
+		if field.Unique {
+			column.SetUnique()
+		}
 	}
+
+	if field.AutoInc {
+		column.SetAutoIncrement()
+	}
+
+	if field.Default != "" {
+		column.SetDefault(field.Default)
+	}
+
+	if field.DefaultFn != "" {
+		column.SetDefaultFunction(field.DefaultFn)
+	}
+
+	if field.Check != "" {
+		column.SetCheck(field.Check)
+	}
+
+	if field.Comment != "" {
+		column.SetComment(field.Comment)
+	}
+
+	// Handle foreign key
+	if field.Foreign != "" {
+		column.SetForeignKey(field.Foreign, field.Name, field.ForeignKeyName)
+	}
+
+	return column
+}
+
+// convertTableDirectiveToAST converts a TableDirective to an AST CreateTableNode for MariaDB
+func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
+	createTable := ast.NewCreateTable(table.Name)
+
+	// Set table comment
+	if table.Comment != "" {
+		createTable.Comment = table.Comment
+	}
+
+	// Handle MariaDB-specific table options (try MariaDB first, then MySQL fallback)
+	if dialectAttrs, ok := table.Overrides[constants.PlatformTypeMariaDB]; ok {
+		// Handle ENGINE option
+		if engine, ok := dialectAttrs["engine"]; ok {
+			createTable.SetOption("ENGINE", engine)
+		}
+
+		// Handle COMMENT option (if not already set from table.Comment)
+		if comment, ok := dialectAttrs["comment"]; ok && createTable.Comment == "" {
+			createTable.Comment = comment
+		}
+
+		// Add any other platform-specific options
+		for k, v := range dialectAttrs {
+			if k != "engine" && k != "comment" && k != "type" {
+				createTable.SetOption(k, v)
+			}
+		}
+	} else if dialectAttrs, ok := table.Overrides[constants.PlatformTypeMySQL]; ok {
+		// Fallback to MySQL options if no MariaDB-specific ones
+		// Handle ENGINE option
+		if engine, ok := dialectAttrs["engine"]; ok {
+			createTable.SetOption("ENGINE", engine)
+		}
+
+		// Handle COMMENT option (if not already set from table.Comment)
+		if comment, ok := dialectAttrs["comment"]; ok && createTable.Comment == "" {
+			createTable.Comment = comment
+		}
+
+		// Add any other platform-specific options
+		for k, v := range dialectAttrs {
+			if k != "engine" && k != "comment" && k != "type" {
+				createTable.SetOption(k, v)
+			}
+		}
+	}
+
+	// Add columns
+	for _, field := range fields {
+		if field.StructName == table.StructName {
+			column := g.convertFieldToColumn(field, enums)
+			createTable.AddColumn(column)
+		}
+	}
+
+	// Add composite primary key if specified
+	if len(table.PrimaryKey) > 1 {
+		constraint := ast.NewPrimaryKeyConstraint(table.PrimaryKey...)
+		createTable.AddConstraint(constraint)
+	}
+
+	return createTable
+}
+
+// GenerateCreateTable generates CREATE TABLE SQL for MariaDB using AST
+func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+	// Convert table directive to AST
+	createTableNode := g.convertTableDirectiveToAST(table, fields, enums)
+
+	// Build a statement list manually
+	var statements []ast.Node
+	statements = append(statements, createTableNode)
 
 	// Add indexes
-	buf.WriteString(g.GenerateIndexes(table, indexes))
-	fmt.Fprintln(&buf)
+	for _, idx := range indexes {
+		if idx.StructName == table.StructName {
+			indexNode := ast.NewIndex(idx.Name, table.Name, idx.Fields...)
+			if idx.Unique {
+				indexNode.Unique = true
+			}
+			statements = append(statements, indexNode)
+		}
+	}
 
-	return buf.String()
+	// Create statement list and render
+	schemaAST := &ast.StatementList{Statements: statements}
+	result, err := g.renderer.RenderSchema(schemaAST)
+	if err != nil {
+		// Fallback to error message if rendering fails
+		return "-- Error rendering MariaDB schema: " + err.Error() + "\n"
+	}
+
+	return result
 }
 
-// GenerateAlterStatements generates ALTER statements for MariaDB
+// GenerateAlterStatements generates ALTER statements for MariaDB using AST
 func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
-	var buf strings.Builder
+	// Group fields by table name
+	tableOperations := make(map[string][]ast.AlterOperation)
 
-	buf.WriteString(constants.PartialAlterCommentSQL)
+	// Process each new field
 	for _, newF := range newFields {
 		found := false
 		for _, oldF := range oldFields {
 			if oldF.StructName == newF.StructName && oldF.Name == newF.Name {
-				if oldF.Type != newF.Type {
-					// MariaDB uses MODIFY COLUMN like MySQL
-					fmt.Fprintf(&buf, "ALTER TABLE %s MODIFY COLUMN %s %s;\n", newF.StructName, newF.Name, newF.Type)
-				}
-				if oldF.Nullable != newF.Nullable {
-					if newF.Nullable {
-						// MariaDB doesn't have a direct DROP NOT NULL, need to MODIFY the column
-						fmt.Fprintf(&buf, "ALTER TABLE %s MODIFY COLUMN %s %s NULL;\n", newF.StructName, newF.Name, newF.Type)
-					} else {
-						fmt.Fprintf(&buf, "ALTER TABLE %s MODIFY COLUMN %s %s NOT NULL;\n", newF.StructName, newF.Name, newF.Type)
-					}
+				// Field exists, check for modifications
+				if oldF.Type != newF.Type || oldF.Nullable != newF.Nullable {
+					// MariaDB uses MODIFY COLUMN for both type and nullability changes like MySQL
+					column := g.convertFieldToColumn(newF, nil)
+					op := &ast.ModifyColumnOperation{Column: column}
+					tableOperations[newF.StructName] = append(tableOperations[newF.StructName], op)
 				}
 				found = true
 				break
 			}
 		}
 		if !found {
-			fmt.Fprintf(&buf, "ALTER TABLE %s ADD COLUMN %s %s;\n", newF.StructName, newF.Name, newF.Type)
+			// New field, add it
+			column := g.convertFieldToColumn(newF, nil)
+			op := &ast.AddColumnOperation{Column: column}
+			tableOperations[newF.StructName] = append(tableOperations[newF.StructName], op)
 		}
 	}
-	fmt.Fprintln(&buf)
 
-	return buf.String()
+	// Build ALTER statements for each table
+	var statements []ast.Node
+
+	for tableName, operations := range tableOperations {
+		alterNode := &ast.AlterTableNode{
+			Name:       tableName,
+			Operations: operations,
+		}
+		statements = append(statements, alterNode)
+	}
+
+	// Render using MariaDB renderer
+	schemaAST := &ast.StatementList{Statements: statements}
+	result, err := g.renderer.RenderSchema(schemaAST)
+	if err != nil {
+		// Fallback to error message if rendering fails
+		return "-- Error rendering MariaDB ALTER statements: " + err.Error() + "\n"
+	}
+
+	return result
 }

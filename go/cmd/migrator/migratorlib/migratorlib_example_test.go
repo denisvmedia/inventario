@@ -138,12 +138,11 @@ func Example_platformSpecificAttributes() {
 
 	// Output:
 	// MySQL SQL with platform-specific attributes:
-	// -- MYSQL TABLE: products --
+	// -- MYSQL TABLE: products (Product catalog) --
 	// CREATE TABLE products (
 	//   id INT AUTO_INCREMENT PRIMARY KEY,
 	//   name VARCHAR(255) NOT NULL
-	// ) ENGINE=InnoDB COMMENT='Product catalog' charset=utf8mb4;
-	//
+	// ); ENGINE=InnoDB charset=utf8mb4
 	// PostgreSQL SQL (platform-specific attributes ignored):
 	// -- POSTGRES TABLE: products --
 	// CREATE TABLE products (

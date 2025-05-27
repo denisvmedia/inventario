@@ -28,7 +28,7 @@ func TestDialectGenerators_HappyPath(t *testing.T) {
 			name:    "mysql generator creates inline enums",
 			dialect: "mysql",
 			contains: []string{
-				"-- MYSQL TABLE: users --",
+				"-- MYSQL TABLE: users (User accounts) --",
 				"status ENUM('active', 'inactive', 'pending') NOT NULL",
 				"ENGINE=InnoDB",
 			},
@@ -37,7 +37,7 @@ func TestDialectGenerators_HappyPath(t *testing.T) {
 			name:    "mariadb generator creates inline enums",
 			dialect: "mariadb",
 			contains: []string{
-				"-- MARIADB TABLE: users --",
+				"-- MARIADB TABLE: users (User accounts) --",
 				"status ENUM('active', 'inactive', 'pending') NOT NULL",
 				"ENGINE=InnoDB",
 			},
@@ -122,16 +122,16 @@ func TestDialectGenerators_AlterStatements(t *testing.T) {
 			name:    "mysql alter statements use MODIFY",
 			dialect: "mysql",
 			contains: []string{
-				"ALTER TABLE User MODIFY COLUMN email VARCHAR(255);",
-				"ALTER TABLE User ADD COLUMN name TEXT;",
+				"ALTER TABLE User MODIFY COLUMN email VARCHAR(255) NOT NULL;",
+				"ALTER TABLE User ADD COLUMN name TEXT NOT NULL;",
 			},
 		},
 		{
 			name:    "mariadb alter statements use MODIFY",
 			dialect: "mariadb",
 			contains: []string{
-				"ALTER TABLE User MODIFY COLUMN email VARCHAR(255);",
-				"ALTER TABLE User ADD COLUMN name TEXT;",
+				"ALTER TABLE User MODIFY COLUMN email VARCHAR(255) NOT NULL;",
+				"ALTER TABLE User ADD COLUMN name TEXT NOT NULL;",
 			},
 		},
 	}

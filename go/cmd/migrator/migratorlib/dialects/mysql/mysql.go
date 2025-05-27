@@ -1,28 +1,31 @@
 package mysql
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/constants"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
+	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
 )
 
-// Generator handles MySQL-specific SQL generation
+// Generator handles MySQL-specific SQL generation using AST
 type Generator struct {
 	*base.Generator
+	renderer *renderers.MySQLRenderer
 }
 
 // New creates a new MySQL generator
 func New() *Generator {
 	return &Generator{
 		Generator: base.NewGenerator(constants.PlatformTypeMySQL),
+		renderer:  renderers.NewMySQLRenderer(),
 	}
 }
 
-// processFieldType processes field type for MySQL, handling enums appropriately
-func (g *Generator) processFieldType(field types.SchemaField, enums []types.GlobalEnum) string {
+// convertFieldToColumn converts a SchemaField to an AST ColumnNode for MySQL
+func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
 	ftype := field.Type
 
 	// Check for platform-specific type override
@@ -37,132 +40,180 @@ func (g *Generator) processFieldType(field types.SchemaField, enums []types.Glob
 		if ftype == en.Name {
 			// MySQL defines enum inline
 			if len(en.Values) > 0 {
-				return fmt.Sprintf(constants.PartialMariaDBMysqlEnumSQL, strings.Join(base.QuoteList(en.Values), constants.SepCommaSpace))
+				quotedValues := base.QuoteList(en.Values)
+				ftype = "ENUM(" + strings.Join(quotedValues, ", ") + ")"
 			}
 			break
 		}
 	}
 
-	return ftype
-}
+	// Create column node
+	column := ast.NewColumn(field.Name, ftype)
 
-// generateTableOptions generates MySQL-specific table options
-func (g *Generator) generateTableOptions(table types.TableDirective) string {
-	dialectAttrs, ok := table.Overrides[constants.PlatformTypeMySQL]
-	if !ok {
-		return ""
-	}
-
-	var options []string
-
-	// Handle ENGINE option
-	if engine, ok := dialectAttrs["engine"]; ok {
-		options = append(options, fmt.Sprintf("ENGINE=%s", engine))
-	}
-
-	// Handle COMMENT option
-	if comment, ok := dialectAttrs["comment"]; ok {
-		options = append(options, fmt.Sprintf("COMMENT='%s'", comment))
-	}
-
-	// Add any other platform-specific options
-	for k, v := range dialectAttrs {
-		if k != "engine" && k != "comment" && k != "type" {
-			options = append(options, fmt.Sprintf("%s=%s", k, v))
-		}
-	}
-
-	if len(options) > 0 {
-		return constants.SepSpace + strings.Join(options, constants.SepSpace)
-	}
-
-	return ""
-}
-
-// GenerateCreateTable generates CREATE TABLE SQL for MySQL
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
-	var buf strings.Builder
-
-	// Add table comment
-	buf.WriteString(g.GenerateTableComment(table.Name))
-
-	// MySQL doesn't need separate enum type definitions - they're inline
-
-	// Start CREATE TABLE statement
-	fmt.Fprintf(&buf, constants.PartialCreateTableBeginSQL, table.Name)
-
-	var lines []string
-
-	// Process fields
-	for _, f := range fields {
-		if f.StructName != table.StructName {
-			continue
-		}
-
-		ftype := g.processFieldType(f, enums)
-		line := g.GenerateFieldLine(f, ftype)
-		lines = append(lines, line)
-	}
-
-	// Add composite primary key if needed
-	if pk := g.GeneratePrimaryKey(table); pk != "" {
-		lines = append(lines, pk)
-	}
-
-	// Add foreign keys
-	fks := g.GenerateForeignKeys(table, fields)
-	lines = append(lines, fks...)
-
-	// Close table definition with MySQL-specific options
-	fmt.Fprintln(&buf, strings.Join(lines, constants.SepCommaNL))
-
-	// Add MySQL-specific table options
-	tableOptions := g.generateTableOptions(table)
-	if tableOptions != "" {
-		fmt.Fprint(&buf, constants.PartialClosingBracketSQL)
-		fmt.Fprint(&buf, tableOptions)
-		fmt.Fprintln(&buf, constants.SepSemicolon)
+	// Set column properties
+	if field.Primary {
+		column.SetPrimary()
 	} else {
-		fmt.Fprintln(&buf, constants.PartialClosingBracketWithSemicolonSQL)
+		if !field.Nullable {
+			column.SetNotNull()
+		}
+		if field.Unique {
+			column.SetUnique()
+		}
 	}
+
+	if field.AutoInc {
+		column.SetAutoIncrement()
+	}
+
+	if field.Default != "" {
+		column.SetDefault(field.Default)
+	}
+
+	if field.DefaultFn != "" {
+		column.SetDefaultFunction(field.DefaultFn)
+	}
+
+	if field.Check != "" {
+		column.SetCheck(field.Check)
+	}
+
+	if field.Comment != "" {
+		column.SetComment(field.Comment)
+	}
+
+	// Handle foreign key
+	if field.Foreign != "" {
+		column.SetForeignKey(field.Foreign, field.Name, field.ForeignKeyName)
+	}
+
+	return column
+}
+
+// convertTableDirectiveToAST converts a TableDirective to an AST CreateTableNode for MySQL
+func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
+	createTable := ast.NewCreateTable(table.Name)
+
+	// Set table comment
+	if table.Comment != "" {
+		createTable.Comment = table.Comment
+	}
+
+	// Handle MySQL-specific table options
+	if dialectAttrs, ok := table.Overrides[constants.PlatformTypeMySQL]; ok {
+		// Handle ENGINE option
+		if engine, ok := dialectAttrs["engine"]; ok {
+			createTable.SetOption("ENGINE", engine)
+		}
+
+		// Handle COMMENT option (if not already set from table.Comment)
+		if comment, ok := dialectAttrs["comment"]; ok && createTable.Comment == "" {
+			createTable.Comment = comment
+		}
+
+		// Add any other platform-specific options
+		for k, v := range dialectAttrs {
+			if k != "engine" && k != "comment" && k != "type" {
+				createTable.SetOption(k, v)
+			}
+		}
+	}
+
+	// Add columns
+	for _, field := range fields {
+		if field.StructName == table.StructName {
+			column := g.convertFieldToColumn(field, enums)
+			createTable.AddColumn(column)
+		}
+	}
+
+	// Add composite primary key if specified
+	if len(table.PrimaryKey) > 1 {
+		constraint := ast.NewPrimaryKeyConstraint(table.PrimaryKey...)
+		createTable.AddConstraint(constraint)
+	}
+
+	return createTable
+}
+
+// GenerateCreateTable generates CREATE TABLE SQL for MySQL using AST
+func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+	// Convert table directive to AST
+	createTableNode := g.convertTableDirectiveToAST(table, fields, enums)
+
+	// Build a statement list manually
+	var statements []ast.Node
+	statements = append(statements, createTableNode)
 
 	// Add indexes
-	buf.WriteString(g.GenerateIndexes(table, indexes))
-	fmt.Fprintln(&buf)
+	for _, idx := range indexes {
+		if idx.StructName == table.StructName {
+			indexNode := ast.NewIndex(idx.Name, table.Name, idx.Fields...)
+			if idx.Unique {
+				indexNode.Unique = true
+			}
+			statements = append(statements, indexNode)
+		}
+	}
 
-	return buf.String()
+	// Create statement list and render
+	schemaAST := &ast.StatementList{Statements: statements}
+	result, err := g.renderer.RenderSchema(schemaAST)
+	if err != nil {
+		// Fallback to error message if rendering fails
+		return "-- Error rendering MySQL schema: " + err.Error() + "\n"
+	}
+
+	return result
 }
 
-// GenerateAlterStatements generates ALTER statements for MySQL
+// GenerateAlterStatements generates ALTER statements for MySQL using AST
 func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
-	var buf strings.Builder
+	// Group fields by table name
+	tableOperations := make(map[string][]ast.AlterOperation)
 
-	buf.WriteString(constants.PartialAlterCommentSQL)
+	// Process each new field
 	for _, newF := range newFields {
 		found := false
 		for _, oldF := range oldFields {
 			if oldF.StructName == newF.StructName && oldF.Name == newF.Name {
-				if oldF.Type != newF.Type {
-					// MySQL uses MODIFY COLUMN instead of ALTER COLUMN TYPE
-					fmt.Fprintf(&buf, "ALTER TABLE %s MODIFY COLUMN %s %s;\n", newF.StructName, newF.Name, newF.Type)
-				}
-				if oldF.Nullable != newF.Nullable {
-					if newF.Nullable {
-						// MySQL doesn't have a direct DROP NOT NULL, need to MODIFY the column
-						fmt.Fprintf(&buf, "ALTER TABLE %s MODIFY COLUMN %s %s NULL;\n", newF.StructName, newF.Name, newF.Type)
-					} else {
-						fmt.Fprintf(&buf, "ALTER TABLE %s MODIFY COLUMN %s %s NOT NULL;\n", newF.StructName, newF.Name, newF.Type)
-					}
+				// Field exists, check for modifications
+				if oldF.Type != newF.Type || oldF.Nullable != newF.Nullable {
+					// MySQL uses MODIFY COLUMN for both type and nullability changes
+					column := g.convertFieldToColumn(newF, nil)
+					op := &ast.ModifyColumnOperation{Column: column}
+					tableOperations[newF.StructName] = append(tableOperations[newF.StructName], op)
 				}
 				found = true
 				break
 			}
 		}
 		if !found {
-			fmt.Fprintf(&buf, "ALTER TABLE %s ADD COLUMN %s %s;\n", newF.StructName, newF.Name, newF.Type)
+			// New field, add it
+			column := g.convertFieldToColumn(newF, nil)
+			op := &ast.AddColumnOperation{Column: column}
+			tableOperations[newF.StructName] = append(tableOperations[newF.StructName], op)
 		}
 	}
-	fmt.Fprintln(&buf)
 
-	return buf.String()
+	// Build ALTER statements for each table
+	var statements []ast.Node
+
+	for tableName, operations := range tableOperations {
+		alterNode := &ast.AlterTableNode{
+			Name:       tableName,
+			Operations: operations,
+		}
+		statements = append(statements, alterNode)
+	}
+
+	// Render using MySQL renderer
+	schemaAST := &ast.StatementList{Statements: statements}
+	result, err := g.renderer.RenderSchema(schemaAST)
+	if err != nil {
+		// Fallback to error message if rendering fails
+		return "-- Error rendering MySQL ALTER statements: " + err.Error() + "\n"
+	}
+
+	return result
 }

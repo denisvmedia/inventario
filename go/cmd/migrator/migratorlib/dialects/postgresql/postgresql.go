@@ -32,7 +32,7 @@ func (g *Generator) generateEnumTypes(enums []types.GlobalEnum) string {
 	return buf.String()
 }
 
-// processFieldType processes field type for PostgreSQL, handling enums appropriately
+// processFieldType processes field type for PostgreSQL, handling enums and overrides
 func (g *Generator) processFieldType(field types.SchemaField, enums []types.GlobalEnum) string {
 	ftype := field.Type
 
