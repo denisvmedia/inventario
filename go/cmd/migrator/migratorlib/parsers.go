@@ -14,10 +14,11 @@ import (
 )
 
 func parseKeyValueComment(comment string) map[string]string {
-	// Updated regex to properly handle quoted values with spaces and special characters
+	result := make(map[string]string)
+
+	// First, handle key=value pairs (quoted and unquoted)
 	r := regexp.MustCompile(`(\w+(?:\.\w+)*)=(?:"([^"]*)"|([^\s]+))`)
 	matches := r.FindAllStringSubmatch(comment, -1)
-	result := make(map[string]string)
 	for _, match := range matches {
 		key := match[1]
 		// match[2] is the quoted value (if quoted), match[3] is the unquoted value
@@ -27,6 +28,38 @@ func parseKeyValueComment(comment string) map[string]string {
 			result[key] = match[3] // Use unquoted value
 		}
 	}
+
+	// Then, handle standalone boolean attributes (no =value)
+	// Remove all key=value pairs from the comment first
+	cleanComment := r.ReplaceAllString(comment, "")
+
+	// Find standalone words that could be boolean flags
+	boolRegex := regexp.MustCompile(`\b(\w+(?:\.\w+)*)\b`)
+	boolMatches := boolRegex.FindAllStringSubmatch(cleanComment, -1)
+
+	// Known boolean attributes that can be standalone
+	booleanAttrs := map[string]bool{
+		"not_null": true, "nullable": true, "primary": true, "unique": true,
+		"auto_increment": true, "index": true, "autoincrement": true,
+	}
+
+	for _, match := range boolMatches {
+		attr := match[1]
+		// Skip directive names and other non-boolean words
+		if attr == "migrator" || attr == "schema" || attr == "field" ||
+			attr == "table" || attr == "embed" || attr == "embedded" {
+			continue
+		}
+		// Only treat as boolean if it's a known boolean attribute or follows boolean naming pattern
+		if booleanAttrs[attr] || strings.HasSuffix(attr, "_null") ||
+			strings.HasPrefix(attr, "is_") || strings.HasPrefix(attr, "has_") {
+			// Only set if not already set by key=value parsing
+			if _, exists := result[attr]; !exists {
+				result[attr] = "true"
+			}
+		}
+	}
+
 	return result
 }
 

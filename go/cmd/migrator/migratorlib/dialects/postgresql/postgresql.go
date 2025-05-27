@@ -26,7 +26,22 @@ func New() *Generator {
 func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
 	ftype := field.Type
 
-	// Check for platform-specific type override
+	// Handle auto-increment for PostgreSQL by converting to SERIAL types (before platform overrides)
+	if field.AutoInc {
+		switch ftype {
+		case "INTEGER", "INT":
+			ftype = "SERIAL"
+		case "BIGINT":
+			ftype = "BIGSERIAL"
+		case "SMALLINT":
+			ftype = "SMALLSERIAL"
+		default:
+			// For other types, default to SERIAL
+			ftype = "SERIAL"
+		}
+	}
+
+	// Check for platform-specific type override (takes precedence over auto-increment conversion)
 	if dialectAttrs, ok := field.Overrides[types.PlatformTypePostgres]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
@@ -36,7 +51,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 	// For PostgreSQL, enum types are used directly (they're defined separately)
 	// No need to transform enum types - they're already correct
 
-	// Create column node with the original type
+	// Create column node with the converted type
 	column := ast.NewColumn(field.Name, ftype)
 
 	// Set column properties
@@ -51,9 +66,8 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 		}
 	}
 
-	if field.AutoInc {
-		column.SetAutoIncrement()
-	}
+	// Auto-increment is handled by type conversion to SERIAL above
+	// PostgreSQL doesn't use AUTO_INCREMENT keyword
 
 	if field.Default != "" {
 		column.SetDefault(field.Default)

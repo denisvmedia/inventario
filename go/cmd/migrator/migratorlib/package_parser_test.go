@@ -14,8 +14,8 @@ func TestParsePackageRecursively(t *testing.T) {
 	result, err := ParsePackageRecursively("stubs")
 	c.Assert(err, qt.IsNil)
 
-	// Verify we found entities
-	c.Assert(len(result.Tables), qt.Equals, 5)
+	// Verify we found entities (includes all test files in stubs directory)
+	c.Assert(len(result.Tables), qt.Equals, 15) // All test tables from various test files
 	c.Assert(len(result.Fields) > 0, qt.IsTrue)
 	c.Assert(len(result.EmbeddedFields) > 0, qt.IsTrue)
 

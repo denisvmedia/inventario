@@ -8,10 +8,10 @@ import "time"
 
 //migrator:schema:table name="embedded_example"
 type EmbeddedExample struct {
-	//migrator:schema:field name="id" type="INTEGER" primary="true" not_null="true"
+	//migrator:schema:field name="id" type="INTEGER" primary="true" not_null
 	ID int `db:"id"`
 
-	//migrator:schema:field name="name" type="VARCHAR(255)" not_null="true"
+	//migrator:schema:field name="name" type="VARCHAR(255)" not_null
 	Name string `db:"name"`
 }
 
@@ -19,10 +19,10 @@ type EmbeddedExample struct {
 //
 //migrator:schema:embed
 type Timestamps struct {
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `db:"created_at"`
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `db:"updated_at"`
 }
 
@@ -43,9 +43,9 @@ type Meta struct {
 
 //migrator:schema:table name="users"
 type User struct {
-	//migrator:schema:field name="id" type="INTEGER" auto_increment="true" primary="true" not_null="true"
+	//migrator:schema:field name="id" type="INTEGER" auto_increment="true" primary="true" not_null
 	ID int `db:"id"`
 
-	//migrator:schema:field name="email" type="VARCHAR(255)" unique="true" not_null="true"
+	//migrator:schema:field name="email" type="VARCHAR(255)" unique="true" not_null
 	Email string `db:"email"`
 }

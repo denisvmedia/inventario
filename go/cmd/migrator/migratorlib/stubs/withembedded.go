@@ -2,7 +2,7 @@ package stubs
 
 //migrator:schema:table name="articles"
 type Article struct {
-	//migrator:schema:field name="id" type="INTEGER" primary="true" not_null="true"
+	//migrator:schema:field name="id" type="INTEGER" primary not_null auto_increment
 	ID int `db:"id"`
 
 	//migrator:schema:field name="title" type="VARCHAR(255)" not_null="true"
