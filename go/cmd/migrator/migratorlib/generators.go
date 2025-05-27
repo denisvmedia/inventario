@@ -13,6 +13,9 @@ type DialectGenerator interface {
 	// GenerateCreateTable generates CREATE TABLE SQL for the specific dialect
 	GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string
 
+	// GenerateCreateTableWithEmbedded generates CREATE TABLE SQL with embedded field support
+	GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string
+
 	// GenerateAlterStatements generates ALTER statements for the specific dialect
 	GenerateAlterStatements(oldFields, newFields []types.SchemaField) string
 
@@ -39,6 +42,12 @@ func GetDialectGenerator(dialect string) DialectGenerator {
 func GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateCreateTable(table, fields, indexes, enums)
+}
+
+// GenerateCreateTableWithEmbedded generates CREATE TABLE SQL with embedded field support
+func GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField, dialect string) string {
+	generator := GetDialectGenerator(dialect)
+	return generator.GenerateCreateTableWithEmbedded(table, fields, indexes, enums, embeddedFields)
 }
 
 // GenerateAlterStatements generates ALTER statements for the given dialect (backward compatibility function)

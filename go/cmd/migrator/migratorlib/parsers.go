@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -13,11 +14,18 @@ import (
 )
 
 func parseKeyValueComment(comment string) map[string]string {
-	r := regexp.MustCompile(`(\w+(?:\.\w+)*)=\"?([^"\s]+)\"?`)
+	// Updated regex to properly handle quoted values with spaces and special characters
+	r := regexp.MustCompile(`(\w+(?:\.\w+)*)=(?:"([^"]*)"|([^\s]+))`)
 	matches := r.FindAllStringSubmatch(comment, -1)
 	result := make(map[string]string)
 	for _, match := range matches {
-		result[match[1]] = match[2]
+		key := match[1]
+		// match[2] is the quoted value (if quoted), match[3] is the unquoted value
+		if match[2] != "" {
+			result[key] = match[2] // Use quoted value
+		} else {
+			result[key] = match[3] // Use unquoted value
+		}
 	}
 	return result
 }
@@ -145,6 +153,32 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 								Overrides:      parsePlatformSpecific(kv),
 							})
 						}
+					} else if strings.HasPrefix(comment.Text, "//migrator:embedded") {
+						kv := parseKeyValueComment(comment.Text)
+						// Handle embedded fields - get the field type name
+						var fieldTypeName string
+						if field.Type != nil {
+							if ident, ok := field.Type.(*ast.Ident); ok {
+								fieldTypeName = ident.Name
+							}
+						}
+
+						embeddedFields = append(embeddedFields, types.EmbeddedField{
+							StructName:       structName,
+							Mode:             kv["mode"],
+							Prefix:           kv["prefix"],
+							Name:             kv["name"],
+							Type:             kv["type"],
+							Nullable:         kv["nullable"] == "true",
+							Index:            kv["index"] == "true",
+							Field:            kv["field"],
+							Ref:              kv["ref"],
+							OnDelete:         kv["on_delete"],
+							OnUpdate:         kv["on_update"],
+							Comment:          kv["comment"],
+							EmbeddedTypeName: fieldTypeName,
+							Overrides:        parsePlatformSpecific(kv),
+						})
 					} else if strings.HasPrefix(comment.Text, "//migrator:schema:index") {
 						kv := parseKeyValueComment(comment.Text)
 						fields := strings.Split(kv["fields"], ",")
@@ -175,4 +209,47 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 	}
 
 	return embeddedFields, schemaFields, schemaIndexes, tableDirectives, enums
+}
+
+// ParseFileWithDependencies parses a Go file and automatically discovers and parses
+// related files in the same directory to resolve embedded type references
+func ParseFileWithDependencies(filename string) ([]types.EmbeddedField, []types.SchemaField, []types.SchemaIndex, []types.TableDirective, []types.GlobalEnum) {
+	// Parse the main file
+	embeddedFields, fields, indexes, tables, enums := ParseFile(filename)
+
+	// Get the directory of the main file
+	dir := filepath.Dir(filename)
+
+	// Parse all other .go files in the same directory to find embedded type definitions
+	pattern := filepath.Join(dir, "*.go")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		log.Warnf("Failed to find related files: %v", err)
+		return embeddedFields, fields, indexes, tables, enums
+	}
+
+	// Collect embedded type names that we need to resolve
+	embeddedTypeNames := make(map[string]bool)
+	for _, embedded := range embeddedFields {
+		embeddedTypeNames[embedded.EmbeddedTypeName] = true
+	}
+
+	// Parse each related file to collect embedded type definitions
+	for _, match := range matches {
+		if match == filename {
+			continue // Skip the main file as it's already parsed
+		}
+
+		// Parse the related file
+		_, relatedFields, _, _, _ := ParseFile(match)
+
+		// Only add fields from embedded types that we actually need
+		for _, field := range relatedFields {
+			if embeddedTypeNames[field.StructName] {
+				fields = append(fields, field)
+			}
+		}
+	}
+
+	return embeddedFields, fields, indexes, tables, enums
 }

@@ -65,8 +65,8 @@ func (g *Generator) GenerateForeignKeyConstraints(table types.TableDirective, fi
 		}
 
 		// Parse foreign key reference (assuming format "table(column)" or just "table")
-		refTable, refColumn := g.parseForeignKeyReference(f.Foreign)
-		
+		refTable, refColumn := g.ParseForeignKeyReference(f.Foreign)
+
 		ref := &ast.ForeignKeyRef{
 			Table:  refTable,
 			Column: refColumn,
@@ -90,6 +90,11 @@ func (g *Generator) GeneratePrimaryKeyConstraint(table types.TableDirective) *as
 
 // GenerateSchema generates a complete schema using the fluent API
 func (g *Generator) GenerateSchema(tables []types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) *ast.StatementList {
+	return g.GenerateSchemaWithEmbedded(tables, fields, indexes, enums, nil)
+}
+
+// GenerateSchemaWithEmbedded generates a complete schema with embedded field support
+func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) *ast.StatementList {
 	schema := builders.NewSchema()
 
 	// Add comment for the schema
@@ -112,8 +117,14 @@ func (g *Generator) GenerateSchema(tables []types.TableDirective, fields []types
 			tableBuilder.Engine(table.Engine)
 		}
 
+		// Process embedded fields first to generate additional schema fields
+		embeddedGeneratedFields := builders.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
+
+		// Combine original fields with embedded-generated fields
+		allFields := append(fields, embeddedGeneratedFields...)
+
 		// Add columns
-		for _, field := range fields {
+		for _, field := range allFields {
 			if field.StructName == table.StructName {
 				columnBuilder := tableBuilder.Column(field.Name, field.Type)
 
@@ -150,7 +161,7 @@ func (g *Generator) GenerateSchema(tables []types.TableDirective, fields []types
 				}
 
 				if field.Foreign != "" {
-					refTable, refColumn := g.parseForeignKeyReference(field.Foreign)
+					refTable, refColumn := g.ParseForeignKeyReference(field.Foreign)
 					columnBuilder.ForeignKey(refTable, refColumn, field.ForeignKeyName).End()
 				} else {
 					columnBuilder.End()
@@ -169,7 +180,7 @@ func (g *Generator) GenerateSchema(tables []types.TableDirective, fields []types
 	// Add indexes
 	for _, idx := range indexes {
 		indexBuilder := schema.Index(idx.Name, idx.StructName, idx.Fields...)
-		
+
 		if idx.Unique {
 			indexBuilder.Unique()
 		}
@@ -184,9 +195,16 @@ func (g *Generator) GenerateSchema(tables []types.TableDirective, fields []types
 	return schema.Build()
 }
 
-// parseForeignKeyReference parses foreign key reference string
+// GenerateCreateTableWithEmbedded generates CREATE TABLE SQL with embedded field support (base implementation)
+func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+	// This is a base implementation that should be overridden by specific dialect generators
+	// Return a simple string representation (this should be overridden by dialect-specific generators)
+	return "-- Base implementation: use dialect-specific generator for proper SQL output"
+}
+
+// ParseForeignKeyReference parses foreign key reference string
 // Supports formats: "table(column)" or just "table"
-func (g *Generator) parseForeignKeyReference(foreign string) (table, column string) {
+func (g *Generator) ParseForeignKeyReference(foreign string) (table, column string) {
 	if strings.Contains(foreign, "(") {
 		// Format: "table(column)"
 		parts := strings.Split(foreign, "(")

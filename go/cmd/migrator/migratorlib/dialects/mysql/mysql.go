@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
+	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
@@ -62,8 +63,15 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 		column.SetDefaultFunction(field.DefaultFn)
 	}
 
-	if field.Check != "" {
-		column.SetCheck(field.Check)
+	// Handle check constraint with platform-specific override
+	checkConstraint := field.Check
+	if dialectAttrs, ok := field.Overrides[types.PlatformTypeMySQL]; ok {
+		if checkOverride, ok := dialectAttrs["check"]; ok {
+			checkConstraint = checkOverride
+		}
+	}
+	if checkConstraint != "" {
+		column.SetCheck(checkConstraint)
 	}
 
 	if field.Comment != "" {
@@ -119,6 +127,25 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 	if len(table.PrimaryKey) > 1 {
 		constraint := ast.NewPrimaryKeyConstraint(table.PrimaryKey...)
 		createTable.AddConstraint(constraint)
+	}
+
+	// Add foreign key constraints
+	for _, field := range fields {
+		if field.StructName == table.StructName && field.Foreign != "" {
+			// Parse foreign key reference
+			refTable, refColumn := g.ParseForeignKeyReference(field.Foreign)
+
+			// Create table-level foreign key constraint
+			ref := &ast.ForeignKeyRef{
+				Table:    refTable,
+				Column:   refColumn,
+				Name:     field.ForeignKeyName,
+				OnDelete: "", // MySQL will use default behavior
+				OnUpdate: "", // MySQL will use default behavior
+			}
+			constraint := ast.NewForeignKeyConstraint(field.ForeignKeyName, []string{field.Name}, ref)
+			createTable.AddConstraint(constraint)
+		}
 	}
 
 	return createTable
@@ -245,4 +272,16 @@ func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaF
 	}
 
 	return result
+}
+
+// GenerateCreateTableWithEmbedded generates CREATE TABLE SQL for MySQL with embedded field support
+func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+	// Process embedded fields to generate additional schema fields
+	embeddedGeneratedFields := builders.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
+
+	// Combine original fields with embedded-generated fields
+	allFields := append(fields, embeddedGeneratedFields...)
+
+	// Use the regular MySQL generation logic with the combined fields
+	return g.GenerateCreateTable(table, allFields, indexes, enums)
 }

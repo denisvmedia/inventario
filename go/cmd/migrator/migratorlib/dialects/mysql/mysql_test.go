@@ -254,6 +254,48 @@ func TestGenerator_GenerateCreateTable_WithTableOverrides(t *testing.T) {
 	c.Assert(result, qt.Contains, "charset=utf8mb4")
 }
 
+func TestGenerator_GenerateCreateTable_WithCheckOverrides(t *testing.T) {
+	c := qt.New(t)
+
+	generator := mysql.New()
+
+	table := types.TableDirective{
+		StructName: "Product",
+		Name:       "products",
+	}
+
+	fields := []types.SchemaField{
+		{
+			StructName: "Product",
+			Name:       "price",
+			Type:       "DECIMAL(10,2)",
+			Check:      "price > 0", // Default check
+			Overrides: map[string]map[string]string{
+				"mysql": {
+					"check": "price >= 0", // MySQL-specific override
+				},
+			},
+		},
+		{
+			StructName: "Product",
+			Name:       "quantity",
+			Type:       "INTEGER",
+			// No default check, only platform-specific
+			Overrides: map[string]map[string]string{
+				"mysql": {
+					"check": "quantity > 0", // MySQL-specific check
+				},
+			},
+		},
+	}
+
+	result := generator.GenerateCreateTable(table, fields, nil, nil)
+
+	c.Assert(result, qt.Contains, "price DECIMAL(10,2) NOT NULL CHECK (price >= 0)") // Should use MySQL override
+	c.Assert(result, qt.Not(qt.Contains), "CHECK (price > 0)")                       // Should not use default
+	c.Assert(result, qt.Contains, "quantity INTEGER NOT NULL CHECK (quantity > 0)")  // Should use MySQL-specific check
+}
+
 func TestGenerator_GenerateCreateTable_CompositeKeys(t *testing.T) {
 	c := qt.New(t)
 

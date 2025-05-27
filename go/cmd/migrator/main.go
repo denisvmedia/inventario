@@ -16,13 +16,16 @@ func main() {
 		return
 	}
 	filename := os.Args[1]
-	emb, fields, indexes, tables, enums := migratorlib.ParseFile(filename)
+	emb, fields, indexes, tables, enums := migratorlib.ParseFileWithDependencies(filename)
 
 	dialects := []string{"postgres", "mysql", "mariadb"}
 	for _, dialect := range dialects {
+		fmt.Printf("=== %s ===\n", dialect)
 		for _, table := range tables {
-			fmt.Println(migratorlib.GenerateCreateTable(table, fields, indexes, enums, dialect))
+			// Use the new embedded field support
+			fmt.Println(migratorlib.GenerateCreateTableWithEmbedded(table, fields, indexes, enums, emb, dialect))
 		}
+		fmt.Println()
 	}
 
 	fmt.Println(migratorlib.GenerateAlterStatements([]types.SchemaField{

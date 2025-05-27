@@ -1,6 +1,7 @@
 package generic
 
 import (
+	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
@@ -35,6 +36,18 @@ func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []typ
 	}
 
 	return result
+}
+
+// GenerateCreateTableWithEmbedded generates CREATE TABLE SQL for generic dialects with embedded field support
+func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+	// Process embedded fields to generate additional schema fields
+	embeddedGeneratedFields := builders.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
+
+	// Combine original fields with embedded-generated fields
+	allFields := append(fields, embeddedGeneratedFields...)
+
+	// Use the regular generic generation logic with the combined fields
+	return g.GenerateCreateTable(table, allFields, indexes, enums)
 }
 
 // GenerateAlterStatements generates ALTER statements for unknown dialects using AST

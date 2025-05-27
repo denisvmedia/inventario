@@ -2,18 +2,20 @@ package types
 
 // EmbeddedField represents an embedded field in a struct
 type EmbeddedField struct {
-	StructName string
-	Mode       string
-	Prefix     string
-	Name       string
-	Type       string
-	Nullable   bool
-	Index      bool
-	Field      string
-	Ref        string
-	OnDelete   string
-	OnUpdate   string
-	Comment    string
+	StructName       string                       // The struct that contains this embedded field
+	Mode             string                       // inline, json, relation, skip
+	Prefix           string                       // For inline mode - prefix for field names
+	Name             string                       // For json mode - column name
+	Type             string                       // For json mode - column type (JSON/JSONB)
+	Nullable         bool                         // Whether the field can be null
+	Index            bool                         // Whether to create an index
+	Field            string                       // For relation mode - foreign key field name
+	Ref              string                       // For relation mode - reference table(column)
+	OnDelete         string                       // For relation mode - ON DELETE action
+	OnUpdate         string                       // For relation mode - ON UPDATE action
+	Comment          string                       // Comment for the field/column
+	EmbeddedTypeName string                       // The name of the embedded type (e.g., "Timestamps")
+	Overrides        map[string]map[string]string // Platform-specific overrides
 }
 
 // SchemaField represents a database field
