@@ -24,11 +24,11 @@ type DialectGenerator interface {
 // GetDialectGenerator returns the appropriate dialect generator for the given dialect name
 func GetDialectGenerator(dialect string) DialectGenerator {
 	switch dialect {
-	case constants.PlatformTypePostgres:
+	case types.PlatformTypePostgres:
 		return postgresql.New()
-	case constants.PlatformTypeMySQL:
+	case types.PlatformTypeMySQL:
 		return mysql.New()
-	case constants.PlatformTypeMariaDB:
+	case types.PlatformTypeMariaDB:
 		return mariadb.New()
 	default:
 		// For unknown dialects, use a generic generator that doesn't apply dialect-specific transformations
@@ -46,6 +46,6 @@ func GenerateCreateTable(table types.TableDirective, fields []types.SchemaField,
 func GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
 	// For backward compatibility, use PostgreSQL dialect as default
 	// In the future, this function should accept a dialect parameter
-	generator := GetDialectGenerator(constants.PlatformTypePostgres)
+	generator := GetDialectGenerator(types.PlatformTypePostgres)
 	return generator.GenerateAlterStatements(oldFields, newFields)
 }

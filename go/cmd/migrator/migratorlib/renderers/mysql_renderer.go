@@ -128,24 +128,52 @@ func (r *MySQLRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
 	return nil
 }
 
-// renderTableOptions renders MySQL table options
+// renderTableOptions renders MySQL table options in a specific order
 func (r *MySQLRenderer) renderTableOptions(options map[string]string) string {
 	var parts []string
 
-	// MySQL supports various table options
+	// Define the order of options - ENGINE should come first
+	orderedKeys := []string{"ENGINE", "CHARSET", "CHARACTER SET", "COLLATE", "COMMENT"}
+
+	// Add options in the specified order
+	for _, key := range orderedKeys {
+		// Check for the key in a case-insensitive manner
+		var value string
+		var exists bool
+		for optKey, optValue := range options {
+			if strings.ToUpper(optKey) == strings.ToUpper(key) {
+				value = optValue
+				exists = true
+				break
+			}
+		}
+
+		if exists {
+			switch strings.ToUpper(key) {
+			case "ENGINE":
+				parts = append(parts, fmt.Sprintf("ENGINE=%s", value))
+			case "CHARSET":
+				parts = append(parts, fmt.Sprintf("charset=%s", value))
+			case "CHARACTER SET":
+				parts = append(parts, fmt.Sprintf("CHARACTER SET=%s", value))
+			case "COLLATE":
+				parts = append(parts, fmt.Sprintf("COLLATE=%s", value))
+			case "COMMENT":
+				parts = append(parts, fmt.Sprintf("COMMENT='%s'", value))
+			}
+		}
+	}
+
+	// Add any remaining options that weren't in the ordered list
 	for key, value := range options {
-		switch strings.ToUpper(key) {
-		case "ENGINE":
-			parts = append(parts, fmt.Sprintf("ENGINE=%s", value))
-		case "CHARSET":
-			parts = append(parts, fmt.Sprintf("charset=%s", value))
-		case "CHARACTER SET":
-			parts = append(parts, fmt.Sprintf("CHARACTER SET=%s", value))
-		case "COLLATE":
-			parts = append(parts, fmt.Sprintf("COLLATE=%s", value))
-		case "COMMENT":
-			parts = append(parts, fmt.Sprintf("COMMENT='%s'", value))
-		default:
+		found := false
+		for _, orderedKey := range orderedKeys {
+			if strings.ToUpper(key) == strings.ToUpper(orderedKey) {
+				found = true
+				break
+			}
+		}
+		if !found {
 			parts = append(parts, fmt.Sprintf("%s=%s", key, value))
 		}
 	}

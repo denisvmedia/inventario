@@ -2,7 +2,6 @@ package postgresql
 
 import (
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/constants"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
@@ -17,7 +16,7 @@ type Generator struct {
 // New creates a new PostgreSQL generator
 func New() *Generator {
 	return &Generator{
-		Generator: base.NewGenerator(constants.PlatformTypePostgres),
+		Generator: base.NewGenerator(types.PlatformTypePostgres),
 		renderer:  renderers.NewPostgreSQLRenderer(),
 	}
 }
@@ -27,7 +26,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 	ftype := field.Type
 
 	// Check for platform-specific type override
-	if dialectAttrs, ok := field.Overrides[constants.PlatformTypePostgres]; ok {
+	if dialectAttrs, ok := field.Overrides[types.PlatformTypePostgres]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
 		}

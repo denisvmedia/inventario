@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/constants"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
@@ -17,7 +16,7 @@ type Generator struct {
 // New creates a new MySQL generator
 func New() *Generator {
 	return &Generator{
-		Generator: base.NewGenerator(constants.PlatformTypeMySQL),
+		Generator: base.NewGenerator(types.PlatformTypeMySQL),
 		renderer:  renderers.NewMySQLRenderer(),
 	}
 }
@@ -27,7 +26,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 	ftype := field.Type
 
 	// Check for platform-specific type override
-	if dialectAttrs, ok := field.Overrides[constants.PlatformTypeMySQL]; ok {
+	if dialectAttrs, ok := field.Overrides[types.PlatformTypeMySQL]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
 		}
@@ -89,7 +88,7 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 	}
 
 	// Handle MySQL-specific table options
-	if dialectAttrs, ok := table.Overrides[constants.PlatformTypeMySQL]; ok {
+	if dialectAttrs, ok := table.Overrides[types.PlatformTypeMySQL]; ok {
 		// Handle ENGINE option
 		if engine, ok := dialectAttrs["engine"]; ok {
 			createTable.SetOption("ENGINE", engine)

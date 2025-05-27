@@ -2,7 +2,6 @@ package mariadb
 
 import (
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/constants"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
@@ -17,7 +16,7 @@ type Generator struct {
 // New creates a new MariaDB generator
 func New() *Generator {
 	return &Generator{
-		Generator: base.NewGenerator(constants.PlatformTypeMariaDB),
+		Generator: base.NewGenerator(types.PlatformTypeMariaDB),
 		renderer:  renderers.NewMariaDBRenderer(),
 	}
 }
@@ -27,11 +26,11 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 	ftype := field.Type
 
 	// Check for platform-specific type override (MariaDB-specific first, then MySQL fallback)
-	if dialectAttrs, ok := field.Overrides[constants.PlatformTypeMariaDB]; ok {
+	if dialectAttrs, ok := field.Overrides[types.PlatformTypeMariaDB]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
 		}
-	} else if dialectAttrs, ok := field.Overrides[constants.PlatformTypeMySQL]; ok {
+	} else if dialectAttrs, ok := field.Overrides[types.PlatformTypeMySQL]; ok {
 		// Fallback to MySQL overrides if no MariaDB-specific ones
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
@@ -94,7 +93,7 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 	}
 
 	// Handle MariaDB-specific table options (try MariaDB first, then MySQL fallback)
-	if dialectAttrs, ok := table.Overrides[constants.PlatformTypeMariaDB]; ok {
+	if dialectAttrs, ok := table.Overrides[types.PlatformTypeMariaDB]; ok {
 		// Handle ENGINE option
 		if engine, ok := dialectAttrs["engine"]; ok {
 			createTable.SetOption("ENGINE", engine)
@@ -111,7 +110,7 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 				createTable.SetOption(k, v)
 			}
 		}
-	} else if dialectAttrs, ok := table.Overrides[constants.PlatformTypeMySQL]; ok {
+	} else if dialectAttrs, ok := table.Overrides[types.PlatformTypeMySQL]; ok {
 		// Fallback to MySQL options if no MariaDB-specific ones
 		// Handle ENGINE option
 		if engine, ok := dialectAttrs["engine"]; ok {
