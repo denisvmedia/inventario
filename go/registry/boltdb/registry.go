@@ -1,6 +1,7 @@
 package boltdb
 
 import (
+	"errors"
 	"fmt"
 
 	bolt "go.etcd.io/bbolt"
@@ -100,11 +101,15 @@ func (r *Registry[T, P]) List() (results []P, err error) {
 	err = r.db.View(func(tx *bolt.Tx) error {
 		val, err := r.base.GetAll(tx, P(new(T)))
 		if err != nil {
-			return errkit.Wrap(err, "failed to list entities")
+			return errkit.Wrap(err, "failed to obtain entities")
 		}
 		results = val
 		return nil
 	})
+
+	if errors.Is(err, registry.ErrNotFound) {
+		return nil, nil
+	}
 
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to list entities")

@@ -1,5 +1,15 @@
 basePath: /api/v1
 definitions:
+  debug.Info:
+    properties:
+      database_driver:
+        type: string
+      error: {}
+      file_storage_driver:
+        type: string
+      operating_system:
+        type: string
+    type: object
   jsonapi.AreaData:
     properties:
       attributes:
@@ -1247,6 +1257,22 @@ paths:
       summary: Get supported currencies
       tags:
       - currencies
+  /debug:
+    get:
+      consumes:
+      - application/json
+      description: get debug information about file storage, database driver, and
+        operating system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/debug.Info'
+      summary: Get debug information
+      tags:
+      - debug
   /locations:
     get:
       consumes:

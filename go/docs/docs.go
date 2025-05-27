@@ -1085,6 +1085,29 @@ const docTemplate = `{
                 }
             }
         },
+        "/debug": {
+            "get": {
+                "description": "get debug information about file storage, database driver, and operating system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "debug"
+                ],
+                "summary": "Get debug information",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/debug.Info"
+                        }
+                    }
+                }
+            }
+        },
         "/locations": {
             "get": {
                 "description": "get locations",
@@ -1390,6 +1413,21 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "debug.Info": {
+            "type": "object",
+            "properties": {
+                "database_driver": {
+                    "type": "string"
+                },
+                "error": {},
+                "file_storage_driver": {
+                    "type": "string"
+                },
+                "operating_system": {
+                    "type": "string"
+                }
+            }
+        },
         "jsonapi.AreaData": {
             "type": "object",
             "properties": {

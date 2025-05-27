@@ -4,8 +4,8 @@ import (
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
+	"github.com/denisvmedia/inventario/debug/seeddata"
 	"github.com/denisvmedia/inventario/internal/log"
-	"github.com/denisvmedia/inventario/internal/seeddata"
 	"github.com/denisvmedia/inventario/registry"
 )
 
