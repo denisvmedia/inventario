@@ -36,7 +36,7 @@ func (r *BaseRenderer) Write(s string) {
 }
 
 // Writef writes a formatted string to the output
-func (r *BaseRenderer) Writef(format string, args ...interface{}) {
+func (r *BaseRenderer) Writef(format string, args ...any) {
 	fmt.Fprintf(&r.output, format, args...)
 }
 
@@ -47,7 +47,7 @@ func (r *BaseRenderer) WriteLine(s string) {
 }
 
 // WriteLinef writes a formatted string followed by a newline
-func (r *BaseRenderer) WriteLinef(format string, args ...interface{}) {
+func (r *BaseRenderer) WriteLinef(format string, args ...any) {
 	fmt.Fprintf(&r.output, format, args...)
 	r.output.WriteString("\n")
 }

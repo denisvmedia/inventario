@@ -115,7 +115,7 @@ func TestDialectGenerators_AlterStatements(t *testing.T) {
 			dialect: "postgres",
 			contains: []string{
 				"ALTER TABLE User ALTER COLUMN email TYPE VARCHAR(255);",
-				"ALTER TABLE User ADD COLUMN name TEXT;",
+				"ALTER TABLE User ADD COLUMN name TEXT NOT NULL;",
 			},
 		},
 		{
@@ -225,5 +225,5 @@ func TestDialectGenerators_BackwardCompatibility(t *testing.T) {
 	}
 
 	alterResult := migratorlib.GenerateAlterStatements(oldFields, newFields)
-	c.Assert(alterResult, qt.Contains, "ALTER TABLE User ADD COLUMN email VARCHAR(255);")
+	c.Assert(alterResult, qt.Contains, "ALTER TABLE User ADD COLUMN email VARCHAR(255) NOT NULL;")
 }

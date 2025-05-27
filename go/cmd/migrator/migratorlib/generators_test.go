@@ -565,7 +565,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 			},
 			contains: []string{
 				"-- ALTER statements: --",
-				"ALTER TABLE User ADD COLUMN email VARCHAR(255);",
+				"ALTER TABLE User ADD COLUMN email VARCHAR(255) NOT NULL;",
 			},
 		},
 		{
@@ -658,7 +658,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 			contains: []string{
 				"ALTER TABLE User ALTER COLUMN name TYPE TEXT;",
 				"ALTER TABLE User ALTER COLUMN name SET NOT NULL;",
-				"ALTER TABLE User ADD COLUMN email VARCHAR(255);",
+				"ALTER TABLE User ADD COLUMN email VARCHAR(255) NOT NULL;",
 			},
 		},
 		{
@@ -847,5 +847,5 @@ func TestGenerateAlterStatementsWithEnums(t *testing.T) {
 
 	// Verify alter statements contain expected changes
 	c.Assert(alterSQL, qt.Contains, "ALTER TABLE Product ALTER COLUMN status TYPE enum_product_status_v2;")
-	c.Assert(alterSQL, qt.Contains, "ALTER TABLE Product ADD COLUMN new_status enum_product_status;")
+	c.Assert(alterSQL, qt.Contains, "ALTER TABLE Product ADD COLUMN new_status enum_product_status")
 }

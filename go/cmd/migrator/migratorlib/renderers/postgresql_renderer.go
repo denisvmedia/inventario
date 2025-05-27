@@ -137,7 +137,76 @@ func (r *PostgreSQLRenderer) processFieldType(fieldType string, enums []string) 
 
 // VisitCreateTable renders CREATE TABLE with PostgreSQL-specific handling
 func (r *PostgreSQLRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
-	return r.BaseRenderer.VisitCreateTable(node)
+	// Table comment
+	if node.Comment != "" {
+		r.WriteLinef("-- %s TABLE: %s (%s) --", strings.ToUpper(r.dialect), node.Name, node.Comment)
+	} else {
+		r.WriteLinef("-- %s TABLE: %s --", strings.ToUpper(r.dialect), node.Name)
+	}
+
+	// CREATE TABLE statement
+	r.WriteLinef("CREATE TABLE %s (", node.Name)
+
+	var lines []string
+
+	// Render columns using PostgreSQL-specific column rendering
+	for _, column := range node.Columns {
+		line, err := r.renderColumn(column)
+		if err != nil {
+			return fmt.Errorf("error rendering column %s: %w", column.Name, err)
+		}
+		lines = append(lines, line)
+	}
+
+	// Render table-level constraints
+	for _, constraint := range node.Constraints {
+		line, err := r.renderConstraint(constraint)
+		if err != nil {
+			return fmt.Errorf("error rendering constraint: %w", err)
+		}
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	// Convert column-level foreign keys to table-level constraints
+	for _, column := range node.Columns {
+		if column.ForeignKey != nil {
+			fk := column.ForeignKey
+			constraint := &ast.ConstraintNode{
+				Type:    ast.ForeignKeyConstraint,
+				Name:    fk.Name,
+				Columns: []string{column.Name},
+				Reference: &ast.ForeignKeyRef{
+					Table:    fk.Table,
+					Column:   fk.Column,
+					OnDelete: fk.OnDelete,
+					OnUpdate: fk.OnUpdate,
+					Name:     fk.Name,
+				},
+			}
+			line, err := r.renderConstraint(constraint)
+			if err != nil {
+				return fmt.Errorf("error rendering foreign key constraint: %w", err)
+			}
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+	}
+
+	// Join all lines
+	for i, line := range lines {
+		if i == len(lines)-1 {
+			r.WriteLine(line) // Last line without comma
+		} else {
+			r.WriteLinef("%s,", line)
+		}
+	}
+
+	r.WriteLine(");")
+	r.WriteLine("")
+	return nil
 }
 
 // VisitColumn delegates to base implementation
@@ -229,15 +298,15 @@ func (r *PostgreSQLRenderer) renderColumn(column *ast.ColumnNode) (string, error
 	// Column name and type
 	parts = append(parts, fmt.Sprintf("  %s %s", column.Name, columnType))
 
-	// Column constraints - PostgreSQL order: NOT NULL, then UNIQUE
+	// Column constraints - PostgreSQL order: UNIQUE, then NOT NULL
 	if column.Primary {
 		parts = append(parts, "PRIMARY KEY")
 	} else {
-		if !column.Nullable {
-			parts = append(parts, "NOT NULL")
-		}
 		if column.Unique {
 			parts = append(parts, "UNIQUE")
+		}
+		if !column.Nullable {
+			parts = append(parts, "NOT NULL")
 		}
 	}
 

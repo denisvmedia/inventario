@@ -30,7 +30,7 @@ func TestCreateTableAST_HappyPath(t *testing.T) {
 				"CREATE TABLE users",
 				"id SERIAL PRIMARY KEY",
 				"name VARCHAR(255) NOT NULL",
-				"email VARCHAR(255) NOT NULL UNIQUE",
+				"email VARCHAR(255) UNIQUE NOT NULL",
 			},
 		},
 		{
@@ -226,7 +226,7 @@ func TestSchemaBuilding_HappyPath(t *testing.T) {
 		"CREATE TYPE user_role AS ENUM ('admin', 'user', 'guest')",
 		"CREATE TABLE users",
 		"id SERIAL PRIMARY KEY",
-		"email VARCHAR(255) NOT NULL UNIQUE",
+		"email VARCHAR(255) UNIQUE NOT NULL",
 		"role user_role NOT NULL DEFAULT 'user'",
 		"CREATE TABLE posts",
 		"title VARCHAR(255) NOT NULL",
