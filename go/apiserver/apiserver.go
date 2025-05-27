@@ -18,6 +18,7 @@ import (
 	_ "gocloud.dev/blob/memblob" // register memblob driver
 	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
+	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
 	"github.com/denisvmedia/inventario/registry"
@@ -57,6 +58,7 @@ func paginate(next http.Handler) http.Handler {
 type Params struct {
 	RegistrySet    *registry.Set
 	UploadLocation string
+	DebugInfo      *debug.Info
 }
 
 func (p *Params) Validate() error {
@@ -119,6 +121,7 @@ func APIServer(params Params) http.Handler {
 		r.Route("/uploads", Uploads(params))
 		r.Route("/seed", Seed(params.RegistrySet))
 		r.Route("/commodities/values", Values(params.RegistrySet))
+		r.Route("/debug", Debug(params))
 	})
 
 	// use Frontend as a root directory
