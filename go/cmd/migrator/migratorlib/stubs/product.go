@@ -17,7 +17,7 @@ type Product struct {
 	//migrator:schema:field name="price" type="DECIMAL(10,2)" not_null="true" check="price > 0"
 	Price float64
 
-	//migrator:schema:field name="status" type="enum_product_status" not_null="true" default="active"
+	//migrator:schema:field name="status" type="ENUM" enum="active,inactive,discontinued,out_of_stock" not_null="true" default="active"
 	Status string
 
 	//migrator:schema:field name="category_id" type="INT" not_null="true" foreign="categories(id)" foreign_key_name="fk_product_category"
@@ -35,6 +35,3 @@ type Product struct {
 	//migrator:schema:index name="idx_products_category" fields="category_id"
 	_ int
 }
-
-// The actual enum values that correspond to enum_product_status
-//migrator:schema:field name="status" type="ENUM" enum="active,inactive,discontinued,out_of_stock"

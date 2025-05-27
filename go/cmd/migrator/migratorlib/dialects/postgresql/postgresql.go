@@ -138,6 +138,8 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 }
 
 // GenerateCreateTable generates CREATE TABLE SQL for PostgreSQL using AST
+// Note: This method should not be used for package-level generation as it includes enum definitions.
+// Use GenerateCreateTableWithoutEnums for package-level generation where enums are handled separately.
 func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
 	// Convert table directive to AST
 	createTableNode := g.convertTableDirectiveToAST(table, fields, enums)
@@ -176,7 +178,42 @@ func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []typ
 	return result
 }
 
+// GenerateCreateTableWithoutEnums generates CREATE TABLE SQL for PostgreSQL without enum definitions
+// This is used when enums are handled at the schema level to avoid duplication
+func (g *Generator) GenerateCreateTableWithoutEnums(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+	// Convert table directive to AST
+	createTableNode := g.convertTableDirectiveToAST(table, fields, enums)
+
+	// Build a statement list with just table and indexes (no enums)
+	var statements []ast.Node
+
+	// Add the table
+	statements = append(statements, createTableNode)
+
+	// Add indexes
+	for _, idx := range indexes {
+		if idx.StructName == table.StructName {
+			indexNode := ast.NewIndex(idx.Name, table.Name, idx.Fields...)
+			if idx.Unique {
+				indexNode.Unique = true
+			}
+			statements = append(statements, indexNode)
+		}
+	}
+
+	// Create statement list and render using PostgreSQL renderer
+	schemaAST := &ast.StatementList{Statements: statements}
+	result, err := g.renderer.RenderSchema(schemaAST)
+	if err != nil {
+		// Fallback to error message if rendering fails
+		return "-- Error rendering PostgreSQL schema: " + err.Error() + "\n"
+	}
+
+	return result
+}
+
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL for PostgreSQL with embedded field support
+// This method is used by the package-migrator and does not include enum definitions to avoid duplication
 func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
 	// Process embedded fields to generate additional schema fields
 	embeddedGeneratedFields := builders.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
@@ -184,8 +221,8 @@ func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, 
 	// Combine original fields with embedded-generated fields
 	allFields := append(fields, embeddedGeneratedFields...)
 
-	// Use the regular PostgreSQL generation logic with the combined fields
-	return g.GenerateCreateTable(table, allFields, indexes, enums)
+	// Use the PostgreSQL generation logic without enum definitions (enums are handled at schema level)
+	return g.GenerateCreateTableWithoutEnums(table, allFields, indexes, enums)
 }
 
 // GenerateAlterStatements generates ALTER statements for PostgreSQL using AST

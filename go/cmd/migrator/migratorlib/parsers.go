@@ -160,17 +160,24 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 							for i := range enum {
 								enum[i] = strings.TrimSpace(enum[i])
 							}
+
+							// Determine the field type - if it's ENUM with enum values, use the generated enum name
+							fieldType := kv["type"]
 							if len(enumRaw) > 0 && kv["type"] == "ENUM" {
-								globalEnumsMap["enum_"+strings.ToLower(structName)+"_"+strings.ToLower(name.Name)] = types.GlobalEnum{
-									Name:   "enum_" + strings.ToLower(structName) + "_" + strings.ToLower(name.Name),
+								enumName := "enum_" + strings.ToLower(structName) + "_" + strings.ToLower(name.Name)
+								globalEnumsMap[enumName] = types.GlobalEnum{
+									Name:   enumName,
 									Values: enum,
 								}
+								// Update the field type to use the generated enum name
+								fieldType = enumName
 							}
+
 							schemaFields = append(schemaFields, types.SchemaField{
 								StructName:     structName,
 								FieldName:      name.Name,
 								Name:           kv["name"],
-								Type:           kv["type"],
+								Type:           fieldType,
 								Nullable:       kv["not_null"] != "true",
 								Primary:        kv["primary"] == "true",
 								AutoInc:        kv["auto_increment"] == "true",
