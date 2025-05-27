@@ -1,7 +1,6 @@
 package migratorlib
 
 import (
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/constants"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/generic"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/mariadb"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/mysql"
