@@ -2,7 +2,9 @@ package migrations
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"sort"
 	"time"
 
@@ -12,12 +14,54 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 )
 
+var (
+	//go:embed base/schema.sql
+	migrationsSchemaSQL string
+
+	//go:embed base/get_version.sql
+	getVersionSQL string
+
+	//go:embed base/record_migration.sql
+	recordMigrationSQL string
+
+	//go:embed base/delete_migration.sql
+	deleteMigrationSQL string
+)
+
+//go:embed source
+var source embed.FS
+
+func GetMigrations() embed.FS {
+	return source
+}
+
+// MigrationFunc represents a migration function.
+type MigrationFunc func(context.Context, pgx.Tx) error
+
+// MigrationFuncFromSQLFilename returns a migration function that reads the SQL from a file
+// in the provided filesystem and executes it.
+func MigrationFuncFromSQLFilename(filename string, fsys fs.FS) MigrationFunc {
+	return func(ctx context.Context, tx pgx.Tx) error {
+		sql, err := fs.ReadFile(fsys, filename)
+		if err != nil {
+			return errkit.Wrap(err, "failed to read migration file")
+		}
+		_, err = tx.Exec(ctx, string(sql))
+		return err
+	}
+}
+
+// NoopMigrationFunc is a no-op migration function.
+func NoopMigrationFunc(_ctx context.Context, _tx pgx.Tx) error {
+	return nil
+}
+
 // Migration represents a database migration
 type Migration struct {
 	Version     int
 	Description string
-	Up          func(ctx context.Context, tx pgx.Tx) error
-	Down        func(ctx context.Context, tx pgx.Tx) error
+	Up          MigrationFunc
+	Down        MigrationFunc
 }
 
 // Migrator handles database migrations
@@ -41,13 +85,7 @@ func (m *Migrator) Register(migration *Migration) {
 
 // Initialize initializes the migrations table if it doesn't exist
 func (m *Migrator) Initialize(ctx context.Context) error {
-	_, err := m.pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version INTEGER PRIMARY KEY,
-			description TEXT NOT NULL,
-			applied_at TIMESTAMP NOT NULL
-		);
-	`)
+	_, err := m.pool.Exec(ctx, migrationsSchemaSQL)
 	if err != nil {
 		return errkit.Wrap(err, "failed to create schema_migrations table")
 	}
@@ -57,9 +95,7 @@ func (m *Migrator) Initialize(ctx context.Context) error {
 // GetCurrentVersion gets the current schema version
 func (m *Migrator) GetCurrentVersion(ctx context.Context) (int, error) {
 	var version int
-	err := m.pool.QueryRow(ctx, `
-		SELECT COALESCE(MAX(version), 0) FROM schema_migrations
-	`).Scan(&version)
+	err := m.pool.QueryRow(ctx, getVersionSQL).Scan(&version)
 	if err != nil {
 		return 0, errkit.Wrap(err, "failed to get current schema version")
 	}
@@ -79,6 +115,9 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 		return err
 	}
 
+	fmt.Printf("Current schema version: %d\n", currentVersion)  //nolint:forbidigo // Migration progress output is intentional
+	fmt.Printf("Available migrations: %d\n", len(m.migrations)) //nolint:forbidigo // Migration progress output is intentional
+
 	// Sort migrations by version
 	sort.Slice(m.migrations, func(i, j int) bool {
 		return m.migrations[i].Version < m.migrations[j].Version
@@ -87,8 +126,10 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 	// Apply migrations
 	for _, migration := range m.migrations {
 		if migration.Version <= currentVersion {
+			fmt.Printf("Skipping migration %d: %s (already applied)\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
 			continue
 		}
+		fmt.Printf("Applying migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
 
 		// Begin transaction
 		tx, err := m.pool.Begin(ctx)
@@ -103,10 +144,7 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 		}
 
 		// Record migration
-		_, err = tx.Exec(ctx, `
-			INSERT INTO schema_migrations (version, description, applied_at)
-			VALUES ($1, $2, $3)
-		`, migration.Version, migration.Description, time.Now())
+		_, err = tx.Exec(ctx, recordMigrationSQL, migration.Version, migration.Description, time.Now())
 		if err != nil {
 			_ = tx.Rollback(ctx)
 			return errkit.Wrap(err, fmt.Sprintf("failed to record migration %d", migration.Version))
@@ -188,10 +226,7 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 		}
 
 		// Record migration
-		_, err = tx.Exec(ctx, `
-			DELETE FROM schema_migrations
-			WHERE version = $1
-		`, migration.Version)
+		_, err = tx.Exec(ctx, deleteMigrationSQL, migration.Version)
 		if err != nil {
 			_ = tx.Rollback(ctx)
 			return errkit.Wrap(err, fmt.Sprintf("failed to record migration reversion %d", migration.Version))
