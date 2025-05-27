@@ -305,8 +305,7 @@ func (r *MySQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, enu
 	}
 
 	r.WriteLine("")
-	r.WriteLine("")
-
+	// Only one newline instead of two for better spacing
 	return nil
 }
 

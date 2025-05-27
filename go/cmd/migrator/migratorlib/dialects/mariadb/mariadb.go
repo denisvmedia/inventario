@@ -1,8 +1,6 @@
 package mariadb
 
 import (
-	"strings"
-
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/constants"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
@@ -40,19 +38,10 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 		}
 	}
 
-	// Check if the field type is an enum and transform it for MariaDB (same as MySQL)
-	for _, en := range enums {
-		if ftype == en.Name {
-			// MariaDB defines enum inline like MySQL
-			if len(en.Values) > 0 {
-				quotedValues := base.QuoteList(en.Values)
-				ftype = "ENUM(" + strings.Join(quotedValues, ", ") + ")"
-			}
-			break
-		}
-	}
+	// Keep the original enum type name - the renderer will handle MariaDB-specific enum formatting
+	// No need to transform enum types here, let the AST and renderer handle it
 
-	// Create column node
+	// Create column node with the original type (enum names will be handled by renderer)
 	column := ast.NewColumn(field.Name, ftype)
 
 	// Set column properties
@@ -179,7 +168,22 @@ func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []typ
 		}
 	}
 
-	// Create statement list and render
+	// Create enum map for renderer
+	enumMap := make(map[string][]string)
+	for _, enum := range enums {
+		enumMap[enum.Name] = enum.Values
+	}
+
+	// Use the enhanced renderer method that handles enums properly
+	if len(enums) > 0 {
+		result, err := g.renderSchemaWithEnums(&ast.StatementList{Statements: statements}, enumMap)
+		if err != nil {
+			return "-- Error rendering MariaDB schema with enums: " + err.Error() + "\n"
+		}
+		return result
+	}
+
+	// Create statement list and render normally if no enums
 	schemaAST := &ast.StatementList{Statements: statements}
 	result, err := g.renderer.RenderSchema(schemaAST)
 	if err != nil {
@@ -188,6 +192,32 @@ func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []typ
 	}
 
 	return result
+}
+
+// renderSchemaWithEnums renders a schema using the MariaDB renderer's enum support
+func (g *Generator) renderSchemaWithEnums(statements *ast.StatementList, enumMap map[string][]string) (string, error) {
+	g.renderer.Reset()
+
+	// MariaDB doesn't need separate enum definitions, so we render everything in order
+	for _, stmt := range statements.Statements {
+		// Skip enum nodes as MariaDB handles enums inline
+		if _, ok := stmt.(*ast.EnumNode); ok {
+			continue
+		}
+
+		// Use enhanced rendering for CREATE TABLE with enum support
+		if createTable, ok := stmt.(*ast.CreateTableNode); ok {
+			if err := g.renderer.VisitCreateTableWithEnums(createTable, enumMap); err != nil {
+				return "", err
+			}
+		} else {
+			if err := stmt.Accept(g.renderer); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	return g.renderer.GetOutput(), nil
 }
 
 // GenerateAlterStatements generates ALTER statements for MariaDB using AST
