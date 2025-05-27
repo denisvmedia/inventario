@@ -28,18 +28,18 @@ type InfoJSON struct {
 	Error json.RawMessage `json:"error,omitempty"`
 }
 
-func (info *Info) MarshalJSON() ([]byte, error) {
-	if info == nil {
+func (inf *Info) MarshalJSON() ([]byte, error) {
+	if inf == nil {
 		return []byte("null"), nil
 	}
 
 	jsonData := InfoJSON{
-		BaseInfo: info.BaseInfo,
+		BaseInfo: inf.BaseInfo,
 	}
 
 	// return json.Marshal(info)
-	if info.Error != nil {
-		jsonData.Error = errkit.ForceMarshalError(info.Error)
+	if inf.Error != nil {
+		jsonData.Error = errkit.ForceMarshalError(inf.Error)
 	}
 
 	return json.Marshal(jsonData)

@@ -19,9 +19,9 @@ type debugAPI struct {
 // @Tags debug
 // @Accept  json
 // @Produce  json
-// @Success 200 {object} DebugInfo "OK"
+// @Success 200 {object} debug.Info "OK"
 // @Router /debug [get]
-func (api *debugAPI) getDebugInfo(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+func (api *debugAPI) getDebugInfo(w http.ResponseWriter, _r *http.Request) { //revive:disable-line:get-return
 	// Set the content type to application/json
 	w.Header().Set("Content-Type", "application/json")
 
