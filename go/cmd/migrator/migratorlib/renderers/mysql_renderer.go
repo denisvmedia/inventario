@@ -32,7 +32,7 @@ func (r *MySQLRenderer) renderAutoIncrement() string {
 	return "AUTO_INCREMENT"
 }
 
-// processFieldType processes field type for MySQL, handling enums appropriately
+// processFieldType processes field type for MySQL, handling enums and type conversions
 func (r *MySQLRenderer) processFieldType(fieldType string, enumValues []string) string {
 	// Check if this is an enum type and convert to MySQL ENUM syntax
 	if len(enumValues) > 0 {
@@ -43,8 +43,44 @@ func (r *MySQLRenderer) processFieldType(fieldType string, enumValues []string) 
 		return fmt.Sprintf("ENUM(%s)", strings.Join(quotedValues, ", "))
 	}
 
-	// Handle other MySQL-specific type mappings if needed
-	return fieldType
+	// Handle MySQL-specific type mappings
+	switch strings.ToUpper(fieldType) {
+	case "SERIAL":
+		return "INT"
+	case "BOOLEAN":
+		return "BOOLEAN"
+	default:
+		return fieldType
+	}
+}
+
+// convertDefaultFunction converts default functions to MySQL-compatible syntax
+func (r *MySQLRenderer) convertDefaultFunction(function string) string {
+	switch strings.ToUpper(function) {
+	case "NOW()":
+		return "CURRENT_TIMESTAMP"
+	default:
+		return function
+	}
+}
+
+// convertDefaultValue converts default values to MySQL-compatible syntax
+func (r *MySQLRenderer) convertDefaultValue(value, columnType string) string {
+	// Handle boolean values
+	if strings.ToUpper(columnType) == "BOOLEAN" {
+		switch strings.ToLower(value) {
+		case "true", "'true'":
+			return "TRUE"
+		case "false", "'false'":
+			return "FALSE"
+		}
+	}
+
+	// For other types, quote the value if it's not already quoted
+	if !strings.HasPrefix(value, "'") && !strings.HasSuffix(value, "'") {
+		return fmt.Sprintf("'%s'", value)
+	}
+	return value
 }
 
 // Enhanced column rendering with MySQL-specific enum handling
@@ -77,9 +113,13 @@ func (r *MySQLRenderer) renderColumnWithEnums(column *ast.ColumnNode, enumValues
 	// Default value
 	if column.Default != nil {
 		if column.Default.Function != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Function))
+			// Handle MySQL-specific function mappings
+			defaultFunc := r.convertDefaultFunction(column.Default.Function)
+			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultFunc))
 		} else if column.Default.Value != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value))
+			// Handle MySQL-specific value mappings
+			defaultValue := r.convertDefaultValue(column.Default.Value, columnType)
+			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultValue))
 		}
 	}
 

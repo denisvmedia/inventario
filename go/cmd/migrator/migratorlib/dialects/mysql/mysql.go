@@ -25,6 +25,13 @@ func New() *Generator {
 // convertFieldToColumn converts a SchemaField to an AST ColumnNode for MySQL
 func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
 	ftype := field.Type
+	autoInc := field.AutoInc
+
+	// Handle SERIAL types for MySQL by converting to INT and setting auto-increment
+	if ftype == "SERIAL" {
+		ftype = "INT"
+		autoInc = true
+	}
 
 	// Check for platform-specific type override
 	if dialectAttrs, ok := field.Overrides[types.PlatformTypeMySQL]; ok {
@@ -51,7 +58,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 		}
 	}
 
-	if field.AutoInc {
+	if autoInc {
 		column.SetAutoIncrement()
 	}
 
