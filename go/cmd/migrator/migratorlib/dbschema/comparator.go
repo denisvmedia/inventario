@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
+	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
 )
 
@@ -103,9 +104,15 @@ func compareTablesAndColumns(generated *migratorlib.PackageParseResult, database
 func compareTableColumns(genTable types.TableDirective, dbTable Table, generated *migratorlib.PackageParseResult) TableDiff {
 	tableDiff := TableDiff{TableName: genTable.Name}
 
+	// Process embedded fields to get the complete field list (same as generators do)
+	embeddedGeneratedFields := builders.ProcessEmbeddedFields(generated.EmbeddedFields, generated.Fields, genTable.StructName)
+
+	// Combine original fields with embedded-generated fields
+	allFields := append(generated.Fields, embeddedGeneratedFields...)
+
 	// Create maps for quick lookup
 	genColumns := make(map[string]types.SchemaField)
-	for _, field := range generated.Fields {
+	for _, field := range allFields {
 		if field.StructName == genTable.StructName {
 			genColumns[field.Name] = field
 		}
@@ -164,8 +171,11 @@ func compareColumns(genCol types.SchemaField, dbCol Column) ColumnDiff {
 		colDiff.Changes["type"] = fmt.Sprintf("%s -> %s", dbType, genType)
 	}
 
-	// Compare nullable
+	// Compare nullable (primary keys are always NOT NULL regardless of the field definition)
 	genNullable := genCol.Nullable
+	if genCol.Primary {
+		genNullable = false // Primary keys are always NOT NULL
+	}
 	dbNullable := dbCol.IsNullable == "YES"
 	if genNullable != dbNullable {
 		colDiff.Changes["nullable"] = fmt.Sprintf("%t -> %t", dbNullable, genNullable)

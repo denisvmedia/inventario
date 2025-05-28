@@ -103,12 +103,25 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 	// PostgreSQL doesn't support table-level options like MySQL ENGINE
 	// So we ignore table.Overrides for PostgreSQL
 
-	// Add columns
+	// Sort fields to ensure primary keys come first, then other fields
+	var primaryFields, otherFields []types.SchemaField
 	for _, field := range fields {
 		if field.StructName == table.StructName {
-			column := g.convertFieldToColumn(field, enums)
-			createTable.AddColumn(column)
+			if field.Primary {
+				primaryFields = append(primaryFields, field)
+			} else {
+				otherFields = append(otherFields, field)
+			}
 		}
+	}
+
+	// Process primary key fields first, then other fields
+	sortedFields := append(primaryFields, otherFields...)
+
+	// Add columns
+	for _, field := range sortedFields {
+		column := g.convertFieldToColumn(field, enums)
+		createTable.AddColumn(column)
 	}
 
 	// Add composite primary key if specified

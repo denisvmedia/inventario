@@ -5,8 +5,11 @@ This package provides functionality to read database schemas and compare them wi
 ## Features
 
 - **PostgreSQL Support**: Full schema reading including tables, columns, constraints, indexes, and enums
+- **MySQL/MariaDB Support**: Complete schema reading and writing capabilities
 - **Connection Management**: Secure database connections with URL parsing and connection pooling
 - **Schema Formatting**: Human-readable schema output with detailed information
+- **Schema Writing**: Create complete database schemas from Go entities
+- **Schema Dropping**: Drop all tables and enums (with safety confirmations)
 - **Error Handling**: Comprehensive error messages and connection diagnostics
 
 ## Usage
@@ -19,6 +22,19 @@ go run ./cmd/package-migrator read-db postgres://username:password@localhost:543
 
 # Read with specific schema (defaults to 'public')
 go run ./cmd/package-migrator read-db postgres://username:password@localhost:5432/database_name?search_path=my_schema
+```
+
+### Dropping Database Schema
+
+```bash
+# Drop PostgreSQL schema (DANGEROUS!)
+go run ./cmd/package-migrator drop-schema ./models postgres://username:password@localhost:5432/database_name
+
+# Drop MySQL schema (DANGEROUS!)
+go run ./cmd/package-migrator drop-schema ./models mysql://username:password@tcp(localhost:3306)/database_name
+
+# Drop with confirmation required
+# User must type 'YES' to confirm the operation
 ```
 
 ### Database URL Format
@@ -113,14 +129,14 @@ To test the schema reader with a real PostgreSQL database:
 2. **Create some test data**:
    ```sql
    CREATE TYPE user_role AS ENUM ('admin', 'user', 'guest');
-   
+
    CREATE TABLE users (
        id SERIAL PRIMARY KEY,
        email VARCHAR(255) UNIQUE NOT NULL,
        role user_role DEFAULT 'user',
        created_at TIMESTAMP NOT NULL DEFAULT NOW()
    );
-   
+
    CREATE INDEX idx_users_role ON users(role);
    ```
 

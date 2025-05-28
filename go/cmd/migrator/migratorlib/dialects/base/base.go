@@ -123,49 +123,62 @@ func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fi
 		// Combine original fields with embedded-generated fields
 		allFields := append(fields, embeddedGeneratedFields...)
 
-		// Add columns
+		// Sort fields to ensure primary keys come first, then other fields
+		var primaryFields, otherFields []types.SchemaField
 		for _, field := range allFields {
 			if field.StructName == table.StructName {
-				columnBuilder := tableBuilder.Column(field.Name, field.Type)
-
-				if !field.Nullable {
-					columnBuilder.NotNull()
-				}
-
 				if field.Primary {
-					columnBuilder.Primary()
-				}
-
-				if field.Unique {
-					columnBuilder.Unique()
-				}
-
-				if field.AutoInc {
-					columnBuilder.AutoIncrement()
-				}
-
-				if field.Default != "" {
-					columnBuilder.Default(field.Default)
-				}
-
-				if field.DefaultFn != "" {
-					columnBuilder.DefaultFunction(field.DefaultFn)
-				}
-
-				if field.Check != "" {
-					columnBuilder.Check(field.Check)
-				}
-
-				if field.Comment != "" {
-					columnBuilder.Comment(field.Comment)
-				}
-
-				if field.Foreign != "" {
-					refTable, refColumn := g.ParseForeignKeyReference(field.Foreign)
-					columnBuilder.ForeignKey(refTable, refColumn, field.ForeignKeyName).End()
+					primaryFields = append(primaryFields, field)
 				} else {
-					columnBuilder.End()
+					otherFields = append(otherFields, field)
 				}
+			}
+		}
+
+		// Process primary key fields first, then other fields
+		sortedFields := append(primaryFields, otherFields...)
+
+		// Add columns
+		for _, field := range sortedFields {
+			columnBuilder := tableBuilder.Column(field.Name, field.Type)
+
+			if !field.Nullable {
+				columnBuilder.NotNull()
+			}
+
+			if field.Primary {
+				columnBuilder.Primary()
+			}
+
+			if field.Unique {
+				columnBuilder.Unique()
+			}
+
+			if field.AutoInc {
+				columnBuilder.AutoIncrement()
+			}
+
+			if field.Default != "" {
+				columnBuilder.Default(field.Default)
+			}
+
+			if field.DefaultFn != "" {
+				columnBuilder.DefaultFunction(field.DefaultFn)
+			}
+
+			if field.Check != "" {
+				columnBuilder.Check(field.Check)
+			}
+
+			if field.Comment != "" {
+				columnBuilder.Comment(field.Comment)
+			}
+
+			if field.Foreign != "" {
+				refTable, refColumn := g.ParseForeignKeyReference(field.Foreign)
+				columnBuilder.ForeignKey(refTable, refColumn, field.ForeignKeyName).End()
+			} else {
+				columnBuilder.End()
 			}
 		}
 

@@ -12,6 +12,8 @@ import (
 // SchemaWriter interface for writing schemas to databases
 type SchemaWriter interface {
 	WriteSchema(result *migratorlib.PackageParseResult) error
+	DropSchema(result *migratorlib.PackageParseResult) error
+	DropAllTables() error
 	ExecuteSQL(sql string) error
 	BeginTransaction() error
 	CommitTransaction() error
@@ -207,6 +209,125 @@ func (w *PostgreSQLWriter) DropSchema(result *migratorlib.PackageParseResult) er
 	return nil
 }
 
+// DropAllTables drops ALL tables and enums in the database schema (COMPLETE CLEANUP!)
+func (w *PostgreSQLWriter) DropAllTables() error {
+	fmt.Println("WARNING: This will drop ALL tables and enums in the database!")
+
+	// Start transaction
+	if err := w.BeginTransaction(); err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Rollback on error, commit on success
+	defer func() {
+		if w.tx != nil {
+			w.RollbackTransaction()
+		}
+	}()
+
+	// Get all tables in the schema
+	tablesQuery := `
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = $1 AND table_type = 'BASE TABLE'
+		ORDER BY table_name`
+
+	rows, err := w.db.Query(tablesQuery, w.schema)
+	if err != nil {
+		return fmt.Errorf("failed to query tables: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			return fmt.Errorf("failed to scan table name: %w", err)
+		}
+		tables = append(tables, tableName)
+	}
+
+	// Drop all tables with CASCADE to handle dependencies
+	for _, tableName := range tables {
+		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", tableName)
+		fmt.Printf("Dropping table: %s\n", tableName)
+		if err := w.ExecuteSQL(dropSQL); err != nil {
+			return fmt.Errorf("failed to drop table %s: %w", tableName, err)
+		}
+	}
+
+	// Get all custom types (enums) in the schema
+	enumsQuery := `
+		SELECT typname
+		FROM pg_type t
+		JOIN pg_namespace n ON t.typnamespace = n.oid
+		WHERE n.nspname = $1 AND t.typtype = 'e'
+		ORDER BY typname`
+
+	enumRows, err := w.db.Query(enumsQuery, w.schema)
+	if err != nil {
+		return fmt.Errorf("failed to query enums: %w", err)
+	}
+	defer enumRows.Close()
+
+	var enums []string
+	for enumRows.Next() {
+		var enumName string
+		if err := enumRows.Scan(&enumName); err != nil {
+			return fmt.Errorf("failed to scan enum name: %w", err)
+		}
+		enums = append(enums, enumName)
+	}
+
+	// Drop all enums
+	for _, enumName := range enums {
+		dropSQL := fmt.Sprintf("DROP TYPE IF EXISTS %s CASCADE", enumName)
+		fmt.Printf("Dropping enum: %s\n", enumName)
+		if err := w.ExecuteSQL(dropSQL); err != nil {
+			return fmt.Errorf("failed to drop enum %s: %w", enumName, err)
+		}
+	}
+
+	// Get all sequences in the schema and drop them
+	sequencesQuery := `
+		SELECT sequence_name
+		FROM information_schema.sequences
+		WHERE sequence_schema = $1
+		ORDER BY sequence_name`
+
+	seqRows, err := w.db.Query(sequencesQuery, w.schema)
+	if err != nil {
+		return fmt.Errorf("failed to query sequences: %w", err)
+	}
+	defer seqRows.Close()
+
+	var sequences []string
+	for seqRows.Next() {
+		var sequenceName string
+		if err := seqRows.Scan(&sequenceName); err != nil {
+			return fmt.Errorf("failed to scan sequence name: %w", err)
+		}
+		sequences = append(sequences, sequenceName)
+	}
+
+	// Drop all sequences
+	for _, sequenceName := range sequences {
+		dropSQL := fmt.Sprintf("DROP SEQUENCE IF EXISTS %s CASCADE", sequenceName)
+		fmt.Printf("Dropping sequence: %s\n", sequenceName)
+		if err := w.ExecuteSQL(dropSQL); err != nil {
+			return fmt.Errorf("failed to drop sequence %s: %w", sequenceName, err)
+		}
+	}
+
+	// Commit transaction
+	if err := w.CommitTransaction(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	fmt.Printf("Successfully dropped %d tables, %d enums, %d sequences\n", len(tables), len(enums), len(sequences))
+	return nil
+}
+
 // CheckSchemaExists checks if any tables from the schema already exist
 func (w *PostgreSQLWriter) CheckSchemaExists(result *migratorlib.PackageParseResult) ([]string, error) {
 	var existingTables []string
@@ -387,6 +508,118 @@ func (w *MySQLWriter) CheckSchemaExists(result *migratorlib.PackageParseResult) 
 	}
 
 	return existingTables, nil
+}
+
+// DropSchema drops all tables in the schema (DANGEROUS!)
+func (w *MySQLWriter) DropSchema(result *migratorlib.PackageParseResult) error {
+	fmt.Println("WARNING: This will drop all tables!")
+
+	// Start transaction
+	if err := w.BeginTransaction(); err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Rollback on error, commit on success
+	defer func() {
+		if w.tx != nil {
+			w.RollbackTransaction()
+		}
+	}()
+
+	// Disable foreign key checks to avoid dependency issues
+	if err := w.ExecuteSQL("SET FOREIGN_KEY_CHECKS = 0"); err != nil {
+		return fmt.Errorf("failed to disable foreign key checks: %w", err)
+	}
+
+	// Drop tables in reverse dependency order
+	tables := result.Tables
+	for i := len(tables) - 1; i >= 0; i-- {
+		table := tables[i]
+		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s", table.Name)
+		fmt.Printf("Dropping table: %s\n", table.Name)
+		if err := w.ExecuteSQL(dropSQL); err != nil {
+			return fmt.Errorf("failed to drop table %s: %w", table.Name, err)
+		}
+	}
+
+	// Re-enable foreign key checks
+	if err := w.ExecuteSQL("SET FOREIGN_KEY_CHECKS = 1"); err != nil {
+		return fmt.Errorf("failed to re-enable foreign key checks: %w", err)
+	}
+
+	// Commit transaction
+	if err := w.CommitTransaction(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	fmt.Printf("Successfully dropped %d tables\n", len(result.Tables))
+	return nil
+}
+
+// DropAllTables drops ALL tables in the database (COMPLETE CLEANUP!)
+func (w *MySQLWriter) DropAllTables() error {
+	fmt.Println("WARNING: This will drop ALL tables in the database!")
+
+	// Start transaction
+	if err := w.BeginTransaction(); err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Rollback on error, commit on success
+	defer func() {
+		if w.tx != nil {
+			w.RollbackTransaction()
+		}
+	}()
+
+	// Disable foreign key checks to avoid dependency issues
+	if err := w.ExecuteSQL("SET FOREIGN_KEY_CHECKS = 0"); err != nil {
+		return fmt.Errorf("failed to disable foreign key checks: %w", err)
+	}
+
+	// Get all tables in the current database
+	tablesQuery := `
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
+		ORDER BY table_name`
+
+	rows, err := w.db.Query(tablesQuery)
+	if err != nil {
+		return fmt.Errorf("failed to query tables: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			return fmt.Errorf("failed to scan table name: %w", err)
+		}
+		tables = append(tables, tableName)
+	}
+
+	// Drop all tables
+	for _, tableName := range tables {
+		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)
+		fmt.Printf("Dropping table: %s\n", tableName)
+		if err := w.ExecuteSQL(dropSQL); err != nil {
+			return fmt.Errorf("failed to drop table %s: %w", tableName, err)
+		}
+	}
+
+	// Re-enable foreign key checks
+	if err := w.ExecuteSQL("SET FOREIGN_KEY_CHECKS = 1"); err != nil {
+		return fmt.Errorf("failed to re-enable foreign key checks: %w", err)
+	}
+
+	// Commit transaction
+	if err := w.CommitTransaction(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	fmt.Printf("Successfully dropped %d tables\n", len(tables))
+	return nil
 }
 
 // splitSQLStatements splits a multi-statement SQL string into individual statements

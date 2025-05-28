@@ -13,7 +13,7 @@ var (
 	_ IDable                 = (*Location)(nil)
 )
 
-//migrator:schema:table name="categories" platform.mysql.engine="InnoDB" platform.mysql.comment="Product categories"
+//migrator:schema:table name="location" platform.mysql.engine="InnoDB" platform.mysql.comment="Locations are the top-level objects"
 type Location struct {
 	//migrator:embedded
 	EntityID

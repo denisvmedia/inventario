@@ -92,7 +92,7 @@ postgres://user:pass@localhost:5432/mydb
 postgres://user:pass@localhost/mydb  # Default port 5432
 
 # Example with test database:
-postgres://inventario:inventario_password@localhost:5432/inventario
+postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 ### MySQL
@@ -225,7 +225,7 @@ go run ./cmd/package-migrator write-db <directory> <database_url>
 
 **PostgreSQL:**
 ```bash
-go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **MySQL:**
@@ -240,7 +240,7 @@ go run ./cmd/package-migrator write-db ./models mariadb://inventario:inventario_
 
 #### Sample Output
 ```
-Writing schema from ./models to database postgres://inventario:***@localhost:5432/inventario
+Writing schema from ./models to database postgres://inventario:***@localhost:5432/inventario?sslmode=disable
 === WRITE SCHEMA TO DATABASE ===
 
 Parsed 2 tables, 2 enums from Go entities
@@ -280,7 +280,7 @@ go run ./cmd/package-migrator read-db <database_url>
 
 **PostgreSQL:**
 ```bash
-go run ./cmd/package-migrator read-db postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator read-db postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **MySQL:**
@@ -297,7 +297,7 @@ go run ./cmd/package-migrator read-db mariadb://inventario:inventario_password@t
 
 **PostgreSQL:**
 ```
-Reading schema from database: postgres://inventario:***@localhost:5432/inventario
+Reading schema from database: postgres://inventario:***@localhost:5432/inventario?sslmode=disable
 === DATABASE SCHEMA ===
 
 Connected to postgres database successfully!
@@ -417,7 +417,7 @@ go run ./cmd/package-migrator compare <directory> <database_url>
 
 **PostgreSQL:**
 ```bash
-go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **MySQL:**
@@ -434,7 +434,7 @@ go run ./cmd/package-migrator compare ./models mariadb://inventario:inventario_p
 
 **No Changes Detected:**
 ```
-Comparing schema from ./models with database postgres://inventario:***@localhost:5432/inventario
+Comparing schema from ./models with database postgres://inventario:***@localhost:5432/inventario?sslmode=disable
 === SCHEMA COMPARISON ===
 
 === NO SCHEMA CHANGES DETECTED ===
@@ -443,7 +443,7 @@ The database schema matches your entity definitions.
 
 **Changes Detected:**
 ```
-Comparing schema from ./models with database postgres://inventario:***@localhost:5432/inventario
+Comparing schema from ./models with database postgres://inventario:***@localhost:5432/inventario?sslmode=disable
 === SCHEMA COMPARISON ===
 
 === SCHEMA DIFFERENCES DETECTED ===
@@ -492,7 +492,7 @@ go run ./cmd/package-migrator migrate <directory> <database_url>
 
 **PostgreSQL:**
 ```bash
-go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **MySQL:**
@@ -509,13 +509,13 @@ go run ./cmd/package-migrator migrate ./models mariadb://inventario:inventario_p
 
 **PostgreSQL Migration:**
 ```
-Generating migration from ./models to database postgres://inventario:***@localhost:5432/inventario
+Generating migration from ./models to database postgres://inventario:***@localhost:5432/inventario?sslmode=disable
 === GENERATE MIGRATION SQL ===
 
 -- Migration generated from schema differences
 -- Generated on: 2024-01-15 14:30:00
 -- Source: ./models
--- Target: postgres://inventario:***@localhost:5432/inventario
+-- Target: postgres://inventario:***@localhost:5432/inventario?sslmode=disable
 
 -- Add new enum values
 ALTER TYPE enum_user_role ADD VALUE 'moderator';
@@ -593,7 +593,7 @@ The tool generates SQL but doesn't automatically apply it. You should:
 **PostgreSQL:**
 ```bash
 # Save migration to file
-go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario > migration.sql
+go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable > migration.sql
 
 # Apply using psql
 psql -h localhost -U inventario -d inventario -f migration.sql
@@ -610,9 +610,148 @@ mysql -h localhost -u inventario -p inventario < migration.sql
 
 ### 6. Drop Schema (Cleanup)
 
-> **⚠️ DANGER: This operation will permanently delete all data!**
+> **⚠️ DANGER: This operation will permanently delete data!**
 
-The drop schema operation is available programmatically but not exposed as a CLI command for safety. It can be used in development environments to clean up test databases.
+Drop tables and enums defined in your Go entities. This operation is useful for:
+- Cleaning up development/test databases
+- Removing specific schema objects defined in your code
+- Selective cleanup before recreating schema
+
+**⚠️ WARNING**: This operation permanently deletes data and cannot be undone!
+
+### 7. Drop All Tables (Complete Cleanup)
+
+> **🚨 EXTREME DANGER: This operation will delete EVERYTHING in the database!**
+
+Drop ALL tables and enums in the entire database, regardless of whether they're defined in your Go code. This operation is useful for:
+- Complete database reset during development
+- Cleaning up databases with mixed schema sources
+- Starting completely fresh
+
+**🚨 EXTREME WARNING**: This operation completely empties the database and cannot be undone!
+
+#### Drop Schema Command Syntax
+```bash
+go run ./cmd/package-migrator drop-schema <directory> <database_url>
+```
+
+#### Drop All Tables Command Syntax
+```bash
+go run ./cmd/package-migrator drop-all <database_url>
+```
+
+#### Examples
+
+**Drop Schema (Go entities only):**
+
+PostgreSQL:
+```bash
+go run ./cmd/package-migrator drop-schema ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+```
+
+MySQL:
+```bash
+go run ./cmd/package-migrator drop-schema ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+```
+
+MariaDB:
+```bash
+go run ./cmd/package-migrator drop-schema ./models mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+```
+
+**Drop All Tables (Complete cleanup):**
+
+PostgreSQL:
+```bash
+go run ./cmd/package-migrator drop-all postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+```
+
+MySQL:
+```bash
+go run ./cmd/package-migrator drop-all mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+```
+
+MariaDB:
+```bash
+go run ./cmd/package-migrator drop-all mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+```
+
+#### Sample Output
+
+**Drop Schema (Go entities only):**
+```
+Dropping schema from postgres://inventario:***@localhost:5432/inventario?sslmode=disable based on entities in ./models
+=== DROP SCHEMA FROM DATABASE ===
+
+Found 2 tables, 2 enums to drop
+Connected to postgres database successfully!
+
+⚠️  WARNING: This operation will permanently delete all tables and enums!
+⚠️  This action cannot be undone!
+⚠️  Tables to be dropped: [users products]
+⚠️  Enums to be dropped: [enum_user_role enum_product_status]
+
+Type 'YES' to confirm: YES
+Dropping schema from database...
+WARNING: This will drop all tables and enums!
+Dropping table: products
+Dropping table: users
+Dropping enum: enum_product_status
+Dropping enum: enum_user_role
+Successfully dropped 2 tables, 2 enums
+✅ Schema dropped successfully!
+```
+
+**Drop All Tables (Complete cleanup):**
+```
+Dropping ALL tables and enums from database postgres://inventario:***@localhost:5432/inventario?sslmode=disable
+=== DROP ALL TABLES FROM DATABASE ===
+
+Connected to postgres database successfully!
+
+🚨 EXTREME WARNING: This operation will permanently delete ALL tables and enums!
+🚨 This will delete EVERYTHING in the database, not just your Go entities!
+🚨 This action cannot be undone!
+🚨 ALL DATA WILL BE LOST!
+
+Type 'DELETE EVERYTHING' to confirm this destructive operation: DELETE EVERYTHING
+
+⚠️  Last chance! Type 'YES I AM SURE' to proceed: YES I AM SURE
+Dropping all tables and enums from database...
+WARNING: This will drop ALL tables and enums in the database!
+Dropping table: users
+Dropping table: products
+Dropping table: legacy_data
+Dropping table: temp_imports
+Dropping enum: enum_user_role
+Dropping enum: enum_product_status
+Dropping enum: enum_legacy_status
+Dropping sequence: users_id_seq
+Dropping sequence: products_id_seq
+Dropping sequence: legacy_data_id_seq
+Successfully dropped 4 tables, 3 enums, 3 sequences
+✅ All tables and enums dropped successfully!
+🔥 Database is now completely empty!
+```
+
+#### Safety Features
+
+**Drop Schema:**
+- **Explicit Confirmation**: Requires typing 'YES' to proceed
+- **Selective Cleanup**: Only drops tables/enums defined in your Go entities
+- **Transaction-based**: All operations are wrapped in a transaction
+- **Dependency Order**: Drops tables in reverse dependency order
+- **Foreign Key Handling**: Disables foreign key checks during operation (MySQL/MariaDB)
+- **Detailed Output**: Shows exactly what will be dropped before confirmation
+
+**Drop All Tables:**
+- **Double Confirmation**: Requires typing 'DELETE EVERYTHING' then 'YES I AM SURE'
+- **Complete Cleanup**: Drops ALL tables, enums, and sequences in the database
+- **Database Query**: Queries database for complete list of objects to drop
+- **Transaction-based**: All operations are wrapped in a transaction
+- **Foreign Key Handling**: Disables foreign key checks during operation (MySQL/MariaDB)
+- **Sequence Cleanup**: Drops all sequences to prevent orphaned sequences (PostgreSQL)
+- **Extreme Warnings**: Multiple warnings about complete data loss
 
 #### Programmatic Usage
 
@@ -693,13 +832,13 @@ go run ./cmd/package-migrator generate ./models postgres
 **Step 3: Create database schema**
 ```bash
 # Create the schema in your database
-go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **Step 4: Verify creation**
 ```bash
 # Confirm everything was created correctly
-go run ./cmd/package-migrator read-db postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator read-db postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 ### Example 2: Adding New Features
@@ -730,13 +869,13 @@ type Order struct {
 **Step 2: Check what changed**
 ```bash
 # See what needs to be updated
-go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **Step 3: Generate migration**
 ```bash
 # Generate SQL to apply changes
-go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario > migration.sql
+go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable > migration.sql
 ```
 
 **Step 4: Review and apply migration**
@@ -751,7 +890,7 @@ psql -h localhost -U user -d myapp -f migration.sql
 **Step 5: Verify changes**
 ```bash
 # Confirm changes were applied
-go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 # Should show "NO SCHEMA CHANGES DETECTED"
 ```
 
@@ -760,7 +899,7 @@ go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_
 **Generate for all databases:**
 ```bash
 # PostgreSQL
-go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 
 # MySQL
 go run ./cmd/package-migrator write-db ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
@@ -772,7 +911,7 @@ go run ./cmd/package-migrator write-db ./models mariadb://inventario:inventario_
 **Compare across databases:**
 ```bash
 # Check PostgreSQL
-go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario
+go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 
 # Check MySQL
 go run ./cmd/package-migrator compare ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local

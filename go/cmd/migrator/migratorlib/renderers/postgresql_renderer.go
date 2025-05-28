@@ -298,9 +298,11 @@ func (r *PostgreSQLRenderer) renderColumn(column *ast.ColumnNode) (string, error
 	// Column name and type
 	parts = append(parts, fmt.Sprintf("  %s %s", column.Name, columnType))
 
-	// Column constraints - PostgreSQL order: UNIQUE, then NOT NULL
+	// Column constraints - PostgreSQL order: PRIMARY KEY, then NOT NULL, then UNIQUE
 	if column.Primary {
 		parts = append(parts, "PRIMARY KEY")
+		// Primary keys are always NOT NULL in PostgreSQL, show it explicitly for schema comparison
+		parts = append(parts, "NOT NULL")
 	} else {
 		if column.Unique {
 			parts = append(parts, "UNIQUE")

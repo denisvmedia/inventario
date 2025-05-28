@@ -11,6 +11,8 @@ The package-migrator now supports a complete database schema management lifecycl
 3. **Update** → Modify your Go entities
 4. **Compare** → Compare current database with updated entities
 5. **Migrate** → Generate migration SQL for differences
+6. **Drop Schema** → Drop tables/enums from Go entities (DANGEROUS!)
+7. **Drop All** → Drop ALL tables and enums in database (VERY DANGEROUS!)
 
 ## Commands
 
@@ -75,6 +77,45 @@ go run ./cmd/package-migrator migrate ./models postgres://user:pass@localhost/db
 
 **Output**: SQL statements to apply the changes
 
+### 6. Drop Schema (DANGEROUS!)
+
+Drop tables and enums defined in your Go entities:
+
+```bash
+go run ./cmd/package-migrator drop-schema ./models postgres://user:pass@localhost/db
+```
+
+**Features**:
+- ⚠️ Requires explicit confirmation (type 'YES')
+- ✅ Only drops tables/enums defined in your Go entities
+- ✅ Drops tables in reverse dependency order
+- ✅ Drops enums after tables (PostgreSQL)
+- ✅ Disables foreign key checks during operation (MySQL/MariaDB)
+- ✅ Transaction-based (all-or-nothing)
+- ✅ Detailed progress output
+
+**⚠️ WARNING**: This operation permanently deletes data and cannot be undone!
+
+### 7. Drop All Tables (VERY DANGEROUS!)
+
+Drop ALL tables and enums in the entire database:
+
+```bash
+go run ./cmd/package-migrator drop-all postgres://user:pass@localhost/db
+```
+
+**Features**:
+- 🚨 Requires double confirmation ('DELETE EVERYTHING' + 'YES I AM SURE')
+- ✅ Drops ALL tables in the database (not just Go entities)
+- ✅ Drops ALL enums in the database (PostgreSQL)
+- ✅ Drops ALL sequences in the database (PostgreSQL)
+- ✅ Queries database for complete object list
+- ✅ Disables foreign key checks during operation (MySQL/MariaDB)
+- ✅ Transaction-based (all-or-nothing)
+- ✅ Detailed progress output
+
+**🚨 EXTREME WARNING**: This operation completely empties the database and cannot be undone!
+
 ## Complete Workflow Example
 
 ### Step 1: Initial Setup
@@ -86,10 +127,10 @@ go run ./cmd/package-migrator migrate ./models postgres://user:pass@localhost/db
 type User struct {
     //migrator:schema:field name="id" type="SERIAL" primary="true"
     ID int `json:"id"`
-    
+
     //migrator:schema:field name="email" type="VARCHAR(255)" unique="true" not_null="true"
     Email string `json:"email"`
-    
+
     //migrator:schema:field name="role" type="ENUM" enum="admin,user,guest" default="user"
     Role string `json:"role"`
 }
@@ -116,13 +157,13 @@ go run ./cmd/package-migrator write-db ./models postgres://user:pass@localhost/m
 type User struct {
     //migrator:schema:field name="id" type="SERIAL" primary="true"
     ID int `json:"id"`
-    
+
     //migrator:schema:field name="email" type="VARCHAR(255)" unique="true" not_null="true"
     Email string `json:"email"`
-    
+
     //migrator:schema:field name="role" type="ENUM" enum="admin,user,guest,moderator" default="user"
     Role string `json:"role"`
-    
+
     // NEW FIELD
     //migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="NOW()"
     CreatedAt time.Time `json:"created_at"`

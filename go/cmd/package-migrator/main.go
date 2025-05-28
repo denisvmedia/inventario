@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,8 @@ func main() {
 		fmt.Println("  read-db <db_url>                     - Read schema from database")
 		fmt.Println("  compare <root_directory> <db_url>    - Compare generated schema with database")
 		fmt.Println("  migrate <root_directory> <db_url>    - Generate migration SQL from differences")
+		fmt.Println("  drop-schema <root_directory> <db_url> - Drop tables/enums from Go entities (DANGEROUS!)")
+		fmt.Println("  drop-all <db_url>                    - Drop ALL tables and enums in database (VERY DANGEROUS!)")
 		fmt.Println()
 		fmt.Println("Examples:")
 		fmt.Println("  package_migrator generate ./")
@@ -28,6 +31,8 @@ func main() {
 		fmt.Println("  package_migrator read-db postgres://user:pass@localhost/db")
 		fmt.Println("  package_migrator compare ./models postgres://user:pass@localhost/db")
 		fmt.Println("  package_migrator migrate ./models postgres://user:pass@localhost/db")
+		fmt.Println("  package_migrator drop-schema ./models postgres://user:pass@localhost/db")
+		fmt.Println("  package_migrator drop-all postgres://user:pass@localhost/db")
 		return
 	}
 
@@ -64,6 +69,18 @@ func main() {
 			return
 		}
 		generateMigration(os.Args[2], os.Args[3])
+	case "drop-schema":
+		if len(os.Args) < 4 {
+			fmt.Println("Usage: package_migrator drop-schema <root_directory> <db_url>")
+			return
+		}
+		dropSchema(os.Args[2], os.Args[3])
+	case "drop-all":
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: package_migrator drop-all <db_url>")
+			return
+		}
+		dropAllTables(os.Args[2])
 	default:
 		// Backward compatibility - if first arg is not a command, treat as generate
 		generateSchema(os.Args[1:])
@@ -371,4 +388,152 @@ func generateMigration(rootDir, dbURL string) {
 	fmt.Println()
 	fmt.Printf("Generated %d migration statements.\n", len(statements))
 	fmt.Println("⚠️  Review the SQL carefully before executing!")
+}
+
+// dropSchema drops all tables and enums from the database (DANGEROUS!)
+func dropSchema(rootDir, dbURL string) {
+	fmt.Printf("Dropping schema from %s based on entities in %s\n", dbschema.FormatDatabaseURL(dbURL), rootDir)
+	fmt.Println("=== DROP SCHEMA FROM DATABASE ===")
+	fmt.Println()
+
+	// 1. Parse Go entities to know what to drop
+	absPath, err := filepath.Abs(rootDir)
+	if err != nil {
+		fmt.Printf("Error resolving path: %v\n", err)
+		return
+	}
+
+	result, err := migratorlib.ParsePackageRecursively(absPath)
+	if err != nil {
+		fmt.Printf("Error parsing Go entities: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Found %d tables, %d enums to drop\n", len(result.Tables), len(result.Enums))
+
+	// 2. Connect to database
+	conn, err := dbschema.ConnectToDatabase(dbURL)
+	if err != nil {
+		fmt.Printf("Error connecting to database: %v\n", err)
+		return
+	}
+	defer conn.Close()
+
+	fmt.Printf("Connected to %s database successfully!\n", conn.Info.Dialect)
+	fmt.Println()
+
+	// 3. Show warning and ask for confirmation
+	fmt.Println("⚠️  WARNING: This operation will permanently delete all tables and enums!")
+	fmt.Println("⚠️  This action cannot be undone!")
+	fmt.Printf("⚠️  Tables to be dropped: %v\n", func() []string {
+		names := make([]string, len(result.Tables))
+		for i, table := range result.Tables {
+			names[i] = table.Name
+		}
+		return names
+	}())
+	if len(result.Enums) > 0 {
+		fmt.Printf("⚠️  Enums to be dropped: %v\n", func() []string {
+			names := make([]string, len(result.Enums))
+			for i, enum := range result.Enums {
+				names[i] = enum.Name
+			}
+			return names
+		}())
+	}
+	fmt.Println()
+	fmt.Print("Type 'YES' to confirm: ")
+
+	confirmation, err := readLine()
+	if err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+		return
+	}
+
+	if confirmation != "YES" {
+		fmt.Println("Operation cancelled.")
+		return
+	}
+
+	// 4. Drop schema
+	fmt.Println("Dropping schema from database...")
+	err = conn.Writer.DropSchema(result)
+	if err != nil {
+		fmt.Printf("Error dropping schema: %v\n", err)
+		return
+	}
+
+	fmt.Println("✅ Schema dropped successfully!")
+}
+
+// dropAllTables drops ALL tables and enums from the database (COMPLETE CLEANUP!)
+func dropAllTables(dbURL string) {
+	fmt.Printf("Dropping ALL tables and enums from database %s\n", dbschema.FormatDatabaseURL(dbURL))
+	fmt.Println("=== DROP ALL TABLES FROM DATABASE ===")
+	fmt.Println()
+
+	// 1. Connect to database
+	conn, err := dbschema.ConnectToDatabase(dbURL)
+	if err != nil {
+		fmt.Printf("Error connecting to database: %v\n", err)
+		return
+	}
+	defer conn.Close()
+
+	fmt.Printf("Connected to %s database successfully!\n", conn.Info.Dialect)
+	fmt.Println()
+
+	// 2. Show extreme warning and ask for confirmation
+	fmt.Println("🚨 EXTREME WARNING: This operation will permanently delete ALL tables and enums!")
+	fmt.Println("🚨 This will delete EVERYTHING in the database, not just your Go entities!")
+	fmt.Println("🚨 This action cannot be undone!")
+	fmt.Println("🚨 ALL DATA WILL BE LOST!")
+	fmt.Println()
+	fmt.Print("Type 'DELETE EVERYTHING' to confirm this destructive operation: ")
+
+	confirmation, err := readLine()
+	if err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+		return
+	}
+
+	if confirmation != "DELETE EVERYTHING" {
+		fmt.Println("Operation cancelled.")
+		return
+	}
+
+	fmt.Println()
+	fmt.Print("⚠️  Last chance! Type 'YES I AM SURE' to proceed: ")
+	confirmation, err = readLine()
+	if err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+		return
+	}
+
+	if confirmation != "YES I AM SURE" {
+		fmt.Println("Operation cancelled.")
+		return
+	}
+
+	// 3. Drop all tables and enums
+	fmt.Println("Dropping all tables and enums from database...")
+	err = conn.Writer.DropAllTables()
+	if err != nil {
+		fmt.Printf("Error dropping all tables: %v\n", err)
+		return
+	}
+
+	fmt.Println("✅ All tables and enums dropped successfully!")
+	fmt.Println("🔥 Database is now completely empty!")
+}
+
+// readLine reads a complete line from stdin, including spaces
+func readLine() (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	// Remove the trailing newline
+	return strings.TrimSpace(line), nil
 }
