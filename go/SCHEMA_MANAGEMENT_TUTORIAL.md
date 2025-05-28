@@ -128,26 +128,30 @@ Generate SQL schema from your Go entities without touching any database. This is
 
 #### Command Syntax
 ```bash
-go run ./cmd/package-migrator generate <directory> [dialect]
+go run ./cmd/package-migrator generate [flags]
 ```
+
+#### Available Flags
+- `--root-dir string`: Root directory to scan for Go entities (default "./")
+- `--dialect string`: Database dialect (postgres, mysql, mariadb). If empty, generates for all dialects
 
 #### Examples
 
 **Generate for all supported databases:**
 ```bash
-go run ./cmd/package-migrator generate ./models
+go run ./cmd/package-migrator generate --root-dir ./models
 ```
 
 **Generate for specific database:**
 ```bash
 # PostgreSQL
-go run ./cmd/package-migrator generate ./models postgres
+go run ./cmd/package-migrator generate --root-dir ./models --dialect postgres
 
 # MySQL
-go run ./cmd/package-migrator generate ./models mysql
+go run ./cmd/package-migrator generate --root-dir ./models --dialect mysql
 
 # MariaDB
-go run ./cmd/package-migrator generate ./models mariadb
+go run ./cmd/package-migrator generate --root-dir ./models --dialect mariadb
 ```
 
 #### Sample Output
@@ -218,24 +222,28 @@ Write the generated schema directly to a database. This operation:
 
 #### Command Syntax
 ```bash
-go run ./cmd/package-migrator write-db <directory> <database_url>
+go run ./cmd/package-migrator write-db [flags]
 ```
+
+#### Available Flags
+- `--root-dir string`: Root directory to scan for Go entities (default "./")
+- `--db-url string`: Database URL (required). Example: postgres://user:pass@localhost/db
 
 #### Examples
 
 **PostgreSQL:**
 ```bash
-go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator write-db --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **MySQL:**
 ```bash
-go run ./cmd/package-migrator write-db ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator write-db --root-dir ./models --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 **MariaDB:**
 ```bash
-go run ./cmd/package-migrator write-db ./models mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator write-db --root-dir ./models --db-url mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 #### Sample Output
@@ -273,24 +281,27 @@ Read and display the complete schema from an existing database. This shows:
 
 #### Command Syntax
 ```bash
-go run ./cmd/package-migrator read-db <database_url>
+go run ./cmd/package-migrator read-db [flags]
 ```
+
+#### Available Flags
+- `--db-url string`: Database URL (required). Example: postgres://user:pass@localhost/db
 
 #### Examples
 
 **PostgreSQL:**
 ```bash
-go run ./cmd/package-migrator read-db postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator read-db --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **MySQL:**
 ```bash
-go run ./cmd/package-migrator read-db mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator read-db --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 **MariaDB:**
 ```bash
-go run ./cmd/package-migrator read-db mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator read-db --db-url mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 #### Sample Output
@@ -410,24 +421,28 @@ Compare your Go entity definitions with the current database schema to identify 
 
 #### Command Syntax
 ```bash
-go run ./cmd/package-migrator compare <directory> <database_url>
+go run ./cmd/package-migrator compare [flags]
 ```
+
+#### Available Flags
+- `--root-dir string`: Root directory to scan for Go entities (default "./")
+- `--db-url string`: Database URL (required). Example: postgres://user:pass@localhost/db
 
 #### Examples
 
 **PostgreSQL:**
 ```bash
-go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator compare --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **MySQL:**
 ```bash
-go run ./cmd/package-migrator compare ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator compare --root-dir ./models --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 **MariaDB:**
 ```bash
-go run ./cmd/package-migrator compare ./models mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator compare --root-dir ./models --db-url mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 #### Sample Output
@@ -485,24 +500,28 @@ Generate migration SQL to update the database schema to match your Go entity def
 
 #### Command Syntax
 ```bash
-go run ./cmd/package-migrator migrate <directory> <database_url>
+go run ./cmd/package-migrator migrate [flags]
 ```
+
+#### Available Flags
+- `--root-dir string`: Root directory to scan for Go entities (default "./")
+- `--db-url string`: Database URL (required). Example: postgres://user:pass@localhost/db
 
 #### Examples
 
 **PostgreSQL:**
 ```bash
-go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator migrate --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **MySQL:**
 ```bash
-go run ./cmd/package-migrator migrate ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator migrate --root-dir ./models --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 **MariaDB:**
 ```bash
-go run ./cmd/package-migrator migrate ./models mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator migrate --root-dir ./models --db-url mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 #### Sample Output
@@ -593,7 +612,7 @@ The tool generates SQL but doesn't automatically apply it. You should:
 **PostgreSQL:**
 ```bash
 # Save migration to file
-go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable > migration.sql
+go run ./cmd/package-migrator migrate --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable > migration.sql
 
 # Apply using psql
 psql -h localhost -U inventario -d inventario -f migration.sql
@@ -602,7 +621,7 @@ psql -h localhost -U inventario -d inventario -f migration.sql
 **MySQL:**
 ```bash
 # Save migration to file
-go run ./cmd/package-migrator migrate ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario > migration.sql
+go run ./cmd/package-migrator migrate --root-dir ./models --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario > migration.sql
 
 # Apply using mysql client
 mysql -h localhost -u inventario -p inventario < migration.sql
@@ -632,13 +651,20 @@ Drop ALL tables and enums in the entire database, regardless of whether they're 
 
 #### Drop Schema Command Syntax
 ```bash
-go run ./cmd/package-migrator drop-schema <directory> <database_url>
+go run ./cmd/package-migrator drop-schema [flags]
 ```
+
+#### Available Flags for drop-schema
+- `--root-dir string`: Root directory to scan for Go entities (default "./")
+- `--db-url string`: Database URL (required). Example: postgres://user:pass@localhost/db
 
 #### Drop All Tables Command Syntax
 ```bash
-go run ./cmd/package-migrator drop-all <database_url>
+go run ./cmd/package-migrator drop-all [flags]
 ```
+
+#### Available Flags for drop-all
+- `--db-url string`: Database URL (required). Example: postgres://user:pass@localhost/db
 
 #### Examples
 
@@ -646,34 +672,34 @@ go run ./cmd/package-migrator drop-all <database_url>
 
 PostgreSQL:
 ```bash
-go run ./cmd/package-migrator drop-schema ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator drop-schema --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 MySQL:
 ```bash
-go run ./cmd/package-migrator drop-schema ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator drop-schema --root-dir ./models --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 MariaDB:
 ```bash
-go run ./cmd/package-migrator drop-schema ./models mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator drop-schema --root-dir ./models --db-url mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 **Drop All Tables (Complete cleanup):**
 
 PostgreSQL:
 ```bash
-go run ./cmd/package-migrator drop-all postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator drop-all --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 MySQL:
 ```bash
-go run ./cmd/package-migrator drop-all mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator drop-all --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 MariaDB:
 ```bash
-go run ./cmd/package-migrator drop-all mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator drop-all --db-url mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 #### Sample Output
@@ -826,19 +852,19 @@ type User struct {
 **Step 2: Generate and review schema**
 ```bash
 # Review what will be created
-go run ./cmd/package-migrator generate ./models postgres
+go run ./cmd/package-migrator generate --root-dir ./models --dialect postgres
 ```
 
 **Step 3: Create database schema**
 ```bash
 # Create the schema in your database
-go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator write-db --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **Step 4: Verify creation**
 ```bash
 # Confirm everything was created correctly
-go run ./cmd/package-migrator read-db postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator read-db --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 ### Example 2: Adding New Features
@@ -869,13 +895,13 @@ type Order struct {
 **Step 2: Check what changed**
 ```bash
 # See what needs to be updated
-go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator compare --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 ```
 
 **Step 3: Generate migration**
 ```bash
 # Generate SQL to apply changes
-go run ./cmd/package-migrator migrate ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable > migration.sql
+go run ./cmd/package-migrator migrate --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable > migration.sql
 ```
 
 **Step 4: Review and apply migration**
@@ -890,7 +916,7 @@ psql -h localhost -U user -d myapp -f migration.sql
 **Step 5: Verify changes**
 ```bash
 # Confirm changes were applied
-go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator compare --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 # Should show "NO SCHEMA CHANGES DETECTED"
 ```
 
@@ -899,25 +925,25 @@ go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_
 **Generate for all databases:**
 ```bash
 # PostgreSQL
-go run ./cmd/package-migrator write-db ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator write-db --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 
 # MySQL
-go run ./cmd/package-migrator write-db ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator write-db --root-dir ./models --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 
 # MariaDB
-go run ./cmd/package-migrator write-db ./models mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator write-db --root-dir ./models --db-url mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 **Compare across databases:**
 ```bash
 # Check PostgreSQL
-go run ./cmd/package-migrator compare ./models postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
+go run ./cmd/package-migrator compare --root-dir ./models --db-url postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable
 
 # Check MySQL
-go run ./cmd/package-migrator compare ./models mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator compare --root-dir ./models --db-url mysql://inventario:inventario_password@tcp(localhost:3306)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 
 # Check MariaDB
-go run ./cmd/package-migrator compare ./models mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
+go run ./cmd/package-migrator compare --root-dir ./models --db-url mariadb://inventario:inventario_password@tcp(localhost:3307)/inventario?charset=utf8mb4&parseTime=True&loc=Local
 ```
 
 ## Advanced Features
