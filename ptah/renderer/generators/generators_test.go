@@ -690,7 +690,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := generators.GenerateAlterStatements(tt.oldFields, tt.newFields, platform.PlatformTypePostgres)
+			result := generators.GenerateAlterStatements(tt.oldFields, tt.newFields, platform.Postgres)
 
 			for _, expected := range tt.contains {
 				c.Assert(result, qt.Contains, expected, qt.Commentf("Expected to contain: %s", expected))
@@ -771,7 +771,7 @@ func TestGenerateAlterStatements_UnhappyPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := generators.GenerateAlterStatements(tt.oldFields, tt.newFields, platform.PlatformTypePostgres)
+			result := generators.GenerateAlterStatements(tt.oldFields, tt.newFields, platform.Postgres)
 
 			for _, notExpected := range tt.notContains {
 				c.Assert(result, qt.Not(qt.Contains), notExpected, qt.Commentf("Expected NOT to contain: %s", notExpected))
@@ -844,7 +844,7 @@ func TestGenerateAlterStatementsWithEnums(t *testing.T) {
 		},
 	}
 
-	alterSQL := generators.GenerateAlterStatements(oldFields, newFields, platform.PlatformTypePostgres)
+	alterSQL := generators.GenerateAlterStatements(oldFields, newFields, platform.Postgres)
 
 	// Verify alter statements contain expected changes
 	c.Assert(alterSQL, qt.Contains, "ALTER TABLE Product ALTER COLUMN status TYPE enum_product_status_v2;")

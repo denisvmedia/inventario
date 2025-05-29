@@ -110,11 +110,11 @@ type DialectGenerator interface {
 // Returns a DialectGenerator implementation appropriate for the specified dialect.
 func GetDialectGenerator(dialect string) DialectGenerator {
 	switch dialect {
-	case platform.PlatformTypePostgres:
+	case platform.Postgres:
 		return postgresql.New()
-	case platform.PlatformTypeMySQL:
+	case platform.MySQL:
 		return mysql.New()
-	case platform.PlatformTypeMariaDB:
+	case platform.MariaDB:
 		return mariadb.New()
 	default:
 		// For unknown dialects, use a generic generator that doesn't apply dialect-specific transformations

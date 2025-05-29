@@ -33,7 +33,7 @@ func main() {
 	fmt.Println(generators.GenerateAlterStatements([]meta.SchemaField{
 		{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: true},
 		{StructName: "User", Name: "name", Type: "TEXT", Nullable: false},
-	}, fields, platform.PlatformTypePostgres))
+	}, fields, platform.Postgres))
 
 	for _, e := range emb {
 		fmt.Printf(`Embedded: %+v

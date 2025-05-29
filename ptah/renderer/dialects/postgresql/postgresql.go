@@ -17,7 +17,7 @@ type Generator struct {
 // New creates a new PostgreSQL generator
 func New() *Generator {
 	return &Generator{
-		Generator: base.NewGenerator(platform.PlatformTypePostgres),
+		Generator: base.NewGenerator(platform.Postgres),
 		renderer:  renderer.NewPostgreSQLRenderer(),
 	}
 }
@@ -42,7 +42,7 @@ func (g *Generator) convertFieldToColumn(field meta.SchemaField, enums []meta.Gl
 	}
 
 	// Check for platform-specific type override (takes precedence over auto-increment conversion)
-	if dialectAttrs, ok := field.Overrides[platform.PlatformTypePostgres]; ok {
+	if dialectAttrs, ok := field.Overrides[platform.Postgres]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
 		}

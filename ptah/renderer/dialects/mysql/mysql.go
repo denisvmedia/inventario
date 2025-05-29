@@ -17,7 +17,7 @@ type Generator struct {
 // New creates a new MySQL generator
 func New() *Generator {
 	return &Generator{
-		Generator: base.NewGenerator(platform.PlatformTypeMySQL),
+		Generator: base.NewGenerator(platform.MySQL),
 		renderer:  renderer.NewMySQLRenderer(),
 	}
 }
@@ -34,7 +34,7 @@ func (g *Generator) convertFieldToColumn(field meta.SchemaField, enums []meta.Gl
 	}
 
 	// Check for platform-specific type override
-	if dialectAttrs, ok := field.Overrides[platform.PlatformTypeMySQL]; ok {
+	if dialectAttrs, ok := field.Overrides[platform.MySQL]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
 		}
@@ -72,7 +72,7 @@ func (g *Generator) convertFieldToColumn(field meta.SchemaField, enums []meta.Gl
 
 	// Handle check constraint with platform-specific override
 	checkConstraint := field.Check
-	if dialectAttrs, ok := field.Overrides[platform.PlatformTypeMySQL]; ok {
+	if dialectAttrs, ok := field.Overrides[platform.MySQL]; ok {
 		if checkOverride, ok := dialectAttrs["check"]; ok {
 			checkConstraint = checkOverride
 		}
@@ -103,7 +103,7 @@ func (g *Generator) convertTableDirectiveToAST(table meta.TableDirective, fields
 	}
 
 	// Handle MySQL-specific table options
-	if dialectAttrs, ok := table.Overrides[platform.PlatformTypeMySQL]; ok {
+	if dialectAttrs, ok := table.Overrides[platform.MySQL]; ok {
 		// Handle ENGINE option
 		if engine, ok := dialectAttrs["engine"]; ok {
 			createTable.SetOption("ENGINE", engine)

@@ -225,6 +225,6 @@ func TestDialectGenerators_BackwardCompatibility(t *testing.T) {
 		},
 	}
 
-	alterResult := generators.GenerateAlterStatements(oldFields, newFields, platform.PlatformTypePostgres)
+	alterResult := generators.GenerateAlterStatements(oldFields, newFields, platform.Postgres)
 	c.Assert(alterResult, qt.Contains, "ALTER TABLE User ADD COLUMN email VARCHAR(255) NOT NULL;")
 }

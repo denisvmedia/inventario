@@ -1,7 +1,7 @@
 package platform
 
 const (
-	PlatformTypePostgres = "postgres"
-	PlatformTypeMySQL    = "mysql"
-	PlatformTypeMariaDB  = "mariadb"
+	Postgres = "postgres"
+	MySQL    = "mysql"
+	MariaDB  = "mariadb"
 )

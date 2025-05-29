@@ -17,7 +17,7 @@ type Generator struct {
 // New creates a new MariaDB generator
 func New() *Generator {
 	return &Generator{
-		Generator: base.NewGenerator(platform.PlatformTypeMariaDB),
+		Generator: base.NewGenerator(platform.MariaDB),
 		renderer:  renderer.NewMariaDBRenderer(),
 	}
 }
@@ -27,11 +27,11 @@ func (g *Generator) convertFieldToColumn(field meta.SchemaField, enums []meta.Gl
 	ftype := field.Type
 
 	// Check for platform-specific type override (MariaDB-specific first, then MySQL fallback)
-	if dialectAttrs, ok := field.Overrides[platform.PlatformTypeMariaDB]; ok {
+	if dialectAttrs, ok := field.Overrides[platform.MariaDB]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
 		}
-	} else if dialectAttrs, ok := field.Overrides[platform.PlatformTypeMySQL]; ok {
+	} else if dialectAttrs, ok := field.Overrides[platform.MySQL]; ok {
 		// Fallback to MySQL overrides if no MariaDB-specific ones
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
@@ -70,11 +70,11 @@ func (g *Generator) convertFieldToColumn(field meta.SchemaField, enums []meta.Gl
 
 	// Handle check constraint with platform-specific override (MariaDB-specific first, then MySQL fallback)
 	checkConstraint := field.Check
-	if dialectAttrs, ok := field.Overrides[platform.PlatformTypeMariaDB]; ok {
+	if dialectAttrs, ok := field.Overrides[platform.MariaDB]; ok {
 		if checkOverride, ok := dialectAttrs["check"]; ok {
 			checkConstraint = checkOverride
 		}
-	} else if dialectAttrs, ok := field.Overrides[platform.PlatformTypeMySQL]; ok {
+	} else if dialectAttrs, ok := field.Overrides[platform.MySQL]; ok {
 		// Fallback to MySQL overrides if no MariaDB-specific ones
 		if checkOverride, ok := dialectAttrs["check"]; ok {
 			checkConstraint = checkOverride
@@ -106,7 +106,7 @@ func (g *Generator) convertTableDirectiveToAST(table meta.TableDirective, fields
 	}
 
 	// Handle MariaDB-specific table options (try MariaDB first, then MySQL fallback)
-	if dialectAttrs, ok := table.Overrides[platform.PlatformTypeMariaDB]; ok {
+	if dialectAttrs, ok := table.Overrides[platform.MariaDB]; ok {
 		// Handle ENGINE option
 		if engine, ok := dialectAttrs["engine"]; ok {
 			createTable.SetOption("ENGINE", engine)
@@ -123,7 +123,7 @@ func (g *Generator) convertTableDirectiveToAST(table meta.TableDirective, fields
 				createTable.SetOption(k, v)
 			}
 		}
-	} else if dialectAttrs, ok := table.Overrides[platform.PlatformTypeMySQL]; ok {
+	} else if dialectAttrs, ok := table.Overrides[platform.MySQL]; ok {
 		// Fallback to MySQL options if no MariaDB-specific ones
 		// Handle ENGINE option
 		if engine, ok := dialectAttrs["engine"]; ok {
