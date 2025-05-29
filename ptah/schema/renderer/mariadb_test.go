@@ -69,7 +69,9 @@ func TestMariaDBRenderer_VisitCreateTable(t *testing.T) {
 	c.Assert(output, qt.Contains, "CREATE TABLE users (")
 	c.Assert(output, qt.Contains, "id INTEGER PRIMARY KEY AUTO_INCREMENT")
 	c.Assert(output, qt.Contains, "email VARCHAR(255) NOT NULL UNIQUE")
-	c.Assert(output, qt.Contains, "); ENGINE=InnoDB CHARSET=utf8mb4")
+	// Check both options are present (order may vary)
+	c.Assert(output, qt.Contains, "ENGINE=InnoDB")
+	c.Assert(output, qt.Contains, "CHARSET=utf8mb4")
 }
 
 func TestMariaDBRenderer_VisitCreateTable_WithComment(t *testing.T) {
@@ -344,4 +346,365 @@ func TestMariaDBRenderer_InheritsFromMySQL(t *testing.T) {
 	// MariaDB uses the base renderer, not MySQL's enhanced conversion
 	// So it should keep NOW() as-is
 	c.Assert(output, qt.Contains, "DEFAULT NOW()")
+}
+
+func TestMariaDBRenderer_RenderColumnWithEnums_ComprehensivePaths(t *testing.T) {
+	tests := []struct {
+		name       string
+		column     *ast.ColumnNode
+		enumValues []string
+		expected   []string
+	}{
+		{
+			name: "Non-primary key with auto increment",
+			column: &ast.ColumnNode{
+				Name:     "sequence_id",
+				Type:     "INTEGER",
+				Primary:  false,
+				AutoInc:  true,
+				Nullable: false,
+				Unique:   true,
+			},
+			expected: []string{"sequence_id INTEGER", "NOT NULL", "UNIQUE", "AUTO_INCREMENT"},
+		},
+		{
+			name: "Column with all constraints",
+			column: &ast.ColumnNode{
+				Name:     "status",
+				Type:     "status",
+				Primary:  false,
+				Nullable: false,
+				Unique:   true,
+				Check:    "status IN ('active', 'inactive')",
+				Comment:  "User status field",
+				Default: &ast.DefaultValue{
+					Value: "active",
+				},
+			},
+			enumValues: []string{"active", "inactive", "pending"},
+			expected: []string{
+				"status ENUM('active', 'inactive', 'pending')",
+				"NOT NULL",
+				"UNIQUE",
+				"DEFAULT 'active'",
+				"CHECK (status IN ('active', 'inactive'))",
+				"COMMENT 'User status field'",
+			},
+		},
+		{
+			name: "Primary key with auto increment and comment",
+			column: &ast.ColumnNode{
+				Name:     "id",
+				Type:     "INTEGER",
+				Primary:  true,
+				AutoInc:  true,
+				Nullable: false,
+				Comment:  "Primary key identifier",
+			},
+			expected: []string{
+				"id INTEGER",
+				"PRIMARY KEY",
+				"AUTO_INCREMENT",
+				"COMMENT 'Primary key identifier'",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			renderer := renderer.NewMariaDBRenderer()
+
+			table := &ast.CreateTableNode{
+				Name:    "test_table",
+				Columns: []*ast.ColumnNode{tt.column},
+			}
+
+			enums := make(map[string][]string)
+			if len(tt.enumValues) > 0 {
+				enums[tt.column.Type] = tt.enumValues
+			}
+
+			err := renderer.VisitCreateTableWithEnums(table, enums)
+			c.Assert(err, qt.IsNil)
+
+			output := renderer.GetOutput()
+			for _, expected := range tt.expected {
+				c.Assert(output, qt.Contains, expected, qt.Commentf("Expected %q in output", expected))
+			}
+		})
+	}
+}
+
+func TestMariaDBRenderer_VisitCreateTableWithEnums_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		table    *ast.CreateTableNode
+		enums    map[string][]string
+		expected []string
+	}{
+		{
+			name: "Table with comment and constraints",
+			table: &ast.CreateTableNode{
+				Name:    "users",
+				Comment: "User accounts table",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+					{Name: "email", Type: "VARCHAR(255)", Nullable: false, Unique: true},
+				},
+				Constraints: []*ast.ConstraintNode{
+					{
+						Type:       ast.CheckConstraint,
+						Name:       "chk_email_format",
+						Expression: "email LIKE '%@%'",
+					},
+				},
+			},
+			expected: []string{
+				"-- MARIADB TABLE: users (User accounts table) --",
+				"CONSTRAINT chk_email_format CHECK (email LIKE '%@%')",
+			},
+		},
+		{
+			name: "Table with no options",
+			table: &ast.CreateTableNode{
+				Name: "simple_table",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+				},
+				// No Options field set
+			},
+			expected: []string{
+				"-- MARIADB TABLE: simple_table --",
+				"CREATE TABLE simple_table (",
+				"id INTEGER PRIMARY KEY",
+				"\n);", // Should end with just );
+			},
+		},
+		{
+			name: "Table with empty options map",
+			table: &ast.CreateTableNode{
+				Name: "empty_options_table",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+				},
+				Options: map[string]string{}, // Empty options
+			},
+			expected: []string{
+				"-- MARIADB TABLE: empty_options_table --",
+				"id INTEGER PRIMARY KEY",
+				"\n);", // Should end with just );
+			},
+		},
+		{
+			name: "Table with options that have values",
+			table: &ast.CreateTableNode{
+				Name: "options_table",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+				},
+				Options: map[string]string{
+					"ENGINE":  "InnoDB",
+					"CHARSET": "utf8mb4",
+				},
+			},
+			expected: []string{
+				"-- MARIADB TABLE: options_table --",
+				"id INTEGER PRIMARY KEY",
+				"ENGINE=InnoDB", // Should have options (order may vary)
+				"CHARSET=utf8mb4",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			renderer := renderer.NewMariaDBRenderer()
+			err := renderer.VisitCreateTableWithEnums(tt.table, tt.enums)
+			c.Assert(err, qt.IsNil)
+
+			output := renderer.GetOutput()
+			for _, expected := range tt.expected {
+				c.Assert(output, qt.Contains, expected, qt.Commentf("Expected %q in output", expected))
+			}
+		})
+	}
+}
+
+func TestMariaDBRenderer_VisitCreateTable_ConstraintRendering(t *testing.T) {
+	tests := []struct {
+		name     string
+		table    *ast.CreateTableNode
+		expected []string
+	}{
+		{
+			name: "Table with constraints using regular VisitCreateTable",
+			table: &ast.CreateTableNode{
+				Name: "users_with_constraints",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+					{Name: "email", Type: "VARCHAR(255)", Nullable: false},
+				},
+				Constraints: []*ast.ConstraintNode{
+					{
+						Type:    ast.UniqueConstraint,
+						Name:    "uk_users_email",
+						Columns: []string{"email"},
+					},
+					{
+						Type:       ast.CheckConstraint,
+						Name:       "chk_email_format",
+						Expression: "email LIKE '%@%'",
+					},
+					{
+						Type:    ast.ForeignKeyConstraint,
+						Name:    "fk_user_profile",
+						Columns: []string{"id"},
+						Reference: &ast.ForeignKeyRef{
+							Table:    "profiles",
+							Column:   "user_id",
+							OnDelete: "CASCADE",
+						},
+					},
+				},
+			},
+			expected: []string{
+				"-- MARIADB TABLE: users_with_constraints --",
+				"CONSTRAINT uk_users_email UNIQUE (email)",
+				"CONSTRAINT chk_email_format CHECK (email LIKE '%@%')",
+				"CONSTRAINT fk_user_profile FOREIGN KEY (id) REFERENCES profiles(user_id) ON DELETE CASCADE",
+			},
+		},
+		{
+			name: "Table with empty constraint that returns empty string",
+			table: &ast.CreateTableNode{
+				Name: "test_empty_constraint",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+				},
+				Constraints: []*ast.ConstraintNode{
+					{
+						Type:    ast.UniqueConstraint,
+						Columns: []string{"email"}, // Valid constraint
+					},
+				},
+			},
+			expected: []string{
+				"-- MARIADB TABLE: test_empty_constraint --",
+				"UNIQUE (email)",
+			},
+		},
+		{
+			name: "Table with options that render to empty string",
+			table: &ast.CreateTableNode{
+				Name: "test_empty_options",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+				},
+				Options: map[string]string{
+					"EMPTY_OPTION": "", // This will render to "EMPTY_OPTION=" which is not empty
+				},
+			},
+			expected: []string{
+				"-- MARIADB TABLE: test_empty_options --",
+				"id INTEGER PRIMARY KEY",
+				"EMPTY_OPTION=",
+			},
+		},
+		{
+			name: "Table with no options (nil map)",
+			table: &ast.CreateTableNode{
+				Name: "test_no_options",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+				},
+				// Options is nil
+			},
+			expected: []string{
+				"-- MARIADB TABLE: test_no_options --",
+				"id INTEGER PRIMARY KEY",
+				");", // Should end with just );
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			renderer := renderer.NewMariaDBRenderer()
+			// Use the regular VisitCreateTable method, not VisitCreateTableWithEnums
+			err := renderer.VisitCreateTable(tt.table)
+			c.Assert(err, qt.IsNil)
+
+			output := renderer.GetOutput()
+			for _, expected := range tt.expected {
+				c.Assert(output, qt.Contains, expected, qt.Commentf("Expected %q in output", expected))
+			}
+		})
+	}
+}
+
+func TestMariaDBRenderer_VisitCreateTable_OptionsPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  map[string]string
+		expected []string
+		notExpected []string
+	}{
+		{
+			name: "Options that produce non-empty string",
+			options: map[string]string{
+				"ENGINE":  "InnoDB",
+				"CHARSET": "utf8mb4",
+			},
+			expected: []string{
+				"ENGINE=InnoDB",
+				"CHARSET=utf8mb4",
+			},
+			notExpected: []string{
+				"\n);\n", // Should not end with just ); on its own line
+			},
+		},
+		{
+			name: "Empty options map",
+			options: map[string]string{},
+			expected: []string{
+				");", // Should end with just );
+			},
+			notExpected: []string{
+				"ENGINE=",
+				"CHARSET=",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			renderer := renderer.NewMariaDBRenderer()
+			table := &ast.CreateTableNode{
+				Name: "test_table",
+				Columns: []*ast.ColumnNode{
+					{Name: "id", Type: "INTEGER", Primary: true},
+				},
+				Options: tt.options,
+			}
+
+			err := renderer.VisitCreateTable(table)
+			c.Assert(err, qt.IsNil)
+
+			output := renderer.GetOutput()
+			for _, expected := range tt.expected {
+				c.Assert(output, qt.Contains, expected, qt.Commentf("Expected %q in output", expected))
+			}
+			for _, notExpected := range tt.notExpected {
+				c.Assert(output, qt.Not(qt.Contains), notExpected, qt.Commentf("Did not expect %q in output", notExpected))
+			}
+		})
+	}
 }

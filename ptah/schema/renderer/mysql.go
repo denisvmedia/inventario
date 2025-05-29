@@ -332,9 +332,12 @@ func (r *MySQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, enu
 
 	// Render columns with enum support
 	for _, column := range node.Columns {
-		var enumValues []string
-		if enums != nil {
-			enumValues = enums[column.Type] // Check if column type is an enum
+		// Always get enum values, the method handles nil enums internally
+		enumValues := r.getEnumValues(column.Type, enums)
+
+		// Only use enum values if the type is actually an enum
+		if !r.isEnumType(column.Type, enums) {
+			enumValues = nil
 		}
 
 		line, err := r.renderColumnWithEnums(column, enumValues)
