@@ -1,6 +1,6 @@
-# Testing PostgreSQL Schema Reading
+# Testing Ptah Database Schema Functionality
 
-This guide shows how to test the PostgreSQL schema reading functionality with a real database.
+This guide shows how to test the Ptah database schema reading, writing, and comparison functionality with real databases.
 
 ## Quick Test with Docker
 
@@ -82,8 +82,8 @@ INSERT INTO products (name, sku, price, category_id) VALUES
 ### 3. Test Schema Reading
 
 ```bash
-# From the go directory
-go run ./cmd/package-migrator read-db postgres://postgres:testpass@localhost:5432/testdb
+# From the project root directory
+go run ./ptah/cmd read-db --db-url postgres://postgres:testpass@localhost:5432/testdb
 ```
 
 ### 4. Expected Output
@@ -179,7 +179,42 @@ If you have an existing PostgreSQL database, you can test with it directly:
 
 ```bash
 # Replace with your actual database credentials
-go run ./cmd/package-migrator read-db postgres://username:password@host:port/database_name
+go run ./ptah/cmd read-db --db-url postgres://username:password@host:port/database_name
+```
+
+## Testing Additional Functionality
+
+### Schema Writing
+
+Test writing a schema from Go entities to the database:
+
+```bash
+# Write schema from Go entities (requires entity files)
+go run ./ptah/cmd write-db --root-dir ./models --db-url postgres://postgres:testpass@localhost:5432/testdb
+```
+
+### Schema Comparison
+
+Test comparing generated schema with database:
+
+```bash
+# Compare schemas
+go run ./ptah/cmd compare --root-dir ./models --db-url postgres://postgres:testpass@localhost:5432/testdb
+```
+
+### MySQL Testing
+
+Test with MySQL/MariaDB:
+
+```bash
+# Start MySQL container
+docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=testpass -e MYSQL_DATABASE=testdb -p 3306:3306 -d mysql:8.0
+
+# Read MySQL schema
+go run ./ptah/cmd read-db --db-url mysql://root:testpass@tcp(localhost:3306)/testdb
+
+# Cleanup
+docker stop test-mysql && docker rm test-mysql
 ```
 
 ## Troubleshooting

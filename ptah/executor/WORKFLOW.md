@@ -1,15 +1,15 @@
 # Complete Database Schema Management Workflow
 
-This document describes the complete workflow for managing database schemas with the package-migrator tool.
+This document describes the complete workflow for managing database schemas with the **Ptah** schema management tool.
 
 ## Overview
 
-The package-migrator now supports a complete database schema management lifecycle:
+Ptah supports a complete database schema management lifecycle:
 
 1. **Generate** → Create SQL schema from Go entities
 2. **Write** → Write schema to database (initial setup)
-3. **Update** → Modify your Go entities
-4. **Compare** → Compare current database with updated entities
+3. **Read** → Read and display current database schema
+4. **Compare** → Compare current database with Go entities
 5. **Migrate** → Generate migration SQL for differences
 6. **Drop Schema** → Drop tables/enums from Go entities (DANGEROUS!)
 7. **Drop All** → Drop ALL tables and enums in database (VERY DANGEROUS!)
@@ -22,12 +22,12 @@ Generate SQL schema from Go entities without touching the database:
 
 ```bash
 # Generate for all dialects
-go run ./cmd/package-migrator generate ./models
+go run ./ptah/cmd generate --root-dir ./models
 
 # Generate for specific dialect
-go run ./cmd/package-migrator generate ./models postgres
-go run ./cmd/package-migrator generate ./models mysql
-go run ./cmd/package-migrator generate ./models mariadb
+go run ./ptah/cmd generate --root-dir ./models --dialect postgres
+go run ./ptah/cmd generate --root-dir ./models --dialect mysql
+go run ./ptah/cmd generate --root-dir ./models --dialect mariadb
 ```
 
 **Output**: SQL statements printed to console
@@ -37,7 +37,7 @@ go run ./cmd/package-migrator generate ./models mariadb
 Write the generated schema directly to a database:
 
 ```bash
-go run ./cmd/package-migrator write-db ./models postgres://user:pass@localhost/db
+go run ./ptah/cmd write-db --root-dir ./models --db-url postgres://user:pass@localhost/db
 ```
 
 **Features**:
@@ -52,7 +52,7 @@ go run ./cmd/package-migrator write-db ./models postgres://user:pass@localhost/d
 Read and display the current database schema:
 
 ```bash
-go run ./cmd/package-migrator read-db postgres://user:pass@localhost/db
+go run ./ptah/cmd read-db --db-url postgres://user:pass@localhost/db
 ```
 
 **Output**: Complete schema information including tables, columns, constraints, indexes, and enums
@@ -62,7 +62,7 @@ go run ./cmd/package-migrator read-db postgres://user:pass@localhost/db
 Compare your Go entities with the current database schema:
 
 ```bash
-go run ./cmd/package-migrator compare ./models postgres://user:pass@localhost/db
+go run ./ptah/cmd compare --root-dir ./models --db-url postgres://user:pass@localhost/db
 ```
 
 **Output**: Detailed differences showing what needs to be added, removed, or modified
@@ -72,7 +72,7 @@ go run ./cmd/package-migrator compare ./models postgres://user:pass@localhost/db
 Generate migration SQL to update the database to match your entities:
 
 ```bash
-go run ./cmd/package-migrator migrate ./models postgres://user:pass@localhost/db
+go run ./ptah/cmd migrate --root-dir ./models --db-url postgres://user:pass@localhost/db
 ```
 
 **Output**: SQL statements to apply the changes
@@ -82,7 +82,7 @@ go run ./cmd/package-migrator migrate ./models postgres://user:pass@localhost/db
 Drop tables and enums defined in your Go entities:
 
 ```bash
-go run ./cmd/package-migrator drop-schema ./models postgres://user:pass@localhost/db
+go run ./ptah/cmd drop-schema --root-dir ./models --db-url postgres://user:pass@localhost/db
 ```
 
 **Features**:
@@ -101,7 +101,7 @@ go run ./cmd/package-migrator drop-schema ./models postgres://user:pass@localhos
 Drop ALL tables and enums in the entire database:
 
 ```bash
-go run ./cmd/package-migrator drop-all postgres://user:pass@localhost/db
+go run ./ptah/cmd drop-all --db-url postgres://user:pass@localhost/db
 ```
 
 **Features**:
@@ -139,13 +139,13 @@ type User struct {
 2. **Generate and review the schema**:
 
 ```bash
-go run ./cmd/package-migrator generate ./models postgres
+go run ./ptah/cmd generate --root-dir ./models --dialect postgres
 ```
 
 3. **Write the schema to your database**:
 
 ```bash
-go run ./cmd/package-migrator write-db ./models postgres://user:pass@localhost/mydb
+go run ./ptah/cmd write-db --root-dir ./models --db-url postgres://user:pass@localhost/mydb
 ```
 
 ### Step 2: Making Changes
@@ -173,7 +173,7 @@ type User struct {
 2. **Compare with the database**:
 
 ```bash
-go run ./cmd/package-migrator compare ./models postgres://user:pass@localhost/mydb
+go run ./ptah/cmd compare --root-dir ./models --db-url postgres://user:pass@localhost/mydb
 ```
 
 **Example Output**:
@@ -196,7 +196,7 @@ SUMMARY: 2 changes detected
 3. **Generate migration SQL**:
 
 ```bash
-go run ./cmd/package-migrator migrate ./models postgres://user:pass@localhost/mydb
+go run ./ptah/cmd migrate --root-dir ./models --db-url postgres://user:pass@localhost/mydb
 ```
 
 **Example Output**:
@@ -226,13 +226,13 @@ ALTER TABLE users ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW();
 1. **Read the updated schema**:
 
 ```bash
-go run ./cmd/package-migrator read-db postgres://user:pass@localhost/mydb
+go run ./ptah/cmd read-db --db-url postgres://user:pass@localhost/mydb
 ```
 
 2. **Compare again** (should show no differences):
 
 ```bash
-go run ./cmd/package-migrator compare ./models postgres://user:pass@localhost/mydb
+go run ./ptah/cmd compare --root-dir ./models --db-url postgres://user:pass@localhost/mydb
 ```
 
 **Expected Output**:
@@ -282,10 +282,15 @@ Comprehensive error messages for common issues:
 - Auto-increment (SERIAL) detection
 - Comments and metadata
 
-### MySQL/MariaDB 🚧
-- Schema reading: Coming soon
-- Schema writing: Coming soon
-- The infrastructure is ready, just need to implement MySQL-specific queries
+### MySQL/MariaDB ✅
+- Tables, views, columns
+- Primary keys, foreign keys, unique constraints
+- Check constraints (MySQL 8.0+)
+- Indexes (regular, unique, primary)
+- Enum types with values
+- Auto-increment detection
+- Full schema reading and writing
+- Schema comparison and migration generation
 
 ## Best Practices
 
@@ -318,5 +323,4 @@ Comprehensive error messages for common issues:
 - [ ] Migration versioning and history
 - [ ] Data migration support
 - [ ] Schema validation and linting
-- [ ] MySQL/MariaDB full support
 - [ ] Migration rollback generation
