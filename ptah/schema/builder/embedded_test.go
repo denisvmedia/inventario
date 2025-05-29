@@ -5,7 +5,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
 	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
@@ -101,9 +100,9 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
-			result := builder.ProcessEmbeddedFields(tt.embeddedFields, tt.allFields, tt.structName)
-			
+
+			result := meta.ProcessEmbeddedFields(tt.embeddedFields, tt.allFields, tt.structName)
+
 			c.Assert(len(result), qt.Equals, len(tt.expected))
 			for i, expected := range tt.expected {
 				c.Assert(result[i].StructName, qt.Equals, expected.StructName)
@@ -172,9 +171,9 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
-			result := builder.ProcessEmbeddedFields(tt.embeddedFields, nil, tt.structName)
-			
+
+			result := meta.ProcessEmbeddedFields(tt.embeddedFields, nil, tt.structName)
+
 			c.Assert(len(result), qt.Equals, len(tt.expected))
 			for i, expected := range tt.expected {
 				c.Assert(result[i].StructName, qt.Equals, expected.StructName)
@@ -250,9 +249,9 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
-			result := builder.ProcessEmbeddedFields(tt.embeddedFields, nil, tt.structName)
-			
+
+			result := meta.ProcessEmbeddedFields(tt.embeddedFields, nil, tt.structName)
+
 			c.Assert(len(result), qt.Equals, len(tt.expected))
 			for i, expected := range tt.expected {
 				c.Assert(result[i].StructName, qt.Equals, expected.StructName)
@@ -270,7 +269,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 
 func TestProcessEmbeddedFields_SkipMode(t *testing.T) {
 	c := qt.New(t)
-	
+
 	embeddedFields := []meta.EmbeddedField{
 		{
 			StructName:       "User",
@@ -278,15 +277,15 @@ func TestProcessEmbeddedFields_SkipMode(t *testing.T) {
 			EmbeddedTypeName: "Internal",
 		},
 	}
-	
-	result := builder.ProcessEmbeddedFields(embeddedFields, nil, "User")
-	
+
+	result := meta.ProcessEmbeddedFields(embeddedFields, nil, "User")
+
 	c.Assert(len(result), qt.Equals, 0)
 }
 
 func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 	c := qt.New(t)
-	
+
 	embeddedFields := []meta.EmbeddedField{
 		{
 			StructName:       "User",
@@ -294,7 +293,7 @@ func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 			EmbeddedTypeName: "Timestamps",
 		},
 	}
-	
+
 	allFields := []meta.SchemaField{
 		{
 			StructName: "Timestamps",
@@ -303,9 +302,9 @@ func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 			Type:       "TIMESTAMP",
 		},
 	}
-	
-	result := builder.ProcessEmbeddedFields(embeddedFields, allFields, "User")
-	
+
+	result := meta.ProcessEmbeddedFields(embeddedFields, allFields, "User")
+
 	c.Assert(len(result), qt.Equals, 1)
 	c.Assert(result[0].StructName, qt.Equals, "User")
 	c.Assert(result[0].Name, qt.Equals, "created_at")
@@ -313,7 +312,7 @@ func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 
 func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 	c := qt.New(t)
-	
+
 	embeddedFields := []meta.EmbeddedField{
 		{
 			StructName:       "User",
@@ -326,7 +325,7 @@ func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 			EmbeddedTypeName: "Timestamps",
 		},
 	}
-	
+
 	allFields := []meta.SchemaField{
 		{
 			StructName: "Timestamps",
@@ -335,16 +334,16 @@ func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 			Type:       "TIMESTAMP",
 		},
 	}
-	
-	result := builder.ProcessEmbeddedFields(embeddedFields, allFields, "User")
-	
+
+	result := meta.ProcessEmbeddedFields(embeddedFields, allFields, "User")
+
 	c.Assert(len(result), qt.Equals, 1) // Only User embedded field processed
 	c.Assert(result[0].StructName, qt.Equals, "User")
 }
 
 func TestProcessEmbeddedFields_RelationModeSkipsIncompleteFields(t *testing.T) {
 	c := qt.New(t)
-	
+
 	embeddedFields := []meta.EmbeddedField{
 		{
 			StructName:       "Post",
@@ -361,8 +360,8 @@ func TestProcessEmbeddedFields_RelationModeSkipsIncompleteFields(t *testing.T) {
 			EmbeddedTypeName: "User",
 		},
 	}
-	
-	result := builder.ProcessEmbeddedFields(embeddedFields, nil, "Post")
-	
+
+	result := meta.ProcessEmbeddedFields(embeddedFields, nil, "Post")
+
 	c.Assert(len(result), qt.Equals, 0) // Both should be skipped
 }
