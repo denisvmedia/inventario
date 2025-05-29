@@ -1,4 +1,4 @@
-package types
+package platform
 
 const (
 	PlatformTypePostgres = "postgres"
