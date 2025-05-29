@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/ast"
 )
 
 // Generator provides common functionality for all dialect generators using AST-based approach

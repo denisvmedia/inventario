@@ -3,9 +3,9 @@ package examples
 import (
 	"fmt"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
+	"github.com/denisvmedia/inventario/ptah/schema/ast"
 )
 
 // DemonstrateASTApproach shows how to use the new AST-based SQL generation

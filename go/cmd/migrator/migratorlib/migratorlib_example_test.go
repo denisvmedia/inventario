@@ -69,7 +69,7 @@ func ExampleGenerateCreateTable() {
 	//
 	// -- POSTGRES TABLE: products --
 	// CREATE TABLE products (
-	//   id SERIAL PRIMARY KEY,
+	//   id SERIAL PRIMARY KEY NOT NULL,
 	//   name VARCHAR(255) NOT NULL,
 	//   status enum_product_status NOT NULL
 	// );
@@ -79,7 +79,7 @@ func ExampleGenerateCreateTable() {
 	// MySQL SQL:
 	// -- MYSQL TABLE: products --
 	// CREATE TABLE products (
-	//   id SERIAL PRIMARY KEY,
+	//   id INT PRIMARY KEY AUTO_INCREMENT,
 	//   name VARCHAR(255) NOT NULL,
 	//   status ENUM('active', 'inactive', 'discontinued') NOT NULL
 	// );
@@ -145,14 +145,14 @@ func Example_platformSpecificAttributes() {
 	// MySQL SQL with platform-specific attributes:
 	// -- MYSQL TABLE: products (Product catalog) --
 	// CREATE TABLE products (
-	//   id INT AUTO_INCREMENT PRIMARY KEY,
+	//   id INT AUTO_INCREMENT PRIMARY KEY AUTO_INCREMENT,
 	//   name VARCHAR(255) NOT NULL
 	// ); ENGINE=InnoDB charset=utf8mb4
 	//
 	// PostgreSQL SQL (platform-specific attributes ignored):
 	// -- POSTGRES TABLE: products --
 	// CREATE TABLE products (
-	//   id SERIAL PRIMARY KEY,
+	//   id SERIAL PRIMARY KEY NOT NULL,
 	//   name VARCHAR(255) NOT NULL
 	// );
 }

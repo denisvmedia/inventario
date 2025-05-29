@@ -24,6 +24,7 @@
 /sample/
 /.db
 /bin/*
+coverage
 
 # Docker volumes and data
 /.docker/

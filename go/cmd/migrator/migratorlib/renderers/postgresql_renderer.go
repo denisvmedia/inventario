@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
+	"github.com/denisvmedia/inventario/ptah/schema/ast"
 )
 
 // PostgreSQLRenderer provides PostgreSQL-specific SQL rendering

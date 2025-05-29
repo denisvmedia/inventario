@@ -3,8 +3,8 @@ package builders
 import (
 	"strings"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/ast"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/ast"
 )
 
 // TableBuilder provides a fluent API for building CREATE TABLE statements
