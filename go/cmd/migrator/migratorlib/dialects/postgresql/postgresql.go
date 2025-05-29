@@ -1,11 +1,12 @@
 package postgresql
 
 import (
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 // Generator handles PostgreSQL-specific SQL generation using AST
@@ -17,13 +18,13 @@ type Generator struct {
 // New creates a new PostgreSQL generator
 func New() *Generator {
 	return &Generator{
-		Generator: base.NewGenerator(types.PlatformTypePostgres),
+		Generator: base.NewGenerator(platform.PlatformTypePostgres),
 		renderer:  renderers.NewPostgreSQLRenderer(),
 	}
 }
 
 // convertFieldToColumn converts a SchemaField to an AST ColumnNode for PostgreSQL
-func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
+func (g *Generator) convertFieldToColumn(field meta.SchemaField, enums []meta.GlobalEnum) *ast.ColumnNode {
 	ftype := field.Type
 
 	// Handle auto-increment for PostgreSQL by converting to SERIAL types (before platform overrides)
@@ -42,7 +43,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 	}
 
 	// Check for platform-specific type override (takes precedence over auto-increment conversion)
-	if dialectAttrs, ok := field.Overrides[types.PlatformTypePostgres]; ok {
+	if dialectAttrs, ok := field.Overrides[platform.PlatformTypePostgres]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
 		}
@@ -92,7 +93,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 }
 
 // convertTableDirectiveToAST converts a TableDirective to an AST CreateTableNode for PostgreSQL
-func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
+func (g *Generator) convertTableDirectiveToAST(table meta.TableDirective, fields []meta.SchemaField, enums []meta.GlobalEnum) *ast.CreateTableNode {
 	createTable := ast.NewCreateTable(table.Name)
 
 	// Set table comment
@@ -104,7 +105,7 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 	// So we ignore table.Overrides for PostgreSQL
 
 	// Sort fields to ensure primary keys come first, then other fields
-	var primaryFields, otherFields []types.SchemaField
+	var primaryFields, otherFields []meta.SchemaField
 	for _, field := range fields {
 		if field.StructName == table.StructName {
 			if field.Primary {
@@ -153,7 +154,7 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 // GenerateCreateTable generates CREATE TABLE SQL for PostgreSQL using AST
 // Note: This method should not be used for package-level generation as it includes enum definitions.
 // Use GenerateCreateTableWithoutEnums for package-level generation where enums are handled separately.
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+func (g *Generator) GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum) string {
 	// Convert table directive to AST
 	createTableNode := g.convertTableDirectiveToAST(table, fields, enums)
 
@@ -193,7 +194,7 @@ func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []typ
 
 // GenerateCreateTableWithoutEnums generates CREATE TABLE SQL for PostgreSQL without enum definitions
 // This is used when enums are handled at the schema level to avoid duplication
-func (g *Generator) GenerateCreateTableWithoutEnums(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+func (g *Generator) GenerateCreateTableWithoutEnums(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum) string {
 	// Convert table directive to AST
 	createTableNode := g.convertTableDirectiveToAST(table, fields, enums)
 
@@ -227,9 +228,9 @@ func (g *Generator) GenerateCreateTableWithoutEnums(table types.TableDirective, 
 
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL for PostgreSQL with embedded field support
 // This method is used by the package-migrator and does not include enum definitions to avoid duplication
-func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+func (g *Generator) GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField) string {
 	// Process embedded fields to generate additional schema fields
-	embeddedGeneratedFields := builders.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
+	embeddedGeneratedFields := builder.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
 
 	// Combine original fields with embedded-generated fields
 	allFields := append(fields, embeddedGeneratedFields...)
@@ -239,7 +240,7 @@ func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, 
 }
 
 // GenerateAlterStatements generates ALTER statements for PostgreSQL using AST
-func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
+func (g *Generator) GenerateAlterStatements(oldFields, newFields []meta.SchemaField) string {
 	// Group fields by table name
 	tableOperations := make(map[string][]ast.AlterOperation)
 

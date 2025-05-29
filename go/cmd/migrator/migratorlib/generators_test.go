@@ -6,26 +6,26 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 func TestGenerateCreateTable_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		table    types.TableDirective
-		fields   []types.SchemaField
-		indexes  []types.SchemaIndex
-		enums    []types.GlobalEnum
+		table    meta.TableDirective
+		fields   []meta.SchemaField
+		indexes  []meta.SchemaIndex
+		enums    []meta.GlobalEnum
 		dialect  string
 		contains []string // strings that should be present in output
 	}{
 		{
 			name: "simple table with basic fields",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -49,11 +49,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with unique and nullable fields",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "email",
@@ -76,11 +76,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with default values",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "Post",
 				Name:       "posts",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "Post",
 					Name:       "status",
@@ -102,11 +102,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with check constraint",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "Product",
 				Name:       "products",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "Product",
 					Name:       "price",
@@ -121,11 +121,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with foreign key",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "Post",
 				Name:       "posts",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName:     "Post",
 					Name:           "user_id",
@@ -142,12 +142,12 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with composite primary key",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "UserRole",
 				Name:       "user_roles",
 				PrimaryKey: []string{"user_id", "role_id"},
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "UserRole",
 					Name:       "user_id",
@@ -168,18 +168,18 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with index",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "email",
 					Type:       "VARCHAR(255)",
 				},
 			},
-			indexes: []types.SchemaIndex{
+			indexes: []meta.SchemaIndex{
 				{
 					StructName: "User",
 					Name:       "idx_users_email",
@@ -193,18 +193,18 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with unique index",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "username",
 					Type:       "VARCHAR(100)",
 				},
 			},
-			indexes: []types.SchemaIndex{
+			indexes: []meta.SchemaIndex{
 				{
 					StructName: "User",
 					Name:       "idx_users_username_unique",
@@ -219,18 +219,18 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "postgres table with enums",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "status",
 					Type:       "user_status_enum",
 				},
 			},
-			enums: []types.GlobalEnum{
+			enums: []meta.GlobalEnum{
 				{
 					Name:   "user_status_enum",
 					Values: []string{"active", "inactive", "pending"},
@@ -244,11 +244,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "mysql dialect without enums",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -256,7 +256,7 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 					Primary:    true,
 				},
 			},
-			enums: []types.GlobalEnum{
+			enums: []meta.GlobalEnum{
 				{
 					Name:   "user_status_enum",
 					Values: []string{"active", "inactive"},
@@ -270,11 +270,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with type override",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -292,11 +292,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "mysql table with enum column",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "status",
@@ -304,7 +304,7 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 					Nullable:   false,
 				},
 			},
-			enums: []types.GlobalEnum{
+			enums: []meta.GlobalEnum{
 				{
 					Name:   "user_status_enum",
 					Values: []string{"active", "inactive", "pending"},
@@ -318,11 +318,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "mariadb table with enum column",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "Product",
 				Name:       "products",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "Product",
 					Name:       "category",
@@ -330,7 +330,7 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 					Nullable:   true,
 				},
 			},
-			enums: []types.GlobalEnum{
+			enums: []meta.GlobalEnum{
 				{
 					Name:   "product_category",
 					Values: []string{"electronics", "clothing", "food", "books"},
@@ -344,11 +344,11 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 		},
 		{
 			name: "mysql table with multiple enum columns",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "Order",
 				Name:       "orders",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "Order",
 					Name:       "status",
@@ -362,7 +362,7 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 					Nullable:   false,
 				},
 			},
-			enums: []types.GlobalEnum{
+			enums: []meta.GlobalEnum{
 				{
 					Name:   "order_status",
 					Values: []string{"pending", "processing", "shipped", "delivered", "cancelled"},
@@ -396,20 +396,20 @@ func TestGenerateCreateTable_HappyPath(t *testing.T) {
 func TestGenerateCreateTable_UnhappyPath(t *testing.T) {
 	tests := []struct {
 		name        string
-		table       types.TableDirective
-		fields      []types.SchemaField
-		indexes     []types.SchemaIndex
-		enums       []types.GlobalEnum
+		table       meta.TableDirective
+		fields      []meta.SchemaField
+		indexes     []meta.SchemaIndex
+		enums       []meta.GlobalEnum
 		dialect     string
 		notContains []string // strings that should NOT be present in output
 	}{
 		{
 			name: "fields from different struct are ignored",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -429,18 +429,18 @@ func TestGenerateCreateTable_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "indexes from different struct are ignored",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "email",
 					Type:       "VARCHAR(255)",
 				},
 			},
-			indexes: []types.SchemaIndex{
+			indexes: []meta.SchemaIndex{
 				{
 					StructName: "Post", // Different struct
 					Name:       "idx_posts_title",
@@ -454,11 +454,11 @@ func TestGenerateCreateTable_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "foreign key without foreign field is ignored",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "Post",
 				Name:       "posts",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName:     "Post",
 					Name:           "user_id",
@@ -474,18 +474,18 @@ func TestGenerateCreateTable_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "enums not generated for non-postgres dialects",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "status",
 					Type:       "user_status_enum",
 				},
 			},
-			enums: []types.GlobalEnum{
+			enums: []meta.GlobalEnum{
 				{
 					Name:   "user_status_enum",
 					Values: []string{"active", "inactive"},
@@ -498,18 +498,18 @@ func TestGenerateCreateTable_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "non-existent enum reference",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "status",
 					Type:       "non_existent_enum", // No matching enum definition
 				},
 			},
-			enums: []types.GlobalEnum{
+			enums: []meta.GlobalEnum{
 				{
 					Name:   "user_status_enum", // Different name
 					Values: []string{"active", "inactive"},
@@ -538,20 +538,20 @@ func TestGenerateCreateTable_UnhappyPath(t *testing.T) {
 func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		oldFields []types.SchemaField
-		newFields []types.SchemaField
+		oldFields []meta.SchemaField
+		newFields []meta.SchemaField
 		contains  []string
 	}{
 		{
 			name: "add new column",
-			oldFields: []types.SchemaField{
+			oldFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "id",
 					Type:       "SERIAL",
 				},
 			},
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -570,14 +570,14 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 		},
 		{
 			name: "change column type",
-			oldFields: []types.SchemaField{
+			oldFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "name",
 					Type:       "VARCHAR(100)",
 				},
 			},
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "name",
@@ -590,7 +590,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 		},
 		{
 			name: "change nullable to not null",
-			oldFields: []types.SchemaField{
+			oldFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "email",
@@ -598,7 +598,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 					Nullable:   true,
 				},
 			},
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "email",
@@ -612,7 +612,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 		},
 		{
 			name: "change not null to nullable",
-			oldFields: []types.SchemaField{
+			oldFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "bio",
@@ -620,7 +620,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 					Nullable:   false,
 				},
 			},
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "bio",
@@ -634,7 +634,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 		},
 		{
 			name: "multiple changes",
-			oldFields: []types.SchemaField{
+			oldFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "name",
@@ -642,7 +642,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 					Nullable:   true,
 				},
 			},
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "name",
@@ -663,7 +663,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 		},
 		{
 			name: "no changes needed",
-			oldFields: []types.SchemaField{
+			oldFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -671,7 +671,7 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 					Nullable:   false,
 				},
 			},
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -701,20 +701,20 @@ func TestGenerateAlterStatements_HappyPath(t *testing.T) {
 func TestGenerateAlterStatements_UnhappyPath(t *testing.T) {
 	tests := []struct {
 		name        string
-		oldFields   []types.SchemaField
-		newFields   []types.SchemaField
+		oldFields   []meta.SchemaField
+		newFields   []meta.SchemaField
 		notContains []string
 	}{
 		{
 			name: "fields from different structs don't generate cross-struct changes",
-			oldFields: []types.SchemaField{
+			oldFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "name",
 					Type:       "VARCHAR(100)",
 				},
 			},
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "Post", // Different struct
 					Name:       "name",
@@ -728,7 +728,7 @@ func TestGenerateAlterStatements_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "identical fields don't generate unnecessary changes",
-			oldFields: []types.SchemaField{
+			oldFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "email",
@@ -736,7 +736,7 @@ func TestGenerateAlterStatements_UnhappyPath(t *testing.T) {
 					Nullable:   true,
 				},
 			},
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "email",
@@ -753,7 +753,7 @@ func TestGenerateAlterStatements_UnhappyPath(t *testing.T) {
 		{
 			name:      "empty old fields don't generate alter statements",
 			oldFields: nil,
-			newFields: []types.SchemaField{
+			newFields: []meta.SchemaField{
 				{
 					StructName: "User",
 					Name:       "email",
@@ -783,12 +783,12 @@ func TestGenerateAlterStatements_UnhappyPath(t *testing.T) {
 func TestGenerateCreateTableWithUnsupportedDialect(t *testing.T) {
 	c := qt.New(t)
 
-	table := types.TableDirective{
+	table := meta.TableDirective{
 		StructName: "User",
 		Name:       "users",
 	}
 
-	fields := []types.SchemaField{
+	fields := []meta.SchemaField{
 		{
 			StructName: "User",
 			Name:       "status",
@@ -797,7 +797,7 @@ func TestGenerateCreateTableWithUnsupportedDialect(t *testing.T) {
 		},
 	}
 
-	enums := []types.GlobalEnum{
+	enums := []meta.GlobalEnum{
 		{
 			Name:   "enum_user_status",
 			Values: []string{"active", "inactive"},
@@ -819,7 +819,7 @@ func TestGenerateCreateTableWithUnsupportedDialect(t *testing.T) {
 func TestGenerateAlterStatementsWithEnums(t *testing.T) {
 	c := qt.New(t)
 
-	oldFields := []types.SchemaField{
+	oldFields := []meta.SchemaField{
 		{
 			StructName: "Product",
 			Name:       "status",
@@ -828,7 +828,7 @@ func TestGenerateAlterStatementsWithEnums(t *testing.T) {
 		},
 	}
 
-	newFields := []types.SchemaField{
+	newFields := []meta.SchemaField{
 		{
 			StructName: "Product",
 			Name:       "status",

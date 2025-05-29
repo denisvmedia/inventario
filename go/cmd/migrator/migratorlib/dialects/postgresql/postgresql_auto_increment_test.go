@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
+
 	qt "github.com/frankban/quicktest"
 )
 
@@ -14,13 +15,13 @@ func TestAutoIncrementConversion(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		field        types.SchemaField
+		field        meta.SchemaField
 		expectedType string
 		description  string
 	}{
 		{
 			name: "INTEGER with auto_increment becomes SERIAL",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				Name:    "id",
 				Type:    "INTEGER",
 				AutoInc: true,
@@ -31,7 +32,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "INT with auto_increment becomes SERIAL",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				Name:    "sequence_id",
 				Type:    "INT",
 				AutoInc: true,
@@ -41,7 +42,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "BIGINT with auto_increment becomes BIGSERIAL",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				Name:    "big_id",
 				Type:    "BIGINT",
 				AutoInc: true,
@@ -51,7 +52,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "SMALLINT with auto_increment becomes SMALLSERIAL",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				Name:    "small_id",
 				Type:    "SMALLINT",
 				AutoInc: true,
@@ -61,7 +62,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "VARCHAR without auto_increment stays VARCHAR",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				Name:    "name",
 				Type:    "VARCHAR(255)",
 				AutoInc: false,
@@ -71,7 +72,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "Custom type with auto_increment becomes SERIAL",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				Name:    "custom_id",
 				Type:    "CUSTOM_TYPE",
 				AutoInc: true,
@@ -93,12 +94,12 @@ func TestAutoIncrementInCreateTable(t *testing.T) {
 	c := qt.New(t)
 	generator := New()
 
-	table := types.TableDirective{
+	table := meta.TableDirective{
 		StructName: "TestTable",
 		Name:       "test_table",
 	}
 
-	fields := []types.SchemaField{
+	fields := []meta.SchemaField{
 		{
 			StructName: "TestTable",
 			Name:       "id",
@@ -125,12 +126,12 @@ func TestAutoIncrementInCreateTable(t *testing.T) {
 	sql := generator.GenerateCreateTable(table, fields, nil, nil)
 
 	// Verify that auto_increment fields are converted to SERIAL types
-	c.Assert(strings.Contains(sql, "id SERIAL PRIMARY KEY"), qt.IsTrue, 
+	c.Assert(strings.Contains(sql, "id SERIAL PRIMARY KEY"), qt.IsTrue,
 		qt.Commentf("INTEGER + auto_increment + primary should generate 'id SERIAL PRIMARY KEY'"))
-	
+
 	c.Assert(strings.Contains(sql, "big_id BIGSERIAL UNIQUE"), qt.IsTrue,
 		qt.Commentf("BIGINT + auto_increment + unique should generate 'big_id BIGSERIAL UNIQUE'"))
-	
+
 	c.Assert(strings.Contains(sql, "name VARCHAR(255) NOT NULL"), qt.IsTrue,
 		qt.Commentf("Regular field should remain unchanged"))
 
@@ -144,7 +145,7 @@ func TestPlatformSpecificOverride(t *testing.T) {
 	generator := New()
 
 	// Test that platform-specific overrides take precedence over auto_increment conversion
-	field := types.SchemaField{
+	field := meta.SchemaField{
 		Name:    "id",
 		Type:    "INTEGER",
 		AutoInc: true,
@@ -157,8 +158,8 @@ func TestPlatformSpecificOverride(t *testing.T) {
 	}
 
 	column := generator.convertFieldToColumn(field, nil)
-	
+
 	// Platform override should take precedence over auto_increment conversion
-	c.Assert(column.Type, qt.Equals, "UUID", 
+	c.Assert(column.Type, qt.Equals, "UUID",
 		qt.Commentf("Platform-specific type override should take precedence over auto_increment conversion"))
 }

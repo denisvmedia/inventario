@@ -6,7 +6,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 func TestGenerator_NewGenerator(t *testing.T) {
@@ -89,13 +89,13 @@ func TestGenerator_GenerateColumn(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		field     types.SchemaField
+		field     meta.SchemaField
 		fieldType string
-		enums     []types.GlobalEnum
+		enums     []meta.GlobalEnum
 	}{
 		{
 			name: "basic string field",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				StructName: "User",
 				Name:       "name",
 				Type:       "VARCHAR(255)",
@@ -105,7 +105,7 @@ func TestGenerator_GenerateColumn(t *testing.T) {
 		},
 		{
 			name: "primary key field",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				StructName: "User",
 				Name:       "id",
 				Type:       "SERIAL",
@@ -115,7 +115,7 @@ func TestGenerator_GenerateColumn(t *testing.T) {
 		},
 		{
 			name: "nullable field",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				StructName: "User",
 				Name:       "email",
 				Type:       "VARCHAR(320)",
@@ -125,14 +125,14 @@ func TestGenerator_GenerateColumn(t *testing.T) {
 		},
 		{
 			name: "enum field",
-			field: types.SchemaField{
+			field: meta.SchemaField{
 				StructName: "User",
 				Name:       "status",
 				Type:       "user_status_enum",
 				Nullable:   false,
 			},
 			fieldType: "user_status_enum",
-			enums: []types.GlobalEnum{
+			enums: []meta.GlobalEnum{
 				{
 					Name:   "user_status_enum",
 					Values: []string{"active", "inactive"},
@@ -160,13 +160,13 @@ func TestGenerator_GenerateCreateTable(t *testing.T) {
 
 	generator := base.NewGenerator("test")
 
-	table := types.TableDirective{
+	table := meta.TableDirective{
 		StructName: "User",
 		Name:       "users",
 		Comment:    "User accounts table",
 	}
 
-	fields := []types.SchemaField{
+	fields := []meta.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -186,7 +186,7 @@ func TestGenerator_GenerateCreateTable(t *testing.T) {
 		},
 	}
 
-	enums := []types.GlobalEnum{
+	enums := []meta.GlobalEnum{
 		{
 			Name:   "user_status_enum",
 			Values: []string{"active", "inactive"},
@@ -215,12 +215,12 @@ func TestGenerator_GenerateIndexes(t *testing.T) {
 
 	generator := base.NewGenerator("test")
 
-	table := types.TableDirective{
+	table := meta.TableDirective{
 		StructName: "User",
 		Name:       "users",
 	}
 
-	indexes := []types.SchemaIndex{
+	indexes := []meta.SchemaIndex{
 		{
 			StructName: "User",
 			Name:       "idx_users_email",
@@ -259,13 +259,13 @@ func TestGenerator_GeneratePrimaryKeyConstraint(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		table      types.TableDirective
+		table      meta.TableDirective
 		expectNil  bool
 		primaryKey []string
 	}{
 		{
 			name: "single primary key - no constraint needed",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "User",
 				Name:       "users",
 				PrimaryKey: []string{"id"},
@@ -274,7 +274,7 @@ func TestGenerator_GeneratePrimaryKeyConstraint(t *testing.T) {
 		},
 		{
 			name: "composite primary key - constraint needed",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "UserRole",
 				Name:       "user_roles",
 				PrimaryKey: []string{"user_id", "role_id"},
@@ -284,7 +284,7 @@ func TestGenerator_GeneratePrimaryKeyConstraint(t *testing.T) {
 		},
 		{
 			name: "no primary key defined",
-			table: types.TableDirective{
+			table: meta.TableDirective{
 				StructName: "Log",
 				Name:       "logs",
 				PrimaryKey: []string{},
@@ -315,7 +315,7 @@ func TestGenerator_GenerateSchema(t *testing.T) {
 
 	generator := base.NewGenerator("postgres")
 
-	tables := []types.TableDirective{
+	tables := []meta.TableDirective{
 		{
 			StructName: "User",
 			Name:       "users",
@@ -328,7 +328,7 @@ func TestGenerator_GenerateSchema(t *testing.T) {
 		},
 	}
 
-	fields := []types.SchemaField{
+	fields := []meta.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -355,7 +355,7 @@ func TestGenerator_GenerateSchema(t *testing.T) {
 		},
 	}
 
-	indexes := []types.SchemaIndex{
+	indexes := []meta.SchemaIndex{
 		{
 			StructName: "User",
 			Name:       "idx_users_name",
@@ -363,7 +363,7 @@ func TestGenerator_GenerateSchema(t *testing.T) {
 		},
 	}
 
-	enums := []types.GlobalEnum{
+	enums := []meta.GlobalEnum{
 		{
 			Name:   "user_status_enum",
 			Values: []string{"active", "inactive"},

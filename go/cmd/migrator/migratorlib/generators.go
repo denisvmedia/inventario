@@ -5,19 +5,20 @@ import (
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/mariadb"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/mysql"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/postgresql"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/platform"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 // DialectGenerator defines the interface for database-specific SQL generation
 type DialectGenerator interface {
 	// GenerateCreateTable generates CREATE TABLE SQL for the specific dialect
-	GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string
+	GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum) string
 
 	// GenerateCreateTableWithEmbedded generates CREATE TABLE SQL with embedded field support
-	GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string
+	GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField) string
 
 	// GenerateAlterStatements generates ALTER statements for the specific dialect
-	GenerateAlterStatements(oldFields, newFields []types.SchemaField) string
+	GenerateAlterStatements(oldFields, newFields []meta.SchemaField) string
 
 	// GetDialectName returns the name of the dialect
 	GetDialectName() string
@@ -26,11 +27,11 @@ type DialectGenerator interface {
 // GetDialectGenerator returns the appropriate dialect generator for the given dialect name
 func GetDialectGenerator(dialect string) DialectGenerator {
 	switch dialect {
-	case types.PlatformTypePostgres:
+	case platform.PlatformTypePostgres:
 		return postgresql.New()
-	case types.PlatformTypeMySQL:
+	case platform.PlatformTypeMySQL:
 		return mysql.New()
-	case types.PlatformTypeMariaDB:
+	case platform.PlatformTypeMariaDB:
 		return mariadb.New()
 	default:
 		// For unknown dialects, use a generic generator that doesn't apply dialect-specific transformations
@@ -39,21 +40,21 @@ func GetDialectGenerator(dialect string) DialectGenerator {
 }
 
 // GenerateCreateTable generates CREATE TABLE SQL for the given dialect (backward compatibility function)
-func GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, dialect string) string {
+func GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateCreateTable(table, fields, indexes, enums)
 }
 
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL with embedded field support
-func GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField, dialect string) string {
+func GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateCreateTableWithEmbedded(table, fields, indexes, enums, embeddedFields)
 }
 
 // GenerateAlterStatements generates ALTER statements for the given dialect (backward compatibility function)
-func GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
+func GenerateAlterStatements(oldFields, newFields []meta.SchemaField) string {
 	// For backward compatibility, use PostgreSQL dialect as default
 	// In the future, this function should accept a dialect parameter
-	generator := GetDialectGenerator(types.PlatformTypePostgres)
+	generator := GetDialectGenerator(platform.PlatformTypePostgres)
 	return generator.GenerateAlterStatements(oldFields, newFields)
 }

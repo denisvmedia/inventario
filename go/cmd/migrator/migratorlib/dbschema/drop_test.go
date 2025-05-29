@@ -7,7 +7,7 @@ import (
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dbschema"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 func TestDropSchemaInterface(t *testing.T) {
@@ -47,7 +47,7 @@ func TestDropSchemaValidation(t *testing.T) {
 
 		// Create a test result with some tables and enums
 		result := &migratorlib.PackageParseResult{
-			Tables: []types.TableDirective{
+			Tables: []meta.TableDirective{
 				{
 					Name:       "users",
 					StructName: "User",
@@ -57,7 +57,7 @@ func TestDropSchemaValidation(t *testing.T) {
 					StructName: "Product",
 				},
 			},
-			Enums: []types.GlobalEnum{
+			Enums: []meta.GlobalEnum{
 				{
 					Name:   "enum_user_role",
 					Values: []string{"admin", "user", "guest"},

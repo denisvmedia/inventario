@@ -3,9 +3,9 @@ package examples
 import (
 	"fmt"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/schema/builder"
 )
 
 // DemonstrateASTApproach shows how to use the new AST-based SQL generation
@@ -15,7 +15,7 @@ func DemonstrateASTApproach() {
 	// Example 1: Building a simple table using the fluent API
 	fmt.Println("1. Simple table using fluent API:")
 
-	table := builders.NewTable("users").
+	table := builder.NewTable("users").
 		Comment("User accounts table").
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().Unique().End().
@@ -49,7 +49,7 @@ func DemonstrateASTApproach() {
 	// Example 2: Building a more complex schema with enums and foreign keys
 	fmt.Println("\n2. Complex schema with enums and foreign keys:")
 
-	schema := builders.NewSchema().
+	schema := builder.NewSchema().
 		Comment("E-commerce database schema").
 		Enum("order_status", "pending", "processing", "shipped", "delivered", "cancelled").
 		Table("categories").
@@ -163,7 +163,7 @@ func generateOldWay() string {
 	fmt.Println(`
 // Readable, type-safe, composable, testable
 func generateNewWay() string {
-    table := builders.NewTable("users").
+    table := builder.NewTable("users").
         Column("id", "SERIAL").Primary().End().
         Column("email", "VARCHAR(255)").NotNull().Unique().End().
         Column("name", "VARCHAR(100)").NotNull().End().
@@ -197,7 +197,7 @@ func ShowAdvancedFeatures() {
 		IndexCount:  0,
 	}
 
-	schema := builders.NewSchema().
+	schema := builder.NewSchema().
 		Table("users").
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().End().

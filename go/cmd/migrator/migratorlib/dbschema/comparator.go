@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 // SchemaDiff represents differences between two schemas
@@ -62,7 +62,7 @@ func CompareSchemas(generated *migratorlib.PackageParseResult, database *Databas
 // compareTablesAndColumns compares tables and their columns
 func compareTablesAndColumns(generated *migratorlib.PackageParseResult, database *DatabaseSchema, diff *SchemaDiff) {
 	// Create maps for quick lookup
-	genTables := make(map[string]types.TableDirective)
+	genTables := make(map[string]meta.TableDirective)
 	for _, table := range generated.Tables {
 		genTables[table.Name] = table
 	}
@@ -101,17 +101,17 @@ func compareTablesAndColumns(generated *migratorlib.PackageParseResult, database
 }
 
 // compareTableColumns compares columns within a table
-func compareTableColumns(genTable types.TableDirective, dbTable Table, generated *migratorlib.PackageParseResult) TableDiff {
+func compareTableColumns(genTable meta.TableDirective, dbTable Table, generated *migratorlib.PackageParseResult) TableDiff {
 	tableDiff := TableDiff{TableName: genTable.Name}
 
 	// Process embedded fields to get the complete field list (same as generators do)
-	embeddedGeneratedFields := builders.ProcessEmbeddedFields(generated.EmbeddedFields, generated.Fields, genTable.StructName)
+	embeddedGeneratedFields := builder.ProcessEmbeddedFields(generated.EmbeddedFields, generated.Fields, genTable.StructName)
 
 	// Combine original fields with embedded-generated fields
 	allFields := append(generated.Fields, embeddedGeneratedFields...)
 
 	// Create maps for quick lookup
-	genColumns := make(map[string]types.SchemaField)
+	genColumns := make(map[string]meta.SchemaField)
 	for _, field := range allFields {
 		if field.StructName == genTable.StructName {
 			genColumns[field.Name] = field
@@ -154,7 +154,7 @@ func compareTableColumns(genTable types.TableDirective, dbTable Table, generated
 }
 
 // compareColumns compares individual column properties
-func compareColumns(genCol types.SchemaField, dbCol Column) ColumnDiff {
+func compareColumns(genCol meta.SchemaField, dbCol Column) ColumnDiff {
 	colDiff := ColumnDiff{
 		ColumnName: genCol.Name,
 		Changes:    make(map[string]string),
@@ -211,7 +211,7 @@ func compareColumns(genCol types.SchemaField, dbCol Column) ColumnDiff {
 // compareEnums compares enum types
 func compareEnums(generated *migratorlib.PackageParseResult, database *DatabaseSchema, diff *SchemaDiff) {
 	// Create maps for quick lookup
-	genEnums := make(map[string]types.GlobalEnum)
+	genEnums := make(map[string]meta.GlobalEnum)
 	for _, enum := range generated.Enums {
 		genEnums[enum.Name] = enum
 	}
@@ -250,7 +250,7 @@ func compareEnums(generated *migratorlib.PackageParseResult, database *DatabaseS
 }
 
 // compareEnumValues compares enum values
-func compareEnumValues(genEnum types.GlobalEnum, dbEnum Enum) EnumDiff {
+func compareEnumValues(genEnum meta.GlobalEnum, dbEnum Enum) EnumDiff {
 	enumDiff := EnumDiff{EnumName: genEnum.Name}
 
 	// Create sets for comparison

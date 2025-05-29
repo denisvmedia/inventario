@@ -7,15 +7,15 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 func TestEmbeddedFields_ProcessEmbeddedFields(t *testing.T) {
 	c := qt.New(t)
 
 	// Define embedded types with their fields
-	embeddedFields := []types.EmbeddedField{
+	embeddedFields := []meta.EmbeddedField{
 		{
 			StructName:       "Article",
 			Mode:             "inline",
@@ -49,7 +49,7 @@ func TestEmbeddedFields_ProcessEmbeddedFields(t *testing.T) {
 	}
 
 	// Define the source fields from embedded types
-	allFields := []types.SchemaField{
+	allFields := []meta.SchemaField{
 		// Timestamps fields
 		{StructName: "Timestamps", Name: "created_at", Type: "TIMESTAMP", Nullable: false},
 		{StructName: "Timestamps", Name: "updated_at", Type: "TIMESTAMP", Nullable: false},
@@ -62,7 +62,7 @@ func TestEmbeddedFields_ProcessEmbeddedFields(t *testing.T) {
 	}
 
 	// Process embedded fields
-	generatedFields := builders.ProcessEmbeddedFields(embeddedFields, allFields, "Article")
+	generatedFields := builder.ProcessEmbeddedFields(embeddedFields, allFields, "Article")
 
 	// Verify the results
 	c.Assert(len(generatedFields), qt.Equals, 6) // 2 from Timestamps + 2 from AuditInfo + 1 JSON + 1 relation
@@ -99,12 +99,12 @@ func TestEmbeddedFields_ProcessEmbeddedFields(t *testing.T) {
 func TestEmbeddedFields_GenerateCreateTableWithEmbedded(t *testing.T) {
 	c := qt.New(t)
 
-	table := types.TableDirective{
+	table := meta.TableDirective{
 		StructName: "Article",
 		Name:       "articles",
 	}
 
-	fields := []types.SchemaField{
+	fields := []meta.SchemaField{
 		{StructName: "Article", Name: "id", Type: "INTEGER", Primary: true},
 		{StructName: "Article", Name: "title", Type: "VARCHAR(255)", Nullable: false},
 		// Embedded type fields
@@ -112,7 +112,7 @@ func TestEmbeddedFields_GenerateCreateTableWithEmbedded(t *testing.T) {
 		{StructName: "Timestamps", Name: "updated_at", Type: "TIMESTAMP", Nullable: false},
 	}
 
-	embeddedFields := []types.EmbeddedField{
+	embeddedFields := []meta.EmbeddedField{
 		{
 			StructName:       "Article",
 			Mode:             "inline",
@@ -140,8 +140,8 @@ func TestEmbeddedFields_GenerateCreateTableWithEmbedded(t *testing.T) {
 }
 
 // Helper functions
-func filterFieldsByName(fields []types.SchemaField, names []string) []types.SchemaField {
-	var result []types.SchemaField
+func filterFieldsByName(fields []meta.SchemaField, names []string) []meta.SchemaField {
+	var result []meta.SchemaField
 	nameSet := make(map[string]bool)
 	for _, name := range names {
 		nameSet[name] = true
@@ -155,8 +155,8 @@ func filterFieldsByName(fields []types.SchemaField, names []string) []types.Sche
 	return result
 }
 
-func filterFieldsByFieldName(fields []types.SchemaField, fieldName string) []types.SchemaField {
-	var result []types.SchemaField
+func filterFieldsByFieldName(fields []meta.SchemaField, fieldName string) []meta.SchemaField {
+	var result []meta.SchemaField
 	for _, field := range fields {
 		if strings.Contains(field.FieldName, fieldName) {
 			result = append(result, field)
@@ -169,7 +169,7 @@ func TestEmbeddedFields_PlatformSpecificOverrides(t *testing.T) {
 	c := qt.New(t)
 
 	// Define embedded field with platform-specific type overrides
-	embeddedFields := []types.EmbeddedField{
+	embeddedFields := []meta.EmbeddedField{
 		{
 			StructName:       "Article",
 			Mode:             "json",
@@ -188,7 +188,7 @@ func TestEmbeddedFields_PlatformSpecificOverrides(t *testing.T) {
 	}
 
 	// Process embedded fields
-	generatedFields := builders.ProcessEmbeddedFields(embeddedFields, nil, "Article")
+	generatedFields := builder.ProcessEmbeddedFields(embeddedFields, nil, "Article")
 
 	// Verify the result
 	c.Assert(len(generatedFields), qt.Equals, 1)
@@ -204,7 +204,7 @@ func TestEmbeddedFields_PlatformSpecificOverrides(t *testing.T) {
 	c.Assert(field.Overrides["mariadb"]["type"], qt.Equals, "LONGTEXT")
 
 	// Test with MySQL generator to verify override is applied
-	table := types.TableDirective{
+	table := meta.TableDirective{
 		StructName: "Article",
 		Name:       "articles",
 	}

@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
 	"github.com/denisvmedia/inventario/internal/log"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 func parseKeyValueComment(comment string) map[string]string {
@@ -102,18 +102,18 @@ func parsePlatformSpecific(kv map[string]string) map[string]map[string]string {
 	return out
 }
 
-func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []types.SchemaIndex, []types.TableDirective, []types.GlobalEnum) {
+func ParseFile(filename string) ([]meta.EmbeddedField, []meta.SchemaField, []meta.SchemaIndex, []meta.TableDirective, []meta.GlobalEnum) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	embeddedFields := []types.EmbeddedField{}
-	schemaFields := []types.SchemaField{}
-	schemaIndexes := []types.SchemaIndex{}
-	tableDirectives := []types.TableDirective{}
-	globalEnumsMap := map[string]types.GlobalEnum{}
+	embeddedFields := []meta.EmbeddedField{}
+	schemaFields := []meta.SchemaField{}
+	schemaIndexes := []meta.SchemaIndex{}
+	tableDirectives := []meta.TableDirective{}
+	globalEnumsMap := map[string]meta.GlobalEnum{}
 
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
@@ -134,7 +134,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 				for _, comment := range genDecl.Doc.List {
 					if strings.HasPrefix(comment.Text, "//migrator:schema:table") {
 						kv := parseKeyValueComment(comment.Text)
-						tableDirectives = append(tableDirectives, types.TableDirective{
+						tableDirectives = append(tableDirectives, meta.TableDirective{
 							StructName: structName,
 							Name:       kv["name"],
 							Engine:     kv["engine"],
@@ -165,7 +165,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 							fieldType := kv["type"]
 							if len(enumRaw) > 0 && kv["type"] == "ENUM" {
 								enumName := "enum_" + strings.ToLower(structName) + "_" + strings.ToLower(name.Name)
-								globalEnumsMap[enumName] = types.GlobalEnum{
+								globalEnumsMap[enumName] = meta.GlobalEnum{
 									Name:   enumName,
 									Values: enum,
 								}
@@ -173,7 +173,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 								fieldType = enumName
 							}
 
-							schemaFields = append(schemaFields, types.SchemaField{
+							schemaFields = append(schemaFields, meta.SchemaField{
 								StructName:     structName,
 								FieldName:      name.Name,
 								Name:           kv["name"],
@@ -203,7 +203,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 							}
 						}
 
-						embeddedFields = append(embeddedFields, types.EmbeddedField{
+						embeddedFields = append(embeddedFields, meta.EmbeddedField{
 							StructName:       structName,
 							Mode:             kv["mode"],
 							Prefix:           kv["prefix"],
@@ -225,7 +225,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 						for i := range fields {
 							fields[i] = strings.TrimSpace(fields[i])
 						}
-						schemaIndexes = append(schemaIndexes, types.SchemaIndex{
+						schemaIndexes = append(schemaIndexes, meta.SchemaIndex{
 							StructName: structName,
 							Name:       kv["name"],
 							Fields:     fields,
@@ -238,7 +238,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 		}
 	}
 
-	enums := make([]types.GlobalEnum, 0, len(globalEnumsMap))
+	enums := make([]meta.GlobalEnum, 0, len(globalEnumsMap))
 	keys := make([]string, 0, len(globalEnumsMap))
 	for k := range globalEnumsMap {
 		keys = append(keys, k)
@@ -253,7 +253,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 
 // ParseFileWithDependencies parses a Go file and automatically discovers and parses
 // related files in the same directory to resolve embedded type references
-func ParseFileWithDependencies(filename string) ([]types.EmbeddedField, []types.SchemaField, []types.SchemaIndex, []types.TableDirective, []types.GlobalEnum) {
+func ParseFileWithDependencies(filename string) ([]meta.EmbeddedField, []meta.SchemaField, []meta.SchemaIndex, []meta.TableDirective, []meta.GlobalEnum) {
 	// Parse the main file
 	embeddedFields, fields, indexes, tables, enums := ParseFile(filename)
 

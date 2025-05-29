@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
+
 	qt "github.com/frankban/quicktest"
 )
 
@@ -69,7 +70,7 @@ func TestWorkflowExample(t *testing.T) {
 		// Mock generated schema (simplified)
 		// In real usage, this would come from parsing Go entities
 		mockResult := &migratorlib.PackageParseResult{
-			Enums: []types.GlobalEnum{
+			Enums: []meta.GlobalEnum{
 				{
 					Name:   "test_enum",
 					Values: []string{"value1", "value2"},

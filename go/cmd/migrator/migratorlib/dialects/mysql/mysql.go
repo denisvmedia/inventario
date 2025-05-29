@@ -1,11 +1,12 @@
 package mysql
 
 import (
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 // Generator handles MySQL-specific SQL generation using AST
@@ -17,13 +18,13 @@ type Generator struct {
 // New creates a new MySQL generator
 func New() *Generator {
 	return &Generator{
-		Generator: base.NewGenerator(types.PlatformTypeMySQL),
+		Generator: base.NewGenerator(platform.PlatformTypeMySQL),
 		renderer:  renderers.NewMySQLRenderer(),
 	}
 }
 
 // convertFieldToColumn converts a SchemaField to an AST ColumnNode for MySQL
-func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
+func (g *Generator) convertFieldToColumn(field meta.SchemaField, enums []meta.GlobalEnum) *ast.ColumnNode {
 	ftype := field.Type
 	autoInc := field.AutoInc
 
@@ -34,7 +35,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 	}
 
 	// Check for platform-specific type override
-	if dialectAttrs, ok := field.Overrides[types.PlatformTypeMySQL]; ok {
+	if dialectAttrs, ok := field.Overrides[platform.PlatformTypeMySQL]; ok {
 		if typeOverride, ok := dialectAttrs["type"]; ok {
 			ftype = typeOverride
 		}
@@ -72,7 +73,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 
 	// Handle check constraint with platform-specific override
 	checkConstraint := field.Check
-	if dialectAttrs, ok := field.Overrides[types.PlatformTypeMySQL]; ok {
+	if dialectAttrs, ok := field.Overrides[platform.PlatformTypeMySQL]; ok {
 		if checkOverride, ok := dialectAttrs["check"]; ok {
 			checkConstraint = checkOverride
 		}
@@ -94,7 +95,7 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 }
 
 // convertTableDirectiveToAST converts a TableDirective to an AST CreateTableNode for MySQL
-func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
+func (g *Generator) convertTableDirectiveToAST(table meta.TableDirective, fields []meta.SchemaField, enums []meta.GlobalEnum) *ast.CreateTableNode {
 	createTable := ast.NewCreateTable(table.Name)
 
 	// Set table comment
@@ -103,7 +104,7 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 	}
 
 	// Handle MySQL-specific table options
-	if dialectAttrs, ok := table.Overrides[types.PlatformTypeMySQL]; ok {
+	if dialectAttrs, ok := table.Overrides[platform.PlatformTypeMySQL]; ok {
 		// Handle ENGINE option
 		if engine, ok := dialectAttrs["engine"]; ok {
 			createTable.SetOption("ENGINE", engine)
@@ -159,7 +160,7 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 }
 
 // GenerateCreateTable generates CREATE TABLE SQL for MySQL using AST
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+func (g *Generator) GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum) string {
 	// Convert table directive to AST
 	createTableNode := g.convertTableDirectiveToAST(table, fields, enums)
 
@@ -231,7 +232,7 @@ func (g *Generator) renderSchemaWithEnums(statements *ast.StatementList, enumMap
 }
 
 // GenerateAlterStatements generates ALTER statements for MySQL using AST
-func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
+func (g *Generator) GenerateAlterStatements(oldFields, newFields []meta.SchemaField) string {
 	// Group fields by table name
 	tableOperations := make(map[string][]ast.AlterOperation)
 
@@ -282,9 +283,9 @@ func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaF
 }
 
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL for MySQL with embedded field support
-func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+func (g *Generator) GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField) string {
 	// Process embedded fields to generate additional schema fields
-	embeddedGeneratedFields := builders.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
+	embeddedGeneratedFields := builder.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
 
 	// Combine original fields with embedded-generated fields
 	allFields := append(fields, embeddedGeneratedFields...)

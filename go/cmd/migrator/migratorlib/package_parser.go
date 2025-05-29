@@ -6,17 +6,17 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
 	"github.com/denisvmedia/inventario/internal/log"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 // PackageParseResult contains all parsed entities from the entire project
 type PackageParseResult struct {
-	Tables         []types.TableDirective
-	Fields         []types.SchemaField
-	Indexes        []types.SchemaIndex
-	Enums          []types.GlobalEnum
-	EmbeddedFields []types.EmbeddedField
+	Tables         []meta.TableDirective
+	Fields         []meta.SchemaField
+	Indexes        []meta.SchemaIndex
+	Enums          []meta.GlobalEnum
+	EmbeddedFields []meta.EmbeddedField
 	Dependencies   map[string][]string // table -> list of tables it depends on
 }
 
@@ -24,11 +24,11 @@ type PackageParseResult struct {
 // to find all entity definitions and build a complete database schema
 func ParsePackageRecursively(rootDir string) (*PackageParseResult, error) {
 	result := &PackageParseResult{
-		Tables:         []types.TableDirective{},
-		Fields:         []types.SchemaField{},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Tables:         []meta.TableDirective{},
+		Fields:         []meta.SchemaField{},
+		Indexes:        []meta.SchemaIndex{},
+		Enums:          []meta.GlobalEnum{},
+		EmbeddedFields: []meta.EmbeddedField{},
 		Dependencies:   make(map[string][]string),
 	}
 
@@ -85,54 +85,54 @@ func ParsePackageRecursively(rootDir string) (*PackageParseResult, error) {
 // deduplicate removes duplicate entities that may be defined in multiple files
 func (r *PackageParseResult) deduplicate() {
 	// Deduplicate tables by name
-	tableMap := make(map[string]types.TableDirective)
+	tableMap := make(map[string]meta.TableDirective)
 	for _, table := range r.Tables {
 		tableMap[table.Name] = table
 	}
-	r.Tables = make([]types.TableDirective, 0, len(tableMap))
+	r.Tables = make([]meta.TableDirective, 0, len(tableMap))
 	for _, table := range tableMap {
 		r.Tables = append(r.Tables, table)
 	}
 
 	// Deduplicate fields by struct name and field name
-	fieldMap := make(map[string]types.SchemaField)
+	fieldMap := make(map[string]meta.SchemaField)
 	for _, field := range r.Fields {
 		key := field.StructName + "." + field.Name
 		fieldMap[key] = field
 	}
-	r.Fields = make([]types.SchemaField, 0, len(fieldMap))
+	r.Fields = make([]meta.SchemaField, 0, len(fieldMap))
 	for _, field := range fieldMap {
 		r.Fields = append(r.Fields, field)
 	}
 
 	// Deduplicate indexes by struct name and index name
-	indexMap := make(map[string]types.SchemaIndex)
+	indexMap := make(map[string]meta.SchemaIndex)
 	for _, index := range r.Indexes {
 		key := index.StructName + "." + index.Name
 		indexMap[key] = index
 	}
-	r.Indexes = make([]types.SchemaIndex, 0, len(indexMap))
+	r.Indexes = make([]meta.SchemaIndex, 0, len(indexMap))
 	for _, index := range indexMap {
 		r.Indexes = append(r.Indexes, index)
 	}
 
 	// Deduplicate enums by name
-	enumMap := make(map[string]types.GlobalEnum)
+	enumMap := make(map[string]meta.GlobalEnum)
 	for _, enum := range r.Enums {
 		enumMap[enum.Name] = enum
 	}
-	r.Enums = make([]types.GlobalEnum, 0, len(enumMap))
+	r.Enums = make([]meta.GlobalEnum, 0, len(enumMap))
 	for _, enum := range enumMap {
 		r.Enums = append(r.Enums, enum)
 	}
 
 	// Deduplicate embedded fields by struct name and embedded type name
-	embeddedMap := make(map[string]types.EmbeddedField)
+	embeddedMap := make(map[string]meta.EmbeddedField)
 	for _, embedded := range r.EmbeddedFields {
 		key := embedded.StructName + "." + embedded.EmbeddedTypeName
 		embeddedMap[key] = embedded
 	}
-	r.EmbeddedFields = make([]types.EmbeddedField, 0, len(embeddedMap))
+	r.EmbeddedFields = make([]meta.EmbeddedField, 0, len(embeddedMap))
 	for _, embedded := range embeddedMap {
 		r.EmbeddedFields = append(r.EmbeddedFields, embedded)
 	}
@@ -187,13 +187,13 @@ func (r *PackageParseResult) buildDependencyGraph() {
 // sortTablesByDependencies performs topological sort to order tables by their dependencies
 func (r *PackageParseResult) sortTablesByDependencies() {
 	// Create a map for quick table lookup
-	tableMap := make(map[string]types.TableDirective)
+	tableMap := make(map[string]meta.TableDirective)
 	for _, table := range r.Tables {
 		tableMap[table.Name] = table
 	}
 
 	// Perform topological sort using Kahn's algorithm
-	sorted := []types.TableDirective{}
+	sorted := []meta.TableDirective{}
 	inDegree := make(map[string]int)
 
 	// Calculate in-degrees (how many dependencies each table has)

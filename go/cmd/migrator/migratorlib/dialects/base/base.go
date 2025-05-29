@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 // Generator provides common functionality for all dialect generators using AST-based approach
@@ -31,24 +31,24 @@ func (g *Generator) GenerateTableComment(tableName string) *ast.CommentNode {
 }
 
 // GenerateColumn converts a SchemaField to a ColumnNode using AST builders
-func (g *Generator) GenerateColumn(field types.SchemaField, fieldType string, enums []types.GlobalEnum) *ast.ColumnNode {
-	return builders.FromSchemaField(field, enums)
+func (g *Generator) GenerateColumn(field meta.SchemaField, fieldType string, enums []meta.GlobalEnum) *ast.ColumnNode {
+	return builder.FromSchemaField(field, enums)
 }
 
 // GenerateCreateTable converts table directive and fields to a CreateTableNode
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
-	return builders.FromTableDirective(table, fields, enums)
+func (g *Generator) GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, enums []meta.GlobalEnum) *ast.CreateTableNode {
+	return builder.FromTableDirective(table, fields, enums)
 }
 
 // GenerateIndexes generates index AST nodes for a table
-func (g *Generator) GenerateIndexes(table types.TableDirective, indexes []types.SchemaIndex) []*ast.IndexNode {
+func (g *Generator) GenerateIndexes(table meta.TableDirective, indexes []meta.SchemaIndex) []*ast.IndexNode {
 	var indexNodes []*ast.IndexNode
 
 	for _, idx := range indexes {
 		if idx.StructName != table.StructName {
 			continue
 		}
-		indexNode := builders.FromSchemaIndex(idx)
+		indexNode := builder.FromSchemaIndex(idx)
 		indexNodes = append(indexNodes, indexNode)
 	}
 
@@ -56,7 +56,7 @@ func (g *Generator) GenerateIndexes(table types.TableDirective, indexes []types.
 }
 
 // GenerateForeignKeyConstraints generates foreign key constraint nodes
-func (g *Generator) GenerateForeignKeyConstraints(table types.TableDirective, fields []types.SchemaField) []*ast.ConstraintNode {
+func (g *Generator) GenerateForeignKeyConstraints(table meta.TableDirective, fields []meta.SchemaField) []*ast.ConstraintNode {
 	var constraints []*ast.ConstraintNode
 
 	for _, f := range fields {
@@ -81,7 +81,7 @@ func (g *Generator) GenerateForeignKeyConstraints(table types.TableDirective, fi
 }
 
 // GeneratePrimaryKeyConstraint generates primary key constraint for composite keys
-func (g *Generator) GeneratePrimaryKeyConstraint(table types.TableDirective) *ast.ConstraintNode {
+func (g *Generator) GeneratePrimaryKeyConstraint(table meta.TableDirective) *ast.ConstraintNode {
 	if len(table.PrimaryKey) > 1 {
 		return ast.NewPrimaryKeyConstraint(table.PrimaryKey...)
 	}
@@ -89,13 +89,13 @@ func (g *Generator) GeneratePrimaryKeyConstraint(table types.TableDirective) *as
 }
 
 // GenerateSchema generates a complete schema using the fluent API
-func (g *Generator) GenerateSchema(tables []types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) *ast.StatementList {
+func (g *Generator) GenerateSchema(tables []meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum) *ast.StatementList {
 	return g.GenerateSchemaWithEmbedded(tables, fields, indexes, enums, nil)
 }
 
 // GenerateSchemaWithEmbedded generates a complete schema with embedded field support
-func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) *ast.StatementList {
-	schema := builders.NewSchema()
+func (g *Generator) GenerateSchemaWithEmbedded(tables []meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField) *ast.StatementList {
+	schema := builder.NewSchema()
 
 	// Add comment for the schema
 	schema.Comment(fmt.Sprintf("%s Database Schema", strings.ToUpper(g.dialectName)))
@@ -118,13 +118,13 @@ func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fi
 		}
 
 		// Process embedded fields first to generate additional schema fields
-		embeddedGeneratedFields := builders.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
+		embeddedGeneratedFields := builder.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
 
 		// Combine original fields with embedded-generated fields
 		allFields := append(fields, embeddedGeneratedFields...)
 
 		// Sort fields to ensure primary keys come first, then other fields
-		var primaryFields, otherFields []types.SchemaField
+		var primaryFields, otherFields []meta.SchemaField
 		for _, field := range allFields {
 			if field.StructName == table.StructName {
 				if field.Primary {
@@ -209,7 +209,7 @@ func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fi
 }
 
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL with embedded field support (base implementation)
-func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+func (g *Generator) GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField) string {
 	// This is a base implementation that should be overridden by specific dialect generators
 	// Return a simple string representation (this should be overridden by dialect-specific generators)
 	return "-- Base implementation: use dialect-specific generator for proper SQL output"

@@ -6,7 +6,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 func TestDialectGenerators_HappyPath(t *testing.T) {
@@ -53,7 +53,7 @@ func TestDialectGenerators_HappyPath(t *testing.T) {
 	}
 
 	// Common test data
-	table := types.TableDirective{
+	table := meta.TableDirective{
 		StructName: "User",
 		Name:       "users",
 		Overrides: map[string]map[string]string{
@@ -68,7 +68,7 @@ func TestDialectGenerators_HappyPath(t *testing.T) {
 		},
 	}
 
-	fields := []types.SchemaField{
+	fields := []meta.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -83,7 +83,7 @@ func TestDialectGenerators_HappyPath(t *testing.T) {
 		},
 	}
 
-	enums := []types.GlobalEnum{
+	enums := []meta.GlobalEnum{
 		{
 			Name:   "user_status_enum",
 			Values: []string{"active", "inactive", "pending"},
@@ -136,7 +136,7 @@ func TestDialectGenerators_AlterStatements(t *testing.T) {
 		},
 	}
 
-	oldFields := []types.SchemaField{
+	oldFields := []meta.SchemaField{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -144,7 +144,7 @@ func TestDialectGenerators_AlterStatements(t *testing.T) {
 		},
 	}
 
-	newFields := []types.SchemaField{
+	newFields := []meta.SchemaField{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -194,12 +194,12 @@ func TestDialectGenerators_GetDialectName(t *testing.T) {
 
 func TestDialectGenerators_BackwardCompatibility(t *testing.T) {
 	// Test that the old API still works exactly the same
-	table := types.TableDirective{
+	table := meta.TableDirective{
 		StructName: "User",
 		Name:       "users",
 	}
 
-	fields := []types.SchemaField{
+	fields := []meta.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -215,8 +215,8 @@ func TestDialectGenerators_BackwardCompatibility(t *testing.T) {
 	c.Assert(result, qt.Contains, "id SERIAL PRIMARY KEY")
 
 	// Test GenerateAlterStatements backward compatibility
-	oldFields := []types.SchemaField{}
-	newFields := []types.SchemaField{
+	oldFields := []meta.SchemaField{}
+	newFields := []meta.SchemaField{
 		{
 			StructName: "User",
 			Name:       "email",

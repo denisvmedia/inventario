@@ -1,10 +1,10 @@
 package generic
 
 import (
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/builders"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 // Generator handles unknown dialects without applying dialect-specific transformations
@@ -22,9 +22,9 @@ func New(dialectName string) *Generator {
 }
 
 // GenerateCreateTable generates CREATE TABLE SQL for unknown dialects using AST
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+func (g *Generator) GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum) string {
 	// Use the base generator's schema generation method
-	schema := g.GenerateSchema([]types.TableDirective{table}, fields, indexes, enums)
+	schema := g.GenerateSchema([]meta.TableDirective{table}, fields, indexes, enums)
 
 	// Render using the base renderer by iterating through statements
 	result, err := g.renderer.Render(schema)
@@ -39,9 +39,9 @@ func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []typ
 }
 
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL for generic dialects with embedded field support
-func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+func (g *Generator) GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField) string {
 	// Process embedded fields to generate additional schema fields
-	embeddedGeneratedFields := builders.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
+	embeddedGeneratedFields := builder.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
 
 	// Combine original fields with embedded-generated fields
 	allFields := append(fields, embeddedGeneratedFields...)
@@ -51,7 +51,7 @@ func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, 
 }
 
 // GenerateAlterStatements generates ALTER statements for unknown dialects using AST
-func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
+func (g *Generator) GenerateAlterStatements(oldFields, newFields []meta.SchemaField) string {
 	// For now, return a simple comment indicating this is not yet implemented with AST
 	// This would need to be implemented with proper ALTER TABLE AST nodes
 	return "-- ALTER statements not yet implemented with AST for generic dialect\n"

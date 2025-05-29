@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 // SchemaWriter interface for writing schemas to databases
@@ -77,7 +77,7 @@ func (w *PostgreSQLWriter) WriteSchema(result *migratorlib.PackageParseResult) e
 }
 
 // writeEnums creates all enum types
-func (w *PostgreSQLWriter) writeEnums(enums []types.GlobalEnum) error {
+func (w *PostgreSQLWriter) writeEnums(enums []meta.GlobalEnum) error {
 	for _, enum := range enums {
 		// Check if enum already exists
 		var exists bool

@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/types"
+	"github.com/denisvmedia/inventario/ptah/schema/meta"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 		fmt.Println()
 	}
 
-	fmt.Println(migratorlib.GenerateAlterStatements([]types.SchemaField{
+	fmt.Println(migratorlib.GenerateAlterStatements([]meta.SchemaField{
 		{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: true},
 		{StructName: "User", Name: "name", Type: "TEXT", Nullable: false},
 	}, fields))
