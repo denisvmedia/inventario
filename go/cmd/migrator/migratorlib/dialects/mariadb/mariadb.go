@@ -2,24 +2,24 @@ package mariadb
 
 import (
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/builder"
 	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/renderer"
 )
 
 // Generator handles MariaDB-specific SQL generation using AST
 type Generator struct {
 	*base.Generator
-	renderer *renderers.MariaDBRenderer
+	renderer *renderer.MariaDBRenderer
 }
 
 // New creates a new MariaDB generator
 func New() *Generator {
 	return &Generator{
 		Generator: base.NewGenerator(platform.PlatformTypeMariaDB),
-		renderer:  renderers.NewMariaDBRenderer(),
+		renderer:  renderer.NewMariaDBRenderer(),
 	}
 }
 

@@ -3,9 +3,9 @@ package examples
 import (
 	"fmt"
 
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/renderer"
 )
 
 // DemonstrateASTApproach shows how to use the new AST-based SQL generation
@@ -25,7 +25,7 @@ func DemonstrateASTApproach() {
 		Build()
 
 	// Render for PostgreSQL
-	pgRenderer := renderers.NewPostgreSQLRenderer()
+	pgRenderer := renderer.NewPostgreSQLRenderer()
 	pgSQL, err := pgRenderer.Render(table)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -36,7 +36,7 @@ func DemonstrateASTApproach() {
 	fmt.Println(pgSQL)
 
 	// Render for MySQL
-	mysqlRenderer := renderers.NewMySQLRenderer()
+	mysqlRenderer := renderer.NewMySQLRenderer()
 	mysqlSQL, err := mysqlRenderer.Render(table)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -219,7 +219,7 @@ func ShowAdvancedFeatures() {
 	transformer := &AuditTransformer{}
 	transformedSchema := transformer.Transform(schema)
 
-	renderer := renderers.NewPostgreSQLRenderer()
+	renderer := renderer.NewPostgreSQLRenderer()
 	sql, _ := renderer.RenderSchema(transformedSchema)
 	fmt.Println("Transformed schema with audit columns:")
 	fmt.Println(sql)

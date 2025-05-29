@@ -2,24 +2,24 @@ package postgresql
 
 import (
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/builder"
 	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/renderer"
 )
 
 // Generator handles PostgreSQL-specific SQL generation using AST
 type Generator struct {
 	*base.Generator
-	renderer *renderers.PostgreSQLRenderer
+	renderer *renderer.PostgreSQLRenderer
 }
 
 // New creates a new PostgreSQL generator
 func New() *Generator {
 	return &Generator{
 		Generator: base.NewGenerator(platform.PlatformTypePostgres),
-		renderer:  renderers.NewPostgreSQLRenderer(),
+		renderer:  renderer.NewPostgreSQLRenderer(),
 	}
 }
 

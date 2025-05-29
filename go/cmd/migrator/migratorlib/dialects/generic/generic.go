@@ -2,22 +2,22 @@ package generic
 
 import (
 	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/dialects/base"
-	"github.com/denisvmedia/inventario/cmd/migrator/migratorlib/renderers"
 	"github.com/denisvmedia/inventario/ptah/schema/builder"
 	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/renderer"
 )
 
 // Generator handles unknown dialects without applying dialect-specific transformations
 type Generator struct {
 	*base.Generator
-	renderer *renderers.BaseRenderer
+	renderer *renderer.BaseRenderer
 }
 
 // New creates a new generic generator
 func New(dialectName string) *Generator {
 	return &Generator{
 		Generator: base.NewGenerator(dialectName),
-		renderer:  renderers.NewBaseRenderer(dialectName),
+		renderer:  renderer.NewBaseRenderer(dialectName),
 	}
 }
 
