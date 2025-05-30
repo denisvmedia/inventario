@@ -64,12 +64,15 @@ func (r *PostgreSQLReader) ReadSchema() (*parsertypes.DatabaseSchema, error) {
 	// Enhance tables with constraint information
 	r.enhanceTablesWithConstraints(schema.Tables, schema.Constraints)
 
+	// Enhance tables with primary key information from indexes
+	r.enhanceTablesWithIndexes(schema.Tables, schema.Indexes)
+
 	return schema, nil
 }
 
 // readTables reads all tables and their columns
 func (r *PostgreSQLReader) readTables() ([]parsertypes.Table, error) {
-	// Read tables
+	// Read tables, excluding system tables like schema_migrations
 	tablesQuery := `
 		SELECT table_name, table_type,
 		       COALESCE(obj_description(c.oid), '') as table_comment
@@ -77,6 +80,7 @@ func (r *PostgreSQLReader) readTables() ([]parsertypes.Table, error) {
 		LEFT JOIN pg_class c ON c.relname = t.table_name
 		LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 		WHERE t.table_schema = $1 AND (n.nspname = $1 OR n.nspname IS NULL)
+		AND t.table_name NOT IN ('schema_migrations')
 		ORDER BY table_name`
 
 	rows, err := r.db.Query(tablesQuery, r.schema)
@@ -206,13 +210,19 @@ func (r *PostgreSQLReader) readEnums() ([]parsertypes.Enum, error) {
 func (r *PostgreSQLReader) readIndexes() ([]parsertypes.Index, error) {
 	indexesQuery := `
 		SELECT
-			schemaname,
-			tablename,
-			indexname,
-			indexdef
-		FROM pg_indexes
-		WHERE schemaname = $1
-		ORDER BY tablename, indexname`
+			n.nspname as schemaname,
+			t.relname as tablename,
+			i.relname as indexname,
+			pg_get_indexdef(i.oid) as indexdef,
+			ix.indisprimary,
+			ix.indisunique
+		FROM pg_index ix
+		JOIN pg_class i ON i.oid = ix.indexrelid
+		JOIN pg_class t ON t.oid = ix.indrelid
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		WHERE n.nspname = $1
+		AND t.relname NOT IN ('schema_migrations')
+		ORDER BY t.relname, i.relname`
 
 	rows, err := r.db.Query(indexesQuery, r.schema)
 	if err != nil {
@@ -223,7 +233,8 @@ func (r *PostgreSQLReader) readIndexes() ([]parsertypes.Index, error) {
 	var indexes []parsertypes.Index
 	for rows.Next() {
 		var schemaName, tableName, indexName, indexDef string
-		err := rows.Scan(&schemaName, &tableName, &indexName, &indexDef)
+		var isPrimary, isUnique bool
+		err := rows.Scan(&schemaName, &tableName, &indexName, &indexDef, &isPrimary, &isUnique)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan index: %w", err)
 		}
@@ -233,8 +244,8 @@ func (r *PostgreSQLReader) readIndexes() ([]parsertypes.Index, error) {
 			Name:       indexName,
 			TableName:  tableName,
 			Definition: indexDef,
-			IsUnique:   strings.Contains(strings.ToUpper(indexDef), "UNIQUE"),
-			IsPrimary:  strings.Contains(indexName, "_pkey"),
+			IsUnique:   isUnique,
+			IsPrimary:  isPrimary,
 		}
 
 		// Extract column names from index definition (simplified parsing)
@@ -274,6 +285,7 @@ func (r *PostgreSQLReader) readConstraints() ([]parsertypes.Constraint, error) {
 		LEFT JOIN information_schema.key_column_usage AS kcu
 			ON tc.constraint_name = kcu.constraint_name
 			AND tc.table_schema = kcu.table_schema
+			AND tc.table_name = kcu.table_name
 		LEFT JOIN information_schema.constraint_column_usage AS ccu
 			ON ccu.constraint_name = tc.constraint_name
 			AND ccu.table_schema = tc.table_schema
@@ -284,6 +296,7 @@ func (r *PostgreSQLReader) readConstraints() ([]parsertypes.Constraint, error) {
 			ON tc.constraint_name = cc.constraint_name
 			AND tc.table_schema = cc.constraint_schema
 		WHERE tc.table_schema = $1
+		AND tc.table_name NOT IN ('schema_migrations')
 		ORDER BY tc.table_name, tc.constraint_type, tc.constraint_name`
 
 	rows, err := r.db.Query(constraintsQuery, r.schema)
@@ -367,6 +380,24 @@ func (r *PostgreSQLReader) enhanceTablesWithConstraints(tables []parsertypes.Tab
 			}
 			if uniqueKeys[tableName] != nil && uniqueKeys[tableName][col.Name] {
 				col.IsUnique = true
+			}
+		}
+	}
+}
+
+// enhanceTablesWithIndexes adds primary key information from indexes
+func (r *PostgreSQLReader) enhanceTablesWithIndexes(tables []parsertypes.Table, indexes []parsertypes.Index) {
+	// For auto-increment integer columns (originally SERIAL), automatically set them as primary keys
+	// This is a PostgreSQL-specific behavior where SERIAL columns become auto-increment integers and are typically primary keys
+	for i := range tables {
+		for j := range tables[i].Columns {
+			col := &tables[i].Columns[j]
+
+			// If it's an auto-increment integer column, assume it's a primary key
+			// PostgreSQL converts SERIAL to integer with auto-increment
+			if col.IsAutoIncrement && (strings.Contains(strings.ToLower(col.DataType), "int") ||
+				strings.Contains(strings.ToLower(col.UDTName), "int")) {
+				col.IsPrimaryKey = true
 			}
 		}
 	}

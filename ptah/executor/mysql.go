@@ -80,6 +80,7 @@ func (r *MySQLReader) readTables(dbName string) ([]parsertypes.Table, error) {
 		FROM information_schema.TABLES t
 		WHERE t.TABLE_SCHEMA = ?
 		AND t.TABLE_TYPE IN ('BASE TABLE', 'VIEW')
+		AND t.TABLE_NAME NOT IN ('schema_migrations')
 		ORDER BY t.TABLE_NAME`
 
 	rows, err := r.db.Query(query, dbName)
@@ -326,6 +327,7 @@ func (r *MySQLReader) readIndexes(dbName string) ([]parsertypes.Index, error) {
 			s.INDEX_TYPE
 		FROM information_schema.STATISTICS s
 		WHERE s.TABLE_SCHEMA = ?
+		AND s.TABLE_NAME NOT IN ('schema_migrations')
 		GROUP BY s.INDEX_NAME, s.TABLE_NAME, s.NON_UNIQUE, s.INDEX_TYPE
 		ORDER BY s.TABLE_NAME, s.INDEX_NAME`
 
@@ -379,6 +381,7 @@ func (r *MySQLReader) readConstraints(dbName string) ([]parsertypes.Constraint, 
 			tc.CONSTRAINT_NAME = rc.CONSTRAINT_NAME AND
 			tc.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
 		WHERE tc.TABLE_SCHEMA = ?
+		AND tc.TABLE_NAME NOT IN ('schema_migrations')
 		ORDER BY tc.TABLE_NAME, tc.CONSTRAINT_NAME`
 
 	rows, err := r.db.Query(query, dbName)

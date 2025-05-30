@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
-	"time"
+	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
 )
@@ -26,6 +26,24 @@ var deleteMigrationSQL string
 // MigrationFunc represents a migration function that operates on a database connection
 type MigrationFunc func(context.Context, *executor.DatabaseConnection) error
 
+// splitSQLStatements splits a SQL string into individual statements
+// This is needed because MySQL doesn't handle multiple statements in a single ExecuteSQL call
+func splitSQLStatements(sql string) []string {
+	// Split by semicolon and filter out empty statements
+	statements := strings.Split(sql, ";")
+	var result []string
+
+	for _, stmt := range statements {
+		// Trim whitespace and skip empty statements
+		trimmed := strings.TrimSpace(stmt)
+		if trimmed != "" && trimmed != "\n" {
+			result = append(result, trimmed)
+		}
+	}
+
+	return result
+}
+
 // MigrationFuncFromSQLFilename returns a migration function that reads SQL from a file
 // in the provided filesystem and executes it using the database connection
 func MigrationFuncFromSQLFilename(filename string, fsys fs.FS) MigrationFunc {
@@ -34,7 +52,18 @@ func MigrationFuncFromSQLFilename(filename string, fsys fs.FS) MigrationFunc {
 		if err != nil {
 			return fmt.Errorf("failed to read migration file: %w", err)
 		}
-		return conn.Writer().ExecuteSQL(string(sql))
+
+		// Split SQL into individual statements for better MySQL compatibility
+		statements := splitSQLStatements(string(sql))
+
+		// Execute each statement separately
+		for _, stmt := range statements {
+			if err := conn.Writer().ExecuteSQL(stmt); err != nil {
+				return fmt.Errorf("failed to execute migration SQL: %w", err)
+			}
+		}
+
+		return nil
 	}
 }
 
@@ -53,8 +82,9 @@ type Migration struct {
 
 // Migrator handles database migrations for ptah
 type Migrator struct {
-	conn       *executor.DatabaseConnection
-	migrations []*Migration
+	conn        *executor.DatabaseConnection
+	migrations  []*Migration
+	initialized bool
 }
 
 // NewMigrator creates a new migrator with the given database connection
@@ -79,7 +109,21 @@ func (m *Migrator) sortMigrations() {
 
 // Initialize creates the migrations table if it doesn't exist
 func (m *Migrator) Initialize(ctx context.Context) error {
-	return m.conn.Writer().ExecuteSQL(migrationsSchemaSQL)
+	// Skip if already initialized
+	if m.initialized {
+		return nil
+	}
+
+	// Execute the schema creation SQL directly on the database connection
+	// This avoids transaction conflicts with the PostgreSQL writer
+	_, err := m.conn.Exec(migrationsSchemaSQL)
+	if err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
+	// Mark as initialized
+	m.initialized = true
+	return nil
 }
 
 // GetCurrentVersion returns the current migration version from the database
@@ -121,12 +165,13 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 	// Apply migrations that are newer than current version
 	for _, migration := range m.migrations {
 		if migration.Version <= currentVersion {
+			fmt.Printf("Skipping migration %d: %s (already applied)\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
 			continue
 		}
 
 		fmt.Printf("Applying migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
 
-		// Begin transaction
+		// Begin transaction for this migration
 		if err := m.conn.Writer().BeginTransaction(); err != nil {
 			return fmt.Errorf("failed to begin transaction for migration %d: %w", migration.Version, err)
 		}
@@ -138,7 +183,8 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 		}
 
 		// Record migration
-		recordSQL := fmt.Sprintf(recordMigrationSQL, migration.Version, migration.Description, time.Now().Format(time.RFC3339))
+		timestamp := FormatTimestampForDatabase(m.conn.Info().Dialect)
+		recordSQL := fmt.Sprintf(recordMigrationSQL, migration.Version, migration.Description, timestamp)
 		if err := m.conn.Writer().ExecuteSQL(recordSQL); err != nil {
 			_ = m.conn.Writer().RollbackTransaction()
 			return fmt.Errorf("failed to record migration %d: %w", migration.Version, err)
@@ -191,7 +237,7 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 
 		fmt.Printf("Rolling back migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
 
-		// Begin transaction
+		// Begin transaction for this migration rollback
 		if err := m.conn.Writer().BeginTransaction(); err != nil {
 			return fmt.Errorf("failed to begin transaction for migration %d: %w", migration.Version, err)
 		}
@@ -218,6 +264,85 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 	}
 
 	fmt.Printf("Successfully migrated down to version %d\n", targetVersion) //nolint:forbidigo // Migration progress output is intentional
+	return nil
+}
+
+// MigrateTo migrates the database to a specific version (up or down)
+func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int) error {
+	// Initialize the migrations table
+	if err := m.Initialize(ctx); err != nil {
+		return fmt.Errorf("failed to initialize migrations table: %w", err)
+	}
+
+	// Get the current version
+	currentVersion, err := m.GetCurrentVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current version: %w", err)
+	}
+
+	if targetVersion == currentVersion {
+		fmt.Printf("Already at target version %d\n", targetVersion) //nolint:forbidigo // Migration progress output is intentional
+		return nil
+	}
+
+	if targetVersion > currentVersion {
+		// Migrate up to target version
+		return m.migrateUpTo(ctx, targetVersion)
+	} else {
+		// Migrate down to target version
+		return m.MigrateDown(ctx, targetVersion)
+	}
+}
+
+// migrateUpTo migrates the database up to a specific version
+func (m *Migrator) migrateUpTo(ctx context.Context, targetVersion int) error {
+	// Sort migrations by version
+	m.sortMigrations()
+
+	// Get the current version
+	currentVersion, err := m.GetCurrentVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current version: %w", err)
+	}
+
+	fmt.Printf("Migrating from version %d to %d\n", currentVersion, targetVersion) //nolint:forbidigo // Migration progress output is intentional
+
+	// Apply migrations up to target version
+	for _, migration := range m.migrations {
+		if migration.Version <= currentVersion || migration.Version > targetVersion {
+			continue
+		}
+
+		fmt.Printf("Applying migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
+
+		// Begin transaction for this migration
+		if err := m.conn.Writer().BeginTransaction(); err != nil {
+			return fmt.Errorf("failed to begin transaction for migration %d: %w", migration.Version, err)
+		}
+
+		// Apply migration
+		if err := migration.Up(ctx, m.conn); err != nil {
+			_ = m.conn.Writer().RollbackTransaction()
+			return fmt.Errorf("failed to apply migration %d: %w", migration.Version, err)
+		}
+
+		// Record migration
+		timestamp := FormatTimestampForDatabase(m.conn.Info().Dialect)
+		recordSQL := fmt.Sprintf(recordMigrationSQL, migration.Version, migration.Description, timestamp)
+		if err := m.conn.Writer().ExecuteSQL(recordSQL); err != nil {
+			_ = m.conn.Writer().RollbackTransaction()
+			return fmt.Errorf("failed to record migration %d: %w", migration.Version, err)
+		}
+
+		// Commit transaction
+		if err := m.conn.Writer().CommitTransaction(); err != nil {
+			return fmt.Errorf("failed to commit transaction for migration %d: %w", migration.Version, err)
+		}
+
+		fmt.Printf("Applied migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
+	}
+
+	fmt.Printf("Successfully migrated to version %d\n", targetVersion) //nolint:forbidigo // Migration progress output is intentional
 	return nil
 }
 

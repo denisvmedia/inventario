@@ -68,7 +68,7 @@ func ConnectToDatabase(dbURL string) (*DatabaseConnection, error) {
 	}
 
 	// Get database info
-	info, err := getDatabaseInfo(db, dialect, parsedURL)
+	info, err := getDatabaseInfo(db, dialect, parsedURL, dbURL)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to get database info: %w", err)
@@ -105,16 +105,24 @@ type DatabaseConnection struct {
 	writer SchemaWriter
 }
 
+// Info returns the database connection information
+func (dc *DatabaseConnection) Info() parsertypes.DatabaseInfo {
+	return dc.info
+}
+
+// Reader returns the schema reader
 func (dc *DatabaseConnection) Reader() SchemaReader {
 	return dc.reader
 }
 
+// Writer returns the schema writer
 func (dc *DatabaseConnection) Writer() SchemaWriter {
 	return dc.writer
 }
 
-func (dc *DatabaseConnection) Info() parsertypes.DatabaseInfo {
-	return dc.info
+// Query executes a query and returns the result rows
+func (dc *DatabaseConnection) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	return dc.db.Query(query, args...)
 }
 
 // QueryRow executes a query that returns a single row
@@ -122,9 +130,9 @@ func (dc *DatabaseConnection) QueryRow(query string, args ...interface{}) *sql.R
 	return dc.db.QueryRow(query, args...)
 }
 
-// Query executes a query that returns multiple rows
-func (dc *DatabaseConnection) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	return dc.db.Query(query, args...)
+// Exec executes a query without returning any rows
+func (dc *DatabaseConnection) Exec(query string, args ...interface{}) (sql.Result, error) {
+	return dc.db.Exec(query, args...)
 }
 
 // Close closes the database connection
@@ -171,9 +179,10 @@ func FormatDatabaseURL(dbURL string) string {
 }
 
 // getDatabaseInfo retrieves database metadata
-func getDatabaseInfo(db *sql.DB, dialect string, parsedURL *url.URL) (parsertypes.DatabaseInfo, error) {
+func getDatabaseInfo(db *sql.DB, dialect string, parsedURL *url.URL, originalURL string) (parsertypes.DatabaseInfo, error) {
 	info := parsertypes.DatabaseInfo{
 		Dialect: dialect,
+		URL:     originalURL,
 	}
 
 	switch dialect {

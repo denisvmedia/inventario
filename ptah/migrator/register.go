@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
 )
@@ -160,11 +161,11 @@ func RegisterGoMigration(migrator *Migrator, version int, description string, up
 // This is useful for programmatically creating migrations
 func CreateMigrationFromSQL(version int, description, upSQL, downSQL string) *Migration {
 	upFunc := func(ctx context.Context, conn *executor.DatabaseConnection) error {
-		return conn.Writer().ExecuteSQL(upSQL)
+		return executeSQLStatements(conn, upSQL)
 	}
-	
+
 	downFunc := func(ctx context.Context, conn *executor.DatabaseConnection) error {
-		return conn.Writer().ExecuteSQL(downSQL)
+		return executeSQLStatements(conn, downSQL)
 	}
 
 	return &Migration{
@@ -174,6 +175,28 @@ func CreateMigrationFromSQL(version int, description, upSQL, downSQL string) *Mi
 		Down:        downFunc,
 	}
 }
+
+// executeSQLStatements splits SQL into individual statements and executes them
+func executeSQLStatements(conn *executor.DatabaseConnection, sql string) error {
+	// Split SQL by semicolons and execute each statement
+	statements := splitSQLStatements(sql)
+
+	for _, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" || strings.HasPrefix(stmt, "--") {
+			continue // Skip empty statements and comments
+		}
+
+		_, err := conn.Exec(stmt)
+		if err != nil {
+			return fmt.Errorf("failed to execute SQL statement: %w\nSQL: %s", err, stmt)
+		}
+	}
+
+	return nil
+}
+
+
 
 // ValidateMigrations validates that all registered migrations are complete
 // and that there are no gaps in version numbers

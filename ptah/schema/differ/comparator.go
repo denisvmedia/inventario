@@ -74,11 +74,9 @@ func (d *SchemaDiff) GenerateMigrationSQL(generated *parsertypes.PackageParseRes
 		// Find the table in generated schema and create it
 		for _, table := range generated.Tables {
 			if table.Name == tableName {
-				// Get the create statement for this table
-				statements = append(statements, fmt.Sprintf("-- Create table: %s", tableName))
-				// Note: This would need the full table creation logic
-				// For now, we'll add a placeholder
-				statements = append(statements, fmt.Sprintf("-- TODO: CREATE TABLE %s (...);", tableName))
+				// Generate basic CREATE TABLE SQL
+				createSQL := generateBasicCreateTableSQL(table, generated.Fields, dialect)
+				statements = append(statements, createSQL)
 				break
 			}
 		}
@@ -308,8 +306,18 @@ func compareColumns(genCol types.SchemaField, dbCol parsertypes.Column) ColumnDi
 	if dbCol.ColumnDefault != nil {
 		dbDefault = *dbCol.ColumnDefault
 	}
-	if genDefault != dbDefault {
-		colDiff.Changes["default"] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
+
+	// For auto-increment/SERIAL columns, ignore default value differences
+	// because the database will show the sequence default but the entity expects empty
+	isAutoIncrement := dbCol.IsAutoIncrement || strings.Contains(strings.ToUpper(genCol.Type), "SERIAL")
+	if !isAutoIncrement {
+		// Normalize default values for comparison (especially for boolean types)
+		normalizedGenDefault := normalizeDefaultValue(genDefault, genType)
+		normalizedDbDefault := normalizeDefaultValue(dbDefault, dbType)
+
+		if normalizedGenDefault != normalizedDbDefault {
+			colDiff.Changes["default"] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
+		}
 	}
 
 	return colDiff
@@ -402,7 +410,8 @@ func compareIndexes(generated *parsertypes.PackageParseResult, database *parsert
 	dbIndexes := make(map[string]bool)
 	for _, index := range database.Indexes {
 		// Skip primary key indexes as they're handled with tables
-		if !index.IsPrimary {
+		// Skip unique indexes as they're automatically created by UNIQUE constraints
+		if !index.IsPrimary && !index.IsUnique {
 			dbIndexes[index.Name] = true
 		}
 	}
@@ -437,6 +446,9 @@ func normalizeType(typeName string) string {
 		return "text"
 	case strings.Contains(typeName, "serial"):
 		return "integer"
+	case strings.Contains(typeName, "tinyint"):
+		// MySQL/MariaDB stores BOOLEAN as TINYINT or TINYINT(1)
+		return "boolean"
 	case strings.Contains(typeName, "int"):
 		return "integer"
 	case strings.Contains(typeName, "bool"):
@@ -447,5 +459,216 @@ func normalizeType(typeName string) string {
 		return "decimal"
 	default:
 		return typeName
+	}
+}
+
+// normalizeDefaultValue normalizes default values for comparison
+func normalizeDefaultValue(defaultValue, typeName string) string {
+	if defaultValue == "" {
+		return ""
+	}
+
+	// Remove quotes first for all comparisons
+	cleanValue := strings.Trim(defaultValue, "'\"")
+
+	// MariaDB/MySQL returns 'NULL' for columns without explicit defaults
+	// Normalize this to empty string for comparison
+	if strings.ToUpper(cleanValue) == "NULL" {
+		return ""
+	}
+
+	// For boolean types, normalize MySQL/MariaDB '1'/'0' to 'true'/'false'
+	if typeName == "boolean" {
+		switch strings.ToLower(cleanValue) {
+		case "1", "true":
+			return "true"
+		case "0", "false":
+			return "false"
+		}
+		// If it's not a recognized boolean value, return as-is
+		return cleanValue
+	}
+
+	// Return cleaned value
+	return cleanValue
+}
+
+// generateBasicCreateTableSQL generates basic CREATE TABLE SQL for a specific table
+func generateBasicCreateTableSQL(table types.TableDirective, fields []types.SchemaField, dialect string) string {
+	var columns []string
+	var primaryKeys []string
+
+	// Filter and process fields for this table
+	for _, field := range fields {
+		if field.StructName == table.StructName {
+			columnDef := generateColumnDefinition(field, dialect)
+			columns = append(columns, columnDef)
+
+			if field.Primary {
+				primaryKeys = append(primaryKeys, field.Name)
+			}
+		}
+	}
+
+	// Ensure we have at least one column
+	if len(columns) == 0 {
+		return fmt.Sprintf("-- ERROR: No columns found for table %s (struct: %s)", table.Name, table.StructName)
+	}
+
+	// Build CREATE TABLE statement
+	sql := fmt.Sprintf("CREATE TABLE %s (\n", table.Name)
+	sql += "  " + strings.Join(columns, ",\n  ")
+
+	// Add primary key constraint if there are multiple primary keys
+	if len(primaryKeys) > 1 {
+		sql += fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(primaryKeys, ", "))
+	}
+
+	sql += "\n);"
+	return sql
+}
+
+// generateColumnDefinition generates a column definition for a field
+func generateColumnDefinition(field types.SchemaField, dialect string) string {
+	sqlType := mapTypeToSQL(field.Type, field.Enum, dialect)
+	colDef := field.Name + " " + sqlType
+
+	// Handle primary key
+	if field.Primary {
+		if dialect == "mysql" && strings.Contains(strings.ToUpper(field.Type), "SERIAL") {
+			// For MySQL SERIAL (which becomes INT AUTO_INCREMENT), add PRIMARY KEY
+			colDef += " PRIMARY KEY"
+		} else if !strings.Contains(strings.ToUpper(field.Type), "SERIAL") {
+			// For non-SERIAL primary keys, add PRIMARY KEY
+			colDef += " PRIMARY KEY"
+		}
+	}
+
+	// Handle NOT NULL (but not for primary keys as they're implicitly NOT NULL)
+	if !field.Nullable && !field.Primary {
+		colDef += " NOT NULL"
+	}
+
+	// Handle UNIQUE constraint
+	if field.Unique && !field.Primary {
+		colDef += " UNIQUE"
+	}
+
+	// Handle DEFAULT values
+	if field.Default != "" {
+		defaultValue := field.Default
+		// Quote string/enum default values if they're not already quoted and not functions
+		if needsQuoting(defaultValue, field.Type, field.Enum) {
+			defaultValue = fmt.Sprintf("'%s'", defaultValue)
+		}
+		colDef += " DEFAULT " + defaultValue
+	}
+
+	return colDef
+}
+
+// needsQuoting determines if a default value needs to be quoted
+func needsQuoting(defaultValue, fieldType string, enumValues []string) bool {
+	// Don't quote if already quoted
+	if strings.HasPrefix(defaultValue, "'") && strings.HasSuffix(defaultValue, "'") {
+		return false
+	}
+
+	// Don't quote if it's a function call (contains parentheses or is a known function)
+	if strings.Contains(defaultValue, "(") ||
+		strings.ToUpper(defaultValue) == "CURRENT_TIMESTAMP" ||
+		strings.ToUpper(defaultValue) == "NOW()" ||
+		strings.ToUpper(defaultValue) == "NULL" {
+		return false
+	}
+
+	// Quote if it's an enum type
+	if len(enumValues) > 0 || strings.HasPrefix(strings.ToLower(fieldType), "enum") {
+		return true
+	}
+
+	// Quote if it's a string type
+	fieldTypeUpper := strings.ToUpper(fieldType)
+	if strings.Contains(fieldTypeUpper, "VARCHAR") ||
+		strings.Contains(fieldTypeUpper, "TEXT") ||
+		strings.Contains(fieldTypeUpper, "CHAR") {
+		return true
+	}
+
+	// Don't quote numeric types, booleans, etc.
+	return false
+}
+
+// mapTypeToSQL maps schema field types to SQL types based on dialect
+func mapTypeToSQL(fieldType string, enumValues []string, dialect string) string {
+	// Check if this is an enum type (has enum values or starts with "enum_")
+	isEnum := len(enumValues) > 0 || strings.HasPrefix(strings.ToLower(fieldType), "enum_")
+
+	if isEnum {
+		switch dialect {
+		case "postgres":
+			// For PostgreSQL, return the enum type name as-is (don't uppercase it)
+			return fieldType
+		case "mysql", "mariadb":
+			// For MySQL/MariaDB, convert to inline ENUM syntax
+			if len(enumValues) > 0 {
+				quotedValues := make([]string, len(enumValues))
+				for i, value := range enumValues {
+					quotedValues[i] = fmt.Sprintf("'%s'", value)
+				}
+				return fmt.Sprintf("ENUM(%s)", strings.Join(quotedValues, ", "))
+			}
+			// If no enum values provided but type starts with enum_, return as-is
+			// This shouldn't happen in normal usage but provides a fallback
+			return fieldType
+		default:
+			return fieldType
+		}
+	}
+
+	// For non-enum types, apply the original logic with uppercase conversion
+	fieldType = strings.ToUpper(fieldType)
+
+	switch dialect {
+	case "postgres":
+		switch {
+		case strings.Contains(fieldType, "SERIAL"):
+			return "SERIAL"
+		case strings.Contains(fieldType, "VARCHAR"):
+			return fieldType
+		case strings.Contains(fieldType, "TEXT"):
+			return "TEXT"
+		case strings.Contains(fieldType, "INTEGER"):
+			return "INTEGER"
+		case strings.Contains(fieldType, "BOOLEAN"):
+			return "BOOLEAN"
+		case strings.Contains(fieldType, "TIMESTAMP"):
+			return "TIMESTAMP"
+		case strings.Contains(fieldType, "DECIMAL"):
+			return fieldType
+		default:
+			return fieldType
+		}
+	case "mysql", "mariadb":
+		switch {
+		case strings.Contains(fieldType, "SERIAL"):
+			return "INT AUTO_INCREMENT"
+		case strings.Contains(fieldType, "VARCHAR"):
+			return fieldType
+		case strings.Contains(fieldType, "TEXT"):
+			return "TEXT"
+		case strings.Contains(fieldType, "INTEGER"):
+			return "INT"
+		case strings.Contains(fieldType, "BOOLEAN"):
+			return "BOOLEAN"
+		case strings.Contains(fieldType, "TIMESTAMP"):
+			return "TIMESTAMP"
+		case strings.Contains(fieldType, "DECIMAL"):
+			return fieldType
+		default:
+			return fieldType
+		}
+	default:
+		return fieldType
 	}
 }

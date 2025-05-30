@@ -30,3 +30,4 @@ coverage
 /.docker/
 .env
 docker-compose.override.yaml
+ptah/integration/reports

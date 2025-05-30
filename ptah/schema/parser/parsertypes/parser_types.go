@@ -98,4 +98,5 @@ type DatabaseInfo struct {
 	Dialect string `json:"dialect"` // postgres, mysql, mariadb
 	Version string `json:"version"`
 	Schema  string `json:"schema"` // public, database name, etc.
+	URL     string `json:"url"`     // database connection URL (for reference)
 }
