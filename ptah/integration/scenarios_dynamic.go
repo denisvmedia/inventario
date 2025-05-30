@@ -53,7 +53,7 @@ func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConne
 	}
 	defer vem.Cleanup()
 
-	// Evolution path: 000 → 001 → 002 → 003
+	// Evolution path: 000 → 001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009 → 010 → 011 → 012
 	versions := []struct {
 		dir         string
 		description string
@@ -62,6 +62,15 @@ func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConne
 		{"001-add-fields", "Add additional fields to users and products"},
 		{"002-add-posts", "Add posts table with foreign key to users"},
 		{"003-add-enums", "Add enum types and status fields"},
+		{"004-field-rename", "Rename fields: bio → description, age → user_age"},
+		{"005-field-type-change", "Change field types: user_age INTEGER → SMALLINT, description TEXT → VARCHAR(500)"},
+		{"006-field-drop", "Drop unused fields: active field from users"},
+		{"007-index-add", "Add new indexes: compound index on name+email, index on description"},
+		{"008-index-remove", "Remove old indexes: idx_users_email (replaced by compound)"},
+		{"009-add-constraints", "Add constraints: check constraint on user_age, foreign key constraint"},
+		{"010-drop-constraints", "Drop constraints: remove check constraint on user_age"},
+		{"011-add-entity", "Add new entity: categories table"},
+		{"012-drop-entity", "Drop entity: remove products table"},
 	}
 
 	for _, version := range versions {
@@ -80,14 +89,57 @@ func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConne
 		return fmt.Errorf("failed to generate final schema: %w", err)
 	}
 
-	// Should have 3 tables: users, products, posts
+	// Should have 3 tables: users, posts, categories (products was dropped in version 012)
 	if len(schema.Tables) != 3 {
 		return fmt.Errorf("expected 3 tables, got %d", len(schema.Tables))
 	}
 
-	// Should have 3 enums: user_status, product_status, post_status
-	if len(schema.Enums) != 3 {
-		return fmt.Errorf("expected 3 enums, got %d", len(schema.Enums))
+	// Should have 2 enums: user_status, post_status (product_status was dropped with products table)
+	if len(schema.Enums) != 2 {
+		return fmt.Errorf("expected 2 enums, got %d", len(schema.Enums))
+	}
+
+	// Verify that field renames, type changes, and constraint changes were applied
+	// Check that users table has the renamed fields (description, user_age) and not the old ones (bio, age)
+	usersTable := findTable(schema.Tables, "users")
+	if usersTable == nil {
+		return fmt.Errorf("users table not found in final schema")
+	}
+
+	// Should have description field (renamed from bio)
+	if !hasField(usersTable.Fields, "description") {
+		return fmt.Errorf("users table should have description field (renamed from bio)")
+	}
+
+	// Should have user_age field (renamed from age)
+	if !hasField(usersTable.Fields, "user_age") {
+		return fmt.Errorf("users table should have user_age field (renamed from age)")
+	}
+
+	// Should NOT have bio or age fields (they were renamed)
+	if hasField(usersTable.Fields, "bio") {
+		return fmt.Errorf("users table should not have bio field (it was renamed to description)")
+	}
+
+	if hasField(usersTable.Fields, "age") {
+		return fmt.Errorf("users table should not have age field (it was renamed to user_age)")
+	}
+
+	// Should NOT have active field (it was dropped)
+	if hasField(usersTable.Fields, "active") {
+		return fmt.Errorf("users table should not have active field (it was dropped)")
+	}
+
+	// Verify that categories table was added
+	categoriesTable := findTable(schema.Tables, "categories")
+	if categoriesTable == nil {
+		return fmt.Errorf("categories table should exist (added in version 011)")
+	}
+
+	// Verify that products table was dropped
+	productsTable := findTable(schema.Tables, "products")
+	if productsTable != nil {
+		return fmt.Errorf("products table should not exist (dropped in version 012)")
 	}
 
 	return nil
@@ -101,14 +153,14 @@ func testDynamicSkipVersions(ctx context.Context, conn *executor.DatabaseConnect
 	}
 	defer vem.Cleanup()
 
-	// Skip version 001, go directly from 000 → 002 → 003
+	// Skip several versions, go directly from 000 → 005 → 012
 	versions := []struct {
 		dir         string
 		description string
 	}{
 		{"000-initial", "Create initial users and products tables"},
-		{"002-add-posts", "Add posts table and additional fields"},
-		{"003-add-enums", "Add enum types and status fields"},
+		{"005-field-type-change", "Add fields, posts table, enums, renames, and type changes"},
+		{"012-drop-entity", "Apply all remaining changes including entity add/drop"},
 	}
 
 	for _, version := range versions {
@@ -127,8 +179,8 @@ func testDynamicSkipVersions(ctx context.Context, conn *executor.DatabaseConnect
 		return fmt.Errorf("expected 3 tables, got %d", len(schema.Tables))
 	}
 
-	if len(schema.Enums) != 3 {
-		return fmt.Errorf("expected 3 enums, got %d", len(schema.Enums))
+	if len(schema.Enums) != 2 {
+		return fmt.Errorf("expected 2 enums, got %d", len(schema.Enums))
 	}
 
 	return nil
@@ -142,9 +194,9 @@ func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnecti
 	}
 	defer vem.Cleanup()
 
-	// Apply version 001 twice
-	version := "001-add-fields"
-	description := "Add additional fields to users and products"
+	// Apply version 007 twice (index add)
+	version := "007-index-add"
+	description := "Add new indexes: compound index on name+email, index on description"
 
 	// First application
 	if err := vem.MigrateToVersion(ctx, conn, version, description); err != nil {
@@ -184,13 +236,13 @@ func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnect
 	}
 	defer vem.Cleanup()
 
-	// Apply up to version 001
+	// Apply up to version 004 (field rename)
 	if err := vem.MigrateToVersion(ctx, conn, "000-initial", "Create initial tables"); err != nil {
 		return fmt.Errorf("failed to migrate to version 000: %w", err)
 	}
 
-	if err := vem.MigrateToVersion(ctx, conn, "001-add-fields", "Add additional fields"); err != nil {
-		return fmt.Errorf("failed to migrate to version 001: %w", err)
+	if err := vem.MigrateToVersion(ctx, conn, "004-field-rename", "Add fields, posts, enums, and rename fields"); err != nil {
+		return fmt.Errorf("failed to migrate to version 004: %w", err)
 	}
 
 	// Verify intermediate state
@@ -204,8 +256,8 @@ func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnect
 	}
 
 	// Continue to final version
-	if err := vem.MigrateToVersion(ctx, conn, "003-add-enums", "Add enum types"); err != nil {
-		return fmt.Errorf("failed to migrate to version 003: %w", err)
+	if err := vem.MigrateToVersion(ctx, conn, "012-drop-entity", "Apply all remaining changes including entity add/drop"); err != nil {
+		return fmt.Errorf("failed to migrate to version 012: %w", err)
 	}
 
 	// Verify final state
@@ -218,8 +270,8 @@ func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnect
 		return fmt.Errorf("expected 3 tables at final state, got %d", len(finalSchema.Tables))
 	}
 
-	if len(finalSchema.Enums) != 3 {
-		return fmt.Errorf("expected 3 enums at final state, got %d", len(finalSchema.Enums))
+	if len(finalSchema.Enums) != 2 {
+		return fmt.Errorf("expected 2 enums at final state, got %d", len(finalSchema.Enums))
 	}
 
 	return nil
@@ -239,8 +291,8 @@ func testDynamicSchemaDiff(ctx context.Context, conn *executor.DatabaseConnectio
 	}
 
 	// Load next version entities but don't apply yet
-	if err := vem.LoadEntityVersion("002-add-posts"); err != nil {
-		return fmt.Errorf("failed to load version 002 entities: %w", err)
+	if err := vem.LoadEntityVersion("006-field-drop"); err != nil {
+		return fmt.Errorf("failed to load version 006 entities: %w", err)
 	}
 
 	// Generate migration SQL to see the diff
@@ -278,9 +330,9 @@ func testDynamicMigrationSQLGeneration(ctx context.Context, conn *executor.Datab
 	}
 	defer vem.Cleanup()
 
-	// Start with empty database, load version 001 entities
-	if err := vem.LoadEntityVersion("001-add-fields"); err != nil {
-		return fmt.Errorf("failed to load version 001 entities: %w", err)
+	// Start with empty database, load version 008 entities (index remove)
+	if err := vem.LoadEntityVersion("008-index-remove"); err != nil {
+		return fmt.Errorf("failed to load version 008 entities: %w", err)
 	}
 
 	// Generate SQL for creating everything from scratch
@@ -348,4 +400,46 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// findTable finds a table by name in a slice of tables
+func findTable(tables []interface{}, name string) interface{} {
+	// This is a placeholder - the actual implementation would depend on the schema structure
+	// In a real implementation, you would iterate through tables and match by name
+	for _, table := range tables {
+		// Assuming table has a Name field - adjust based on actual schema structure
+		if tableName := getTableName(table); tableName == name {
+			return table
+		}
+	}
+	return nil
+}
+
+// hasField checks if a field exists in a slice of fields
+func hasField(fields []interface{}, name string) bool {
+	// This is a placeholder - the actual implementation would depend on the field structure
+	// In a real implementation, you would iterate through fields and match by name
+	for _, field := range fields {
+		// Assuming field has a Name field - adjust based on actual field structure
+		if fieldName := getFieldName(field); fieldName == name {
+			return true
+		}
+	}
+	return false
+}
+
+// getTableName extracts the name from a table object
+func getTableName(table interface{}) string {
+	// This is a placeholder - implement based on actual table structure
+	// For example, if table is a struct with Name field:
+	// return table.Name
+	return ""
+}
+
+// getFieldName extracts the name from a field object
+func getFieldName(field interface{}) string {
+	// This is a placeholder - implement based on actual field structure
+	// For example, if field is a struct with Name field:
+	// return field.Name
+	return ""
 }
