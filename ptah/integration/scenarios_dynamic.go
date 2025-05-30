@@ -64,81 +64,80 @@ func GetDynamicScenarios() []TestScenario {
 			EnhancedTestFunc: testDynamicRollbackToZero,
 		},
 
-		// TODO: Re-enable these scenarios after fixing the rollback scenarios
 		// Error handling & recovery scenarios
-		// {
-		// 	Name:             "dynamic_partial_failure_recovery",
-		// 	Description:      "Test recovery from migration failure mid-way",
-		// 	EnhancedTestFunc: testDynamicPartialFailureRecovery,
-		// },
-		// {
-		// 	Name:             "dynamic_invalid_migration",
-		// 	Description:      "Test handling of invalid/corrupted migration data",
-		// 	EnhancedTestFunc: testDynamicInvalidMigration,
-		// },
-		// {
-		// 	Name:             "dynamic_concurrent_migrations",
-		// 	Description:      "Test concurrent migration attempts (locking behavior)",
-		// 	EnhancedTestFunc: testDynamicConcurrentMigrations,
-		// },
+		{
+			Name:             "dynamic_partial_failure_recovery",
+			Description:      "Test recovery from migration failure mid-way",
+			EnhancedTestFunc: testDynamicPartialFailureRecovery,
+		},
+		{
+			Name:             "dynamic_invalid_migration",
+			Description:      "Test handling of invalid/corrupted migration data",
+			EnhancedTestFunc: testDynamicInvalidMigration,
+		},
+		{
+			Name:             "dynamic_concurrent_migrations",
+			Description:      "Test concurrent migration attempts (locking behavior)",
+			EnhancedTestFunc: testDynamicConcurrentMigrations,
+		},
 
-		// // Complex schema change scenarios
-		// {
-		// 	Name:             "dynamic_circular_dependencies",
-		// 	Description:      "Test handling of circular foreign key dependencies",
-		// 	EnhancedTestFunc: testDynamicCircularDependencies,
-		// },
-		// {
-		// 	Name:             "dynamic_data_migration",
-		// 	Description:      "Test migrations that require data transformation",
-		// 	EnhancedTestFunc: testDynamicDataMigration,
-		// },
-		// {
-		// 	Name:             "dynamic_large_table_migration",
-		// 	Description:      "Test performance with large datasets during migration",
-		// 	EnhancedTestFunc: testDynamicLargeTableMigration,
-		// },
+		// Complex schema change scenarios
+		{
+			Name:             "dynamic_circular_dependencies",
+			Description:      "Test handling of circular foreign key dependencies",
+			EnhancedTestFunc: testDynamicCircularDependencies,
+		},
+		{
+			Name:             "dynamic_data_migration",
+			Description:      "Test migrations that require data transformation",
+			EnhancedTestFunc: testDynamicDataMigration,
+		},
+		{
+			Name:             "dynamic_large_table_migration",
+			Description:      "Test performance with large datasets during migration",
+			EnhancedTestFunc: testDynamicLargeTableMigration,
+		},
 
-		// // Edge case scenarios
-		// {
-		// 	Name:             "dynamic_empty_migrations",
-		// 	Description:      "Test versions with no actual schema changes",
-		// 	EnhancedTestFunc: testDynamicEmptyMigrations,
-		// },
-		// {
-		// 	Name:             "dynamic_duplicate_names",
-		// 	Description:      "Test handling of duplicate table/field names across versions",
-		// 	EnhancedTestFunc: testDynamicDuplicateNames,
-		// },
-		// {
-		// 	Name:             "dynamic_reserved_keywords",
-		// 	Description:      "Test migrations involving SQL reserved keywords",
-		// 	EnhancedTestFunc: testDynamicReservedKeywords,
-		// },
+		// Edge case scenarios
+		{
+			Name:             "dynamic_empty_migrations",
+			Description:      "Test versions with no actual schema changes",
+			EnhancedTestFunc: testDynamicEmptyMigrations,
+		},
+		{
+			Name:             "dynamic_duplicate_names",
+			Description:      "Test handling of duplicate table/field names across versions",
+			EnhancedTestFunc: testDynamicDuplicateNames,
+		},
+		{
+			Name:             "dynamic_reserved_keywords",
+			Description:      "Test migrations involving SQL reserved keywords",
+			EnhancedTestFunc: testDynamicReservedKeywords,
+		},
 
-		// // Cross-database compatibility scenarios
-		// {
-		// 	Name:             "dynamic_dialect_differences",
-		// 	Description:      "Test same migration across PostgreSQL/MySQL/MariaDB",
-		// 	EnhancedTestFunc: testDynamicDialectDifferences,
-		// },
-		// {
-		// 	Name:             "dynamic_type_mapping",
-		// 	Description:      "Test database-specific type conversions",
-		// 	EnhancedTestFunc: testDynamicTypeMapping,
-		// },
+		// Cross-database compatibility scenarios
+		{
+			Name:             "dynamic_dialect_differences",
+			Description:      "Test same migration across PostgreSQL/MySQL/MariaDB",
+			EnhancedTestFunc: testDynamicDialectDifferences,
+		},
+		{
+			Name:             "dynamic_type_mapping",
+			Description:      "Test database-specific type conversions",
+			EnhancedTestFunc: testDynamicTypeMapping,
+		},
 
-		// // Validation & integrity scenarios
-		// {
-		// 	Name:             "dynamic_constraint_validation",
-		// 	Description:      "Test constraint violations during migration",
-		// 	EnhancedTestFunc: testDynamicConstraintValidation,
-		// },
-		// {
-		// 	Name:             "dynamic_foreign_key_cascade",
-		// 	Description:      "Test cascading effects of table/field drops",
-		// 	EnhancedTestFunc: testDynamicForeignKeyCascade,
-		// },
+		// Validation & integrity scenarios
+		{
+			Name:             "dynamic_constraint_validation",
+			Description:      "Test constraint violations during migration",
+			EnhancedTestFunc: testDynamicConstraintValidation,
+		},
+		{
+			Name:             "dynamic_foreign_key_cascade",
+			Description:      "Test cascading effects of table/field drops",
+			EnhancedTestFunc: testDynamicForeignKeyCascade,
+		},
 	}
 }
 
@@ -1108,15 +1107,24 @@ func testDynamicCircularDependencies(ctx context.Context, conn *executor.Databas
 	defer vem.Cleanup()
 
 	return recorder.RecordStep("Test Circular Dependencies", "Create tables with circular foreign key references", func() error {
+		dialect := conn.Info().Dialect
 		// Create migrations that establish circular dependencies
 		m := migrator.NewMigrator(conn)
 
 		// First, create tables without foreign keys
+		var createSQL string
+		if dialect == "mysql" {
+			createSQL = `CREATE TABLE departments (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255));
+			 CREATE TABLE employees (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), department_id INTEGER);`
+		} else {
+			createSQL = `CREATE TABLE departments (id SERIAL PRIMARY KEY, name VARCHAR(255));
+			 CREATE TABLE employees (id SERIAL PRIMARY KEY, name VARCHAR(255), department_id INTEGER);`
+		}
+
 		migration1 := migrator.CreateMigrationFromSQL(
 			1,
 			"Create tables without FK",
-			`CREATE TABLE departments (id SERIAL PRIMARY KEY, name VARCHAR(255));
-			 CREATE TABLE employees (id SERIAL PRIMARY KEY, name VARCHAR(255), department_id INTEGER);`,
+			createSQL,
 			`DROP TABLE employees; DROP TABLE departments;`,
 		)
 		m.Register(migration1)
@@ -1169,15 +1177,28 @@ func testDynamicDataMigration(ctx context.Context, conn *executor.DatabaseConnec
 
 	// Create initial table with data
 	err = recorder.RecordStep("Create Table with Data", "Create users table and insert test data", func() error {
+		dialect := conn.Info().Dialect
 		m := migrator.NewMigrator(conn)
-		migration := migrator.CreateMigrationFromSQL(
-			1,
-			"Create users with data",
-			`CREATE TABLE users (id SERIAL PRIMARY KEY, full_name VARCHAR(255), email VARCHAR(255));
+
+		var createSQL string
+		if dialect == "mysql" {
+			createSQL = `CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(255), email VARCHAR(255));
 			 INSERT INTO users (full_name, email) VALUES
 			   ('John Doe', 'john@example.com'),
 			   ('Jane Smith', 'jane@example.com'),
-			   ('Bob Johnson', 'bob@example.com');`,
+			   ('Bob Johnson', 'bob@example.com');`
+		} else {
+			createSQL = `CREATE TABLE users (id SERIAL PRIMARY KEY, full_name VARCHAR(255), email VARCHAR(255));
+			 INSERT INTO users (full_name, email) VALUES
+			   ('John Doe', 'john@example.com'),
+			   ('Jane Smith', 'jane@example.com'),
+			   ('Bob Johnson', 'bob@example.com');`
+		}
+
+		migration := migrator.CreateMigrationFromSQL(
+			1,
+			"Create users with data",
+			createSQL,
 			`DROP TABLE users;`,
 		)
 		m.Register(migration)
@@ -1258,15 +1279,28 @@ func testDynamicLargeTableMigration(ctx context.Context, conn *executor.Database
 
 	// Create table with moderate amount of data (not too large for CI)
 	err = recorder.RecordStep("Create Large Table", "Create table with test data", func() error {
+		dialect := conn.Info().Dialect
 		m := migrator.NewMigrator(conn)
-		migration := migrator.CreateMigrationFromSQL(
-			1,
-			"Create large table",
-			`CREATE TABLE large_table (
+
+		var createSQL string
+		if dialect == "mysql" {
+			createSQL = `CREATE TABLE large_table (
+			   id INT AUTO_INCREMENT PRIMARY KEY,
+			   data VARCHAR(255),
+			   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			 );`
+		} else {
+			createSQL = `CREATE TABLE large_table (
 			   id SERIAL PRIMARY KEY,
 			   data VARCHAR(255),
 			   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-			 );`,
+			 );`
+		}
+
+		migration := migrator.CreateMigrationFromSQL(
+			1,
+			"Create large table",
+			createSQL,
 			`DROP TABLE large_table;`,
 		)
 		m.Register(migration)
@@ -1414,13 +1448,21 @@ func testDynamicDuplicateNames(ctx context.Context, conn *executor.DatabaseConne
 	defer vem.Cleanup()
 
 	return recorder.RecordStep("Test Duplicate Names", "Test handling of duplicate table/field names", func() error {
+		dialect := conn.Info().Dialect
 		m := migrator.NewMigrator(conn)
 
-		// Create initial table
+		// Create initial table with database-specific SQL
+		var createSQL string
+		if dialect == "mysql" {
+			createSQL = "CREATE TABLE test_table (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255));"
+		} else {
+			createSQL = "CREATE TABLE test_table (id SERIAL PRIMARY KEY, name VARCHAR(255));"
+		}
+
 		migration1 := migrator.CreateMigrationFromSQL(
 			1,
 			"Create initial table",
-			"CREATE TABLE test_table (id SERIAL PRIMARY KEY, name VARCHAR(255));",
+			createSQL,
 			"DROP TABLE test_table;",
 		)
 		m.Register(migration1)
@@ -1481,21 +1523,38 @@ func testDynamicReservedKeywords(ctx context.Context, conn *executor.DatabaseCon
 	defer vem.Cleanup()
 
 	return recorder.RecordStep("Test Reserved Keywords", "Test migrations with SQL reserved keywords", func() error {
+		dialect := conn.Info().Dialect
 		m := migrator.NewMigrator(conn)
 
 		// Create table with reserved keyword names (properly quoted)
-		migration := migrator.CreateMigrationFromSQL(
-			1,
-			"Reserved keywords test",
-			`CREATE TABLE "order" (
+		var createSQL, dropSQL string
+		if dialect == "mysql" {
+			createSQL = "CREATE TABLE `order` (" +
+				"   `id` INT AUTO_INCREMENT PRIMARY KEY," +
+				"   `select` VARCHAR(255)," +
+				"   `from` VARCHAR(255)," +
+				"   `where` TEXT," +
+				"   `group` INTEGER" +
+				" );" +
+				" CREATE INDEX `index` ON `order`(`select`);"
+			dropSQL = "DROP INDEX `index` ON `order`; DROP TABLE `order`;"
+		} else {
+			createSQL = `CREATE TABLE "order" (
 			   "id" SERIAL PRIMARY KEY,
 			   "select" VARCHAR(255),
 			   "from" VARCHAR(255),
 			   "where" TEXT,
 			   "group" INTEGER
 			 );
-			 CREATE INDEX "index" ON "order"("select");`,
-			`DROP INDEX "index"; DROP TABLE "order";`,
+			 CREATE INDEX "index" ON "order"("select");`
+			dropSQL = `DROP INDEX "index"; DROP TABLE "order";`
+		}
+
+		migration := migrator.CreateMigrationFromSQL(
+			1,
+			"Reserved keywords test",
+			createSQL,
+			dropSQL,
 		)
 		m.Register(migration)
 
@@ -1721,11 +1780,23 @@ func testDynamicConstraintValidation(ctx context.Context, conn *executor.Databas
 
 	// Create table with data that will violate constraints
 	err = recorder.RecordStep("Create Table with Data", "Create table and insert data", func() error {
+		dialect := conn.Info().Dialect
 		m := migrator.NewMigrator(conn)
-		migration := migrator.CreateMigrationFromSQL(
-			1,
-			"Create table with data",
-			`CREATE TABLE constraint_test (
+
+		var createSQL string
+		if dialect == "mysql" {
+			createSQL = `CREATE TABLE constraint_test (
+			   id INT AUTO_INCREMENT PRIMARY KEY,
+			   email VARCHAR(255),
+			   age INTEGER
+			 );
+			 INSERT INTO constraint_test (email, age) VALUES
+			   ('user1@example.com', 25),
+			   ('user2@example.com', 30),
+			   ('user1@example.com', 35),  -- Duplicate email
+			   ('user3@example.com', -5);  -- Invalid age`
+		} else {
+			createSQL = `CREATE TABLE constraint_test (
 			   id SERIAL PRIMARY KEY,
 			   email VARCHAR(255),
 			   age INTEGER
@@ -1734,7 +1805,13 @@ func testDynamicConstraintValidation(ctx context.Context, conn *executor.Databas
 			   ('user1@example.com', 25),
 			   ('user2@example.com', 30),
 			   ('user1@example.com', 35),  -- Duplicate email
-			   ('user3@example.com', -5);  -- Invalid age`,
+			   ('user3@example.com', -5);  -- Invalid age`
+		}
+
+		migration := migrator.CreateMigrationFromSQL(
+			1,
+			"Create table with data",
+			createSQL,
 			`DROP TABLE constraint_test;`,
 		)
 		m.Register(migration)
@@ -1794,11 +1871,25 @@ func testDynamicForeignKeyCascade(ctx context.Context, conn *executor.DatabaseCo
 
 	// Create tables with foreign key relationships
 	err = recorder.RecordStep("Create Tables with FK", "Create parent and child tables with foreign key", func() error {
+		dialect := conn.Info().Dialect
 		m := migrator.NewMigrator(conn)
-		migration := migrator.CreateMigrationFromSQL(
-			1,
-			"Create FK tables",
-			`CREATE TABLE parent_table (
+
+		var createSQL string
+		if dialect == "mysql" {
+			createSQL = `CREATE TABLE parent_table (
+			   id INT AUTO_INCREMENT PRIMARY KEY,
+			   name VARCHAR(255)
+			 );
+			 CREATE TABLE child_table (
+			   id INT AUTO_INCREMENT PRIMARY KEY,
+			   parent_id INTEGER,
+			   data VARCHAR(255),
+			   FOREIGN KEY (parent_id) REFERENCES parent_table(id)
+			 );
+			 INSERT INTO parent_table (name) VALUES ('Parent 1'), ('Parent 2');
+			 INSERT INTO child_table (parent_id, data) VALUES (1, 'Child 1'), (2, 'Child 2');`
+		} else {
+			createSQL = `CREATE TABLE parent_table (
 			   id SERIAL PRIMARY KEY,
 			   name VARCHAR(255)
 			 );
@@ -1809,7 +1900,13 @@ func testDynamicForeignKeyCascade(ctx context.Context, conn *executor.DatabaseCo
 			   FOREIGN KEY (parent_id) REFERENCES parent_table(id)
 			 );
 			 INSERT INTO parent_table (name) VALUES ('Parent 1'), ('Parent 2');
-			 INSERT INTO child_table (parent_id, data) VALUES (1, 'Child 1'), (2, 'Child 2');`,
+			 INSERT INTO child_table (parent_id, data) VALUES (1, 'Child 1'), (2, 'Child 2');`
+		}
+
+		migration := migrator.CreateMigrationFromSQL(
+			1,
+			"Create FK tables",
+			createSQL,
 			`DROP TABLE child_table; DROP TABLE parent_table;`,
 		)
 		m.Register(migration)
@@ -1821,12 +1918,21 @@ func testDynamicForeignKeyCascade(ctx context.Context, conn *executor.DatabaseCo
 
 	// Try to drop parent table (should fail due to FK constraint)
 	err = recorder.RecordStep("Test FK Constraint on Drop", "Try to drop parent table with FK references", func() error {
+		dialect := conn.Info().Dialect
 		m := migrator.NewMigrator(conn)
+
+		var downSQL string
+		if dialect == "mysql" {
+			downSQL = `CREATE TABLE parent_table (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255));`
+		} else {
+			downSQL = `CREATE TABLE parent_table (id SERIAL PRIMARY KEY, name VARCHAR(255));`
+		}
+
 		migration := migrator.CreateMigrationFromSQL(
 			2,
 			"Drop parent table",
 			`DROP TABLE parent_table;`,
-			`CREATE TABLE parent_table (id SERIAL PRIMARY KEY, name VARCHAR(255));`,
+			downSQL,
 		)
 		m.Register(migration)
 
@@ -1842,58 +1948,72 @@ func testDynamicForeignKeyCascade(ctx context.Context, conn *executor.DatabaseCo
 
 	// Test cascade delete
 	return recorder.RecordStep("Test Cascade Operations", "Test foreign key cascade behavior", func() error {
-		// Add cascade constraint
+		dialect := conn.Info().Dialect
+		// Recreate tables with cascade constraint from the start
 		m := migrator.NewMigrator(conn)
+
+		var recreateSQL string
+		if dialect == "mysql" {
+			recreateSQL = `DROP TABLE child_table;
+			 DROP TABLE parent_table;
+			 CREATE TABLE parent_table (
+			   id INT AUTO_INCREMENT PRIMARY KEY,
+			   name VARCHAR(255)
+			 );
+			 CREATE TABLE child_table (
+			   id INT AUTO_INCREMENT PRIMARY KEY,
+			   parent_id INTEGER,
+			   data VARCHAR(255),
+			   FOREIGN KEY (parent_id) REFERENCES parent_table(id) ON DELETE CASCADE
+			 );
+			 INSERT INTO parent_table (name) VALUES ('Parent 1'), ('Parent 2');
+			 INSERT INTO child_table (parent_id, data) VALUES (1, 'Child 1'), (2, 'Child 2');`
+		} else {
+			recreateSQL = `DROP TABLE child_table;
+			 DROP TABLE parent_table;
+			 CREATE TABLE parent_table (
+			   id SERIAL PRIMARY KEY,
+			   name VARCHAR(255)
+			 );
+			 CREATE TABLE child_table (
+			   id SERIAL PRIMARY KEY,
+			   parent_id INTEGER,
+			   data VARCHAR(255),
+			   FOREIGN KEY (parent_id) REFERENCES parent_table(id) ON DELETE CASCADE
+			 );
+			 INSERT INTO parent_table (name) VALUES ('Parent 1'), ('Parent 2');
+			 INSERT INTO child_table (parent_id, data) VALUES (1, 'Child 1'), (2, 'Child 2');`
+		}
+
 		migration := migrator.CreateMigrationFromSQL(
 			3,
 			"Add cascade FK",
-			`ALTER TABLE child_table DROP CONSTRAINT child_table_parent_id_fkey;
-			 ALTER TABLE child_table ADD CONSTRAINT child_table_parent_id_fkey
-			   FOREIGN KEY (parent_id) REFERENCES parent_table(id) ON DELETE CASCADE;`,
-			`ALTER TABLE child_table DROP CONSTRAINT child_table_parent_id_fkey;
-			 ALTER TABLE child_table ADD CONSTRAINT child_table_parent_id_fkey
-			   FOREIGN KEY (parent_id) REFERENCES parent_table(id);`,
+			recreateSQL,
+			`DROP TABLE child_table; DROP TABLE parent_table;`,
 		)
 		m.Register(migration)
 
 		if err := m.MigrateUp(ctx); err != nil {
-			// If the constraint name is different, try a more generic approach
-			if strings.Contains(err.Error(), "does not exist") {
-				m2 := migrator.NewMigrator(conn)
-				migration2 := migrator.CreateMigrationFromSQL(
-					4,
-					"Recreate tables with cascade",
-					`DROP TABLE child_table;
-					 DROP TABLE parent_table;
-					 CREATE TABLE parent_table (
-					   id SERIAL PRIMARY KEY,
-					   name VARCHAR(255)
-					 );
-					 CREATE TABLE child_table (
-					   id SERIAL PRIMARY KEY,
-					   parent_id INTEGER,
-					   data VARCHAR(255),
-					   FOREIGN KEY (parent_id) REFERENCES parent_table(id) ON DELETE CASCADE
-					 );
-					 INSERT INTO parent_table (name) VALUES ('Parent 1'), ('Parent 2');
-					 INSERT INTO child_table (parent_id, data) VALUES (1, 'Child 1'), (2, 'Child 2');`,
-					`DROP TABLE child_table; DROP TABLE parent_table;`,
-				)
-				m2.Register(migration2)
-				if err := m2.MigrateUp(ctx); err != nil {
-					return fmt.Errorf("failed to recreate tables with cascade: %w", err)
-				}
-			} else {
-				return fmt.Errorf("failed to add cascade constraint: %w", err)
-			}
+			return fmt.Errorf("failed to recreate tables with cascade: %w", err)
 		}
 
-		// Verify cascade works by deleting parent
+		// Verify cascade works by deleting parent and checking result in one transaction
+		if err := conn.Writer().BeginTransaction(); err != nil {
+			return fmt.Errorf("failed to begin transaction for cascade test: %w", err)
+		}
+
+		// Delete parent record
 		if err := conn.Writer().ExecuteSQL("DELETE FROM parent_table WHERE id = 1"); err != nil {
+			_ = conn.Writer().RollbackTransaction()
 			return fmt.Errorf("failed to delete parent record: %w", err)
 		}
 
-		// Check that child record was also deleted
+		// Commit the delete
+		if err := conn.Writer().CommitTransaction(); err != nil {
+			return fmt.Errorf("failed to commit delete transaction: %w", err)
+		}
+
+		// Check that child record was also deleted (outside transaction)
 		rows := conn.QueryRow("SELECT COUNT(*) FROM child_table WHERE parent_id = 1")
 		var count int
 		if err := rows.Scan(&count); err != nil {

@@ -708,7 +708,7 @@ func (w *MySQLWriter) DropAllTables() error {
 
 	// Drop all tables
 	for _, tableName := range tables {
-		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)
+		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", tableName)
 		fmt.Printf("Dropping table: %s\n", tableName)
 		if err := w.ExecuteSQL(dropSQL); err != nil {
 			return fmt.Errorf("failed to drop table %s: %w", tableName, err)

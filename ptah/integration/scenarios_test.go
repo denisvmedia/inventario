@@ -53,8 +53,8 @@ func TestGetDynamicScenarios(t *testing.T) {
 
 	scenarios := GetDynamicScenarios()
 
-	// Should have exactly 9 dynamic scenarios (6 original + 3 rollback)
-	c.Assert(len(scenarios), qt.Equals, 9)
+	// Should have exactly 22 dynamic scenarios (6 original + 16 new)
+	c.Assert(len(scenarios), qt.Equals, 22)
 
 	// Verify all scenarios have required fields
 	for _, scenario := range scenarios {
@@ -72,11 +72,24 @@ func TestGetDynamicScenarios(t *testing.T) {
 		scenarioNames[scenario.Name] = true
 	}
 
-	// Check for the rollback scenarios we added
+	// Check for all the new scenarios we added
 	newScenarios := []string{
 		"dynamic_rollback_single",
 		"dynamic_rollback_multiple",
 		"dynamic_rollback_to_zero",
+		"dynamic_partial_failure_recovery",
+		"dynamic_invalid_migration",
+		"dynamic_concurrent_migrations",
+		"dynamic_circular_dependencies",
+		"dynamic_data_migration",
+		"dynamic_large_table_migration",
+		"dynamic_empty_migrations",
+		"dynamic_duplicate_names",
+		"dynamic_reserved_keywords",
+		"dynamic_dialect_differences",
+		"dynamic_type_mapping",
+		"dynamic_constraint_validation",
+		"dynamic_foreign_key_cascade",
 	}
 
 	for _, scenarioName := range newScenarios {

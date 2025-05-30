@@ -707,7 +707,7 @@ func (w *PostgreSQLWriter) DropAllTables() error {
 
 	// Drop all tables with CASCADE to handle dependencies
 	for _, tableName := range tables {
-		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", tableName)
+		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS \"%s\" CASCADE", tableName)
 		fmt.Printf("Dropping table: %s\n", tableName)
 		if err := w.ExecuteSQL(dropSQL); err != nil {
 			return fmt.Errorf("failed to drop table %s: %w", tableName, err)
@@ -716,7 +716,7 @@ func (w *PostgreSQLWriter) DropAllTables() error {
 
 	// Drop all enums
 	for _, enumName := range enums {
-		dropSQL := fmt.Sprintf("DROP TYPE IF EXISTS %s CASCADE", enumName)
+		dropSQL := fmt.Sprintf("DROP TYPE IF EXISTS \"%s\" CASCADE", enumName)
 		fmt.Printf("Dropping enum: %s\n", enumName)
 		if err := w.ExecuteSQL(dropSQL); err != nil {
 			return fmt.Errorf("failed to drop enum %s: %w", enumName, err)
@@ -725,7 +725,7 @@ func (w *PostgreSQLWriter) DropAllTables() error {
 
 	// Drop all sequences
 	for _, sequenceName := range sequences {
-		dropSQL := fmt.Sprintf("DROP SEQUENCE IF EXISTS %s CASCADE", sequenceName)
+		dropSQL := fmt.Sprintf("DROP SEQUENCE IF EXISTS \"%s\" CASCADE", sequenceName)
 		fmt.Printf("Dropping sequence: %s\n", sequenceName)
 		if err := w.ExecuteSQL(dropSQL); err != nil {
 			return fmt.Errorf("failed to drop sequence %s: %w", sequenceName, err)
