@@ -14,6 +14,9 @@ import (
 //go:embed base/schema.sql
 var migrationsSchemaSQL string
 
+//go:embed base/get_version.sql
+var getVersionSQL string
+
 //go:embed base/record_migration.sql
 var recordMigrationSQL string
 
@@ -86,14 +89,14 @@ func (m *Migrator) GetCurrentVersion(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("failed to initialize migrations table: %w", err)
 	}
 
-	// For now, we'll return 0 as the default version
-	// In a complete implementation, you would need to extend the executor
-	// interfaces to support querying, or use a different approach
-	// This is a limitation of the current executor design
-	//
-	// When query support is added, this would execute:
-	// SELECT COALESCE(MAX(version), 0) FROM schema_migrations;
-	return 0, nil
+	// Query the current version
+	var version int
+	row := m.conn.QueryRow(getVersionSQL)
+	if err := row.Scan(&version); err != nil {
+		return 0, fmt.Errorf("failed to get current version: %w", err)
+	}
+
+	return version, nil
 }
 
 // MigrateUp migrates the database up to the latest version
@@ -220,10 +223,32 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 
 // GetAppliedMigrations returns a list of applied migration versions
 func (m *Migrator) GetAppliedMigrations(ctx context.Context) ([]int, error) {
-	// This would need to be implemented with proper query support
-	// For now, return empty slice as a placeholder
-	// In a complete implementation, you would query the schema_migrations table
-	return []int{}, nil
+	// First ensure the migrations table exists
+	if err := m.Initialize(ctx); err != nil {
+		return nil, fmt.Errorf("failed to initialize migrations table: %w", err)
+	}
+
+	// Query all applied migration versions
+	rows, err := m.conn.Query("SELECT version FROM schema_migrations ORDER BY version")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query applied migrations: %w", err)
+	}
+	defer rows.Close()
+
+	var applied []int
+	for rows.Next() {
+		var version int
+		if err := rows.Scan(&version); err != nil {
+			return nil, fmt.Errorf("failed to scan migration version: %w", err)
+		}
+		applied = append(applied, version)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating migration rows: %w", err)
+	}
+
+	return applied, nil
 }
 
 // GetPendingMigrations returns a list of pending migration versions

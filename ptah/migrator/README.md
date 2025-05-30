@@ -218,9 +218,8 @@ CREATE TABLE schema_migrations (
 
 ## Limitations
 
-- **Query Support**: The current implementation has limited query support due to executor interface constraints
-- **Version Tracking**: Current version tracking is simplified and may need enhancement for production use
 - **Concurrent Migrations**: No built-in protection against concurrent migration execution
+- **Advanced Features**: Some advanced migration features like conditional migrations or complex rollback scenarios are not yet implemented
 
 ## Integration with Ptah
 

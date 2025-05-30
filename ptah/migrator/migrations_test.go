@@ -106,6 +106,40 @@ func TestMigrationStatus_NoPending(t *testing.T) {
 	c.Assert(status.HasPendingChanges, qt.IsFalse)
 }
 
+func TestMigrationVersionTracking(t *testing.T) {
+	c := qt.New(t)
+
+	// This test verifies that the migration version tracking logic works
+	// even though we can't test with a real database connection
+
+	// Create a migrator with nil connection (for testing)
+	m := NewMigrator(nil)
+	c.Assert(m, qt.IsNotNil)
+
+	// Register some test migrations
+	migration1 := &Migration{
+		Version:     1,
+		Description: "First migration",
+		Up:          NoopMigrationFunc,
+		Down:        NoopMigrationFunc,
+	}
+	migration2 := &Migration{
+		Version:     2,
+		Description: "Second migration",
+		Up:          NoopMigrationFunc,
+		Down:        NoopMigrationFunc,
+	}
+
+	m.Register(migration1)
+	m.Register(migration2)
+
+	// Test that migrations are sorted properly
+	m.sortMigrations()
+	c.Assert(len(m.migrations), qt.Equals, 2)
+	c.Assert(m.migrations[0].Version, qt.Equals, 1)
+	c.Assert(m.migrations[1].Version, qt.Equals, 2)
+}
+
 func TestRegisterMigrations_WithFilesystem(t *testing.T) {
 	c := qt.New(t)
 

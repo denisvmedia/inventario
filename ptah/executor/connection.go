@@ -117,6 +117,16 @@ func (dc *DatabaseConnection) Info() parsertypes.DatabaseInfo {
 	return dc.info
 }
 
+// QueryRow executes a query that returns a single row
+func (dc *DatabaseConnection) QueryRow(query string, args ...interface{}) *sql.Row {
+	return dc.db.QueryRow(query, args...)
+}
+
+// Query executes a query that returns multiple rows
+func (dc *DatabaseConnection) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	return dc.db.Query(query, args...)
+}
+
 // Close closes the database connection
 func (dc *DatabaseConnection) Close() error {
 	if dc.db != nil {
