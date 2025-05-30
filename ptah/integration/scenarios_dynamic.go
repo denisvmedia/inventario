@@ -13,40 +13,40 @@ import (
 func GetDynamicScenarios() []TestScenario {
 	return []TestScenario{
 		{
-			Name:        "dynamic_basic_evolution",
-			Description: "Test basic schema evolution using versioned entities: 000 → 001 → 002 → 003",
-			TestFunc:    testDynamicBasicEvolution,
+			Name:             "dynamic_basic_evolution",
+			Description:      "Test basic schema evolution using versioned entities: 000 → 001 → 002 → 003",
+			EnhancedTestFunc: testDynamicBasicEvolution,
 		},
 		{
-			Name:        "dynamic_skip_versions",
-			Description: "Test non-sequential migration: 000 → 002 → 003",
-			TestFunc:    testDynamicSkipVersions,
+			Name:             "dynamic_skip_versions",
+			Description:      "Test non-sequential migration: 000 → 002 → 003",
+			EnhancedTestFunc: testDynamicSkipVersions,
 		},
 		{
-			Name:        "dynamic_idempotency",
-			Description: "Test applying the same version multiple times",
-			TestFunc:    testDynamicIdempotency,
+			Name:             "dynamic_idempotency",
+			Description:      "Test applying the same version multiple times",
+			EnhancedTestFunc: testDynamicIdempotency,
 		},
 		{
-			Name:        "dynamic_partial_apply",
-			Description: "Test applying to specific version, then continuing",
-			TestFunc:    testDynamicPartialApply,
+			Name:             "dynamic_partial_apply",
+			Description:      "Test applying to specific version, then continuing",
+			EnhancedTestFunc: testDynamicPartialApply,
 		},
 		{
-			Name:        "dynamic_schema_diff",
-			Description: "Test schema diff generation between versions",
-			TestFunc:    testDynamicSchemaDiff,
+			Name:             "dynamic_schema_diff",
+			Description:      "Test schema diff generation between versions",
+			EnhancedTestFunc: testDynamicSchemaDiff,
 		},
 		{
-			Name:        "dynamic_migration_sql_generation",
-			Description: "Test SQL migration generation from entity changes",
-			TestFunc:    testDynamicMigrationSQLGeneration,
+			Name:             "dynamic_migration_sql_generation",
+			Description:      "Test SQL migration generation from entity changes",
+			EnhancedTestFunc: testDynamicMigrationSQLGeneration,
 		},
 	}
 }
 
 // testDynamicBasicEvolution tests the basic evolution path through all versions
-func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	// Create versioned entity manager
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
@@ -75,79 +75,91 @@ func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConne
 	}
 
 	for _, version := range versions {
-		fmt.Printf("Applying version %s: %s\n", version.dir, version.description)
-		
-		if err := vem.MigrateToVersion(ctx, conn, version.dir, version.description); err != nil {
-			return fmt.Errorf("failed to migrate to version %s: %w", version.dir, err)
+		stepName := fmt.Sprintf("Apply %s", version.dir)
+		stepDesc := version.description
+
+		err := recorder.RecordStep(stepName, stepDesc, func() error {
+			fmt.Printf("Applying version %s: %s\n", version.dir, version.description)
+
+			if err := vem.MigrateToVersion(ctx, conn, version.dir, version.description); err != nil {
+				return fmt.Errorf("failed to migrate to version %s: %w", version.dir, err)
+			}
+
+			fmt.Printf("Successfully applied version %s\n", version.dir)
+			return nil
+		})
+
+		if err != nil {
+			return err
 		}
-		
-		fmt.Printf("Successfully applied version %s\n", version.dir)
 	}
 
 	// Verify final state
-	schema, err := vem.GenerateSchemaFromEntities()
-	if err != nil {
-		return fmt.Errorf("failed to generate final schema: %w", err)
-	}
+	return recorder.RecordStep("Verify Final State", "Validate that all migrations were applied correctly", func() error {
+		schema, err := vem.GenerateSchemaFromEntities()
+		if err != nil {
+			return fmt.Errorf("failed to generate final schema: %w", err)
+		}
 
-	// Should have 3 tables: users, posts, categories (products was dropped in version 012)
-	if len(schema.Tables) != 3 {
-		return fmt.Errorf("expected 3 tables, got %d", len(schema.Tables))
-	}
+		// Should have 3 tables: users, posts, categories (products was dropped in version 012)
+		if len(schema.Tables) != 3 {
+			return fmt.Errorf("expected 3 tables, got %d", len(schema.Tables))
+		}
 
-	// Should have 2 enums: user_status, post_status (product_status was dropped with products table)
-	if len(schema.Enums) != 2 {
-		return fmt.Errorf("expected 2 enums, got %d", len(schema.Enums))
-	}
+		// Should have 2 enums: user_status, post_status (product_status was dropped with products table)
+		if len(schema.Enums) != 2 {
+			return fmt.Errorf("expected 2 enums, got %d", len(schema.Enums))
+		}
 
-	// Verify that field renames, type changes, and constraint changes were applied
-	// Check that users table has the renamed fields (description, user_age) and not the old ones (bio, age)
-	usersTable := findTable(schema.Tables, "users")
-	if usersTable == nil {
-		return fmt.Errorf("users table not found in final schema")
-	}
+		// Verify that field renames, type changes, and constraint changes were applied
+		// Check that users table has the renamed fields (description, user_age) and not the old ones (bio, age)
+		usersTable := findTable(schema.Tables, "users")
+		if usersTable == nil {
+			return fmt.Errorf("users table not found in final schema")
+		}
 
-	// Should have description field (renamed from bio)
-	if !hasField(schema.Fields, "User", "description") {
-		return fmt.Errorf("users table should have description field (renamed from bio)")
-	}
+		// Should have description field (renamed from bio)
+		if !hasField(schema.Fields, "User", "description") {
+			return fmt.Errorf("users table should have description field (renamed from bio)")
+		}
 
-	// Should have user_age field (renamed from age)
-	if !hasField(schema.Fields, "User", "user_age") {
-		return fmt.Errorf("users table should have user_age field (renamed from age)")
-	}
+		// Should have user_age field (renamed from age)
+		if !hasField(schema.Fields, "User", "user_age") {
+			return fmt.Errorf("users table should have user_age field (renamed from age)")
+		}
 
-	// Should NOT have bio or age fields (they were renamed)
-	if hasField(schema.Fields, "User", "bio") {
-		return fmt.Errorf("users table should not have bio field (it was renamed to description)")
-	}
+		// Should NOT have bio or age fields (they were renamed)
+		if hasField(schema.Fields, "User", "bio") {
+			return fmt.Errorf("users table should not have bio field (it was renamed to description)")
+		}
 
-	if hasField(schema.Fields, "User", "age") {
-		return fmt.Errorf("users table should not have age field (it was renamed to user_age)")
-	}
+		if hasField(schema.Fields, "User", "age") {
+			return fmt.Errorf("users table should not have age field (it was renamed to user_age)")
+		}
 
-	// Should NOT have active field (it was dropped)
-	if hasField(schema.Fields, "User", "active") {
-		return fmt.Errorf("users table should not have active field (it was dropped)")
-	}
+		// Should NOT have active field (it was dropped)
+		if hasField(schema.Fields, "User", "active") {
+			return fmt.Errorf("users table should not have active field (it was dropped)")
+		}
 
-	// Verify that categories table was added
-	categoriesTable := findTable(schema.Tables, "categories")
-	if categoriesTable == nil {
-		return fmt.Errorf("categories table should exist (added in version 011)")
-	}
+		// Verify that categories table was added
+		categoriesTable := findTable(schema.Tables, "categories")
+		if categoriesTable == nil {
+			return fmt.Errorf("categories table should exist (added in version 011)")
+		}
 
-	// Verify that products table was dropped
-	productsTable := findTable(schema.Tables, "products")
-	if productsTable != nil {
-		return fmt.Errorf("products table should not exist (dropped in version 012)")
-	}
+		// Verify that products table was dropped
+		productsTable := findTable(schema.Tables, "products")
+		if productsTable != nil {
+			return fmt.Errorf("products table should not exist (dropped in version 012)")
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // testDynamicSkipVersions tests non-sequential version application
-func testDynamicSkipVersions(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testDynamicSkipVersions(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -165,30 +177,39 @@ func testDynamicSkipVersions(ctx context.Context, conn *executor.DatabaseConnect
 	}
 
 	for _, version := range versions {
-		if err := vem.MigrateToVersion(ctx, conn, version.dir, version.description); err != nil {
+		stepName := fmt.Sprintf("Apply %s", version.dir)
+		stepDesc := version.description
+
+		err := recorder.RecordStep(stepName, stepDesc, func() error {
+			return vem.MigrateToVersion(ctx, conn, version.dir, version.description)
+		})
+
+		if err != nil {
 			return fmt.Errorf("failed to migrate to version %s: %w", version.dir, err)
 		}
 	}
 
 	// Verify final state is the same as sequential application
-	schema, err := vem.GenerateSchemaFromEntities()
-	if err != nil {
-		return fmt.Errorf("failed to generate final schema: %w", err)
-	}
+	return recorder.RecordStep("Verify Final State", "Validate that skip-version migration produces same result as sequential", func() error {
+		schema, err := vem.GenerateSchemaFromEntities()
+		if err != nil {
+			return fmt.Errorf("failed to generate final schema: %w", err)
+		}
 
-	if len(schema.Tables) != 3 {
-		return fmt.Errorf("expected 3 tables, got %d", len(schema.Tables))
-	}
+		if len(schema.Tables) != 3 {
+			return fmt.Errorf("expected 3 tables, got %d", len(schema.Tables))
+		}
 
-	if len(schema.Enums) != 2 {
-		return fmt.Errorf("expected 2 enums, got %d", len(schema.Enums))
-	}
+		if len(schema.Enums) != 2 {
+			return fmt.Errorf("expected 2 enums, got %d", len(schema.Enums))
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // testDynamicIdempotency tests applying the same version multiple times
-func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -229,7 +250,7 @@ func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnecti
 }
 
 // testDynamicPartialApply tests applying to a specific version, then continuing
-func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -278,7 +299,7 @@ func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnect
 }
 
 // testDynamicSchemaDiff tests schema diff generation between versions
-func testDynamicSchemaDiff(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testDynamicSchemaDiff(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -323,7 +344,7 @@ func testDynamicSchemaDiff(ctx context.Context, conn *executor.DatabaseConnectio
 }
 
 // testDynamicMigrationSQLGeneration tests SQL generation from entity changes
-func testDynamicMigrationSQLGeneration(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testDynamicMigrationSQLGeneration(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)

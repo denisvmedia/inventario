@@ -104,7 +104,8 @@ func TestDynamicScenariosBasic(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		// Run the dynamic basic evolution test
-		err = testDynamicBasicEvolution(ctx, conn, testFixtures)
+		recorder := &StepRecorder{}
+		err = testDynamicBasicEvolution(ctx, conn, testFixtures, recorder)
 		c.Assert(err, qt.IsNil)
 
 		// Verify final state - should have 3 tables
@@ -121,7 +122,8 @@ func TestDynamicScenariosBasic(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		// Run the dynamic idempotency test
-		err = testDynamicIdempotency(ctx, conn, testFixtures)
+		recorder := &StepRecorder{}
+		err = testDynamicIdempotency(ctx, conn, testFixtures, recorder)
 		c.Assert(err, qt.IsNil)
 	})
 }

@@ -16,6 +16,15 @@ import (
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 )
 
+// TestStep represents a single step within a test scenario
+type TestStep struct {
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Success     bool          `json:"success"`
+	Duration    time.Duration `json:"duration"`
+	Error       string        `json:"error,omitempty"`
+}
+
 // TestResult represents the result of a single test scenario
 type TestResult struct {
 	Name        string        `json:"name"`
@@ -24,6 +33,7 @@ type TestResult struct {
 	Duration    time.Duration `json:"duration"`
 	Error       string        `json:"error,omitempty"`
 	Description string        `json:"description"`
+	Steps       []TestStep    `json:"steps,omitempty"`
 }
 
 // TestReport represents the complete test report
@@ -37,11 +47,51 @@ type TestReport struct {
 	Summary      string       `json:"summary"`
 }
 
+// StepRecorder allows test functions to record individual steps
+type StepRecorder struct {
+	steps []TestStep
+	mu    sync.Mutex
+}
+
+// RecordStep records a step in the test execution
+func (sr *StepRecorder) RecordStep(name, description string, fn func() error) error {
+	start := time.Now()
+	step := TestStep{
+		Name:        name,
+		Description: description,
+	}
+
+	err := fn()
+	step.Duration = time.Since(start)
+
+	if err != nil {
+		step.Success = false
+		step.Error = err.Error()
+	} else {
+		step.Success = true
+	}
+
+	sr.mu.Lock()
+	sr.steps = append(sr.steps, step)
+	sr.mu.Unlock()
+
+	return err
+}
+
+// GetSteps returns all recorded steps
+func (sr *StepRecorder) GetSteps() []TestStep {
+	sr.mu.Lock()
+	defer sr.mu.Unlock()
+	return append([]TestStep(nil), sr.steps...)
+}
+
 // TestScenario represents a single test scenario
 type TestScenario struct {
 	Name        string
 	Description string
 	TestFunc    func(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error
+	// Optional enhanced test function that supports step recording
+	EnhancedTestFunc func(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error
 }
 
 // TestRunner manages and executes integration tests
@@ -128,14 +178,28 @@ func (tr *TestRunner) runSingleTest(ctx context.Context, scenario TestScenario, 
 		return result
 	}
 	
-	// Run the test scenario
-	if err := scenario.TestFunc(ctx, conn, tr.fixtures); err != nil {
+	// Create step recorder
+	recorder := &StepRecorder{}
+
+	// Run the test scenario - use enhanced function if available, otherwise use regular function
+	if scenario.EnhancedTestFunc != nil {
+		err = scenario.EnhancedTestFunc(ctx, conn, tr.fixtures, recorder)
+	} else {
+		err = scenario.TestFunc(ctx, conn, tr.fixtures)
+	}
+
+	if err != nil {
 		result.Success = false
 		result.Error = err.Error()
 	} else {
 		result.Success = true
 	}
-	
+
+	// Capture recorded steps (only if enhanced function was used)
+	if scenario.EnhancedTestFunc != nil {
+		result.Steps = recorder.GetSteps()
+	}
+
 	result.Duration = time.Since(start)
 	return result
 }

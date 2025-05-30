@@ -193,6 +193,17 @@ const htmlTemplate = `<!DOCTYPE html>
         .database-badge { background: #007acc; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; }
         .progress-bar { width: 100%; height: 20px; background: #e9ecef; border-radius: 10px; overflow: hidden; }
         .progress-fill { height: 100%; background: linear-gradient(90deg, #28a745, #20c997); transition: width 0.3s ease; }
+        .steps-container { margin-top: 10px; }
+        .step-item { margin-left: 20px; padding: 5px 0; border-left: 2px solid #e9ecef; padding-left: 10px; }
+        .step-header { display: flex; align-items: center; gap: 8px; }
+        .step-name { font-weight: bold; }
+        .step-duration { color: #666; font-size: 0.9em; }
+        .step-description { color: #666; font-size: 0.9em; margin-top: 2px; }
+        .step-error { background: #f8d7da; padding: 5px; border-radius: 3px; margin-top: 5px; font-family: monospace; font-size: 0.8em; }
+        .expandable { cursor: pointer; user-select: none; }
+        .expandable:hover { background-color: #f8f9fa; }
+        .expand-icon { transition: transform 0.2s; }
+        .expanded .expand-icon { transform: rotate(90deg); }
     </style>
 </head>
 <body>
@@ -242,8 +253,11 @@ const htmlTemplate = `<!DOCTYPE html>
             </thead>
             <tbody>
                 {{range .Results}}
-                <tr>
-                    <td class="{{statusClass .Success}}">{{statusIcon .Success}}</td>
+                <tr class="{{if .Steps}}expandable{{end}}" onclick="{{if .Steps}}toggleSteps('{{.Name}}_{{.Database}}'){{end}}">
+                    <td class="{{statusClass .Success}}">
+                        {{if .Steps}}<span class="expand-icon">▶</span>{{end}}
+                        {{statusIcon .Success}}
+                    </td>
                     <td>{{.Name}}</td>
                     <td><span class="database-badge">{{.Database}}</span></td>
                     <td class="duration">{{formatDuration .Duration}}</td>
@@ -254,6 +268,27 @@ const htmlTemplate = `<!DOCTYPE html>
                         {{end}}
                     </td>
                 </tr>
+                {{if .Steps}}
+                <tr id="steps_{{.Name}}_{{.Database}}" style="display: none;">
+                    <td colspan="5">
+                        <div class="steps-container">
+                            {{range .Steps}}
+                            <div class="step-item">
+                                <div class="step-header">
+                                    <span class="{{if .Success}}success{{else}}failure{{end}}">{{if .Success}}✅{{else}}❌{{end}}</span>
+                                    <span class="step-name">{{.Name}}</span>
+                                    <span class="step-duration">({{formatDuration .Duration}})</span>
+                                </div>
+                                <div class="step-description">{{.Description}}</div>
+                                {{if not .Success}}
+                                    <div class="step-error">{{.Error}}</div>
+                                {{end}}
+                            </div>
+                            {{end}}
+                        </div>
+                    </td>
+                </tr>
+                {{end}}
                 {{end}}
             </tbody>
         </table>
@@ -263,5 +298,22 @@ const htmlTemplate = `<!DOCTYPE html>
             <p>Report generated at {{formatTime .EndTime}}</p>
         </footer>
     </div>
+
+    <script>
+        function toggleSteps(testId) {
+            const stepsRow = document.getElementById('steps_' + testId);
+            const expandIcon = event.currentTarget.querySelector('.expand-icon');
+
+            if (stepsRow.style.display === 'none') {
+                stepsRow.style.display = 'table-row';
+                expandIcon.style.transform = 'rotate(90deg)';
+                event.currentTarget.classList.add('expanded');
+            } else {
+                stepsRow.style.display = 'none';
+                expandIcon.style.transform = 'rotate(0deg)';
+                event.currentTarget.classList.remove('expanded');
+            }
+        }
+    </script>
 </body>
 </html>`
