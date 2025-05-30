@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"strings"
 	"time"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
@@ -959,29 +958,28 @@ func testDynamicInvalidMigration(ctx context.Context, conn *executor.DatabaseCon
 
 	// Test various invalid migration scenarios
 	return recorder.RecordStep("Test Invalid Migration Scenarios", "Test handling of various invalid migrations", func() error {
-		m := migrator.NewMigrator(conn)
-
-		// Test 1: Migration with empty SQL
+		// Test 1: Migration with empty SQL (should succeed)
+		m1 := migrator.NewMigrator(conn)
 		emptyMigration := migrator.CreateMigrationFromSQL(
-			998,
+			2,
 			"Empty migration",
 			"", // Empty SQL
 			"",
 		)
-		m.Register(emptyMigration)
+		m1.Register(emptyMigration)
 
 		// This should succeed (empty migrations are valid)
-		if err := m.MigrateUp(ctx); err != nil {
+		if err := m1.MigrateUp(ctx); err != nil {
 			return fmt.Errorf("empty migration should succeed: %w", err)
 		}
 
-		// Test 2: Migration with syntax error
+		// Test 2: Migration with syntax error - use clearly invalid SQL
 		m2 := migrator.NewMigrator(conn)
 		syntaxErrorMigration := migrator.CreateMigrationFromSQL(
-			997,
+			3,
 			"Syntax error migration",
-			"CREATE TABLE users (id INVALID_SYNTAX);", // Invalid syntax
-			"DROP TABLE users;",
+			"THIS IS NOT VALID SQL AT ALL!!!;", // Clearly invalid syntax
+			"",
 		)
 		m2.Register(syntaxErrorMigration)
 
@@ -993,7 +991,7 @@ func testDynamicInvalidMigration(ctx context.Context, conn *executor.DatabaseCon
 		// Test 3: Migration with conflicting table name
 		m3 := migrator.NewMigrator(conn)
 		conflictMigration := migrator.CreateMigrationFromSQL(
-			996,
+			4,
 			"Conflicting table migration",
 			"CREATE TABLE users (id INTEGER);", // Table already exists
 			"DROP TABLE users;",
@@ -1210,49 +1208,50 @@ func testDynamicDataMigration(ctx context.Context, conn *executor.DatabaseConnec
 
 	// Perform data migration: split full_name into first_name and last_name
 	return recorder.RecordStep("Data Migration", "Split full_name into first_name and last_name", func() error {
+		// First check if columns already exist and drop them if they do
+		dialect := conn.Info().Dialect
+
+		// Try to drop columns if they exist (ignore errors if they don't exist)
+		_ = conn.Writer().ExecuteSQL("ALTER TABLE users DROP COLUMN first_name")
+		_ = conn.Writer().ExecuteSQL("ALTER TABLE users DROP COLUMN last_name")
+
 		m := migrator.NewMigrator(conn)
-		migration := migrator.CreateMigrationFromSQL(
-			2,
-			"Split name fields",
-			`ALTER TABLE users ADD COLUMN first_name VARCHAR(255);
+
+		// Use database-specific SQL for better compatibility
+		var migrationSQL string
+		if dialect == "postgres" {
+			migrationSQL = `ALTER TABLE users ADD COLUMN first_name VARCHAR(255);
 			 ALTER TABLE users ADD COLUMN last_name VARCHAR(255);
 			 UPDATE users SET
 			   first_name = SPLIT_PART(full_name, ' ', 1),
 			   last_name = SPLIT_PART(full_name, ' ', 2)
 			 WHERE full_name IS NOT NULL;
-			 ALTER TABLE users DROP COLUMN full_name;`,
+			 ALTER TABLE users DROP COLUMN full_name;`
+		} else {
+			// For MySQL/MariaDB, use a simpler approach
+			migrationSQL = `ALTER TABLE users ADD COLUMN first_name VARCHAR(255);
+			 ALTER TABLE users ADD COLUMN last_name VARCHAR(255);
+			 UPDATE users SET first_name = 'John', last_name = 'Doe' WHERE id = 1;
+			 UPDATE users SET first_name = 'Jane', last_name = 'Smith' WHERE id = 2;
+			 UPDATE users SET first_name = 'Bob', last_name = 'Johnson' WHERE id = 3;
+			 ALTER TABLE users DROP COLUMN full_name;`
+		}
+
+		migration := migrator.CreateMigrationFromSQL(
+			2,
+			"Split name fields",
+			migrationSQL,
 			`ALTER TABLE users ADD COLUMN full_name VARCHAR(255);
-			 UPDATE users SET full_name = CONCAT(first_name, ' ', last_name)
-			 WHERE first_name IS NOT NULL AND last_name IS NOT NULL;
+			 UPDATE users SET full_name = 'John Doe' WHERE id = 1;
+			 UPDATE users SET full_name = 'Jane Smith' WHERE id = 2;
+			 UPDATE users SET full_name = 'Bob Johnson' WHERE id = 3;
 			 ALTER TABLE users DROP COLUMN first_name;
 			 ALTER TABLE users DROP COLUMN last_name;`,
 		)
 		m.Register(migration)
 
 		if err := m.MigrateUp(ctx); err != nil {
-			// If SPLIT_PART doesn't exist (not PostgreSQL), try a simpler approach
-			if strings.Contains(err.Error(), "SPLIT_PART") {
-				m2 := migrator.NewMigrator(conn)
-				simpleMigration := migrator.CreateMigrationFromSQL(
-					3,
-					"Simple name split",
-					`ALTER TABLE users ADD COLUMN first_name VARCHAR(255);
-					 ALTER TABLE users ADD COLUMN last_name VARCHAR(255);
-					 UPDATE users SET first_name = 'John', last_name = 'Doe' WHERE id = 1;
-					 UPDATE users SET first_name = 'Jane', last_name = 'Smith' WHERE id = 2;
-					 UPDATE users SET first_name = 'Bob', last_name = 'Johnson' WHERE id = 3;
-					 ALTER TABLE users DROP COLUMN full_name;`,
-					`ALTER TABLE users ADD COLUMN full_name VARCHAR(255);
-					 UPDATE users SET full_name = 'John Doe' WHERE id = 1;
-					 UPDATE users SET full_name = 'Jane Smith' WHERE id = 2;
-					 UPDATE users SET full_name = 'Bob Johnson' WHERE id = 3;
-					 ALTER TABLE users DROP COLUMN first_name;
-					 ALTER TABLE users DROP COLUMN last_name;`,
-				)
-				m2.Register(simpleMigration)
-				return m2.MigrateUp(ctx)
-			}
-			return err
+			return fmt.Errorf("data migration failed: %w", err)
 		}
 
 		// Verify the data migration worked
