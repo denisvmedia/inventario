@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -209,4 +211,57 @@ func TestParseKeyValueComment_PrecedenceRules(t *testing.T) {
 
 	// The explicit not_null="false" should take precedence over standalone not_null
 	c.Assert(result["not_null"], qt.Equals, "false")
+}
+
+func TestParseFile_EnumHandling(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a test file with both enum and non-enum fields
+	content := `package entities
+
+//migrator:schema:table name="products"
+type Product struct {
+	//migrator:schema:field name="id" type="SERIAL" primary="true"
+	ID int64
+
+	//migrator:schema:field name="name" type="VARCHAR(255)" not_null="true"
+	Name string
+
+	//migrator:schema:field name="active" type="BOOLEAN" not_null="true" default="true"
+	Active bool
+
+	//migrator:schema:field name="status" type="ENUM" enum="draft,active,discontinued" not_null="true" default="draft"
+	Status string
+}
+`
+
+	// Write to temporary file
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "product.go")
+	err := os.WriteFile(testFile, []byte(content), 0644)
+	c.Assert(err, qt.IsNil)
+
+	// Parse the file
+	_, fields, _, _, enums := ParseFile(testFile)
+
+	// Should have 4 fields and 1 enum
+	c.Assert(len(fields), qt.Equals, 4)
+	c.Assert(len(enums), qt.Equals, 1)
+
+	// Check that non-enum fields have nil Enum values
+	for _, field := range fields {
+		switch field.Name {
+		case "id", "name", "active":
+			// These fields should have nil Enum values (not []string{""})
+			c.Assert(field.Enum, qt.IsNil, qt.Commentf("Field %s should have nil Enum, got %v", field.Name, field.Enum))
+		case "status":
+			// This field should have enum values
+			c.Assert(field.Enum, qt.DeepEquals, []string{"draft", "active", "discontinued"})
+			c.Assert(field.Type, qt.Equals, "enum_product_status")
+		}
+	}
+
+	// Check the global enum
+	c.Assert(enums[0].Name, qt.Equals, "enum_product_status")
+	c.Assert(enums[0].Values, qt.DeepEquals, []string{"draft", "active", "discontinued"})
 }

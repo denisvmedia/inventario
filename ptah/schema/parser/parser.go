@@ -71,9 +71,12 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 						kv := parseKeyValueComment(comment.Text)
 						for _, name := range field.Names {
 							enumRaw := kv["enum"]
-							enum := strings.Split(enumRaw, ",")
-							for i := range enum {
-								enum[i] = strings.TrimSpace(enum[i])
+							var enum []string
+							if enumRaw != "" {
+								enum = strings.Split(enumRaw, ",")
+								for i := range enum {
+									enum[i] = strings.TrimSpace(enum[i])
+								}
 							}
 
 							// Determine the field type - if it's ENUM with enum values, use the generated enum name

@@ -601,8 +601,9 @@ func needsQuoting(defaultValue, fieldType string, enumValues []string) bool {
 
 // mapTypeToSQL maps schema field types to SQL types based on dialect
 func mapTypeToSQL(fieldType string, enumValues []string, dialect string) string {
-	// Check if this is an enum type (has enum values or starts with "enum_")
-	isEnum := len(enumValues) > 0 || strings.HasPrefix(strings.ToLower(fieldType), "enum_")
+	// Check if this is an enum type (has non-empty enum values or starts with "enum_")
+	hasValidEnumValues := hasNonEmptyEnumValues(enumValues)
+	isEnum := hasValidEnumValues || strings.HasPrefix(strings.ToLower(fieldType), "enum_")
 
 	if isEnum {
 		switch dialect {
@@ -611,14 +612,18 @@ func mapTypeToSQL(fieldType string, enumValues []string, dialect string) string 
 			return fieldType
 		case "mysql", "mariadb":
 			// For MySQL/MariaDB, convert to inline ENUM syntax
-			if len(enumValues) > 0 {
-				quotedValues := make([]string, len(enumValues))
-				for i, value := range enumValues {
-					quotedValues[i] = fmt.Sprintf("'%s'", value)
+			if hasValidEnumValues {
+				quotedValues := make([]string, 0, len(enumValues))
+				for _, value := range enumValues {
+					if value != "" { // Skip empty values
+						quotedValues = append(quotedValues, fmt.Sprintf("'%s'", value))
+					}
 				}
-				return fmt.Sprintf("ENUM(%s)", strings.Join(quotedValues, ", "))
+				if len(quotedValues) > 0 {
+					return fmt.Sprintf("ENUM(%s)", strings.Join(quotedValues, ", "))
+				}
 			}
-			// If no enum values provided but type starts with enum_, return as-is
+			// If no valid enum values provided but type starts with enum_, return as-is
 			// This shouldn't happen in normal usage but provides a fallback
 			return fieldType
 		default:
@@ -671,4 +676,14 @@ func mapTypeToSQL(fieldType string, enumValues []string, dialect string) string 
 	default:
 		return fieldType
 	}
+}
+
+// hasNonEmptyEnumValues checks if the enum values slice contains any non-empty values
+func hasNonEmptyEnumValues(enumValues []string) bool {
+	for _, value := range enumValues {
+		if value != "" {
+			return true
+		}
+	}
+	return false
 }

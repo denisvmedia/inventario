@@ -865,3 +865,148 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 	c.Assert(diff.IndexesAdded, qt.DeepEquals, []string{"idx_post_title"})
 	c.Assert(diff.IndexesRemoved, qt.DeepEquals, []string{"old_idx_user_phone"})
 }
+
+// TestMapTypeToSQL_EnumHandling tests the fix for the ENUM('') bug
+// This test verifies that fields with empty enum values are not treated as enums
+func TestMapTypeToSQL_EnumHandling(t *testing.T) {
+
+	tests := []struct {
+		name        string
+		fieldType   string
+		enumValues  []string
+		dialect     string
+		expected    string
+		description string
+	}{
+		{
+			name:        "boolean_with_nil_enum",
+			fieldType:   "BOOLEAN",
+			enumValues:  nil,
+			dialect:     "mysql",
+			expected:    "BOOLEAN",
+			description: "BOOLEAN field with nil enum values should remain BOOLEAN",
+		},
+		{
+			name:        "boolean_with_empty_enum_slice",
+			fieldType:   "BOOLEAN",
+			enumValues:  []string{},
+			dialect:     "mysql",
+			expected:    "BOOLEAN",
+			description: "BOOLEAN field with empty enum slice should remain BOOLEAN",
+		},
+		{
+			name:        "boolean_with_empty_string_in_enum",
+			fieldType:   "BOOLEAN",
+			enumValues:  []string{""},
+			dialect:     "mysql",
+			expected:    "BOOLEAN",
+			description: "BOOLEAN field with empty string in enum slice should remain BOOLEAN (this was the bug)",
+		},
+		{
+			name:        "varchar_with_empty_string_in_enum",
+			fieldType:   "VARCHAR(100)",
+			enumValues:  []string{""},
+			dialect:     "mysql",
+			expected:    "VARCHAR(100)",
+			description: "VARCHAR field with empty string in enum slice should remain VARCHAR",
+		},
+		{
+			name:        "varchar_with_multiple_empty_strings",
+			fieldType:   "VARCHAR(255)",
+			enumValues:  []string{"", "", ""},
+			dialect:     "mysql",
+			expected:    "VARCHAR(255)",
+			description: "VARCHAR field with multiple empty strings should remain VARCHAR",
+		},
+		{
+			name:        "valid_enum_with_values",
+			fieldType:   "enum_status",
+			enumValues:  []string{"active", "inactive"},
+			dialect:     "mysql",
+			expected:    "ENUM('active', 'inactive')",
+			description: "Valid enum with actual values should work correctly",
+		},
+		{
+			name:        "enum_with_mixed_empty_and_valid",
+			fieldType:   "enum_status",
+			enumValues:  []string{"", "active", "", "inactive", ""},
+			dialect:     "mysql",
+			expected:    "ENUM('active', 'inactive')",
+			description: "Enum with mixed empty and valid values should filter out empty values",
+		},
+		{
+			name:        "enum_type_prefix_with_empty_values",
+			fieldType:   "enum_user_status",
+			enumValues:  []string{""},
+			dialect:     "mysql",
+			expected:    "enum_user_status",
+			description: "Type starting with enum_ but having only empty values should return type as-is",
+		},
+		{
+			name:        "postgres_enum_handling",
+			fieldType:   "enum_status",
+			enumValues:  []string{"active", "inactive"},
+			dialect:     "postgres",
+			expected:    "enum_status",
+			description: "PostgreSQL should return enum type name as-is",
+		},
+		{
+			name:        "mariadb_enum_handling",
+			fieldType:   "enum_status",
+			enumValues:  []string{"active", "inactive"},
+			dialect:     "mariadb",
+			expected:    "ENUM('active', 'inactive')",
+			description: "MariaDB should handle enums like MySQL",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			// We need to test the mapTypeToSQL function through the public API
+			// Create a simple schema diff and generate SQL to test the function indirectly
+			generated := &parsertypes.PackageParseResult{
+				Tables: []types.TableDirective{
+					{StructName: "TestTable", Name: "test_table"},
+				},
+				Fields: []types.SchemaField{
+					{
+						StructName: "TestTable",
+						Name:       "test_field",
+						Type:       tt.fieldType,
+						Enum:       tt.enumValues,
+						Nullable:   false,
+					},
+				},
+				Enums: []types.GlobalEnum{
+					{Name: "enum_status", Values: []string{"active", "inactive"}},
+				},
+			}
+
+			database := &parsertypes.DatabaseSchema{
+				Tables: []parsertypes.Table{},
+				Enums:  []parsertypes.Enum{},
+			}
+
+			diff := differ.CompareSchemas(generated, database)
+			statements := diff.GenerateMigrationSQL(generated, tt.dialect)
+
+			// Find the CREATE TABLE statement
+			var createTableSQL string
+			for _, stmt := range statements {
+				if strings.Contains(stmt, "CREATE TABLE test_table") {
+					createTableSQL = stmt
+					break
+				}
+			}
+
+			c.Assert(createTableSQL, qt.Not(qt.Equals), "", qt.Commentf("CREATE TABLE statement not found"))
+			c.Assert(createTableSQL, qt.Contains, tt.expected, qt.Commentf(tt.description))
+
+			// Specifically check that we don't have the ENUM('') bug
+			if tt.fieldType != "enum_status" && !strings.HasPrefix(tt.fieldType, "enum_") {
+				c.Assert(createTableSQL, qt.Not(qt.Contains), "ENUM('')", qt.Commentf("Should not contain ENUM('')"))
+			}
+		})
+	}
+}
