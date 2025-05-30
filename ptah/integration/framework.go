@@ -201,12 +201,21 @@ func (vem *VersionedEntityManager) LoadEntityVersion(versionDir string) error {
 
 	// Copy entities from version directory
 	// Use forward slashes for filesystem paths
-	versionPath := "entities/" + versionDir
+	// Try both possible paths: with and without "fixtures/" prefix
+	var versionPath string
+	var entries []fs.DirEntry
+	var err error
 
-	// Read the directory contents
-	entries, err := fs.ReadDir(vem.fixturesFS, versionPath)
+	// First try with "fixtures/" prefix (for embedded filesystem)
+	versionPath = "fixtures/entities/" + versionDir
+	entries, err = fs.ReadDir(vem.fixturesFS, versionPath)
 	if err != nil {
-		return fmt.Errorf("failed to read version directory %s: %w", versionPath, err)
+		// If that fails, try without "fixtures/" prefix (for mounted filesystem)
+		versionPath = "entities/" + versionDir
+		entries, err = fs.ReadDir(vem.fixturesFS, versionPath)
+		if err != nil {
+			return fmt.Errorf("failed to read version directory %s (tried both fixtures/entities/%s and entities/%s): %w", versionDir, versionDir, versionDir, err)
+		}
 	}
 
 	// Copy each file

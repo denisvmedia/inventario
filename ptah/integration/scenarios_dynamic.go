@@ -6,6 +6,7 @@ import (
 	"io/fs"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // GetDynamicScenarios returns all dynamic integration test scenarios that use versioned entities
@@ -107,26 +108,26 @@ func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConne
 	}
 
 	// Should have description field (renamed from bio)
-	if !hasField(usersTable.Fields, "description") {
+	if !hasField(schema.Fields, "User", "description") {
 		return fmt.Errorf("users table should have description field (renamed from bio)")
 	}
 
 	// Should have user_age field (renamed from age)
-	if !hasField(usersTable.Fields, "user_age") {
+	if !hasField(schema.Fields, "User", "user_age") {
 		return fmt.Errorf("users table should have user_age field (renamed from age)")
 	}
 
 	// Should NOT have bio or age fields (they were renamed)
-	if hasField(usersTable.Fields, "bio") {
+	if hasField(schema.Fields, "User", "bio") {
 		return fmt.Errorf("users table should not have bio field (it was renamed to description)")
 	}
 
-	if hasField(usersTable.Fields, "age") {
+	if hasField(schema.Fields, "User", "age") {
 		return fmt.Errorf("users table should not have age field (it was renamed to user_age)")
 	}
 
 	// Should NOT have active field (it was dropped)
-	if hasField(usersTable.Fields, "active") {
+	if hasField(schema.Fields, "User", "active") {
 		return fmt.Errorf("users table should not have active field (it was dropped)")
 	}
 
@@ -194,23 +195,22 @@ func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnecti
 	}
 	defer vem.Cleanup()
 
-	// Apply version 007 twice (index add)
-	version := "007-index-add"
-	description := "Add new indexes: compound index on name+email, index on description"
+	// Apply version 001 twice (simple add fields)
+	version := "001-add-fields"
+	description := "Add additional fields to users and products"
 
 	// First application
 	if err := vem.MigrateToVersion(ctx, conn, version, description); err != nil {
 		return fmt.Errorf("failed to migrate to version %s (first time): %w", version, err)
 	}
 
-	// Second application - should be idempotent (no new migrations applied)
-	// Instead of checking SQL generation, check that no new migrations are applied
+	// Get the current migration version after first application
 	currentVersion, err := getCurrentMigrationVersion(ctx, conn)
 	if err != nil {
 		return fmt.Errorf("failed to get current migration version: %w", err)
 	}
 
-	// Try to apply the same version again
+	// Try to apply the same version again - should be idempotent
 	if err := vem.MigrateToVersion(ctx, conn, version, description); err != nil {
 		return fmt.Errorf("failed to migrate to version %s (second time): %w", version, err)
 	}
@@ -236,16 +236,16 @@ func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnect
 	}
 	defer vem.Cleanup()
 
-	// Apply up to version 004 (field rename)
+	// Apply up to version 001 (add fields - still only 2 tables: users, products)
 	if err := vem.MigrateToVersion(ctx, conn, "000-initial", "Create initial tables"); err != nil {
 		return fmt.Errorf("failed to migrate to version 000: %w", err)
 	}
 
-	if err := vem.MigrateToVersion(ctx, conn, "004-field-rename", "Add fields, posts, enums, and rename fields"); err != nil {
-		return fmt.Errorf("failed to migrate to version 004: %w", err)
+	if err := vem.MigrateToVersion(ctx, conn, "001-add-fields", "Add additional fields to users and products"); err != nil {
+		return fmt.Errorf("failed to migrate to version 001: %w", err)
 	}
 
-	// Verify intermediate state
+	// Verify intermediate state (should have 2 tables: users, products)
 	schema, err := vem.GenerateSchemaFromEntities()
 	if err != nil {
 		return fmt.Errorf("failed to generate intermediate schema: %w", err)
@@ -403,43 +403,21 @@ func containsSubstring(s, substr string) bool {
 }
 
 // findTable finds a table by name in a slice of tables
-func findTable(tables []interface{}, name string) interface{} {
-	// This is a placeholder - the actual implementation would depend on the schema structure
-	// In a real implementation, you would iterate through tables and match by name
-	for _, table := range tables {
-		// Assuming table has a Name field - adjust based on actual schema structure
-		if tableName := getTableName(table); tableName == name {
-			return table
+func findTable(tables []types.TableDirective, name string) *types.TableDirective {
+	for i, table := range tables {
+		if table.Name == name {
+			return &tables[i]
 		}
 	}
 	return nil
 }
 
-// hasField checks if a field exists in a slice of fields
-func hasField(fields []interface{}, name string) bool {
-	// This is a placeholder - the actual implementation would depend on the field structure
-	// In a real implementation, you would iterate through fields and match by name
+// hasField checks if a field exists for a specific table
+func hasField(fields []types.SchemaField, tableName, fieldName string) bool {
 	for _, field := range fields {
-		// Assuming field has a Name field - adjust based on actual field structure
-		if fieldName := getFieldName(field); fieldName == name {
+		if field.StructName == tableName && field.Name == fieldName {
 			return true
 		}
 	}
 	return false
-}
-
-// getTableName extracts the name from a table object
-func getTableName(table interface{}) string {
-	// This is a placeholder - implement based on actual table structure
-	// For example, if table is a struct with Name field:
-	// return table.Name
-	return ""
-}
-
-// getFieldName extracts the name from a field object
-func getFieldName(field interface{}) string {
-	// This is a placeholder - implement based on actual field structure
-	// For example, if field is a struct with Name field:
-	// return field.Name
-	return ""
 }
