@@ -19,4 +19,6 @@ type SchemaWriter interface {
 	CommitTransaction() error
 	RollbackTransaction() error
 	CheckSchemaExists(result *parsertypes.PackageParseResult) ([]string, error)
+	SetDryRun(dryRun bool)
+	IsDryRun() bool
 }

@@ -24,6 +24,7 @@ It will skip existing tables and provide warnings about conflicts.`,
 const (
 	rootDirFlag = "root-dir"
 	dbURLFlag   = "db-url"
+	dryRunFlag  = "dry-run"
 )
 
 var writeDBFlags = map[string]cobraflags.Flag{
@@ -37,6 +38,11 @@ var writeDBFlags = map[string]cobraflags.Flag{
 		Value: "",
 		Usage: "Database URL (required). Example: postgres://user:pass@localhost/db",
 	},
+	dryRunFlag: &cobraflags.BoolFlag{
+		Name:  dryRunFlag,
+		Value: false,
+		Usage: "Show what would be executed without making actual changes",
+	},
 }
 
 func NewWriteDBCommand() *cobra.Command {
@@ -47,13 +53,19 @@ func NewWriteDBCommand() *cobra.Command {
 func writeDBCommand(_ *cobra.Command, _ []string) error {
 	rootDir := writeDBFlags[rootDirFlag].GetString()
 	dbURL := writeDBFlags[dbURLFlag].GetString()
+	dryRun := writeDBFlags[dryRunFlag].GetBool()
 
 	if dbURL == "" {
 		return fmt.Errorf("database URL is required")
 	}
 
-	fmt.Printf("Writing schema from %s to database %s\n", rootDir, executor.FormatDatabaseURL(dbURL))
-	fmt.Println("=== WRITE SCHEMA TO DATABASE ===")
+	if dryRun {
+		fmt.Printf("[DRY RUN] Would write schema from %s to database %s\n", rootDir, executor.FormatDatabaseURL(dbURL))
+		fmt.Println("=== DRY RUN: WRITE SCHEMA TO DATABASE ===")
+	} else {
+		fmt.Printf("Writing schema from %s to database %s\n", rootDir, executor.FormatDatabaseURL(dbURL))
+		fmt.Println("=== WRITE SCHEMA TO DATABASE ===")
+	}
 	fmt.Println()
 
 	// 1. Parse Go entities
@@ -78,26 +90,39 @@ func writeDBCommand(_ *cobra.Command, _ []string) error {
 
 	fmt.Printf("Connected to %s database successfully!\n", conn.Info().Dialect)
 
-	// 3. Check if schema already exists
-	existingTables, err := conn.Writer().CheckSchemaExists(result)
-	if err != nil {
-		return fmt.Errorf("error checking existing schema: %w", err)
-	}
+	// Set dry run mode on the writer
+	conn.Writer().SetDryRun(dryRun)
 
-	if len(existingTables) > 0 {
-		fmt.Printf("⚠️  WARNING: The following tables already exist: %v\n", existingTables)
-		fmt.Println("This operation will skip existing tables.")
-		fmt.Println("Use 'compare' command to see differences, or 'migrate' to generate update SQL.")
-		fmt.Println()
+	// 3. Check if schema already exists (skip in dry run mode)
+	if !dryRun {
+		existingTables, err := conn.Writer().CheckSchemaExists(result)
+		if err != nil {
+			return fmt.Errorf("error checking existing schema: %w", err)
+		}
+
+		if len(existingTables) > 0 {
+			fmt.Printf("⚠️  WARNING: The following tables already exist: %v\n", existingTables)
+			fmt.Println("This operation will skip existing tables.")
+			fmt.Println("Use 'compare' command to see differences, or 'migrate' to generate update SQL.")
+			fmt.Println()
+		}
 	}
 
 	// 4. Write schema
-	fmt.Println("Writing schema to database...")
+	if dryRun {
+		fmt.Println("[DRY RUN] Would write schema to database...")
+	} else {
+		fmt.Println("Writing schema to database...")
+	}
 	err = conn.Writer().WriteSchema(result)
 	if err != nil {
 		return fmt.Errorf("error writing schema: %w", err)
 	}
 
-	fmt.Println("✅ Schema written successfully!")
+	if dryRun {
+		fmt.Println("✅ [DRY RUN] Schema operations completed successfully!")
+	} else {
+		fmt.Println("✅ Schema written successfully!")
+	}
 	return nil
 }

@@ -40,12 +40,19 @@ Write the generated schema directly to a database:
 go run ./ptah/cmd write-db --root-dir ./models --db-url postgres://user:pass@localhost/db
 ```
 
+**Dry Run Mode** (preview changes without executing):
+
+```bash
+go run ./ptah/cmd write-db --root-dir ./models --db-url postgres://user:pass@localhost/db --dry-run
+```
+
 **Features**:
 - ✅ Creates enums first (PostgreSQL requirement)
 - ✅ Creates tables in dependency order
 - ✅ Skips existing tables (safe)
 - ✅ Transaction-based (all-or-nothing)
 - ✅ Detailed progress output
+- ✅ **Dry run support** - preview all SQL operations without executing them
 
 ### 3. Read Database Schema
 
@@ -85,14 +92,21 @@ Drop tables and enums defined in your Go entities:
 go run ./ptah/cmd drop-schema --root-dir ./models --db-url postgres://user:pass@localhost/db
 ```
 
+**Dry Run Mode** (preview what would be dropped):
+
+```bash
+go run ./ptah/cmd drop-schema --root-dir ./models --db-url postgres://user:pass@localhost/db --dry-run
+```
+
 **Features**:
-- ⚠️ Requires explicit confirmation (type 'YES')
+- ⚠️ Requires explicit confirmation (type 'YES') - **skipped in dry run mode**
 - ✅ Only drops tables/enums defined in your Go entities
 - ✅ Drops tables in reverse dependency order
 - ✅ Drops enums after tables (PostgreSQL)
 - ✅ Disables foreign key checks during operation (MySQL/MariaDB)
 - ✅ Transaction-based (all-or-nothing)
 - ✅ Detailed progress output
+- ✅ **Dry run support** - preview all drop operations without executing them
 
 **⚠️ WARNING**: This operation permanently deletes data and cannot be undone!
 
@@ -104,8 +118,14 @@ Drop ALL tables and enums in the entire database:
 go run ./ptah/cmd drop-all --db-url postgres://user:pass@localhost/db
 ```
 
+**Dry Run Mode** (preview complete database cleanup):
+
+```bash
+go run ./ptah/cmd drop-all --db-url postgres://user:pass@localhost/db --dry-run
+```
+
 **Features**:
-- 🚨 Requires double confirmation ('DELETE EVERYTHING' + 'YES I AM SURE')
+- 🚨 Requires double confirmation ('DELETE EVERYTHING' + 'YES I AM SURE') - **skipped in dry run mode**
 - ✅ Drops ALL tables in the database (not just Go entities)
 - ✅ Drops ALL enums in the database (PostgreSQL)
 - ✅ Drops ALL sequences in the database (PostgreSQL)
@@ -113,6 +133,7 @@ go run ./ptah/cmd drop-all --db-url postgres://user:pass@localhost/db
 - ✅ Disables foreign key checks during operation (MySQL/MariaDB)
 - ✅ Transaction-based (all-or-nothing)
 - ✅ Detailed progress output
+- ✅ **Dry run support** - preview complete database cleanup without executing
 
 **🚨 EXTREME WARNING**: This operation completely empties the database and cannot be undone!
 
@@ -240,6 +261,47 @@ go run ./ptah/cmd compare --root-dir ./models --db-url postgres://user:pass@loca
 === NO SCHEMA CHANGES DETECTED ===
 The database schema matches your entity definitions.
 ```
+
+## Dry Run Mode
+
+All destructive operations support **dry run mode** for safe preview of changes:
+
+### What is Dry Run Mode?
+
+Dry run mode allows you to preview exactly what SQL operations would be executed without actually making any changes to your database. This is especially useful for:
+
+- **Testing configurations** before applying to production
+- **Reviewing changes** in CI/CD pipelines
+- **Learning** what operations each command performs
+- **Debugging** schema generation issues
+
+### Commands Supporting Dry Run
+
+| Command | Dry Run Flag | Description |
+|---------|-------------|-------------|
+| `write-db` | `--dry-run` | Preview schema creation without executing |
+| `drop-schema` | `--dry-run` | Preview table/enum drops without executing |
+| `drop-all` | `--dry-run` | Preview complete database cleanup without executing |
+
+### Dry Run Output Format
+
+When dry run mode is enabled, you'll see:
+
+```
+[DRY RUN] Would begin transaction
+[DRY RUN] Would execute SQL: CREATE TYPE user_role AS ENUM ('admin', 'user', 'guest')
+[DRY RUN] Would execute SQL: CREATE TABLE users (id SERIAL PRIMARY KEY, ...)
+[DRY RUN] Would commit transaction
+✅ [DRY RUN] Schema operations completed successfully!
+```
+
+### Safety Features in Dry Run Mode
+
+- **No database connections** for actual writes
+- **No confirmations required** - dangerous operations show preview without prompts
+- **Complete SQL preview** - see exactly what would be executed
+- **Transaction simulation** - shows transaction boundaries
+- **Error-free exploration** - safe to run against any database
 
 ## Advanced Features
 

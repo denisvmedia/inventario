@@ -111,12 +111,12 @@ Defines platform-specific constants and identifiers:
 Provides command-line interface for all Ptah operations:
 
 - **`generate`** - Generate SQL schema from Go entities without touching database
-- **`writedb`** - Write generated schema directly to database
+- **`writedb`** - Write generated schema directly to database (supports `--dry-run`)
 - **`readdb`** - Read and display current database schema
 - **`compare`** - Compare Go entities with current database schema
 - **`migrate`** - Generate migration SQL for schema differences
-- **`dropschema`** - Drop tables/enums from Go entities (DANGEROUS!)
-- **`dropall`** - Drop ALL tables and enums in database (VERY DANGEROUS!)
+- **`dropschema`** - Drop tables/enums from Go entities (DANGEROUS!) (supports `--dry-run`)
+- **`dropall`** - Drop ALL tables and enums in database (VERY DANGEROUS!) (supports `--dry-run`)
 
 ### Supporting Components
 

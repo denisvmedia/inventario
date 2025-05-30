@@ -28,6 +28,7 @@ not everything in the database.`,
 const (
 	rootDirFlag = "root-dir"
 	dbURLFlag   = "db-url"
+	dryRunFlag  = "dry-run"
 )
 
 var dropSchemaFlags = map[string]cobraflags.Flag{
@@ -41,6 +42,11 @@ var dropSchemaFlags = map[string]cobraflags.Flag{
 		Value: "",
 		Usage: "Database URL (required). Example: postgres://user:pass@localhost/db",
 	},
+	dryRunFlag: &cobraflags.BoolFlag{
+		Name:  dryRunFlag,
+		Value: false,
+		Usage: "Show what would be executed without making actual changes",
+	},
 }
 
 func NewDropSchemaCommand() *cobra.Command {
@@ -51,13 +57,19 @@ func NewDropSchemaCommand() *cobra.Command {
 func dropSchemaCommand(_ *cobra.Command, _ []string) error {
 	rootDir := dropSchemaFlags[rootDirFlag].GetString()
 	dbURL := dropSchemaFlags[dbURLFlag].GetString()
+	dryRun := dropSchemaFlags[dryRunFlag].GetBool()
 
 	if dbURL == "" {
 		return fmt.Errorf("database URL is required")
 	}
 
-	fmt.Printf("Dropping schema from %s based on entities in %s\n", executor.FormatDatabaseURL(dbURL), rootDir)
-	fmt.Println("=== DROP SCHEMA FROM DATABASE ===")
+	if dryRun {
+		fmt.Printf("[DRY RUN] Would drop schema from %s based on entities in %s\n", executor.FormatDatabaseURL(dbURL), rootDir)
+		fmt.Println("=== DRY RUN: DROP SCHEMA FROM DATABASE ===")
+	} else {
+		fmt.Printf("Dropping schema from %s based on entities in %s\n", executor.FormatDatabaseURL(dbURL), rootDir)
+		fmt.Println("=== DROP SCHEMA FROM DATABASE ===")
+	}
 	fmt.Println()
 
 	// 1. Parse Go entities to know what to drop
@@ -83,10 +95,17 @@ func dropSchemaCommand(_ *cobra.Command, _ []string) error {
 	fmt.Printf("Connected to %s database successfully!\n", conn.Info().Dialect)
 	fmt.Println()
 
-	// 3. Show warning and ask for confirmation
-	fmt.Println("⚠️  WARNING: This operation will permanently delete all tables and enums!")
-	fmt.Println("⚠️  This action cannot be undone!")
-	fmt.Printf("⚠️  Tables to be dropped: %v\n", func() []string {
+	// Set dry run mode on the writer
+	conn.Writer().SetDryRun(dryRun)
+
+	// 3. Show warning and ask for confirmation (skip confirmation in dry run mode)
+	if dryRun {
+		fmt.Println("ℹ️  [DRY RUN] This would permanently delete all tables and enums!")
+	} else {
+		fmt.Println("⚠️  WARNING: This operation will permanently delete all tables and enums!")
+		fmt.Println("⚠️  This action cannot be undone!")
+	}
+	fmt.Printf("Tables to be dropped: %v\n", func() []string {
 		names := make([]string, len(result.Tables))
 		for i, table := range result.Tables {
 			names[i] = table.Name
@@ -94,7 +113,7 @@ func dropSchemaCommand(_ *cobra.Command, _ []string) error {
 		return names
 	}())
 	if len(result.Enums) > 0 {
-		fmt.Printf("⚠️  Enums to be dropped: %v\n", func() []string {
+		fmt.Printf("Enums to be dropped: %v\n", func() []string {
 			names := make([]string, len(result.Enums))
 			for i, enum := range result.Enums {
 				names[i] = enum.Name
@@ -103,26 +122,36 @@ func dropSchemaCommand(_ *cobra.Command, _ []string) error {
 		}())
 	}
 	fmt.Println()
-	fmt.Print("Type 'YES' to confirm: ")
 
-	confirmation, err := readLine()
-	if err != nil {
-		return fmt.Errorf("error reading input: %w", err)
-	}
+	if !dryRun {
+		fmt.Print("Type 'YES' to confirm: ")
+		confirmation, err := readLine()
+		if err != nil {
+			return fmt.Errorf("error reading input: %w", err)
+		}
 
-	if confirmation != "YES" {
-		fmt.Println("Operation cancelled.")
-		return nil
+		if confirmation != "YES" {
+			fmt.Println("Operation cancelled.")
+			return nil
+		}
 	}
 
 	// 4. Drop schema
-	fmt.Println("Dropping schema from database...")
+	if dryRun {
+		fmt.Println("[DRY RUN] Would drop schema from database...")
+	} else {
+		fmt.Println("Dropping schema from database...")
+	}
 	err = conn.Writer().DropSchema(result)
 	if err != nil {
 		return fmt.Errorf("error dropping schema: %w", err)
 	}
 
-	fmt.Println("✅ Schema dropped successfully!")
+	if dryRun {
+		fmt.Println("✅ [DRY RUN] Schema drop operations completed successfully!")
+	} else {
+		fmt.Println("✅ Schema dropped successfully!")
+	}
 	return nil
 }
 

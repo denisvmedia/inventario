@@ -1,6 +1,8 @@
 package seed
 
 import (
+	"fmt"
+
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
@@ -17,7 +19,8 @@ var seedCmd = &cobra.Command{
 }
 
 const (
-	dbDSNFlag = "db-dsn"
+	dbDSNFlag  = "db-dsn"
+	dryRunFlag = "dry-run"
 )
 
 var seedFlags = map[string]cobraflags.Flag{
@@ -25,6 +28,11 @@ var seedFlags = map[string]cobraflags.Flag{
 		Name:  dbDSNFlag,
 		Value: "memory://",
 		Usage: "Database DSN",
+	},
+	dryRunFlag: &cobraflags.BoolFlag{
+		Name:  dryRunFlag,
+		Value: false,
+		Usage: "Show what data would be seeded without making actual changes",
 	},
 }
 
@@ -36,9 +44,21 @@ func NewSeedCommand() *cobra.Command {
 
 func seedCommand(_ *cobra.Command, _ []string) error {
 	dsn := seedFlags[dbDSNFlag].GetString()
-	log.WithFields(log.Fields{
-		dbDSNFlag: dsn,
-	}).Info("Seeding database")
+	dryRun := seedFlags[dryRunFlag].GetBool()
+
+	if dryRun {
+		log.WithFields(log.Fields{
+			dbDSNFlag: dsn,
+		}).Info("[DRY RUN] Would seed database")
+		fmt.Println("⚠️  [DRY RUN] Seed dry run mode is not yet fully implemented.")
+		fmt.Println("⚠️  This would seed the database with example data.")
+		fmt.Println("⚠️  The seed data would include sample locations, areas, and commodities.")
+		return nil
+	} else {
+		log.WithFields(log.Fields{
+			dbDSNFlag: dsn,
+		}).Info("Seeding database")
+	}
 
 	registrySetFn, ok := registry.GetRegistry(dsn)
 	if !ok {

@@ -430,6 +430,7 @@ type MySQLWriter struct {
 	db     *sql.DB
 	tx     *sql.Tx
 	schema string
+	dryRun bool
 }
 
 // NewMySQLWriter creates a new MySQL schema writer
@@ -457,14 +458,19 @@ func (w *MySQLWriter) WriteSchema(result *parsertypes.PackageParseResult) error 
 	// MySQL doesn't have separate enum types like PostgreSQL
 	// Enums are defined inline in column definitions
 
-	// Get existing tables to avoid conflicts
-	existingTables, err := w.CheckSchemaExists(result)
-	if err != nil {
-		return fmt.Errorf("failed to check existing schema: %w", err)
-	}
-	existingTableMap := make(map[string]bool)
-	for _, table := range existingTables {
-		existingTableMap[table] = true
+	// Get existing tables to avoid conflicts (skip in dry run mode)
+	var existingTableMap map[string]bool
+	if !w.dryRun {
+		existingTables, err := w.CheckSchemaExists(result)
+		if err != nil {
+			return fmt.Errorf("failed to check existing schema: %w", err)
+		}
+		existingTableMap = make(map[string]bool)
+		for _, table := range existingTables {
+			existingTableMap[table] = true
+		}
+	} else {
+		existingTableMap = make(map[string]bool)
 	}
 
 	// Create tables in dependency order
@@ -510,6 +516,11 @@ func (w *MySQLWriter) WriteSchema(result *parsertypes.PackageParseResult) error 
 
 // ExecuteSQL executes a SQL statement
 func (w *MySQLWriter) ExecuteSQL(sql string) error {
+	if w.dryRun {
+		fmt.Printf("[DRY RUN] Would execute SQL: %s\n", sql)
+		return nil
+	}
+
 	if w.tx == nil {
 		return fmt.Errorf("no active transaction")
 	}
@@ -523,6 +534,11 @@ func (w *MySQLWriter) ExecuteSQL(sql string) error {
 
 // BeginTransaction starts a new transaction
 func (w *MySQLWriter) BeginTransaction() error {
+	if w.dryRun {
+		fmt.Println("[DRY RUN] Would begin transaction")
+		return nil
+	}
+
 	if w.tx != nil {
 		return fmt.Errorf("transaction already active")
 	}
@@ -537,6 +553,11 @@ func (w *MySQLWriter) BeginTransaction() error {
 
 // CommitTransaction commits the current transaction
 func (w *MySQLWriter) CommitTransaction() error {
+	if w.dryRun {
+		fmt.Println("[DRY RUN] Would commit transaction")
+		return nil
+	}
+
 	if w.tx == nil {
 		return fmt.Errorf("no active transaction")
 	}
@@ -548,6 +569,11 @@ func (w *MySQLWriter) CommitTransaction() error {
 
 // RollbackTransaction rolls back the current transaction
 func (w *MySQLWriter) RollbackTransaction() error {
+	if w.dryRun {
+		fmt.Println("[DRY RUN] Would rollback transaction")
+		return nil
+	}
+
 	if w.tx == nil {
 		return nil // No transaction to rollback
 	}
@@ -649,26 +675,32 @@ func (w *MySQLWriter) DropAllTables() error {
 		return fmt.Errorf("failed to disable foreign key checks: %w", err)
 	}
 
-	// Get all tables in the current database
-	tablesQuery := `
-		SELECT table_name
-		FROM information_schema.tables
-		WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
-		ORDER BY table_name`
-
-	rows, err := w.db.Query(tablesQuery)
-	if err != nil {
-		return fmt.Errorf("failed to query tables: %w", err)
-	}
-	defer rows.Close()
-
 	var tables []string
-	for rows.Next() {
-		var tableName string
-		if err := rows.Scan(&tableName); err != nil {
-			return fmt.Errorf("failed to scan table name: %w", err)
+
+	if w.dryRun {
+		// In dry run mode, simulate some tables for demonstration
+		tables = []string{"example_table1", "example_table2", "example_table3"}
+	} else {
+		// Get all tables in the current database
+		tablesQuery := `
+			SELECT table_name
+			FROM information_schema.tables
+			WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
+			ORDER BY table_name`
+
+		rows, err := w.db.Query(tablesQuery)
+		if err != nil {
+			return fmt.Errorf("failed to query tables: %w", err)
 		}
-		tables = append(tables, tableName)
+		defer rows.Close()
+
+		for rows.Next() {
+			var tableName string
+			if err := rows.Scan(&tableName); err != nil {
+				return fmt.Errorf("failed to scan table name: %w", err)
+			}
+			tables = append(tables, tableName)
+		}
 	}
 
 	// Drop all tables
@@ -746,6 +778,11 @@ func (w *MySQLWriter) extractTableNameFromCreateIndex(sql string) string {
 
 // tableExists checks if a table exists in the database
 func (w *MySQLWriter) tableExists(tableName string) bool {
+	if w.dryRun {
+		// In dry run mode, assume table doesn't exist to show all operations
+		return false
+	}
+
 	var exists bool
 	checkSQL := `
 		SELECT EXISTS (
@@ -755,4 +792,14 @@ func (w *MySQLWriter) tableExists(tableName string) bool {
 
 	err := w.db.QueryRow(checkSQL, tableName).Scan(&exists)
 	return err == nil && exists
+}
+
+// SetDryRun enables or disables dry run mode
+func (w *MySQLWriter) SetDryRun(dryRun bool) {
+	w.dryRun = dryRun
+}
+
+// IsDryRun returns whether dry run mode is enabled
+func (w *MySQLWriter) IsDryRun() bool {
+	return w.dryRun
 }

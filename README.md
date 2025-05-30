@@ -57,6 +57,37 @@ psql -c "CREATE DATABASE inventario;"
 
 The application will automatically create the necessary tables and indexes when it starts.
 
+## Dry Run Mode
+
+Inventario supports dry run mode for all database operations, allowing you to preview changes before they are executed:
+
+```bash
+# Preview database migrations without executing them
+./inventario migrate --db-dsn postgres://user:pass@localhost/db --dry-run
+
+# Preview seed data without inserting it
+./inventario seed --db-dsn postgres://user:pass@localhost/db --dry-run
+```
+
+For schema management operations using the Ptah tool:
+
+```bash
+# Preview schema creation
+go run ./ptah/cmd write-db --root-dir ./models --db-url postgres://user:pass@localhost/db --dry-run
+
+# Preview schema deletion
+go run ./ptah/cmd drop-schema --root-dir ./models --db-url postgres://user:pass@localhost/db --dry-run
+
+# Preview complete database cleanup
+go run ./ptah/cmd drop-all --db-url postgres://user:pass@localhost/db --dry-run
+```
+
+Dry run mode is especially useful for:
+- Testing configurations before applying to production
+- Reviewing changes in CI/CD pipelines
+- Learning what operations each command performs
+- Debugging schema generation issues
+
 ### Prerequisites
 
 - **Go**: Version 1.24 or higher
