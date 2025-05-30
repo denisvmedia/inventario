@@ -8,7 +8,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
 var migrateCmd = &cobra.Command{
@@ -62,7 +64,7 @@ func migrateCommand(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("error resolving path: %w", err)
 	}
 
-	result, err := builder.ParsePackageRecursively(absPath)
+	result, err := parser.ParsePackageRecursively(absPath)
 	if err != nil {
 		return fmt.Errorf("error parsing Go entities: %w", err)
 	}
@@ -74,16 +76,16 @@ func migrateCommand(_ *cobra.Command, _ []string) error {
 	}
 	defer conn.Close()
 
-	dbSchema, err := conn.Reader.ReadSchema()
+	dbSchema, err := conn.Reader().ReadSchema()
 	if err != nil {
 		return fmt.Errorf("error reading database schema: %w", err)
 	}
 
 	// 3. Compare schemas
-	diff := executor.CompareSchemas(result, dbSchema)
+	diff := differ.CompareSchemas(result, dbSchema)
 
 	// 4. Display differences summary
-	fmt.Print(executor.FormatSchemaDiff(diff))
+	fmt.Print(renderer.FormatSchemaDiff(diff))
 
 	if !diff.HasChanges() {
 		return nil
@@ -93,7 +95,7 @@ func migrateCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println("=== MIGRATION SQL ===")
 	fmt.Println()
 
-	statements := diff.GenerateMigrationSQL(result, conn.Info.Dialect)
+	statements := diff.GenerateMigrationSQL(result, conn.Info().Dialect)
 
 	fmt.Println("-- Migration generated from schema differences")
 	fmt.Printf("-- Generated on: %s\n", "now") // You could add actual timestamp

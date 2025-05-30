@@ -9,7 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
 // TestGenerateCreateTableFromStubs tests SQL generation from the sample entity files in stubs directory
@@ -31,7 +31,7 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 			c := qt.New(t)
 
 			// Parse the entity file
-			_, fields, indexes, tables, enums := builder.ParseFile(file)
+			_, fields, indexes, tables, enums := parser.ParseFile(file)
 
 			// Verify that we got data from the file
 			c.Assert(tables, qt.Not(qt.HasLen), 0, qt.Commentf("No table directives found in %s", file))

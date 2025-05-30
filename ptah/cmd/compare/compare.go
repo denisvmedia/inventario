@@ -8,7 +8,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
 var compareCmd = &cobra.Command{
@@ -62,7 +64,7 @@ func compareCommand(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("error resolving path: %w", err)
 	}
 
-	result, err := builder.ParsePackageRecursively(absPath)
+	result, err := parser.ParsePackageRecursively(absPath)
 	if err != nil {
 		return fmt.Errorf("error parsing Go entities: %w", err)
 	}
@@ -74,16 +76,16 @@ func compareCommand(_ *cobra.Command, _ []string) error {
 	}
 	defer conn.Close()
 
-	dbSchema, err := conn.Reader.ReadSchema()
+	dbSchema, err := conn.Reader().ReadSchema()
 	if err != nil {
 		return fmt.Errorf("error reading database schema: %w", err)
 	}
 
 	// 3. Compare schemas
-	diff := executor.CompareSchemas(result, dbSchema)
+	diff := differ.CompareSchemas(result, dbSchema)
 
 	// 4. Display differences
-	output := executor.FormatSchemaDiff(diff)
+	output := renderer.FormatSchemaDiff(diff)
 	fmt.Print(output)
 
 	return nil

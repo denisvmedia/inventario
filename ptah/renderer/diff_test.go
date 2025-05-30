@@ -1,21 +1,23 @@
-package executor_test
+package renderer_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/denisvmedia/inventario/ptah/executor"
+
+	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/schema/differ"
 )
 
 func TestFormatSchemaDiff_NoChanges(t *testing.T) {
 	tests := []struct {
 		name     string
-		diff     *executor.SchemaDiff
+		diff     *differ.SchemaDiff
 		contains []string
 	}{
 		{
 			name: "completely empty diff",
-			diff: &executor.SchemaDiff{},
+			diff: &differ.SchemaDiff{},
 			contains: []string{
 				"=== NO SCHEMA CHANGES DETECTED ===",
 				"The database schema matches your entity definitions.",
@@ -23,13 +25,13 @@ func TestFormatSchemaDiff_NoChanges(t *testing.T) {
 		},
 		{
 			name: "diff with empty slices",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				TablesAdded:    []string{},
 				TablesRemoved:  []string{},
-				TablesModified: []executor.TableDiff{},
+				TablesModified: []differ.TableDiff{},
 				EnumsAdded:     []string{},
 				EnumsRemoved:   []string{},
-				EnumsModified:  []executor.EnumDiff{},
+				EnumsModified:  []differ.EnumDiff{},
 				IndexesAdded:   []string{},
 				IndexesRemoved: []string{},
 			},
@@ -43,9 +45,9 @@ func TestFormatSchemaDiff_NoChanges(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
-			result := executor.FormatSchemaDiff(tt.diff)
-			
+
+			result := renderer.FormatSchemaDiff(tt.diff)
+
 			c.Assert(result, qt.Not(qt.Equals), "")
 			for _, expected := range tt.contains {
 				c.Assert(result, qt.Contains, expected)
@@ -57,12 +59,12 @@ func TestFormatSchemaDiff_NoChanges(t *testing.T) {
 func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 	tests := []struct {
 		name     string
-		diff     *executor.SchemaDiff
+		diff     *differ.SchemaDiff
 		contains []string
 	}{
 		{
 			name: "tables added and removed",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				TablesAdded:   []string{"new_users", "new_posts"},
 				TablesRemoved: []string{"old_logs", "deprecated_table"},
 			},
@@ -82,17 +84,17 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 		},
 		{
 			name: "tables modified with column changes",
-			diff: &executor.SchemaDiff{
-				TablesModified: []executor.TableDiff{
+			diff: &differ.SchemaDiff{
+				TablesModified: []differ.TableDiff{
 					{
-						TableName:    "users",
-						ColumnsAdded: []string{"email", "phone"},
+						TableName:      "users",
+						ColumnsAdded:   []string{"email", "phone"},
 						ColumnsRemoved: []string{"old_field"},
-						ColumnsModified: []executor.ColumnDiff{
+						ColumnsModified: []differ.ColumnDiff{
 							{
 								ColumnName: "name",
 								Changes: map[string]string{
-									"type": "VARCHAR(100) -> VARCHAR(255)",
+									"type":     "VARCHAR(100) -> VARCHAR(255)",
 									"nullable": "YES -> NO",
 								},
 							},
@@ -116,10 +118,10 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 		},
 		{
 			name: "enums added, removed and modified",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				EnumsAdded:   []string{"status_enum", "priority_enum"},
 				EnumsRemoved: []string{"old_enum"},
-				EnumsModified: []executor.EnumDiff{
+				EnumsModified: []differ.EnumDiff{
 					{
 						EnumName:      "user_role",
 						ValuesAdded:   []string{"admin", "moderator"},
@@ -145,7 +147,7 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 		},
 		{
 			name: "indexes added and removed",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				IndexesAdded:   []string{"idx_users_email", "idx_posts_title"},
 				IndexesRemoved: []string{"old_index"},
 			},
@@ -162,10 +164,10 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 		},
 		{
 			name: "comprehensive changes",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				TablesAdded:   []string{"new_table"},
 				TablesRemoved: []string{"old_table"},
-				TablesModified: []executor.TableDiff{
+				TablesModified: []differ.TableDiff{
 					{
 						TableName:    "users",
 						ColumnsAdded: []string{"email"},
@@ -196,9 +198,9 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
-			result := executor.FormatSchemaDiff(tt.diff)
-			
+
+			result := renderer.FormatSchemaDiff(tt.diff)
+
 			c.Assert(result, qt.Not(qt.Equals), "")
 			for _, expected := range tt.contains {
 				c.Assert(result, qt.Contains, expected)
@@ -210,7 +212,7 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 func TestFormatSchemaDiff_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
-		diff     *executor.SchemaDiff
+		diff     *differ.SchemaDiff
 		contains []string
 	}{
 		{
@@ -220,8 +222,8 @@ func TestFormatSchemaDiff_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "empty enum diff with no values",
-			diff: &executor.SchemaDiff{
-				EnumsModified: []executor.EnumDiff{
+			diff: &differ.SchemaDiff{
+				EnumsModified: []differ.EnumDiff{
 					{
 						EnumName:      "empty_enum",
 						ValuesAdded:   []string{},
@@ -237,13 +239,13 @@ func TestFormatSchemaDiff_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "empty table diff with no changes",
-			diff: &executor.SchemaDiff{
-				TablesModified: []executor.TableDiff{
+			diff: &differ.SchemaDiff{
+				TablesModified: []differ.TableDiff{
 					{
 						TableName:       "empty_table",
 						ColumnsAdded:    []string{},
 						ColumnsRemoved:  []string{},
-						ColumnsModified: []executor.ColumnDiff{},
+						ColumnsModified: []differ.ColumnDiff{},
 					},
 				},
 			},
@@ -258,15 +260,15 @@ func TestFormatSchemaDiff_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			if tt.diff == nil {
 				// Test that nil diff doesn't panic
-				c.Assert(func() { executor.FormatSchemaDiff(tt.diff) }, qt.PanicMatches, ".*")
+				c.Assert(func() { renderer.FormatSchemaDiff(tt.diff) }, qt.PanicMatches, ".*")
 				return
 			}
-			
-			result := executor.FormatSchemaDiff(tt.diff)
-			
+
+			result := renderer.FormatSchemaDiff(tt.diff)
+
 			c.Assert(result, qt.Not(qt.Equals), "")
 			for _, expected := range tt.contains {
 				c.Assert(result, qt.Contains, expected)

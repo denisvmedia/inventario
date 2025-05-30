@@ -1,31 +1,32 @@
-package builder_test
+package transform_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/transform"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 	tests := []struct {
 		name           string
-		embeddedFields []meta.EmbeddedField
-		allFields      []meta.SchemaField
+		embeddedFields []types.EmbeddedField
+		allFields      []types.SchemaField
 		structName     string
-		expected       []meta.SchemaField
+		expected       []types.SchemaField
 	}{
 		{
 			name: "inline without prefix",
-			embeddedFields: []meta.EmbeddedField{
+			embeddedFields: []types.EmbeddedField{
 				{
 					StructName:       "User",
 					Mode:             "inline",
 					EmbeddedTypeName: "Timestamps",
 				},
 			},
-			allFields: []meta.SchemaField{
+			allFields: []types.SchemaField{
 				{
 					StructName: "Timestamps",
 					FieldName:  "CreatedAt",
@@ -40,7 +41,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 				},
 			},
 			structName: "User",
-			expected: []meta.SchemaField{
+			expected: []types.SchemaField{
 				{
 					StructName: "User",
 					FieldName:  "CreatedAt",
@@ -57,7 +58,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 		},
 		{
 			name: "inline with prefix",
-			embeddedFields: []meta.EmbeddedField{
+			embeddedFields: []types.EmbeddedField{
 				{
 					StructName:       "User",
 					Mode:             "inline",
@@ -65,7 +66,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 					EmbeddedTypeName: "AuditInfo",
 				},
 			},
-			allFields: []meta.SchemaField{
+			allFields: []types.SchemaField{
 				{
 					StructName: "AuditInfo",
 					FieldName:  "By",
@@ -80,7 +81,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 				},
 			},
 			structName: "User",
-			expected: []meta.SchemaField{
+			expected: []types.SchemaField{
 				{
 					StructName: "User",
 					FieldName:  "By",
@@ -101,7 +102,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := meta.ProcessEmbeddedFields(tt.embeddedFields, tt.allFields, tt.structName)
+			result := transform.ProcessEmbeddedFields(tt.embeddedFields, tt.allFields, tt.structName)
 
 			c.Assert(len(result), qt.Equals, len(tt.expected))
 			for i, expected := range tt.expected {
@@ -117,13 +118,13 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 	tests := []struct {
 		name           string
-		embeddedFields []meta.EmbeddedField
+		embeddedFields []types.EmbeddedField
 		structName     string
-		expected       []meta.SchemaField
+		expected       []types.SchemaField
 	}{
 		{
 			name: "json mode with default name and type",
-			embeddedFields: []meta.EmbeddedField{
+			embeddedFields: []types.EmbeddedField{
 				{
 					StructName:       "User",
 					Mode:             "json",
@@ -131,7 +132,7 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 				},
 			},
 			structName: "User",
-			expected: []meta.SchemaField{
+			expected: []types.SchemaField{
 				{
 					StructName: "User",
 					FieldName:  "Meta",
@@ -143,7 +144,7 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 		},
 		{
 			name: "json mode with custom name and type",
-			embeddedFields: []meta.EmbeddedField{
+			embeddedFields: []types.EmbeddedField{
 				{
 					StructName:       "User",
 					Mode:             "json",
@@ -155,7 +156,7 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 				},
 			},
 			structName: "User",
-			expected: []meta.SchemaField{
+			expected: []types.SchemaField{
 				{
 					StructName: "User",
 					FieldName:  "Meta",
@@ -172,7 +173,7 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := meta.ProcessEmbeddedFields(tt.embeddedFields, nil, tt.structName)
+			result := transform.ProcessEmbeddedFields(tt.embeddedFields, nil, tt.structName)
 
 			c.Assert(len(result), qt.Equals, len(tt.expected))
 			for i, expected := range tt.expected {
@@ -190,13 +191,13 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 	tests := []struct {
 		name           string
-		embeddedFields []meta.EmbeddedField
+		embeddedFields []types.EmbeddedField
 		structName     string
-		expected       []meta.SchemaField
+		expected       []types.SchemaField
 	}{
 		{
 			name: "relation mode with integer reference",
-			embeddedFields: []meta.EmbeddedField{
+			embeddedFields: []types.EmbeddedField{
 				{
 					StructName:       "Post",
 					Mode:             "relation",
@@ -207,7 +208,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 				},
 			},
 			structName: "Post",
-			expected: []meta.SchemaField{
+			expected: []types.SchemaField{
 				{
 					StructName:     "Post",
 					FieldName:      "User",
@@ -221,7 +222,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 		},
 		{
 			name: "relation mode with varchar reference",
-			embeddedFields: []meta.EmbeddedField{
+			embeddedFields: []types.EmbeddedField{
 				{
 					StructName:       "Post",
 					Mode:             "relation",
@@ -232,7 +233,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 				},
 			},
 			structName: "Post",
-			expected: []meta.SchemaField{
+			expected: []types.SchemaField{
 				{
 					StructName:     "Post",
 					FieldName:      "Category",
@@ -250,7 +251,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := meta.ProcessEmbeddedFields(tt.embeddedFields, nil, tt.structName)
+			result := transform.ProcessEmbeddedFields(tt.embeddedFields, nil, tt.structName)
 
 			c.Assert(len(result), qt.Equals, len(tt.expected))
 			for i, expected := range tt.expected {
@@ -270,7 +271,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 func TestProcessEmbeddedFields_SkipMode(t *testing.T) {
 	c := qt.New(t)
 
-	embeddedFields := []meta.EmbeddedField{
+	embeddedFields := []types.EmbeddedField{
 		{
 			StructName:       "User",
 			Mode:             "skip",
@@ -278,7 +279,7 @@ func TestProcessEmbeddedFields_SkipMode(t *testing.T) {
 		},
 	}
 
-	result := meta.ProcessEmbeddedFields(embeddedFields, nil, "User")
+	result := transform.ProcessEmbeddedFields(embeddedFields, nil, "User")
 
 	c.Assert(len(result), qt.Equals, 0)
 }
@@ -286,7 +287,7 @@ func TestProcessEmbeddedFields_SkipMode(t *testing.T) {
 func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 	c := qt.New(t)
 
-	embeddedFields := []meta.EmbeddedField{
+	embeddedFields := []types.EmbeddedField{
 		{
 			StructName:       "User",
 			Mode:             "", // Empty mode should default to inline
@@ -294,7 +295,7 @@ func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 		},
 	}
 
-	allFields := []meta.SchemaField{
+	allFields := []types.SchemaField{
 		{
 			StructName: "Timestamps",
 			FieldName:  "CreatedAt",
@@ -303,7 +304,7 @@ func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 		},
 	}
 
-	result := meta.ProcessEmbeddedFields(embeddedFields, allFields, "User")
+	result := transform.ProcessEmbeddedFields(embeddedFields, allFields, "User")
 
 	c.Assert(len(result), qt.Equals, 1)
 	c.Assert(result[0].StructName, qt.Equals, "User")
@@ -313,7 +314,7 @@ func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 	c := qt.New(t)
 
-	embeddedFields := []meta.EmbeddedField{
+	embeddedFields := []types.EmbeddedField{
 		{
 			StructName:       "User",
 			Mode:             "inline",
@@ -326,7 +327,7 @@ func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 		},
 	}
 
-	allFields := []meta.SchemaField{
+	allFields := []types.SchemaField{
 		{
 			StructName: "Timestamps",
 			FieldName:  "CreatedAt",
@@ -335,7 +336,7 @@ func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 		},
 	}
 
-	result := meta.ProcessEmbeddedFields(embeddedFields, allFields, "User")
+	result := transform.ProcessEmbeddedFields(embeddedFields, allFields, "User")
 
 	c.Assert(len(result), qt.Equals, 1) // Only User embedded field processed
 	c.Assert(result[0].StructName, qt.Equals, "User")
@@ -344,7 +345,7 @@ func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 func TestProcessEmbeddedFields_RelationModeSkipsIncompleteFields(t *testing.T) {
 	c := qt.New(t)
 
-	embeddedFields := []meta.EmbeddedField{
+	embeddedFields := []types.EmbeddedField{
 		{
 			StructName:       "Post",
 			Mode:             "relation",
@@ -361,7 +362,7 @@ func TestProcessEmbeddedFields_RelationModeSkipsIncompleteFields(t *testing.T) {
 		},
 	}
 
-	result := meta.ProcessEmbeddedFields(embeddedFields, nil, "Post")
+	result := transform.ProcessEmbeddedFields(embeddedFields, nil, "Post")
 
 	c.Assert(len(result), qt.Equals, 0) // Both should be skipped
 }

@@ -1,12 +1,14 @@
-package meta
+package transform
 
 import (
 	"strings"
+
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // ProcessEmbeddedFields processes embedded fields and generates corresponding schema fields
-func ProcessEmbeddedFields(embeddedFields []EmbeddedField, allFields []SchemaField, structName string) []SchemaField {
-	var generatedFields []SchemaField
+func ProcessEmbeddedFields(embeddedFields []types.EmbeddedField, allFields []types.SchemaField, structName string) []types.SchemaField {
+	var generatedFields []types.SchemaField
 
 	for _, embedded := range embeddedFields {
 		if embedded.StructName != structName {
@@ -42,7 +44,7 @@ func ProcessEmbeddedFields(embeddedFields []EmbeddedField, allFields []SchemaFie
 				columnType = "JSONB" // Default to JSONB
 			}
 
-			generatedFields = append(generatedFields, SchemaField{
+			generatedFields = append(generatedFields, types.SchemaField{
 				StructName: structName,
 				FieldName:  embedded.EmbeddedTypeName,
 				Name:       columnName,
@@ -64,7 +66,7 @@ func ProcessEmbeddedFields(embeddedFields []EmbeddedField, allFields []SchemaFie
 				refType = "VARCHAR(36)" // Assume UUID if not integer
 			}
 
-			generatedFields = append(generatedFields, SchemaField{
+			generatedFields = append(generatedFields, types.SchemaField{
 				StructName:     structName,
 				FieldName:      embedded.EmbeddedTypeName,
 				Name:           embedded.Field,

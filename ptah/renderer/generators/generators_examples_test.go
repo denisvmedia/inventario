@@ -4,18 +4,18 @@ import (
 	"fmt"
 
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // ExampleGenerateCreateTable demonstrates how to generate SQL for different databases
 func ExampleGenerateCreateTable() {
 	// Sample data
-	productTable := meta.TableDirective{
+	productTable := types.TableDirective{
 		StructName: "Product",
 		Name:       "products",
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "Product",
 			Name:       "id",
@@ -36,7 +36,7 @@ func ExampleGenerateCreateTable() {
 		},
 	}
 
-	indexes := []meta.SchemaIndex{
+	indexes := []types.SchemaIndex{
 		{
 			StructName: "Product",
 			Name:       "idx_products_name",
@@ -44,7 +44,7 @@ func ExampleGenerateCreateTable() {
 		},
 	}
 
-	enums := []meta.GlobalEnum{
+	enums := []types.GlobalEnum{
 		{
 			Name:   "enum_product_status",
 			Values: []string{"active", "inactive", "discontinued"},
@@ -89,7 +89,7 @@ func ExampleGenerateCreateTable() {
 // Example_platformSpecificAttributes demonstrates how to use platform-specific attributes
 func Example_platformSpecificAttributes() {
 	// Sample data for a table with platform-specific attributes
-	productTable := meta.TableDirective{
+	productTable := types.TableDirective{
 		StructName: "Product",
 		Name:       "products",
 		Overrides: map[string]map[string]string{
@@ -106,7 +106,7 @@ func Example_platformSpecificAttributes() {
 		},
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "Product",
 			Name:       "id",

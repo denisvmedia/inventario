@@ -1,4 +1,4 @@
-package meta
+package types
 
 // EmbeddedField represents an embedded field in a struct
 type EmbeddedField struct {

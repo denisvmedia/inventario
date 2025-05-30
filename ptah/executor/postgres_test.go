@@ -7,6 +7,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	_ "github.com/lib/pq"
+
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 )
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -106,7 +108,7 @@ func TestPostgreSQLReader_ReadSchema_Integration(t *testing.T) {
 	c.Assert(schema.Tables, qt.Not(qt.HasLen), 0)
 
 	// Find our test table
-	var testTable *Table
+	var testTable *parsertypes.Table
 	for i := range schema.Tables {
 		if schema.Tables[i].Name == "test_table" {
 			testTable = &schema.Tables[i]
@@ -133,7 +135,7 @@ func TestPostgreSQLReader_ReadSchema_Integration(t *testing.T) {
 
 	// Verify enums were read
 	c.Assert(schema.Enums, qt.Not(qt.HasLen), 0)
-	var testEnum *Enum
+	var testEnum *parsertypes.Enum
 	for i := range schema.Enums {
 		if schema.Enums[i].Name == "test_status" {
 			testEnum = &schema.Enums[i]
@@ -169,10 +171,10 @@ func TestPostgreSQLReader_enhanceTablesWithConstraints(t *testing.T) {
 	reader := NewPostgreSQLReader(nil, "public")
 
 	// Create test data
-	tables := []Table{
+	tables := []parsertypes.Table{
 		{
 			Name: "test_table",
-			Columns: []Column{
+			Columns: []parsertypes.Column{
 				{Name: "id", IsPrimaryKey: false, IsUnique: false},
 				{Name: "email", IsPrimaryKey: false, IsUnique: false},
 				{Name: "name", IsPrimaryKey: false, IsUnique: false},
@@ -180,7 +182,7 @@ func TestPostgreSQLReader_enhanceTablesWithConstraints(t *testing.T) {
 		},
 	}
 
-	constraints := []Constraint{
+	constraints := []parsertypes.Constraint{
 		{TableName: "test_table", ColumnName: "id", Type: "PRIMARY KEY"},
 		{TableName: "test_table", ColumnName: "email", Type: "UNIQUE"},
 	}
@@ -200,4 +202,122 @@ func TestPostgreSQLReader_enhanceTablesWithConstraints(t *testing.T) {
 	nameCol := findColumn(tables[0].Columns, "name")
 	c.Assert(nameCol.IsPrimaryKey, qt.IsFalse)
 	c.Assert(nameCol.IsUnique, qt.IsFalse)
+}
+
+func TestNewPostgreSQLWriter(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			schema         string
+			expectedSchema string
+		}{
+			{
+				name:           "with custom schema",
+				schema:         "test_schema",
+				expectedSchema: "test_schema",
+			},
+			{
+				name:           "with empty schema defaults to public",
+				schema:         "",
+				expectedSchema: "public",
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				c := qt.New(t)
+				writer := NewPostgreSQLWriter(nil, test.schema)
+				c.Assert(writer, qt.IsNotNil)
+				c.Assert(writer.schema, qt.Equals, test.expectedSchema)
+				c.Assert(writer.db, qt.IsNil) // We passed nil for testing
+				c.Assert(writer.tx, qt.IsNil) // No transaction initially
+			})
+		}
+	})
+}
+
+func TestPostgreSQLWriter_TransactionMethods_NoConnection(t *testing.T) {
+	c := qt.New(t)
+	writer := NewPostgreSQLWriter(nil, "public")
+
+	t.Run("ExecuteSQL with no transaction", func(t *testing.T) {
+		err := writer.ExecuteSQL("SELECT 1")
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Equals, "no active transaction")
+	})
+
+	t.Run("CommitTransaction with no transaction", func(t *testing.T) {
+		err := writer.CommitTransaction()
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Equals, "no active transaction")
+	})
+
+	t.Run("RollbackTransaction with no transaction", func(t *testing.T) {
+		err := writer.RollbackTransaction()
+		c.Assert(err, qt.IsNil) // Should not error when no transaction
+	})
+}
+
+func TestPostgreSQLWriter_Integration(t *testing.T) {
+	dsn := skipIfNoPostgreSQL(t)
+	c := qt.New(t)
+
+	db, err := sql.Open("postgres", dsn)
+	c.Assert(err, qt.IsNil)
+	defer db.Close()
+
+	writer := NewPostgreSQLWriter(db, "public")
+
+	t.Run("CheckSchemaExists with empty result", func(t *testing.T) {
+		result := createTestParseResult()
+		existing, err := writer.CheckSchemaExists(result)
+		c.Assert(err, qt.IsNil)
+		c.Assert(existing, qt.HasLen, 0)
+	})
+
+	t.Run("transaction lifecycle", func(t *testing.T) {
+		// Test successful transaction
+		err := writer.BeginTransaction()
+		c.Assert(err, qt.IsNil)
+
+		err = writer.ExecuteSQL("SELECT 1")
+		c.Assert(err, qt.IsNil)
+
+		err = writer.CommitTransaction()
+		c.Assert(err, qt.IsNil)
+
+		// Test rollback transaction
+		err = writer.BeginTransaction()
+		c.Assert(err, qt.IsNil)
+
+		err = writer.RollbackTransaction()
+		c.Assert(err, qt.IsNil)
+	})
+
+	t.Run("DropAllTables", func(t *testing.T) {
+		// Create a test table first
+		_, err := db.Exec("CREATE TABLE IF NOT EXISTS temp_test_table (id SERIAL PRIMARY KEY)")
+		c.Assert(err, qt.IsNil)
+
+		err = writer.DropAllTables()
+		c.Assert(err, qt.IsNil)
+
+		// Verify table was dropped
+		var exists bool
+		err = db.QueryRow(`
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.tables
+				WHERE table_schema = 'public' AND table_name = 'temp_test_table'
+			)
+		`).Scan(&exists)
+		c.Assert(err, qt.IsNil)
+		c.Assert(exists, qt.IsFalse)
+	})
+}
+
+func TestPostgreSQLWriter_SchemaWriterInterface(t *testing.T) {
+	c := qt.New(t)
+	writer := NewPostgreSQLWriter(nil, "public")
+	var _ SchemaWriter = writer
+	c.Assert(writer, qt.IsNotNil)
 }

@@ -8,20 +8,9 @@ import (
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
+
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 )
-
-// DatabaseConnection represents a database connection with metadata
-type DatabaseConnection struct {
-	DB     *sql.DB
-	Info   DatabaseInfo
-	Reader SchemaReader
-	Writer SchemaWriter
-}
-
-// SchemaReader interface for reading database schemas
-type SchemaReader interface {
-	ReadSchema() (*DatabaseSchema, error)
-}
 
 // ConnectToDatabase creates a database connection from a URL
 func ConnectToDatabase(dbURL string) (*DatabaseConnection, error) {
@@ -101,24 +90,79 @@ func ConnectToDatabase(dbURL string) (*DatabaseConnection, error) {
 	}
 
 	return &DatabaseConnection{
-		DB:     db,
-		Info:   info,
-		Reader: reader,
-		Writer: writer,
+		db:     db,
+		info:   info,
+		reader: reader,
+		writer: writer,
 	}, nil
+}
+
+// DatabaseConnection represents a database connection with metadata
+type DatabaseConnection struct {
+	db     *sql.DB
+	info   parsertypes.DatabaseInfo
+	reader SchemaReader
+	writer SchemaWriter
+}
+
+func (dc *DatabaseConnection) Reader() SchemaReader {
+	return dc.reader
+}
+
+func (dc *DatabaseConnection) Writer() SchemaWriter {
+	return dc.writer
+}
+
+func (dc *DatabaseConnection) Info() parsertypes.DatabaseInfo {
+	return dc.info
 }
 
 // Close closes the database connection
 func (dc *DatabaseConnection) Close() error {
-	if dc.DB != nil {
-		return dc.DB.Close()
+	if dc.db != nil {
+		return dc.db.Close()
 	}
 	return nil
 }
 
+// FormatDatabaseURL formats a database URL for display (hiding password)
+func FormatDatabaseURL(dbURL string) string {
+	// Handle MySQL/MariaDB URLs specially since they have a different format
+	if (strings.HasPrefix(dbURL, "mysql://") || strings.HasPrefix(dbURL, "mariadb://")) && strings.Contains(dbURL, "@tcp(") {
+		// For MySQL/MariaDB URLs like mysql://user:pass@tcp(host:port)/db?params
+		// Just replace the password part
+		re := regexp.MustCompile(`://([^:]+):([^@]+)@`)
+		return re.ReplaceAllString(dbURL, "://$1:***@")
+	}
+
+	parsedURL, err := url.Parse(dbURL)
+	if err != nil {
+		return dbURL
+	}
+
+	// Hide password
+	if parsedURL.User != nil {
+		if _, hasPassword := parsedURL.User.Password(); hasPassword {
+			// Create a new URL string manually to avoid URL encoding of ***
+			username := parsedURL.User.Username()
+			host := parsedURL.Host
+			scheme := parsedURL.Scheme
+			path := parsedURL.Path
+
+			result := scheme + "://" + username + ":***@" + host + path
+			if parsedURL.RawQuery != "" {
+				result += "?" + parsedURL.RawQuery
+			}
+			return result
+		}
+	}
+
+	return parsedURL.String()
+}
+
 // getDatabaseInfo retrieves database metadata
-func getDatabaseInfo(db *sql.DB, dialect string, parsedURL *url.URL) (DatabaseInfo, error) {
-	info := DatabaseInfo{
+func getDatabaseInfo(db *sql.DB, dialect string, parsedURL *url.URL) (parsertypes.DatabaseInfo, error) {
+	info := parsertypes.DatabaseInfo{
 		Dialect: dialect,
 	}
 
@@ -165,41 +209,6 @@ func getDatabaseInfo(db *sql.DB, dialect string, parsedURL *url.URL) (DatabaseIn
 	}
 
 	return info, nil
-}
-
-// FormatDatabaseURL formats a database URL for display (hiding password)
-func FormatDatabaseURL(dbURL string) string {
-	// Handle MySQL/MariaDB URLs specially since they have a different format
-	if (strings.HasPrefix(dbURL, "mysql://") || strings.HasPrefix(dbURL, "mariadb://")) && strings.Contains(dbURL, "@tcp(") {
-		// For MySQL/MariaDB URLs like mysql://user:pass@tcp(host:port)/db?params
-		// Just replace the password part
-		re := regexp.MustCompile(`://([^:]+):([^@]+)@`)
-		return re.ReplaceAllString(dbURL, "://$1:***@")
-	}
-
-	parsedURL, err := url.Parse(dbURL)
-	if err != nil {
-		return dbURL
-	}
-
-	// Hide password
-	if parsedURL.User != nil {
-		if _, hasPassword := parsedURL.User.Password(); hasPassword {
-			// Create a new URL string manually to avoid URL encoding of ***
-			username := parsedURL.User.Username()
-			host := parsedURL.Host
-			scheme := parsedURL.Scheme
-			path := parsedURL.Path
-
-			result := scheme + "://" + username + ":***@" + host + path
-			if parsedURL.RawQuery != "" {
-				result += "?" + parsedURL.RawQuery
-			}
-			return result
-		}
-	}
-
-	return parsedURL.String()
 }
 
 // convertMySQLURL converts a MySQL/MariaDB URL from standard format to Go driver format

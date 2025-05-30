@@ -1,12 +1,12 @@
-package builder
+package transform
 
 import (
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // FromSchemaField converts a SchemaField to a ColumnNode
-func FromSchemaField(field meta.SchemaField, enums []meta.GlobalEnum) *ast.ColumnNode {
+func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
 	column := ast.NewColumn(field.Name, field.Type)
 
 	if !field.Nullable {
@@ -49,7 +49,7 @@ func FromSchemaField(field meta.SchemaField, enums []meta.GlobalEnum) *ast.Colum
 }
 
 // FromTableDirective converts a TableDirective to a CreateTableNode
-func FromTableDirective(table meta.TableDirective, fields []meta.SchemaField, enums []meta.GlobalEnum) *ast.CreateTableNode {
+func FromTableDirective(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
 	createTable := ast.NewCreateTable(table.Name)
 
 	if table.Comment != "" {
@@ -78,7 +78,7 @@ func FromTableDirective(table meta.TableDirective, fields []meta.SchemaField, en
 }
 
 // FromSchemaIndex converts a SchemaIndex to an IndexNode
-func FromSchemaIndex(index meta.SchemaIndex) *ast.IndexNode {
+func FromSchemaIndex(index types.SchemaIndex) *ast.IndexNode {
 	indexNode := ast.NewIndex(index.Name, index.StructName, index.Fields...)
 
 	if index.Unique {

@@ -24,7 +24,7 @@ import (
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mariadb"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/postgresql"
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // DialectGenerator defines the interface for database-specific SQL generation.
@@ -51,7 +51,7 @@ type DialectGenerator interface {
 	//   - enums: Global enum definitions that may be referenced by fields
 	//
 	// Returns a complete CREATE TABLE SQL statement ready for execution.
-	GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum) string
+	GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string
 
 	// GenerateCreateTableWithEmbedded generates a CREATE TABLE SQL statement with embedded field support.
 	//
@@ -67,7 +67,7 @@ type DialectGenerator interface {
 	//   - embeddedFields: Fields from embedded structs to be included in the table
 	//
 	// Returns a complete CREATE TABLE SQL statement with embedded fields included.
-	GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField) string
+	GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string
 
 	// GenerateAlterStatements generates ALTER TABLE SQL statements for schema migrations.
 	//
@@ -80,7 +80,7 @@ type DialectGenerator interface {
 	//   - newFields: Target field definitions after migration
 	//
 	// Returns a series of ALTER TABLE statements to migrate from old to new schema.
-	GenerateAlterStatements(oldFields, newFields []meta.SchemaField) string
+	GenerateAlterStatements(oldFields, newFields []types.SchemaField) string
 
 	// GetDialectName returns the name identifier of the database dialect.
 	//
@@ -140,7 +140,7 @@ func GetDialectGenerator(dialect string) DialectGenerator {
 //   - dialect: The database dialect identifier
 //
 // Returns a complete CREATE TABLE SQL statement for the specified dialect.
-func GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, dialect string) string {
+func GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateCreateTable(table, fields, indexes, enums)
 }
@@ -164,7 +164,7 @@ func GenerateCreateTable(table meta.TableDirective, fields []meta.SchemaField, i
 //   - dialect: The database dialect identifier
 //
 // Returns a complete CREATE TABLE SQL statement with embedded fields for the specified dialect.
-func GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.SchemaField, indexes []meta.SchemaIndex, enums []meta.GlobalEnum, embeddedFields []meta.EmbeddedField, dialect string) string {
+func GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateCreateTableWithEmbedded(table, fields, indexes, enums, embeddedFields)
 }
@@ -185,7 +185,7 @@ func GenerateCreateTableWithEmbedded(table meta.TableDirective, fields []meta.Sc
 //   - dialect: The database dialect identifier
 //
 // Returns a series of ALTER TABLE statements to migrate from old to new schema for the specified dialect.
-func GenerateAlterStatements(oldFields, newFields []meta.SchemaField, dialect string) string {
+func GenerateAlterStatements(oldFields, newFields []types.SchemaField, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateAlterStatements(oldFields, newFields)
 }

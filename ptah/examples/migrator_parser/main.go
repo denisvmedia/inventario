@@ -8,8 +8,8 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/parser"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func main() {
@@ -18,7 +18,7 @@ func main() {
 		return
 	}
 	filename := os.Args[1]
-	emb, fields, indexes, tables, enums := builder.ParseFileWithDependencies(filename)
+	emb, fields, indexes, tables, enums := parser.ParseFileWithDependencies(filename)
 
 	dialects := []string{"postgres", "mysql", "mariadb"}
 	for _, dialect := range dialects {
@@ -30,7 +30,7 @@ func main() {
 		fmt.Println()
 	}
 
-	fmt.Println(generators.GenerateAlterStatements([]meta.SchemaField{
+	fmt.Println(generators.GenerateAlterStatements([]types.SchemaField{
 		{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: true},
 		{StructName: "User", Name: "name", Type: "TEXT", Nullable: false},
 	}, fields, platform.Postgres))

@@ -1,4 +1,4 @@
-// Package builder provides functionality for parsing Go packages to extract database schema information.
+// Package parser provides functionality for parsing Go packages to extract database schema information.
 //
 // This package implements a recursive parser that walks through Go source files to discover
 // entity definitions, table directives, field mappings, indexes, enums, and embedded fields.
@@ -29,44 +29,20 @@
 //	for _, stmt := range statements {
 //		fmt.Println(stmt)
 //	}
-package builder
+package parser
 
 import (
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/renderer/generators"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
-
-// PackageParseResult contains all parsed entities from the entire project.
-//
-// This struct aggregates all database schema information discovered during the recursive
-// parsing process. It includes all entity types, their relationships, and dependency
-// information needed for proper migration generation.
-//
-// The result is processed to:
-//   - Remove duplicates that may occur when entities are defined in multiple files
-//   - Build dependency graphs based on foreign key relationships
-//   - Sort tables in topological order to ensure proper creation sequence
-//
-// Fields:
-//   - Tables: All table directives found in the project
-//   - Fields: All field definitions with their database mappings
-//   - Indexes: All index definitions for database optimization
-//   - Enums: Global enum definitions that can be referenced by fields
-//   - EmbeddedFields: Fields from embedded structs with their relation modes
-//   - Dependencies: Dependency graph mapping table names to their dependencies
-type PackageParseResult struct {
-	Tables         []meta.TableDirective
-	Fields         []meta.SchemaField
-	Indexes        []meta.SchemaIndex
-	Enums          []meta.GlobalEnum
-	EmbeddedFields []meta.EmbeddedField
-	Dependencies   map[string][]string // table -> list of tables it depends on
-}
 
 // ParsePackageRecursively parses all Go files in the given root directory and its subdirectories
 // to find all entity definitions and build a complete database schema.
@@ -99,14 +75,14 @@ type PackageParseResult struct {
 //	}
 //
 //	// Generate migration statements in proper order
-//	statements := result.GetOrderedCreateStatements("postgresql")
-func ParsePackageRecursively(rootDir string) (*PackageParseResult, error) {
-	result := &PackageParseResult{
-		Tables:         []meta.TableDirective{},
-		Fields:         []meta.SchemaField{},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+//	statements := GetOrderedCreateStatements(result, "postgresql")
+func ParsePackageRecursively(rootDir string) (*parsertypes.PackageParseResult, error) {
+	result := &parsertypes.PackageParseResult{
+		Tables:         []types.TableDirective{},
+		Fields:         []types.SchemaField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 		Dependencies:   make(map[string][]string),
 	}
 
@@ -149,13 +125,13 @@ func ParsePackageRecursively(rootDir string) (*PackageParseResult, error) {
 	}
 
 	// Deduplicate entities (same table/field defined in multiple files)
-	result.deduplicate()
+	deduplicate(result)
 
 	// Build dependency graph for foreign key ordering
-	result.buildDependencyGraph()
+	buildDependencyGraph(result)
 
 	// Sort tables by dependency order
-	result.sortTablesByDependencies()
+	sortTablesByDependencies(result)
 
 	return result, nil
 }
@@ -176,56 +152,56 @@ func ParsePackageRecursively(rootDir string) (*PackageParseResult, error) {
 // This method modifies the PackageParseResult in-place, replacing the original
 // slices with deduplicated versions. The order of entities may change during
 // this process, but dependency ordering is handled separately.
-func (r *PackageParseResult) deduplicate() {
+func deduplicate(r *parsertypes.PackageParseResult) {
 	// Deduplicate tables by name
-	tableMap := make(map[string]meta.TableDirective)
+	tableMap := make(map[string]types.TableDirective)
 	for _, table := range r.Tables {
 		tableMap[table.Name] = table
 	}
-	r.Tables = make([]meta.TableDirective, 0, len(tableMap))
+	r.Tables = make([]types.TableDirective, 0, len(tableMap))
 	for _, table := range tableMap {
 		r.Tables = append(r.Tables, table)
 	}
 
 	// Deduplicate fields by struct name and field name
-	fieldMap := make(map[string]meta.SchemaField)
+	fieldMap := make(map[string]types.SchemaField)
 	for _, field := range r.Fields {
 		key := field.StructName + "." + field.Name
 		fieldMap[key] = field
 	}
-	r.Fields = make([]meta.SchemaField, 0, len(fieldMap))
+	r.Fields = make([]types.SchemaField, 0, len(fieldMap))
 	for _, field := range fieldMap {
 		r.Fields = append(r.Fields, field)
 	}
 
 	// Deduplicate indexes by struct name and index name
-	indexMap := make(map[string]meta.SchemaIndex)
+	indexMap := make(map[string]types.SchemaIndex)
 	for _, index := range r.Indexes {
 		key := index.StructName + "." + index.Name
 		indexMap[key] = index
 	}
-	r.Indexes = make([]meta.SchemaIndex, 0, len(indexMap))
+	r.Indexes = make([]types.SchemaIndex, 0, len(indexMap))
 	for _, index := range indexMap {
 		r.Indexes = append(r.Indexes, index)
 	}
 
 	// Deduplicate enums by name
-	enumMap := make(map[string]meta.GlobalEnum)
+	enumMap := make(map[string]types.GlobalEnum)
 	for _, enum := range r.Enums {
 		enumMap[enum.Name] = enum
 	}
-	r.Enums = make([]meta.GlobalEnum, 0, len(enumMap))
+	r.Enums = make([]types.GlobalEnum, 0, len(enumMap))
 	for _, enum := range enumMap {
 		r.Enums = append(r.Enums, enum)
 	}
 
 	// Deduplicate embedded fields by struct name and embedded type name
-	embeddedMap := make(map[string]meta.EmbeddedField)
+	embeddedMap := make(map[string]types.EmbeddedField)
 	for _, embedded := range r.EmbeddedFields {
 		key := embedded.StructName + "." + embedded.EmbeddedTypeName
 		embeddedMap[key] = embedded
 	}
-	r.EmbeddedFields = make([]meta.EmbeddedField, 0, len(embeddedMap))
+	r.EmbeddedFields = make([]types.EmbeddedField, 0, len(embeddedMap))
 	for _, embedded := range embeddedMap {
 		r.EmbeddedFields = append(r.EmbeddedFields, embedded)
 	}
@@ -251,7 +227,7 @@ func (r *PackageParseResult) deduplicate() {
 //
 // The resulting dependency graph is stored in the Dependencies field and used by
 // sortTablesByDependencies() to perform topological sorting.
-func (r *PackageParseResult) buildDependencyGraph() {
+func buildDependencyGraph(r *parsertypes.PackageParseResult) {
 	// Initialize dependencies map for all tables
 	for _, table := range r.Tables {
 		r.Dependencies[table.Name] = []string{}
@@ -267,7 +243,7 @@ func (r *PackageParseResult) buildDependencyGraph() {
 			for _, table := range r.Tables {
 				if table.StructName == field.StructName {
 					// Add dependency: table depends on refTable
-					if !contains(r.Dependencies[table.Name], refTable) {
+					if !slices.Contains(r.Dependencies[table.Name], refTable) {
 						r.Dependencies[table.Name] = append(r.Dependencies[table.Name], refTable)
 					}
 					break
@@ -286,7 +262,7 @@ func (r *PackageParseResult) buildDependencyGraph() {
 			for _, table := range r.Tables {
 				if table.StructName == embedded.StructName {
 					// Add dependency: table depends on refTable
-					if !contains(r.Dependencies[table.Name], refTable) {
+					if !slices.Contains(r.Dependencies[table.Name], refTable) {
 						r.Dependencies[table.Name] = append(r.Dependencies[table.Name], refTable)
 					}
 					break
@@ -317,15 +293,15 @@ func (r *PackageParseResult) buildDependencyGraph() {
 // The method modifies the Tables slice in-place, reordering it according to dependency
 // requirements. This ensures that CREATE TABLE statements can be executed in the
 // returned order without foreign key constraint violations.
-func (r *PackageParseResult) sortTablesByDependencies() {
+func sortTablesByDependencies(r *parsertypes.PackageParseResult) {
 	// Create a map for quick table lookup
-	tableMap := make(map[string]meta.TableDirective)
+	tableMap := make(map[string]types.TableDirective)
 	for _, table := range r.Tables {
 		tableMap[table.Name] = table
 	}
 
 	// Perform topological sort using Kahn's algorithm
-	sorted := []meta.TableDirective{}
+	sorted := []types.TableDirective{}
 	inDegree := make(map[string]int)
 
 	// Calculate in-degrees (how many dependencies each table has)
@@ -390,25 +366,6 @@ func (r *PackageParseResult) sortTablesByDependencies() {
 	r.Tables = sorted
 }
 
-// contains checks if a slice contains a string.
-//
-// This is a utility function used internally for dependency graph construction
-// to avoid adding duplicate dependencies to the same table.
-//
-// Parameters:
-//   - slice: The string slice to search in
-//   - item: The string to search for
-//
-// Returns true if the item is found in the slice, false otherwise.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
 // GetDependencyInfo returns human-readable dependency information for debugging.
 //
 // This method generates a formatted string that displays the complete dependency
@@ -441,7 +398,7 @@ func contains(slice []string, item string) bool {
 //	2. categories
 //	3. products
 //	4. orders
-func (r *PackageParseResult) GetDependencyInfo() string {
+func GetDependencyInfo(r *parsertypes.PackageParseResult) string {
 	var info strings.Builder
 	info.WriteString("Table Dependencies:\n")
 	info.WriteString("==================\n")
@@ -462,4 +419,15 @@ func (r *PackageParseResult) GetDependencyInfo() string {
 	}
 
 	return info.String()
+}
+
+func GetOrderedCreateStatements(r *parsertypes.PackageParseResult, dialect string) []string {
+	statements := []string{}
+
+	for _, table := range r.Tables {
+		sql := generators.GenerateCreateTableWithEmbedded(table, r.Fields, r.Indexes, r.Enums, r.EmbeddedFields, dialect)
+		statements = append(statements, sql)
+	}
+
+	return statements
 }

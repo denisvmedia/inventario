@@ -6,8 +6,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestDropSchemaInterface(t *testing.T) {
@@ -46,8 +46,8 @@ func TestDropSchemaValidation(t *testing.T) {
 		c := qt.New(t)
 
 		// Create a test result with some tables and enums
-		result := &builder.PackageParseResult{
-			Tables: []meta.TableDirective{
+		result := &parsertypes.PackageParseResult{
+			Tables: []types.TableDirective{
 				{
 					Name:       "users",
 					StructName: "User",
@@ -57,7 +57,7 @@ func TestDropSchemaValidation(t *testing.T) {
 					StructName: "Product",
 				},
 			},
-			Enums: []meta.GlobalEnum{
+			Enums: []types.GlobalEnum{
 				{
 					Name:   "enum_user_role",
 					Values: []string{"admin", "user", "guest"},

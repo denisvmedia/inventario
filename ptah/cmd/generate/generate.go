@@ -9,8 +9,7 @@ import (
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
 var generateCmd = &cobra.Command{
@@ -66,7 +65,7 @@ func generateCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// Parse the entire package recursively
-	result, err := builder.ParsePackageRecursively(absPath)
+	result, err := parser.ParsePackageRecursively(absPath)
 	if err != nil {
 		return fmt.Errorf("error parsing package: %w", err)
 	}
@@ -77,7 +76,7 @@ func generateCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// Print dependency information
-	fmt.Println(result.GetDependencyInfo())
+	fmt.Println(parser.GetDependencyInfo(result))
 	fmt.Println()
 
 	// Determine which dialects to generate
@@ -112,7 +111,7 @@ func generateCommand(_ *cobra.Command, _ []string) error {
 		}
 
 		// Generate table statements
-		statements := executor.GetOrderedCreateStatements(result, d)
+		statements := parser.GetOrderedCreateStatements(result, d)
 
 		for i, statement := range statements {
 			fmt.Printf("-- Table %d/%d\n", i+1, len(result.Tables))

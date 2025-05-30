@@ -6,7 +6,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestGenerator_New(t *testing.T) {
@@ -22,14 +22,14 @@ func TestGenerator_GenerateCreateTable_BasicTable(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := meta.TableDirective{
+	table := types.TableDirective{
 		StructName: "User",
 		Name:       "users",
 		Comment:    "User accounts table",
 		Engine:     "InnoDB",
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -74,13 +74,13 @@ func TestGenerator_GenerateCreateTable_WithInlineEnums(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := meta.TableDirective{
+	table := types.TableDirective{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB",
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -103,7 +103,7 @@ func TestGenerator_GenerateCreateTable_WithInlineEnums(t *testing.T) {
 		},
 	}
 
-	enums := []meta.GlobalEnum{
+	enums := []types.GlobalEnum{
 		{
 			Name:   "user_status_enum",
 			Values: []string{"active", "inactive", "pending"},
@@ -128,13 +128,13 @@ func TestGenerator_GenerateCreateTable_WithIndexes(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := meta.TableDirective{
+	table := types.TableDirective{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB",
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -156,7 +156,7 @@ func TestGenerator_GenerateCreateTable_WithIndexes(t *testing.T) {
 		},
 	}
 
-	indexes := []meta.SchemaIndex{
+	indexes := []types.SchemaIndex{
 		{
 			StructName: "User",
 			Name:       "idx_users_email",
@@ -188,13 +188,13 @@ func TestGenerator_GenerateCreateTable_WithTypeOverrides(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := meta.TableDirective{
+	table := types.TableDirective{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB",
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -225,7 +225,7 @@ func TestGenerator_GenerateCreateTable_WithTableOverrides(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := meta.TableDirective{
+	table := types.TableDirective{
 		StructName: "User",
 		Name:       "users",
 		Overrides: map[string]map[string]string{
@@ -237,7 +237,7 @@ func TestGenerator_GenerateCreateTable_WithTableOverrides(t *testing.T) {
 		},
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -259,12 +259,12 @@ func TestGenerator_GenerateCreateTable_WithCheckOverrides(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := meta.TableDirective{
+	table := types.TableDirective{
 		StructName: "Product",
 		Name:       "products",
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "Product",
 			Name:       "price",
@@ -301,14 +301,14 @@ func TestGenerator_GenerateCreateTable_CompositeKeys(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := meta.TableDirective{
+	table := types.TableDirective{
 		StructName: "UserRole",
 		Name:       "user_roles",
 		PrimaryKey: []string{"user_id", "role_id"},
 		Engine:     "InnoDB",
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "UserRole",
 			Name:       "user_id",
@@ -342,7 +342,7 @@ func TestGenerator_GenerateAlterStatements(t *testing.T) {
 
 	generator := mysql.New()
 
-	oldFields := []meta.SchemaField{
+	oldFields := []types.SchemaField{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -351,7 +351,7 @@ func TestGenerator_GenerateAlterStatements(t *testing.T) {
 		},
 	}
 
-	newFields := []meta.SchemaField{
+	newFields := []types.SchemaField{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -379,13 +379,13 @@ func TestGenerator_GenerateCreateTable_IgnoresDifferentStructs(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := meta.TableDirective{
+	table := types.TableDirective{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB",
 	}
 
-	fields := []meta.SchemaField{
+	fields := []types.SchemaField{
 		{
 			StructName: "User",
 			Name:       "id",

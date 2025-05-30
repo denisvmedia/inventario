@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
 var writeDBCmd = &cobra.Command{
@@ -62,7 +62,7 @@ func writeDBCommand(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("error resolving path: %w", err)
 	}
 
-	result, err := builder.ParsePackageRecursively(absPath)
+	result, err := parser.ParsePackageRecursively(absPath)
 	if err != nil {
 		return fmt.Errorf("error parsing Go entities: %w", err)
 	}
@@ -76,10 +76,10 @@ func writeDBCommand(_ *cobra.Command, _ []string) error {
 	}
 	defer conn.Close()
 
-	fmt.Printf("Connected to %s database successfully!\n", conn.Info.Dialect)
+	fmt.Printf("Connected to %s database successfully!\n", conn.Info().Dialect)
 
 	// 3. Check if schema already exists
-	existingTables, err := conn.Writer.CheckSchemaExists(result)
+	existingTables, err := conn.Writer().CheckSchemaExists(result)
 	if err != nil {
 		return fmt.Errorf("error checking existing schema: %w", err)
 	}
@@ -93,7 +93,7 @@ func writeDBCommand(_ *cobra.Command, _ []string) error {
 
 	// 4. Write schema
 	fmt.Println("Writing schema to database...")
-	err = conn.Writer.WriteSchema(result)
+	err = conn.Writer().WriteSchema(result)
 	if err != nil {
 		return fmt.Errorf("error writing schema: %w", err)
 	}

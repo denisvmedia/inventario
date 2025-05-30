@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/renderer"
 )
 
 var readDBCmd = &cobra.Command{
@@ -61,17 +62,17 @@ func readDBCommand(_ *cobra.Command, _ []string) error {
 	}
 	defer conn.Close()
 
-	fmt.Printf("Connected to %s database successfully!\n", conn.Info.Dialect)
+	fmt.Printf("Connected to %s database successfully!\n", conn.Info().Dialect)
 	fmt.Println()
 
 	// Read the schema
-	schema, err := conn.Reader.ReadSchema()
+	schema, err := conn.Reader().ReadSchema()
 	if err != nil {
 		return fmt.Errorf("error reading schema: %w", err)
 	}
 
 	// Format and display the schema
-	output := executor.FormatSchema(schema, conn.Info)
+	output := renderer.FormatSchema(schema, conn.Info())
 	fmt.Print(output)
 
 	return nil

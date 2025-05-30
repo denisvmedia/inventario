@@ -58,7 +58,7 @@ func dropAllCommand(_ *cobra.Command, _ []string) error {
 	}
 	defer conn.Close()
 
-	fmt.Printf("Connected to %s database successfully!\n", conn.Info.Dialect)
+	fmt.Printf("Connected to %s database successfully!\n", conn.Info().Dialect)
 	fmt.Println()
 
 	// 2. Show extreme warning and ask for confirmation
@@ -93,7 +93,7 @@ func dropAllCommand(_ *cobra.Command, _ []string) error {
 
 	// 3. Drop all tables and enums
 	fmt.Println("Dropping all tables and enums from database...")
-	err = conn.Writer.DropAllTables()
+	err = conn.Writer().DropAllTables()
 	if err != nil {
 		return fmt.Errorf("error dropping all tables: %w", err)
 	}

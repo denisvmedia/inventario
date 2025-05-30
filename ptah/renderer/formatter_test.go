@@ -1,4 +1,4 @@
-package executor_test
+package renderer_test
 
 import (
 	"strings"
@@ -6,25 +6,26 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 )
 
 func TestFormatSchema_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		schema   *executor.DatabaseSchema
-		info     executor.DatabaseInfo
+		schema   *parsertypes.DatabaseSchema
+		info     parsertypes.DatabaseInfo
 		contains []string
 	}{
 		{
 			name: "complete schema with all components",
-			schema: &executor.DatabaseSchema{
-				Tables: []executor.Table{
+			schema: &parsertypes.DatabaseSchema{
+				Tables: []parsertypes.Table{
 					{
 						Name:    "users",
 						Type:    "TABLE",
 						Comment: "User accounts",
-						Columns: []executor.Column{
+						Columns: []parsertypes.Column{
 							{
 								Name:         "id",
 								DataType:     "INTEGER",
@@ -41,13 +42,13 @@ func TestFormatSchema_HappyPath(t *testing.T) {
 						},
 					},
 				},
-				Enums: []executor.Enum{
+				Enums: []parsertypes.Enum{
 					{
 						Name:   "user_status",
 						Values: []string{"active", "inactive", "pending"},
 					},
 				},
-				Indexes: []executor.Index{
+				Indexes: []parsertypes.Index{
 					{
 						Name:      "idx_users_email",
 						TableName: "users",
@@ -55,7 +56,7 @@ func TestFormatSchema_HappyPath(t *testing.T) {
 						IsUnique:  true,
 					},
 				},
-				Constraints: []executor.Constraint{
+				Constraints: []parsertypes.Constraint{
 					{
 						Name:       "pk_users",
 						TableName:  "users",
@@ -64,7 +65,7 @@ func TestFormatSchema_HappyPath(t *testing.T) {
 					},
 				},
 			},
-			info: executor.DatabaseInfo{
+			info: parsertypes.DatabaseInfo{
 				Dialect: "postgres",
 				Version: "14.5",
 				Schema:  "public",
@@ -94,12 +95,12 @@ func TestFormatSchema_HappyPath(t *testing.T) {
 		},
 		{
 			name: "minimal schema with no enums or constraints",
-			schema: &executor.DatabaseSchema{
-				Tables: []executor.Table{
+			schema: &parsertypes.DatabaseSchema{
+				Tables: []parsertypes.Table{
 					{
 						Name: "simple_table",
 						Type: "TABLE",
-						Columns: []executor.Column{
+						Columns: []parsertypes.Column{
 							{
 								Name:       "id",
 								DataType:   "INTEGER",
@@ -109,7 +110,7 @@ func TestFormatSchema_HappyPath(t *testing.T) {
 					},
 				},
 			},
-			info: executor.DatabaseInfo{
+			info: parsertypes.DatabaseInfo{
 				Dialect: "mysql",
 				Version: "8.0",
 				Schema:  "test_db",
@@ -132,7 +133,7 @@ func TestFormatSchema_HappyPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := executor.FormatSchema(tt.schema, tt.info)
+			result := renderer.FormatSchema(tt.schema, tt.info)
 
 			c.Assert(result, qt.Not(qt.Equals), "")
 			for _, expected := range tt.contains {
@@ -145,19 +146,19 @@ func TestFormatSchema_HappyPath(t *testing.T) {
 func TestFormatSchema_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
-		schema   *executor.DatabaseSchema
-		info     executor.DatabaseInfo
+		schema   *parsertypes.DatabaseSchema
+		info     parsertypes.DatabaseInfo
 		contains []string
 	}{
 		{
 			name: "empty schema",
-			schema: &executor.DatabaseSchema{
-				Tables:      []executor.Table{},
-				Enums:       []executor.Enum{},
-				Indexes:     []executor.Index{},
-				Constraints: []executor.Constraint{},
+			schema: &parsertypes.DatabaseSchema{
+				Tables:      []parsertypes.Table{},
+				Enums:       []parsertypes.Enum{},
+				Indexes:     []parsertypes.Index{},
+				Constraints: []parsertypes.Constraint{},
 			},
-			info: executor.DatabaseInfo{
+			info: parsertypes.DatabaseInfo{
 				Dialect: "postgres",
 				Version: "14.5",
 				Schema:  "public",
@@ -173,13 +174,13 @@ func TestFormatSchema_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "nil schema",
-			schema: &executor.DatabaseSchema{
+			schema: &parsertypes.DatabaseSchema{
 				Tables:      nil,
 				Enums:       nil,
 				Indexes:     nil,
 				Constraints: nil,
 			},
-			info: executor.DatabaseInfo{
+			info: parsertypes.DatabaseInfo{
 				Dialect: "mysql",
 				Version: "8.0",
 				Schema:  "test",
@@ -198,7 +199,7 @@ func TestFormatSchema_EdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := executor.FormatSchema(tt.schema, tt.info)
+			result := renderer.FormatSchema(tt.schema, tt.info)
 
 			c.Assert(result, qt.Not(qt.Equals), "")
 			for _, expected := range tt.contains {
@@ -211,13 +212,13 @@ func TestFormatSchema_EdgeCases(t *testing.T) {
 func TestFormatColumn_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		column   executor.Column
+		column   parsertypes.Column
 		indent   string
 		expected string
 	}{
 		{
 			name: "primary key column",
-			column: executor.Column{
+			column: parsertypes.Column{
 				Name:         "id",
 				DataType:     "INTEGER",
 				IsNullable:   "NO",
@@ -228,7 +229,7 @@ func TestFormatColumn_HappyPath(t *testing.T) {
 		},
 		{
 			name: "varchar column with length",
-			column: executor.Column{
+			column: parsertypes.Column{
 				Name:               "email",
 				DataType:           "VARCHAR",
 				CharacterMaxLength: intPtr(255),
@@ -240,7 +241,7 @@ func TestFormatColumn_HappyPath(t *testing.T) {
 		},
 		{
 			name: "decimal column with precision and scale",
-			column: executor.Column{
+			column: parsertypes.Column{
 				Name:             "price",
 				DataType:         "DECIMAL",
 				NumericPrecision: intPtr(10),
@@ -253,7 +254,7 @@ func TestFormatColumn_HappyPath(t *testing.T) {
 		},
 		{
 			name: "auto increment column",
-			column: executor.Column{
+			column: parsertypes.Column{
 				Name:            "id",
 				DataType:        "INTEGER",
 				IsNullable:      "NO",
@@ -270,18 +271,18 @@ func TestFormatColumn_HappyPath(t *testing.T) {
 
 			// Use reflection to call the unexported function
 			// Since formatColumn is unexported, we'll test it through FormatSchema
-			schema := &executor.DatabaseSchema{
-				Tables: []executor.Table{
+			schema := &parsertypes.DatabaseSchema{
+				Tables: []parsertypes.Table{
 					{
 						Name:    "test_table",
 						Type:    "TABLE",
-						Columns: []executor.Column{tt.column},
+						Columns: []parsertypes.Column{tt.column},
 					},
 				},
 			}
-			info := executor.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
+			info := parsertypes.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
 
-			result := executor.FormatSchema(schema, info)
+			result := renderer.FormatSchema(schema, info)
 
 			// Extract the column part and verify it contains expected formatting
 			lines := strings.Split(result, "\n")
@@ -303,13 +304,13 @@ func TestFormatColumn_HappyPath(t *testing.T) {
 func TestFormatConstraint_HappyPath(t *testing.T) {
 	tests := []struct {
 		name       string
-		constraint executor.Constraint
+		constraint parsertypes.Constraint
 		indent     string
 		expected   string
 	}{
 		{
 			name: "primary key constraint",
-			constraint: executor.Constraint{
+			constraint: parsertypes.Constraint{
 				Name:       "pk_users",
 				TableName:  "users",
 				Type:       "PRIMARY KEY",
@@ -320,7 +321,7 @@ func TestFormatConstraint_HappyPath(t *testing.T) {
 		},
 		{
 			name: "foreign key constraint with rules",
-			constraint: executor.Constraint{
+			constraint: parsertypes.Constraint{
 				Name:          "fk_user_profile",
 				TableName:     "profiles",
 				Type:          "FOREIGN KEY",
@@ -335,7 +336,7 @@ func TestFormatConstraint_HappyPath(t *testing.T) {
 		},
 		{
 			name: "unique constraint",
-			constraint: executor.Constraint{
+			constraint: parsertypes.Constraint{
 				Name:       "uk_users_email",
 				TableName:  "users",
 				Type:       "UNIQUE",
@@ -346,7 +347,7 @@ func TestFormatConstraint_HappyPath(t *testing.T) {
 		},
 		{
 			name: "check constraint",
-			constraint: executor.Constraint{
+			constraint: parsertypes.Constraint{
 				Name:        "ck_users_age",
 				TableName:   "users",
 				Type:        "CHECK",
@@ -358,7 +359,7 @@ func TestFormatConstraint_HappyPath(t *testing.T) {
 		},
 		{
 			name: "unknown constraint type",
-			constraint: executor.Constraint{
+			constraint: parsertypes.Constraint{
 				Name:       "custom_constraint",
 				TableName:  "users",
 				Type:       "CUSTOM",
@@ -374,21 +375,21 @@ func TestFormatConstraint_HappyPath(t *testing.T) {
 			c := qt.New(t)
 
 			// Test through FormatSchema since formatConstraint is unexported
-			schema := &executor.DatabaseSchema{
-				Tables: []executor.Table{
+			schema := &parsertypes.DatabaseSchema{
+				Tables: []parsertypes.Table{
 					{
 						Name: tt.constraint.TableName,
 						Type: "TABLE",
-						Columns: []executor.Column{
+						Columns: []parsertypes.Column{
 							{Name: "id", DataType: "INTEGER"},
 						},
 					},
 				},
-				Constraints: []executor.Constraint{tt.constraint},
+				Constraints: []parsertypes.Constraint{tt.constraint},
 			}
-			info := executor.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
+			info := parsertypes.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
 
-			result := executor.FormatSchema(schema, info)
+			result := renderer.FormatSchema(schema, info)
 
 			// Verify the constraint appears in the output
 			c.Assert(result, qt.Contains, tt.constraint.Type)
@@ -400,13 +401,13 @@ func TestFormatConstraint_HappyPath(t *testing.T) {
 func TestFormatIndex_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		index    executor.Index
+		index    parsertypes.Index
 		indent   string
 		expected string
 	}{
 		{
 			name: "primary key index",
-			index: executor.Index{
+			index: parsertypes.Index{
 				Name:      "pk_users",
 				TableName: "users",
 				Columns:   []string{"id"},
@@ -417,7 +418,7 @@ func TestFormatIndex_HappyPath(t *testing.T) {
 		},
 		{
 			name: "unique index",
-			index: executor.Index{
+			index: parsertypes.Index{
 				Name:      "uk_users_email",
 				TableName: "users",
 				Columns:   []string{"email"},
@@ -428,7 +429,7 @@ func TestFormatIndex_HappyPath(t *testing.T) {
 		},
 		{
 			name: "regular index with multiple columns",
-			index: executor.Index{
+			index: parsertypes.Index{
 				Name:      "idx_users_name_age",
 				TableName: "users",
 				Columns:   []string{"first_name", "last_name", "age"},
@@ -443,21 +444,21 @@ func TestFormatIndex_HappyPath(t *testing.T) {
 			c := qt.New(t)
 
 			// Test through FormatSchema since formatIndex is unexported
-			schema := &executor.DatabaseSchema{
-				Tables: []executor.Table{
+			schema := &parsertypes.DatabaseSchema{
+				Tables: []parsertypes.Table{
 					{
 						Name: tt.index.TableName,
 						Type: "TABLE",
-						Columns: []executor.Column{
+						Columns: []parsertypes.Column{
 							{Name: "id", DataType: "INTEGER"},
 						},
 					},
 				},
-				Indexes: []executor.Index{tt.index},
+				Indexes: []parsertypes.Index{tt.index},
 			}
-			info := executor.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
+			info := parsertypes.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
 
-			result := executor.FormatSchema(schema, info)
+			result := renderer.FormatSchema(schema, info)
 
 			// Verify the index appears in the output
 			c.Assert(result, qt.Contains, tt.index.Name)
@@ -471,13 +472,13 @@ func TestFormatIndex_HappyPath(t *testing.T) {
 func TestGetTableConstraints_HappyPath(t *testing.T) {
 	tests := []struct {
 		name        string
-		constraints []executor.Constraint
+		constraints []parsertypes.Constraint
 		tableName   string
 		expected    int
 	}{
 		{
 			name: "multiple constraints for table",
-			constraints: []executor.Constraint{
+			constraints: []parsertypes.Constraint{
 				{Name: "pk_users", TableName: "users", Type: "PRIMARY KEY"},
 				{Name: "fk_posts_user", TableName: "posts", Type: "FOREIGN KEY"},
 				{Name: "uk_users_email", TableName: "users", Type: "UNIQUE"},
@@ -488,7 +489,7 @@ func TestGetTableConstraints_HappyPath(t *testing.T) {
 		},
 		{
 			name: "no constraints for table",
-			constraints: []executor.Constraint{
+			constraints: []parsertypes.Constraint{
 				{Name: "pk_posts", TableName: "posts", Type: "PRIMARY KEY"},
 			},
 			tableName: "users",
@@ -496,7 +497,7 @@ func TestGetTableConstraints_HappyPath(t *testing.T) {
 		},
 		{
 			name:        "empty constraints list",
-			constraints: []executor.Constraint{},
+			constraints: []parsertypes.Constraint{},
 			tableName:   "users",
 			expected:    0,
 		},
@@ -507,21 +508,21 @@ func TestGetTableConstraints_HappyPath(t *testing.T) {
 			c := qt.New(t)
 
 			// Test through FormatSchema since getTableConstraints is unexported
-			schema := &executor.DatabaseSchema{
-				Tables: []executor.Table{
+			schema := &parsertypes.DatabaseSchema{
+				Tables: []parsertypes.Table{
 					{
 						Name: tt.tableName,
 						Type: "TABLE",
-						Columns: []executor.Column{
+						Columns: []parsertypes.Column{
 							{Name: "id", DataType: "INTEGER"},
 						},
 					},
 				},
 				Constraints: tt.constraints,
 			}
-			info := executor.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
+			info := parsertypes.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
 
-			result := executor.FormatSchema(schema, info)
+			result := renderer.FormatSchema(schema, info)
 
 			// Count constraint occurrences in the table section
 			if tt.expected > 0 {
@@ -534,13 +535,13 @@ func TestGetTableConstraints_HappyPath(t *testing.T) {
 func TestGetTableIndexes_HappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		indexes   []executor.Index
+		indexes   []parsertypes.Index
 		tableName string
 		expected  int
 	}{
 		{
 			name: "multiple indexes for table",
-			indexes: []executor.Index{
+			indexes: []parsertypes.Index{
 				{Name: "pk_users", TableName: "users", IsPrimary: true},
 				{Name: "idx_posts_title", TableName: "posts", IsUnique: false},
 				{Name: "uk_users_email", TableName: "users", IsUnique: true},
@@ -550,7 +551,7 @@ func TestGetTableIndexes_HappyPath(t *testing.T) {
 		},
 		{
 			name: "no indexes for table",
-			indexes: []executor.Index{
+			indexes: []parsertypes.Index{
 				{Name: "idx_posts_title", TableName: "posts"},
 			},
 			tableName: "users",
@@ -558,7 +559,7 @@ func TestGetTableIndexes_HappyPath(t *testing.T) {
 		},
 		{
 			name:      "empty indexes list",
-			indexes:   []executor.Index{},
+			indexes:   []parsertypes.Index{},
 			tableName: "users",
 			expected:  0,
 		},
@@ -569,21 +570,21 @@ func TestGetTableIndexes_HappyPath(t *testing.T) {
 			c := qt.New(t)
 
 			// Test through FormatSchema since getTableIndexes is unexported
-			schema := &executor.DatabaseSchema{
-				Tables: []executor.Table{
+			schema := &parsertypes.DatabaseSchema{
+				Tables: []parsertypes.Table{
 					{
 						Name: tt.tableName,
 						Type: "TABLE",
-						Columns: []executor.Column{
+						Columns: []parsertypes.Column{
 							{Name: "id", DataType: "INTEGER"},
 						},
 					},
 				},
 				Indexes: tt.indexes,
 			}
-			info := executor.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
+			info := parsertypes.DatabaseInfo{Dialect: "postgres", Version: "14", Schema: "public"}
 
-			result := executor.FormatSchema(schema, info)
+			result := renderer.FormatSchema(schema, info)
 
 			// Count index occurrences in the table section
 			if tt.expected > 0 {

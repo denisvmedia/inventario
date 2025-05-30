@@ -1,4 +1,4 @@
-package executor_test
+package differ_test
 
 import (
 	"strings"
@@ -6,9 +6,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestNormalizeType(t *testing.T) {
@@ -78,32 +78,32 @@ func TestNormalizeType(t *testing.T) {
 func TestSchemaDiff_HasChanges(t *testing.T) {
 	tests := []struct {
 		name     string
-		diff     *executor.SchemaDiff
+		diff     *differ.SchemaDiff
 		expected bool
 	}{
 		{
 			name:     "no changes",
-			diff:     &executor.SchemaDiff{},
+			diff:     &differ.SchemaDiff{},
 			expected: false,
 		},
 		{
 			name: "tables added",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				TablesAdded: []string{"users"},
 			},
 			expected: true,
 		},
 		{
 			name: "tables removed",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				TablesRemoved: []string{"old_table"},
 			},
 			expected: true,
 		},
 		{
 			name: "tables modified",
-			diff: &executor.SchemaDiff{
-				TablesModified: []executor.TableDiff{
+			diff: &differ.SchemaDiff{
+				TablesModified: []differ.TableDiff{
 					{TableName: "users", ColumnsAdded: []string{"email"}},
 				},
 			},
@@ -111,22 +111,22 @@ func TestSchemaDiff_HasChanges(t *testing.T) {
 		},
 		{
 			name: "enums added",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				EnumsAdded: []string{"status_enum"},
 			},
 			expected: true,
 		},
 		{
 			name: "enums removed",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				EnumsRemoved: []string{"old_enum"},
 			},
 			expected: true,
 		},
 		{
 			name: "enums modified",
-			diff: &executor.SchemaDiff{
-				EnumsModified: []executor.EnumDiff{
+			diff: &differ.SchemaDiff{
+				EnumsModified: []differ.EnumDiff{
 					{EnumName: "status", ValuesAdded: []string{"pending"}},
 				},
 			},
@@ -134,14 +134,14 @@ func TestSchemaDiff_HasChanges(t *testing.T) {
 		},
 		{
 			name: "indexes added",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				IndexesAdded: []string{"idx_user_email"},
 			},
 			expected: true,
 		},
 		{
 			name: "indexes removed",
-			diff: &executor.SchemaDiff{
+			diff: &differ.SchemaDiff{
 				IndexesRemoved: []string{"old_index"},
 			},
 			expected: true,
@@ -160,21 +160,21 @@ func TestSchemaDiff_HasChanges(t *testing.T) {
 func TestCompareSchemas_EmptySchemas(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables:         []meta.TableDirective{},
-		Fields:         []meta.SchemaField{},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+	generated := &parsertypes.PackageParseResult{
+		Tables:         []types.TableDirective{},
+		Fields:         []types.SchemaField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables:  []executor.Table{},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+	database := &parsertypes.DatabaseSchema{
+		Tables:  []parsertypes.Table{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsFalse)
 	c.Assert(diff.TablesAdded, qt.HasLen, 0)
@@ -190,24 +190,24 @@ func TestCompareSchemas_EmptySchemas(t *testing.T) {
 func TestCompareSchemas_TablesAdded(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{
 			{StructName: "User", Name: "users"},
 			{StructName: "Post", Name: "posts"},
 		},
-		Fields:         []meta.SchemaField{},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+		Fields:         []types.SchemaField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables:  []executor.Table{},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+	database := &parsertypes.DatabaseSchema{
+		Tables:  []parsertypes.Table{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.TablesAdded, qt.HasLen, 2)
@@ -219,24 +219,24 @@ func TestCompareSchemas_TablesAdded(t *testing.T) {
 func TestCompareSchemas_TablesRemoved(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables:         []meta.TableDirective{},
-		Fields:         []meta.SchemaField{},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+	generated := &parsertypes.PackageParseResult{
+		Tables:         []types.TableDirective{},
+		Fields:         []types.SchemaField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{
 			{Name: "old_users"},
 			{Name: "old_posts"},
 		},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.TablesAdded, qt.HasLen, 0)
@@ -248,24 +248,24 @@ func TestCompareSchemas_TablesRemoved(t *testing.T) {
 func TestCompareSchemas_EnumsAdded(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables:  []meta.TableDirective{},
-		Fields:  []meta.SchemaField{},
-		Indexes: []meta.SchemaIndex{},
-		Enums: []meta.GlobalEnum{
+	generated := &parsertypes.PackageParseResult{
+		Tables:  []types.TableDirective{},
+		Fields:  []types.SchemaField{},
+		Indexes: []types.SchemaIndex{},
+		Enums: []types.GlobalEnum{
 			{Name: "status_enum", Values: []string{"active", "inactive"}},
 			{Name: "role_enum", Values: []string{"admin", "user"}},
 		},
-		EmbeddedFields: []meta.EmbeddedField{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables:  []executor.Table{},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+	database := &parsertypes.DatabaseSchema{
+		Tables:  []parsertypes.Table{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.EnumsAdded, qt.HasLen, 2)
@@ -277,24 +277,24 @@ func TestCompareSchemas_EnumsAdded(t *testing.T) {
 func TestCompareSchemas_EnumsRemoved(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables:         []meta.TableDirective{},
-		Fields:         []meta.SchemaField{},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+	generated := &parsertypes.PackageParseResult{
+		Tables:         []types.TableDirective{},
+		Fields:         []types.SchemaField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{},
-		Enums: []executor.Enum{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{},
+		Enums: []parsertypes.Enum{
 			{Name: "old_status", Values: []string{"active", "inactive"}},
 			{Name: "old_role", Values: []string{"admin", "user"}},
 		},
-		Indexes: []executor.Index{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.EnumsAdded, qt.HasLen, 0)
@@ -306,25 +306,25 @@ func TestCompareSchemas_EnumsRemoved(t *testing.T) {
 func TestCompareSchemas_EnumsModified(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables:  []meta.TableDirective{},
-		Fields:  []meta.SchemaField{},
-		Indexes: []meta.SchemaIndex{},
-		Enums: []meta.GlobalEnum{
+	generated := &parsertypes.PackageParseResult{
+		Tables:  []types.TableDirective{},
+		Fields:  []types.SchemaField{},
+		Indexes: []types.SchemaIndex{},
+		Enums: []types.GlobalEnum{
 			{Name: "status_enum", Values: []string{"active", "inactive", "pending"}}, // Added "pending"
 		},
-		EmbeddedFields: []meta.EmbeddedField{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{},
-		Enums: []executor.Enum{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{},
+		Enums: []parsertypes.Enum{
 			{Name: "status_enum", Values: []string{"active", "inactive", "deleted"}}, // Has "deleted" instead of "pending"
 		},
-		Indexes: []executor.Index{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.EnumsAdded, qt.HasLen, 0)
@@ -340,28 +340,28 @@ func TestCompareSchemas_EnumsModified(t *testing.T) {
 func TestCompareSchemas_IndexesAddedAndRemoved(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{},
-		Fields: []meta.SchemaField{},
-		Indexes: []meta.SchemaIndex{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{},
+		Fields: []types.SchemaField{},
+		Indexes: []types.SchemaIndex{
 			{Name: "idx_user_email"},
 			{Name: "idx_user_name"},
 		},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{},
-		Enums:  []executor.Enum{},
-		Indexes: []executor.Index{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{},
+		Enums:  []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{
 			{Name: "idx_user_email"},            // Exists in both
 			{Name: "old_idx_user_phone"},        // Only in database
 			{Name: "pk_users", IsPrimary: true}, // Primary key index - should be ignored
 		},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.IndexesAdded, qt.HasLen, 1)
@@ -373,36 +373,36 @@ func TestCompareSchemas_IndexesAddedAndRemoved(t *testing.T) {
 func TestCompareSchemas_TablesModified_ColumnsAddedAndRemoved(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []meta.SchemaField{
+		Fields: []types.SchemaField{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "email", Type: "VARCHAR", Nullable: false}, // New field
 			{StructName: "User", Name: "name", Type: "VARCHAR", Nullable: false},  // Existing field
 		},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{
 			{
 				Name: "users",
-				Columns: []executor.Column{
+				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 					{Name: "name", DataType: "VARCHAR", IsNullable: "NO"},
 					{Name: "phone", DataType: "VARCHAR", IsNullable: "YES"}, // Field to be removed
 				},
 			},
 		},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.TablesModified, qt.HasLen, 1)
@@ -417,36 +417,36 @@ func TestCompareSchemas_TablesModified_ColumnsAddedAndRemoved(t *testing.T) {
 func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []meta.SchemaField{
+		Fields: []types.SchemaField{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "email", Type: "VARCHAR", Nullable: false, Unique: true},
 			{StructName: "User", Name: "status", Type: "VARCHAR", Nullable: true, Default: "active"},
 		},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{
 			{
 				Name: "users",
-				Columns: []executor.Column{
+				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                        // Type and nullable changed
 					{Name: "status", DataType: "VARCHAR", IsNullable: "NO", ColumnDefault: stringPtr("pending")}, // Nullable and default changed
 				},
 			},
 		},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.TablesModified, qt.HasLen, 1)
@@ -472,7 +472,7 @@ func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 }
 
 // Helper function to find a column diff by name
-func findColumnDiff(diffs []executor.ColumnDiff, columnName string) *executor.ColumnDiff {
+func findColumnDiff(diffs []differ.ColumnDiff, columnName string) *differ.ColumnDiff {
 	for _, diff := range diffs {
 		if diff.ColumnName == columnName {
 			return &diff
@@ -489,17 +489,17 @@ func stringPtr(s string) *string {
 func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []meta.SchemaField{
+		Fields: []types.SchemaField{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "name", Type: "VARCHAR", Nullable: false},
 		},
-		Indexes: []meta.SchemaIndex{},
-		Enums:   []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{
+		Indexes: []types.SchemaIndex{},
+		Enums:   []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{
 			{
 				StructName:       "User",
 				Mode:             "inline",
@@ -511,16 +511,16 @@ func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
 	// Mock the ProcessEmbeddedFields function behavior
 	// In real scenario, this would be called by the comparator
 	// For testing, we'll add the expected embedded fields to the Fields slice
-	generated.Fields = append(generated.Fields, []meta.SchemaField{
+	generated.Fields = append(generated.Fields, []types.SchemaField{
 		{StructName: "User", Name: "created_at", Type: "TIMESTAMP", Nullable: false},
 		{StructName: "User", Name: "updated_at", Type: "TIMESTAMP", Nullable: false},
 	}...)
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{
 			{
 				Name: "users",
-				Columns: []executor.Column{
+				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 					{Name: "name", DataType: "VARCHAR", IsNullable: "NO"},
 					{Name: "created_at", DataType: "TIMESTAMP", IsNullable: "NO"},
@@ -528,11 +528,11 @@ func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
 				},
 			},
 		},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 	c.Assert(diff.TablesModified, qt.HasLen, 1)
@@ -547,12 +547,12 @@ func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
 func TestGenerateMigrationSQL_PostgreSQL(t *testing.T) {
 	c := qt.New(t)
 
-	diff := &executor.SchemaDiff{
+	diff := &differ.SchemaDiff{
 		TablesAdded:   []string{"users"},
 		TablesRemoved: []string{"old_table"},
 		EnumsAdded:    []string{"status_enum"},
 		EnumsRemoved:  []string{"old_enum"},
-		EnumsModified: []executor.EnumDiff{
+		EnumsModified: []differ.EnumDiff{
 			{
 				EnumName:      "role_enum",
 				ValuesAdded:   []string{"moderator"},
@@ -563,8 +563,8 @@ func TestGenerateMigrationSQL_PostgreSQL(t *testing.T) {
 		IndexesRemoved: []string{"old_index"},
 	}
 
-	generated := &builder.PackageParseResult{
-		Enums: []meta.GlobalEnum{
+	generated := &parsertypes.PackageParseResult{
+		Enums: []types.GlobalEnum{
 			{Name: "status_enum", Values: []string{"active", "inactive"}},
 		},
 	}
@@ -639,9 +639,9 @@ func TestGenerateMigrationSQL_PostgreSQL(t *testing.T) {
 func TestGenerateMigrationSQL_NonPostgreSQL(t *testing.T) {
 	c := qt.New(t)
 
-	diff := &executor.SchemaDiff{
+	diff := &differ.SchemaDiff{
 		EnumsAdded: []string{"status_enum"},
-		EnumsModified: []executor.EnumDiff{
+		EnumsModified: []differ.EnumDiff{
 			{
 				EnumName:    "role_enum",
 				ValuesAdded: []string{"moderator"},
@@ -649,8 +649,8 @@ func TestGenerateMigrationSQL_NonPostgreSQL(t *testing.T) {
 		},
 	}
 
-	generated := &builder.PackageParseResult{
-		Enums: []meta.GlobalEnum{
+	generated := &parsertypes.PackageParseResult{
+		Enums: []types.GlobalEnum{
 			{Name: "status_enum", Values: []string{"active", "inactive"}},
 		},
 	}
@@ -667,32 +667,32 @@ func TestGenerateMigrationSQL_NonPostgreSQL(t *testing.T) {
 func TestCompareSchemas_PrimaryKeyHandling(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []meta.SchemaField{
+		Fields: []types.SchemaField{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true, Nullable: true}, // Primary key should override nullable
 		},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{
 			{
 				Name: "users",
-				Columns: []executor.Column{
+				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 				},
 			},
 		},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	// Should not detect any changes because primary keys are always NOT NULL
 	c.Assert(diff.HasChanges(), qt.IsFalse)
@@ -702,32 +702,32 @@ func TestCompareSchemas_PrimaryKeyHandling(t *testing.T) {
 func TestCompareSchemas_UDTNameHandling(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []meta.SchemaField{
+		Fields: []types.SchemaField{
 			{StructName: "User", Name: "status", Type: "status_enum", Nullable: false},
 		},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{
 			{
 				Name: "users",
-				Columns: []executor.Column{
+				Columns: []parsertypes.Column{
 					{Name: "status", DataType: "USER-DEFINED", UDTName: "status_enum", IsNullable: "NO"},
 				},
 			},
 		},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	// Should not detect any changes because UDTName should be used for comparison
 	c.Assert(diff.HasChanges(), qt.IsFalse)
@@ -737,32 +737,32 @@ func TestCompareSchemas_UDTNameHandling(t *testing.T) {
 func TestCompareSchemas_EmptyDefaultValues(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []meta.SchemaField{
+		Fields: []types.SchemaField{
 			{StructName: "User", Name: "status", Type: "VARCHAR", Default: ""}, // Empty default
 		},
-		Indexes:        []meta.SchemaIndex{},
-		Enums:          []meta.GlobalEnum{},
-		EmbeddedFields: []meta.EmbeddedField{},
+		Indexes:        []types.SchemaIndex{},
+		Enums:          []types.GlobalEnum{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{
 			{
 				Name: "users",
-				Columns: []executor.Column{
+				Columns: []parsertypes.Column{
 					{Name: "status", DataType: "VARCHAR", ColumnDefault: nil}, // NULL default
 				},
 			},
 		},
-		Enums:   []executor.Enum{},
-		Indexes: []executor.Index{},
+		Enums:   []parsertypes.Enum{},
+		Indexes: []parsertypes.Index{},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsFalse)
 	c.Assert(diff.TablesModified, qt.HasLen, 0)
@@ -771,12 +771,12 @@ func TestCompareSchemas_EmptyDefaultValues(t *testing.T) {
 func TestCompareSchemas_ComplexScenario(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &builder.PackageParseResult{
-		Tables: []meta.TableDirective{
+	generated := &parsertypes.PackageParseResult{
+		Tables: []types.TableDirective{
 			{StructName: "User", Name: "users"},
 			{StructName: "Post", Name: "posts"}, // New table
 		},
-		Fields: []meta.SchemaField{
+		Fields: []types.SchemaField{
 			// Users table
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "email", Type: "VARCHAR", Nullable: false, Unique: true},
@@ -785,22 +785,22 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 			{StructName: "Post", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "Post", Name: "title", Type: "VARCHAR", Nullable: false},
 		},
-		Indexes: []meta.SchemaIndex{
+		Indexes: []types.SchemaIndex{
 			{Name: "idx_user_email"},
 			{Name: "idx_post_title"},
 		},
-		Enums: []meta.GlobalEnum{
+		Enums: []types.GlobalEnum{
 			{Name: "user_status", Values: []string{"active", "inactive", "suspended"}}, // Modified enum
 			{Name: "post_status", Values: []string{"draft", "published"}},              // New enum
 		},
-		EmbeddedFields: []meta.EmbeddedField{},
+		EmbeddedFields: []types.EmbeddedField{},
 	}
 
-	database := &executor.DatabaseSchema{
-		Tables: []executor.Table{
+	database := &parsertypes.DatabaseSchema{
+		Tables: []parsertypes.Table{
 			{
 				Name: "users",
-				Columns: []executor.Column{
+				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                            // Type and constraints changed
 					{Name: "status", DataType: "user_status", IsNullable: "NO", ColumnDefault: stringPtr("pending")}, // Default changed
@@ -809,22 +809,22 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 			},
 			{
 				Name: "old_logs", // Table to be removed
-				Columns: []executor.Column{
+				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 				},
 			},
 		},
-		Enums: []executor.Enum{
+		Enums: []parsertypes.Enum{
 			{Name: "user_status", Values: []string{"active", "inactive", "deleted"}}, // "suspended" added, "deleted" removed
 			{Name: "old_priority", Values: []string{"low", "high"}},                  // Enum to be removed
 		},
-		Indexes: []executor.Index{
+		Indexes: []parsertypes.Index{
 			{Name: "idx_user_email"},     // Exists in both
 			{Name: "old_idx_user_phone"}, // Index to be removed
 		},
 	}
 
-	diff := executor.CompareSchemas(generated, database)
+	diff := differ.CompareSchemas(generated, database)
 
 	c.Assert(diff.HasChanges(), qt.IsTrue)
 

@@ -1,11 +1,14 @@
-package executor
+package differ_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
-	"github.com/denisvmedia/inventario/ptah/schema/meta"
+	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
+	"github.com/denisvmedia/inventario/ptah/schema/types"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -20,7 +23,7 @@ func TestWorkflowExample(t *testing.T) {
 
 		// Test password masking
 		url := "postgres://user:secret123@localhost:5432/mydb"
-		formatted := FormatDatabaseURL(url)
+		formatted := executor.FormatDatabaseURL(url)
 		c.Assert(formatted, qt.Equals, "postgres://user:***@localhost:5432/mydb")
 	})
 
@@ -28,13 +31,13 @@ func TestWorkflowExample(t *testing.T) {
 		c := qt.New(t)
 
 		// Create empty diff
-		diff := &SchemaDiff{}
+		diff := &differ.SchemaDiff{}
 
 		// Should report no changes
 		c.Assert(diff.HasChanges(), qt.Equals, false)
 
 		// Format should show no changes
-		output := FormatSchemaDiff(diff)
+		output := renderer.FormatSchemaDiff(diff)
 		c.Assert(output, qt.Contains, "NO SCHEMA CHANGES DETECTED")
 	})
 
@@ -42,7 +45,7 @@ func TestWorkflowExample(t *testing.T) {
 		c := qt.New(t)
 
 		// Create diff with changes
-		diff := &SchemaDiff{
+		diff := &differ.SchemaDiff{
 			TablesAdded:   []string{"new_table"},
 			TablesRemoved: []string{"old_table"},
 			EnumsAdded:    []string{"new_enum"},
@@ -52,7 +55,7 @@ func TestWorkflowExample(t *testing.T) {
 		c.Assert(diff.HasChanges(), qt.Equals, true)
 
 		// Format should show changes
-		output := FormatSchemaDiff(diff)
+		output := renderer.FormatSchemaDiff(diff)
 		c.Assert(output, qt.Contains, "SCHEMA DIFFERENCES DETECTED")
 		c.Assert(output, qt.Contains, "new_table")
 		c.Assert(output, qt.Contains, "old_table")
@@ -63,14 +66,14 @@ func TestWorkflowExample(t *testing.T) {
 		c := qt.New(t)
 
 		// Create diff with enum changes
-		diff := &SchemaDiff{
+		diff := &differ.SchemaDiff{
 			EnumsAdded: []string{"test_enum"},
 		}
 
 		// Mock generated schema (simplified)
 		// In real usage, this would come from parsing Go entities
-		mockResult := &builder.PackageParseResult{
-			Enums: []meta.GlobalEnum{
+		mockResult := &parsertypes.PackageParseResult{
+			Enums: []types.GlobalEnum{
 				{
 					Name:   "test_enum",
 					Values: []string{"value1", "value2"},
@@ -119,36 +122,9 @@ func TestDatabaseConnectionErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			conn, err := ConnectToDatabase(tt.dbURL)
+			conn, err := executor.ConnectToDatabase(tt.dbURL)
 			c.Assert(err, qt.ErrorMatches, ".*"+tt.expected+".*")
 			c.Assert(conn, qt.IsNil)
-		})
-	}
-}
-
-// TestTypeNormalization tests the type comparison logic
-func TestTypeNormalization(t *testing.T) {
-
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"VARCHAR(255)", "varchar"},
-		{"TEXT", "text"},
-		{"SERIAL", "integer"},
-		{"INTEGER", "integer"},
-		{"BOOLEAN", "boolean"},
-		{"TIMESTAMP", "timestamp"},
-		{"DECIMAL(10,2)", "decimal"},
-		{"NUMERIC(10,2)", "decimal"},
-		{"custom_enum", "custom_enum"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			c := qt.New(t)
-			result := normalizeType(tt.input)
-			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}
 }
