@@ -3,9 +3,13 @@ package migrator_test
 import (
 	"context"
 	"fmt"
+	"io/fs"
+
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
 	"github.com/denisvmedia/inventario/ptah/migrator"
+	migrator_examples "github.com/denisvmedia/inventario/ptah/examples/migrator"
 )
 
 // Example demonstrates how to use the migrator programmatically
@@ -58,7 +62,7 @@ func ExampleMigrator() {
 func ExampleRunMigrations() {
 	// This is a demonstration - in real usage you would have a valid database URL
 	dbURL := "postgres://user:pass@localhost/db"
-	
+
 	// Connect to database
 	conn, err := executor.ConnectToDatabase(dbURL)
 	if err != nil {
@@ -67,8 +71,12 @@ func ExampleRunMigrations() {
 	}
 	defer conn.Close()
 
-	// Run all migrations from the embedded filesystem
-	err = migrator.RunMigrations(context.Background(), conn)
+	// Get example migrations filesystem
+	exampleFS := migrator_examples.GetExampleMigrations()
+	migrationsFS := must.Must(fs.Sub(exampleFS, "migrations"))
+
+	// Run all migrations from the filesystem
+	err = migrator.RunMigrations(context.Background(), conn, migrationsFS)
 	if err != nil {
 		fmt.Printf("Migration failed: %v\n", err)
 		return
@@ -81,7 +89,7 @@ func ExampleRunMigrations() {
 func ExampleGetMigrationStatus() {
 	// This is a demonstration - in real usage you would have a valid database URL
 	dbURL := "postgres://user:pass@localhost/db"
-	
+
 	// Connect to database
 	conn, err := executor.ConnectToDatabase(dbURL)
 	if err != nil {
@@ -90,8 +98,12 @@ func ExampleGetMigrationStatus() {
 	}
 	defer conn.Close()
 
+	// Get example migrations filesystem
+	exampleFS := migrator_examples.GetExampleMigrations()
+	migrationsFS := must.Must(fs.Sub(exampleFS, "migrations"))
+
 	// Get migration status
-	status, err := migrator.GetMigrationStatus(context.Background(), conn)
+	status, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 	if err != nil {
 		fmt.Printf("Failed to get status: %v\n", err)
 		return
@@ -150,10 +162,12 @@ func Example_registerMigrationsCustomFilesystem() {
 	// Create a migrator
 	m := migrator.NewMigrator(conn)
 
-	// Option 1: Register from embedded migrations (default behavior)
-	err = migrator.RegisterMigrationsFromEmbedded(m)
+	// Option 1: Register from example migrations
+	exampleFS := migrator_examples.GetExampleMigrations()
+	migrationsFS := must.Must(fs.Sub(exampleFS, "migrations"))
+	err = migrator.RegisterMigrations(m, migrationsFS)
 	if err != nil {
-		fmt.Printf("Failed to register embedded migrations: %v\n", err)
+		fmt.Printf("Failed to register example migrations: %v\n", err)
 		return
 	}
 
@@ -163,11 +177,6 @@ func Example_registerMigrationsCustomFilesystem() {
 	// Option 3: Register from a custom filesystem
 	// customFS := os.DirFS("/custom/path")
 	// err = migrator.RegisterMigrations(m, customFS)
-
-	// Option 4: Register from a subdirectory of embedded filesystem
-	// migrationsFS := migrator.GetMigrations()
-	// subFS, _ := fs.Sub(migrationsFS, "source")
-	// err = migrator.RegisterMigrations(m, subFS)
 
 	fmt.Println("Migrations registered successfully")
 }

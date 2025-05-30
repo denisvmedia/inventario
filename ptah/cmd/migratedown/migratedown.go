@@ -3,6 +3,7 @@ package migratedown
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
@@ -29,11 +30,12 @@ before running down migrations in production.`,
 }
 
 const (
-	dbURLFlag     = "db-url"
-	targetFlag    = "target"
-	dryRunFlag    = "dry-run"
-	verboseFlag   = "verbose"
-	confirmFlag   = "confirm"
+	dbURLFlag        = "db-url"
+	migrationsFlag   = "migrations-dir"
+	targetFlag       = "target"
+	dryRunFlag       = "dry-run"
+	verboseFlag      = "verbose"
+	confirmFlag      = "confirm"
 )
 
 var migrateDownFlags = map[string]cobraflags.Flag{
@@ -41,6 +43,11 @@ var migrateDownFlags = map[string]cobraflags.Flag{
 		Name:  dbURLFlag,
 		Value: "",
 		Usage: "Database URL (required). Example: postgres://user:pass@localhost/db",
+	},
+	migrationsFlag: &cobraflags.StringFlag{
+		Name:  migrationsFlag,
+		Value: "",
+		Usage: "Directory containing migration files (required)",
 	},
 	targetFlag: &cobraflags.IntFlag{
 		Name:  targetFlag,
@@ -71,6 +78,7 @@ func NewMigrateDownCommand() *cobra.Command {
 
 func migrateDownCommand(_ *cobra.Command, _ []string) error {
 	dbURL := migrateDownFlags[dbURLFlag].GetString()
+	migrationsDir := migrateDownFlags[migrationsFlag].GetString()
 	targetVersion := migrateDownFlags[targetFlag].GetInt()
 	dryRun := migrateDownFlags[dryRunFlag].GetBool()
 	verbose := migrateDownFlags[verboseFlag].GetBool()
@@ -78,6 +86,10 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 
 	if dbURL == "" {
 		return fmt.Errorf("database URL is required")
+	}
+
+	if migrationsDir == "" {
+		return fmt.Errorf("migrations directory is required")
 	}
 
 	if targetVersion < 0 {
@@ -107,11 +119,15 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println("=== MIGRATE DOWN ===")
 	fmt.Printf("Database: %s\n", executor.FormatDatabaseURL(dbURL))
 	fmt.Printf("Dialect: %s\n", conn.Info().Dialect)
+	fmt.Printf("Migrations directory: %s\n", migrationsDir)
 	fmt.Printf("Target version: %d\n", targetVersion)
 	fmt.Println()
 
+	// Create filesystem from migrations directory
+	migrationsFS := os.DirFS(migrationsDir)
+
 	// Get migration status before running
-	status, err := migrator.GetMigrationStatus(context.Background(), conn)
+	status, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("error getting migration status: %w", err)
 	}
@@ -160,13 +176,13 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	// Run down migrations
-	err = migrator.RunMigrationsDown(context.Background(), conn, targetVersion)
+	err = migrator.RunMigrationsDown(context.Background(), conn, targetVersion, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("error running down migrations: %w", err)
 	}
 
 	// Get final status
-	finalStatus, err := migrator.GetMigrationStatus(context.Background(), conn)
+	finalStatus, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("error getting final migration status: %w", err)
 	}

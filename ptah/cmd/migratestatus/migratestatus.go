@@ -3,6 +3,7 @@ package migratestatus
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
@@ -28,9 +29,10 @@ migrations or for debugging migration issues.`,
 }
 
 const (
-	dbURLFlag   = "db-url"
-	verboseFlag = "verbose"
-	jsonFlag    = "json"
+	dbURLFlag        = "db-url"
+	migrationsFlag   = "migrations-dir"
+	verboseFlag      = "verbose"
+	jsonFlag         = "json"
 )
 
 var migrateStatusFlags = map[string]cobraflags.Flag{
@@ -38,6 +40,11 @@ var migrateStatusFlags = map[string]cobraflags.Flag{
 		Name:  dbURLFlag,
 		Value: "",
 		Usage: "Database URL (required). Example: postgres://user:pass@localhost/db",
+	},
+	migrationsFlag: &cobraflags.StringFlag{
+		Name:  migrationsFlag,
+		Value: "",
+		Usage: "Directory containing migration files (required)",
 	},
 	verboseFlag: &cobraflags.BoolFlag{
 		Name:  verboseFlag,
@@ -58,11 +65,16 @@ func NewMigrateStatusCommand() *cobra.Command {
 
 func migrateStatusCommand(_ *cobra.Command, _ []string) error {
 	dbURL := migrateStatusFlags[dbURLFlag].GetString()
+	migrationsDir := migrateStatusFlags[migrationsFlag].GetString()
 	verbose := migrateStatusFlags[verboseFlag].GetBool()
 	jsonOutput := migrateStatusFlags[jsonFlag].GetBool()
 
 	if dbURL == "" {
 		return fmt.Errorf("database URL is required")
+	}
+
+	if migrationsDir == "" {
+		return fmt.Errorf("migrations directory is required")
 	}
 
 	// Connect to database
@@ -72,8 +84,11 @@ func migrateStatusCommand(_ *cobra.Command, _ []string) error {
 	}
 	defer conn.Close()
 
+	// Create filesystem from migrations directory
+	migrationsFS := os.DirFS(migrationsDir)
+
 	// Get migration status
-	status, err := migrator.GetMigrationStatus(context.Background(), conn)
+	status, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("error getting migration status: %w", err)
 	}

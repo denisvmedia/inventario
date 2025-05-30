@@ -70,39 +70,39 @@ DROP TABLE IF EXISTS users;
 ### Migrate Up
 Apply all pending migrations:
 ```bash
-go run ./cmd migrate-up --db-url postgres://user:pass@localhost/db
+go run ./cmd migrate-up --db-url postgres://user:pass@localhost/db --migrations-dir /path/to/migrations
 ```
 
 With dry run:
 ```bash
-go run ./cmd migrate-up --db-url postgres://user:pass@localhost/db --dry-run
+go run ./cmd migrate-up --db-url postgres://user:pass@localhost/db --migrations-dir /path/to/migrations --dry-run
 ```
 
 ### Migrate Down
 Roll back to a specific version:
 ```bash
-go run ./cmd migrate-down --db-url postgres://user:pass@localhost/db --target 5
+go run ./cmd migrate-down --db-url postgres://user:pass@localhost/db --migrations-dir /path/to/migrations --target 5
 ```
 
 With confirmation skip (dangerous!):
 ```bash
-go run ./cmd migrate-down --db-url postgres://user:pass@localhost/db --target 5 --confirm
+go run ./cmd migrate-down --db-url postgres://user:pass@localhost/db --migrations-dir /path/to/migrations --target 5 --confirm
 ```
 
 ### Migration Status
 Check current migration status:
 ```bash
-go run ./cmd migrate-status --db-url postgres://user:pass@localhost/db
+go run ./cmd migrate-status --db-url postgres://user:pass@localhost/db --migrations-dir /path/to/migrations
 ```
 
 Verbose output:
 ```bash
-go run ./cmd migrate-status --db-url postgres://user:pass@localhost/db --verbose
+go run ./cmd migrate-status --db-url postgres://user:pass@localhost/db --migrations-dir /path/to/migrations --verbose
 ```
 
 JSON output:
 ```bash
-go run ./cmd migrate-status --db-url postgres://user:pass@localhost/db --json
+go run ./cmd migrate-status --db-url postgres://user:pass@localhost/db --migrations-dir /path/to/migrations --json
 ```
 
 ## Programmatic Usage
@@ -126,8 +126,11 @@ func main() {
     }
     defer conn.Close()
 
+    // Create filesystem from migrations directory
+    migrationsFS := os.DirFS("/path/to/migrations")
+
     // Run all pending migrations
-    err = migrator.RunMigrations(context.Background(), conn)
+    err = migrator.RunMigrations(context.Background(), conn, migrationsFS)
     if err != nil {
         panic(err)
     }
@@ -138,17 +141,19 @@ func main() {
 
 ```go
 // Register migrations from a custom filesystem
-migrator := migrator.NewMigrator(conn)
+m := migrator.NewMigrator(conn)
 
-// Option 1: Register from embedded migrations (default)
-err := migrator.RegisterMigrationsFromEmbedded(migrator)
+// Option 1: Register from a directory on disk
+err := migrator.RegisterMigrationsFromDirectory(m, "/path/to/migrations")
 
-// Option 2: Register from a directory on disk
-err := migrator.RegisterMigrationsFromDirectory(migrator, "/path/to/migrations")
-
-// Option 3: Register from a custom filesystem
+// Option 2: Register from a custom filesystem
 customFS := os.DirFS("/custom/path")
-err := migrator.RegisterMigrations(migrator, customFS)
+err := migrator.RegisterMigrations(m, customFS)
+
+// Option 3: Register from example migrations
+exampleFS := migrator_examples.GetExampleMigrations()
+migrationsFS := must.Must(fs.Sub(exampleFS, "migrations"))
+err := migrator.RegisterMigrations(m, migrationsFS)
 
 // Option 4: Register a Go-based migration
 upFunc := func(ctx context.Context, conn *executor.DatabaseConnection) error {
@@ -159,13 +164,16 @@ downFunc := func(ctx context.Context, conn *executor.DatabaseConnection) error {
     return conn.Writer().ExecuteSQL("DROP TABLE test")
 }
 
-migrator.RegisterGoMigration(migrator, 1001, "Create test table", upFunc, downFunc)
+migrator.RegisterGoMigration(m, 1001, "Create test table", upFunc, downFunc)
 ```
 
 ### Migration Status Checking
 
 ```go
-status, err := migrator.GetMigrationStatus(context.Background(), conn)
+// Create filesystem from migrations directory
+migrationsFS := os.DirFS("/path/to/migrations")
+
+status, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 if err != nil {
     panic(err)
 }

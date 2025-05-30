@@ -3,6 +3,7 @@ package migrateup
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
@@ -25,9 +26,10 @@ be rolled back and the migration process will stop.`,
 }
 
 const (
-	dbURLFlag   = "db-url"
-	dryRunFlag  = "dry-run"
-	verboseFlag = "verbose"
+	dbURLFlag        = "db-url"
+	migrationsFlag   = "migrations-dir"
+	dryRunFlag       = "dry-run"
+	verboseFlag      = "verbose"
 )
 
 var migrateUpFlags = map[string]cobraflags.Flag{
@@ -35,6 +37,11 @@ var migrateUpFlags = map[string]cobraflags.Flag{
 		Name:  dbURLFlag,
 		Value: "",
 		Usage: "Database URL (required). Example: postgres://user:pass@localhost/db",
+	},
+	migrationsFlag: &cobraflags.StringFlag{
+		Name:  migrationsFlag,
+		Value: "",
+		Usage: "Directory containing migration files (required)",
 	},
 	dryRunFlag: &cobraflags.BoolFlag{
 		Name:  dryRunFlag,
@@ -55,11 +62,16 @@ func NewMigrateUpCommand() *cobra.Command {
 
 func migrateUpCommand(_ *cobra.Command, _ []string) error {
 	dbURL := migrateUpFlags[dbURLFlag].GetString()
+	migrationsDir := migrateUpFlags[migrationsFlag].GetString()
 	dryRun := migrateUpFlags[dryRunFlag].GetBool()
 	verbose := migrateUpFlags[verboseFlag].GetBool()
 
 	if dbURL == "" {
 		return fmt.Errorf("database URL is required")
+	}
+
+	if migrationsDir == "" {
+		return fmt.Errorf("migrations directory is required")
 	}
 
 	if verbose {
@@ -85,10 +97,14 @@ func migrateUpCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println("=== MIGRATE UP ===")
 	fmt.Printf("Database: %s\n", executor.FormatDatabaseURL(dbURL))
 	fmt.Printf("Dialect: %s\n", conn.Info().Dialect)
+	fmt.Printf("Migrations directory: %s\n", migrationsDir)
 	fmt.Println()
 
+	// Create filesystem from migrations directory
+	migrationsFS := os.DirFS(migrationsDir)
+
 	// Get migration status before running
-	status, err := migrator.GetMigrationStatus(context.Background(), conn)
+	status, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("error getting migration status: %w", err)
 	}
@@ -109,13 +125,13 @@ func migrateUpCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// Run migrations
-	err = migrator.RunMigrations(context.Background(), conn)
+	err = migrator.RunMigrations(context.Background(), conn, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("error running migrations: %w", err)
 	}
 
 	// Get final status
-	finalStatus, err := migrator.GetMigrationStatus(context.Background(), conn)
+	finalStatus, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("error getting final migration status: %w", err)
 	}

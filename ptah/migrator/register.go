@@ -6,8 +6,6 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/go-extras/go-kit/must"
-
 	"github.com/denisvmedia/inventario/ptah/executor"
 )
 
@@ -82,11 +80,11 @@ func RegisterMigrations(migrator *Migrator, migrationsFS fs.FS) error {
 	return nil
 }
 
-// RunMigrations runs all pending migrations up to the latest version
-func RunMigrations(ctx context.Context, conn *executor.DatabaseConnection) error {
+// RunMigrations runs all pending migrations up to the latest version using the provided filesystem
+func RunMigrations(ctx context.Context, conn *executor.DatabaseConnection, migrationsFS fs.FS) error {
 	migrator := NewMigrator(conn)
 
-	if err := RegisterMigrationsFromEmbedded(migrator); err != nil {
+	if err := RegisterMigrations(migrator, migrationsFS); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -97,11 +95,11 @@ func RunMigrations(ctx context.Context, conn *executor.DatabaseConnection) error
 	return nil
 }
 
-// RunMigrationsDown runs down migrations to the specified target version
-func RunMigrationsDown(ctx context.Context, conn *executor.DatabaseConnection, targetVersion int) error {
+// RunMigrationsDown runs down migrations to the specified target version using the provided filesystem
+func RunMigrationsDown(ctx context.Context, conn *executor.DatabaseConnection, targetVersion int, migrationsFS fs.FS) error {
 	migrator := NewMigrator(conn)
 
-	if err := RegisterMigrationsFromEmbedded(migrator); err != nil {
+	if err := RegisterMigrations(migrator, migrationsFS); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -112,11 +110,11 @@ func RunMigrationsDown(ctx context.Context, conn *executor.DatabaseConnection, t
 	return nil
 }
 
-// GetMigrationStatus returns information about the current migration status
-func GetMigrationStatus(ctx context.Context, conn *executor.DatabaseConnection) (*MigrationStatus, error) {
+// GetMigrationStatus returns information about the current migration status using the provided filesystem
+func GetMigrationStatus(ctx context.Context, conn *executor.DatabaseConnection, migrationsFS fs.FS) (*MigrationStatus, error) {
 	migrator := NewMigrator(conn)
 
-	if err := RegisterMigrationsFromEmbedded(migrator); err != nil {
+	if err := RegisterMigrations(migrator, migrationsFS); err != nil {
 		return nil, fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -217,13 +215,6 @@ func ValidateMigrations(migrator *Migrator) error {
 	}
 
 	return nil
-}
-
-// RegisterMigrationsFromEmbedded is a convenience function that registers migrations
-// from the embedded source directory
-func RegisterMigrationsFromEmbedded(migrator *Migrator) error {
-	migrationsFS := must.Must(fs.Sub(GetMigrations(), "source"))
-	return RegisterMigrations(migrator, migrationsFS)
 }
 
 // RegisterMigrationsFromDirectory registers migrations from a directory on disk

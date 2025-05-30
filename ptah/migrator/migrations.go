@@ -2,7 +2,7 @@ package migrator
 
 import (
 	"context"
-	"embed"
+	_ "embed"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -11,27 +11,14 @@ import (
 	"github.com/denisvmedia/inventario/ptah/executor"
 )
 
-var (
-	//go:embed base/schema.sql
-	migrationsSchemaSQL string
+//go:embed base/schema.sql
+var migrationsSchemaSQL string
 
-	//go:embed base/get_version.sql
-	getVersionSQL string
+//go:embed base/record_migration.sql
+var recordMigrationSQL string
 
-	//go:embed base/record_migration.sql
-	recordMigrationSQL string
-
-	//go:embed base/delete_migration.sql
-	deleteMigrationSQL string
-)
-
-//go:embed source
-var source embed.FS
-
-// GetMigrations returns the embedded migrations filesystem
-func GetMigrations() embed.FS {
-	return source
-}
+//go:embed base/delete_migration.sql
+var deleteMigrationSQL string
 
 // MigrationFunc represents a migration function that operates on a database connection
 type MigrationFunc func(context.Context, *executor.DatabaseConnection) error
@@ -103,6 +90,9 @@ func (m *Migrator) GetCurrentVersion(ctx context.Context) (int, error) {
 	// In a complete implementation, you would need to extend the executor
 	// interfaces to support querying, or use a different approach
 	// This is a limitation of the current executor design
+	//
+	// When query support is added, this would execute:
+	// SELECT COALESCE(MAX(version), 0) FROM schema_migrations;
 	return 0, nil
 }
 
@@ -145,8 +135,7 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 		}
 
 		// Record migration
-		recordSQL := fmt.Sprintf("INSERT INTO schema_migrations (version, description, applied_at) VALUES (%d, '%s', '%s')",
-			migration.Version, migration.Description, time.Now().Format(time.RFC3339))
+		recordSQL := fmt.Sprintf(recordMigrationSQL, migration.Version, migration.Description, time.Now().Format(time.RFC3339))
 		if err := m.conn.Writer().ExecuteSQL(recordSQL); err != nil {
 			_ = m.conn.Writer().RollbackTransaction()
 			return fmt.Errorf("failed to record migration %d: %w", migration.Version, err)
@@ -182,8 +171,8 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 		return nil
 	}
 
-	fmt.Printf("Current schema version: %d\n", currentVersion)   //nolint:forbidigo // Migration progress output is intentional
-	fmt.Printf("Target schema version: %d\n", targetVersion)     //nolint:forbidigo // Migration progress output is intentional
+	fmt.Printf("Current schema version: %d\n", currentVersion)  //nolint:forbidigo // Migration progress output is intentional
+	fmt.Printf("Target schema version: %d\n", targetVersion)    //nolint:forbidigo // Migration progress output is intentional
 	fmt.Printf("Available migrations: %d\n", len(m.migrations)) //nolint:forbidigo // Migration progress output is intentional
 
 	// Sort migrations by version in descending order for rollback
@@ -211,7 +200,7 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 		}
 
 		// Remove migration record
-		deleteSQL := fmt.Sprintf("DELETE FROM schema_migrations WHERE version = %d", migration.Version)
+		deleteSQL := fmt.Sprintf(deleteMigrationSQL, migration.Version)
 		if err := m.conn.Writer().ExecuteSQL(deleteSQL); err != nil {
 			_ = m.conn.Writer().RollbackTransaction()
 			return fmt.Errorf("failed to record migration reversion %d: %w", migration.Version, err)
