@@ -31,3 +31,4 @@ coverage
 .env
 docker-compose.override.yaml
 ptah/integration/reports
+ptah/integration/fixtures/migrations
