@@ -11,6 +11,9 @@ import (
 	"github.com/denisvmedia/inventario/ptah/cmd/dropschema"
 	"github.com/denisvmedia/inventario/ptah/cmd/generate"
 	"github.com/denisvmedia/inventario/ptah/cmd/migrate"
+	"github.com/denisvmedia/inventario/ptah/cmd/migratedown"
+	"github.com/denisvmedia/inventario/ptah/cmd/migratestatus"
+	"github.com/denisvmedia/inventario/ptah/cmd/migrateup"
 	"github.com/denisvmedia/inventario/ptah/cmd/readdb"
 	"github.com/denisvmedia/inventario/ptah/cmd/writedb"
 )
@@ -45,6 +48,9 @@ func Execute(args ...string) {
 	rootCmd.AddCommand(readdb.NewReadDBCommand())
 	rootCmd.AddCommand(compare.NewCompareCommand())
 	rootCmd.AddCommand(migrate.NewMigrateCommand())
+	rootCmd.AddCommand(migrateup.NewMigrateUpCommand())
+	rootCmd.AddCommand(migratedown.NewMigrateDownCommand())
+	rootCmd.AddCommand(migratestatus.NewMigrateStatusCommand())
 	rootCmd.AddCommand(dropschema.NewDropSchemaCommand())
 	rootCmd.AddCommand(dropall.NewDropAllCommand())
 

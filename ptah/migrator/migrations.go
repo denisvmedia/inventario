@@ -1,0 +1,256 @@
+package migrator
+
+import (
+	"context"
+	"embed"
+	"fmt"
+	"io/fs"
+	"sort"
+	"time"
+
+	"github.com/denisvmedia/inventario/ptah/executor"
+)
+
+var (
+	//go:embed base/schema.sql
+	migrationsSchemaSQL string
+
+	//go:embed base/get_version.sql
+	getVersionSQL string
+
+	//go:embed base/record_migration.sql
+	recordMigrationSQL string
+
+	//go:embed base/delete_migration.sql
+	deleteMigrationSQL string
+)
+
+//go:embed source
+var source embed.FS
+
+// GetMigrations returns the embedded migrations filesystem
+func GetMigrations() embed.FS {
+	return source
+}
+
+// MigrationFunc represents a migration function that operates on a database connection
+type MigrationFunc func(context.Context, *executor.DatabaseConnection) error
+
+// MigrationFuncFromSQLFilename returns a migration function that reads SQL from a file
+// in the provided filesystem and executes it using the database connection
+func MigrationFuncFromSQLFilename(filename string, fsys fs.FS) MigrationFunc {
+	return func(ctx context.Context, conn *executor.DatabaseConnection) error {
+		sql, err := fs.ReadFile(fsys, filename)
+		if err != nil {
+			return fmt.Errorf("failed to read migration file: %w", err)
+		}
+		return conn.Writer().ExecuteSQL(string(sql))
+	}
+}
+
+// NoopMigrationFunc is a no-op migration function
+func NoopMigrationFunc(_ctx context.Context, _conn *executor.DatabaseConnection) error {
+	return nil
+}
+
+// Migration represents a database migration
+type Migration struct {
+	Version     int
+	Description string
+	Up          MigrationFunc
+	Down        MigrationFunc
+}
+
+// Migrator handles database migrations for ptah
+type Migrator struct {
+	conn       *executor.DatabaseConnection
+	migrations []*Migration
+}
+
+// NewMigrator creates a new migrator with the given database connection
+func NewMigrator(conn *executor.DatabaseConnection) *Migrator {
+	return &Migrator{
+		conn:       conn,
+		migrations: make([]*Migration, 0),
+	}
+}
+
+// Register registers a migration with the migrator
+func (m *Migrator) Register(migration *Migration) {
+	m.migrations = append(m.migrations, migration)
+}
+
+// sortMigrations sorts migrations by version in ascending order
+func (m *Migrator) sortMigrations() {
+	sort.Slice(m.migrations, func(i, j int) bool {
+		return m.migrations[i].Version < m.migrations[j].Version
+	})
+}
+
+// Initialize creates the migrations table if it doesn't exist
+func (m *Migrator) Initialize(ctx context.Context) error {
+	return m.conn.Writer().ExecuteSQL(migrationsSchemaSQL)
+}
+
+// GetCurrentVersion returns the current migration version from the database
+func (m *Migrator) GetCurrentVersion(ctx context.Context) (int, error) {
+	// First ensure the migrations table exists
+	if err := m.Initialize(ctx); err != nil {
+		return 0, fmt.Errorf("failed to initialize migrations table: %w", err)
+	}
+
+	// For now, we'll return 0 as the default version
+	// In a complete implementation, you would need to extend the executor
+	// interfaces to support querying, or use a different approach
+	// This is a limitation of the current executor design
+	return 0, nil
+}
+
+// MigrateUp migrates the database up to the latest version
+func (m *Migrator) MigrateUp(ctx context.Context) error {
+	// Initialize the migrations table
+	if err := m.Initialize(ctx); err != nil {
+		return fmt.Errorf("failed to initialize migrations table: %w", err)
+	}
+
+	// Get the current version
+	currentVersion, err := m.GetCurrentVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current version: %w", err)
+	}
+
+	fmt.Printf("Current schema version: %d\n", currentVersion)  //nolint:forbidigo // Migration progress output is intentional
+	fmt.Printf("Available migrations: %d\n", len(m.migrations)) //nolint:forbidigo // Migration progress output is intentional
+
+	// Sort migrations by version
+	m.sortMigrations()
+
+	// Apply migrations that are newer than current version
+	for _, migration := range m.migrations {
+		if migration.Version <= currentVersion {
+			continue
+		}
+
+		fmt.Printf("Applying migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
+
+		// Begin transaction
+		if err := m.conn.Writer().BeginTransaction(); err != nil {
+			return fmt.Errorf("failed to begin transaction for migration %d: %w", migration.Version, err)
+		}
+
+		// Apply migration
+		if err := migration.Up(ctx, m.conn); err != nil {
+			_ = m.conn.Writer().RollbackTransaction()
+			return fmt.Errorf("failed to apply migration %d: %w", migration.Version, err)
+		}
+
+		// Record migration
+		recordSQL := fmt.Sprintf("INSERT INTO schema_migrations (version, description, applied_at) VALUES (%d, '%s', '%s')",
+			migration.Version, migration.Description, time.Now().Format(time.RFC3339))
+		if err := m.conn.Writer().ExecuteSQL(recordSQL); err != nil {
+			_ = m.conn.Writer().RollbackTransaction()
+			return fmt.Errorf("failed to record migration %d: %w", migration.Version, err)
+		}
+
+		// Commit transaction
+		if err := m.conn.Writer().CommitTransaction(); err != nil {
+			return fmt.Errorf("failed to commit transaction for migration %d: %w", migration.Version, err)
+		}
+
+		fmt.Printf("Applied migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
+	}
+
+	fmt.Println("All migrations applied successfully") //nolint:forbidigo // Migration progress output is intentional
+	return nil
+}
+
+// MigrateDown migrates the database down to the specified target version
+func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
+	// Initialize the migrations table
+	if err := m.Initialize(ctx); err != nil {
+		return fmt.Errorf("failed to initialize migrations table: %w", err)
+	}
+
+	// Get the current version
+	currentVersion, err := m.GetCurrentVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current version: %w", err)
+	}
+
+	if targetVersion >= currentVersion {
+		fmt.Printf("Target version %d is not less than current version %d\n", targetVersion, currentVersion) //nolint:forbidigo // Migration progress output is intentional
+		return nil
+	}
+
+	fmt.Printf("Current schema version: %d\n", currentVersion)   //nolint:forbidigo // Migration progress output is intentional
+	fmt.Printf("Target schema version: %d\n", targetVersion)     //nolint:forbidigo // Migration progress output is intentional
+	fmt.Printf("Available migrations: %d\n", len(m.migrations)) //nolint:forbidigo // Migration progress output is intentional
+
+	// Sort migrations by version in descending order for rollback
+	sort.Slice(m.migrations, func(i, j int) bool {
+		return m.migrations[i].Version > m.migrations[j].Version
+	})
+
+	// Apply down migrations for versions greater than target
+	for _, migration := range m.migrations {
+		if migration.Version <= targetVersion || migration.Version > currentVersion {
+			continue
+		}
+
+		fmt.Printf("Rolling back migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
+
+		// Begin transaction
+		if err := m.conn.Writer().BeginTransaction(); err != nil {
+			return fmt.Errorf("failed to begin transaction for migration %d: %w", migration.Version, err)
+		}
+
+		// Apply down migration
+		if err := migration.Down(ctx, m.conn); err != nil {
+			_ = m.conn.Writer().RollbackTransaction()
+			return fmt.Errorf("failed to revert migration %d: %w", migration.Version, err)
+		}
+
+		// Remove migration record
+		deleteSQL := fmt.Sprintf("DELETE FROM schema_migrations WHERE version = %d", migration.Version)
+		if err := m.conn.Writer().ExecuteSQL(deleteSQL); err != nil {
+			_ = m.conn.Writer().RollbackTransaction()
+			return fmt.Errorf("failed to record migration reversion %d: %w", migration.Version, err)
+		}
+
+		// Commit transaction
+		if err := m.conn.Writer().CommitTransaction(); err != nil {
+			return fmt.Errorf("failed to commit transaction for migration %d: %w", migration.Version, err)
+		}
+
+		fmt.Printf("Rolled back migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
+	}
+
+	fmt.Printf("Successfully migrated down to version %d\n", targetVersion) //nolint:forbidigo // Migration progress output is intentional
+	return nil
+}
+
+// GetAppliedMigrations returns a list of applied migration versions
+func (m *Migrator) GetAppliedMigrations(ctx context.Context) ([]int, error) {
+	// This would need to be implemented with proper query support
+	// For now, return empty slice as a placeholder
+	// In a complete implementation, you would query the schema_migrations table
+	return []int{}, nil
+}
+
+// GetPendingMigrations returns a list of pending migration versions
+func (m *Migrator) GetPendingMigrations(ctx context.Context) ([]int, error) {
+	currentVersion, err := m.GetCurrentVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var pending []int
+	for _, migration := range m.migrations {
+		if migration.Version > currentVersion {
+			pending = append(pending, migration.Version)
+		}
+	}
+
+	sort.Ints(pending)
+	return pending, nil
+}
