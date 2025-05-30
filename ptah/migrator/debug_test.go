@@ -14,7 +14,7 @@ func TestInitializeDebug(t *testing.T) {
 
 	// Skip if no PostgreSQL URL is provided
 	dbURL := "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
-	
+
 	// Connect to database
 	conn, err := executor.ConnectToDatabase(dbURL)
 	if err != nil {
@@ -22,11 +22,14 @@ func TestInitializeDebug(t *testing.T) {
 	}
 	defer conn.Close()
 
+	// Clean up any existing schema_migrations table to ensure a clean test
+	ctx := context.Background()
+	_, _ = conn.Exec("DROP TABLE IF EXISTS schema_migrations")
+
 	// Create a migrator
 	m := NewMigrator(conn)
 
 	// Test Initialize method directly
-	ctx := context.Background()
 	err = m.Initialize(ctx)
 	c.Assert(err, qt.IsNil, qt.Commentf("Initialize should not fail"))
 

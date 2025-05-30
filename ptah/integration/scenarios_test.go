@@ -52,14 +52,34 @@ func TestGetDynamicScenarios(t *testing.T) {
 	c := qt.New(t)
 
 	scenarios := GetDynamicScenarios()
-	
-	// Should have exactly 6 dynamic scenarios
-	c.Assert(len(scenarios), qt.Equals, 6)
+
+	// Should have exactly 9 dynamic scenarios (6 original + 3 rollback)
+	c.Assert(len(scenarios), qt.Equals, 9)
 
 	// Verify all scenarios have required fields
 	for _, scenario := range scenarios {
 		c.Assert(scenario.Name, qt.Not(qt.Equals), "", qt.Commentf("Scenario name should not be empty"))
 		c.Assert(scenario.Description, qt.Not(qt.Equals), "", qt.Commentf("Scenario description should not be empty"))
-		c.Assert(scenario.TestFunc, qt.IsNotNil, qt.Commentf("Scenario test function should not be nil"))
+
+		// Each scenario should have either TestFunc or EnhancedTestFunc
+		hasTestFunc := scenario.TestFunc != nil || scenario.EnhancedTestFunc != nil
+		c.Assert(hasTestFunc, qt.IsTrue, qt.Commentf("Scenario %s should have either TestFunc or EnhancedTestFunc", scenario.Name))
+	}
+
+	// Verify that all new scenarios are present
+	scenarioNames := make(map[string]bool)
+	for _, scenario := range scenarios {
+		scenarioNames[scenario.Name] = true
+	}
+
+	// Check for the rollback scenarios we added
+	newScenarios := []string{
+		"dynamic_rollback_single",
+		"dynamic_rollback_multiple",
+		"dynamic_rollback_to_zero",
+	}
+
+	for _, scenarioName := range newScenarios {
+		c.Assert(scenarioNames[scenarioName], qt.IsTrue, qt.Commentf("New dynamic scenario %s should be included", scenarioName))
 	}
 }
