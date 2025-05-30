@@ -2,6 +2,7 @@ package migrator
 
 import (
 	"context"
+	"io/fs"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -102,4 +103,38 @@ func TestMigrationStatus_NoPending(t *testing.T) {
 	c.Assert(status.PendingMigrations, qt.HasLen, 0)
 	c.Assert(status.TotalMigrations, qt.Equals, 5)
 	c.Assert(status.HasPendingChanges, qt.IsFalse)
+}
+
+func TestRegisterMigrations_WithFilesystem(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a migrator with nil connection (for testing)
+	m := NewMigrator(nil)
+	c.Assert(m, qt.IsNotNil)
+
+	// Create a simple test filesystem using the embedded migrations
+	// In a real test, you might create a custom filesystem
+	testFS := GetMigrations()
+	subFS, err := fs.Sub(testFS, "source")
+	c.Assert(err, qt.IsNil)
+
+	// Register migrations from the test filesystem
+	err = RegisterMigrations(m, subFS)
+	c.Assert(err, qt.IsNil)
+
+	// Note: We can't easily test the internal state without exposing it
+	// In a real implementation, you might want to add a GetMigrations() method
+	// for testing purposes
+}
+
+func TestRegisterMigrationsFromEmbedded(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a migrator with nil connection (for testing)
+	m := NewMigrator(nil)
+	c.Assert(m, qt.IsNotNil)
+
+	// Register migrations from embedded filesystem
+	err := RegisterMigrationsFromEmbedded(m)
+	c.Assert(err, qt.IsNil)
 }

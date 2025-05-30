@@ -15,7 +15,7 @@ The Ptah Migrator provides versioned database migration capabilities with up/dow
 
 ## Migration File Structure
 
-Migrations are stored in the `source/` directory with the following naming convention:
+Migrations are stored with the following naming convention:
 
 ```
 NNNNNNNNNN_description.up.sql    # Up migration
@@ -26,6 +26,24 @@ Where:
 - `NNNNNNNNNN` is a 10-digit version number (e.g., `0000000001`)
 - `description` is a snake_case description of the migration
 - Each migration must have both `.up.sql` and `.down.sql` files
+
+### Filesystem Requirements
+
+The `RegisterMigrations` function accepts an `fs.FS` parameter where migrations should be located in the root directory. It's the caller's responsibility to prepare the filesystem correctly:
+
+```go
+// For embedded migrations, use a subdirectory
+migrationsFS := must.Must(fs.Sub(GetMigrations(), "source"))
+err := RegisterMigrations(migrator, migrationsFS)
+
+// For directory on disk
+migrationsFS := os.DirFS("/path/to/migrations")
+err := RegisterMigrations(migrator, migrationsFS)
+
+// For convenience, use helper functions
+err := RegisterMigrationsFromEmbedded(migrator)  // Uses embedded source/ directory
+err := RegisterMigrationsFromDirectory(migrator, "/path/to/migrations")
+```
 
 ### Example Migration Files
 
@@ -119,9 +137,20 @@ func main() {
 ### Custom Migration Registration
 
 ```go
-// Register a Go-based migration
+// Register migrations from a custom filesystem
 migrator := migrator.NewMigrator(conn)
 
+// Option 1: Register from embedded migrations (default)
+err := migrator.RegisterMigrationsFromEmbedded(migrator)
+
+// Option 2: Register from a directory on disk
+err := migrator.RegisterMigrationsFromDirectory(migrator, "/path/to/migrations")
+
+// Option 3: Register from a custom filesystem
+customFS := os.DirFS("/custom/path")
+err := migrator.RegisterMigrations(migrator, customFS)
+
+// Option 4: Register a Go-based migration
 upFunc := func(ctx context.Context, conn *executor.DatabaseConnection) error {
     return conn.Writer().ExecuteSQL("CREATE TABLE test (id SERIAL PRIMARY KEY)")
 }

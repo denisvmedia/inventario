@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"os"
 
 	"github.com/go-extras/go-kit/must"
 
@@ -11,10 +12,10 @@ import (
 )
 
 // RegisterMigrations registers all migrations with the migrator by scanning
-// the embedded migrations filesystem for SQL files
-func RegisterMigrations(migrator *Migrator) error {
+// the provided filesystem for SQL files. The filesystem should have migrations
+// in the root directory (it's the caller's responsibility to prepare it).
+func RegisterMigrations(migrator *Migrator, migrationsFS fs.FS) error {
 	migrationsMap := make(map[int]*Migration) // version -> migration
-	migrationsFS := must.Must(fs.Sub(GetMigrations(), "source"))
 
 	err := fs.WalkDir(migrationsFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -84,8 +85,8 @@ func RegisterMigrations(migrator *Migrator) error {
 // RunMigrations runs all pending migrations up to the latest version
 func RunMigrations(ctx context.Context, conn *executor.DatabaseConnection) error {
 	migrator := NewMigrator(conn)
-	
-	if err := RegisterMigrations(migrator); err != nil {
+
+	if err := RegisterMigrationsFromEmbedded(migrator); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -99,8 +100,8 @@ func RunMigrations(ctx context.Context, conn *executor.DatabaseConnection) error
 // RunMigrationsDown runs down migrations to the specified target version
 func RunMigrationsDown(ctx context.Context, conn *executor.DatabaseConnection, targetVersion int) error {
 	migrator := NewMigrator(conn)
-	
-	if err := RegisterMigrations(migrator); err != nil {
+
+	if err := RegisterMigrationsFromEmbedded(migrator); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -114,8 +115,8 @@ func RunMigrationsDown(ctx context.Context, conn *executor.DatabaseConnection, t
 // GetMigrationStatus returns information about the current migration status
 func GetMigrationStatus(ctx context.Context, conn *executor.DatabaseConnection) (*MigrationStatus, error) {
 	migrator := NewMigrator(conn)
-	
-	if err := RegisterMigrations(migrator); err != nil {
+
+	if err := RegisterMigrationsFromEmbedded(migrator); err != nil {
 		return nil, fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -216,4 +217,17 @@ func ValidateMigrations(migrator *Migrator) error {
 	}
 
 	return nil
+}
+
+// RegisterMigrationsFromEmbedded is a convenience function that registers migrations
+// from the embedded source directory
+func RegisterMigrationsFromEmbedded(migrator *Migrator) error {
+	migrationsFS := must.Must(fs.Sub(GetMigrations(), "source"))
+	return RegisterMigrations(migrator, migrationsFS)
+}
+
+// RegisterMigrationsFromDirectory registers migrations from a directory on disk
+func RegisterMigrationsFromDirectory(migrator *Migrator, dirPath string) error {
+	migrationsFS := os.DirFS(dirPath)
+	return RegisterMigrations(migrator, migrationsFS)
 }
