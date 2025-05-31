@@ -227,7 +227,7 @@ type Product struct {
 	//migrator:schema:field name="name" type="VARCHAR(255)" not_null="true"
 	Name string
 
-	//migrator:schema:field name="active" type="BOOLEAN" not_null="true" default="true"
+	//migrator:schema:field name="active" type="BOOLEAN" not_null="true" default_expr="true"
 	Active bool
 
 	//migrator:schema:field name="status" type="ENUM" enum="draft,active,discontinued" not_null="true" default="draft"

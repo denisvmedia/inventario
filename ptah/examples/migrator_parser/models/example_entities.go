@@ -14,7 +14,7 @@ type User struct {
 	//migrator:schema:field name=role type="ENUM" enum="admin,user,guest" default="user"
 	Role string
 
-	//migrator:schema:field name=created_at type="TIMESTAMP" default_fn="NOW()" not_null=true
+	//migrator:schema:field name=created_at type="TIMESTAMP" default_expr="NOW()" not_null=true
 	CreatedAt string
 }
 
@@ -32,7 +32,7 @@ type Post struct {
 	//migrator:schema:field name=content type="TEXT"
 	Content string
 
-	//migrator:schema:field name=created_at type="TIMESTAMP" default_fn="NOW()" not_null=true
+	//migrator:schema:field name=created_at type="TIMESTAMP" default_expr="NOW()" not_null=true
 	CreatedAt string
 }
 

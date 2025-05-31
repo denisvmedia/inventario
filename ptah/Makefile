@@ -67,7 +67,7 @@ integration-test-mariadb: docker-build
 	docker-compose --profile test run --rm ptah-tester --databases=mariadb --report=html --verbose
 
 # Run integration tests using Docker Compose with custom arguments
-integration-test-custom:
+integration-test-custom: docker-build
 	@echo "Running integration tests with custom arguments..."
 	@echo "Usage: make integration-test-custom ARGS='--report=json --databases=postgres'"
 	docker-compose --profile test run --rm ptah-tester $(ARGS)

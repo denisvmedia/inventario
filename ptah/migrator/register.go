@@ -183,8 +183,7 @@ func executeSQLStatements(conn *executor.DatabaseConnection, sql string) error {
 
 	for _, stmt := range statements {
 		stmt = strings.TrimSpace(stmt)
-
-		if stmt == "" || strings.HasPrefix(stmt, "--") {
+		if stmt == "" {
 			continue // Skip empty statements and comments
 		}
 

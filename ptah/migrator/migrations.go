@@ -30,7 +30,7 @@ type MigrationFunc func(context.Context, *executor.DatabaseConnection) error
 // This is needed because MySQL doesn't handle multiple statements in a single ExecuteSQL call.
 // Unlike simple string splitting, this properly handles semicolons within string literals and comments.
 func SplitSQLStatements(sql string) []string {
-	return sqlsplitter.SplitSQLStatements(sql)
+	return sqlsplitter.SplitSQLStatements(sqlsplitter.RemoveComments(sql))
 }
 
 // MigrationFuncFromSQLFilename returns a migration function that reads SQL from a file

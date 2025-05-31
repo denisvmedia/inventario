@@ -163,8 +163,8 @@ func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fi
 				columnBuilder.Default(field.Default)
 			}
 
-			if field.DefaultFn != "" {
-				columnBuilder.DefaultFunction(field.DefaultFn)
+			if field.DefaultExpr != "" {
+				columnBuilder.DefaultExpression(field.DefaultExpr)
 			}
 
 			if field.Check != "" {

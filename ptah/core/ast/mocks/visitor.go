@@ -3,7 +3,7 @@ package mocks
 import (
 	"errors"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 )
 
 // MockVisitor implements the Visitor interface for testing

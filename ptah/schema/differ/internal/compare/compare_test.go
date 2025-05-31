@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/ptr"
 
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/internal/compare"
@@ -440,7 +441,7 @@ func TestColumns_HappyPath(t *testing.T) {
 			dbCol: parsertypes.Column{
 				Name:          "status",
 				DataType:      "VARCHAR(50)",
-				ColumnDefault: stringPtr("inactive"),
+				ColumnDefault: ptr.To("inactive"),
 			},
 			expected: differtypes.ColumnDiff{
 				ColumnName: "status",
@@ -528,7 +529,7 @@ func TestColumns_UnhappyPath(t *testing.T) {
 				DataType:        "integer",
 				IsPrimaryKey:    true,
 				IsAutoIncrement: true,
-				ColumnDefault:   stringPtr("nextval('users_id_seq'::regclass)"),
+				ColumnDefault:   ptr.To("nextval('users_id_seq'::regclass)"),
 			},
 			expected: differtypes.ColumnDiff{
 				ColumnName: "id",
@@ -621,8 +622,8 @@ func TestEnums_HappyPath(t *testing.T) {
 			expected: &differtypes.SchemaDiff{
 				EnumsModified: []differtypes.EnumDiff{
 					{
-						EnumName:     "status_enum",
-						ValuesAdded:  []string{"pending"},
+						EnumName:      "status_enum",
+						ValuesAdded:   []string{"pending"},
 						ValuesRemoved: nil,
 					},
 				},
@@ -1028,7 +1029,7 @@ func TestColumns_EdgeCases(t *testing.T) {
 				DataType:        "integer",
 				IsPrimaryKey:    true,
 				IsAutoIncrement: false, // Not detected as auto increment
-				ColumnDefault:   stringPtr("nextval('seq'::regclass)"),
+				ColumnDefault:   ptr.To("nextval('seq'::regclass)"),
 			},
 			expected: differtypes.ColumnDiff{
 				ColumnName: "id",
@@ -1124,9 +1125,4 @@ func TestTablesAndColumns_SortingConsistency(t *testing.T) {
 	// Check that results are sorted alphabetically
 	c.Assert(diff.TablesAdded, qt.DeepEquals, []string{"alpha_table", "zebra_table"})
 	c.Assert(diff.TablesRemoved, qt.DeepEquals, []string{"alpha_old_table", "zebra_old_table"})
-}
-
-// Helper function to create string pointers
-func stringPtr(s string) *string {
-	return &s
 }

@@ -17,7 +17,7 @@ type Category struct {
 	//migrator:schema:field name="parent_id" type="INT" not_null="false" foreign="categories(id)" foreign_key_name="fk_category_parent"
 	ParentID *int64
 
-	//migrator:schema:field name="display_order" type="INT" not_null="true" default="0"
+	//migrator:schema:field name="display_order" type="INT" not_null="true" default_expr="0"
 	DisplayOrder int
 
 	//migrator:schema:field name="visibility" type="enum_category_visibility" not_null="true" default="visible"

@@ -12,7 +12,7 @@ type OldSyntaxUser struct {
 	//migrator:schema:field name="email" type="VARCHAR(255)" unique="true" not_null="true" index="true"
 	Email string `db:"email"`
 
-	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
+	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default_expr="true"
 	IsActive bool `db:"is_active"`
 
 	//migrator:schema:field name="description" type="TEXT" nullable="true"
@@ -29,7 +29,7 @@ type NewSyntaxUser struct {
 	//migrator:schema:field name="email" type="VARCHAR(255)" unique not_null index
 	Email string `db:"email"`
 
-	//migrator:schema:field name="is_active" type="BOOLEAN" not_null default="true"
+	//migrator:schema:field name="is_active" type="BOOLEAN" not_null default_expr="true"
 	IsActive bool `db:"is_active"`
 
 	//migrator:schema:field name="description" type="TEXT" nullable
@@ -49,10 +49,10 @@ type MixedSyntaxPost struct {
 	//migrator:schema:field name="content" type="TEXT" nullable="true"
 	Content *string `db:"content"`
 
-	//migrator:schema:field name="view_count" type="INTEGER" not_null default="0" check="view_count >= 0"
+	//migrator:schema:field name="view_count" type="INTEGER" not_null default_expr="0" check="view_count >= 0"
 	ViewCount int `db:"view_count"`
 
-	//migrator:schema:field name="is_published" type="BOOLEAN" not_null="false" default="false"
+	//migrator:schema:field name="is_published" type="BOOLEAN" not_null="false" default_expr="false"
 	IsPublished bool `db:"is_published"`
 }
 
@@ -60,7 +60,7 @@ type MixedSyntaxPost struct {
 //
 //migrator:schema:embed
 type ModernTimestamps struct {
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default_expr="CURRENT_TIMESTAMP"
 	CreatedAt string `db:"created_at"`
 
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" nullable

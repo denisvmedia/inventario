@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
-	"github.com/denisvmedia/inventario/ptah/schema/ast/mocks"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast/mocks"
 )
 
 func TestNewPrimaryKeyConstraint(t *testing.T) {

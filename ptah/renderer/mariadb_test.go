@@ -333,7 +333,7 @@ func TestMariaDBRenderer_InheritsFromMySQL(t *testing.T) {
 				Type:     "TIMESTAMP",
 				Nullable: false,
 				Default: &ast.DefaultValue{
-					Function: "NOW()",
+					Expression: "NOW()",
 				},
 			},
 		},

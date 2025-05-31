@@ -45,6 +45,7 @@ type EnumNode struct {
 // NewEnum creates a new enum node with the specified name and values.
 //
 // Example:
+//
 //	enum := NewEnum("status", "active", "inactive", "pending")
 func NewEnum(name string, values ...string) *EnumNode {
 	return &EnumNode{
@@ -82,6 +83,7 @@ type CreateTableNode struct {
 // options map. Use the fluent API methods to add columns, constraints, and options.
 //
 // Example:
+//
 //	table := NewCreateTable("users")
 func NewCreateTable(name string) *CreateTableNode {
 	return &CreateTableNode{
@@ -100,6 +102,7 @@ func (n *CreateTableNode) Accept(visitor Visitor) error {
 // AddColumn adds a column to the CREATE TABLE statement and returns the table node for chaining.
 //
 // Example:
+//
 //	table.AddColumn(NewColumn("id", "INTEGER").SetPrimary())
 func (n *CreateTableNode) AddColumn(column *ColumnNode) *CreateTableNode {
 	n.Columns = append(n.Columns, column)
@@ -109,6 +112,7 @@ func (n *CreateTableNode) AddColumn(column *ColumnNode) *CreateTableNode {
 // AddConstraint adds a table-level constraint and returns the table node for chaining.
 //
 // Example:
+//
 //	table.AddConstraint(NewUniqueConstraint("uk_email", "email"))
 func (n *CreateTableNode) AddConstraint(constraint *ConstraintNode) *CreateTableNode {
 	n.Constraints = append(n.Constraints, constraint)
@@ -122,6 +126,7 @@ func (n *CreateTableNode) AddConstraint(constraint *ConstraintNode) *CreateTable
 //   - PostgreSQL: TABLESPACE, WITH
 //
 // Example:
+//
 //	table.SetOption("ENGINE", "InnoDB")
 func (n *CreateTableNode) SetOption(key, value string) *CreateTableNode {
 	n.Options[key] = value
@@ -162,6 +167,7 @@ type ColumnNode struct {
 // methods to configure other properties.
 //
 // Example:
+//
 //	column := NewColumn("email", "VARCHAR(255)")
 func NewColumn(name, dataType string) *ColumnNode {
 	return &ColumnNode{
@@ -182,6 +188,7 @@ func (n *ColumnNode) Accept(visitor Visitor) error {
 // cannot contain NULL values in SQL.
 //
 // Example:
+//
 //	column.SetPrimary()
 func (n *ColumnNode) SetPrimary() *ColumnNode {
 	n.Primary = true
@@ -192,6 +199,7 @@ func (n *ColumnNode) SetPrimary() *ColumnNode {
 // SetNotNull marks the column as NOT NULL and returns the column for chaining.
 //
 // Example:
+//
 //	column.SetNotNull()
 func (n *ColumnNode) SetNotNull() *ColumnNode {
 	n.Nullable = false
@@ -204,6 +212,7 @@ func (n *ColumnNode) SetNotNull() *ColumnNode {
 // constraints, use table-level constraints instead.
 //
 // Example:
+//
 //	column.SetUnique()
 func (n *ColumnNode) SetUnique() *ColumnNode {
 	n.Unique = true
@@ -218,6 +227,7 @@ func (n *ColumnNode) SetUnique() *ColumnNode {
 //   - SQLite: AUTOINCREMENT
 //
 // Example:
+//
 //	column.SetAutoIncrement()
 func (n *ColumnNode) SetAutoIncrement() *ColumnNode {
 	n.AutoInc = true
@@ -227,9 +237,10 @@ func (n *ColumnNode) SetAutoIncrement() *ColumnNode {
 // SetDefault sets a literal default value and returns the column for chaining.
 //
 // The value should be properly quoted for string literals (e.g., "'active'").
-// For function calls, use SetDefaultFunction instead.
+// For function calls, use SetDefaultExpression instead.
 //
 // Example:
+//
 //	column.SetDefault("'active'")
 //	column.SetDefault("0")
 func (n *ColumnNode) SetDefault(value string) *ColumnNode {
@@ -237,15 +248,16 @@ func (n *ColumnNode) SetDefault(value string) *ColumnNode {
 	return n
 }
 
-// SetDefaultFunction sets a function as the default value and returns the column for chaining.
+// SetDefaultExpression sets a function as the default value and returns the column for chaining.
 //
 // Common functions include NOW(), CURRENT_TIMESTAMP, UUID(), etc.
 //
 // Example:
-//	column.SetDefaultFunction("CURRENT_TIMESTAMP")
-//	column.SetDefaultFunction("UUID()")
-func (n *ColumnNode) SetDefaultFunction(fn string) *ColumnNode {
-	n.Default = &DefaultValue{Function: fn}
+//
+//	column.SetDefaultExpression("NOW()")
+//	column.SetDefaultExpression("UUID()")
+func (n *ColumnNode) SetDefaultExpression(fn string) *ColumnNode {
+	n.Default = &DefaultValue{Expression: fn}
 	return n
 }
 
@@ -255,6 +267,7 @@ func (n *ColumnNode) SetDefaultFunction(fn string) *ColumnNode {
 // the column.
 //
 // Example:
+//
 //	column.SetCheck("status IN ('active', 'inactive')")
 //	column.SetCheck("price > 0")
 func (n *ColumnNode) SetCheck(expression string) *ColumnNode {
@@ -265,6 +278,7 @@ func (n *ColumnNode) SetCheck(expression string) *ColumnNode {
 // SetComment sets a column comment and returns the column for chaining.
 //
 // Example:
+//
 //	column.SetComment("User's email address")
 func (n *ColumnNode) SetComment(comment string) *ColumnNode {
 	n.Comment = comment
@@ -277,6 +291,7 @@ func (n *ColumnNode) SetComment(comment string) *ColumnNode {
 // is the constraint name.
 //
 // Example:
+//
 //	column.SetForeignKey("users", "id", "fk_orders_user")
 func (n *ColumnNode) SetForeignKey(table, column, name string) *ColumnNode {
 	n.ForeignKey = &ForeignKeyRef{
@@ -332,6 +347,7 @@ type IndexNode struct {
 // NewIndex creates a new index node with the specified name, table, and columns.
 //
 // Example:
+//
 //	index := NewIndex("idx_user_email", "users", "email")
 //	index := NewIndex("idx_user_name_status", "users", "name", "status")
 func NewIndex(name, table string, columns ...string) *IndexNode {
@@ -352,6 +368,7 @@ func (n *IndexNode) Accept(visitor Visitor) error {
 // Unique indexes enforce uniqueness constraints on the indexed columns.
 //
 // Example:
+//
 //	index.SetUnique()
 func (n *IndexNode) SetUnique() *IndexNode {
 	n.Unique = true
@@ -370,6 +387,7 @@ type CommentNode struct {
 // NewComment creates a new comment node with the specified text.
 //
 // Example:
+//
 //	comment := NewComment("User management tables")
 func NewComment(text string) *CommentNode {
 	return &CommentNode{Text: text}

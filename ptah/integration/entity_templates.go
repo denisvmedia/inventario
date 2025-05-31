@@ -30,10 +30,10 @@ type User struct {
 	//migrator:schema:field name="name" type="VARCHAR(255)" not_null="true"
 	Name string
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time
 }
 `
@@ -59,13 +59,13 @@ type Post struct {
 	//migrator:schema:field name="content" type="TEXT"
 	Content string
 
-	//migrator:schema:field name="published" type="BOOLEAN" not_null="true" default="false"
+	//migrator:schema:field name="published" type="BOOLEAN" not_null="true" default_expr="false"
 	Published bool
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time
 }
 
@@ -94,10 +94,10 @@ type Comment struct {
 	//migrator:schema:field name="content" type="TEXT" not_null="true"
 	Content string
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time
 }
 
@@ -126,13 +126,13 @@ type Product struct {
 	//migrator:schema:field name="price" type="DECIMAL(10,2)" not_null="true"
 	Price float64
 
-	//migrator:schema:field name="active" type="BOOLEAN" not_null="true" default="true"
+	//migrator:schema:field name="active" type="BOOLEAN" not_null="true" default_expr="true"
 	Active bool
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time
 }
 
@@ -164,13 +164,13 @@ type User struct {
 	//migrator:schema:field name="bio" type="TEXT"
 	Bio string
 
-	//migrator:schema:field name="active" type="BOOLEAN" not_null="true" default="true"
+	//migrator:schema:field name="active" type="BOOLEAN" not_null="true" default_expr="true"
 	Active bool
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time
 }
 
@@ -208,10 +208,10 @@ type Article struct {
 	//migrator:schema:field name="status" type="status_type" not_null="true" default="draft"
 	Status StatusType
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time
 }
 
@@ -230,7 +230,7 @@ func (et *EntityTemplate) CustomEntity(tableName, structName string, fields []En
 
 	for _, field := range fields {
 		sb.WriteString(fmt.Sprintf("\t//migrator:schema:field name=\"%s\" type=\"%s\"", field.Name, field.Type))
-		
+
 		if field.Primary {
 			sb.WriteString(" primary=\"true\"")
 		}
@@ -244,12 +244,12 @@ func (et *EntityTemplate) CustomEntity(tableName, structName string, fields []En
 			sb.WriteString(fmt.Sprintf(" default=\"%s\"", field.Default))
 		}
 		if field.DefaultFn != "" {
-			sb.WriteString(fmt.Sprintf(" default_fn=\"%s\"", field.DefaultFn))
+			sb.WriteString(fmt.Sprintf(" default_expr=\"%s\"", field.DefaultFn))
 		}
 		if field.ForeignKey != "" {
 			sb.WriteString(fmt.Sprintf(" foreign_key=\"%s\"", field.ForeignKey))
 		}
-		
+
 		sb.WriteString("\n")
 		sb.WriteString(fmt.Sprintf("\t%s %s\n\n", field.GoName, field.GoType))
 	}

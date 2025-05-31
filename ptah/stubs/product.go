@@ -23,13 +23,13 @@ type Product struct {
 	//migrator:schema:field name="category_id" type="INT" not_null="true" foreign="categories(id)" foreign_key_name="fk_product_category"
 	CategoryID int64
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="NOW()"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="NOW()"
 	CreatedAt string
 
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="false"
 	UpdatedAt string
 
-	//migrator:schema:field name="in_stock" type="BOOLEAN" not_null="true" default="true"
+	//migrator:schema:field name="in_stock" type="BOOLEAN" not_null="true" default_expr="true"
 	InStock bool
 
 	//migrator:schema:index name="idx_products_category" fields="category_id"

@@ -16,13 +16,13 @@ type SimplifiedUser struct {
 	//migrator:schema:field name="password_hash" type="TEXT" not_null
 	PasswordHash string `db:"password_hash"`
 
-	//migrator:schema:field name="is_active" type="BOOLEAN" not_null default="true"
+	//migrator:schema:field name="is_active" type="BOOLEAN" not_null default_expr="true"
 	IsActive bool `db:"is_active"`
 
-	//migrator:schema:field name="is_admin" type="BOOLEAN" not_null default="false"
+	//migrator:schema:field name="is_admin" type="BOOLEAN" not_null default_expr="false"
 	IsAdmin bool `db:"is_admin"`
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `db:"created_at"`
 
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" nullable
@@ -43,13 +43,13 @@ type SimplifiedPost struct {
 	//migrator:schema:field name="content" type="TEXT" nullable
 	Content *string `db:"content"`
 
-	//migrator:schema:field name="is_published" type="BOOLEAN" not_null default="false"
+	//migrator:schema:field name="is_published" type="BOOLEAN" not_null default_expr="false"
 	IsPublished bool `db:"is_published"`
 
-	//migrator:schema:field name="view_count" type="INTEGER" not_null default="0" check="view_count >= 0"
+	//migrator:schema:field name="view_count" type="INTEGER" not_null default_expr="0" check="view_count >= 0"
 	ViewCount int `db:"view_count"`
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `db:"created_at"`
 }
 
@@ -60,7 +60,7 @@ var _ = SimplifiedPost{}
 //
 //migrator:schema:embed
 type SimpleTimestamps struct {
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `db:"created_at"`
 
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" nullable

@@ -6,6 +6,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/postgresql"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
@@ -318,4 +320,117 @@ func TestGenerator_GenerateCreateTable_IgnoresDifferentStructs(t *testing.T) {
 
 	c.Assert(result, qt.Contains, "id SERIAL PRIMARY KEY")
 	c.Assert(result, qt.Not(qt.Contains), "title") // Should not include Post fields
+}
+
+func TestGenerator_GenerateCreateTable_WithEnumsInContext(t *testing.T) {
+	c := qt.New(t)
+
+	generator := postgresql.New()
+
+	table := types.TableDirective{
+		StructName: "User",
+		Name:       "users",
+	}
+
+	fields := []types.SchemaField{
+		{
+			StructName: "User",
+			Name:       "id",
+			Type:       "SERIAL",
+			Primary:    true,
+		},
+		{
+			StructName: "User",
+			Name:       "status",
+			Type:       "user_status", // This should be recognized as an enum
+			Nullable:   false,
+		},
+	}
+
+	enums := []types.GlobalEnum{
+		{
+			Name:   "user_status",
+			Values: []string{"active", "inactive", "suspended"},
+		},
+	}
+
+	result := generator.GenerateCreateTable(table, fields, nil, enums)
+
+	// Should contain the enum definition
+	c.Assert(result, qt.Contains, "CREATE TYPE user_status AS ENUM ('active', 'inactive', 'suspended');")
+	// Should use the enum type directly in the column
+	c.Assert(result, qt.Contains, "status user_status NOT NULL")
+}
+
+func TestGenerator_GenerateMigrationSQL_AlterColumn(t *testing.T) {
+	c := qt.New(t)
+
+	generator := postgresql.New()
+
+	// Create a mock schema diff with column modifications
+	diff := &differtypes.SchemaDiff{
+		TablesModified: []differtypes.TableDiff{
+			{
+				TableName: "users",
+				ColumnsModified: []differtypes.ColumnDiff{
+					{
+						ColumnName: "email",
+						Changes: map[string]string{
+							"type":     "VARCHAR(255) -> VARCHAR(320)",
+							"nullable": "true -> false",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create generated schema with the target field
+	generated := &parsertypes.PackageParseResult{
+		Fields: []types.SchemaField{
+			{
+				StructName: "users",
+				Name:       "email",
+				Type:       "VARCHAR(320)",
+				Nullable:   false,
+			},
+		},
+	}
+
+	result := generator.GenerateMigrationSQL(diff, generated)
+
+	// Should contain ALTER COLUMN statements
+	c.Assert(result, qt.HasLen, 3) // Comment + SQL
+	c.Assert(result[0], qt.Contains, "-- Modify table: users")
+	c.Assert(result[1], qt.Contains, "-- Modify column users.email:")
+	c.Assert(result[2], qt.Contains, "ALTER TABLE users ALTER COLUMN email TYPE VARCHAR(320);")
+	c.Assert(result[2], qt.Contains, "ALTER TABLE users ALTER COLUMN email SET NOT NULL;")
+}
+
+func TestGenerator_GenerateMigrationSQL_DropColumn(t *testing.T) {
+	c := qt.New(t)
+
+	generator := postgresql.New()
+
+	// Create a mock schema diff with column removals
+	diff := &differtypes.SchemaDiff{
+		TablesModified: []differtypes.TableDiff{
+			{
+				TableName:      "users",
+				ColumnsRemoved: []string{"old_field", "deprecated_column"},
+			},
+		},
+	}
+
+	generated := &parsertypes.PackageParseResult{}
+
+	result := generator.GenerateMigrationSQL(diff, generated)
+
+	// Should contain DROP COLUMN statements with warnings
+	c.Assert(result, qt.HasLen, 5) // 2 warnings + 2 SQL statements
+	c.Assert(result[0], qt.Contains, "-- Modify table: users")
+	c.Assert(result[1], qt.Contains, "-- WARNING: Dropping column users.old_field - This will delete data!")
+	c.Assert(result[2], qt.Contains, "ALTER TABLE users DROP COLUMN old_field;")
+	c.Assert(result[3], qt.Contains, "-- WARNING: Dropping column users.deprecated_column - This will delete data!")
+	c.Assert(result[4], qt.Contains, "ALTER TABLE users DROP COLUMN deprecated_column;")
 }

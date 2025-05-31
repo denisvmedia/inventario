@@ -16,16 +16,16 @@ type Category struct {
 	//migrator:schema:field name="parent_id" type="BIGINT"
 	ParentID *int64
 
-	//migrator:schema:field name="sort_order" type="INTEGER" not_null="true" default="0"
+	//migrator:schema:field name="sort_order" type="INTEGER" not_null="true" default_expr="0"
 	SortOrder int
 
-	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
+	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default_expr="true"
 	IsActive bool
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time
 }
 

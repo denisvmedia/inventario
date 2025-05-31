@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
-	"github.com/denisvmedia/inventario/ptah/schema/ast/mocks"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast/mocks"
 )
 
 // TestVisitorInterface_HappyPath tests that the visitor interface works correctly
@@ -211,24 +211,24 @@ func TestDefaultValue_LiteralValue(t *testing.T) {
 	c := qt.New(t)
 
 	dv := &ast.DefaultValue{
-		Value:    "'default_string'",
-		Function: "",
+		Value:      "'default_string'",
+		Expression: "",
 	}
 
 	c.Assert(dv.Value, qt.Equals, "'default_string'")
-	c.Assert(dv.Function, qt.Equals, "")
+	c.Assert(dv.Expression, qt.Equals, "")
 }
 
 func TestDefaultValue_FunctionValue(t *testing.T) {
 	c := qt.New(t)
 
 	dv := &ast.DefaultValue{
-		Value:    "",
-		Function: "NOW()",
+		Value:      "",
+		Expression: "NOW()",
 	}
 
 	c.Assert(dv.Value, qt.Equals, "")
-	c.Assert(dv.Function, qt.Equals, "NOW()")
+	c.Assert(dv.Expression, qt.Equals, "NOW()")
 }
 
 func TestDefaultValue_BothValues(t *testing.T) {
@@ -236,12 +236,12 @@ func TestDefaultValue_BothValues(t *testing.T) {
 
 	// Edge case: both values set (should not happen in normal usage)
 	dv := &ast.DefaultValue{
-		Value:    "'literal'",
-		Function: "NOW()",
+		Value:      "'literal'",
+		Expression: "NOW()",
 	}
 
 	c.Assert(dv.Value, qt.Equals, "'literal'")
-	c.Assert(dv.Function, qt.Equals, "NOW()")
+	c.Assert(dv.Expression, qt.Equals, "NOW()")
 }
 
 func TestForeignKeyRef_BasicFields(t *testing.T) {
@@ -378,12 +378,12 @@ func TestDefaultValue_EdgeCases(t *testing.T) {
 			c := qt.New(t)
 
 			dv := &ast.DefaultValue{
-				Value:    tt.value,
-				Function: tt.function,
+				Value:      tt.value,
+				Expression: tt.function,
 			}
 
 			c.Assert(dv.Value, qt.Equals, tt.value)
-			c.Assert(dv.Function, qt.Equals, tt.function)
+			c.Assert(dv.Expression, qt.Equals, tt.function)
 		})
 	}
 }

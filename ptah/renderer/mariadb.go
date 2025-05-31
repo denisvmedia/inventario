@@ -201,8 +201,8 @@ func (r *MariaDBRenderer) renderColumnWithEnums(column *ast.ColumnNode, enumValu
 
 	// Default values
 	if column.Default != nil {
-		if column.Default.Function != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Function))
+		if column.Default.Expression != "" {
+			parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Expression))
 		} else if column.Default.Value != "" {
 			parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value))
 		}

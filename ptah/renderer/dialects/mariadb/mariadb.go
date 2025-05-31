@@ -3,10 +3,11 @@ package mariadb
 import (
 	"fmt"
 
+	"github.com/denisvmedia/inventario/ptah/schema/ast"
+
 	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
@@ -69,8 +70,8 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 		column.SetDefault(field.Default)
 	}
 
-	if field.DefaultFn != "" {
-		column.SetDefaultFunction(field.DefaultFn)
+	if field.DefaultExpr != "" {
+		column.SetDefaultExpression(field.DefaultExpr)
 	}
 
 	// Handle check constraint with platform-specific override (MariaDB-specific first, then MySQL fallback)
@@ -451,5 +452,3 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 
 	return statements
 }
-
-

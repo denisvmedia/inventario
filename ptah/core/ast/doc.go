@@ -58,7 +58,7 @@
 //		).
 //		AddColumn(
 //			ast.NewColumn("created_at", "TIMESTAMP").
-//				SetDefaultFunction("CURRENT_TIMESTAMP"),
+//				SetDefaultExpression("CURRENT_TIMESTAMP"),
 //		).
 //		AddConstraint(ast.NewUniqueConstraint("uk_users_email", "email"))
 //

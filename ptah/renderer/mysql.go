@@ -54,8 +54,8 @@ func (r *MySQLRenderer) processFieldType(fieldType string, enumValues []string) 
 	}
 }
 
-// convertDefaultFunction converts default functions to MySQL-compatible syntax
-func (r *MySQLRenderer) convertDefaultFunction(function string) string {
+// convertDefaultExpression converts default functions to MySQL-compatible syntax
+func (r *MySQLRenderer) convertDefaultExpression(function string) string {
 	switch strings.ToUpper(function) {
 	case "NOW()":
 		return "CURRENT_TIMESTAMP"
@@ -111,16 +111,13 @@ func (r *MySQLRenderer) renderColumnWithEnums(column *ast.ColumnNode, enumValues
 	}
 
 	// Default value
-	if column.Default != nil {
-		if column.Default.Function != "" {
-			// Handle MySQL-specific function mappings
-			defaultFunc := r.convertDefaultFunction(column.Default.Function)
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultFunc))
-		} else if column.Default.Value != "" {
-			// Handle MySQL-specific value mappings
-			defaultValue := r.convertDefaultValue(column.Default.Value, columnType)
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultValue))
-		}
+	switch {
+	case column.Default == nil:
+		// No default value
+	case column.Default.Value != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT %s", r.convertDefaultValue(column.Default.Value, columnType))) // TODO: escape!
+	case column.Default.Expression != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT %s", r.convertDefaultExpression(column.Default.Expression)))
 	}
 
 	// Check constraint

@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
-	"github.com/denisvmedia/inventario/ptah/schema/ast/mocks"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast/mocks"
 )
 
 func TestNewCreateTable(t *testing.T) {
@@ -131,16 +131,16 @@ func TestColumnNode_SetDefault(t *testing.T) {
 
 	c.Assert(column.Default, qt.IsNotNil)
 	c.Assert(column.Default.Value, qt.Equals, "'active'")
-	c.Assert(column.Default.Function, qt.Equals, "")
+	c.Assert(column.Default.Expression, qt.Equals, "")
 }
 
 func TestColumnNode_SetDefaultFunction(t *testing.T) {
 	c := qt.New(t)
 
-	column := ast.NewColumn("created_at", "TIMESTAMP").SetDefaultFunction("NOW()")
+	column := ast.NewColumn("created_at", "TIMESTAMP").SetDefaultExpression("NOW()")
 
 	c.Assert(column.Default, qt.IsNotNil)
-	c.Assert(column.Default.Function, qt.Equals, "NOW()")
+	c.Assert(column.Default.Expression, qt.Equals, "NOW()")
 	c.Assert(column.Default.Value, qt.Equals, "")
 }
 
@@ -292,7 +292,7 @@ func TestComplexTableCreation(t *testing.T) {
 		AddColumn(
 			ast.NewColumn("created_at", "TIMESTAMP").
 				SetNotNull().
-				SetDefaultFunction("CURRENT_TIMESTAMP"),
+				SetDefaultExpression("CURRENT_TIMESTAMP"),
 		).
 		AddColumn(
 			ast.NewColumn("status", "VARCHAR(20)").
@@ -326,7 +326,7 @@ func TestComplexTableCreation(t *testing.T) {
 	// Verify third column (created_at)
 	createdCol := table.Columns[2]
 	c.Assert(createdCol.Default, qt.IsNotNil)
-	c.Assert(createdCol.Default.Function, qt.Equals, "CURRENT_TIMESTAMP")
+	c.Assert(createdCol.Default.Expression, qt.Equals, "CURRENT_TIMESTAMP")
 
 	// Verify fourth column (status)
 	statusCol := table.Columns[3]

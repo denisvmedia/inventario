@@ -19,10 +19,10 @@ type EmbeddedExample struct {
 //
 //migrator:schema:embed
 type Timestamps struct {
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `db:"created_at"`
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `db:"updated_at"`
 }
 

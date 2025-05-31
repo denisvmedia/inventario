@@ -21,11 +21,11 @@ type BooleanDemo struct {
 	Description *string `db:"description"`
 
 	// Boolean field with default
-	//migrator:schema:field name="is_active" type="BOOLEAN" not_null default="true"
+	//migrator:schema:field name="is_active" type="BOOLEAN" not_null default_expr="true"
 	IsActive bool `db:"is_active"`
 
 	// Boolean field following naming pattern (automatically detected as boolean)
-	//migrator:schema:field name="has_permission" type="BOOLEAN" not_null default="false"
+	//migrator:schema:field name="has_permission" type="BOOLEAN" not_null default_expr="false"
 	HasPermission bool `db:"has_permission"`
 
 	// Field with all boolean attributes combined
