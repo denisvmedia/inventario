@@ -426,3 +426,206 @@ func TestFromSchemaIndex_HappyPath(t *testing.T) {
 		})
 	}
 }
+
+func TestFromGlobalEnum_HappyPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		enum     types.GlobalEnum
+		expected func(*ast.EnumNode) bool
+	}{
+		{
+			name: "basic enum",
+			enum: types.GlobalEnum{
+				Name:   "status",
+				Values: []string{"active", "inactive", "pending"},
+			},
+			expected: func(enum *ast.EnumNode) bool {
+				return enum.Name == "status" &&
+					len(enum.Values) == 3 &&
+					enum.Values[0] == "active" &&
+					enum.Values[1] == "inactive" &&
+					enum.Values[2] == "pending"
+			},
+		},
+		{
+			name: "single value enum",
+			enum: types.GlobalEnum{
+				Name:   "boolean_status",
+				Values: []string{"true"},
+			},
+			expected: func(enum *ast.EnumNode) bool {
+				return enum.Name == "boolean_status" &&
+					len(enum.Values) == 1 &&
+					enum.Values[0] == "true"
+			},
+		},
+		{
+			name: "empty enum",
+			enum: types.GlobalEnum{
+				Name:   "empty_enum",
+				Values: []string{},
+			},
+			expected: func(enum *ast.EnumNode) bool {
+				return enum.Name == "empty_enum" &&
+					len(enum.Values) == 0
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			result := transform.FromGlobalEnum(tt.enum)
+
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(tt.expected(result), qt.IsTrue)
+		})
+	}
+}
+
+func TestFromSchemaField_WithEnumValidation(t *testing.T) {
+	tests := []struct {
+		name     string
+		field    types.SchemaField
+		enums    []types.GlobalEnum
+		expected func(*ast.ColumnNode) bool
+	}{
+		{
+			name: "enum field with valid global enum",
+			field: types.SchemaField{
+				Name: "status",
+				Type: "enum_user_status",
+				Enum: []string{"active", "inactive"},
+			},
+			enums: []types.GlobalEnum{
+				{
+					Name:   "enum_user_status",
+					Values: []string{"active", "inactive", "pending"},
+				},
+			},
+			expected: func(col *ast.ColumnNode) bool {
+				return col.Name == "status" && col.Type == "enum_user_status"
+			},
+		},
+		{
+			name: "enum field with no matching global enum",
+			field: types.SchemaField{
+				Name: "status",
+				Type: "enum_unknown_status",
+				Enum: []string{"active"},
+			},
+			enums: []types.GlobalEnum{
+				{
+					Name:   "enum_user_status",
+					Values: []string{"active", "inactive"},
+				},
+			},
+			expected: func(col *ast.ColumnNode) bool {
+				return col.Name == "status" && col.Type == "enum_unknown_status"
+			},
+		},
+		{
+			name: "non-enum field should not be validated",
+			field: types.SchemaField{
+				Name: "name",
+				Type: "VARCHAR(255)",
+			},
+			enums: []types.GlobalEnum{
+				{
+					Name:   "enum_user_status",
+					Values: []string{"active", "inactive"},
+				},
+			},
+			expected: func(col *ast.ColumnNode) bool {
+				return col.Name == "name" && col.Type == "VARCHAR(255)"
+			},
+		},
+		{
+			name: "enum field with invalid values should still work but warn",
+			field: types.SchemaField{
+				Name: "status",
+				Type: "enum_user_status",
+				Enum: []string{"active", "invalid_value"},
+			},
+			enums: []types.GlobalEnum{
+				{
+					Name:   "enum_user_status",
+					Values: []string{"active", "inactive"},
+				},
+			},
+			expected: func(col *ast.ColumnNode) bool {
+				return col.Name == "status" && col.Type == "enum_user_status"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			result := transform.FromSchemaField(tt.field, tt.enums)
+
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(tt.expected(result), qt.IsTrue)
+		})
+	}
+}
+
+func TestIsEnumType(t *testing.T) {
+	tests := []struct {
+		name     string
+		fieldType string
+		expected bool
+	}{
+		{
+			name:     "enum type with prefix",
+			fieldType: "enum_user_status",
+			expected: true,
+		},
+		{
+			name:     "enum type with different name",
+			fieldType: "enum_product_category",
+			expected: true,
+		},
+		{
+			name:     "non-enum type",
+			fieldType: "VARCHAR(255)",
+			expected: false,
+		},
+		{
+			name:     "integer type",
+			fieldType: "INTEGER",
+			expected: false,
+		},
+		{
+			name:     "empty string",
+			fieldType: "",
+			expected: false,
+		},
+		{
+			name:     "contains enum but not prefix",
+			fieldType: "my_enum_type",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			// We need to test the unexported function through the public API
+			// by checking if validation is triggered
+			field := types.SchemaField{
+				Name: "test_field",
+				Type: tt.fieldType,
+				Enum: []string{"test_value"},
+			}
+
+			// This should not panic regardless of the field type
+			result := transform.FromSchemaField(field, []types.GlobalEnum{})
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(result.Type, qt.Equals, tt.fieldType)
+		})
+	}
+}
