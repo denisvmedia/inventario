@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
+	builder2 "github.com/denisvmedia/inventario/ptah/core/builder"
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
 )
 
 // DemonstrateASTApproach shows how to use the new AST-based SQL generation
@@ -15,7 +15,7 @@ func DemonstrateASTApproach() {
 	// Example 1: Building a simple table using the fluent API
 	fmt.Println("1. Simple table using fluent API:")
 
-	table := builder.NewTable("users").
+	table := builder2.NewTable("users").
 		Comment("User accounts table").
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().Unique().End().
@@ -49,7 +49,7 @@ func DemonstrateASTApproach() {
 	// Example 2: Building a more complex schema with enums and foreign keys
 	fmt.Println("\n2. Complex schema with enums and foreign keys:")
 
-	schema := builder.NewSchema().
+	schema := builder2.NewSchema().
 		Comment("E-commerce database schema").
 		Enum("order_status", "pending", "processing", "shipped", "delivered", "cancelled").
 		Table("categories").
@@ -197,7 +197,7 @@ func ShowAdvancedFeatures() {
 		IndexCount:  0,
 	}
 
-	schema := builder.NewSchema().
+	schema := builder2.NewSchema().
 		Table("users").
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().End().

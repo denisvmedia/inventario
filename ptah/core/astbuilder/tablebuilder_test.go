@@ -1,4 +1,4 @@
-package builder_test
+package astbuilder_test
 
 import (
 	"testing"
@@ -6,13 +6,13 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/core/builder"
 )
 
 func TestNewTable(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users")
+	table := astbuilder.NewTable("users")
 
 	c.Assert(table, qt.IsNotNil)
 
@@ -26,7 +26,7 @@ func TestNewTable(t *testing.T) {
 func TestTableBuilder_Comment(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Comment("User accounts table")
 
 	result := table.Build()
@@ -37,7 +37,7 @@ func TestTableBuilder_Comment(t *testing.T) {
 func TestTableBuilder_Engine(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Engine("InnoDB")
 
 	result := table.Build()
@@ -48,7 +48,7 @@ func TestTableBuilder_Engine(t *testing.T) {
 func TestTableBuilder_Option(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Option("CHARSET", "utf8mb4").
 		Option("COLLATE", "utf8mb4_unicode_ci")
 
@@ -61,7 +61,7 @@ func TestTableBuilder_Option(t *testing.T) {
 func TestTableBuilder_Column(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().Unique().End()
 
@@ -84,7 +84,7 @@ func TestTableBuilder_Column(t *testing.T) {
 func TestTableBuilder_PrimaryKey(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("user_roles").
+	table := astbuilder.NewTable("user_roles").
 		Column("user_id", "INTEGER").End().
 		Column("role_id", "INTEGER").End().
 		PrimaryKey("user_id", "role_id")
@@ -99,7 +99,7 @@ func TestTableBuilder_PrimaryKey(t *testing.T) {
 func TestTableBuilder_Unique(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("email", "VARCHAR(255)").End().
 		Column("username", "VARCHAR(100)").End().
 		Unique("uk_users_email_username", "email", "username")
@@ -115,7 +115,7 @@ func TestTableBuilder_Unique(t *testing.T) {
 func TestTableBuilder_ForeignKey(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("posts").
+	table := astbuilder.NewTable("posts").
 		Column("user_id", "INTEGER").End().
 		ForeignKey("fk_posts_user", []string{"user_id"}, "users", "id").
 		OnDelete("CASCADE").
@@ -138,7 +138,7 @@ func TestTableBuilder_ForeignKey(t *testing.T) {
 func TestTableBuilder_ComplexTable(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("posts").
+	table := astbuilder.NewTable("posts").
 		Comment("Blog posts table").
 		Engine("InnoDB").
 		Option("CHARSET", "utf8mb4").
@@ -181,7 +181,7 @@ func TestTableBuilder_FluentChaining(t *testing.T) {
 	c := qt.New(t)
 
 	// Test that all methods return the table builder for chaining
-	table := builder.NewTable("test")
+	table := astbuilder.NewTable("test")
 
 	result1 := table.Comment("test comment")
 	c.Assert(result1, qt.Equals, table)
@@ -216,7 +216,7 @@ func TestTableBuilder_FluentChaining(t *testing.T) {
 func TestTableBuilder_MultipleConstraints(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("test").
+	table := astbuilder.NewTable("test").
 		Column("id", "INTEGER").End().
 		Column("email", "VARCHAR(255)").End().
 		Column("username", "VARCHAR(100)").End().

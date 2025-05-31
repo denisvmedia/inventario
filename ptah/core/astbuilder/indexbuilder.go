@@ -1,4 +1,4 @@
-package builder
+package astbuilder
 
 import (
 	"github.com/denisvmedia/inventario/ptah/core/ast"

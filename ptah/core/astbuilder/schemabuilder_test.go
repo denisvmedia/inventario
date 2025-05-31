@@ -1,4 +1,4 @@
-package builder_test
+package astbuilder_test
 
 import (
 	"testing"
@@ -6,13 +6,13 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/core/builder"
 )
 
 func TestNewSchema(t *testing.T) {
 	c := qt.New(t)
 
-	schema := builder.NewSchema()
+	schema := astbuilder.NewSchema()
 
 	c.Assert(schema, qt.IsNotNil)
 
@@ -25,7 +25,7 @@ func TestNewSchema(t *testing.T) {
 func TestSchemaBuilder_Comment(t *testing.T) {
 	c := qt.New(t)
 
-	schema := builder.NewSchema().
+	schema := astbuilder.NewSchema().
 		Comment("This is a test schema")
 
 	result := schema.Build()
@@ -41,7 +41,7 @@ func TestSchemaBuilder_Comment(t *testing.T) {
 func TestSchemaBuilder_Enum(t *testing.T) {
 	c := qt.New(t)
 
-	schema := builder.NewSchema().
+	schema := astbuilder.NewSchema().
 		Enum("status", "active", "inactive", "pending")
 
 	result := schema.Build()
@@ -58,7 +58,7 @@ func TestSchemaBuilder_Enum(t *testing.T) {
 func TestSchemaBuilder_Table(t *testing.T) {
 	c := qt.New(t)
 
-	schema := builder.NewSchema().
+	schema := astbuilder.NewSchema().
 		Table("users").
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().Unique().End().
@@ -89,7 +89,7 @@ func TestSchemaBuilder_Table(t *testing.T) {
 func TestSchemaBuilder_Index(t *testing.T) {
 	c := qt.New(t)
 
-	schema := builder.NewSchema().
+	schema := astbuilder.NewSchema().
 		Index("idx_users_email", "users", "email").
 		Unique().
 		Comment("Unique index on email").
@@ -112,7 +112,7 @@ func TestSchemaBuilder_Index(t *testing.T) {
 func TestSchemaBuilder_ComplexSchema(t *testing.T) {
 	c := qt.New(t)
 
-	schema := builder.NewSchema().
+	schema := astbuilder.NewSchema().
 		Comment("User management schema").
 		Enum("user_status", "active", "inactive", "suspended").
 		Table("users").
@@ -173,7 +173,7 @@ func TestSchemaBuilder_FluentChaining(t *testing.T) {
 	c := qt.New(t)
 
 	// Test that all methods return the schema builder for chaining
-	schema := builder.NewSchema()
+	schema := astbuilder.NewSchema()
 
 	result1 := schema.Comment("test")
 	c.Assert(result1, qt.Equals, schema)
@@ -198,7 +198,7 @@ func TestSchemaBuilder_FluentChaining(t *testing.T) {
 func TestSchemaBuilder_MultipleComments(t *testing.T) {
 	c := qt.New(t)
 
-	schema := builder.NewSchema().
+	schema := astbuilder.NewSchema().
 		Comment("First comment").
 		Comment("Second comment")
 
@@ -218,7 +218,7 @@ func TestSchemaBuilder_MultipleComments(t *testing.T) {
 func TestSchemaBuilder_MultipleEnums(t *testing.T) {
 	c := qt.New(t)
 
-	schema := builder.NewSchema().
+	schema := astbuilder.NewSchema().
 		Enum("status", "active", "inactive").
 		Enum("role", "admin", "user", "guest")
 

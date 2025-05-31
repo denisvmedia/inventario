@@ -19,7 +19,7 @@
 package generators
 
 import (
-	"github.com/denisvmedia/inventario/ptah/platform"
+	"github.com/denisvmedia/inventario/ptah/core/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/generic"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mariadb"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"

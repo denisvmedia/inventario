@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/core/platform"
 
-	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"

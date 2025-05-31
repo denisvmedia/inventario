@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/platform"
+	"github.com/denisvmedia/inventario/ptah/core/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )

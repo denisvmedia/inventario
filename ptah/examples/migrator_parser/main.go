@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/denisvmedia/inventario/ptah/platform"
+	"github.com/denisvmedia/inventario/ptah/core/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
 	"github.com/denisvmedia/inventario/ptah/schema/types"

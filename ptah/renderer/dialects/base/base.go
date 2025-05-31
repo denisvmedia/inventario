@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/core/builder"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
@@ -96,7 +96,7 @@ func (g *Generator) GenerateSchema(tables []types.TableDirective, fields []types
 
 // GenerateSchemaWithEmbedded generates a complete schema with embedded field support
 func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) *ast.StatementList {
-	schema := builder.NewSchema()
+	schema := astbuilder.NewSchema()
 
 	// Add comment for the schema
 	schema.Comment(fmt.Sprintf("%s Database Schema", strings.ToUpper(g.dialectName)))

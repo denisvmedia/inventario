@@ -1,17 +1,17 @@
-package builder_test
+package astbuilder_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/schema/builder"
+	"github.com/denisvmedia/inventario/ptah/core/builder"
 )
 
 func TestColumnBuilder_Primary(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("id", "SERIAL").Primary().End()
 
 	result := table.Build()
@@ -25,7 +25,7 @@ func TestColumnBuilder_Primary(t *testing.T) {
 func TestColumnBuilder_NotNull(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("email", "VARCHAR(255)").NotNull().End()
 
 	result := table.Build()
@@ -38,7 +38,7 @@ func TestColumnBuilder_NotNull(t *testing.T) {
 func TestColumnBuilder_Nullable(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("description", "TEXT").Nullable().End()
 
 	result := table.Build()
@@ -51,7 +51,7 @@ func TestColumnBuilder_Nullable(t *testing.T) {
 func TestColumnBuilder_Unique(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("email", "VARCHAR(255)").Unique().End()
 
 	result := table.Build()
@@ -64,7 +64,7 @@ func TestColumnBuilder_Unique(t *testing.T) {
 func TestColumnBuilder_AutoIncrement(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("id", "INTEGER").AutoIncrement().End()
 
 	result := table.Build()
@@ -77,7 +77,7 @@ func TestColumnBuilder_AutoIncrement(t *testing.T) {
 func TestColumnBuilder_Default(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("status", "VARCHAR(20)").Default("'active'").End()
 
 	result := table.Build()
@@ -92,7 +92,7 @@ func TestColumnBuilder_Default(t *testing.T) {
 func TestColumnBuilder_DefaultFunction(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("created_at", "TIMESTAMP").DefaultExpression("NOW()").End()
 
 	result := table.Build()
@@ -107,7 +107,7 @@ func TestColumnBuilder_DefaultFunction(t *testing.T) {
 func TestColumnBuilder_Check(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("age", "INTEGER").Check("age >= 0 AND age <= 150").End()
 
 	result := table.Build()
@@ -120,7 +120,7 @@ func TestColumnBuilder_Check(t *testing.T) {
 func TestColumnBuilder_Comment(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("id", "SERIAL").Comment("Auto-incrementing primary key").End()
 
 	result := table.Build()
@@ -133,7 +133,7 @@ func TestColumnBuilder_Comment(t *testing.T) {
 func TestColumnBuilder_ForeignKey(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("posts").
+	table := astbuilder.NewTable("posts").
 		Column("user_id", "INTEGER").ForeignKey("users", "id", "fk_posts_user").
 		OnDelete("CASCADE").
 		OnUpdate("RESTRICT").
@@ -154,7 +154,7 @@ func TestColumnBuilder_ForeignKey(t *testing.T) {
 func TestColumnBuilder_ComplexColumn(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("posts").
+	table := astbuilder.NewTable("posts").
 		Column("user_id", "INTEGER").
 		NotNull().
 		Check("user_id > 0").
@@ -181,7 +181,7 @@ func TestColumnBuilder_ComplexColumn(t *testing.T) {
 func TestColumnBuilder_FluentChaining(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("test")
+	table := astbuilder.NewTable("test")
 	columnBuilder := table.Column("test_col", "INTEGER")
 
 	// Test that all methods return the column builder for chaining
@@ -227,7 +227,7 @@ func TestColumnBuilder_FluentChaining(t *testing.T) {
 func TestColumnBuilder_MultipleColumns(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Column("id", "SERIAL").Primary().AutoIncrement().Comment("Primary key").End().
 		Column("email", "VARCHAR(255)").NotNull().Unique().Comment("User email").End().
 		Column("username", "VARCHAR(100)").NotNull().Unique().End().
@@ -264,7 +264,7 @@ func TestColumnBuilder_MultipleColumns(t *testing.T) {
 func TestColumnBuilder_PrimaryKeyOverridesNullable(t *testing.T) {
 	c := qt.New(t)
 
-	table := builder.NewTable("test").
+	table := astbuilder.NewTable("test").
 		Column("id", "INTEGER").Nullable().Primary().End()
 
 	result := table.Build()
