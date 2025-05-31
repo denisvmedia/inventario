@@ -54,11 +54,11 @@ func seedCommand(_ *cobra.Command, _ []string) error {
 		// fmt.Println("⚠️  This would seed the database with example data.")
 		// fmt.Println("⚠️  The seed data would include sample locations, areas, and commodities.")
 		return fmt.Errorf("dry run mode not yet implemented")
-	} else {
-		log.WithFields(log.Fields{
-			dbDSNFlag: dsn,
-		}).Info("Seeding database")
 	}
+
+	log.WithFields(log.Fields{
+		dbDSNFlag: dsn,
+	}).Info("Seeding database")
 
 	registrySetFn, ok := registry.GetRegistry(dsn)
 	if !ok {

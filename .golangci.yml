@@ -237,6 +237,8 @@ linters:
       # Allow migration filenames to have numbers at the beginning
       - path: 'registry/postgres/migrations/.*\.go$'
         text: 'filename-format:'
+      - path: '(test\_entities|test\_simple)/.*\.go$'
+        text: 'var-naming:'
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'
