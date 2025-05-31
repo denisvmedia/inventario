@@ -56,9 +56,9 @@ func migrateCommand(_ *cobra.Command, _ []string) error {
 		// fmt.Println("⚠️  This would run migrations against the database.")
 		// fmt.Println("⚠️  For now, use the ptah tool 'migrate' command for dry run migration SQL generation.")
 		return fmt.Errorf("dry run mode is not yet implemented")
-	} else {
-		log.WithField(dbDSNFlag, dsn).Info("Running migrations")
 	}
+
+	log.WithField(dbDSNFlag, dsn).Info("Running migrations")
 
 	// Run migrations using the standardized interface
 	err := migrations.RunMigrations(context.Background(), dsn)
