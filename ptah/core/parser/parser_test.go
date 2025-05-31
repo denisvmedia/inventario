@@ -1261,9 +1261,9 @@ func TestParser_ParsePostgreSQLTableOptions(t *testing.T) {
 				autovacuum_vacuum_threshold = 50
 			);`,
 			expectedOptions: map[string]string{
-				"fillfactor":                   "70",
-				"autovacuum_enabled":           "true",
-				"autovacuum_vacuum_threshold":  "50",
+				"fillfactor":                  "70",
+				"autovacuum_enabled":          "true",
+				"autovacuum_vacuum_threshold": "50",
 			},
 		},
 		{
@@ -1526,6 +1526,520 @@ func TestParser_ParseExtendedPostgreSQLDemo(t *testing.T) {
 
 	// Test TABLESPACE option
 	c.Assert(createTable.Options["TABLESPACE"], qt.Equals, "pg_default")
+}
+
+func TestParser_ParseMariaDBComprehensiveDemo(t *testing.T) {
+	c := qt.New(t)
+
+	// Comprehensive MariaDB CREATE TABLE statement with advanced features
+	sql := `CREATE TABLE ` + "`full_demo`" + ` (
+		-- Auto-increment with unsigned integer
+		` + "`id`" + ` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+
+		-- Character types
+		` + "`username`" + ` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+		` + "`bio`" + ` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+
+		-- Numeric with defaults and constraints
+		` + "`balance`" + ` DECIMAL(10,2) NOT NULL DEFAULT 0.00 CHECK (` + "`balance`" + ` >= 0),
+		` + "`score`" + ` DOUBLE ZEROFILL DEFAULT 0000.00,
+
+		-- Date and time
+		` + "`created_at`" + ` DATETIME DEFAULT CURRENT_TIMESTAMP,
+		` + "`updated_at`" + ` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+		-- Boolean type
+		` + "`is_active`" + ` BOOLEAN NOT NULL DEFAULT TRUE,
+
+		-- Enum and set
+		` + "`status`" + ` ENUM('new', 'active', 'archived') DEFAULT 'new',
+		` + "`roles`" + ` SET('admin', 'editor', 'user') DEFAULT 'user',
+
+		-- JSON support (MariaDB 10.2+)
+		` + "`data`" + ` JSON,
+
+		-- Spatial types
+		` + "`location`" + ` POINT,
+		SPATIAL INDEX (` + "`location`" + `),
+
+		-- Virtual columns
+		` + "`fullname`" + ` VARCHAR(100) AS (CONCAT(` + "`username`" + `, ' ', 'User')) STORED,
+
+		-- Foreign key with actions
+		` + "`country_id`" + ` INT,
+		CONSTRAINT ` + "`fk_country`" + ` FOREIGN KEY (` + "`country_id`" + `) REFERENCES ` + "`countries`" + ` (` + "`id`" + `)
+		ON DELETE SET NULL ON UPDATE CASCADE,
+
+		-- Unique and composite indexes
+		UNIQUE KEY ` + "`uq_username`" + ` (` + "`username`" + `),
+		UNIQUE KEY ` + "`uq_roles_status`" + ` (` + "`roles`" + `, ` + "`status`" + `),
+
+		-- Check constraint with name
+		CONSTRAINT ` + "`chk_score_positive`" + ` CHECK (` + "`score`" + ` >= 0)
+	)
+	ENGINE=InnoDB
+	AUTO_INCREMENT=1000
+	DEFAULT CHARSET=utf8mb4
+	COLLATE=utf8mb4_unicode_ci
+	ROW_FORMAT=DYNAMIC
+	COMMENT='Comprehensive MariaDB table';`
+
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+	c.Assert(createTable.Name, qt.Equals, "`full_demo`")
+
+	// Debug: Print actual columns found
+	t.Logf("Found %d columns:", len(createTable.Columns))
+	for i, col := range createTable.Columns {
+		t.Logf("  %d: %s %s", i, col.Name, col.Type)
+	}
+	t.Logf("Found %d constraints:", len(createTable.Constraints))
+	for i, constraint := range createTable.Constraints {
+		t.Logf("  %d: %s %v", i, constraint.Type, constraint.Columns)
+	}
+
+	// Test that we have the expected number of columns (14 total)
+	c.Assert(len(createTable.Columns), qt.Equals, 14)
+
+	// Test auto-increment unsigned primary key
+	idCol := createTable.Columns[0]
+	c.Assert(idCol.Name, qt.Equals, "`id`")
+	c.Assert(idCol.Type, qt.Equals, "INT UNSIGNED")
+	c.Assert(idCol.Nullable, qt.IsFalse)
+	c.Assert(idCol.AutoInc, qt.IsTrue)
+	c.Assert(idCol.Primary, qt.IsTrue)
+
+	// Test character types with charset and collation
+	usernameCol := createTable.Columns[1]
+	c.Assert(usernameCol.Name, qt.Equals, "`username`")
+	c.Assert(usernameCol.Type, qt.Equals, "VARCHAR(50)")
+	c.Assert(usernameCol.Nullable, qt.IsFalse)
+
+	bioCol := createTable.Columns[2]
+	c.Assert(bioCol.Name, qt.Equals, "`bio`")
+	c.Assert(bioCol.Type, qt.Equals, "TEXT")
+
+	// Test DECIMAL with check constraint
+	balanceCol := createTable.Columns[3]
+	c.Assert(balanceCol.Name, qt.Equals, "`balance`")
+	c.Assert(balanceCol.Type, qt.Equals, "DECIMAL(10,2)")
+	c.Assert(balanceCol.Nullable, qt.IsFalse)
+	c.Assert(balanceCol.Default, qt.IsNotNil)
+	c.Assert(balanceCol.Default.Value, qt.Equals, "0.00")
+	c.Assert(balanceCol.Check, qt.Contains, "`balance` >= 0")
+
+	// Test DOUBLE with ZEROFILL
+	scoreCol := createTable.Columns[4]
+	c.Assert(scoreCol.Name, qt.Equals, "`score`")
+	c.Assert(scoreCol.Type, qt.Equals, "DOUBLE ZEROFILL")
+	c.Assert(scoreCol.Default, qt.IsNotNil)
+	c.Assert(scoreCol.Default.Value, qt.Equals, "0000.00")
+
+	// Test DATETIME with CURRENT_TIMESTAMP
+	createdCol := createTable.Columns[5]
+	c.Assert(createdCol.Name, qt.Equals, "`created_at`")
+	c.Assert(createdCol.Type, qt.Equals, "DATETIME")
+	c.Assert(createdCol.Default, qt.IsNotNil)
+	c.Assert(createdCol.Default.Expression, qt.Equals, "CURRENT_TIMESTAMP()")
+
+	// Test TIMESTAMP with ON UPDATE
+	updatedCol := createTable.Columns[6]
+	c.Assert(updatedCol.Name, qt.Equals, "`updated_at`")
+	c.Assert(updatedCol.Type, qt.Equals, "TIMESTAMP")
+	c.Assert(updatedCol.Default, qt.IsNotNil)
+	c.Assert(updatedCol.Default.Expression, qt.Equals, "CURRENT_TIMESTAMP()")
+
+	// Test BOOLEAN with default
+	activeCol := createTable.Columns[7]
+	c.Assert(activeCol.Name, qt.Equals, "`is_active`")
+	c.Assert(activeCol.Type, qt.Equals, "BOOLEAN")
+	c.Assert(activeCol.Nullable, qt.IsFalse)
+	c.Assert(activeCol.Default, qt.IsNotNil)
+	c.Assert(activeCol.Default.Value, qt.Equals, "TRUE")
+
+	// Test ENUM type
+	statusCol := createTable.Columns[8]
+	c.Assert(statusCol.Name, qt.Equals, "`status`")
+	c.Assert(statusCol.Type, qt.Equals, "ENUM('new', 'active', 'archived')")
+	c.Assert(statusCol.Default, qt.IsNotNil)
+	c.Assert(statusCol.Default.Value, qt.Equals, "'new'")
+
+	// Test SET type
+	rolesCol := createTable.Columns[9]
+	c.Assert(rolesCol.Name, qt.Equals, "`roles`")
+	c.Assert(rolesCol.Type, qt.Equals, "SET('admin', 'editor', 'user')")
+	c.Assert(rolesCol.Default, qt.IsNotNil)
+	c.Assert(rolesCol.Default.Value, qt.Equals, "'user'")
+
+	// Test JSON type
+	dataCol := createTable.Columns[10]
+	c.Assert(dataCol.Name, qt.Equals, "`data`")
+	c.Assert(dataCol.Type, qt.Equals, "JSON")
+
+	// Test POINT spatial type
+	locationCol := createTable.Columns[11]
+	c.Assert(locationCol.Name, qt.Equals, "`location`")
+	c.Assert(locationCol.Type, qt.Equals, "POINT")
+
+	// Test virtual/generated column
+	fullnameCol := createTable.Columns[12]
+	c.Assert(fullnameCol.Name, qt.Equals, "`fullname`")
+	c.Assert(fullnameCol.Type, qt.Equals, "VARCHAR(100)")
+
+	// Test foreign key column
+	countryCol := createTable.Columns[13]
+	c.Assert(countryCol.Name, qt.Equals, "`country_id`")
+	c.Assert(countryCol.Type, qt.Equals, "INT")
+
+	// Test table-level constraints
+	c.Assert(len(createTable.Constraints) >= 4, qt.IsTrue)
+
+	// Test table options
+	c.Assert(createTable.Options["ENGINE"], qt.Equals, "InnoDB")
+	c.Assert(createTable.Options["CHARSET"], qt.Equals, "utf8mb4")
+	c.Assert(createTable.Options["COLLATE"], qt.Equals, "utf8mb4_unicode_ci")
+	c.Assert(createTable.Options["ROW_FORMAT"], qt.Equals, "DYNAMIC")
+	c.Assert(createTable.Comment, qt.Equals, "'Comprehensive MariaDB table'")
+}
+
+func TestParser_TimeoutProtection(t *testing.T) {
+	c := qt.New(t)
+
+	// Test with a simple valid SQL first to ensure timeout doesn't interfere with normal parsing
+	sql := "CREATE TABLE users (id INTEGER PRIMARY KEY);"
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+}
+
+func TestParser_MariaDBMinimal(t *testing.T) {
+	c := qt.New(t)
+
+	// Test just the problematic id column that causes hanging
+	sql := "CREATE TABLE `test` (`id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY);"
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+	c.Assert(createTable.Name, qt.Equals, "`test`")
+	c.Assert(len(createTable.Columns), qt.Equals, 1)
+
+	// Test the id column
+	idCol := createTable.Columns[0]
+	c.Assert(idCol.Name, qt.Equals, "`id`")
+	c.Assert(idCol.Type, qt.Equals, "INT UNSIGNED")
+	c.Assert(idCol.Nullable, qt.IsFalse)
+	c.Assert(idCol.AutoInc, qt.IsTrue)
+	c.Assert(idCol.Primary, qt.IsTrue)
+}
+
+func TestParser_MariaDBTypeModifiers(t *testing.T) {
+	tests := []struct {
+		name         string
+		sql          string
+		expectedType string
+	}{
+		{
+			name:         "INT UNSIGNED",
+			sql:          "CREATE TABLE test (col INT UNSIGNED);",
+			expectedType: "INT UNSIGNED",
+		},
+		{
+			name:         "DOUBLE ZEROFILL",
+			sql:          "CREATE TABLE test (col DOUBLE ZEROFILL);",
+			expectedType: "DOUBLE ZEROFILL",
+		},
+		{
+			name:         "DECIMAL UNSIGNED",
+			sql:          "CREATE TABLE test (col DECIMAL(10,2) UNSIGNED);",
+			expectedType: "DECIMAL(10,2) UNSIGNED",
+		},
+		{
+			name:         "BIGINT SIGNED",
+			sql:          "CREATE TABLE test (col BIGINT SIGNED);",
+			expectedType: "BIGINT SIGNED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			p := parser.NewParser(tt.sql)
+			statements, err := p.Parse()
+			c.Assert(err, qt.IsNil)
+			c.Assert(len(statements.Statements), qt.Equals, 1)
+
+			createTable := statements.Statements[0].(*ast.CreateTableNode)
+			c.Assert(len(createTable.Columns), qt.Equals, 1)
+			c.Assert(createTable.Columns[0].Type, qt.Equals, tt.expectedType)
+		})
+	}
+}
+
+func TestParser_MariaDBCharacterSet(t *testing.T) {
+	c := qt.New(t)
+
+	// Test CHARACTER SET and COLLATE syntax
+	sql := "CREATE TABLE test (`name` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci);"
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+	c.Assert(len(createTable.Columns), qt.Equals, 1)
+	c.Assert(createTable.Columns[0].Type, qt.Equals, "VARCHAR(50)")
+}
+
+func TestParser_MariaDBEnumAndSet(t *testing.T) {
+	tests := []struct {
+		name         string
+		sql          string
+		expectedType string
+	}{
+		{
+			name:         "ENUM type",
+			sql:          "CREATE TABLE test (status ENUM('new', 'active', 'archived'));",
+			expectedType: "ENUM('new', 'active', 'archived')",
+		},
+		{
+			name:         "SET type",
+			sql:          "CREATE TABLE test (roles SET('admin', 'editor', 'user'));",
+			expectedType: "SET('admin', 'editor', 'user')",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			p := parser.NewParser(tt.sql)
+			statements, err := p.Parse()
+			c.Assert(err, qt.IsNil)
+			c.Assert(len(statements.Statements), qt.Equals, 1)
+
+			createTable := statements.Statements[0].(*ast.CreateTableNode)
+			c.Assert(len(createTable.Columns), qt.Equals, 1)
+			c.Assert(createTable.Columns[0].Type, qt.Equals, tt.expectedType)
+		})
+	}
+}
+
+func TestParser_MariaDBVirtualColumn(t *testing.T) {
+	c := qt.New(t)
+
+	// Test virtual/generated column syntax
+	sql := "CREATE TABLE test (`name` VARCHAR(50), `fullname` VARCHAR(100) AS (CONCAT(`name`, ' ', 'User')) STORED);"
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+	c.Assert(len(createTable.Columns), qt.Equals, 2)
+	c.Assert(createTable.Columns[1].Type, qt.Equals, "VARCHAR(100)")
+}
+
+func TestParser_MariaDBTableOptions(t *testing.T) {
+	c := qt.New(t)
+
+	// Test table options parsing
+	sql := `CREATE TABLE test (id INT)
+		ENGINE=InnoDB
+		AUTO_INCREMENT=1000
+		DEFAULT CHARSET=utf8mb4
+		COLLATE=utf8mb4_unicode_ci
+		ROW_FORMAT=DYNAMIC
+		COMMENT='Test table';`
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+	c.Assert(len(createTable.Columns), qt.Equals, 1)
+}
+
+func TestParser_MariaDBFirstFewColumns(t *testing.T) {
+	c := qt.New(t)
+
+	// Test just the first few columns to isolate the issue
+	sql := `CREATE TABLE test (
+		` + "`id`" + ` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		` + "`username`" + ` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+		` + "`bio`" + ` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+	);`
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+
+	// Debug: Print actual columns found
+	t.Logf("Found %d columns:", len(createTable.Columns))
+	for i, col := range createTable.Columns {
+		t.Logf("  %d: %s %s", i, col.Name, col.Type)
+	}
+
+	c.Assert(len(createTable.Columns), qt.Equals, 3)
+}
+
+func TestParser_MariaDBWithCheckConstraint(t *testing.T) {
+	c := qt.New(t)
+
+	// Test the balance column with CHECK constraint
+	sql := `CREATE TABLE test (
+		` + "`balance`" + ` DECIMAL(10,2) NOT NULL DEFAULT 0.00 CHECK (` + "`balance`" + ` >= 0)
+	);`
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+
+	// Debug: Print actual columns found
+	t.Logf("Found %d columns:", len(createTable.Columns))
+	for i, col := range createTable.Columns {
+		t.Logf("  %d: %s %s", i, col.Name, col.Type)
+	}
+
+	c.Assert(len(createTable.Columns), qt.Equals, 1)
+}
+
+func TestParser_MariaDBOnUpdateTimestamp(t *testing.T) {
+	c := qt.New(t)
+
+	// Test the updated_at column with ON UPDATE CURRENT_TIMESTAMP
+	sql := `CREATE TABLE test (
+		` + "`updated_at`" + ` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	);`
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+
+	// Debug: Print actual columns found
+	t.Logf("Found %d columns:", len(createTable.Columns))
+	for i, col := range createTable.Columns {
+		t.Logf("  %d: %s %s", i, col.Name, col.Type)
+	}
+
+	c.Assert(len(createTable.Columns), qt.Equals, 1)
+}
+
+func TestParser_MariaDBFirst5Columns(t *testing.T) {
+	c := qt.New(t)
+
+	// Test the first 5 columns from the comprehensive DDL
+	sql := `CREATE TABLE ` + "`full_demo`" + ` (
+		-- Auto-increment with unsigned integer
+		` + "`id`" + ` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+
+		-- Character types
+		` + "`username`" + ` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+		` + "`bio`" + ` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+
+		-- Numeric with defaults and constraints
+		` + "`balance`" + ` DECIMAL(10,2) NOT NULL DEFAULT 0.00 CHECK (` + "`balance`" + ` >= 0),
+		` + "`score`" + ` DOUBLE ZEROFILL DEFAULT 0000.00
+	);`
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+
+	// Debug: Print actual columns found
+	t.Logf("Found %d columns:", len(createTable.Columns))
+	for i, col := range createTable.Columns {
+		t.Logf("  %d: %s %s", i, col.Name, col.Type)
+	}
+	t.Logf("Found %d constraints:", len(createTable.Constraints))
+	for i, constraint := range createTable.Constraints {
+		t.Logf("  %d: %s %v", i, constraint.Type, constraint.Columns)
+	}
+
+	c.Assert(len(createTable.Columns), qt.Equals, 5)
+}
+
+func TestParser_MariaDBFirst7Columns(t *testing.T) {
+	c := qt.New(t)
+
+	// Test the first 7 columns including the timestamp columns
+	sql := `CREATE TABLE ` + "`full_demo`" + ` (
+		` + "`id`" + ` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		` + "`username`" + ` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+		` + "`bio`" + ` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+		` + "`balance`" + ` DECIMAL(10,2) NOT NULL DEFAULT 0.00 CHECK (` + "`balance`" + ` >= 0),
+		` + "`score`" + ` DOUBLE ZEROFILL DEFAULT 0000.00,
+
+		-- Date and time
+		` + "`created_at`" + ` DATETIME DEFAULT CURRENT_TIMESTAMP,
+		` + "`updated_at`" + ` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	);`
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+
+	// Debug: Print actual columns found
+	t.Logf("Found %d columns:", len(createTable.Columns))
+	for i, col := range createTable.Columns {
+		t.Logf("  %d: %s %s", i, col.Name, col.Type)
+	}
+
+	c.Assert(len(createTable.Columns), qt.Equals, 7)
+}
+
+func TestParser_MariaDBFirst10Columns(t *testing.T) {
+	c := qt.New(t)
+
+	// Test the first 10 columns including BOOLEAN, ENUM, and SET
+	sql := `CREATE TABLE ` + "`full_demo`" + ` (
+		` + "`id`" + ` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		` + "`username`" + ` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+		` + "`bio`" + ` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+		` + "`balance`" + ` DECIMAL(10,2) NOT NULL DEFAULT 0.00 CHECK (` + "`balance`" + ` >= 0),
+		` + "`score`" + ` DOUBLE ZEROFILL DEFAULT 0000.00,
+		` + "`created_at`" + ` DATETIME DEFAULT CURRENT_TIMESTAMP,
+		` + "`updated_at`" + ` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+		-- Boolean type
+		` + "`is_active`" + ` BOOLEAN NOT NULL DEFAULT TRUE,
+
+		-- Enum and set
+		` + "`status`" + ` ENUM('new', 'active', 'archived') DEFAULT 'new',
+		` + "`roles`" + ` SET('admin', 'editor', 'user') DEFAULT 'user'
+	);`
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+
+	// Debug: Print actual columns found
+	t.Logf("Found %d columns:", len(createTable.Columns))
+	for i, col := range createTable.Columns {
+		t.Logf("  %d: %s %s", i, col.Name, col.Type)
+	}
+
+	c.Assert(len(createTable.Columns), qt.Equals, 10)
 }
 
 func TestParser_ErrorHandling(t *testing.T) {

@@ -4,6 +4,7 @@ package parser
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/core/lexer"
@@ -15,9 +16,11 @@ import (
 // representation of SQL DDL statements. It supports CREATE TABLE, ALTER TABLE, CREATE INDEX,
 // and other DDL operations.
 type Parser struct {
-	lexer    *lexer.Lexer
-	current  lexer.Token
-	previous lexer.Token
+	lexer     *lexer.Lexer
+	current   lexer.Token
+	previous  lexer.Token
+	startTime time.Time
+	timeout   time.Duration
 }
 
 // NewParser creates a new parser with the given SQL input.
@@ -30,7 +33,9 @@ type Parser struct {
 func NewParser(input string) *Parser {
 	l := lexer.NewLexer(input)
 	p := &Parser{
-		lexer: l,
+		lexer:     l,
+		startTime: time.Now(),
+		timeout:   30 * time.Second, // 30 second timeout to prevent infinite loops
 	}
 	p.advance() // Load the first token
 	return p
@@ -49,6 +54,11 @@ func (p *Parser) Parse() (*ast.StatementList, error) {
 	}
 
 	for !p.isAtEnd() {
+		// Check for timeout to prevent infinite loops
+		if err := p.checkTimeout(); err != nil {
+			return nil, err
+		}
+
 		// Skip whitespace and comments
 		if p.current.Type == lexer.TokenWhitespace || p.current.Type == lexer.TokenComment {
 			p.advance()
@@ -144,6 +154,14 @@ func (p *Parser) isAtEnd() bool {
 	return p.current.Type == lexer.TokenEOF
 }
 
+// checkTimeout checks if parsing has exceeded the timeout limit.
+func (p *Parser) checkTimeout() error {
+	if time.Since(p.startTime) > p.timeout {
+		return fmt.Errorf("parsing timeout exceeded (%v) - possible infinite loop at position %d", p.timeout, p.current.Start)
+	}
+	return nil
+}
+
 // expect consumes a token of the expected type and value, returning an error if it doesn't match.
 func (p *Parser) expect(tokenType lexer.TokenType, value string) error {
 	p.skipWhitespace()
@@ -230,6 +248,11 @@ func (p *Parser) parseCreateTable() (*ast.CreateTableNode, error) {
 
 	// Parse column definitions and constraints
 	for {
+		// Check for timeout to prevent infinite loops
+		if err := p.checkTimeout(); err != nil {
+			return nil, err
+		}
+
 		p.skipWhitespace()
 
 		// Check for closing parenthesis
@@ -286,11 +309,11 @@ func (p *Parser) parseCreateTable() (*ast.CreateTableNode, error) {
 func (p *Parser) parseTableElement(table *ast.CreateTableNode) error {
 	p.skipWhitespace()
 
-	// Check if this is a constraint (starts with CONSTRAINT, PRIMARY, UNIQUE, FOREIGN, CHECK)
+	// Check if this is a constraint (starts with CONSTRAINT, PRIMARY, UNIQUE, FOREIGN, CHECK, SPATIAL, INDEX, KEY)
 	if p.current.Type == lexer.TokenIdentifier {
 		keyword := strings.ToUpper(p.current.Value)
 		switch keyword {
-		case "CONSTRAINT", "PRIMARY", "UNIQUE", "FOREIGN", "CHECK":
+		case "CONSTRAINT", "PRIMARY", "UNIQUE", "FOREIGN", "CHECK", "SPATIAL", "INDEX", "KEY":
 			constraint, err := p.parseTableConstraint()
 			if err != nil {
 				return err
@@ -331,6 +354,11 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 
 	// Parse column constraints and attributes
 	for {
+		// Check for timeout to prevent infinite loops
+		if err := p.checkTimeout(); err != nil {
+			return nil, err
+		}
+
 		p.skipWhitespace()
 
 		if p.current.Type != lexer.TokenIdentifier {
@@ -401,6 +429,45 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 			}
 			column.ForeignKey = fkRef
 
+		case "AS":
+			// Handle MySQL/MariaDB virtual columns (AS (expression) STORED)
+			p.advance()
+			p.skipWhitespace()
+
+			// Parse the generation expression
+			if err := p.expect(lexer.TokenOperator, "("); err != nil {
+				return nil, fmt.Errorf("expected '(' for generated expression: %w", err)
+			}
+
+			// Collect the expression until closing parenthesis
+			var expr strings.Builder
+			parenCount := 1
+			for parenCount > 0 && !p.isAtEnd() {
+				if p.current.Type == lexer.TokenOperator {
+					if p.current.Value == "(" {
+						parenCount++
+					} else if p.current.Value == ")" {
+						parenCount--
+					}
+				}
+				if parenCount > 0 {
+					expr.WriteString(p.current.Value)
+				}
+				p.advance()
+			}
+
+			// Parse STORED/VIRTUAL keyword
+			p.skipWhitespace()
+			if p.current.Type == lexer.TokenIdentifier {
+				storageType := strings.ToUpper(p.current.Value)
+				if storageType == "STORED" || storageType == "VIRTUAL" {
+					p.advance()
+				}
+			}
+
+			// Store as a check constraint for now (in a full implementation, add Generated field to ColumnNode)
+			column.SetCheck("AS (" + expr.String() + ") STORED")
+
 		case "GENERATED":
 			// Handle PostgreSQL GENERATED columns
 			p.advance()
@@ -445,8 +512,22 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 			// Store as a check constraint for now (in a full implementation, add Generated field to ColumnNode)
 			column.SetCheck("GENERATED ALWAYS AS (" + expr.String() + ") STORED")
 
+		case "CHARACTER":
+			// Handle MySQL/MariaDB CHARACTER SET
+			p.advance()
+			p.skipWhitespace()
+			if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "SET" {
+				p.advance()
+				p.skipWhitespace()
+				if p.current.Type == lexer.TokenIdentifier {
+					// Store charset as comment for now
+					column.SetComment("CHARACTER SET " + p.current.Value)
+					p.advance()
+				}
+			}
+
 		case "COLLATE":
-			// Handle PostgreSQL COLLATE
+			// Handle PostgreSQL/MySQL COLLATE
 			p.advance()
 			p.skipWhitespace()
 
@@ -465,6 +546,30 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 
 			// Store as comment for now (in a full implementation, add Collation field to ColumnNode)
 			column.SetComment("COLLATE " + collation)
+
+		case "ON":
+			// Handle MySQL/MariaDB ON UPDATE syntax
+			p.advance()
+			p.skipWhitespace()
+			if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "UPDATE" {
+				p.advance()
+				p.skipWhitespace()
+				// Parse the update expression (usually CURRENT_TIMESTAMP)
+				if p.current.Type == lexer.TokenIdentifier {
+					updateExpr := p.current.Value
+					p.advance()
+					// Handle function calls like CURRENT_TIMESTAMP()
+					if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
+						p.advance()
+						if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
+							updateExpr += "()"
+							p.advance()
+						}
+					}
+					// Store as comment for now
+					column.SetComment("ON UPDATE " + updateExpr)
+				}
+			}
 
 		default:
 			// Unknown keyword, stop parsing column attributes
@@ -554,6 +659,22 @@ func (p *Parser) parseColumnType() (string, error) {
 		}
 	}
 
+	// Check for MySQL/MariaDB type modifiers (UNSIGNED, ZEROFILL, etc.)
+	p.skipWhitespace()
+	for p.current.Type == lexer.TokenIdentifier {
+		modifier := strings.ToUpper(p.current.Value)
+		switch modifier {
+		case "UNSIGNED", "SIGNED", "ZEROFILL":
+			typeName += " " + p.current.Value
+			p.advance()
+			p.skipWhitespace()
+		default:
+			// Not a type modifier, stop processing
+			goto arrayCheck
+		}
+	}
+
+arrayCheck:
 	// Check for array notation (PostgreSQL) - must come after type parameters
 	p.skipWhitespace()
 	if p.current.Type == lexer.TokenOperator && p.current.Value == "[" {
@@ -857,6 +978,21 @@ func (p *Parser) parseTableConstraint() (*ast.ConstraintNode, error) {
 
 	case "UNIQUE":
 		p.advance()
+		p.skipWhitespace()
+		// Optional KEY or INDEX keyword
+		if p.current.Type == lexer.TokenIdentifier {
+			keyword := strings.ToUpper(p.current.Value)
+			if keyword == "KEY" || keyword == "INDEX" {
+				p.advance()
+				p.skipWhitespace()
+				// Check for optional constraint name after UNIQUE KEY
+				if p.current.Type == lexer.TokenIdentifier && p.current.Value != "(" {
+					constraint.Name = p.current.Value
+					p.advance()
+					p.skipWhitespace()
+				}
+			}
+		}
 		constraint.Type = ast.UniqueConstraint
 
 	case "FOREIGN":
@@ -870,6 +1006,29 @@ func (p *Parser) parseTableConstraint() (*ast.ConstraintNode, error) {
 	case "CHECK":
 		p.advance()
 		constraint.Type = ast.CheckConstraint
+
+	case "SPATIAL":
+		p.advance()
+		p.skipWhitespace()
+		// Expect INDEX keyword
+		if err := p.expect(lexer.TokenIdentifier, "INDEX"); err != nil {
+			return nil, fmt.Errorf("expected INDEX after SPATIAL: %w", err)
+		}
+		// Treat as a special unique constraint for now
+		constraint.Type = ast.UniqueConstraint
+		constraint.Name = "SPATIAL_INDEX"
+
+	case "INDEX", "KEY":
+		p.advance()
+		p.skipWhitespace()
+		// Check for optional constraint name after INDEX/KEY
+		if p.current.Type == lexer.TokenIdentifier && p.current.Value != "(" {
+			constraint.Name = p.current.Value
+			p.advance()
+			p.skipWhitespace()
+		}
+		// Treat as a unique constraint for now
+		constraint.Type = ast.UniqueConstraint
 
 	default:
 		return nil, fmt.Errorf("unsupported constraint type: %s at position %d", constraintType, p.current.Start)
@@ -940,6 +1099,11 @@ func (p *Parser) parseTableConstraint() (*ast.ConstraintNode, error) {
 // parseTableOptions parses table options like ENGINE, CHARSET, etc.
 func (p *Parser) parseTableOptions(table *ast.CreateTableNode) error {
 	for {
+		// Check for timeout to prevent infinite loops
+		if err := p.checkTimeout(); err != nil {
+			return err
+		}
+
 		p.skipWhitespace()
 
 		if p.current.Type != lexer.TokenIdentifier {
@@ -1013,9 +1177,16 @@ func (p *Parser) parseTableOptions(table *ast.CreateTableNode) error {
 				return fmt.Errorf("expected '=' after AUTO_INCREMENT: %w", err)
 			}
 			p.skipWhitespace()
-			value, err := p.expectIdentifier()
-			if err != nil {
-				return fmt.Errorf("expected auto increment value: %w", err)
+			// Handle numeric values which might be tokenized as operators
+			var value string
+			if p.current.Type == lexer.TokenIdentifier {
+				value = p.current.Value
+				p.advance()
+			} else if p.current.Type == lexer.TokenOperator && isNumeric(p.current.Value) {
+				value = p.current.Value
+				p.advance()
+			} else {
+				return fmt.Errorf("expected auto increment value: got %s at position %d", p.current.Type, p.current.Start)
 			}
 			table.SetOption("AUTO_INCREMENT", value)
 
@@ -1045,6 +1216,19 @@ func (p *Parser) parseTableOptions(table *ast.CreateTableNode) error {
 			if err := p.parsePostgreSQLWithClause(table); err != nil {
 				return err
 			}
+
+		case "ROW_FORMAT":
+			p.advance()
+			p.skipWhitespace()
+			if err := p.expect(lexer.TokenOperator, "="); err != nil {
+				return fmt.Errorf("expected '=' after ROW_FORMAT: %w", err)
+			}
+			p.skipWhitespace()
+			value, err := p.expectIdentifier()
+			if err != nil {
+				return fmt.Errorf("expected row format value: %w", err)
+			}
+			table.SetOption("ROW_FORMAT", value)
 
 		case "TABLESPACE":
 			// Handle PostgreSQL TABLESPACE
