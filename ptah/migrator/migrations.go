@@ -7,8 +7,8 @@ import (
 	"io/fs"
 	"sort"
 
+	"github.com/denisvmedia/inventario/ptah/core/sqlutil"
 	"github.com/denisvmedia/inventario/ptah/executor"
-	"github.com/denisvmedia/inventario/ptah/migrator/sqlsplitter"
 )
 
 //go:embed base/schema.sql
@@ -30,7 +30,7 @@ type MigrationFunc func(context.Context, *executor.DatabaseConnection) error
 // This is needed because MySQL doesn't handle multiple statements in a single ExecuteSQL call.
 // Unlike simple string splitting, this properly handles semicolons within string literals and comments.
 func SplitSQLStatements(sql string) []string {
-	return sqlsplitter.SplitSQLStatements(sqlsplitter.RemoveComments(sql))
+	return sqlutil.SplitSQLStatements(sqlutil.StripComments(sql))
 }
 
 // MigrationFuncFromSQLFilename returns a migration function that reads SQL from a file
@@ -97,7 +97,7 @@ func (m *Migrator) sortMigrations() {
 }
 
 // Initialize creates the migrations table if it doesn't exist
-func (m *Migrator) Initialize(ctx context.Context) error {
+func (m *Migrator) Initialize(_ctx context.Context) error {
 	// Skip if already initialized
 	if m.initialized {
 		return nil

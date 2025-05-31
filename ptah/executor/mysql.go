@@ -9,7 +9,7 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
 	coreparser "github.com/denisvmedia/inventario/ptah/core/parser"
-	"github.com/denisvmedia/inventario/ptah/migrator/sqlsplitter"
+	"github.com/denisvmedia/inventario/ptah/core/sqlutil"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 )
@@ -168,8 +168,8 @@ func (r *MySQLReader) parseTableFromDDL(ddl string) (parsertypes.Table, error) {
 // convertASTToTable converts an AST CreateTableNode to parsertypes.Table
 func (r *MySQLReader) convertASTToTable(node *ast.CreateTableNode) parsertypes.Table {
 	table := parsertypes.Table{
-		Name:    strings.Trim(node.Name, "`"),  // Remove backticks
-		Type:    "BASE TABLE",                  // Default for regular tables
+		Name:    strings.Trim(node.Name, "`"), // Remove backticks
+		Type:    "BASE TABLE",                 // Default for regular tables
 		Comment: "",                           // Will be extracted from options if present
 	}
 
@@ -182,14 +182,14 @@ func (r *MySQLReader) convertASTToTable(node *ast.CreateTableNode) parsertypes.T
 		}
 
 		col := parsertypes.Column{
-			Name:               strings.Trim(astCol.Name, "`"),
-			DataType:           astCol.Type,
-			ColumnType:         astCol.Type, // For MySQL, these are often the same
-			IsNullable:         isNullable,
-			OrdinalPosition:    len(table.Columns) + 1,
-			IsAutoIncrement:    astCol.AutoInc,
-			IsPrimaryKey:       astCol.Primary,
-			IsUnique:           astCol.Unique,
+			Name:            strings.Trim(astCol.Name, "`"),
+			DataType:        astCol.Type,
+			ColumnType:      astCol.Type, // For MySQL, these are often the same
+			IsNullable:      isNullable,
+			OrdinalPosition: len(table.Columns) + 1,
+			IsAutoIncrement: astCol.AutoInc,
+			IsPrimaryKey:    astCol.Primary,
+			IsUnique:        astCol.Unique,
 		}
 
 		// Handle default values
@@ -729,7 +729,7 @@ func (w *MySQLWriter) DropAllTables() error {
 // splitSQLStatements splits a multi-statement SQL string into individual statements using AST-based parsing.
 // Unlike simple string splitting, this properly handles semicolons within string literals and comments.
 func (w *MySQLWriter) splitSQLStatements(sql string) []string {
-	return sqlsplitter.SplitSQLStatements(sql)
+	return sqlutil.SplitSQLStatements(sql)
 }
 
 // isCreateTableStatement checks if a SQL statement is a CREATE TABLE statement

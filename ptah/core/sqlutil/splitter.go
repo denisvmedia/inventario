@@ -1,4 +1,4 @@
-package sqlsplitter
+package sqlutil
 
 import (
 	"strings"
@@ -6,10 +6,10 @@ import (
 	"github.com/denisvmedia/inventario/ptah/core/lexer"
 )
 
-// RemoveComments removes all SQL comments from the input string using lexer-based parsing.
+// StripComments removes all SQL comments from the input string using lexer-based parsing.
 // This properly handles comments within string literals and preserves the structure of the SQL.
 // Both line comments (-- comment) and block comments (/* comment */) are removed.
-func RemoveComments(sql string) string {
+func StripComments(sql string) string {
 	if strings.TrimSpace(sql) == "" {
 		return sql
 	}
@@ -19,7 +19,6 @@ func RemoveComments(sql string) string {
 
 	for {
 		token := lexr.NextToken()
-		// fmt.Println(token.Type, " -> ", token.Value)
 
 		if token.Type == lexer.TokenEOF {
 			break

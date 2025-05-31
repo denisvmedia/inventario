@@ -1,11 +1,11 @@
-package sqlsplitter_test
+package sqlutil_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/migrator/sqlsplitter"
+	"github.com/denisvmedia/inventario/ptah/core/sqlutil"
 )
 
 func TestSplitSQLStatements_HappyPath(t *testing.T) {
@@ -60,7 +60,7 @@ func TestSplitSQLStatements_HappyPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := sqlsplitter.SplitSQLStatements(tt.input)
+			result := sqlutil.SplitSQLStatements(tt.input)
 			c.Assert(result, qt.DeepEquals, tt.expected)
 		})
 	}
@@ -108,7 +108,7 @@ func TestSplitSQLStatements_StringLiterals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := sqlsplitter.SplitSQLStatements(tt.input)
+			result := sqlutil.SplitSQLStatements(tt.input)
 			c.Assert(result, qt.DeepEquals, tt.expected)
 		})
 	}
@@ -151,7 +151,7 @@ func TestSplitSQLStatements_Comments(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := sqlsplitter.SplitSQLStatements(tt.input)
+			result := sqlutil.SplitSQLStatements(tt.input)
 			c.Assert(result, qt.DeepEquals, tt.expected)
 		})
 	}
@@ -212,7 +212,7 @@ func TestSplitSQLStatements_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := sqlsplitter.SplitSQLStatements(tt.input)
+			result := sqlutil.SplitSQLStatements(tt.input)
 			c.Assert(result, qt.DeepEquals, tt.expected)
 		})
 	}
@@ -272,7 +272,7 @@ CREATE TABLE users (
 )`,
 	}
 
-	result := sqlsplitter.SplitSQLStatements(input)
+	result := sqlutil.SplitSQLStatements(input)
 	c.Assert(result, qt.DeepEquals, expected)
 }
 
@@ -337,7 +337,7 @@ func TestRemoveComments_HappyPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := sqlsplitter.RemoveComments(tt.input)
+			result := sqlutil.StripComments(tt.input)
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}
@@ -394,7 +394,7 @@ func TestRemoveComments_StringLiterals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := sqlsplitter.RemoveComments(tt.input)
+			result := sqlutil.StripComments(tt.input)
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}
@@ -476,7 +476,7 @@ func TestRemoveComments_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := sqlsplitter.RemoveComments(tt.input)
+			result := sqlutil.StripComments(tt.input)
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}
@@ -557,7 +557,7 @@ ORDER BY post_count DESC; `,
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := sqlsplitter.RemoveComments(tt.input)
+			result := sqlutil.StripComments(tt.input)
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}
@@ -617,14 +617,14 @@ CREATE TABLE users (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );`
 
-	result := sqlsplitter.RemoveComments(input)
+	result := sqlutil.StripComments(input)
 	c.Assert(result, qt.Equals, expected)
 }
 
 func TestRemoveComments_Integration(t *testing.T) {
 	c := qt.New(t)
 
-	// Test that RemoveComments + SplitSQLStatements works correctly together
+	// Test that StripComments + SplitSQLStatements works correctly together
 	input := `-- First statement
 SELECT * FROM users -- get users
 WHERE active = true; -- only active
@@ -633,7 +633,7 @@ WHERE active = true; -- only active
 INSERT INTO logs (message) VALUES ('Test -- not a comment'); /* Real comment */`
 
 	// First remove comments
-	withoutComments := sqlsplitter.RemoveComments(input)
+	withoutComments := sqlutil.StripComments(input)
 	expected := `
 SELECT * FROM users 
 WHERE active = true; 
@@ -644,7 +644,7 @@ INSERT INTO logs (message) VALUES ('Test -- not a comment'); `
 	c.Assert(withoutComments, qt.Equals, expected)
 
 	// Then split into statements
-	statements := sqlsplitter.SplitSQLStatements(withoutComments)
+	statements := sqlutil.SplitSQLStatements(withoutComments)
 	expectedStatements := []string{
 		"SELECT * FROM users \nWHERE active = true",
 		"INSERT INTO logs (message) VALUES ('Test -- not a comment')",

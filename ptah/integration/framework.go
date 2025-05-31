@@ -207,7 +207,7 @@ func (tr *TestRunner) runSingleTest(ctx context.Context, scenario TestScenario, 
 }
 
 // cleanDatabase drops all tables and resets the database to a clean state
-func (tr *TestRunner) cleanDatabase(ctx context.Context, conn *executor.DatabaseConnection) error {
+func (tr *TestRunner) cleanDatabase(_ctx context.Context, conn *executor.DatabaseConnection) error {
 	// Drop all tables to ensure clean state
 	return conn.Writer().DropAllTables()
 }
@@ -313,7 +313,7 @@ func (vem *VersionedEntityManager) GenerateSchemaFromEntities() (*parsertypes.Pa
 }
 
 // GenerateMigrationSQL compares current entities with database and generates migration SQL
-func (vem *VersionedEntityManager) GenerateMigrationSQL(ctx context.Context, conn *executor.DatabaseConnection) ([]string, error) {
+func (vem *VersionedEntityManager) GenerateMigrationSQL(_ctx context.Context, conn *executor.DatabaseConnection) ([]string, error) {
 	// Parse current entities
 	generated, err := vem.GenerateSchemaFromEntities()
 	if err != nil {
@@ -364,10 +364,10 @@ func (vem *VersionedEntityManager) ApplyMigrationFromEntities(ctx context.Contex
 	migration := migrator.CreateMigrationFromSQL(vem.version, description, upSQL, downSQL)
 
 	// Apply the migration
-	migrator := migrator.NewMigrator(conn)
-	migrator.Register(migration)
+	migratr := migrator.NewMigrator(conn)
+	migratr.Register(migration)
 
-	return migrator.MigrateUp(ctx)
+	return migratr.MigrateUp(ctx)
 }
 
 // MigrateToVersion loads entities from a version and applies the migration
