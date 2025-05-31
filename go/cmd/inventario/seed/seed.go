@@ -47,13 +47,13 @@ func seedCommand(_ *cobra.Command, _ []string) error {
 	dryRun := seedFlags[dryRunFlag].GetBool()
 
 	if dryRun {
-		log.WithFields(log.Fields{
-			dbDSNFlag: dsn,
-		}).Info("[DRY RUN] Would seed database")
-		fmt.Println("⚠️  [DRY RUN] Seed dry run mode is not yet fully implemented.")
-		fmt.Println("⚠️  This would seed the database with example data.")
-		fmt.Println("⚠️  The seed data would include sample locations, areas, and commodities.")
-		return nil
+		// log.WithFields(log.Fields{
+		//	dbDSNFlag: dsn,
+		// }).Info("[DRY RUN] Would seed database")
+		// fmt.Println("⚠️  [DRY RUN] Seed dry run mode is not yet fully implemented.")
+		// fmt.Println("⚠️  This would seed the database with example data.")
+		// fmt.Println("⚠️  The seed data would include sample locations, areas, and commodities.")
+		return fmt.Errorf("dry run mode not yet implemented")
 	} else {
 		log.WithFields(log.Fields{
 			dbDSNFlag: dsn,
