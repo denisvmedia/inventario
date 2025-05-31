@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/denisvmedia/inventario/ptah/schema/differ/internal/normalize"
 )
 
 // TestTypeNormalization tests the type comparison logic
@@ -27,7 +29,7 @@ func TestTypeNormalization(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			c := qt.New(t)
-			result := normalizeType(tt.input)
+			result := differtypes.NormalizeType(tt.input)
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}

@@ -5,157 +5,13 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/ptr"
 
 	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
-
-func TestNormalizeType(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "varchar with length",
-			input:    "VARCHAR(255)",
-			expected: "varchar",
-		},
-		{
-			name:     "text type",
-			input:    "TEXT",
-			expected: "text",
-		},
-		{
-			name:     "serial type",
-			input:    "SERIAL",
-			expected: "integer",
-		},
-		{
-			name:     "integer type",
-			input:    "INTEGER",
-			expected: "integer",
-		},
-		{
-			name:     "boolean type",
-			input:    "BOOLEAN",
-			expected: "boolean",
-		},
-		{
-			name:     "timestamp type",
-			input:    "TIMESTAMP",
-			expected: "timestamp",
-		},
-		{
-			name:     "decimal type",
-			input:    "DECIMAL(10,2)",
-			expected: "decimal",
-		},
-		{
-			name:     "numeric type",
-			input:    "NUMERIC(10,2)",
-			expected: "decimal",
-		},
-		{
-			name:     "unknown type",
-			input:    "CUSTOM_TYPE",
-			expected: "custom_type",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := qt.New(t)
-			// We need to test the normalizeType function, but it's not exported
-			// So we'll test it indirectly through the comparison logic
-			// For now, let's create a simple test that we know will work
-			c.Assert(tt.input, qt.Not(qt.Equals), "")
-		})
-	}
-}
-
-func TestSchemaDiff_HasChanges(t *testing.T) {
-	tests := []struct {
-		name     string
-		diff     *differ.SchemaDiff
-		expected bool
-	}{
-		{
-			name:     "no changes",
-			diff:     &differ.SchemaDiff{},
-			expected: false,
-		},
-		{
-			name: "tables added",
-			diff: &differ.SchemaDiff{
-				TablesAdded: []string{"users"},
-			},
-			expected: true,
-		},
-		{
-			name: "tables removed",
-			diff: &differ.SchemaDiff{
-				TablesRemoved: []string{"old_table"},
-			},
-			expected: true,
-		},
-		{
-			name: "tables modified",
-			diff: &differ.SchemaDiff{
-				TablesModified: []differ.TableDiff{
-					{TableName: "users", ColumnsAdded: []string{"email"}},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "enums added",
-			diff: &differ.SchemaDiff{
-				EnumsAdded: []string{"status_enum"},
-			},
-			expected: true,
-		},
-		{
-			name: "enums removed",
-			diff: &differ.SchemaDiff{
-				EnumsRemoved: []string{"old_enum"},
-			},
-			expected: true,
-		},
-		{
-			name: "enums modified",
-			diff: &differ.SchemaDiff{
-				EnumsModified: []differ.EnumDiff{
-					{EnumName: "status", ValuesAdded: []string{"pending"}},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "indexes added",
-			diff: &differ.SchemaDiff{
-				IndexesAdded: []string{"idx_user_email"},
-			},
-			expected: true,
-		},
-		{
-			name: "indexes removed",
-			diff: &differ.SchemaDiff{
-				IndexesRemoved: []string{"old_index"},
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := qt.New(t)
-			result := tt.diff.HasChanges()
-			c.Assert(result, qt.Equals, tt.expected)
-		})
-	}
-}
 
 func TestCompareSchemas_EmptySchemas(t *testing.T) {
 	c := qt.New(t)
@@ -437,8 +293,8 @@ func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 				Name: "users",
 				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
-					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                        // Type and nullable changed
-					{Name: "status", DataType: "VARCHAR", IsNullable: "NO", ColumnDefault: stringPtr("pending")}, // Nullable and default changed
+					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                     // Type and nullable changed
+					{Name: "status", DataType: "VARCHAR", IsNullable: "NO", ColumnDefault: ptr.To("pending")}, // Nullable and default changed
 				},
 			},
 		},
@@ -472,18 +328,13 @@ func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 }
 
 // Helper function to find a column diff by name
-func findColumnDiff(diffs []differ.ColumnDiff, columnName string) *differ.ColumnDiff {
+func findColumnDiff(diffs []differtypes.ColumnDiff, columnName string) *differtypes.ColumnDiff {
 	for _, diff := range diffs {
 		if diff.ColumnName == columnName {
 			return &diff
 		}
 	}
 	return nil
-}
-
-// Helper function to create string pointer
-func stringPtr(s string) *string {
-	return &s
 }
 
 func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
@@ -547,12 +398,12 @@ func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
 func TestGenerateMigrationSQL_PostgreSQL(t *testing.T) {
 	c := qt.New(t)
 
-	diff := &differ.SchemaDiff{
+	diff := &differtypes.SchemaDiff{
 		TablesAdded:   []string{"users"},
 		TablesRemoved: []string{"old_table"},
 		EnumsAdded:    []string{"status_enum"},
 		EnumsRemoved:  []string{"old_enum"},
-		EnumsModified: []differ.EnumDiff{
+		EnumsModified: []differtypes.EnumDiff{
 			{
 				EnumName:      "role_enum",
 				ValuesAdded:   []string{"moderator"},
@@ -569,7 +420,7 @@ func TestGenerateMigrationSQL_PostgreSQL(t *testing.T) {
 		},
 	}
 
-	statements := diff.GenerateMigrationSQL(generated, "postgres")
+	statements := differ.GenerateMigrationSQL(diff, generated, "postgres")
 
 	c.Assert(statements, qt.Not(qt.HasLen), 0)
 
@@ -639,9 +490,9 @@ func TestGenerateMigrationSQL_PostgreSQL(t *testing.T) {
 func TestGenerateMigrationSQL_NonPostgreSQL(t *testing.T) {
 	c := qt.New(t)
 
-	diff := &differ.SchemaDiff{
+	diff := &differtypes.SchemaDiff{
 		EnumsAdded: []string{"status_enum"},
-		EnumsModified: []differ.EnumDiff{
+		EnumsModified: []differtypes.EnumDiff{
 			{
 				EnumName:    "role_enum",
 				ValuesAdded: []string{"moderator"},
@@ -655,7 +506,7 @@ func TestGenerateMigrationSQL_NonPostgreSQL(t *testing.T) {
 		},
 	}
 
-	statements := diff.GenerateMigrationSQL(generated, "mysql")
+	statements := differ.GenerateMigrationSQL(diff, generated, "mysql")
 
 	// For non-PostgreSQL dialects, enum operations should not generate SQL
 	for _, stmt := range statements {
@@ -802,9 +653,9 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 				Name: "users",
 				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
-					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                            // Type and constraints changed
-					{Name: "status", DataType: "user_status", IsNullable: "NO", ColumnDefault: stringPtr("pending")}, // Default changed
-					{Name: "phone", DataType: "VARCHAR", IsNullable: "YES"},                                          // Column to be removed
+					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                         // Type and constraints changed
+					{Name: "status", DataType: "user_status", IsNullable: "NO", ColumnDefault: ptr.To("pending")}, // Default changed
+					{Name: "phone", DataType: "VARCHAR", IsNullable: "YES"},                                       // Column to be removed
 				},
 			},
 			{
@@ -866,7 +717,7 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 	c.Assert(diff.IndexesRemoved, qt.DeepEquals, []string{"old_idx_user_phone"})
 }
 
-// TestMapTypeToSQL_EnumHandling tests the fix for the ENUM('') bug
+// TestMapTypeToSQL_EnumHandling tests the fix for the ENUM(”) bug
 // This test verifies that fields with empty enum values are not treated as enums
 func TestMapTypeToSQL_EnumHandling(t *testing.T) {
 
@@ -963,7 +814,7 @@ func TestMapTypeToSQL_EnumHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			// We need to test the mapTypeToSQL function through the public API
+			// We need to test the MapTypeToSQL function through the public API
 			// Create a simple schema diff and generate SQL to test the function indirectly
 			generated := &parsertypes.PackageParseResult{
 				Tables: []types.TableDirective{
@@ -989,7 +840,7 @@ func TestMapTypeToSQL_EnumHandling(t *testing.T) {
 			}
 
 			diff := differ.CompareSchemas(generated, database)
-			statements := diff.GenerateMigrationSQL(generated, tt.dialect)
+			statements := differ.GenerateMigrationSQL(diff, generated, tt.dialect)
 
 			// Find the CREATE TABLE statement
 			var createTableSQL string

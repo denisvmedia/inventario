@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 )
 
 // FormatSchemaDiff formats a schema difference for display
-func FormatSchemaDiff(diff *differ.SchemaDiff) string {
+func FormatSchemaDiff(diff *types.SchemaDiff) string {
 	var sb strings.Builder
 
 	if !diff.HasChanges() {

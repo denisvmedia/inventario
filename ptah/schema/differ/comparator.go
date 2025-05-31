@@ -1,45 +1,176 @@
+// Package differ provides schema comparison and migration SQL generation functionality.
+//
+// This package is the core of the Ptah migration system's schema evolution capabilities.
+// It compares generated schema definitions (from Go struct annotations) with existing
+// database schemas to identify differences and generate appropriate migration SQL statements.
+//
+// # Core Functionality
+//
+// The package provides comprehensive schema comparison across multiple database elements:
+//   - Tables: Creation, removal, and structural modifications
+//   - Columns: Addition, removal, and property changes (type, constraints, defaults)
+//   - Enums: Creation, removal, and value modifications
+//   - Indexes: Addition and removal of database indexes
+//
+// # Use Cases
+//
+// 1. **Migration Generation**: Automatically generate SQL migration scripts from schema changes
+// 2. **Schema Validation**: Verify that database schema matches application expectations
+// 3. **Development Workflow**: Detect schema drift during development cycles
+// 4. **Production Deployment**: Generate safe migration scripts for production environments
+// 5. **Multi-Database Support**: Handle schema differences across PostgreSQL, MySQL, and MariaDB
+//
+// # Workflow
+//
+// The typical workflow involves:
+//  1. Parse Go struct annotations to generate target schema
+//  2. Introspect existing database schema using executor reader.ReadSchema()
+//  3. Compare schemas using CompareSchemas()
+//  4. Generate migration SQL using GenerateMigrationSQL()
+//  5. Review and apply migrations
+//
+// # Example Usage
+//
+// Basic schema comparison:
+//
+//	// Parse target schema from Go structs
+//	generated := parser.ParsePackage("./models")
+//
+//	// Introspect current database schema using executor
+//	reader := executor.NewPostgreSQLReader(db, "public")
+//	database, err := reader.ReadSchema()
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	// Compare schemas
+//	diff := differ.CompareSchemas(generated, database)
+//
+//	// Check for changes
+//	if diff.HasChanges() {
+//		// Generate migration SQL
+//		statements := GenerateMigrationSQL(diff, generated, "postgres")
+//		for _, stmt := range statements {
+//			fmt.Println(stmt)
+//		}
+//	}
+//
+// MySQL/MariaDB schema comparison:
+//
+//	// Parse target schema from Go structs
+//	generated := parser.ParsePackage("./models")
+//
+//	// Introspect current database schema using MySQL executor
+//	reader := executor.NewMySQLReader(db, "")
+//	database, err := reader.ReadSchema()
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	// Compare schemas
+//	diff := differ.CompareSchemas(generated, database)
+//
+//	// Generate MySQL-specific migration SQL
+//	if diff.HasChanges() {
+//		statements := GenerateMigrationSQL(diff, generated, "mysql")
+//		for _, stmt := range statements {
+//			fmt.Println(stmt)
+//		}
+//	}
+//
+// # Safety Features
+//
+// The package includes several safety mechanisms:
+//   - Destructive operations (DROP TABLE, DROP COLUMN) are commented out by default
+//   - Warnings are generated for operations that may cause data loss
+//   - Enum value removal limitations are clearly documented
+//   - Auto-increment/SERIAL column handling prevents false positives
+//
+// # Multi-Database Support
+//
+// The package supports multiple SQL dialects with appropriate type mapping:
+//   - PostgreSQL: Native ENUM types, SERIAL columns, JSONB support
+//   - MySQL/MariaDB: Inline ENUM syntax, AUTO_INCREMENT, JSON columns
+//   - Extensible architecture for additional database support
 package differ
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/internal/compare"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/transform"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
-// SchemaDiff represents differences between two schemas
-type SchemaDiff struct {
-	TablesAdded    []string    `json:"tables_added"`
-	TablesRemoved  []string    `json:"tables_removed"`
-	TablesModified []TableDiff `json:"tables_modified"`
-	EnumsAdded     []string    `json:"enums_added"`
-	EnumsRemoved   []string    `json:"enums_removed"`
-	EnumsModified  []EnumDiff  `json:"enums_modified"`
-	IndexesAdded   []string    `json:"indexes_added"`
-	IndexesRemoved []string    `json:"indexes_removed"`
-}
-
-// HasChanges returns true if the diff contains any changes
-func (d *SchemaDiff) HasChanges() bool {
-	return len(d.TablesAdded) > 0 ||
-		len(d.TablesRemoved) > 0 ||
-		len(d.TablesModified) > 0 ||
-		len(d.EnumsAdded) > 0 ||
-		len(d.EnumsRemoved) > 0 ||
-		len(d.EnumsModified) > 0 ||
-		len(d.IndexesAdded) > 0 ||
-		len(d.IndexesRemoved) > 0
-}
-
-// GenerateMigrationSQL generates SQL statements to apply the schema differences
-func (d *SchemaDiff) GenerateMigrationSQL(generated *parsertypes.PackageParseResult, dialect string) []string {
+// GenerateMigrationSQL generates SQL statements to apply the schema differences for a specific database dialect.
+//
+// This method transforms the schema differences captured in the SchemaDiff into executable
+// SQL statements that can be applied to bring the database schema in line with the target
+// schema. The generated SQL follows database-specific syntax and best practices.
+//
+// # Parameters
+//
+//   - generated: The target schema parsed from Go struct annotations
+//   - dialect: Target database dialect ("postgres", "mysql", "mariadb")
+//
+// # Migration Order
+//
+// The SQL statements are generated in a specific order to avoid dependency conflicts:
+//  1. Create new enum types (required before tables that use them)
+//  2. Modify existing enum types (add new values)
+//  3. Create new tables
+//  4. Modify existing tables (add/modify/remove columns)
+//  5. Add new indexes
+//  6. Remove indexes (safe operations)
+//  7. Remove tables (dangerous - commented out by default)
+//  8. Remove enum types (dangerous - commented out by default)
+//
+// # Safety Features
+//
+// The method includes several safety mechanisms:
+//   - Destructive operations are commented out with warnings
+//   - Enum value removal limitations are documented
+//   - Data loss warnings are included for dangerous operations
+//   - TODO comments are added for operations requiring manual review
+//
+// # Database-Specific Handling
+//
+//   - **PostgreSQL**: Native ENUM types, SERIAL columns, proper type handling
+//   - **MySQL/MariaDB**: Inline ENUM syntax, AUTO_INCREMENT, type mapping
+//   - **Cross-platform**: Intelligent type normalization and conversion
+//
+// # Example Usage
+//
+//	diff := CompareSchemas(generated, database)
+//	statements := GenerateMigrationSQL(diff, generated, "postgres")
+//
+//	// Review generated statements
+//	for i, stmt := range statements {
+//		fmt.Printf("-- Statement %d:\n%s\n\n", i+1, stmt)
+//	}
+//
+//	// Apply non-commented statements
+//	for _, stmt := range statements {
+//		if !strings.HasPrefix(stmt, "--") {
+//			_, err := db.Exec(stmt)
+//			if err != nil {
+//				log.Fatalf("Migration failed: %v", err)
+//			}
+//		}
+//	}
+//
+// # Return Value
+//
+// Returns a slice of SQL statements as strings. Each statement is a complete SQL
+// command that can be executed independently. Comments and warnings are included
+// as SQL comments (lines starting with "--").
+func GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult, dialect string) []string {
 	var statements []string
 
 	// 1. Add new enums first
-	for _, enumName := range d.EnumsAdded {
+	for _, enumName := range diff.EnumsAdded {
 		for _, enum := range generated.Enums {
 			if enum.Name == enumName {
 				if dialect == "postgres" {
@@ -56,7 +187,7 @@ func (d *SchemaDiff) GenerateMigrationSQL(generated *parsertypes.PackageParseRes
 	}
 
 	// 2. Modify existing enums (add values only - PostgreSQL doesn't support removing enum values easily)
-	for _, enumDiff := range d.EnumsModified {
+	for _, enumDiff := range diff.EnumsModified {
 		if dialect == "postgres" {
 			for _, value := range enumDiff.ValuesAdded {
 				sql := fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s';", enumDiff.EnumName, value)
@@ -70,12 +201,12 @@ func (d *SchemaDiff) GenerateMigrationSQL(generated *parsertypes.PackageParseRes
 	}
 
 	// 3. Add new tables
-	for _, tableName := range d.TablesAdded {
+	for _, tableName := range diff.TablesAdded {
 		// Find the table in generated schema and create it
 		for _, table := range generated.Tables {
 			if table.Name == tableName {
 				// Generate basic CREATE TABLE SQL
-				createSQL := generateBasicCreateTableSQL(table, generated.Fields, dialect)
+				createSQL := GenerateBasicCreateTableSQL(table, generated.Fields, dialect)
 				statements = append(statements, createSQL)
 				break
 			}
@@ -83,7 +214,7 @@ func (d *SchemaDiff) GenerateMigrationSQL(generated *parsertypes.PackageParseRes
 	}
 
 	// 4. Modify existing tables
-	for _, tableDiff := range d.TablesModified {
+	for _, tableDiff := range diff.TablesModified {
 		statements = append(statements, fmt.Sprintf("-- Modify table: %s", tableDiff.TableName))
 
 		// Add new columns
@@ -105,403 +236,183 @@ func (d *SchemaDiff) GenerateMigrationSQL(generated *parsertypes.PackageParseRes
 	}
 
 	// 5. Add new indexes
-	for _, indexName := range d.IndexesAdded {
+	for _, indexName := range diff.IndexesAdded {
 		statements = append(statements, fmt.Sprintf("-- TODO: CREATE INDEX %s ON ...;", indexName))
 	}
 
 	// 6. Remove indexes
-	for _, indexName := range d.IndexesRemoved {
+	for _, indexName := range diff.IndexesRemoved {
 		statements = append(statements, fmt.Sprintf("DROP INDEX IF EXISTS %s;", indexName))
 	}
 
 	// 7. Remove tables (dangerous!)
-	for _, tableName := range d.TablesRemoved {
+	for _, tableName := range diff.TablesRemoved {
 		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TABLE %s; -- This will delete all data!", tableName))
 	}
 
 	// 8. Remove enums (dangerous!)
-	for _, enumName := range d.EnumsRemoved {
+	for _, enumName := range diff.EnumsRemoved {
 		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TYPE %s; -- Make sure no tables use this enum!", enumName))
 	}
 
 	return statements
 }
 
-// TableDiff represents differences in a table
-type TableDiff struct {
-	TableName       string       `json:"table_name"`
-	ColumnsAdded    []string     `json:"columns_added"`
-	ColumnsRemoved  []string     `json:"columns_removed"`
-	ColumnsModified []ColumnDiff `json:"columns_modified"`
-}
+// CompareSchemas compares a generated schema with a database schema and returns comprehensive differences.
+//
+// This is the main entry point for schema comparison in the Ptah migration system.
+// It performs a comprehensive analysis of differences between the target schema
+// (generated from Go struct annotations) and the current database schema.
+//
+// # Parameters
+//
+//   - generated: Target schema parsed from Go struct annotations using the parser package
+//   - database: Current database schema obtained through executor reader.ReadSchema()
+//
+// # Comparison Process
+//
+// The function performs comparison in three main areas:
+//  1. **Tables and Columns**: Structural differences in table definitions
+//  2. **Enum Types**: Changes to enum type definitions and values
+//  3. **Indexes**: Differences in database index definitions
+//
+// # Embedded Field Handling
+//
+// The comparison process properly handles embedded fields by processing them
+// through the transform package, ensuring that generated fields from embedded
+// structs are correctly compared against database columns.
+//
+// # Example Usage
+//
+//	// Parse target schema from Go structs
+//	generated, err := parser.ParsePackage("./models")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	// Introspect current database schema using executor
+//	reader := executor.NewPostgreSQLReader(db, "public")
+//	database, err := reader.ReadSchema()
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	// Compare schemas
+//	diff := CompareSchemas(generated, database)
+//
+//	// Analyze results
+//	if diff.HasChanges() {
+//		fmt.Printf("Found %d new tables\n", len(diff.TablesAdded))
+//		fmt.Printf("Found %d modified tables\n", len(diff.TablesModified))
+//		fmt.Printf("Found %d new enums\n", len(diff.EnumsAdded))
+//	}
+//
+// # Return Value
+//
+// Returns a *SchemaDiff containing all identified differences between the schemas.
+// The diff can be used to generate migration SQL or for analysis purposes.
+//
+// # Thread Safety
+//
+// This function is read-only and thread-safe. It does not modify the input
+// parameters and can be called concurrently from multiple goroutines.
+func CompareSchemas(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema) *differtypes.SchemaDiff {
+	diff := &differtypes.SchemaDiff{}
 
-// ColumnDiff represents differences in a column
-type ColumnDiff struct {
-	ColumnName string            `json:"column_name"`
-	Changes    map[string]string `json:"changes"` // field -> old_value -> new_value
-}
+	// Compare tables and their column structures
+	compare.CompareTablesAndColumns(generated, database, diff)
 
-// EnumDiff represents differences in an enum
-type EnumDiff struct {
-	EnumName      string   `json:"enum_name"`
-	ValuesAdded   []string `json:"values_added"`
-	ValuesRemoved []string `json:"values_removed"`
-}
+	// Compare enum type definitions and values
+	compare.CompareEnums(generated, database, diff)
 
-// CompareSchemas compares a generated schema with a database schema
-func CompareSchemas(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema) *SchemaDiff {
-	diff := &SchemaDiff{}
-
-	// Compare tables
-	compareTablesAndColumns(generated, database, diff)
-
-	// Compare enums
-	compareEnums(generated, database, diff)
-
-	// Compare indexes
-	compareIndexes(generated, database, diff)
+	// Compare database index definitions
+	compare.CompareIndexes(generated, database, diff)
 
 	return diff
 }
 
-// compareTablesAndColumns compares tables and their columns
-func compareTablesAndColumns(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *SchemaDiff) {
-	// Create maps for quick lookup
-	genTables := make(map[string]types.TableDirective)
-	for _, table := range generated.Tables {
-		genTables[table.Name] = table
-	}
-
-	dbTables := make(map[string]parsertypes.Table)
-	for _, table := range database.Tables {
-		dbTables[table.Name] = table
-	}
-
-	// Find added and removed tables
-	for tableName := range genTables {
-		if _, exists := dbTables[tableName]; !exists {
-			diff.TablesAdded = append(diff.TablesAdded, tableName)
-		}
-	}
-
-	for tableName := range dbTables {
-		if _, exists := genTables[tableName]; !exists {
-			diff.TablesRemoved = append(diff.TablesRemoved, tableName)
-		}
-	}
-
-	// Find modified tables (compare columns)
-	for tableName, genTable := range genTables {
-		if dbTable, exists := dbTables[tableName]; exists {
-			tableDiff := compareTableColumns(genTable, dbTable, generated)
-			if len(tableDiff.ColumnsAdded) > 0 || len(tableDiff.ColumnsRemoved) > 0 || len(tableDiff.ColumnsModified) > 0 {
-				diff.TablesModified = append(diff.TablesModified, tableDiff)
-			}
-		}
-	}
-
-	// Sort for consistent output
-	sort.Strings(diff.TablesAdded)
-	sort.Strings(diff.TablesRemoved)
-}
-
-// compareTableColumns compares columns within a table
-func compareTableColumns(genTable types.TableDirective, dbTable parsertypes.Table, generated *parsertypes.PackageParseResult) TableDiff {
-	tableDiff := TableDiff{TableName: genTable.Name}
-
-	// Process embedded fields to get the complete field list (same as generators do)
-	embeddedGeneratedFields := transform.ProcessEmbeddedFields(generated.EmbeddedFields, generated.Fields, genTable.StructName)
-
-	// Combine original fields with embedded-generated fields
-	allFields := append(generated.Fields, embeddedGeneratedFields...)
-
-	// Create maps for quick lookup
-	genColumns := make(map[string]types.SchemaField)
-	for _, field := range allFields {
-		if field.StructName == genTable.StructName {
-			genColumns[field.Name] = field
-		}
-	}
-
-	dbColumns := make(map[string]parsertypes.Column)
-	for _, col := range dbTable.Columns {
-		dbColumns[col.Name] = col
-	}
-
-	// Find added and removed columns
-	for colName := range genColumns {
-		if _, exists := dbColumns[colName]; !exists {
-			tableDiff.ColumnsAdded = append(tableDiff.ColumnsAdded, colName)
-		}
-	}
-
-	for colName := range dbColumns {
-		if _, exists := genColumns[colName]; !exists {
-			tableDiff.ColumnsRemoved = append(tableDiff.ColumnsRemoved, colName)
-		}
-	}
-
-	// Find modified columns
-	for colName, genCol := range genColumns {
-		if dbCol, exists := dbColumns[colName]; exists {
-			colDiff := compareColumns(genCol, dbCol)
-			if len(colDiff.Changes) > 0 {
-				tableDiff.ColumnsModified = append(tableDiff.ColumnsModified, colDiff)
-			}
-		}
-	}
-
-	// Sort for consistent output
-	sort.Strings(tableDiff.ColumnsAdded)
-	sort.Strings(tableDiff.ColumnsRemoved)
-
-	return tableDiff
-}
-
-// compareColumns compares individual column properties
-func compareColumns(genCol types.SchemaField, dbCol parsertypes.Column) ColumnDiff {
-	colDiff := ColumnDiff{
-		ColumnName: genCol.Name,
-		Changes:    make(map[string]string),
-	}
-
-	// Compare data types (simplified)
-	genType := normalizeType(genCol.Type)
-	dbType := normalizeType(dbCol.DataType)
-	if dbCol.UDTName != "" {
-		dbType = normalizeType(dbCol.UDTName)
-	}
-
-	if genType != dbType {
-		colDiff.Changes["type"] = fmt.Sprintf("%s -> %s", dbType, genType)
-	}
-
-	// Compare nullable (primary keys are always NOT NULL regardless of the field definition)
-	genNullable := genCol.Nullable
-	if genCol.Primary {
-		genNullable = false // Primary keys are always NOT NULL
-	}
-	dbNullable := dbCol.IsNullable == "YES"
-	if genNullable != dbNullable {
-		colDiff.Changes["nullable"] = fmt.Sprintf("%t -> %t", dbNullable, genNullable)
-	}
-
-	// Compare primary key
-	genPrimary := genCol.Primary
-	dbPrimary := dbCol.IsPrimaryKey
-	if genPrimary != dbPrimary {
-		colDiff.Changes["primary_key"] = fmt.Sprintf("%t -> %t", dbPrimary, genPrimary)
-	}
-
-	// Compare unique
-	genUnique := genCol.Unique
-	dbUnique := dbCol.IsUnique
-	if genUnique != dbUnique {
-		colDiff.Changes["unique"] = fmt.Sprintf("%t -> %t", dbUnique, genUnique)
-	}
-
-	// Compare default values (simplified)
-	genDefault := genCol.Default
-	dbDefault := ""
-	if dbCol.ColumnDefault != nil {
-		dbDefault = *dbCol.ColumnDefault
-	}
-
-	// For auto-increment/SERIAL columns, ignore default value differences
-	// because the database will show the sequence default but the entity expects empty
-	isAutoIncrement := dbCol.IsAutoIncrement || strings.Contains(strings.ToUpper(genCol.Type), "SERIAL")
-	if !isAutoIncrement {
-		// Normalize default values for comparison (especially for boolean types)
-		normalizedGenDefault := normalizeDefaultValue(genDefault, genType)
-		normalizedDbDefault := normalizeDefaultValue(dbDefault, dbType)
-
-		if normalizedGenDefault != normalizedDbDefault {
-			colDiff.Changes["default"] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
-		}
-	}
-
-	return colDiff
-}
-
-// compareEnums compares enum types
-func compareEnums(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *SchemaDiff) {
-	// Create maps for quick lookup
-	genEnums := make(map[string]types.GlobalEnum)
-	for _, enum := range generated.Enums {
-		genEnums[enum.Name] = enum
-	}
-
-	dbEnums := make(map[string]parsertypes.Enum)
-	for _, enum := range database.Enums {
-		dbEnums[enum.Name] = enum
-	}
-
-	// Find added and removed enums
-	for enumName := range genEnums {
-		if _, exists := dbEnums[enumName]; !exists {
-			diff.EnumsAdded = append(diff.EnumsAdded, enumName)
-		}
-	}
-
-	for enumName := range dbEnums {
-		if _, exists := genEnums[enumName]; !exists {
-			diff.EnumsRemoved = append(diff.EnumsRemoved, enumName)
-		}
-	}
-
-	// Find modified enums
-	for enumName, genEnum := range genEnums {
-		if dbEnum, exists := dbEnums[enumName]; exists {
-			enumDiff := compareEnumValues(genEnum, dbEnum)
-			if len(enumDiff.ValuesAdded) > 0 || len(enumDiff.ValuesRemoved) > 0 {
-				diff.EnumsModified = append(diff.EnumsModified, enumDiff)
-			}
-		}
-	}
-
-	// Sort for consistent output
-	sort.Strings(diff.EnumsAdded)
-	sort.Strings(diff.EnumsRemoved)
-}
-
-// compareEnumValues compares enum values
-func compareEnumValues(genEnum types.GlobalEnum, dbEnum parsertypes.Enum) EnumDiff {
-	enumDiff := EnumDiff{EnumName: genEnum.Name}
-
-	// Create sets for comparison
-	genValues := make(map[string]bool)
-	for _, value := range genEnum.Values {
-		genValues[value] = true
-	}
-
-	dbValues := make(map[string]bool)
-	for _, value := range dbEnum.Values {
-		dbValues[value] = true
-	}
-
-	// Find added and removed values
-	for value := range genValues {
-		if !dbValues[value] {
-			enumDiff.ValuesAdded = append(enumDiff.ValuesAdded, value)
-		}
-	}
-
-	for value := range dbValues {
-		if !genValues[value] {
-			enumDiff.ValuesRemoved = append(enumDiff.ValuesRemoved, value)
-		}
-	}
-
-	// Sort for consistent output
-	sort.Strings(enumDiff.ValuesAdded)
-	sort.Strings(enumDiff.ValuesRemoved)
-
-	return enumDiff
-}
-
-// compareIndexes compares indexes (simplified)
-func compareIndexes(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *SchemaDiff) {
-	// Create sets for comparison
-	genIndexes := make(map[string]bool)
-	for _, index := range generated.Indexes {
-		genIndexes[index.Name] = true
-	}
-
-	dbIndexes := make(map[string]bool)
-	for _, index := range database.Indexes {
-		// Skip primary key indexes as they're handled with tables
-		// Skip unique indexes as they're automatically created by UNIQUE constraints
-		if !index.IsPrimary && !index.IsUnique {
-			dbIndexes[index.Name] = true
-		}
-	}
-
-	// Find added and removed indexes
-	for indexName := range genIndexes {
-		if !dbIndexes[indexName] {
-			diff.IndexesAdded = append(diff.IndexesAdded, indexName)
-		}
-	}
-
-	for indexName := range dbIndexes {
-		if !genIndexes[indexName] {
-			diff.IndexesRemoved = append(diff.IndexesRemoved, indexName)
-		}
-	}
-
-	// Sort for consistent output
-	sort.Strings(diff.IndexesAdded)
-	sort.Strings(diff.IndexesRemoved)
-}
-
-// normalizeType normalizes type names for comparison
-func normalizeType(typeName string) string {
-	// Convert common type variations to standard forms
-	typeName = strings.ToLower(typeName)
-
-	switch {
-	case strings.Contains(typeName, "varchar"):
-		return "varchar"
-	case strings.Contains(typeName, "text"):
-		return "text"
-	case strings.Contains(typeName, "serial"):
-		return "integer"
-	case strings.Contains(typeName, "tinyint"):
-		// MySQL/MariaDB stores BOOLEAN as TINYINT or TINYINT(1)
-		return "boolean"
-	case strings.Contains(typeName, "int"):
-		return "integer"
-	case strings.Contains(typeName, "bool"):
-		return "boolean"
-	case strings.Contains(typeName, "timestamp"):
-		return "timestamp"
-	case strings.Contains(typeName, "decimal") || strings.Contains(typeName, "numeric"):
-		return "decimal"
-	default:
-		return typeName
-	}
-}
-
-// normalizeDefaultValue normalizes default values for comparison
-func normalizeDefaultValue(defaultValue, typeName string) string {
-	if defaultValue == "" {
-		return ""
-	}
-
-	// Remove quotes first for all comparisons
-	cleanValue := strings.Trim(defaultValue, "'\"")
-
-	// MariaDB/MySQL returns 'NULL' for columns without explicit defaults
-	// Normalize this to empty string for comparison
-	if strings.ToUpper(cleanValue) == "NULL" {
-		return ""
-	}
-
-	// For boolean types, normalize MySQL/MariaDB '1'/'0' to 'true'/'false'
-	if typeName == "boolean" {
-		switch strings.ToLower(cleanValue) {
-		case "1", "true":
-			return "true"
-		case "0", "false":
-			return "false"
-		}
-		// If it's not a recognized boolean value, return as-is
-		return cleanValue
-	}
-
-	// Return cleaned value
-	return cleanValue
-}
-
-// generateBasicCreateTableSQL generates basic CREATE TABLE SQL for a specific table
-func generateBasicCreateTableSQL(table types.TableDirective, fields []types.SchemaField, dialect string) string {
+// GenerateBasicCreateTableSQL generates database-specific CREATE TABLE SQL statements for migration purposes.
+//
+// This function creates basic but complete CREATE TABLE statements that can be used
+// in migration scripts. It handles column definitions, primary key constraints,
+// and dialect-specific syntax variations while maintaining compatibility across
+// different database systems.
+//
+// # SQL Generation Process
+//
+// The function follows a structured approach to SQL generation:
+//  1. **Field Filtering**: Processes only fields belonging to the target table
+//  2. **Column Definition**: Generates individual column definitions with constraints
+//  3. **Primary Key Handling**: Manages both single and composite primary keys
+//  4. **SQL Assembly**: Constructs the final CREATE TABLE statement
+//
+// # Primary Key Logic
+//
+// **Single Primary Key**:
+//   - Added directly to column definition (e.g., "id SERIAL PRIMARY KEY")
+//   - Handled within GenerateColumnDefinition()
+//
+// **Composite Primary Key**:
+//   - Individual columns don't have PRIMARY KEY in their definitions
+//   - Table-level PRIMARY KEY constraint added at the end
+//   - Format: "PRIMARY KEY (col1, col2, col3)"
+//
+// # Error Handling
+//
+// The function includes safety checks:
+//   - Validates that at least one column exists for the table
+//   - Returns descriptive error comments for debugging
+//   - Includes struct name in error messages for easier troubleshooting
+//
+// # Example Output
+//
+// **Simple table**:
+//
+//	```sql
+//	CREATE TABLE users (
+//	  id SERIAL PRIMARY KEY,
+//	  email VARCHAR(255) NOT NULL UNIQUE,
+//	  created_at TIMESTAMP DEFAULT NOW()
+//	);
+//	```
+//
+// **Composite primary key table**:
+//
+//	```sql
+//	CREATE TABLE user_roles (
+//	  user_id INTEGER NOT NULL,
+//	  role_id INTEGER NOT NULL,
+//	  assigned_at TIMESTAMP DEFAULT NOW(),
+//	  PRIMARY KEY (user_id, role_id)
+//	);
+//	```
+//
+// # Parameters
+//
+//   - table: Table directive containing table metadata (name, struct name, etc.)
+//   - fields: Complete list of schema fields (function filters for relevant ones)
+//   - dialect: Target database dialect for SQL syntax ("postgres", "mysql", "mariadb")
+//
+// # Return Value
+//
+// Returns a complete CREATE TABLE SQL statement as a string, or an error comment
+// if the table has no columns. The SQL is formatted for readability with proper
+// indentation and line breaks.
+//
+// # Database Compatibility
+//
+// The function generates SQL compatible with:
+//   - PostgreSQL: SERIAL types, native syntax
+//   - MySQL/MariaDB: AUTO_INCREMENT, dialect-specific types
+//   - Cross-platform: Uses MapTypeToSQL() for type conversion
+func GenerateBasicCreateTableSQL(table types.TableDirective, fields []types.SchemaField, dialect string) string {
 	var columns []string
 	var primaryKeys []string
 
 	// Filter and process fields for this table
 	for _, field := range fields {
 		if field.StructName == table.StructName {
-			columnDef := generateColumnDefinition(field, dialect)
+			columnDef := GenerateColumnDefinition(field, dialect)
 			columns = append(columns, columnDef)
 
 			if field.Primary {
@@ -528,9 +439,99 @@ func generateBasicCreateTableSQL(table types.TableDirective, fields []types.Sche
 	return sql
 }
 
-// generateColumnDefinition generates a column definition for a field
-func generateColumnDefinition(field types.SchemaField, dialect string) string {
-	sqlType := mapTypeToSQL(field.Type, field.Enum, dialect)
+// GenerateColumnDefinition creates a complete SQL column definition from a schema field with full constraint support.
+//
+// This function is responsible for translating Go struct field annotations into
+// proper SQL column definitions, handling all supported constraints, data types,
+// and database-specific syntax variations.
+//
+// # Column Definition Components
+//
+// The function builds column definitions with these components in order:
+//  1. **Column Name**: The database column name
+//  2. **Data Type**: Mapped to database-specific SQL type
+//  3. **Primary Key**: PRIMARY KEY constraint (for single-column PKs)
+//  4. **Nullability**: NOT NULL constraint (when applicable)
+//  5. **Uniqueness**: UNIQUE constraint
+//  6. **Default Value**: DEFAULT clause with proper quoting
+//
+// # Primary Key Handling Logic
+//
+// **MySQL SERIAL Types**:
+//   - SERIAL becomes "INT AUTO_INCREMENT PRIMARY KEY"
+//   - Special handling for MySQL's auto-increment syntax
+//
+// **Non-SERIAL Primary Keys**:
+//   - Adds "PRIMARY KEY" to column definition
+//   - Works for INTEGER, VARCHAR, UUID, and other types
+//
+// **Composite Primary Keys**:
+//   - Individual columns don't get PRIMARY KEY in their definition
+//   - Table-level constraint is added separately
+//
+// # Constraint Logic
+//
+// **NOT NULL Handling**:
+//   - Primary key columns are implicitly NOT NULL
+//   - Only adds NOT NULL for non-primary key columns when field.Nullable is false
+//   - Prevents redundant "PRIMARY KEY NOT NULL" syntax
+//
+// **UNIQUE Constraint**:
+//   - Only added for non-primary key columns
+//   - Primary keys are inherently unique
+//
+// # Default Value Processing
+//
+// The function handles default values with intelligent quoting:
+//   - Uses NeedsQuoting() to determine if quotes are needed
+//   - Handles function calls (NOW(), CURRENT_TIMESTAMP)
+//   - Properly quotes string and enum values
+//   - Leaves numeric and boolean values unquoted
+//
+// # Example Outputs
+//
+// **Auto-increment primary key**:
+//
+//	```sql
+//	id SERIAL PRIMARY KEY
+//	```
+//
+// **String column with constraints**:
+//
+//	```sql
+//	email VARCHAR(255) NOT NULL UNIQUE DEFAULT 'user@example.com'
+//	```
+//
+// **Timestamp with function default**:
+//
+//	```sql
+//	created_at TIMESTAMP DEFAULT NOW()
+//	```
+//
+// **Enum column**:
+//
+//	```sql
+//	status enum_status_type DEFAULT 'active'
+//	```
+//
+// # Parameters
+//
+//   - field: Schema field containing all column metadata and constraints
+//   - dialect: Target database dialect for type mapping and syntax
+//
+// # Return Value
+//
+// Returns a complete SQL column definition string ready for use in CREATE TABLE
+// or ALTER TABLE statements.
+//
+// # Database Compatibility
+//
+// Generates dialect-appropriate SQL:
+//   - PostgreSQL: SERIAL, BOOLEAN, native enum types
+//   - MySQL/MariaDB: AUTO_INCREMENT, TINYINT, inline ENUM syntax
+//   - Cross-platform: Intelligent type mapping via MapTypeToSQL()
+func GenerateColumnDefinition(field types.SchemaField, dialect string) string {
+	sqlType := MapTypeToSQL(field.Type, field.Enum, dialect)
 	colDef := field.Name + " " + sqlType
 
 	// Handle primary key
@@ -558,7 +559,7 @@ func generateColumnDefinition(field types.SchemaField, dialect string) string {
 	if field.Default != "" {
 		defaultValue := field.Default
 		// Quote string/enum default values if they're not already quoted and not functions
-		if needsQuoting(defaultValue, field.Type, field.Enum) {
+		if NeedsQuoting(defaultValue, field.Type, field.Enum) {
 			defaultValue = fmt.Sprintf("'%s'", defaultValue)
 		}
 		colDef += " DEFAULT " + defaultValue
@@ -567,8 +568,96 @@ func generateColumnDefinition(field types.SchemaField, dialect string) string {
 	return colDef
 }
 
-// needsQuoting determines if a default value needs to be quoted
-func needsQuoting(defaultValue, fieldType string, enumValues []string) bool {
+// NeedsQuoting determines if a default value requires SQL quoting based on value content and field type.
+//
+// This function implements intelligent quoting logic for SQL default values,
+// ensuring that string and enum values are properly quoted while leaving
+// numeric values, function calls, and already-quoted values unchanged.
+//
+// # Quoting Decision Logic
+//
+// The function applies quoting rules in this order:
+//  1. **Already Quoted**: Skip if value already has single quotes
+//  2. **Function Calls**: Skip if value contains parentheses or is a known function
+//  3. **Enum Types**: Quote if field has enum values or is an enum type
+//  4. **String Types**: Quote if field type is VARCHAR, TEXT, or CHAR
+//  5. **Other Types**: Don't quote numeric, boolean, or other types
+//
+// # Function Call Detection
+//
+// The function recognizes these patterns as function calls (no quoting needed):
+//   - Values containing parentheses: "NOW()", "RANDOM()"
+//   - Known SQL functions: "CURRENT_TIMESTAMP", "NULL"
+//   - Case-insensitive function names
+//
+// # Type-Based Quoting Rules
+//
+// **Enum Types**:
+//   - Quote if enumValues slice is non-empty
+//   - Quote if fieldType starts with "enum" (case-insensitive)
+//   - Ensures enum values are properly quoted in SQL
+//
+// **String Types**:
+//   - Quote VARCHAR, TEXT, CHAR variations (case-insensitive)
+//   - Handles all string-like database types
+//
+// **Numeric/Boolean Types**:
+//   - No quoting for INTEGER, DECIMAL, BOOLEAN, etc.
+//   - Allows direct numeric and boolean value insertion
+//
+// # Example Decisions
+//
+// **String values (quote needed)**:
+//
+//	```go
+//	NeedsQuoting("hello", "VARCHAR(255)", nil)     // → true
+//	NeedsQuoting("default", "TEXT", nil)          // → true
+//	```
+//
+// **Already quoted (skip)**:
+//
+//	```go
+//	NeedsQuoting("'hello'", "VARCHAR(255)", nil)  // → false
+//	```
+//
+// **Function calls (skip)**:
+//
+//	```go
+//	NeedsQuoting("NOW()", "TIMESTAMP", nil)       // → false
+//	NeedsQuoting("CURRENT_TIMESTAMP", "TIMESTAMP", nil) // → false
+//	```
+//
+// **Enum values (quote needed)**:
+//
+//	```go
+//	NeedsQuoting("active", "status", []string{"active", "inactive"}) // → true
+//	NeedsQuoting("pending", "enum_status", nil)   // → true
+//	```
+//
+// **Numeric values (skip)**:
+//
+//	```go
+//	NeedsQuoting("42", "INTEGER", nil)            // → false
+//	NeedsQuoting("true", "BOOLEAN", nil)          // → false
+//	```
+//
+// # Parameters
+//
+//   - defaultValue: The default value to analyze for quoting needs
+//   - fieldType: The SQL field type (used for type-based quoting decisions)
+//   - enumValues: Slice of enum values (non-empty indicates enum type)
+//
+// # Return Value
+//
+// Returns true if the default value should be wrapped in single quotes,
+// false if it should be used as-is in the SQL statement.
+//
+// # SQL Injection Safety
+//
+// This function is designed for use with trusted schema definitions and
+// should not be used with user-provided input. Default values come from
+// Go struct annotations and are considered safe for SQL generation.
+func NeedsQuoting(defaultValue, fieldType string, enumValues []string) bool {
 	// Don't quote if already quoted
 	if strings.HasPrefix(defaultValue, "'") && strings.HasSuffix(defaultValue, "'") {
 		return false
@@ -599,10 +688,102 @@ func needsQuoting(defaultValue, fieldType string, enumValues []string) bool {
 	return false
 }
 
-// mapTypeToSQL maps schema field types to SQL types based on dialect
-func mapTypeToSQL(fieldType string, enumValues []string, dialect string) string {
+// MapTypeToSQL performs intelligent type mapping from schema field types to database-specific SQL types.
+//
+// This function is the core type translation engine that handles the complex task
+// of converting Go struct field types into appropriate SQL data types for different
+// database systems. It includes special handling for enum types and cross-database
+// type compatibility.
+//
+// # Type Mapping Strategy
+//
+// The function uses a two-phase approach:
+//  1. **Enum Detection**: Checks if the field represents an enum type
+//  2. **Standard Type Mapping**: Applies database-specific type conversions
+//
+// # Enum Type Handling
+//
+// **Enum Detection Logic**:
+//   - Field has non-empty enumValues slice (explicit enum values)
+//   - Field type starts with "enum_" prefix (enum type reference)
+//
+// **PostgreSQL Enum Handling**:
+//   - Returns enum type name as-is (preserves case)
+//   - Assumes enum type already exists or will be created
+//   - Example: "enum_status" → "enum_status"
+//
+// **MySQL/MariaDB Enum Handling**:
+//   - Converts to inline ENUM syntax with quoted values
+//   - Example: ["active", "inactive"] → "ENUM('active', 'inactive')"
+//   - Filters out empty values for clean SQL generation
+//
+// # Standard Type Mapping
+//
+// **PostgreSQL Type Mapping**:
+//   - SERIAL → "SERIAL" (auto-incrementing integer)
+//   - VARCHAR → preserved as-is with length
+//   - BOOLEAN → "BOOLEAN" (native boolean type)
+//   - TIMESTAMP → "TIMESTAMP"
+//   - Other types preserved as-is
+//
+// **MySQL/MariaDB Type Mapping**:
+//   - SERIAL → "INT AUTO_INCREMENT" (MySQL auto-increment syntax)
+//   - INTEGER → "INT" (MySQL standard integer type)
+//   - BOOLEAN → "BOOLEAN" (MySQL boolean type)
+//   - Other types preserved with appropriate conversions
+//
+// # Example Mappings
+//
+// **Enum types**:
+//
+//	```go
+//	// PostgreSQL
+//	MapTypeToSQL("enum_status", []string{"active", "inactive"}, "postgres")
+//	// → "enum_status"
+//
+//	// MySQL
+//	MapTypeToSQL("status", []string{"active", "inactive"}, "mysql")
+//	// → "ENUM('active', 'inactive')"
+//	```
+//
+// **Standard types**:
+//
+//	```go
+//	// PostgreSQL
+//	MapTypeToSQL("SERIAL", nil, "postgres")     // → "SERIAL"
+//	MapTypeToSQL("VARCHAR(255)", nil, "postgres") // → "VARCHAR(255)"
+//
+//	// MySQL
+//	MapTypeToSQL("SERIAL", nil, "mysql")        // → "INT AUTO_INCREMENT"
+//	MapTypeToSQL("INTEGER", nil, "mysql")       // → "INT"
+//	```
+//
+// # Parameters
+//
+//   - fieldType: The original field type from Go struct annotations
+//   - enumValues: Slice of enum values (empty for non-enum types)
+//   - dialect: Target database dialect ("postgres", "mysql", "mariadb")
+//
+// # Return Value
+//
+// Returns a database-specific SQL type string ready for use in CREATE TABLE
+// or ALTER TABLE statements.
+//
+// # Case Handling
+//
+// **Enum Types**: Preserve original case for PostgreSQL compatibility
+// **Standard Types**: Convert to uppercase for consistent SQL generation
+// **Database-Specific**: Apply dialect-appropriate case conventions
+//
+// # Extensibility
+//
+// The function is designed for easy extension:
+//   - Add new database dialects by extending the switch statement
+//   - Add new type mappings within existing dialect cases
+//   - Enum handling is abstracted and reusable across dialects
+func MapTypeToSQL(fieldType string, enumValues []string, dialect string) string {
 	// Check if this is an enum type (has non-empty enum values or starts with "enum_")
-	hasValidEnumValues := hasNonEmptyEnumValues(enumValues)
+	hasValidEnumValues := HasNonEmptyEnumValues(enumValues)
 	isEnum := hasValidEnumValues || strings.HasPrefix(strings.ToLower(fieldType), "enum_")
 
 	if isEnum {
@@ -678,8 +859,79 @@ func mapTypeToSQL(fieldType string, enumValues []string, dialect string) string 
 	}
 }
 
-// hasNonEmptyEnumValues checks if the enum values slice contains any non-empty values
-func hasNonEmptyEnumValues(enumValues []string) bool {
+// HasNonEmptyEnumValues validates that an enum values slice contains at least one meaningful value.
+//
+// This utility function is used throughout the enum handling logic to distinguish
+// between fields that have actual enum values defined versus fields that have
+// empty or placeholder enum value slices.
+//
+// # Validation Logic
+//
+// The function iterates through the enum values slice and returns true as soon
+// as it finds any non-empty string value. This approach is efficient for typical
+// enum value slices which usually have meaningful values at the beginning.
+//
+// # Use Cases
+//
+// **Enum Type Detection**:
+//   - Used in MapTypeToSQL() to determine if a field should be treated as an enum
+//   - Helps distinguish between explicit enum values and enum type references
+//
+// **SQL Generation**:
+//   - Determines whether to generate inline ENUM syntax (MySQL/MariaDB)
+//   - Validates that enum fields have meaningful values for SQL generation
+//
+// **Schema Validation**:
+//   - Ensures enum fields have proper value definitions
+//   - Prevents generation of empty ENUM() clauses in SQL
+//
+// # Example Scenarios
+//
+// **Valid enum values**:
+//
+//	```go
+//	HasNonEmptyEnumValues([]string{"active", "inactive", "pending"}) // → true
+//	HasNonEmptyEnumValues([]string{"", "draft", "published"})        // → true (has "draft")
+//	```
+//
+// **Invalid/empty enum values**:
+//
+//	```go
+//	HasNonEmptyEnumValues([]string{})                    // → false (empty slice)
+//	HasNonEmptyEnumValues([]string{"", "", ""})          // → false (all empty)
+//	HasNonEmptyEnumValues(nil)                           // → false (nil slice)
+//	```
+//
+// # Performance Characteristics
+//
+// - Time Complexity: O(n) worst case, O(1) best case (early return)
+// - Space Complexity: O(1) (no additional memory allocation)
+// - Optimized for typical enum slices with valid values at the beginning
+//
+// # Parameters
+//
+//   - enumValues: Slice of string values to validate for non-empty content
+//
+// # Return Value
+//
+// Returns true if at least one non-empty string is found in the slice,
+// false if the slice is nil, empty, or contains only empty strings.
+//
+// # Integration Points
+//
+// This function is used by:
+//   - MapTypeToSQL() for enum type detection
+//   - MySQL/MariaDB enum SQL generation logic
+//   - Schema validation routines
+//
+// # Edge Case Handling
+//
+// The function gracefully handles:
+//   - Nil slices (returns false)
+//   - Empty slices (returns false)
+//   - Slices with mixed empty and non-empty values (returns true if any non-empty)
+//   - Single-element slices (returns based on that element's emptiness)
+func HasNonEmptyEnumValues(enumValues []string) bool {
 	for _, value := range enumValues {
 		if value != "" {
 			return true

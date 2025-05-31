@@ -6,7 +6,7 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/executor"
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	types2 "github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 
@@ -31,7 +31,7 @@ func TestWorkflowExample(t *testing.T) {
 		c := qt.New(t)
 
 		// Create empty diff
-		diff := &differ.SchemaDiff{}
+		diff := &types2.SchemaDiff{}
 
 		// Should report no changes
 		c.Assert(diff.HasChanges(), qt.Equals, false)
@@ -45,7 +45,7 @@ func TestWorkflowExample(t *testing.T) {
 		c := qt.New(t)
 
 		// Create diff with changes
-		diff := &differ.SchemaDiff{
+		diff := &types2.SchemaDiff{
 			TablesAdded:   []string{"new_table"},
 			TablesRemoved: []string{"old_table"},
 			EnumsAdded:    []string{"new_enum"},
@@ -66,7 +66,7 @@ func TestWorkflowExample(t *testing.T) {
 		c := qt.New(t)
 
 		// Create diff with enum changes
-		diff := &differ.SchemaDiff{
+		diff := &types2.SchemaDiff{
 			EnumsAdded: []string{"test_enum"},
 		}
 

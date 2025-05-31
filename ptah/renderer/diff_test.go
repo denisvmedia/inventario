@@ -6,18 +6,18 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 )
 
 func TestFormatSchemaDiff_NoChanges(t *testing.T) {
 	tests := []struct {
 		name     string
-		diff     *differ.SchemaDiff
+		diff     *types.SchemaDiff
 		contains []string
 	}{
 		{
 			name: "completely empty diff",
-			diff: &differ.SchemaDiff{},
+			diff: &types.SchemaDiff{},
 			contains: []string{
 				"=== NO SCHEMA CHANGES DETECTED ===",
 				"The database schema matches your entity definitions.",
@@ -25,13 +25,13 @@ func TestFormatSchemaDiff_NoChanges(t *testing.T) {
 		},
 		{
 			name: "diff with empty slices",
-			diff: &differ.SchemaDiff{
+			diff: &types.SchemaDiff{
 				TablesAdded:    []string{},
 				TablesRemoved:  []string{},
-				TablesModified: []differ.TableDiff{},
+				TablesModified: []differtypes.TableDiff{},
 				EnumsAdded:     []string{},
 				EnumsRemoved:   []string{},
-				EnumsModified:  []differ.EnumDiff{},
+				EnumsModified:  []differtypes.EnumDiff{},
 				IndexesAdded:   []string{},
 				IndexesRemoved: []string{},
 			},
@@ -59,12 +59,12 @@ func TestFormatSchemaDiff_NoChanges(t *testing.T) {
 func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 	tests := []struct {
 		name     string
-		diff     *differ.SchemaDiff
+		diff     *types.SchemaDiff
 		contains []string
 	}{
 		{
 			name: "tables added and removed",
-			diff: &differ.SchemaDiff{
+			diff: &types.SchemaDiff{
 				TablesAdded:   []string{"new_users", "new_posts"},
 				TablesRemoved: []string{"old_logs", "deprecated_table"},
 			},
@@ -84,13 +84,13 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 		},
 		{
 			name: "tables modified with column changes",
-			diff: &differ.SchemaDiff{
-				TablesModified: []differ.TableDiff{
+			diff: &types.SchemaDiff{
+				TablesModified: []differtypes.TableDiff{
 					{
 						TableName:      "users",
 						ColumnsAdded:   []string{"email", "phone"},
 						ColumnsRemoved: []string{"old_field"},
-						ColumnsModified: []differ.ColumnDiff{
+						ColumnsModified: []differtypes.ColumnDiff{
 							{
 								ColumnName: "name",
 								Changes: map[string]string{
@@ -118,10 +118,10 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 		},
 		{
 			name: "enums added, removed and modified",
-			diff: &differ.SchemaDiff{
+			diff: &types.SchemaDiff{
 				EnumsAdded:   []string{"status_enum", "priority_enum"},
 				EnumsRemoved: []string{"old_enum"},
-				EnumsModified: []differ.EnumDiff{
+				EnumsModified: []differtypes.EnumDiff{
 					{
 						EnumName:      "user_role",
 						ValuesAdded:   []string{"admin", "moderator"},
@@ -147,7 +147,7 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 		},
 		{
 			name: "indexes added and removed",
-			diff: &differ.SchemaDiff{
+			diff: &types.SchemaDiff{
 				IndexesAdded:   []string{"idx_users_email", "idx_posts_title"},
 				IndexesRemoved: []string{"old_index"},
 			},
@@ -164,10 +164,10 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 		},
 		{
 			name: "comprehensive changes",
-			diff: &differ.SchemaDiff{
+			diff: &types.SchemaDiff{
 				TablesAdded:   []string{"new_table"},
 				TablesRemoved: []string{"old_table"},
-				TablesModified: []differ.TableDiff{
+				TablesModified: []differtypes.TableDiff{
 					{
 						TableName:    "users",
 						ColumnsAdded: []string{"email"},
@@ -212,7 +212,7 @@ func TestFormatSchemaDiff_WithChanges(t *testing.T) {
 func TestFormatSchemaDiff_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
-		diff     *differ.SchemaDiff
+		diff     *types.SchemaDiff
 		contains []string
 	}{
 		{
@@ -222,8 +222,8 @@ func TestFormatSchemaDiff_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "empty enum diff with no values",
-			diff: &differ.SchemaDiff{
-				EnumsModified: []differ.EnumDiff{
+			diff: &types.SchemaDiff{
+				EnumsModified: []differtypes.EnumDiff{
 					{
 						EnumName:      "empty_enum",
 						ValuesAdded:   []string{},
@@ -239,13 +239,13 @@ func TestFormatSchemaDiff_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "empty table diff with no changes",
-			diff: &differ.SchemaDiff{
-				TablesModified: []differ.TableDiff{
+			diff: &types.SchemaDiff{
+				TablesModified: []differtypes.TableDiff{
 					{
 						TableName:       "empty_table",
 						ColumnsAdded:    []string{},
 						ColumnsRemoved:  []string{},
-						ColumnsModified: []differ.ColumnDiff{},
+						ColumnsModified: []differtypes.ColumnDiff{},
 					},
 				},
 			},
