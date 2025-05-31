@@ -51,11 +51,11 @@ func migrateCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	if dryRun {
-		log.WithField(dbDSNFlag, dsn).Info("[DRY RUN] Would run migrations")
-		fmt.Println("⚠️  [DRY RUN] Migration dry run mode is not yet fully implemented.")
-		fmt.Println("⚠️  This would run migrations against the database.")
-		fmt.Println("⚠️  For now, use the ptah tool 'migrate' command for dry run migration SQL generation.")
-		return nil
+		// log.WithField(dbDSNFlag, dsn).Info("[DRY RUN] Would run migrations")
+		// fmt.Println("⚠️  [DRY RUN] Migration dry run mode is not yet fully implemented.")
+		// fmt.Println("⚠️  This would run migrations against the database.")
+		// fmt.Println("⚠️  For now, use the ptah tool 'migrate' command for dry run migration SQL generation.")
+		return fmt.Errorf("dry run mode is not yet implemented")
 	} else {
 		log.WithField(dbDSNFlag, dsn).Info("Running migrations")
 	}
