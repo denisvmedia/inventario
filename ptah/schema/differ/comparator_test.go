@@ -281,7 +281,7 @@ func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 		Fields: []types.SchemaField{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "email", Type: "VARCHAR", Nullable: false, Unique: true},
-			{StructName: "User", Name: "status", Type: "VARCHAR", Nullable: true, Default: "active"},
+			{StructName: "User", Name: "status", Type: "VARCHAR", Nullable: true, Default: "'active'"},
 		},
 		Indexes:        []types.SchemaIndex{},
 		Enums:          []types.GlobalEnum{},
@@ -294,8 +294,8 @@ func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 				Name: "users",
 				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
-					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                     // Type and nullable changed
-					{Name: "status", DataType: "VARCHAR", IsNullable: "NO", ColumnDefault: ptr.To("pending")}, // Nullable and default changed
+					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                       // Type and nullable changed
+					{Name: "status", DataType: "VARCHAR", IsNullable: "NO", ColumnDefault: ptr.To("'pending'")}, // Nullable and default changed
 				},
 			},
 		},
@@ -632,7 +632,7 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 			// Users table
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "email", Type: "VARCHAR", Nullable: false, Unique: true},
-			{StructName: "User", Name: "status", Type: "user_status", Nullable: false, Default: "active"},
+			{StructName: "User", Name: "status", Type: "user_status", Nullable: false, Default: "'active'"},
 			// Posts table
 			{StructName: "Post", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "Post", Name: "title", Type: "VARCHAR", Nullable: false},
@@ -654,9 +654,9 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 				Name: "users",
 				Columns: []parsertypes.Column{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
-					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                         // Type and constraints changed
-					{Name: "status", DataType: "user_status", IsNullable: "NO", ColumnDefault: ptr.To("pending")}, // Default changed
-					{Name: "phone", DataType: "VARCHAR", IsNullable: "YES"},                                       // Column to be removed
+					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                           // Type and constraints changed
+					{Name: "status", DataType: "user_status", IsNullable: "NO", ColumnDefault: ptr.To("'pending'")}, // Default changed
+					{Name: "phone", DataType: "VARCHAR", IsNullable: "YES"},                                         // Column to be removed
 				},
 			},
 			{

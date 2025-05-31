@@ -379,7 +379,7 @@ func Columns(genCol types.SchemaField, dbCol parsertypes.Column) differtypes.Col
 		normalizeGenDefaultFn := normalize.DefaultValue(genDefault, "")
 
 		if normalizeGenDefaultFn != normalizedDbDefault {
-			colDiff.Changes[idxName] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
+			colDiff.Changes[idxName] = fmt.Sprintf("%s -> %s", dbDefault, genDefault)
 		}
 	}
 

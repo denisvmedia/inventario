@@ -436,12 +436,12 @@ func TestColumns_HappyPath(t *testing.T) {
 			genCol: types.SchemaField{
 				Name:    "status",
 				Type:    "VARCHAR(50)",
-				Default: "active",
+				Default: "'active'",
 			},
 			dbCol: parsertypes.Column{
 				Name:          "status",
 				DataType:      "VARCHAR(50)",
-				ColumnDefault: ptr.To("inactive"),
+				ColumnDefault: ptr.To("'inactive'"),
 			},
 			expected: differtypes.ColumnDiff{
 				ColumnName: "status",
