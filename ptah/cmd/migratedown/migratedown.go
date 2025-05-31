@@ -126,6 +126,12 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 	// Create filesystem from migrations directory
 	migrationsFS := os.DirFS(migrationsDir)
 
+	// Create migrator to access applied migrations
+	mig := migrator.NewMigrator(conn)
+	if err := migrator.RegisterMigrations(mig, migrationsFS); err != nil {
+		return fmt.Errorf("error registering migrations: %w", err)
+	}
+
 	// Get migration status before running
 	status, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 	if err != nil {
@@ -140,21 +146,27 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
+	// Get applied migrations from the database
+	appliedMigrations, err := mig.GetAppliedMigrations(context.Background())
+	if err != nil {
+		return fmt.Errorf("error getting applied migrations: %w", err)
+	}
+
 	// Calculate which migrations will be rolled back
 	var migrationsToRollback []int
-	for _, version := range status.PendingMigrations {
-		if version > targetVersion && version <= status.CurrentVersion {
+	for _, version := range appliedMigrations {
+		if version > targetVersion {
 			migrationsToRollback = append(migrationsToRollback, version)
 		}
 	}
 
-	// Also need to check applied migrations that are above target
-	// This is a simplified approach - in practice you'd query the database
-	// for applied migrations above the target version
-	fmt.Printf("Migrations to roll back: %d\n", status.CurrentVersion-targetVersion)
+	fmt.Printf("Migrations to roll back: %d\n", len(migrationsToRollback))
 
 	if verbose {
 		fmt.Printf("Will roll back from version %d to %d\n", status.CurrentVersion, targetVersion)
+		if len(migrationsToRollback) > 0 {
+			fmt.Printf("Specific migrations to rollback: %v\n", migrationsToRollback)
+		}
 	}
 
 	fmt.Println()
@@ -163,11 +175,14 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 	if !dryRun && !skipConfirm {
 		fmt.Println("⚠️  WARNING: Rolling back migrations can result in data loss!")
 		fmt.Printf("This will roll back the database from version %d to version %d.\n", status.CurrentVersion, targetVersion)
+		if len(migrationsToRollback) > 0 {
+			fmt.Printf("The following %d migration(s) will be rolled back: %v\n", len(migrationsToRollback), migrationsToRollback)
+		}
 		fmt.Print("Are you sure you want to continue? Type 'YES' to confirm: ")
-		
+
 		var confirmation string
 		fmt.Scanln(&confirmation)
-		
+
 		if confirmation != "YES" {
 			fmt.Println("Migration rollback cancelled.")
 			return nil
@@ -191,6 +206,9 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 	if dryRun {
 		fmt.Println("✅ Dry run completed successfully!")
 		fmt.Printf("Would have rolled back to version: %d\n", targetVersion)
+		if len(migrationsToRollback) > 0 {
+			fmt.Printf("Would have rolled back these migrations: %v\n", migrationsToRollback)
+		}
 	} else {
 		fmt.Println("✅ Migration rollback completed successfully!")
 		fmt.Printf("Database is now at version: %d\n", finalStatus.CurrentVersion)
