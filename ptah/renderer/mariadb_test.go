@@ -708,3 +708,75 @@ func TestMariaDBRenderer_VisitCreateTable_OptionsPath(t *testing.T) {
 		})
 	}
 }
+
+func TestMariaDBRenderer_VisitDropTable(t *testing.T) {
+	tests := []struct {
+		name     string
+		node     *ast.DropTableNode
+		expected string
+	}{
+		{
+			name: "Basic DROP TABLE",
+			node: ast.NewDropTable("users"),
+			expected: "DROP TABLE users;\n",
+		},
+		{
+			name: "DROP TABLE IF EXISTS",
+			node: ast.NewDropTable("users").SetIfExists(),
+			expected: "DROP TABLE IF EXISTS users;\n",
+		},
+		{
+			name: "DROP TABLE with CASCADE (ignored in MariaDB)",
+			node: ast.NewDropTable("users").SetCascade(),
+			expected: "DROP TABLE users;\n",
+		},
+		{
+			name: "DROP TABLE with all options",
+			node: ast.NewDropTable("users").SetIfExists().SetCascade().SetComment("Dangerous operation"),
+			expected: "-- Dangerous operation\nDROP TABLE IF EXISTS users;\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			renderer := renderer.NewMariaDBRenderer()
+			err := renderer.VisitDropTable(tt.node)
+
+			c.Assert(err, qt.IsNil)
+			c.Assert(renderer.GetOutput(), qt.Equals, tt.expected)
+		})
+	}
+}
+
+func TestMariaDBRenderer_VisitDropType(t *testing.T) {
+	tests := []struct {
+		name     string
+		node     *ast.DropTypeNode
+		expected string
+	}{
+		{
+			name: "Basic DROP TYPE (not supported)",
+			node: ast.NewDropType("status_enum"),
+			expected: "-- MariaDB does not support DROP TYPE - enums are handled inline in column definitions\n",
+		},
+		{
+			name: "DROP TYPE with comment",
+			node: ast.NewDropType("status_enum").SetComment("Remove unused enum"),
+			expected: "-- Remove unused enum\n-- MariaDB does not support DROP TYPE - enums are handled inline in column definitions\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			renderer := renderer.NewMariaDBRenderer()
+			err := renderer.VisitDropType(tt.node)
+
+			c.Assert(err, qt.IsNil)
+			c.Assert(renderer.GetOutput(), qt.Equals, tt.expected)
+		})
+	}
+}

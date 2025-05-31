@@ -398,6 +398,126 @@ func (n *CommentNode) Accept(visitor Visitor) error {
 	return visitor.VisitComment(n)
 }
 
+// DropTableNode represents a DROP TABLE statement.
+//
+// This node supports various DROP TABLE options including IF EXISTS,
+// CASCADE/RESTRICT, and dialect-specific features.
+type DropTableNode struct {
+	// Name is the name of the table to drop
+	Name string
+	// IfExists indicates whether to use IF EXISTS clause
+	IfExists bool
+	// Cascade indicates whether to use CASCADE option (PostgreSQL)
+	Cascade bool
+	// Comment is an optional comment for the drop operation
+	Comment string
+}
+
+// NewDropTable creates a new DROP TABLE node with the specified table name.
+//
+// The node is created with IfExists=false and Cascade=false by default.
+// Use the fluent API methods to configure these options.
+//
+// Example:
+//
+//	dropTable := NewDropTable("users").SetIfExists().SetCascade()
+func NewDropTable(name string) *DropTableNode {
+	return &DropTableNode{
+		Name:     name,
+		IfExists: false,
+		Cascade:  false,
+	}
+}
+
+// SetIfExists sets the IF EXISTS option for the DROP TABLE statement.
+//
+// This makes the statement safe to execute even if the table doesn't exist.
+func (n *DropTableNode) SetIfExists() *DropTableNode {
+	n.IfExists = true
+	return n
+}
+
+// SetCascade sets the CASCADE option for the DROP TABLE statement.
+//
+// This is primarily used in PostgreSQL to automatically drop dependent objects.
+func (n *DropTableNode) SetCascade() *DropTableNode {
+	n.Cascade = true
+	return n
+}
+
+// SetComment sets a comment for the DROP TABLE operation.
+//
+// This comment can be used for documentation or warnings.
+func (n *DropTableNode) SetComment(comment string) *DropTableNode {
+	n.Comment = comment
+	return n
+}
+
+// Accept implements the Node interface for DropTableNode.
+func (n *DropTableNode) Accept(visitor Visitor) error {
+	return visitor.VisitDropTable(n)
+}
+
+// DropTypeNode represents a DROP TYPE statement (PostgreSQL-specific).
+//
+// This node is used to drop custom types, particularly enum types in PostgreSQL.
+// Other databases may not support this operation or handle it differently.
+type DropTypeNode struct {
+	// Name is the name of the type to drop
+	Name string
+	// IfExists indicates whether to use IF EXISTS clause
+	IfExists bool
+	// Cascade indicates whether to use CASCADE option
+	Cascade bool
+	// Comment is an optional comment for the drop operation
+	Comment string
+}
+
+// NewDropType creates a new DROP TYPE node with the specified type name.
+//
+// The node is created with IfExists=false and Cascade=false by default.
+// Use the fluent API methods to configure these options.
+//
+// Example:
+//
+//	dropType := NewDropType("status_enum").SetIfExists().SetCascade()
+func NewDropType(name string) *DropTypeNode {
+	return &DropTypeNode{
+		Name:     name,
+		IfExists: false,
+		Cascade:  false,
+	}
+}
+
+// SetIfExists sets the IF EXISTS option for the DROP TYPE statement.
+//
+// This makes the statement safe to execute even if the type doesn't exist.
+func (n *DropTypeNode) SetIfExists() *DropTypeNode {
+	n.IfExists = true
+	return n
+}
+
+// SetCascade sets the CASCADE option for the DROP TYPE statement.
+//
+// This automatically drops dependent objects that use this type.
+func (n *DropTypeNode) SetCascade() *DropTypeNode {
+	n.Cascade = true
+	return n
+}
+
+// SetComment sets a comment for the DROP TYPE operation.
+//
+// This comment can be used for documentation or warnings.
+func (n *DropTypeNode) SetComment(comment string) *DropTypeNode {
+	n.Comment = comment
+	return n
+}
+
+// Accept implements the Node interface for DropTypeNode.
+func (n *DropTypeNode) Accept(visitor Visitor) error {
+	return visitor.VisitDropType(n)
+}
+
 // StatementList represents a collection of SQL statements that should be executed together.
 //
 // This is typically used to represent a complete schema or migration script

@@ -245,6 +245,60 @@ func (r *PostgreSQLRenderer) VisitComment(node *ast.CommentNode) error {
 	return r.BaseRenderer.VisitComment(node)
 }
 
+// VisitDropTable renders PostgreSQL-specific DROP TABLE statements
+func (r *PostgreSQLRenderer) VisitDropTable(node *ast.DropTableNode) error {
+	// Build DROP TABLE statement with PostgreSQL-specific features
+	var parts []string
+	parts = append(parts, "DROP TABLE")
+
+	if node.IfExists {
+		parts = append(parts, "IF EXISTS")
+	}
+
+	parts = append(parts, node.Name)
+
+	if node.Cascade {
+		parts = append(parts, "CASCADE")
+	}
+
+	sql := strings.Join(parts, " ") + ";"
+
+	// Add comment if provided
+	if node.Comment != "" {
+		r.WriteLinef("-- %s", node.Comment)
+	}
+
+	r.WriteLine(sql)
+	return nil
+}
+
+// VisitDropType renders PostgreSQL-specific DROP TYPE statements
+func (r *PostgreSQLRenderer) VisitDropType(node *ast.DropTypeNode) error {
+	// Build DROP TYPE statement (PostgreSQL-specific)
+	var parts []string
+	parts = append(parts, "DROP TYPE")
+
+	if node.IfExists {
+		parts = append(parts, "IF EXISTS")
+	}
+
+	parts = append(parts, node.Name)
+
+	if node.Cascade {
+		parts = append(parts, "CASCADE")
+	}
+
+	sql := strings.Join(parts, " ") + ";"
+
+	// Add comment if provided
+	if node.Comment != "" {
+		r.WriteLinef("-- %s", node.Comment)
+	}
+
+	r.WriteLine(sql)
+	return nil
+}
+
 // Render overrides the base Render method to ensure proper method resolution
 func (r *PostgreSQLRenderer) Render(node ast.Node) (string, error) {
 	r.Reset()

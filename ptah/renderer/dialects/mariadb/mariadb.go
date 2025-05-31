@@ -2,6 +2,7 @@ package mariadb
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
 
@@ -408,14 +409,66 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 
 		// Modify existing columns
 		for _, colDiff := range tableDiff.ColumnsModified {
-			for changeType, change := range colDiff.Changes {
-				statements = append(statements, fmt.Sprintf("-- TODO: ALTER TABLE %s MODIFY COLUMN %s %s (%s);", tableDiff.TableName, colDiff.ColumnName, changeType, change))
+			// Find the target field definition for this column
+			var targetField *types.SchemaField
+			for _, field := range generated.Fields {
+				if field.StructName == tableDiff.TableName && field.Name == colDiff.ColumnName {
+					targetField = &field
+					break
+				}
+			}
+
+			if targetField == nil {
+				statements = append(statements, fmt.Sprintf("-- ERROR: Could not find field definition for %s.%s", tableDiff.TableName, colDiff.ColumnName))
+				continue
+			}
+
+			// Create a column definition with the target field properties
+			column := g.convertFieldToColumn(*targetField, generated.Enums)
+
+			// Generate ALTER COLUMN statements using AST
+			alterNode := &ast.AlterTableNode{
+				Name:       tableDiff.TableName,
+				Operations: []ast.AlterOperation{&ast.ModifyColumnOperation{Column: column}},
+			}
+
+			// Create enum map for MariaDB enum handling
+			enumMap := make(map[string][]string)
+			for _, enum := range generated.Enums {
+				enumMap[enum.Name] = enum.Values
+			}
+
+			// Generate MODIFY COLUMN statement using enum-aware method
+			g.renderer.Reset()
+			err := g.renderer.VisitAlterTableWithEnums(alterNode, enumMap)
+			if err != nil {
+				statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate MODIFY COLUMN for %s.%s: %v", tableDiff.TableName, colDiff.ColumnName, err))
+			} else {
+				// Add a comment showing what changes are being made
+				changesList := make([]string, 0, len(colDiff.Changes))
+				for changeType, change := range colDiff.Changes {
+					changesList = append(changesList, fmt.Sprintf("%s: %s", changeType, change))
+				}
+				statements = append(statements, fmt.Sprintf("-- Modify column %s.%s: %s", tableDiff.TableName, colDiff.ColumnName, strings.Join(changesList, ", ")))
+				statements = append(statements, g.renderer.GetOutput())
 			}
 		}
 
 		// Remove columns (dangerous!)
 		for _, colName := range tableDiff.ColumnsRemoved {
-			statements = append(statements, fmt.Sprintf("-- WARNING: ALTER TABLE %s DROP COLUMN %s; -- This will delete data!", tableDiff.TableName, colName))
+			// Generate DROP COLUMN statement using AST
+			alterNode := &ast.AlterTableNode{
+				Name:       tableDiff.TableName,
+				Operations: []ast.AlterOperation{&ast.DropColumnOperation{ColumnName: colName}},
+			}
+			result, err := g.renderer.Render(alterNode)
+			if err != nil {
+				statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate DROP COLUMN for %s.%s: %v", tableDiff.TableName, colName, err))
+			} else {
+				// Add a warning comment before the actual SQL
+				statements = append(statements, fmt.Sprintf("-- WARNING: Dropping column %s.%s - This will delete data!", tableDiff.TableName, colName))
+				statements = append(statements, result)
+			}
 		}
 	}
 
@@ -446,7 +499,16 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 
 	// 5. Remove tables (dangerous!)
 	for _, tableName := range diff.TablesRemoved {
-		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TABLE %s; -- This will delete all data!", tableName))
+		dropTableNode := ast.NewDropTable(tableName).
+			SetIfExists().
+			SetComment("WARNING: This will delete all data!")
+
+		result, err := g.renderer.Render(dropTableNode)
+		if err != nil {
+			statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate DROP TABLE for %s: %v", tableName, err))
+		} else {
+			statements = append(statements, result)
+		}
 	}
 
 	// MariaDB doesn't have separate enum types to remove - they're inline with tables

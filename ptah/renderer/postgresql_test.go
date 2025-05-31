@@ -901,6 +901,88 @@ func TestPostgreSQLRenderer_VisitMethods(t *testing.T) {
 	}
 }
 
+func TestPostgreSQLRenderer_VisitDropTable(t *testing.T) {
+	tests := []struct {
+		name     string
+		node     *ast.DropTableNode
+		expected string
+	}{
+		{
+			name: "Basic DROP TABLE",
+			node: ast.NewDropTable("users"),
+			expected: "DROP TABLE users;\n",
+		},
+		{
+			name: "DROP TABLE IF EXISTS",
+			node: ast.NewDropTable("users").SetIfExists(),
+			expected: "DROP TABLE IF EXISTS users;\n",
+		},
+		{
+			name: "DROP TABLE CASCADE",
+			node: ast.NewDropTable("users").SetCascade(),
+			expected: "DROP TABLE users CASCADE;\n",
+		},
+		{
+			name: "DROP TABLE with all options",
+			node: ast.NewDropTable("users").SetIfExists().SetCascade().SetComment("Dangerous operation"),
+			expected: "-- Dangerous operation\nDROP TABLE IF EXISTS users CASCADE;\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			renderer := renderer.NewPostgreSQLRenderer()
+			err := renderer.VisitDropTable(tt.node)
+
+			c.Assert(err, qt.IsNil)
+			c.Assert(renderer.GetOutput(), qt.Equals, tt.expected)
+		})
+	}
+}
+
+func TestPostgreSQLRenderer_VisitDropType(t *testing.T) {
+	tests := []struct {
+		name     string
+		node     *ast.DropTypeNode
+		expected string
+	}{
+		{
+			name: "Basic DROP TYPE",
+			node: ast.NewDropType("status_enum"),
+			expected: "DROP TYPE status_enum;\n",
+		},
+		{
+			name: "DROP TYPE IF EXISTS",
+			node: ast.NewDropType("status_enum").SetIfExists(),
+			expected: "DROP TYPE IF EXISTS status_enum;\n",
+		},
+		{
+			name: "DROP TYPE CASCADE",
+			node: ast.NewDropType("status_enum").SetCascade(),
+			expected: "DROP TYPE status_enum CASCADE;\n",
+		},
+		{
+			name: "DROP TYPE with all options",
+			node: ast.NewDropType("status_enum").SetIfExists().SetCascade().SetComment("Remove unused enum"),
+			expected: "-- Remove unused enum\nDROP TYPE IF EXISTS status_enum CASCADE;\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			renderer := renderer.NewPostgreSQLRenderer()
+			err := renderer.VisitDropType(tt.node)
+
+			c.Assert(err, qt.IsNil)
+			c.Assert(renderer.GetOutput(), qt.Equals, tt.expected)
+		})
+	}
+}
+
 func TestPostgreSQLRenderer_RenderAutoIncrement(t *testing.T) {
 	c := qt.New(t)
 

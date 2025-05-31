@@ -24,6 +24,10 @@ type Visitor interface {
 	VisitEnum(*EnumNode) error
 	// VisitComment renders a SQL comment
 	VisitComment(*CommentNode) error
+	// VisitDropTable renders a DROP TABLE statement
+	VisitDropTable(*DropTableNode) error
+	// VisitDropType renders a DROP TYPE statement (PostgreSQL-specific)
+	VisitDropType(*DropTypeNode) error
 }
 
 // DefaultValue represents different types of default values for table columns.

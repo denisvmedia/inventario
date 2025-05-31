@@ -491,12 +491,32 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 
 	// 7. Remove tables (dangerous!)
 	for _, tableName := range diff.TablesRemoved {
-		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TABLE %s; -- This will delete all data!", tableName))
+		dropTableNode := ast.NewDropTable(tableName).
+			SetIfExists().
+			SetCascade().
+			SetComment("WARNING: This will delete all data!")
+
+		result, err := g.renderer.Render(dropTableNode)
+		if err != nil {
+			statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate DROP TABLE for %s: %v", tableName, err))
+		} else {
+			statements = append(statements, result)
+		}
 	}
 
 	// 8. Remove enums (dangerous!)
 	for _, enumName := range diff.EnumsRemoved {
-		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TYPE %s; -- Make sure no tables use this enum!", enumName))
+		dropTypeNode := ast.NewDropType(enumName).
+			SetIfExists().
+			SetCascade().
+			SetComment("WARNING: Make sure no tables use this enum!")
+
+		result, err := g.renderer.Render(dropTypeNode)
+		if err != nil {
+			statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate DROP TYPE for %s: %v", enumName, err))
+		} else {
+			statements = append(statements, result)
+		}
 	}
 
 	return statements

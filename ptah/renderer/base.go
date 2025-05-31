@@ -294,6 +294,60 @@ func (r *BaseRenderer) VisitEnum(node *ast.EnumNode) error {
 	return nil
 }
 
+// VisitDropTable renders DROP TABLE statements (base implementation)
+func (r *BaseRenderer) VisitDropTable(node *ast.DropTableNode) error {
+	// Build DROP TABLE statement
+	var parts []string
+	parts = append(parts, "DROP TABLE")
+
+	if node.IfExists {
+		parts = append(parts, "IF EXISTS")
+	}
+
+	parts = append(parts, node.Name)
+
+	if node.Cascade {
+		parts = append(parts, "CASCADE")
+	}
+
+	sql := strings.Join(parts, " ") + ";"
+
+	// Add comment if provided
+	if node.Comment != "" {
+		r.WriteLinef("-- %s", node.Comment)
+	}
+
+	r.WriteLine(sql)
+	return nil
+}
+
+// VisitDropType renders DROP TYPE statements (base implementation)
+func (r *BaseRenderer) VisitDropType(node *ast.DropTypeNode) error {
+	// Build DROP TYPE statement
+	var parts []string
+	parts = append(parts, "DROP TYPE")
+
+	if node.IfExists {
+		parts = append(parts, "IF EXISTS")
+	}
+
+	parts = append(parts, node.Name)
+
+	if node.Cascade {
+		parts = append(parts, "CASCADE")
+	}
+
+	sql := strings.Join(parts, " ") + ";"
+
+	// Add comment if provided
+	if node.Comment != "" {
+		r.WriteLinef("-- %s", node.Comment)
+	}
+
+	r.WriteLine(sql)
+	return nil
+}
+
 // Render renders an AST node to SQL
 func (r *BaseRenderer) Render(node ast.Node) (string, error) {
 	r.Reset()

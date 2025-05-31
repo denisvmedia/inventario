@@ -296,3 +296,40 @@ func (r *MariaDBRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, e
 	r.WriteLine("")
 	return nil
 }
+
+// VisitDropTable renders MariaDB-specific DROP TABLE statements
+func (r *MariaDBRenderer) VisitDropTable(node *ast.DropTableNode) error {
+	// Build DROP TABLE statement with MariaDB-specific features
+	var parts []string
+	parts = append(parts, "DROP TABLE")
+
+	if node.IfExists {
+		parts = append(parts, "IF EXISTS")
+	}
+
+	parts = append(parts, node.Name)
+
+	// MariaDB doesn't support CASCADE for DROP TABLE like PostgreSQL
+	// Ignore the Cascade flag for MariaDB
+
+	sql := strings.Join(parts, " ") + ";"
+
+	// Add comment if provided
+	if node.Comment != "" {
+		r.WriteLinef("-- %s", node.Comment)
+	}
+
+	r.WriteLine(sql)
+	return nil
+}
+
+// VisitDropType renders DROP TYPE statements for MariaDB
+func (r *MariaDBRenderer) VisitDropType(node *ast.DropTypeNode) error {
+	// MariaDB doesn't have separate enum types like PostgreSQL
+	// This operation is not applicable for MariaDB, so we just add a comment
+	if node.Comment != "" {
+		r.WriteLinef("-- %s", node.Comment)
+	}
+	r.WriteLinef("-- MariaDB does not support DROP TYPE - enums are handled inline in column definitions")
+	return nil
+}

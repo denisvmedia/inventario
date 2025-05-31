@@ -6,6 +6,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
@@ -404,4 +406,97 @@ func TestGenerator_GenerateCreateTable_IgnoresDifferentStructs(t *testing.T) {
 
 	c.Assert(result, qt.Contains, "id INT PRIMARY KEY AUTO_INCREMENT")
 	c.Assert(result, qt.Not(qt.Contains), "title") // Should not include Post fields
+}
+
+func TestGenerator_GenerateMigrationSQL_ModifyColumn(t *testing.T) {
+	c := qt.New(t)
+
+	generator := mysql.New()
+
+	// Create a mock schema diff with column modifications
+	diff := &differtypes.SchemaDiff{
+		TablesModified: []differtypes.TableDiff{
+			{
+				TableName: "users",
+				ColumnsModified: []differtypes.ColumnDiff{
+					{
+						ColumnName: "email",
+						Changes: map[string]string{
+							"type":     "VARCHAR(255) -> VARCHAR(320)",
+							"nullable": "true -> false",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create generated schema with the target field
+	generated := &parsertypes.PackageParseResult{
+		Fields: []types.SchemaField{
+			{
+				StructName: "users",
+				Name:       "email",
+				Type:       "VARCHAR(320)",
+				Nullable:   false,
+			},
+		},
+	}
+
+	result := generator.GenerateMigrationSQL(diff, generated)
+
+	// Should contain MODIFY COLUMN statements
+	c.Assert(result, qt.HasLen, 3) // Comment + SQL
+	c.Assert(result[0], qt.Contains, "-- Modify table: users")
+	c.Assert(result[1], qt.Contains, "-- Modify column users.email:")
+	c.Assert(result[2], qt.Contains, "ALTER TABLE users MODIFY COLUMN email VARCHAR(320) NOT NULL;")
+}
+
+func TestGenerator_GenerateMigrationSQL_ModifyColumnWithEnum(t *testing.T) {
+	c := qt.New(t)
+
+	generator := mysql.New()
+
+	// Create a mock schema diff with enum column modifications
+	diff := &differtypes.SchemaDiff{
+		TablesModified: []differtypes.TableDiff{
+			{
+				TableName: "users",
+				ColumnsModified: []differtypes.ColumnDiff{
+					{
+						ColumnName: "status",
+						Changes: map[string]string{
+							"type": "user_status_enum -> user_status_enum",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create generated schema with enum field
+	generated := &parsertypes.PackageParseResult{
+		Fields: []types.SchemaField{
+			{
+				StructName: "users",
+				Name:       "status",
+				Type:       "user_status_enum",
+				Nullable:   false,
+			},
+		},
+		Enums: []types.GlobalEnum{
+			{
+				Name:   "user_status_enum",
+				Values: []string{"active", "inactive", "pending"},
+			},
+		},
+	}
+
+	result := generator.GenerateMigrationSQL(diff, generated)
+
+	// Should contain MODIFY COLUMN with inline ENUM
+	c.Assert(result, qt.HasLen, 3) // Comment + SQL
+	c.Assert(result[0], qt.Contains, "-- Modify table: users")
+	c.Assert(result[1], qt.Contains, "-- Modify column users.status:")
+	c.Assert(result[2], qt.Contains, "ALTER TABLE users MODIFY COLUMN status ENUM('active', 'inactive', 'pending') NOT NULL;")
 }

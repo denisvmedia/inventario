@@ -67,3 +67,19 @@ func (m *MockVisitor) VisitComment(node *ast.CommentNode) error {
 	}
 	return nil
 }
+
+func (m *MockVisitor) VisitDropTable(node *ast.DropTableNode) error {
+	m.VisitedNodes = append(m.VisitedNodes, "DropTable:"+node.Name)
+	if m.ReturnError {
+		return errors.New("mock error")
+	}
+	return nil
+}
+
+func (m *MockVisitor) VisitDropType(node *ast.DropTypeNode) error {
+	m.VisitedNodes = append(m.VisitedNodes, "DropType:"+node.Name)
+	if m.ReturnError {
+		return errors.New("mock error")
+	}
+	return nil
+}

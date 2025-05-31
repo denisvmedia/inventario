@@ -413,3 +413,79 @@ func TestColumnNode_AllProperties(t *testing.T) {
 	c.Assert(column.ForeignKey.Column, qt.Equals, "id")
 	c.Assert(column.ForeignKey.Name, qt.Equals, "fk_user_ref")
 }
+
+func TestDropTableNode_Constructor(t *testing.T) {
+	c := qt.New(t)
+
+	dropTable := ast.NewDropTable("users")
+
+	c.Assert(dropTable.Name, qt.Equals, "users")
+	c.Assert(dropTable.IfExists, qt.IsFalse)
+	c.Assert(dropTable.Cascade, qt.IsFalse)
+	c.Assert(dropTable.Comment, qt.Equals, "")
+}
+
+func TestDropTableNode_FluentAPI(t *testing.T) {
+	c := qt.New(t)
+
+	dropTable := ast.NewDropTable("users").
+		SetIfExists().
+		SetCascade().
+		SetComment("Dangerous operation")
+
+	c.Assert(dropTable.Name, qt.Equals, "users")
+	c.Assert(dropTable.IfExists, qt.IsTrue)
+	c.Assert(dropTable.Cascade, qt.IsTrue)
+	c.Assert(dropTable.Comment, qt.Equals, "Dangerous operation")
+}
+
+func TestDropTableNode_Accept(t *testing.T) {
+	c := qt.New(t)
+
+	visitor := &mocks.MockVisitor{}
+	dropTable := ast.NewDropTable("users")
+
+	err := dropTable.Accept(visitor)
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(visitor.VisitedNodes, qt.HasLen, 1)
+	c.Assert(visitor.VisitedNodes[0], qt.Equals, "DropTable:users")
+}
+
+func TestDropTypeNode_Constructor(t *testing.T) {
+	c := qt.New(t)
+
+	dropType := ast.NewDropType("status_enum")
+
+	c.Assert(dropType.Name, qt.Equals, "status_enum")
+	c.Assert(dropType.IfExists, qt.IsFalse)
+	c.Assert(dropType.Cascade, qt.IsFalse)
+	c.Assert(dropType.Comment, qt.Equals, "")
+}
+
+func TestDropTypeNode_FluentAPI(t *testing.T) {
+	c := qt.New(t)
+
+	dropType := ast.NewDropType("status_enum").
+		SetIfExists().
+		SetCascade().
+		SetComment("Remove unused enum")
+
+	c.Assert(dropType.Name, qt.Equals, "status_enum")
+	c.Assert(dropType.IfExists, qt.IsTrue)
+	c.Assert(dropType.Cascade, qt.IsTrue)
+	c.Assert(dropType.Comment, qt.Equals, "Remove unused enum")
+}
+
+func TestDropTypeNode_Accept(t *testing.T) {
+	c := qt.New(t)
+
+	visitor := &mocks.MockVisitor{}
+	dropType := ast.NewDropType("status_enum")
+
+	err := dropType.Accept(visitor)
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(visitor.VisitedNodes, qt.HasLen, 1)
+	c.Assert(visitor.VisitedNodes[0], qt.Equals, "DropType:status_enum")
+}

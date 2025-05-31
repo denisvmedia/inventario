@@ -411,3 +411,40 @@ func (r *MySQLRenderer) getEnumValues(fieldType string, enums map[string][]strin
 	}
 	return enums[fieldType]
 }
+
+// VisitDropTable renders MySQL-specific DROP TABLE statements
+func (r *MySQLRenderer) VisitDropTable(node *ast.DropTableNode) error {
+	// Build DROP TABLE statement with MySQL-specific features
+	var parts []string
+	parts = append(parts, "DROP TABLE")
+
+	if node.IfExists {
+		parts = append(parts, "IF EXISTS")
+	}
+
+	parts = append(parts, node.Name)
+
+	// MySQL doesn't support CASCADE for DROP TABLE like PostgreSQL
+	// Ignore the Cascade flag for MySQL
+
+	sql := strings.Join(parts, " ") + ";"
+
+	// Add comment if provided
+	if node.Comment != "" {
+		r.WriteLinef("-- %s", node.Comment)
+	}
+
+	r.WriteLine(sql)
+	return nil
+}
+
+// VisitDropType renders DROP TYPE statements for MySQL
+func (r *MySQLRenderer) VisitDropType(node *ast.DropTypeNode) error {
+	// MySQL doesn't have separate enum types like PostgreSQL
+	// This operation is not applicable for MySQL, so we just add a comment
+	if node.Comment != "" {
+		r.WriteLinef("-- %s", node.Comment)
+	}
+	r.WriteLinef("-- MySQL does not support DROP TYPE - enums are handled inline in column definitions")
+	return nil
+}
