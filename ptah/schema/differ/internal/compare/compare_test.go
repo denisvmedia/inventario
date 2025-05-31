@@ -1126,3 +1126,379 @@ func TestTablesAndColumns_SortingConsistency(t *testing.T) {
 	c.Assert(diff.TablesAdded, qt.DeepEquals, []string{"alpha_table", "zebra_table"})
 	c.Assert(diff.TablesRemoved, qt.DeepEquals, []string{"alpha_old_table", "zebra_old_table"})
 }
+
+func TestColumnByName_HappyPath(t *testing.T) {
+	tests := []struct {
+		name         string
+		diffs        []differtypes.ColumnDiff
+		columnName   string
+		expectedDiff *differtypes.ColumnDiff
+	}{
+		{
+			name: "find existing column",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "id",
+					Changes: map[string]string{
+						"type": "integer -> bigint",
+					},
+				},
+				{
+					ColumnName: "email",
+					Changes: map[string]string{
+						"type":     "varchar -> text",
+						"nullable": "true -> false",
+					},
+				},
+				{
+					ColumnName: "name",
+					Changes: map[string]string{
+						"unique": "false -> true",
+					},
+				},
+			},
+			columnName: "email",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "email",
+				Changes: map[string]string{
+					"type":     "varchar -> text",
+					"nullable": "true -> false",
+				},
+			},
+		},
+		{
+			name: "find first column in slice",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "first_column",
+					Changes: map[string]string{
+						"type": "varchar -> text",
+					},
+				},
+				{
+					ColumnName: "second_column",
+					Changes: map[string]string{
+						"nullable": "true -> false",
+					},
+				},
+			},
+			columnName: "first_column",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "first_column",
+				Changes: map[string]string{
+					"type": "varchar -> text",
+				},
+			},
+		},
+		{
+			name: "find last column in slice",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "first_column",
+					Changes: map[string]string{
+						"type": "varchar -> text",
+					},
+				},
+				{
+					ColumnName: "last_column",
+					Changes: map[string]string{
+						"nullable": "true -> false",
+					},
+				},
+			},
+			columnName: "last_column",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "last_column",
+				Changes: map[string]string{
+					"nullable": "true -> false",
+				},
+			},
+		},
+		{
+			name: "find column with empty changes",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "unchanged_column",
+					Changes:    map[string]string{},
+				},
+			},
+			columnName: "unchanged_column",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "unchanged_column",
+				Changes:    map[string]string{},
+			},
+		},
+		{
+			name: "find column with single change",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "status",
+					Changes: map[string]string{
+						"default": "'inactive' -> 'active'",
+					},
+				},
+			},
+			columnName: "status",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "status",
+				Changes: map[string]string{
+					"default": "'inactive' -> 'active'",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			result := compare.ColumnByName(tt.diffs, tt.columnName)
+
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(result.ColumnName, qt.Equals, tt.expectedDiff.ColumnName)
+			c.Assert(len(result.Changes), qt.Equals, len(tt.expectedDiff.Changes))
+			for key, expectedValue := range tt.expectedDiff.Changes {
+				c.Assert(result.Changes[key], qt.Equals, expectedValue)
+			}
+		})
+	}
+}
+
+func TestColumnByName_UnhappyPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		diffs      []differtypes.ColumnDiff
+		columnName string
+	}{
+		{
+			name: "column not found",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "id",
+					Changes: map[string]string{
+						"type": "integer -> bigint",
+					},
+				},
+				{
+					ColumnName: "email",
+					Changes: map[string]string{
+						"nullable": "true -> false",
+					},
+				},
+			},
+			columnName: "nonexistent_column",
+		},
+		{
+			name:       "empty slice",
+			diffs:      []differtypes.ColumnDiff{},
+			columnName: "any_column",
+		},
+		{
+			name:       "nil slice",
+			diffs:      nil,
+			columnName: "any_column",
+		},
+		{
+			name: "empty column name search",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "id",
+					Changes: map[string]string{
+						"type": "integer -> bigint",
+					},
+				},
+			},
+			columnName: "",
+		},
+		{
+			name: "case sensitive search - wrong case",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "Email",
+					Changes: map[string]string{
+						"type": "varchar -> text",
+					},
+				},
+			},
+			columnName: "email", // lowercase, should not match "Email"
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			result := compare.ColumnByName(tt.diffs, tt.columnName)
+
+			c.Assert(result, qt.IsNil)
+		})
+	}
+}
+
+func TestColumnByName_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name         string
+		diffs        []differtypes.ColumnDiff
+		columnName   string
+		expectedDiff *differtypes.ColumnDiff
+	}{
+		{
+			name: "duplicate column names - returns first match",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "duplicate_name",
+					Changes: map[string]string{
+						"type": "varchar -> text",
+					},
+				},
+				{
+					ColumnName: "duplicate_name",
+					Changes: map[string]string{
+						"nullable": "true -> false",
+					},
+				},
+			},
+			columnName: "duplicate_name",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "duplicate_name",
+				Changes: map[string]string{
+					"type": "varchar -> text",
+				},
+			},
+		},
+		{
+			name: "column name with special characters",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "column_with_underscore",
+					Changes: map[string]string{
+						"type": "varchar -> text",
+					},
+				},
+				{
+					ColumnName: "column-with-dash",
+					Changes: map[string]string{
+						"nullable": "true -> false",
+					},
+				},
+				{
+					ColumnName: "column.with.dots",
+					Changes: map[string]string{
+						"unique": "false -> true",
+					},
+				},
+			},
+			columnName: "column-with-dash",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "column-with-dash",
+				Changes: map[string]string{
+					"nullable": "true -> false",
+				},
+			},
+		},
+		{
+			name: "column name with numbers",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "column123",
+					Changes: map[string]string{
+						"type": "integer -> bigint",
+					},
+				},
+				{
+					ColumnName: "123column",
+					Changes: map[string]string{
+						"nullable": "true -> false",
+					},
+				},
+			},
+			columnName: "123column",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "123column",
+				Changes: map[string]string{
+					"nullable": "true -> false",
+				},
+			},
+		},
+		{
+			name: "single character column name",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "a",
+					Changes: map[string]string{
+						"type": "char -> varchar",
+					},
+				},
+			},
+			columnName: "a",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "a",
+				Changes: map[string]string{
+					"type": "char -> varchar",
+				},
+			},
+		},
+		{
+			name: "very long column name",
+			diffs: []differtypes.ColumnDiff{
+				{
+					ColumnName: "this_is_a_very_long_column_name_that_might_be_used_in_some_databases_with_descriptive_naming_conventions",
+					Changes: map[string]string{
+						"type": "text -> longtext",
+					},
+				},
+			},
+			columnName: "this_is_a_very_long_column_name_that_might_be_used_in_some_databases_with_descriptive_naming_conventions",
+			expectedDiff: &differtypes.ColumnDiff{
+				ColumnName: "this_is_a_very_long_column_name_that_might_be_used_in_some_databases_with_descriptive_naming_conventions",
+				Changes: map[string]string{
+					"type": "text -> longtext",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			result := compare.ColumnByName(tt.diffs, tt.columnName)
+
+			if tt.expectedDiff == nil {
+				c.Assert(result, qt.IsNil)
+			} else {
+				c.Assert(result, qt.IsNotNil)
+				c.Assert(result.ColumnName, qt.Equals, tt.expectedDiff.ColumnName)
+				c.Assert(len(result.Changes), qt.Equals, len(tt.expectedDiff.Changes))
+				for key, expectedValue := range tt.expectedDiff.Changes {
+					c.Assert(result.Changes[key], qt.Equals, expectedValue)
+				}
+			}
+		})
+	}
+}
+
+func TestColumnByName_PointerBehavior(t *testing.T) {
+	c := qt.New(t)
+
+	// Test that the returned pointer references the original data
+	originalDiffs := []differtypes.ColumnDiff{
+		{
+			ColumnName: "test_column",
+			Changes: map[string]string{
+				"type": "varchar -> text",
+			},
+		},
+	}
+
+	result := compare.ColumnByName(originalDiffs, "test_column")
+
+	c.Assert(result, qt.IsNotNil)
+	c.Assert(result.ColumnName, qt.Equals, "test_column")
+
+	// Modify the returned pointer and verify it affects the original slice
+	result.Changes["new_change"] = "old -> new"
+
+	c.Assert(originalDiffs[0].Changes["new_change"], qt.Equals, "old -> new")
+	c.Assert(len(originalDiffs[0].Changes), qt.Equals, 2)
+}
