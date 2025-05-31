@@ -67,6 +67,7 @@ var (
 )
 
 type EntityID struct {
+	//migrator:schema:field name="id" type="VARCHAR(36)" primary="true" platform.mysql.type="INT AUTO_INCREMENT" platform.mariadb.type="INT AUTO_INCREMENT"
 	ID string `json:"id" db:"id"`
 }
 

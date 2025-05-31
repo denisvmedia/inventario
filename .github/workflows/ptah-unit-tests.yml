@@ -1,0 +1,84 @@
+name: Ptah Unit Tests
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'ptah/**'
+      - '.github/workflows/ptah-unit-tests.yml'
+  pull_request:
+    paths:
+      - 'ptah/**'
+      - '.github/workflows/ptah-unit-tests.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  unit-tests:
+    name: ptah-unit-tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.3'
+          cache: true
+          cache-dependency-path: ptah/go.sum
+      
+      - name: Install dependencies
+        run: go mod download
+        working-directory: ptah
+      
+      - name: Run unit tests
+        run: |
+          # Run unit tests excluding integration tests
+          # These tests don't require database connections
+          go test -v -race \
+            ./executor \
+            ./migrator \
+            ./renderer/... \
+            ./schema/... \
+            -run "^Test.*" \
+            -skip "Integration|MySQL.*Integration|PostgreSQL.*Integration" \
+            -timeout 10m
+        working-directory: ptah
+      
+      - name: Run ptah root package unit tests
+        run: |
+          # Run unit tests in the root ptah package
+          go test -v -race . -timeout 5m
+        working-directory: ptah
+      
+      - name: Generate test coverage
+        run: |
+          go test -coverprofile=coverage.out \
+            ./executor \
+            ./migrator \
+            ./renderer/... \
+            ./schema/... \
+            -run "^Test.*" \
+            -skip "Integration|MySQL.*Integration|PostgreSQL.*Integration"
+          go tool cover -html=coverage.out -o coverage.html
+        working-directory: ptah
+      
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: ptah-unit-test-coverage
+          path: |
+            ptah/coverage.out
+            ptah/coverage.html
+          retention-days: 7
+      
+      - name: Golint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          args: --timeout=30m
+          version: v2.1.6
+          working-directory: ptah
