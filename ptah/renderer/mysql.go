@@ -130,12 +130,24 @@ func (r *MySQLRenderer) renderColumnWithEnums(column *ast.ColumnNode, enumValues
 
 // VisitAlterTable renders MySQL-specific ALTER TABLE statements
 func (r *MySQLRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
+	// Use the enum-aware version with empty enum map for backward compatibility
+	return r.VisitAlterTableWithEnums(node, nil)
+}
+
+// VisitAlterTableWithEnums renders MySQL-specific ALTER TABLE statements with enum support
+func (r *MySQLRenderer) VisitAlterTableWithEnums(node *ast.AlterTableNode, enums map[string][]string) error {
 	r.WriteLine("-- ALTER statements: --")
 
 	for _, operation := range node.Operations {
 		switch op := operation.(type) {
 		case *ast.AddColumnOperation:
-			line, err := r.renderColumn(op.Column)
+			// Get enum values for this column type
+			enumValues := r.getEnumValues(op.Column.Type, enums)
+			if !r.isEnumType(op.Column.Type, enums) {
+				enumValues = nil
+			}
+
+			line, err := r.renderColumnWithEnums(op.Column, enumValues)
 			if err != nil {
 				return fmt.Errorf("error rendering add column: %w", err)
 			}
@@ -147,8 +159,14 @@ func (r *MySQLRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
 			r.WriteLinef("ALTER TABLE %s DROP COLUMN %s;", node.Name, op.ColumnName)
 
 		case *ast.ModifyColumnOperation:
+			// Get enum values for this column type
+			enumValues := r.getEnumValues(op.Column.Type, enums)
+			if !r.isEnumType(op.Column.Type, enums) {
+				enumValues = nil
+			}
+
 			// MySQL uses MODIFY COLUMN syntax
-			line, err := r.renderColumn(op.Column)
+			line, err := r.renderColumnWithEnums(op.Column, enumValues)
 			if err != nil {
 				return fmt.Errorf("error rendering modify column: %w", err)
 			}

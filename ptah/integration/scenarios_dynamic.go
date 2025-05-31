@@ -316,7 +316,6 @@ func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnecti
 	description := "Add additional fields to users and products"
 
 	// First application
-	fmt.Println("🚀 Applying version 001-add-fields for the first time")
 	if err := vem.MigrateToVersion(ctx, conn, version, description); err != nil {
 		return fmt.Errorf("failed to migrate to version %s (first time): %w", version, err)
 	}
@@ -326,15 +325,12 @@ func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnecti
 	if err != nil {
 		return fmt.Errorf("failed to get current migration version: %w", err)
 	}
-	fmt.Println("Current migration version after first application:", currentVersion)
 
-	fmt.Println("🚀 Applying version 001-add-fields for the second time")
 	// Try to apply the same version again - should be idempotent
 	if err := vem.MigrateToVersion(ctx, conn, version, description); err != nil {
 		return fmt.Errorf("failed to migrate to version %s (second time): %w", version, err)
 	}
 
-	fmt.Println("🚀 Checking that version remains the same after second application")
 	// Check that no new migration was applied
 	newVersion, err := getCurrentMigrationVersion(ctx, conn)
 	if err != nil {

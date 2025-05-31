@@ -393,12 +393,13 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 						enumMap[enum.Name] = enum.Values
 					}
 
-					// Generate ADD COLUMN statement using AST
-					result, err := g.renderer.Render(alterNode)
+					// Generate ADD COLUMN statement using enum-aware method
+					g.renderer.Reset()
+					err := g.renderer.VisitAlterTableWithEnums(alterNode, enumMap)
 					if err != nil {
 						statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate ADD COLUMN for %s.%s: %v", tableDiff.TableName, colName, err))
 					} else {
-						statements = append(statements, result)
+						statements = append(statements, g.renderer.GetOutput())
 					}
 					break
 				}

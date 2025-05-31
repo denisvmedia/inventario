@@ -357,6 +357,9 @@ func Columns(genCol types.SchemaField, dbCol parsertypes.Column) differtypes.Col
 
 	// Compare default values (simplified)
 	genDefault := genCol.Default
+	if genDefault == "" {
+		genDefault = genCol.DefaultExpr
+	}
 	dbDefault := ""
 	if dbCol.ColumnDefault != nil {
 		dbDefault = *dbCol.ColumnDefault
@@ -368,20 +371,16 @@ func Columns(genCol types.SchemaField, dbCol parsertypes.Column) differtypes.Col
 	if !isAutoIncrement {
 		normalizedDbDefault := normalize.DefaultValue(dbDefault, dbType)
 
+		idxName := "default"
 		if normalize.IsDefaultExpr(dbDefault) {
-			normalizeGenDefaultFn := normalize.DefaultValue(genCol.DefaultExpr, "")
-
-			if normalizeGenDefaultFn != normalizedDbDefault {
-				colDiff.Changes["default_expr"] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
-			}
-		} else {
-			normalizedGenDefault := normalize.DefaultValue(genDefault, genType)
-
-			if normalizedGenDefault != normalizedDbDefault {
-				colDiff.Changes["default"] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
-			}
+			idxName = "default_expr"
 		}
 
+		normalizeGenDefaultFn := normalize.DefaultValue(genDefault, "")
+
+		if normalizeGenDefaultFn != normalizedDbDefault {
+			colDiff.Changes[idxName] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
+		}
 	}
 
 	return colDiff

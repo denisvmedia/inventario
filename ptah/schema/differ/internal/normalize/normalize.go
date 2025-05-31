@@ -121,6 +121,10 @@ func DefaultValue(defaultValue, typeName string) string {
 		return ""
 	}
 
+	if strings.ToUpper(defaultValue) == "CURRENT_TIMESTAMP()" {
+		return "CURRENT_TIMESTAMP"
+	}
+
 	cleanValue := defaultValue
 
 	// MariaDB/MySQL returns 'NULL' string for columns without explicit defaults
