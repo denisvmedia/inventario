@@ -258,8 +258,8 @@ func TestMySQLWriter_UtilityMethods(t *testing.T) {
 			},
 			{
 				name:     "with comments",
-				input:    "CREATE TABLE test (id INT); -- This is a comment; CREATE INDEX idx_test ON test (id);",
-				expected: []string{"CREATE TABLE test (id INT)", "CREATE INDEX idx_test ON test (id)"},
+				input:    "CREATE TABLE test (id INT); /* This is a comment; */ CREATE INDEX idx_test ON test (id);",
+				expected: []string{"CREATE TABLE test (id INT)", "/* This is a comment; */ CREATE INDEX idx_test ON test (id)"},
 			},
 			{
 				name:     "empty statements",

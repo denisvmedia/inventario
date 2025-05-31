@@ -7,6 +7,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/denisvmedia/inventario/ptah/migrator/sqlsplitter"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 )
@@ -729,21 +730,10 @@ func (w *MySQLWriter) DropAllTables() error {
 	return nil
 }
 
-// splitSQLStatements splits a multi-statement SQL string into individual statements
+// splitSQLStatements splits a multi-statement SQL string into individual statements using AST-based parsing.
+// Unlike simple string splitting, this properly handles semicolons within string literals and comments.
 func (w *MySQLWriter) splitSQLStatements(sql string) []string {
-	// Split by semicolon and filter out empty statements
-	var statements []string
-	parts := strings.Split(sql, ";")
-
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		// Skip empty parts and comments
-		if part != "" && !strings.HasPrefix(part, "--") {
-			statements = append(statements, part)
-		}
-	}
-
-	return statements
+	return sqlsplitter.SplitSQLStatements(sql)
 }
 
 // isCreateTableStatement checks if a SQL statement is a CREATE TABLE statement

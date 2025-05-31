@@ -79,6 +79,29 @@ docker-compose --profile test run --rm ptah-tester --report=json
 docker-compose --profile test run --rm ptah-tester --verbose
 ```
 
+### Listing Available Scenarios
+
+Before running tests, you can list all available scenarios to see what's available:
+
+```bash
+# List all scenarios (both static and dynamic)
+docker-compose --profile test run --rm ptah-tester list
+
+# List only static scenarios (basic functionality tests)
+docker-compose --profile test run --rm ptah-tester list --static
+
+# List only dynamic scenarios (versioned entity evolution tests)
+docker-compose --profile test run --rm ptah-tester list --dynamic
+
+# Show help for the list command
+docker-compose --profile test run --rm ptah-tester list --help
+```
+
+The list command displays:
+- 📋 **Static scenarios**: Traditional migration tests using pre-built migration files
+- 🔄 **Dynamic scenarios**: Advanced tests using versioned entity fixtures with ✨ indicating enhanced step recording
+- Scenario descriptions and usage examples
+
 ### Scenario Selection
 
 ```bash
@@ -93,6 +116,9 @@ docker-compose --profile test run --rm ptah-tester --scenarios=idempotency_reapp
 
 # Run failure recovery tests
 docker-compose --profile test run --rm ptah-tester --scenarios=failure_diagnostics,partial_failure_recovery
+
+# Run dynamic scenarios for schema evolution testing
+docker-compose --profile test run --rm ptah-tester --scenarios=dynamic_basic_evolution,dynamic_rollback_single
 ```
 
 ### Database Selection
@@ -126,10 +152,20 @@ docker-compose --profile test run --rm ptah-tester --report=json --databases=pos
 
 ## Command Line Options
 
+### Main Test Command
+
 - `--report` - Report format: `txt`, `json`, or `html` (default: `txt`)
 - `--databases` - Comma-separated list of databases to test (default: `postgres,mysql,mariadb`)
 - `--scenarios` - Comma-separated list of specific scenarios to run (default: all)
 - `--verbose` - Enable verbose output
+
+### List Command
+
+The `list` subcommand helps you discover available test scenarios:
+
+- `--static` - Show only static scenarios (traditional migration tests)
+- `--dynamic` - Show only dynamic scenarios (versioned entity evolution tests)
+- `--all` - Show all scenarios (default)
 
 Reports are automatically saved to `/app/reports` inside the container and mapped to `./integration/reports` on the host.
 

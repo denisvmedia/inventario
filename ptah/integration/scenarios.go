@@ -65,7 +65,7 @@ func GetAllScenarios() []TestScenario {
 			Description: "Simulate a failing migration and capture error",
 			TestFunc:    testFailureDiagnostics,
 		},
-		
+
 		// Idempotency
 		{
 			Name:        "idempotency_reapply",
@@ -77,42 +77,42 @@ func GetAllScenarios() []TestScenario {
 			Description: "Run migrate up when database is already up-to-date",
 			TestFunc:    testIdempotencyUpToDate,
 		},
-		
+
 		// Concurrency
 		{
 			Name:        "concurrency_parallel_migrate",
 			Description: "Launch two migrate up processes in parallel",
 			TestFunc:    testConcurrencyParallelMigrate,
 		},
-		
+
 		// Partial Failure Recovery
 		{
 			Name:        "partial_failure_recovery",
 			Description: "Handle multi-step migration with intentional failure",
 			TestFunc:    testPartialFailureRecovery,
 		},
-		
+
 		// Timestamp Verification
 		{
 			Name:        "timestamp_verification",
 			Description: "Check that applied_at timestamps are stored correctly",
 			TestFunc:    testTimestampVerification,
 		},
-		
+
 		// Manual Patch Detection
 		{
 			Name:        "manual_patch_detection",
 			Description: "Detect manual schema changes via schema diff",
 			TestFunc:    testManualPatchDetection,
 		},
-		
+
 		// Permission Restrictions
 		{
 			Name:        "permission_restrictions",
 			Description: "Test with read-only privileges",
 			TestFunc:    testPermissionRestrictions,
 		},
-		
+
 		// Cleanup Support
 		{
 			Name:        "cleanup_support",
@@ -121,10 +121,10 @@ func GetAllScenarios() []TestScenario {
 		},
 	}
 
-// Add dynamic scenarios that use versioned entities
-scenarios = append(scenarios, GetDynamicScenarios()...)
+	// Add dynamic scenarios that use versioned entities
+	scenarios = append(scenarios, GetDynamicScenarios()...)
 
-return scenarios
+	return scenarios
 }
 
 // testApplyIncrementalMigrations tests applying multiple sequential migrations
@@ -136,22 +136,22 @@ func testApplyIncrementalMigrations(ctx context.Context, conn *executor.Database
 	if err != nil {
 		return fmt.Errorf("failed to get migrations filesystem: %w", err)
 	}
-	
+
 	// Apply all migrations
 	if err := helper.ApplyMigrations(ctx, migrationsFS); err != nil {
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
-	
+
 	// Verify final version
 	version, err := helper.GetCurrentVersion(ctx, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("failed to get current version: %w", err)
 	}
-	
+
 	if version != 3 { // Expecting 3 migrations in basic set
 		return fmt.Errorf("expected version 3, got %d", version)
 	}
-	
+
 	// Verify tables exist
 	tables := []string{"users", "posts", "comments"}
 	for _, table := range tables {
@@ -163,7 +163,7 @@ func testApplyIncrementalMigrations(ctx context.Context, conn *executor.Database
 			return fmt.Errorf("table %s should exist after migrations", table)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -175,27 +175,27 @@ func testRollbackMigrations(ctx context.Context, conn *executor.DatabaseConnecti
 	if err != nil {
 		return fmt.Errorf("failed to get migrations filesystem: %w", err)
 	}
-	
+
 	// Apply all migrations first
 	if err := helper.ApplyMigrations(ctx, migrationsFS); err != nil {
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
-	
+
 	// Rollback to version 1
 	if err := helper.RollbackToVersion(ctx, migrationsFS, 1); err != nil {
 		return fmt.Errorf("failed to rollback to version 1: %w", err)
 	}
-	
+
 	// Verify version
 	version, err := helper.GetCurrentVersion(ctx, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("failed to get current version: %w", err)
 	}
-	
+
 	if version != 1 {
 		return fmt.Errorf("expected version 1 after rollback, got %d", version)
 	}
-	
+
 	// Verify only users table exists
 	exists, err := helper.TableExists("users")
 	if err != nil {
@@ -204,7 +204,7 @@ func testRollbackMigrations(ctx context.Context, conn *executor.DatabaseConnecti
 	if !exists {
 		return fmt.Errorf("users table should exist after rollback to version 1")
 	}
-	
+
 	// Verify posts table doesn't exist
 	exists, err = helper.TableExists("posts")
 	if err != nil {
@@ -213,7 +213,7 @@ func testRollbackMigrations(ctx context.Context, conn *executor.DatabaseConnecti
 	if exists {
 		return fmt.Errorf("posts table should not exist after rollback to version 1")
 	}
-	
+
 	return nil
 }
 
@@ -225,35 +225,35 @@ func testUpgradeToSpecificVersion(ctx context.Context, conn *executor.DatabaseCo
 	if err != nil {
 		return fmt.Errorf("failed to get migrations filesystem: %w", err)
 	}
-	
+
 	// Create migrator and register migrations
 	m := migrator.NewMigrator(conn)
 	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
-	
+
 	// Migrate to version 2 only
 	if err := m.MigrateTo(ctx, 2); err != nil {
 		return fmt.Errorf("failed to migrate to version 2: %w", err)
 	}
-	
+
 	// Verify version
 	version, err := helper.GetCurrentVersion(ctx, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("failed to get current version: %w", err)
 	}
-	
+
 	if version != 2 {
 		return fmt.Errorf("expected version 2, got %d", version)
 	}
-	
+
 	// Verify correct tables exist
 	tables := map[string]bool{
-		"users": true,
-		"posts": true,
+		"users":    true,
+		"posts":    true,
 		"comments": false, // Should not exist at version 2
 	}
-	
+
 	for table, shouldExist := range tables {
 		exists, err := helper.TableExists(table)
 		if err != nil {
@@ -263,7 +263,7 @@ func testUpgradeToSpecificVersion(ctx context.Context, conn *executor.DatabaseCo
 			return fmt.Errorf("table %s existence mismatch: expected %v, got %v", table, shouldExist, exists)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -275,37 +275,37 @@ func testCheckCurrentVersion(ctx context.Context, conn *executor.DatabaseConnect
 	if err != nil {
 		return fmt.Errorf("failed to get migrations filesystem: %w", err)
 	}
-	
+
 	// Initially should be version 0
 	version, err := helper.GetCurrentVersion(ctx, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("failed to get initial version: %w", err)
 	}
-	
+
 	if version != 0 {
 		return fmt.Errorf("expected initial version 0, got %d", version)
 	}
-	
+
 	// Apply first migration
 	m := migrator.NewMigrator(conn)
 	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
-	
+
 	if err := m.MigrateTo(ctx, 1); err != nil {
 		return fmt.Errorf("failed to migrate to version 1: %w", err)
 	}
-	
+
 	// Should now be version 1
 	version, err = helper.GetCurrentVersion(ctx, migrationsFS)
 	if err != nil {
 		return fmt.Errorf("failed to get version after migration: %w", err)
 	}
-	
+
 	if version != 1 {
 		return fmt.Errorf("expected version 1 after migration, got %d", version)
 	}
-	
+
 	return nil
 }
 
@@ -313,41 +313,41 @@ func testCheckCurrentVersion(ctx context.Context, conn *executor.DatabaseConnect
 func testGenerateDesiredSchema(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
 	// Get the entities directory
 	entitiesDir := filepath.Join("fixtures", "entities")
-	
+
 	// Parse entities
 	result, err := parser.ParsePackageRecursively(entitiesDir)
 	if err != nil {
 		return fmt.Errorf("failed to parse entities: %w", err)
 	}
-	
+
 	// Verify we got some tables
 	if len(result.Tables) == 0 {
 		return fmt.Errorf("expected to find tables in entity definitions")
 	}
-	
+
 	// Verify we got some fields
 	if len(result.Fields) == 0 {
 		return fmt.Errorf("expected to find fields in entity definitions")
 	}
-	
+
 	// Check for expected entities
 	expectedTables := map[string]bool{
-		"users": false,
+		"users":    false,
 		"products": false,
 	}
-	
+
 	for _, table := range result.Tables {
 		if _, exists := expectedTables[table.Name]; exists {
 			expectedTables[table.Name] = true
 		}
 	}
-	
+
 	for tableName, found := range expectedTables {
 		if !found {
 			return fmt.Errorf("expected to find table %s in entity definitions", tableName)
 		}
 	}
-	
+
 	return nil
 }
 
