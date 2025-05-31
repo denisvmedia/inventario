@@ -181,6 +181,63 @@ func TestMySQLReader_parseTableFromDDL(t *testing.T) {
 			},
 		},
 		{
+			name: "table with unique constraint",
+			ddl: "CREATE TABLE `products` (\n" +
+				"  `id` int NOT NULL AUTO_INCREMENT,\n" +
+				"  `sku` varchar(100) NOT NULL,\n" +
+				"  PRIMARY KEY (`id`),\n" +
+				"  UNIQUE KEY `uk_sku` (`sku`)\n" +
+				") ENGINE=InnoDB",
+			expectError: false,
+			validate: func(c *qt.C, table parsertypes.Table) {
+				c.Assert(table.Name, qt.Equals, "products")
+				c.Assert(len(table.Columns), qt.Equals, 2)
+
+				// Check sku column should be marked as unique
+				skuCol := table.Columns[1]
+				c.Assert(skuCol.Name, qt.Equals, "sku")
+				c.Assert(skuCol.IsUnique, qt.IsTrue)
+			},
+		},
+		{
+			name: "real MySQL SHOW CREATE TABLE output",
+			ddl: "CREATE TABLE `test_table` (\n" +
+				"  `id` int NOT NULL AUTO_INCREMENT,\n" +
+				"  `name` varchar(255) NOT NULL,\n" +
+				"  `status` enum('active','inactive') DEFAULT 'active',\n" +
+				"  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n" +
+				"  PRIMARY KEY (`id`),\n" +
+				"  UNIQUE KEY `unique_name` (`name`)\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+			expectError: false,
+			validate: func(c *qt.C, table parsertypes.Table) {
+				c.Assert(table.Name, qt.Equals, "test_table")
+				c.Assert(len(table.Columns), qt.Equals, 4)
+
+				// Check id column
+				idCol := table.Columns[0]
+				c.Assert(idCol.Name, qt.Equals, "id")
+				c.Assert(idCol.IsAutoIncrement, qt.IsTrue)
+				c.Assert(idCol.IsPrimaryKey, qt.IsTrue)
+
+				// Check name column
+				nameCol := table.Columns[1]
+				c.Assert(nameCol.Name, qt.Equals, "name")
+				c.Assert(nameCol.IsUnique, qt.IsTrue)
+
+				// Check status column (enum)
+				statusCol := table.Columns[2]
+				c.Assert(statusCol.Name, qt.Equals, "status")
+				c.Assert(statusCol.DataType, qt.Equals, "enum('active','inactive')")
+
+				// Check created_at column
+				createdCol := table.Columns[3]
+				c.Assert(createdCol.Name, qt.Equals, "created_at")
+				c.Assert(createdCol.DataType, qt.Equals, "timestamp")
+				c.Assert(createdCol.IsNullable, qt.Equals, "YES")
+			},
+		},
+		{
 			name:        "invalid DDL",
 			ddl:         "INVALID SQL STATEMENT",
 			expectError: true,
@@ -261,7 +318,7 @@ func TestMySQLReader_ReadSchema_Integration(t *testing.T) {
 
 	statusCol := findColumn(testTable.Columns, "status")
 	c.Assert(statusCol, qt.IsNotNil)
-	c.Assert(statusCol.DataType, qt.Equals, "enum")
+	c.Assert(statusCol.DataType, qt.Equals, "enum('active','inactive')")
 }
 
 func TestMySQLReader_ReadSchema_NoConnection(t *testing.T) {
