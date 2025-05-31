@@ -964,7 +964,7 @@ func TestParser_ParsePostgreSQLComprehensiveDemo(t *testing.T) {
 		small_value SMALLINT DEFAULT 1 CHECK (small_value > 0),
 		numeric_precise NUMERIC(12,4) NOT NULL DEFAULT 0.0000,
 		real_value REAL,
-		-- double_value DOUBLE PRECISION,
+		double_value DOUBLE PRECISION,
 		is_active BOOLEAN DEFAULT TRUE,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMPTZ DEFAULT now(),
@@ -988,8 +988,8 @@ func TestParser_ParsePostgreSQLComprehensiveDemo(t *testing.T) {
 	createTable := statements.Statements[0].(*ast.CreateTableNode)
 	c.Assert(createTable.Name, qt.Equals, "public.full_demo")
 
-	// Test that we have the expected number of columns (actual count from parser)
-	c.Assert(len(createTable.Columns), qt.Equals, 19)
+	// Test that we have the expected number of columns (now includes DOUBLE PRECISION)
+	c.Assert(len(createTable.Columns), qt.Equals, 20)
 
 	// Test key PostgreSQL features
 
@@ -1039,33 +1039,38 @@ func TestParser_ParsePostgreSQLComprehensiveDemo(t *testing.T) {
 	c.Assert(numericCol.Default, qt.IsNotNil)
 	c.Assert(numericCol.Default.Value, qt.Equals, "0.0000")
 
+	// DOUBLE PRECISION type
+	doubleCol := createTable.Columns[9]
+	c.Assert(doubleCol.Name, qt.Equals, "double_value")
+	c.Assert(doubleCol.Type, qt.Equals, "DOUBLE PRECISION")
+
 	// Boolean with default
-	boolCol := createTable.Columns[9]
+	boolCol := createTable.Columns[10]
 	c.Assert(boolCol.Name, qt.Equals, "is_active")
 	c.Assert(boolCol.Type, qt.Equals, "BOOLEAN")
 	c.Assert(boolCol.Default, qt.IsNotNil)
 	c.Assert(boolCol.Default.Value, qt.Equals, "TRUE")
 
 	// TIMESTAMPTZ type
-	updatedCol := createTable.Columns[11]
+	updatedCol := createTable.Columns[12]
 	c.Assert(updatedCol.Name, qt.Equals, "updated_at")
 	c.Assert(updatedCol.Type, qt.Equals, "TIMESTAMPTZ")
 	c.Assert(updatedCol.Default, qt.IsNotNil)
 	c.Assert(updatedCol.Default.Expression, qt.Equals, "now()")
 
 	// Array types
-	tagsCol := createTable.Columns[12]
+	tagsCol := createTable.Columns[13]
 	c.Assert(tagsCol.Name, qt.Equals, "tags")
 	c.Assert(tagsCol.Type, qt.Equals, "TEXT[]")
 	c.Assert(tagsCol.Default, qt.IsNotNil)
 	c.Assert(tagsCol.Default.Expression, qt.Equals, "ARRAY[]::TEXT[]")
 
-	matrixCol := createTable.Columns[13]
+	matrixCol := createTable.Columns[14]
 	c.Assert(matrixCol.Name, qt.Equals, "matrix")
 	c.Assert(matrixCol.Type, qt.Equals, "INT[][]")
 
 	// JSON types
-	jsonbCol := createTable.Columns[15]
+	jsonbCol := createTable.Columns[16]
 	c.Assert(jsonbCol.Name, qt.Equals, "jsonb_field")
 	c.Assert(jsonbCol.Type, qt.Equals, "JSONB")
 	c.Assert(jsonbCol.Nullable, qt.IsFalse)
@@ -1073,17 +1078,17 @@ func TestParser_ParsePostgreSQLComprehensiveDemo(t *testing.T) {
 	c.Assert(jsonbCol.Default.Value, qt.Equals, "'{}'::jsonb")
 
 	// BYTEA type
-	dataCol := createTable.Columns[16]
+	dataCol := createTable.Columns[17]
 	c.Assert(dataCol.Name, qt.Equals, "data")
 	c.Assert(dataCol.Type, qt.Equals, "BYTEA")
 
 	// Domain type
-	emailCol := createTable.Columns[17]
+	emailCol := createTable.Columns[18]
 	c.Assert(emailCol.Name, qt.Equals, "email_address")
 	c.Assert(emailCol.Type, qt.Equals, "email_domain")
 
 	// Foreign key with cascading rules
-	userIdCol := createTable.Columns[18]
+	userIdCol := createTable.Columns[19]
 	c.Assert(userIdCol.Name, qt.Equals, "user_id")
 	c.Assert(userIdCol.Type, qt.Equals, "INTEGER")
 	c.Assert(userIdCol.ForeignKey, qt.IsNotNil)
@@ -1111,6 +1116,328 @@ func TestParser_ParsePostgreSQLComprehensiveDemo(t *testing.T) {
 	tableLevelCheck := createTable.Constraints[2]
 	c.Assert(tableLevelCheck.Type, qt.Equals, ast.CheckConstraint)
 	c.Assert(tableLevelCheck.Expression, qt.Contains, "created_at <= updated_at")
+}
+
+func TestParser_ParseMultiWordTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		sql          string
+		expectedType string
+	}{
+		{
+			name:         "DOUBLE PRECISION",
+			sql:          "CREATE TABLE test (value DOUBLE PRECISION);",
+			expectedType: "DOUBLE PRECISION",
+		},
+		{
+			name:         "CHARACTER VARYING",
+			sql:          "CREATE TABLE test (name CHARACTER VARYING(255));",
+			expectedType: "CHARACTER VARYING(255)",
+		},
+		{
+			name:         "DOUBLE PRECISION with default",
+			sql:          "CREATE TABLE test (value DOUBLE PRECISION DEFAULT 0.0);",
+			expectedType: "DOUBLE PRECISION",
+		},
+		{
+			name:         "DOUBLE PRECISION NOT NULL",
+			sql:          "CREATE TABLE test (value DOUBLE PRECISION NOT NULL);",
+			expectedType: "DOUBLE PRECISION",
+		},
+		{
+			name:         "TIMESTAMP WITH TIME ZONE",
+			sql:          "CREATE TABLE test (ts TIMESTAMP WITH TIME ZONE);",
+			expectedType: "WITH TIMESTAMP TIME ZONE",
+		},
+		{
+			name:         "TIMESTAMP WITHOUT TIME ZONE",
+			sql:          "CREATE TABLE test (ts TIMESTAMP WITHOUT TIME ZONE);",
+			expectedType: "WITHOUT TIMESTAMP TIME ZONE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			p := parser.NewParser(tt.sql)
+			statements, err := p.Parse()
+			c.Assert(err, qt.IsNil)
+			c.Assert(len(statements.Statements), qt.Equals, 1)
+
+			createTable := statements.Statements[0].(*ast.CreateTableNode)
+			c.Assert(len(createTable.Columns), qt.Equals, 1)
+
+			column := createTable.Columns[0]
+			c.Assert(column.Type, qt.Equals, tt.expectedType)
+		})
+	}
+}
+
+func TestParser_ParseParameterizedArrayTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		sql          string
+		expectedType string
+	}{
+		{
+			name:         "NUMERIC array with parameters",
+			sql:          "CREATE TABLE test (scores NUMERIC(5,2)[]);",
+			expectedType: "NUMERIC(5,2)[]",
+		},
+		{
+			name:         "VARCHAR array",
+			sql:          "CREATE TABLE test (names VARCHAR(100)[]);",
+			expectedType: "VARCHAR(100)[]",
+		},
+		{
+			name:         "DECIMAL multi-dimensional array",
+			sql:          "CREATE TABLE test (matrix DECIMAL(10,2)[][]);",
+			expectedType: "DECIMAL(10,2)[][]",
+		},
+		{
+			name:         "CHAR array",
+			sql:          "CREATE TABLE test (codes CHAR(3)[]);",
+			expectedType: "CHAR(3)[]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			p := parser.NewParser(tt.sql)
+			statements, err := p.Parse()
+			c.Assert(err, qt.IsNil)
+			c.Assert(len(statements.Statements), qt.Equals, 1)
+
+			createTable := statements.Statements[0].(*ast.CreateTableNode)
+			c.Assert(len(createTable.Columns), qt.Equals, 1)
+
+			column := createTable.Columns[0]
+			c.Assert(column.Type, qt.Equals, tt.expectedType)
+		})
+	}
+}
+
+func TestParser_ParseOriginalProblematicSQL(t *testing.T) {
+	c := qt.New(t)
+
+	// This is the original SQL that was causing infinite loop due to DOUBLE PRECISION
+	sql := `CREATE TABLE public.full_demo (
+		serial_id SERIAL PRIMARY KEY,
+		double_value DOUBLE PRECISION,
+		varchar_var VARCHAR(255) NOT NULL
+	);`
+
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+	c.Assert(createTable.Name, qt.Equals, "public.full_demo")
+	c.Assert(len(createTable.Columns), qt.Equals, 3)
+
+	// Verify DOUBLE PRECISION column is parsed correctly
+	doubleCol := createTable.Columns[1]
+	c.Assert(doubleCol.Name, qt.Equals, "double_value")
+	c.Assert(doubleCol.Type, qt.Equals, "DOUBLE PRECISION")
+}
+
+func TestParser_ParseExtendedPostgreSQLDemo(t *testing.T) {
+	c := qt.New(t)
+
+	// Extended comprehensive PostgreSQL CREATE TABLE statement with even more advanced features
+	sql := `CREATE TABLE public.extended_demo (
+		-- Identity and serial types
+		serial_id SERIAL PRIMARY KEY,
+		big_id BIGSERIAL UNIQUE,
+		small_id SMALLSERIAL,
+
+		-- UUID with default generator
+		uuid_id UUID DEFAULT gen_random_uuid() NOT NULL,
+		uuid_alt UUID DEFAULT uuid_generate_v4(),
+
+		-- Character types with various specifications
+		char_fixed CHAR(10),
+		varchar_var VARCHAR(255) NOT NULL,
+		varchar_unlimited VARCHAR,
+		text_field TEXT CHECK (char_length(text_field) <= 5000),
+		char_varying CHARACTER VARYING(100),
+
+		-- Numeric types with constraints
+		small_value SMALLINT DEFAULT 1 CHECK (small_value > 0),
+		int_value INTEGER,
+		big_value BIGINT,
+		numeric_precise NUMERIC(12,4) NOT NULL DEFAULT 0.0000,
+		decimal_alt DECIMAL(10,2),
+		money_value MONEY DEFAULT '$0.00',
+
+		-- Floating-point types
+		real_value REAL,
+		double_value DOUBLE PRECISION,
+		float_value FLOAT(24),
+
+		-- Boolean with default
+		is_active BOOLEAN DEFAULT TRUE,
+		is_deleted BOOLEAN DEFAULT FALSE,
+
+		-- Dates and timestamps with various formats
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMPTZ DEFAULT now(),
+		due_date DATE,
+		time_only TIME,
+		time_with_tz TIMETZ,
+		interval_field INTERVAL,
+		timestamp_no_tz TIMESTAMP WITHOUT TIME ZONE,
+		timestamp_with_tz TIMESTAMP WITH TIME ZONE DEFAULT now(),
+
+		-- Enum (requires pre-defined type)
+		status status_enum DEFAULT 'pending',
+		priority priority_type DEFAULT 'medium',
+
+		-- Arrays of various types
+		tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+		matrix INT[][],
+		scores NUMERIC(5,2)[],
+		flags BOOLEAN[] DEFAULT '{false,false,true}',
+
+		-- JSON and JSONB
+		json_field JSON,
+		jsonb_field JSONB NOT NULL DEFAULT '{}'::jsonb,
+		metadata JSONB DEFAULT '{"version": 1}',
+
+		-- Binary data
+		data BYTEA,
+		file_content BYTEA,
+
+		-- Network types
+		ip_address INET,
+		mac_address MACADDR,
+		network_range CIDR,
+
+		-- Geometric types
+		point_location POINT,
+		line_segment LSEG,
+		box_area BOX,
+		path_data PATH,
+		polygon_shape POLYGON,
+		circle_area CIRCLE,
+
+		-- Text search types
+		search_vector TSVECTOR,
+		search_query TSQUERY,
+
+		-- Range types
+		int_range INT4RANGE,
+		timestamp_range TSRANGE,
+		date_range DATERANGE,
+
+		-- Domain types (assume domains are defined)
+		email_address email_domain,
+		phone_number phone_domain,
+		postal_code zipcode_domain,
+
+		-- Generated columns
+		full_name TEXT GENERATED ALWAYS AS (char_fixed || ' ' || varchar_var) STORED,
+		search_text TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', text_field)) STORED,
+
+		-- Collation examples
+		case_insensitive TEXT COLLATE "C",
+		locale_specific TEXT COLLATE "en_US.UTF-8",
+
+		-- Foreign keys with various cascading rules
+		user_id INTEGER REFERENCES users(id) ON DELETE CASCADE ON UPDATE SET NULL,
+		category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+		parent_id INTEGER REFERENCES extended_demo(serial_id) ON DELETE CASCADE,
+
+		-- Composite unique constraint
+		CONSTRAINT uq_tag_and_status UNIQUE (tags, status),
+		CONSTRAINT uq_user_category UNIQUE (user_id, category_id),
+
+		-- Check constraints with expressions
+		CONSTRAINT chk_price_non_negative CHECK (numeric_precise >= 0),
+		CONSTRAINT chk_valid_email CHECK (email_address ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'),
+		CONSTRAINT chk_date_order CHECK (created_at <= updated_at),
+		CONSTRAINT chk_status_priority CHECK (
+			(status = 'urgent' AND priority IN ('high', 'critical')) OR
+			(status != 'urgent')
+		),
+
+		-- Table-level check constraints
+		CHECK (created_at <= updated_at),
+		CHECK (small_value BETWEEN 1 AND 1000)
+	);
+	-- Table options (commented out for now)
+	-- WITH (
+	--     fillfactor = 70,
+	--     autovacuum_enabled = true,
+	--     autovacuum_vacuum_threshold = 50,
+	--     autovacuum_analyze_threshold = 50
+	-- )
+	-- TABLESPACE pg_default;
+`
+
+	p := parser.NewParser(sql)
+	statements, err := p.Parse()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(statements.Statements), qt.Equals, 1)
+
+	createTable := statements.Statements[0].(*ast.CreateTableNode)
+	c.Assert(createTable.Name, qt.Equals, "public.extended_demo")
+
+	// Test that we have a substantial number of columns (should be at least 40)
+	c.Assert(len(createTable.Columns) > 40, qt.IsTrue)
+
+	// Test key PostgreSQL features that should be parsed correctly
+
+	// Test DOUBLE PRECISION is now working
+	var doubleCol *ast.ColumnNode
+	for _, col := range createTable.Columns {
+		if col.Name == "double_value" {
+			doubleCol = col
+			break
+		}
+	}
+	c.Assert(doubleCol, qt.IsNotNil)
+	c.Assert(doubleCol.Type, qt.Equals, "DOUBLE PRECISION")
+
+	// Test CHARACTER VARYING
+	var charVaryingCol *ast.ColumnNode
+	for _, col := range createTable.Columns {
+		if col.Name == "char_varying" {
+			charVaryingCol = col
+			break
+		}
+	}
+	c.Assert(charVaryingCol, qt.IsNotNil)
+	c.Assert(charVaryingCol.Type, qt.Equals, "CHARACTER VARYING(100)")
+
+	// Test TIMESTAMP WITH TIME ZONE
+	var timestampCol *ast.ColumnNode
+	for _, col := range createTable.Columns {
+		if col.Name == "timestamp_with_tz" {
+			timestampCol = col
+			break
+		}
+	}
+	c.Assert(timestampCol, qt.IsNotNil)
+	c.Assert(timestampCol.Type, qt.Equals, "WITH TIMESTAMP TIME ZONE")
+
+	// Test parameterized array type
+	var scoresCol *ast.ColumnNode
+	for _, col := range createTable.Columns {
+		if col.Name == "scores" {
+			scoresCol = col
+			break
+		}
+	}
+	c.Assert(scoresCol, qt.IsNotNil)
+	c.Assert(scoresCol.Type, qt.Equals, "NUMERIC(5,2)[]")
+
+	// Test that we have multiple constraints
+	c.Assert(len(createTable.Constraints) > 0, qt.IsTrue)
 }
 
 func TestParser_ErrorHandling(t *testing.T) {

@@ -475,7 +475,7 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 	return column, nil
 }
 
-// parseColumnType parses a column data type (e.g., INTEGER, VARCHAR(255), DECIMAL(10,2)).
+// parseColumnType parses a column data type (e.g., INTEGER, VARCHAR(255), DECIMAL(10,2), DOUBLE PRECISION).
 func (p *Parser) parseColumnType() (string, error) {
 	if p.current.Type != lexer.TokenIdentifier {
 		return "", fmt.Errorf("expected column type, got %s at position %d", p.current.Type, p.current.Start)
@@ -484,12 +484,83 @@ func (p *Parser) parseColumnType() (string, error) {
 	typeName := p.current.Value
 	p.advance()
 
-	// Check for array notation (PostgreSQL)
+	// Handle multi-word types like DOUBLE PRECISION, CHARACTER VARYING, etc.
+	p.skipWhitespace()
+	if p.current.Type == lexer.TokenIdentifier {
+		firstWord := strings.ToUpper(typeName)
+		secondWord := strings.ToUpper(p.current.Value)
+
+		// Check for known multi-word type combinations
+		switch firstWord {
+		case "DOUBLE":
+			if secondWord == "PRECISION" {
+				typeName += " " + p.current.Value
+				p.advance()
+			}
+		case "CHARACTER":
+			if secondWord == "VARYING" {
+				typeName += " " + p.current.Value
+				p.advance()
+			}
+		case "TIME":
+			if secondWord == "WITH" || secondWord == "WITHOUT" {
+				typeName = p.current.Value + " " + typeName
+				p.advance()
+				p.skipWhitespace()
+				if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "TIME" {
+					typeName += " " + p.current.Value
+					p.advance()
+					p.skipWhitespace()
+					if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "ZONE" {
+						typeName += " " + p.current.Value
+						p.advance()
+					}
+				}
+			}
+		case "TIMESTAMP":
+			if secondWord == "WITH" || secondWord == "WITHOUT" {
+				typeName = p.current.Value + " " + typeName
+				p.advance()
+				p.skipWhitespace()
+				if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "TIME" {
+					typeName += " " + p.current.Value
+					p.advance()
+					p.skipWhitespace()
+					if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "ZONE" {
+						typeName += " " + p.current.Value
+						p.advance()
+					}
+				}
+			}
+		}
+	}
+
+	// Check for type parameters (e.g., VARCHAR(255), NUMERIC(10,2))
+	p.skipWhitespace()
+	if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
+		typeName += "("
+		p.advance()
+
+		// Collect everything inside parentheses
+		parenCount := 1
+		for parenCount > 0 && p.current.Type != lexer.TokenEOF {
+			if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
+				parenCount++
+			} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
+				parenCount--
+			}
+			typeName += p.current.Value
+			p.advance()
+		}
+	}
+
+	// Check for array notation (PostgreSQL) - must come after type parameters
+	p.skipWhitespace()
 	if p.current.Type == lexer.TokenOperator && p.current.Value == "[" {
 		typeName += "["
 		p.advance()
 
-		// Handle multi-dimensional arrays like INT[][]
+		// Handle multi-dimensional arrays like INT[][] or NUMERIC(5,2)[]
 		for p.current.Type == lexer.TokenOperator && p.current.Value == "]" {
 			typeName += "]"
 			p.advance()
@@ -499,43 +570,6 @@ func (p *Parser) parseColumnType() (string, error) {
 			} else {
 				break
 			}
-		}
-	}
-
-	// Check for type parameters like VARCHAR(255) or DECIMAL(10,2)
-	if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
-		p.advance()
-		p.skipWhitespace()
-
-		// Collect everything until closing parenthesis
-		var params []string
-		for {
-			if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
-				break
-			}
-
-			// Accept identifiers, numbers, commas, and spaces
-			if p.current.Type == lexer.TokenIdentifier ||
-			   p.current.Type == lexer.TokenOperator {
-				params = append(params, p.current.Value)
-				p.advance()
-			} else if p.current.Type == lexer.TokenWhitespace {
-				// Skip whitespace but don't add to params
-				p.advance()
-			} else {
-				return "", fmt.Errorf("unexpected token in type parameters: %s at position %d", p.current.Value, p.current.Start)
-			}
-		}
-
-		// Consume closing parenthesis
-		if err := p.expect(lexer.TokenOperator, ")"); err != nil {
-			return "", err
-		}
-
-		if len(params) > 0 {
-			typeName += "(" + strings.Join(params, "") + ")"
-		} else {
-			typeName += "()"
 		}
 	}
 
