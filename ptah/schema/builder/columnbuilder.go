@@ -1,7 +1,7 @@
 package builder
 
 import (
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 )
 
 // ColumnBuilder provides a fluent API for building column definitions
@@ -46,9 +46,9 @@ func (cb *ColumnBuilder) Default(value string) *ColumnBuilder {
 	return cb
 }
 
-// DefaultFunction sets a function as default value
-func (cb *ColumnBuilder) DefaultFunction(fn string) *ColumnBuilder {
-	cb.column.SetDefaultFunction(fn)
+// DefaultExpression sets a function as default value
+func (cb *ColumnBuilder) DefaultExpression(fn string) *ColumnBuilder {
+	cb.column.SetDefaultExpression(fn)
 	return cb
 }
 
@@ -122,9 +122,9 @@ func (scb *SchemaColumnBuilder) Default(value string) *SchemaColumnBuilder {
 	return scb
 }
 
-// DefaultFunction sets a function as default value
-func (scb *SchemaColumnBuilder) DefaultFunction(fn string) *SchemaColumnBuilder {
-	scb.column.SetDefaultFunction(fn)
+// DefaultExpression sets a function as default value
+func (scb *SchemaColumnBuilder) DefaultExpression(fn string) *SchemaColumnBuilder {
+	scb.column.SetDefaultExpression(fn)
 	return scb
 }
 

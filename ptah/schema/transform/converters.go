@@ -75,7 +75,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
@@ -192,8 +192,8 @@ func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.Col
 		column.SetDefault(field.Default)
 	}
 
-	if field.DefaultFn != "" {
-		column.SetDefaultFunction(field.DefaultFn)
+	if field.DefaultExpr != "" {
+		column.SetDefaultExpression(field.DefaultExpr)
 	}
 
 	if field.Check != "" {
@@ -243,7 +243,7 @@ func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.Col
 //	fields := []types.SchemaField{
 //		{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 //		{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: false, Unique: true},
-//		{StructName: "User", Name: "created_at", Type: "TIMESTAMP", DefaultFn: "NOW()"},
+//		{StructName: "User", Name: "created_at", Type: "TIMESTAMP", DefaultExpr: "NOW()"},
 //	}
 //	createTable := FromTableDirective(table, fields, nil)
 //	// Results in: CREATE TABLE users (
@@ -263,7 +263,7 @@ func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.Col
 //	fields := []types.SchemaField{
 //		{StructName: "UserRole", Name: "user_id", Type: "INTEGER", Foreign: "users(id)"},
 //		{StructName: "UserRole", Name: "role_id", Type: "INTEGER", Foreign: "roles(id)"},
-//		{StructName: "UserRole", Name: "assigned_at", Type: "TIMESTAMP", DefaultFn: "NOW()"},
+//		{StructName: "UserRole", Name: "assigned_at", Type: "TIMESTAMP", DefaultExpr: "NOW()"},
 //	}
 //	createTable := FromTableDirective(table, fields, nil)
 //	// Results in: CREATE TABLE user_roles (
@@ -496,10 +496,10 @@ func isEnumType(fieldType string) bool {
 //
 // # Validation Rules
 //
-//   1. If the field type matches a global enum name, the global enum should exist
-//   2. If the field has specific enum values, they must be a subset of the global enum values
-//   3. Empty field enum values are ignored (field uses all global enum values)
-//   4. Validation warnings are logged but do not stop processing
+//  1. If the field type matches a global enum name, the global enum should exist
+//  2. If the field has specific enum values, they must be a subset of the global enum values
+//  3. Empty field enum values are ignored (field uses all global enum values)
+//  4. Validation warnings are logged but do not stop processing
 //
 // # Examples
 //

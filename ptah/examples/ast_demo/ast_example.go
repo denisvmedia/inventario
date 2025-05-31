@@ -3,8 +3,8 @@ package ast_demo
 import (
 	"fmt"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/builder"
 )
 
@@ -20,7 +20,7 @@ func DemonstrateASTApproach() {
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().Unique().End().
 		Column("name", "VARCHAR(100)").NotNull().End().
-		Column("created_at", "TIMESTAMP").DefaultFunction("NOW()").End().
+		Column("created_at", "TIMESTAMP").DefaultExpression("NOW()").End().
 		Column("is_active", "BOOLEAN").Default("true").End().
 		Build()
 
@@ -71,7 +71,7 @@ func DemonstrateASTApproach() {
 		Column("user_id", "INTEGER").NotNull().End().
 		Column("status", "order_status").NotNull().Default("pending").End().
 		Column("total", "DECIMAL(10,2)").NotNull().End().
-		Column("created_at", "TIMESTAMP").DefaultFunction("NOW()").End().
+		Column("created_at", "TIMESTAMP").DefaultExpression("NOW()").End().
 		End().
 		Index("idx_orders_user_id", "orders", "user_id").End().
 		Index("idx_orders_status", "orders", "status").End().
@@ -257,8 +257,8 @@ func (t *AuditTransformer) Transform(schema *ast.StatementList) *ast.StatementLi
 	for _, stmt := range schema.Statements {
 		if table, ok := stmt.(*ast.CreateTableNode); ok {
 			// Add audit columns to table
-			table.AddColumn(ast.NewColumn("created_at", "TIMESTAMP").SetDefaultFunction("NOW()"))
-			table.AddColumn(ast.NewColumn("updated_at", "TIMESTAMP").SetDefaultFunction("NOW()"))
+			table.AddColumn(ast.NewColumn("created_at", "TIMESTAMP").SetDefaultExpression("NOW()"))
+			table.AddColumn(ast.NewColumn("updated_at", "TIMESTAMP").SetDefaultExpression("NOW()"))
 			table.AddColumn(ast.NewColumn("created_by", "VARCHAR(100)"))
 			table.AddColumn(ast.NewColumn("updated_by", "VARCHAR(100)"))
 		}

@@ -130,10 +130,10 @@ func GetMigrationStatus(ctx context.Context, conn *executor.DatabaseConnection, 
 	}
 
 	return &MigrationStatus{
-		CurrentVersion:     currentVersion,
-		PendingMigrations:  pendingMigrations,
-		TotalMigrations:    len(migrator.migrations),
-		HasPendingChanges:  len(pendingMigrations) > 0,
+		CurrentVersion:    currentVersion,
+		PendingMigrations: pendingMigrations,
+		TotalMigrations:   len(migrator.migrations),
+		HasPendingChanges: len(pendingMigrations) > 0,
 	}, nil
 }
 
@@ -179,11 +179,11 @@ func CreateMigrationFromSQL(version int, description, upSQL, downSQL string) *Mi
 // executeSQLStatements splits SQL into individual statements and executes them
 func executeSQLStatements(conn *executor.DatabaseConnection, sql string) error {
 	// Split SQL by semicolons and execute each statement
-	statements := splitSQLStatements(sql)
+	statements := SplitSQLStatements(sql)
 
 	for _, stmt := range statements {
 		stmt = strings.TrimSpace(stmt)
-		if stmt == "" || strings.HasPrefix(stmt, "--") {
+		if stmt == "" {
 			continue // Skip empty statements and comments
 		}
 
@@ -195,8 +195,6 @@ func executeSQLStatements(conn *executor.DatabaseConnection, sql string) error {
 
 	return nil
 }
-
-
 
 // ValidateMigrations validates that all registered migrations are complete
 // and that there are no gaps in version numbers
@@ -218,7 +216,7 @@ func ValidateMigrations(migrator *Migrator) error {
 	// Extract versions and check for duplicates
 	versions := make([]int, len(migrator.migrations))
 	versionSet := make(map[int]bool)
-	
+
 	for i, migration := range migrator.migrations {
 		if versionSet[migration.Version] {
 			return fmt.Errorf("duplicate migration version: %d", migration.Version)

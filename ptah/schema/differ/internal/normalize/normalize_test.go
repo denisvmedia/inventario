@@ -121,8 +121,8 @@ func TestDefaultValue(t *testing.T) {
 		{"true for text", "true", "text", "true"},
 
 		// Complex cases
-		{"quoted null", "'NULL'", "varchar", ""},
-		{"double quoted null", "\"NULL\"", "varchar", ""},
+		{"quoted null", "'NULL'", "varchar", "NULL"},
+		{"double quoted null", "\"NULL\"", "varchar", "NULL"},
 		{"nested quotes", "\"'value'\"", "varchar", "value"},
 		{"special characters", "'special@#$%'", "varchar", "special@#$%"},
 

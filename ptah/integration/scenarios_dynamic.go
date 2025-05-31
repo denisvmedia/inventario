@@ -464,7 +464,7 @@ func testDynamicMigrationSQLGeneration(ctx context.Context, conn *executor.Datab
 	// Should have CREATE TABLE statements for users and products
 	hasUsersTable := false
 	hasProductsTable := false
-	
+
 	for _, stmt := range statements {
 		if contains(stmt, "CREATE TABLE users") || contains(stmt, "CREATE TABLE \"users\"") {
 			hasUsersTable = true
@@ -502,11 +502,11 @@ func getCurrentMigrationVersion(ctx context.Context, conn *executor.DatabaseConn
 // contains checks if a string contains a substring (case-insensitive)
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) &&
-		   (s == substr ||
-		    len(s) > len(substr) &&
-		    (s[:len(substr)] == substr ||
-		     s[len(s)-len(substr):] == substr ||
-		     containsSubstring(s, substr)))
+		(s == substr ||
+			len(s) > len(substr) &&
+				(s[:len(substr)] == substr ||
+					s[len(s)-len(substr):] == substr ||
+					containsSubstring(s, substr)))
 }
 
 func containsSubstring(s, substr string) bool {
@@ -2025,5 +2025,3 @@ func testDynamicForeignKeyCascade(ctx context.Context, conn *executor.DatabaseCo
 		return nil
 	})
 }
-
-

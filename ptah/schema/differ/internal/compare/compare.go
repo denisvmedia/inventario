@@ -293,7 +293,7 @@ func TableColumns(genTable types.TableDirective, dbTable parsertypes.Table, gene
 //
 //	```
 //	Generated: default=""
-//	Database:  default="NULL"
+//	Database:  default_expr="NULL"
 //	Result:    No change (both normalize to empty string)
 //	```
 //
@@ -357,6 +357,9 @@ func Columns(genCol types.SchemaField, dbCol parsertypes.Column) differtypes.Col
 
 	// Compare default values (simplified)
 	genDefault := genCol.Default
+	if genDefault == "" {
+		genDefault = genCol.DefaultExpr
+	}
 	dbDefault := ""
 	if dbCol.ColumnDefault != nil {
 		dbDefault = *dbCol.ColumnDefault
@@ -366,12 +369,17 @@ func Columns(genCol types.SchemaField, dbCol parsertypes.Column) differtypes.Col
 	// because the database will show the sequence default but the entity expects empty
 	isAutoIncrement := dbCol.IsAutoIncrement || strings.Contains(strings.ToUpper(genCol.Type), "SERIAL")
 	if !isAutoIncrement {
-		// Normalize default values for comparison (especially for boolean types)
-		normalizedGenDefault := normalize.DefaultValue(genDefault, genType)
 		normalizedDbDefault := normalize.DefaultValue(dbDefault, dbType)
 
-		if normalizedGenDefault != normalizedDbDefault {
-			colDiff.Changes["default"] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
+		idxName := "default"
+		if normalize.IsDefaultExpr(dbDefault) {
+			idxName = "default_expr"
+		}
+
+		normalizeGenDefaultFn := normalize.DefaultValue(genDefault, "")
+
+		if normalizeGenDefaultFn != normalizedDbDefault {
+			colDiff.Changes[idxName] = fmt.Sprintf("%s -> %s", dbDefault, genDefault)
 		}
 	}
 

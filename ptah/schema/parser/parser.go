@@ -102,7 +102,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 								Unique:         kv["unique"] == "true",
 								UniqueExpr:     kv["unique_expr"],
 								Default:        kv["default"],
-								DefaultFn:      kv["default_fn"],
+								DefaultExpr:    kv["default_expr"],
 								Foreign:        kv["foreign"],
 								ForeignKeyName: kv["foreign_key_name"],
 								Enum:           enum,

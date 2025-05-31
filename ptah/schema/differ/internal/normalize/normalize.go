@@ -121,14 +121,20 @@ func DefaultValue(defaultValue, typeName string) string {
 		return ""
 	}
 
-	// Remove surrounding quotes for comparison (both single and double quotes)
-	cleanValue := strings.Trim(defaultValue, "'\"")
+	if strings.ToUpper(defaultValue) == "CURRENT_TIMESTAMP()" {
+		return "CURRENT_TIMESTAMP"
+	}
+
+	cleanValue := defaultValue
 
 	// MariaDB/MySQL returns 'NULL' string for columns without explicit defaults
 	// Normalize this to empty string for consistent comparison
 	if strings.ToUpper(cleanValue) == "NULL" {
 		return ""
 	}
+
+	// Remove surrounding quotes for comparison (both single and double quotes)
+	cleanValue = strings.Trim(defaultValue, "'\"")
 
 	// For boolean types, normalize database-specific representations
 	if typeName == "boolean" {
@@ -144,4 +150,16 @@ func DefaultValue(defaultValue, typeName string) string {
 
 	// Return cleaned value for all other types
 	return cleanValue
+}
+
+func IsDefaultExpr(value string) bool {
+	cleanValue := strings.Trim(value, " \t\n\r")
+
+	if strings.HasPrefix(cleanValue, `"`) && strings.HasSuffix(cleanValue, `"`) {
+		return false
+	}
+	if strings.HasPrefix(cleanValue, "'") && strings.HasSuffix(cleanValue, "'") {
+		return false
+	}
+	return true
 }

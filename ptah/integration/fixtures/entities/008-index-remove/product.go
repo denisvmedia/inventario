@@ -16,16 +16,16 @@ type Product struct {
 	//migrator:schema:field name="price" type="DECIMAL(10,2)" not_null="true"
 	Price float64
 
-	//migrator:schema:field name="stock_quantity" type="INTEGER" not_null="true" default="0"
+	//migrator:schema:field name="stock_quantity" type="INTEGER" not_null="true" default_expr="0"
 	StockQuantity int
 
 	//migrator:schema:field name="status" type="ENUM" enum="available,discontinued,out_of_stock" not_null="true" default="available"
 	Status string
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time
 }
 

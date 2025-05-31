@@ -81,7 +81,7 @@ type SchemaField struct {
 	Unique         bool                         // Whether this column has a unique constraint
 	UniqueExpr     string                       // Custom unique constraint expression
 	Default        string                       // Default value for the column
-	DefaultFn      string                       // Default function (e.g., "NOW()", "CURRENT_TIMESTAMP")
+	DefaultExpr    string                       // Default expression (e.g., "NOW()", "UUID()", "CURRENT_TIMESTAMP", "1", "true")
 	Foreign        string                       // Foreign key reference (e.g., "users(id)")
 	ForeignKeyName string                       // Custom foreign key constraint name
 	Enum           []string                     // Enum values for ENUM type fields
@@ -197,12 +197,13 @@ type TableDirective struct {
 //   - SQLite: Uses CHECK constraints with IN clauses (status TEXT CHECK (status IN ('active', 'inactive')))
 //
 // Example of generated SQL:
-//   PostgreSQL:
-//     CREATE TYPE enum_user_status AS ENUM ('active', 'inactive', 'suspended');
-//     CREATE TABLE users (status enum_user_status DEFAULT 'active');
 //
-//   MySQL:
-//     CREATE TABLE users (status ENUM('active', 'inactive', 'suspended') DEFAULT 'active');
+//	PostgreSQL:
+//	  CREATE TYPE enum_user_status AS ENUM ('active', 'inactive', 'suspended');
+//	  CREATE TABLE users (status enum_user_status DEFAULT 'active');
+//
+//	MySQL:
+//	  CREATE TABLE users (status ENUM('active', 'inactive', 'suspended') DEFAULT 'active');
 type GlobalEnum struct {
 	Name   string   // The generated enum type name (e.g., "enum_user_status")
 	Values []string // The allowed enum values (e.g., ["active", "inactive", "suspended"])

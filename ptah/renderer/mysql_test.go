@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 )
 
 func TestMySQLRenderer_ImplementsVisitorInterface(t *testing.T) {
@@ -96,26 +96,26 @@ func TestMySQLRenderer_ProcessFieldType(t *testing.T) {
 	}
 }
 
-func TestMySQLRenderer_ConvertDefaultFunction(t *testing.T) {
+func TestMySQLRenderer_ConvertDefaultExpression(t *testing.T) {
 	tests := []struct {
-		name     string
-		function string
-		expected string
+		name       string
+		expression string
+		expected   string
 	}{
 		{
-			name:     "NOW() to CURRENT_TIMESTAMP",
-			function: "NOW()",
-			expected: "CURRENT_TIMESTAMP",
+			name:       "NOW() to CURRENT_TIMESTAMP",
+			expression: "NOW()",
+			expected:   "CURRENT_TIMESTAMP",
 		},
 		{
-			name:     "now() to CURRENT_TIMESTAMP (case insensitive)",
-			function: "now()",
-			expected: "CURRENT_TIMESTAMP",
+			name:       "now() to CURRENT_TIMESTAMP (case insensitive)",
+			expression: "now()",
+			expected:   "CURRENT_TIMESTAMP",
 		},
 		{
-			name:     "Other function unchanged",
-			function: "UUID()",
-			expected: "UUID()",
+			name:       "Other function unchanged",
+			expression: "UUID()",
+			expected:   "UUID()",
 		},
 	}
 
@@ -123,9 +123,9 @@ func TestMySQLRenderer_ConvertDefaultFunction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			r := renderer.NewMySQLRenderer()
 
-			// Test through VisitCreateTableWithEnums since convertDefaultFunction is private
+			// Test through VisitCreateTableWithEnums since convertDefaultExpression is private
 			table := &ast.CreateTableNode{
 				Name: "test_table",
 				Columns: []*ast.ColumnNode{
@@ -134,16 +134,16 @@ func TestMySQLRenderer_ConvertDefaultFunction(t *testing.T) {
 						Type:     "TIMESTAMP",
 						Nullable: false,
 						Default: &ast.DefaultValue{
-							Function: tt.function,
+							Expression: tt.expression,
 						},
 					},
 				},
 			}
 
-			err := renderer.VisitCreateTableWithEnums(table, nil)
+			err := r.VisitCreateTableWithEnums(table, nil)
 			c.Assert(err, qt.IsNil)
 
-			output := renderer.GetOutput()
+			output := r.GetOutput()
 			c.Assert(output, qt.Contains, "DEFAULT "+tt.expected)
 		})
 	}
@@ -192,7 +192,7 @@ func TestMySQLRenderer_ConvertDefaultValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			r := renderer.NewMySQLRenderer()
 
 			// Test through VisitCreateTableWithEnums since convertDefaultValue is private
 			table := &ast.CreateTableNode{
@@ -209,10 +209,10 @@ func TestMySQLRenderer_ConvertDefaultValue(t *testing.T) {
 				},
 			}
 
-			err := renderer.VisitCreateTableWithEnums(table, nil)
+			err := r.VisitCreateTableWithEnums(table, nil)
 			c.Assert(err, qt.IsNil)
 
-			output := renderer.GetOutput()
+			output := r.GetOutput()
 			c.Assert(output, qt.Contains, "DEFAULT "+tt.expected)
 		})
 	}

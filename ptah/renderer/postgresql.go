@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 )
 
 // PostgreSQLRenderer provides PostgreSQL-specific SQL rendering
 type PostgreSQLRenderer struct {
 	*BaseRenderer
+	// CurrentEnums stores enum names available in the current rendering context
+	CurrentEnums []string // TODO: make private
 }
 
 // Ensure PostgreSQLRenderer implements the Visitor interface
@@ -19,6 +21,7 @@ var _ ast.Visitor = (*PostgreSQLRenderer)(nil)
 func NewPostgreSQLRenderer() *PostgreSQLRenderer {
 	return &PostgreSQLRenderer{
 		BaseRenderer: NewBaseRenderer("postgres"),
+		CurrentEnums: nil,
 	}
 }
 
@@ -75,8 +78,16 @@ func (r *PostgreSQLRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
 func (r *PostgreSQLRenderer) renderPostgreSQLModifyColumn(tableName string, column *ast.ColumnNode) {
 	// PostgreSQL requires separate ALTER statements for different column properties
 
-	// Change column type
-	r.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s;", tableName, column.Name, column.Type)
+	// Process the column type with enum support
+	columnType := r.processFieldType(column.Type, r.CurrentEnums)
+
+	// Change column type (with USING clause for complex conversions if needed)
+	if columnType != column.Type {
+		// Type was transformed (e.g., enum handling), use the processed type
+		r.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s;", tableName, column.Name, columnType)
+	} else {
+		r.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s;", tableName, column.Name, column.Type)
+	}
 
 	// Change nullability
 	if column.Nullable {
@@ -86,14 +97,13 @@ func (r *PostgreSQLRenderer) renderPostgreSQLModifyColumn(tableName string, colu
 	}
 
 	// Change default value
-	if column.Default != nil {
-		if column.Default.Function != "" {
-			r.WriteLinef("ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s;", tableName, column.Name, column.Default.Function)
-		} else if column.Default.Value != "" {
-			r.WriteLinef("ALTER TABLE %s ALTER COLUMN %s SET DEFAULT '%s';", tableName, column.Name, column.Default.Value)
-		}
-	} else {
+	switch {
+	case column.Default == nil:
 		r.WriteLinef("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT;", tableName, column.Name)
+	case column.Default.Value != "":
+		r.WriteLinef("ALTER TABLE %s ALTER COLUMN %s SET DEFAULT '%s';", tableName, column.Name, column.Default.Value) // TODO: escape!
+	case column.Default.Expression != "":
+		r.WriteLinef("ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s;", tableName, column.Name, column.Default.Expression)
 	}
 }
 
@@ -248,6 +258,14 @@ func (r *PostgreSQLRenderer) Render(node ast.Node) (string, error) {
 func (r *PostgreSQLRenderer) RenderSchema(statements *ast.StatementList) (string, error) {
 	r.Reset()
 
+	// Collect enum names for the current rendering context
+	r.CurrentEnums = nil
+	for _, stmt := range statements.Statements {
+		if enum, ok := stmt.(*ast.EnumNode); ok {
+			r.CurrentEnums = append(r.CurrentEnums, enum.Name)
+		}
+	}
+
 	// First pass: render all enums
 	for _, stmt := range statements.Statements {
 		if enum, ok := stmt.(*ast.EnumNode); ok {
@@ -294,12 +312,44 @@ func (r *PostgreSQLRenderer) isEnumType(fieldType string, enums []string) bool {
 	return false
 }
 
+// NeedsQuotedDefault determines if a default value should be quoted based on the column type
+func (r *PostgreSQLRenderer) NeedsQuotedDefault(columnType string) bool { // TODO: make private
+	// PostgreSQL numeric types that don't need quotes
+	numericTypes := []string{
+		"INTEGER", "INT", "BIGINT", "SMALLINT", "SERIAL", "BIGSERIAL", "SMALLSERIAL",
+		"DECIMAL", "NUMERIC", "REAL", "DOUBLE PRECISION", "FLOAT", "FLOAT4", "FLOAT8",
+		"BOOLEAN", "BOOL",
+	}
+
+	upperType := strings.ToUpper(columnType)
+	for _, numType := range numericTypes {
+		if strings.HasPrefix(upperType, numType) {
+			return false
+		}
+	}
+
+	// Special cases for PostgreSQL
+	if strings.HasPrefix(upperType, "TIMESTAMP") ||
+		strings.HasPrefix(upperType, "DATE") ||
+		strings.HasPrefix(upperType, "TIME") {
+		return true
+	}
+
+	// Check if it's an enum type (enums need quotes)
+	if r.isEnumType(columnType, r.CurrentEnums) {
+		return true
+	}
+
+	// Default to quoted for string types and unknown types
+	return true
+}
+
 // renderColumn overrides base column rendering with PostgreSQL-specific handling
 func (r *PostgreSQLRenderer) renderColumn(column *ast.ColumnNode) (string, error) {
 	var parts []string
 
-	// Handle PostgreSQL-specific type conversions
-	columnType := r.processFieldType(column.Type, nil) // TODO: Pass actual enums if needed
+	// Handle PostgreSQL-specific type conversions using current enum context
+	columnType := r.processFieldType(column.Type, r.CurrentEnums)
 
 	// Column name and type
 	parts = append(parts, fmt.Sprintf("  %s %s", column.Name, columnType))
@@ -322,12 +372,13 @@ func (r *PostgreSQLRenderer) renderColumn(column *ast.ColumnNode) (string, error
 	// So we skip the auto increment rendering
 
 	// Default value
-	if column.Default != nil {
-		if column.Default.Function != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Function))
-		} else if column.Default.Value != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value))
-		}
+	switch {
+	case column.Default == nil:
+		// No default value
+	case column.Default.Value != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value)) // TODO: escape!
+	case column.Default.Expression != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Expression))
 	}
 
 	// Check constraint
@@ -340,6 +391,9 @@ func (r *PostgreSQLRenderer) renderColumn(column *ast.ColumnNode) (string, error
 
 // VisitCreateTableWithEnums renders CREATE TABLE with enum support for PostgreSQL
 func (r *PostgreSQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, enums []string) error {
+	// Set the current enums context for this rendering operation
+	r.CurrentEnums = enums
+
 	// Table comment
 	if node.Comment != "" {
 		r.WriteLinef("-- %s TABLE: %s (%s) --", strings.ToUpper(r.dialect), node.Name, node.Comment)
@@ -448,12 +502,13 @@ func (r *PostgreSQLRenderer) renderColumnWithEnums(column *ast.ColumnNode, enums
 	// So we skip the auto increment rendering
 
 	// Default value
-	if column.Default != nil {
-		if column.Default.Function != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Function))
-		} else if column.Default.Value != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value))
-		}
+	switch {
+	case column.Default == nil:
+		// No default value
+	case column.Default.Value != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value)) // TODO: escape!
+	case column.Default.Expression != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Expression))
 	}
 
 	// Check constraint

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 )
 
 // MySQLRenderer provides MySQL-specific SQL rendering
@@ -54,8 +54,8 @@ func (r *MySQLRenderer) processFieldType(fieldType string, enumValues []string) 
 	}
 }
 
-// convertDefaultFunction converts default functions to MySQL-compatible syntax
-func (r *MySQLRenderer) convertDefaultFunction(function string) string {
+// convertDefaultExpression converts default functions to MySQL-compatible syntax
+func (r *MySQLRenderer) convertDefaultExpression(function string) string {
 	switch strings.ToUpper(function) {
 	case "NOW()":
 		return "CURRENT_TIMESTAMP"
@@ -111,16 +111,13 @@ func (r *MySQLRenderer) renderColumnWithEnums(column *ast.ColumnNode, enumValues
 	}
 
 	// Default value
-	if column.Default != nil {
-		if column.Default.Function != "" {
-			// Handle MySQL-specific function mappings
-			defaultFunc := r.convertDefaultFunction(column.Default.Function)
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultFunc))
-		} else if column.Default.Value != "" {
-			// Handle MySQL-specific value mappings
-			defaultValue := r.convertDefaultValue(column.Default.Value, columnType)
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultValue))
-		}
+	switch {
+	case column.Default == nil:
+		// No default value
+	case column.Default.Value != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT %s", r.convertDefaultValue(column.Default.Value, columnType))) // TODO: escape!
+	case column.Default.Expression != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT %s", r.convertDefaultExpression(column.Default.Expression)))
 	}
 
 	// Check constraint
@@ -133,12 +130,24 @@ func (r *MySQLRenderer) renderColumnWithEnums(column *ast.ColumnNode, enumValues
 
 // VisitAlterTable renders MySQL-specific ALTER TABLE statements
 func (r *MySQLRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
+	// Use the enum-aware version with empty enum map for backward compatibility
+	return r.VisitAlterTableWithEnums(node, nil)
+}
+
+// VisitAlterTableWithEnums renders MySQL-specific ALTER TABLE statements with enum support
+func (r *MySQLRenderer) VisitAlterTableWithEnums(node *ast.AlterTableNode, enums map[string][]string) error {
 	r.WriteLine("-- ALTER statements: --")
 
 	for _, operation := range node.Operations {
 		switch op := operation.(type) {
 		case *ast.AddColumnOperation:
-			line, err := r.renderColumn(op.Column)
+			// Get enum values for this column type
+			enumValues := r.getEnumValues(op.Column.Type, enums)
+			if !r.isEnumType(op.Column.Type, enums) {
+				enumValues = nil
+			}
+
+			line, err := r.renderColumnWithEnums(op.Column, enumValues)
 			if err != nil {
 				return fmt.Errorf("error rendering add column: %w", err)
 			}
@@ -150,8 +159,14 @@ func (r *MySQLRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
 			r.WriteLinef("ALTER TABLE %s DROP COLUMN %s;", node.Name, op.ColumnName)
 
 		case *ast.ModifyColumnOperation:
+			// Get enum values for this column type
+			enumValues := r.getEnumValues(op.Column.Type, enums)
+			if !r.isEnumType(op.Column.Type, enums) {
+				enumValues = nil
+			}
+
 			// MySQL uses MODIFY COLUMN syntax
-			line, err := r.renderColumn(op.Column)
+			line, err := r.renderColumnWithEnums(op.Column, enumValues)
 			if err != nil {
 				return fmt.Errorf("error rendering modify column: %w", err)
 			}

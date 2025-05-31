@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
-	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/migrator/sqlsplitter"
 )
 
 //go:embed base/schema.sql
@@ -26,22 +26,11 @@ var deleteMigrationSQL string
 // MigrationFunc represents a migration function that operates on a database connection
 type MigrationFunc func(context.Context, *executor.DatabaseConnection) error
 
-// splitSQLStatements splits a SQL string into individual statements
-// This is needed because MySQL doesn't handle multiple statements in a single ExecuteSQL call
-func splitSQLStatements(sql string) []string {
-	// Split by semicolon and filter out empty statements
-	statements := strings.Split(sql, ";")
-	var result []string
-
-	for _, stmt := range statements {
-		// Trim whitespace and skip empty statements
-		trimmed := strings.TrimSpace(stmt)
-		if trimmed != "" && trimmed != "\n" {
-			result = append(result, trimmed)
-		}
-	}
-
-	return result
+// SplitSQLStatements splits a SQL string into individual statements using AST-based parsing.
+// This is needed because MySQL doesn't handle multiple statements in a single ExecuteSQL call.
+// Unlike simple string splitting, this properly handles semicolons within string literals and comments.
+func SplitSQLStatements(sql string) []string {
+	return sqlsplitter.SplitSQLStatements(sqlsplitter.RemoveComments(sql))
 }
 
 // MigrationFuncFromSQLFilename returns a migration function that reads SQL from a file
@@ -54,7 +43,7 @@ func MigrationFuncFromSQLFilename(filename string, fsys fs.FS) MigrationFunc {
 		}
 
 		// Split SQL into individual statements for better MySQL compatibility
-		statements := splitSQLStatements(string(sql))
+		statements := SplitSQLStatements(string(sql))
 
 		// Execute each statement separately
 		for _, stmt := range statements {

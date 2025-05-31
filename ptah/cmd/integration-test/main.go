@@ -18,6 +18,11 @@ var (
 	databases    []string
 	scenarios    []string
 	verbose      bool
+
+	// List command flags
+	showStatic  bool
+	showDynamic bool
+	showAll     bool
 )
 
 var rootCmd = &cobra.Command{
@@ -34,12 +39,32 @@ reports in multiple formats.`,
 	RunE: runIntegrationTests,
 }
 
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all available test scenarios",
+	Long: `List all available integration test scenarios with their descriptions.
+
+This command displays all static and dynamic test scenarios that can be run
+with the integration test suite. Use this to see what scenarios are available
+before running specific tests with the --scenarios flag.`,
+	RunE: listScenarios,
+}
+
 func init() {
+	// Root command flags
 	rootCmd.Flags().StringVar(&reportFormat, "report", "txt", "Report format: txt, json, or html")
 	rootCmd.Flags().StringVar(&outputDir, "output", "/app/reports", "Output directory for reports")
 	rootCmd.Flags().StringSliceVar(&databases, "databases", []string{"postgres", "mysql", "mariadb"}, "Databases to test against")
 	rootCmd.Flags().StringSliceVar(&scenarios, "scenarios", []string{}, "Specific scenarios to run (empty = all)")
 	rootCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
+
+	// List command flags
+	listCmd.Flags().BoolVar(&showStatic, "static", false, "Show only static scenarios")
+	listCmd.Flags().BoolVar(&showDynamic, "dynamic", false, "Show only dynamic scenarios")
+	listCmd.Flags().BoolVar(&showAll, "all", true, "Show all scenarios (default)")
+
+	// Add subcommands
+	rootCmd.AddCommand(listCmd)
 }
 
 func main() {
@@ -174,4 +199,111 @@ func runIntegrationTests(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\n🎉 All tests passed!\n")
 	return nil
+}
+
+func listScenarios(cmd *cobra.Command, args []string) error {
+	// Get all scenarios
+	allScenarios := integration.GetAllScenarios()
+	staticScenarios := getStaticScenarios()
+	dynamicScenarios := integration.GetDynamicScenarios()
+
+	// Determine which scenarios to show based on flags
+	var scenariosToShow []integration.TestScenario
+	var title string
+
+	// Handle flag combinations
+	if showStatic && showDynamic {
+		// Both flags set - show all
+		scenariosToShow = allScenarios
+		title = "All Test Scenarios"
+	} else if showStatic {
+		// Only static
+		scenariosToShow = staticScenarios
+		title = "Static Test Scenarios"
+	} else if showDynamic {
+		// Only dynamic
+		scenariosToShow = dynamicScenarios
+		title = "Dynamic Test Scenarios"
+	} else {
+		// Default - show all
+		scenariosToShow = allScenarios
+		title = "All Test Scenarios"
+	}
+
+	// Print header
+	fmt.Printf("🏛️  Ptah Migration Library - %s\n", title)
+	fmt.Printf("%s\n\n", strings.Repeat("=", len(title)+35))
+
+	// Group scenarios by type for better organization
+	if !showStatic && !showDynamic {
+		// Show both types with grouping
+		fmt.Printf("📋 Static Scenarios (%d):\n", len(staticScenarios))
+		printScenarios(staticScenarios, "  ")
+
+		fmt.Printf("\n🔄 Dynamic Scenarios (%d):\n", len(dynamicScenarios))
+		printScenarios(dynamicScenarios, "  ")
+
+		fmt.Printf("\n📊 Summary:\n")
+		fmt.Printf("  Total Scenarios: %d\n", len(allScenarios))
+		fmt.Printf("  Static: %d\n", len(staticScenarios))
+		fmt.Printf("  Dynamic: %d\n", len(dynamicScenarios))
+	} else {
+		// Show filtered scenarios
+		printScenarios(scenariosToShow, "")
+		fmt.Printf("\n📊 Total: %d scenarios\n", len(scenariosToShow))
+	}
+
+	fmt.Printf("\n💡 Usage:\n")
+	fmt.Printf("  Run all scenarios:     ptah-integration-test\n")
+	fmt.Printf("  Run specific scenario: ptah-integration-test --scenarios scenario_name\n")
+	fmt.Printf("  Run multiple:          ptah-integration-test --scenarios scenario1,scenario2\n")
+
+	return nil
+}
+
+// getStaticScenarios returns only the static scenarios (non-dynamic ones)
+func getStaticScenarios() []integration.TestScenario {
+	allScenarios := integration.GetAllScenarios()
+	dynamicScenarios := integration.GetDynamicScenarios()
+
+	// Create a map of dynamic scenario names for quick lookup
+	dynamicNames := make(map[string]bool)
+	for _, scenario := range dynamicScenarios {
+		dynamicNames[scenario.Name] = true
+	}
+
+	// Filter out dynamic scenarios
+	var staticScenarios []integration.TestScenario
+	for _, scenario := range allScenarios {
+		if !dynamicNames[scenario.Name] {
+			staticScenarios = append(staticScenarios, scenario)
+		}
+	}
+
+	return staticScenarios
+}
+
+// printScenarios prints a list of scenarios with formatting
+func printScenarios(scenarios []integration.TestScenario, indent string) {
+	for i, scenario := range scenarios {
+		// Determine scenario type indicator
+		typeIndicator := "📋"
+		if strings.HasPrefix(scenario.Name, "dynamic_") {
+			typeIndicator = "🔄"
+		}
+
+		// Determine if it has enhanced functionality (step recording)
+		enhancedIndicator := ""
+		if scenario.EnhancedTestFunc != nil {
+			enhancedIndicator = " ✨"
+		}
+
+		fmt.Printf("%s%s %s%s\n", indent, typeIndicator, scenario.Name, enhancedIndicator)
+		fmt.Printf("%s   %s\n", indent, scenario.Description)
+
+		// Add spacing between scenarios except for the last one
+		if i < len(scenarios)-1 {
+			fmt.Printf("\n")
+		}
+	}
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 )
 
 // BaseRenderer provides common SQL rendering functionality
@@ -140,12 +140,13 @@ func (r *BaseRenderer) renderColumn(column *ast.ColumnNode) (string, error) {
 	}
 
 	// Default value
-	if column.Default != nil {
-		if column.Default.Function != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Function))
-		} else if column.Default.Value != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value))
-		}
+	switch {
+	case column.Default == nil:
+		// No default value
+	case column.Default.Value != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value)) // TODO: escape!
+	case column.Default.Expression != "":
+		parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Expression))
 	}
 
 	// Check constraint

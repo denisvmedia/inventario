@@ -3,10 +3,11 @@ package mysql
 import (
 	"fmt"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
+
 	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
@@ -71,8 +72,8 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 		column.SetDefault(field.Default)
 	}
 
-	if field.DefaultFn != "" {
-		column.SetDefaultFunction(field.DefaultFn)
+	if field.DefaultExpr != "" {
+		column.SetDefaultExpression(field.DefaultExpr)
 	}
 
 	// Handle check constraint with platform-specific override
@@ -370,12 +371,13 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 						enumMap[enum.Name] = enum.Values
 					}
 
-					// Generate ADD COLUMN statement using AST
-					result, err := g.renderer.Render(alterNode)
+					// Generate ADD COLUMN statement using enum-aware method
+					g.renderer.Reset()
+					err := g.renderer.VisitAlterTableWithEnums(alterNode, enumMap)
 					if err != nil {
 						statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate ADD COLUMN for %s.%s: %v", tableDiff.TableName, colName, err))
 					} else {
-						statements = append(statements, result)
+						statements = append(statements, g.renderer.GetOutput())
 					}
 					break
 				}
@@ -429,5 +431,3 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 
 	return statements
 }
-
-

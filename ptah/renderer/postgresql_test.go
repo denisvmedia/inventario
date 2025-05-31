@@ -6,8 +6,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 )
 
 func TestPostgreSQLRenderer_ImplementsVisitorInterface(t *testing.T) {
@@ -634,7 +634,7 @@ func TestPostgreSQLRenderer_VisitCreateTableWithEnums_ColumnFeatures(t *testing.
 						Type:     "priority_level",
 						Nullable: true,
 						Default: &ast.DefaultValue{
-							Function: "get_default_priority()",
+							Expression: "get_default_priority()",
 						},
 					},
 					{
@@ -1081,7 +1081,7 @@ func TestPostgreSQLRenderer_RenderPostgreSQLModifyColumn(t *testing.T) {
 				Type:     "TIMESTAMP",
 				Nullable: true,
 				Default: &ast.DefaultValue{
-					Function: "NOW()",
+					Expression: "NOW()",
 				},
 			},
 			expected: []string{
@@ -1183,7 +1183,7 @@ func TestPostgreSQLRenderer_ComprehensiveColumnRendering(t *testing.T) {
 				Type:     "TIMESTAMP",
 				Nullable: false,
 				Default: &ast.DefaultValue{
-					Function: "CURRENT_TIMESTAMP",
+					Expression: "CURRENT_TIMESTAMP",
 				},
 			},
 			expected: []string{
@@ -1461,4 +1461,36 @@ func TestPostgreSQLRenderer_IsEnumType_DirectTesting(t *testing.T) {
 			c.Assert(output, qt.Contains, "test_col "+tt.expected)
 		})
 	}
+}
+
+func TestPostgreSQLRenderer_NeedsQuotedDefault(t *testing.T) {
+	c := qt.New(t)
+
+	renderer := renderer.NewPostgreSQLRenderer()
+
+	// Test numeric types (should not need quotes)
+	c.Assert(renderer.NeedsQuotedDefault("INTEGER"), qt.IsFalse)
+	c.Assert(renderer.NeedsQuotedDefault("BIGINT"), qt.IsFalse)
+	c.Assert(renderer.NeedsQuotedDefault("SERIAL"), qt.IsFalse)
+	c.Assert(renderer.NeedsQuotedDefault("DECIMAL(10,2)"), qt.IsFalse)
+	c.Assert(renderer.NeedsQuotedDefault("BOOLEAN"), qt.IsFalse)
+	c.Assert(renderer.NeedsQuotedDefault("FLOAT"), qt.IsFalse)
+	c.Assert(renderer.NeedsQuotedDefault("DOUBLE PRECISION"), qt.IsFalse)
+
+	// Test string types (should need quotes)
+	c.Assert(renderer.NeedsQuotedDefault("VARCHAR(255)"), qt.IsTrue)
+	c.Assert(renderer.NeedsQuotedDefault("TEXT"), qt.IsTrue)
+	c.Assert(renderer.NeedsQuotedDefault("CHAR(10)"), qt.IsTrue)
+
+	// Test date/time types (should need quotes)
+	c.Assert(renderer.NeedsQuotedDefault("TIMESTAMP"), qt.IsTrue)
+	c.Assert(renderer.NeedsQuotedDefault("DATE"), qt.IsTrue)
+	c.Assert(renderer.NeedsQuotedDefault("TIME"), qt.IsTrue)
+	c.Assert(renderer.NeedsQuotedDefault("TIMESTAMP WITH TIME ZONE"), qt.IsTrue)
+
+	// Test enum types (should need quotes)
+	renderer.CurrentEnums = []string{"user_status", "priority_level"}
+	c.Assert(renderer.NeedsQuotedDefault("user_status"), qt.IsTrue)
+	c.Assert(renderer.NeedsQuotedDefault("priority_level"), qt.IsTrue)
+	c.Assert(renderer.NeedsQuotedDefault("unknown_enum"), qt.IsTrue) // Unknown types default to quoted
 }

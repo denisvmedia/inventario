@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 )
 
 // MariaDBRenderer provides MariaDB-specific SQL rendering
@@ -109,12 +109,24 @@ func (r *MariaDBRenderer) renderTableOptions(options map[string]string) string {
 
 // VisitAlterTable renders MariaDB-specific ALTER TABLE statements
 func (r *MariaDBRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
+	// Use the enum-aware version with empty enum map for backward compatibility
+	return r.VisitAlterTableWithEnums(node, nil)
+}
+
+// VisitAlterTableWithEnums renders MariaDB-specific ALTER TABLE statements with enum support
+func (r *MariaDBRenderer) VisitAlterTableWithEnums(node *ast.AlterTableNode, enums map[string][]string) error {
 	r.WriteLine("-- ALTER statements: --")
 
 	for _, operation := range node.Operations {
 		switch op := operation.(type) {
 		case *ast.AddColumnOperation:
-			line, err := r.renderColumn(op.Column)
+			// Get enum values for this column type
+			var enumValues []string
+			if enums != nil {
+				enumValues = enums[op.Column.Type]
+			}
+
+			line, err := r.renderColumnWithEnums(op.Column, enumValues)
 			if err != nil {
 				return fmt.Errorf("error rendering add column: %w", err)
 			}
@@ -126,8 +138,14 @@ func (r *MariaDBRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
 			r.WriteLinef("ALTER TABLE %s DROP COLUMN %s;", node.Name, op.ColumnName)
 
 		case *ast.ModifyColumnOperation:
+			// Get enum values for this column type
+			var enumValues []string
+			if enums != nil {
+				enumValues = enums[op.Column.Type]
+			}
+
 			// MariaDB uses MODIFY COLUMN syntax like MySQL
-			line, err := r.renderColumn(op.Column)
+			line, err := r.renderColumnWithEnums(op.Column, enumValues)
 			if err != nil {
 				return fmt.Errorf("error rendering modify column: %w", err)
 			}
@@ -201,8 +219,8 @@ func (r *MariaDBRenderer) renderColumnWithEnums(column *ast.ColumnNode, enumValu
 
 	// Default values
 	if column.Default != nil {
-		if column.Default.Function != "" {
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Function))
+		if column.Default.Expression != "" {
+			parts = append(parts, fmt.Sprintf("DEFAULT %s", column.Default.Expression))
 		} else if column.Default.Value != "" {
 			parts = append(parts, fmt.Sprintf("DEFAULT '%s'", column.Default.Value))
 		}

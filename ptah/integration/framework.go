@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,13 +40,13 @@ type TestResult struct {
 
 // TestReport represents the complete test report
 type TestReport struct {
-	StartTime    time.Time    `json:"start_time"`
-	EndTime      time.Time    `json:"end_time"`
-	TotalTests   int          `json:"total_tests"`
-	PassedTests  int          `json:"passed_tests"`
-	FailedTests  int          `json:"failed_tests"`
-	Results      []TestResult `json:"results"`
-	Summary      string       `json:"summary"`
+	StartTime   time.Time    `json:"start_time"`
+	EndTime     time.Time    `json:"end_time"`
+	TotalTests  int          `json:"total_tests"`
+	PassedTests int          `json:"passed_tests"`
+	FailedTests int          `json:"failed_tests"`
+	Results     []TestResult `json:"results"`
+	Summary     string       `json:"summary"`
 }
 
 // StepRecorder allows test functions to record individual steps
@@ -129,7 +130,7 @@ func (tr *TestRunner) AddScenario(scenario TestScenario) {
 // RunAll executes all test scenarios against all databases
 func (tr *TestRunner) RunAll(ctx context.Context) error {
 	tr.report.StartTime = time.Now()
-	
+
 	for dbName, dbURL := range tr.databases {
 		for _, scenario := range tr.scenarios {
 			result := tr.runSingleTest(ctx, scenario, dbName, dbURL)
@@ -144,23 +145,23 @@ func (tr *TestRunner) RunAll(ctx context.Context) error {
 			tr.mu.Unlock()
 		}
 	}
-	
+
 	tr.report.EndTime = time.Now()
 	tr.generateSummary()
-	
+
 	return nil
 }
 
 // runSingleTest executes a single test scenario against a specific database
 func (tr *TestRunner) runSingleTest(ctx context.Context, scenario TestScenario, dbName, dbURL string) TestResult {
 	start := time.Now()
-	
+
 	result := TestResult{
 		Name:        fmt.Sprintf("%s_%s", scenario.Name, dbName),
 		Database:    dbName,
 		Description: scenario.Description,
 	}
-	
+
 	// Connect to database
 	conn, err := executor.ConnectToDatabase(dbURL)
 	if err != nil {
@@ -170,7 +171,7 @@ func (tr *TestRunner) runSingleTest(ctx context.Context, scenario TestScenario, 
 		return result
 	}
 	defer conn.Close()
-	
+
 	// Clean database before test
 	if err := tr.cleanDatabase(ctx, conn); err != nil {
 		result.Success = false
@@ -178,7 +179,7 @@ func (tr *TestRunner) runSingleTest(ctx context.Context, scenario TestScenario, 
 		result.Duration = time.Since(start)
 		return result
 	}
-	
+
 	// Create step recorder
 	recorder := &StepRecorder{}
 
@@ -342,6 +343,8 @@ func (vem *VersionedEntityManager) ApplyMigrationFromEntities(ctx context.Contex
 		return fmt.Errorf("failed to generate migration SQL: %w", err)
 	}
 
+	fmt.Println("Generated migration SQL\n", strings.Join(statements, "\n"))
+
 	if len(statements) == 0 {
 		// No changes needed - this is idempotent behavior
 		return nil
@@ -382,7 +385,7 @@ func (vem *VersionedEntityManager) MigrateToVersion(ctx context.Context, conn *e
 func (tr *TestRunner) generateSummary() {
 	duration := tr.report.EndTime.Sub(tr.report.StartTime)
 	successRate := float64(tr.report.PassedTests) / float64(tr.report.TotalTests) * 100
-	
+
 	tr.report.Summary = fmt.Sprintf(
 		"Executed %d tests in %v. %d passed, %d failed (%.1f%% success rate)",
 		tr.report.TotalTests,
@@ -437,7 +440,7 @@ func (dh *DatabaseHelper) TableExists(tableName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	
+
 	for _, table := range schema.Tables {
 		if table.Name == tableName {
 			return true, nil

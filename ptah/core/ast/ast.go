@@ -34,8 +34,8 @@ type Visitor interface {
 type DefaultValue struct {
 	// Value contains literal default values like 'default_value', '42', 'true'
 	Value string
-	// Function contains function calls like NOW(), CURRENT_TIMESTAMP, UUID()
-	Function string
+	// Function contains function calls like NOW(), UUID()
+	Expression string
 }
 
 // ForeignKeyRef represents a foreign key reference with optional referential actions.

@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 )
 
 func TestBaseRenderer_BasicOperations(t *testing.T) {
@@ -253,7 +253,7 @@ func TestBaseRenderer_RenderColumn_HappyPath(t *testing.T) {
 				Type:     "TIMESTAMP",
 				Nullable: false,
 				Default: &ast.DefaultValue{
-					Function: "NOW()",
+					Expression: "NOW()",
 				},
 			},
 			expected: "  created_at TIMESTAMP NOT NULL DEFAULT NOW()",
@@ -770,7 +770,7 @@ func TestBaseRenderer_ColumnRendering_AllFeatures(t *testing.T) {
 				Type:     "TIMESTAMP",
 				Nullable: false,
 				Default: &ast.DefaultValue{
-					Function: "NOW()",
+					Expression: "NOW()",
 				},
 			},
 			expected: []string{

@@ -7,6 +7,9 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
+	coreparser "github.com/denisvmedia/inventario/ptah/core/parser"
+	"github.com/denisvmedia/inventario/ptah/migrator/sqlsplitter"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 )
@@ -70,39 +73,27 @@ func (r *MySQLReader) ReadSchema() (*parsertypes.DatabaseSchema, error) {
 	return schema, nil
 }
 
-// readTables reads all tables and their columns
+// readTables reads all tables and their columns using SHOW CREATE TABLE and DDL parsing
 func (r *MySQLReader) readTables(dbName string) ([]parsertypes.Table, error) {
-	query := `
-		SELECT
-			t.TABLE_NAME,
-			t.TABLE_TYPE,
-			COALESCE(t.TABLE_COMMENT, '') as TABLE_COMMENT
-		FROM information_schema.TABLES t
-		WHERE t.TABLE_SCHEMA = ?
-		AND t.TABLE_TYPE IN ('BASE TABLE', 'VIEW')
-		AND t.TABLE_NAME NOT IN ('schema_migrations')
-		ORDER BY t.TABLE_NAME`
-
-	rows, err := r.db.Query(query, dbName)
+	// First, get just the table names
+	tableNames, err := r.getTableNames(dbName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get table names: %w", err)
 	}
-	defer rows.Close()
 
 	var tables []parsertypes.Table
-	for rows.Next() {
-		var table parsertypes.Table
-		err := rows.Scan(&table.Name, &table.Type, &table.Comment)
+	for _, tableName := range tableNames {
+		// Get DDL for this table using SHOW CREATE TABLE
+		ddl, err := r.getTableDDL(tableName)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get DDL for table %s: %w", tableName, err)
 		}
 
-		// Read columns for this table
-		columns, err := r.readColumns(dbName, table.Name)
+		// Parse DDL using core parser
+		table, err := r.parseTableFromDDL(ddl)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read columns for table %s: %w", table.Name, err)
+			return nil, fmt.Errorf("failed to parse DDL for table %s: %w", tableName, err)
 		}
-		table.Columns = columns
 
 		tables = append(tables, table)
 	}
@@ -110,141 +101,147 @@ func (r *MySQLReader) readTables(dbName string) ([]parsertypes.Table, error) {
 	return tables, nil
 }
 
-// readColumns reads columns for a specific table
-func (r *MySQLReader) readColumns(dbName, tableName string) ([]parsertypes.Column, error) {
+// getTableNames fetches just the table names from the database
+func (r *MySQLReader) getTableNames(dbName string) ([]string, error) {
 	query := `
-		SELECT
-			c.COLUMN_NAME,
-			c.DATA_TYPE,
-			c.COLUMN_TYPE,
-			c.IS_NULLABLE,
-			c.COLUMN_DEFAULT,
-			COALESCE(c.CHARACTER_MAXIMUM_LENGTH, 0) as CHARACTER_MAXIMUM_LENGTH,
-			COALESCE(c.NUMERIC_PRECISION, 0) as NUMERIC_PRECISION,
-			COALESCE(c.NUMERIC_SCALE, 0) as NUMERIC_SCALE,
-			c.ORDINAL_POSITION,
-			c.EXTRA
-		FROM information_schema.COLUMNS c
-		WHERE c.TABLE_SCHEMA = ? AND c.TABLE_NAME = ?
-		ORDER BY c.ORDINAL_POSITION`
+		SELECT TABLE_NAME
+		FROM information_schema.TABLES
+		WHERE TABLE_SCHEMA = ?
+		AND TABLE_TYPE IN ('BASE TABLE', 'VIEW')
+		AND TABLE_NAME NOT IN ('schema_migrations')
+		ORDER BY TABLE_NAME`
 
-	rows, err := r.db.Query(query, dbName, tableName)
+	rows, err := r.db.Query(query, dbName)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var columns []parsertypes.Column
+	var tableNames []string
 	for rows.Next() {
-		var col parsertypes.Column
-		var characterMaxLength, numericPrecision, numericScale int
-		var columnDefault sql.NullString
-		var extra string
-
-		err := rows.Scan(
-			&col.Name,
-			&col.DataType,
-			&col.ColumnType,
-			&col.IsNullable,
-			&columnDefault,
-			&characterMaxLength,
-			&numericPrecision,
-			&numericScale,
-			&col.OrdinalPosition,
-			&extra,
-		)
-		if err != nil {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
 			return nil, err
 		}
-
-		// Handle nullable default
-		if columnDefault.Valid {
-			col.ColumnDefault = &columnDefault.String
-		}
-
-		// Set numeric fields
-		if characterMaxLength > 0 {
-			col.CharacterMaxLength = &characterMaxLength
-		}
-		if numericPrecision > 0 {
-			col.NumericPrecision = &numericPrecision
-		}
-		if numericScale > 0 {
-			col.NumericScale = &numericScale
-		}
-
-		// Detect auto increment
-		col.IsAutoIncrement = strings.Contains(strings.ToLower(extra), "auto_increment")
-
-		columns = append(columns, col)
+		tableNames = append(tableNames, tableName)
 	}
 
-	// Add derived fields (primary key, unique) from constraints
-	err = r.addConstraintInfo(dbName, tableName, columns)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add constraint info: %w", err)
-	}
-
-	return columns, nil
+	return tableNames, nil
 }
 
-// addConstraintInfo adds primary key and unique constraint information to columns
-func (r *MySQLReader) addConstraintInfo(dbName, tableName string, columns []parsertypes.Column) error {
-	// Get primary key information
-	pkQuery := `
-		SELECT COLUMN_NAME
-		FROM information_schema.KEY_COLUMN_USAGE
-		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY'
-		ORDER BY ORDINAL_POSITION`
+// getTableDDL gets the DDL for a specific table using SHOW CREATE TABLE
+func (r *MySQLReader) getTableDDL(tableName string) (string, error) {
+	query := fmt.Sprintf("SHOW CREATE TABLE `%s`", tableName)
 
-	pkRows, err := r.db.Query(pkQuery, dbName, tableName)
+	var name, ddl string
+	err := r.db.QueryRow(query).Scan(&name, &ddl)
 	if err != nil {
-		return err
-	}
-	defer pkRows.Close()
-
-	pkColumns := make(map[string]bool)
-	for pkRows.Next() {
-		var colName string
-		if err := pkRows.Scan(&colName); err != nil {
-			return err
-		}
-		pkColumns[colName] = true
+		return "", fmt.Errorf("failed to get DDL for table %s: %w", tableName, err)
 	}
 
-	// Get unique constraint information
-	uniqueQuery := `
-		SELECT COLUMN_NAME
-		FROM information_schema.KEY_COLUMN_USAGE kcu
-		JOIN information_schema.TABLE_CONSTRAINTS tc ON
-			kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME AND
-			kcu.TABLE_SCHEMA = tc.TABLE_SCHEMA AND
-			kcu.TABLE_NAME = tc.TABLE_NAME
-		WHERE kcu.TABLE_SCHEMA = ? AND kcu.TABLE_NAME = ?
-		AND tc.CONSTRAINT_TYPE = 'UNIQUE'`
+	return ddl, nil
+}
 
-	uniqueRows, err := r.db.Query(uniqueQuery, dbName, tableName)
+// parseTableFromDDL parses a table DDL using the core parser and converts to parsertypes.Table
+func (r *MySQLReader) parseTableFromDDL(ddl string) (parsertypes.Table, error) {
+	// Parse DDL using core parser
+	parser := coreparser.NewParser(ddl)
+	statements, err := parser.Parse()
 	if err != nil {
-		return err
+		return parsertypes.Table{}, fmt.Errorf("failed to parse DDL: %w", err)
 	}
-	defer uniqueRows.Close()
 
-	uniqueColumns := make(map[string]bool)
-	for uniqueRows.Next() {
-		var colName string
-		if err := uniqueRows.Scan(&colName); err != nil {
-			return err
+	if len(statements.Statements) == 0 {
+		return parsertypes.Table{}, fmt.Errorf("no statements found in DDL")
+	}
+
+	// Should be a CREATE TABLE statement
+	createTableNode, ok := statements.Statements[0].(*ast.CreateTableNode)
+	if !ok {
+		return parsertypes.Table{}, fmt.Errorf("expected CREATE TABLE statement, got %T", statements.Statements[0])
+	}
+
+	// Convert AST to parsertypes.Table
+	return r.convertASTToTable(createTableNode), nil
+}
+
+// convertASTToTable converts an AST CreateTableNode to parsertypes.Table
+func (r *MySQLReader) convertASTToTable(node *ast.CreateTableNode) parsertypes.Table {
+	table := parsertypes.Table{
+		Name:    strings.Trim(node.Name, "`"),  // Remove backticks
+		Type:    "BASE TABLE",                  // Default for regular tables
+		Comment: "",                           // Will be extracted from options if present
+	}
+
+	// Convert columns
+	for _, astCol := range node.Columns {
+		// Convert boolean nullable to string format expected by parsertypes
+		isNullable := "YES"
+		if !astCol.Nullable {
+			isNullable = "NO"
 		}
-		uniqueColumns[colName] = true
+
+		col := parsertypes.Column{
+			Name:               strings.Trim(astCol.Name, "`"),
+			DataType:           astCol.Type,
+			ColumnType:         astCol.Type, // For MySQL, these are often the same
+			IsNullable:         isNullable,
+			OrdinalPosition:    len(table.Columns) + 1,
+			IsAutoIncrement:    astCol.AutoInc,
+			IsPrimaryKey:       astCol.Primary,
+			IsUnique:           astCol.Unique,
+		}
+
+		// Handle default values
+		if astCol.Default != nil {
+			if astCol.Default.Expression != "" {
+				col.ColumnDefault = &astCol.Default.Expression
+			} else {
+				col.ColumnDefault = &astCol.Default.Value
+			}
+		}
+
+		// Handle character length, precision, scale if available
+		// These would need to be parsed from the type string for MySQL
+		// For now, we'll leave them as nil since the AST doesn't provide them directly
+
+		table.Columns = append(table.Columns, col)
 	}
 
-	// Update column information
-	for i := range columns {
-		columns[i].IsPrimaryKey = pkColumns[columns[i].Name]
-		columns[i].IsUnique = uniqueColumns[columns[i].Name]
+	// Handle table-level constraints to update column flags
+	for _, constraint := range node.Constraints {
+		switch constraint.Type {
+		case ast.PrimaryKeyConstraint:
+			// Mark columns as primary key
+			for _, colName := range constraint.Columns {
+				colName = strings.Trim(colName, "`")
+				for i := range table.Columns {
+					if table.Columns[i].Name == colName {
+						table.Columns[i].IsPrimaryKey = true
+					}
+				}
+			}
+		case ast.UniqueConstraint:
+			// Mark columns as unique (only if single column unique constraint)
+			if len(constraint.Columns) == 1 {
+				colName := strings.Trim(constraint.Columns[0], "`")
+				for i := range table.Columns {
+					if table.Columns[i].Name == colName {
+						table.Columns[i].IsUnique = true
+					}
+				}
+			}
+		}
 	}
 
-	return nil
+	// Extract table comment from options
+	for key, value := range node.Options {
+		if strings.ToUpper(key) == "COMMENT" {
+			table.Comment = strings.Trim(value, "'\"")
+		}
+	}
+
+	return table
 }
 
 // readEnums reads enum types from MySQL (stored as column types)
@@ -729,21 +726,10 @@ func (w *MySQLWriter) DropAllTables() error {
 	return nil
 }
 
-// splitSQLStatements splits a multi-statement SQL string into individual statements
+// splitSQLStatements splits a multi-statement SQL string into individual statements using AST-based parsing.
+// Unlike simple string splitting, this properly handles semicolons within string literals and comments.
 func (w *MySQLWriter) splitSQLStatements(sql string) []string {
-	// Split by semicolon and filter out empty statements
-	var statements []string
-	parts := strings.Split(sql, ";")
-
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		// Skip empty parts and comments
-		if part != "" && !strings.HasPrefix(part, "--") {
-			statements = append(statements, part)
-		}
-	}
-
-	return statements
+	return sqlsplitter.SplitSQLStatements(sql)
 }
 
 // isCreateTableStatement checks if a SQL statement is a CREATE TABLE statement

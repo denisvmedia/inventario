@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
@@ -116,12 +116,12 @@ func TestFromSchemaField_WithDefaults(t *testing.T) {
 		{
 			name: "function default",
 			field: types.SchemaField{
-				Name:      "created_at",
-				Type:      "TIMESTAMP",
-				DefaultFn: "NOW()",
+				Name:        "created_at",
+				Type:        "TIMESTAMP",
+				DefaultExpr: "NOW()",
 			},
 			expected: func(col *ast.ColumnNode) bool {
-				return col.Default != nil && col.Default.Function == "NOW()"
+				return col.Default != nil && col.Default.Expression == "NOW()"
 			},
 		},
 	}
@@ -574,39 +574,39 @@ func TestFromSchemaField_WithEnumValidation(t *testing.T) {
 
 func TestIsEnumType(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		fieldType string
-		expected bool
+		expected  bool
 	}{
 		{
-			name:     "enum type with prefix",
+			name:      "enum type with prefix",
 			fieldType: "enum_user_status",
-			expected: true,
+			expected:  true,
 		},
 		{
-			name:     "enum type with different name",
+			name:      "enum type with different name",
 			fieldType: "enum_product_category",
-			expected: true,
+			expected:  true,
 		},
 		{
-			name:     "non-enum type",
+			name:      "non-enum type",
 			fieldType: "VARCHAR(255)",
-			expected: false,
+			expected:  false,
 		},
 		{
-			name:     "integer type",
+			name:      "integer type",
 			fieldType: "INTEGER",
-			expected: false,
+			expected:  false,
 		},
 		{
-			name:     "empty string",
+			name:      "empty string",
 			fieldType: "",
-			expected: false,
+			expected:  false,
 		},
 		{
-			name:     "contains enum but not prefix",
+			name:      "contains enum but not prefix",
 			fieldType: "my_enum_type",
-			expected: false,
+			expected:  false,
 		},
 	}
 

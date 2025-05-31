@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 )
 
 func TestMariaDBRenderer_ImplementsVisitorInterface(t *testing.T) {
@@ -333,7 +333,7 @@ func TestMariaDBRenderer_InheritsFromMySQL(t *testing.T) {
 				Type:     "TIMESTAMP",
 				Nullable: false,
 				Default: &ast.DefaultValue{
-					Function: "NOW()",
+					Expression: "NOW()",
 				},
 			},
 		},

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/builder"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
@@ -163,8 +163,8 @@ func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fi
 				columnBuilder.Default(field.Default)
 			}
 
-			if field.DefaultFn != "" {
-				columnBuilder.DefaultFunction(field.DefaultFn)
+			if field.DefaultExpr != "" {
+				columnBuilder.DefaultExpression(field.DefaultExpr)
 			}
 
 			if field.Check != "" {

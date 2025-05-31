@@ -1,7 +1,7 @@
 package builder
 
 import (
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 )
 
 // IndexBuilder provides a fluent API for building CREATE INDEX statements

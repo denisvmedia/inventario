@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
+
 	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
@@ -79,8 +80,8 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 		column.SetDefault(field.Default)
 	}
 
-	if field.DefaultFn != "" {
-		column.SetDefaultFunction(field.DefaultFn)
+	if field.DefaultExpr != "" {
+		column.SetDefaultExpression(field.DefaultExpr)
 	}
 
 	if field.Check != "" {
@@ -409,14 +410,57 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 
 		// Modify existing columns
 		for _, colDiff := range tableDiff.ColumnsModified {
-			for changeType, change := range colDiff.Changes {
-				statements = append(statements, fmt.Sprintf("-- TODO: ALTER TABLE %s ALTER COLUMN %s %s (%s);", tableDiff.TableName, colDiff.ColumnName, changeType, change))
+			// Find the target field definition for this column
+			var targetField *types.SchemaField
+			for _, field := range generated.Fields {
+				if field.StructName == tableDiff.TableName && field.Name == colDiff.ColumnName {
+					targetField = &field
+					break
+				}
+			}
+
+			if targetField == nil {
+				statements = append(statements, fmt.Sprintf("-- ERROR: Could not find field definition for %s.%s", tableDiff.TableName, colDiff.ColumnName))
+				continue
+			}
+
+			// Create a column definition with the target field properties
+			column := g.convertFieldToColumn(*targetField, generated.Enums)
+
+			// Generate ALTER COLUMN statements using AST
+			alterNode := &ast.AlterTableNode{
+				Name:       tableDiff.TableName,
+				Operations: []ast.AlterOperation{&ast.ModifyColumnOperation{Column: column}},
+			}
+			result, err := g.renderer.Render(alterNode)
+			if err != nil {
+				statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate ALTER COLUMN for %s.%s: %v", tableDiff.TableName, colDiff.ColumnName, err))
+			} else {
+				// Add a comment showing what changes are being made
+				changesList := make([]string, 0, len(colDiff.Changes))
+				for changeType, change := range colDiff.Changes {
+					changesList = append(changesList, fmt.Sprintf("%s: %s", changeType, change))
+				}
+				statements = append(statements, fmt.Sprintf("-- Modify column %s.%s: %s", tableDiff.TableName, colDiff.ColumnName, strings.Join(changesList, ", ")))
+				statements = append(statements, result)
 			}
 		}
 
 		// Remove columns (dangerous!)
 		for _, colName := range tableDiff.ColumnsRemoved {
-			statements = append(statements, fmt.Sprintf("-- WARNING: ALTER TABLE %s DROP COLUMN %s; -- This will delete data!", tableDiff.TableName, colName))
+			// Generate DROP COLUMN statement using AST
+			alterNode := &ast.AlterTableNode{
+				Name:       tableDiff.TableName,
+				Operations: []ast.AlterOperation{&ast.DropColumnOperation{ColumnName: colName}},
+			}
+			result, err := g.renderer.Render(alterNode)
+			if err != nil {
+				statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate DROP COLUMN for %s.%s: %v", tableDiff.TableName, colName, err))
+			} else {
+				// Add a warning comment before the actual SQL
+				statements = append(statements, fmt.Sprintf("-- WARNING: Dropping column %s.%s - This will delete data!", tableDiff.TableName, colName))
+				statements = append(statements, result)
+			}
 		}
 	}
 

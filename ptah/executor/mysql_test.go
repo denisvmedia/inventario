@@ -132,6 +132,137 @@ func TestMySQLReader_parseEnumValues(t *testing.T) {
 	})
 }
 
+// TestMySQLReader_parseTableFromDDL tests the new DDL parsing functionality
+func TestMySQLReader_parseTableFromDDL(t *testing.T) {
+
+	tests := []struct {
+		name        string
+		ddl         string
+		expectError bool
+		validate    func(c *qt.C, table parsertypes.Table)
+	}{
+		{
+			name: "simple table with primary key",
+			ddl: "CREATE TABLE `users` (\n" +
+				"  `id` int NOT NULL AUTO_INCREMENT,\n" +
+				"  `name` varchar(255) NOT NULL,\n" +
+				"  `email` varchar(255) DEFAULT NULL,\n" +
+				"  PRIMARY KEY (`id`)\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+			expectError: false,
+			validate: func(c *qt.C, table parsertypes.Table) {
+				c.Assert(table.Name, qt.Equals, "users")
+				c.Assert(table.Type, qt.Equals, "BASE TABLE")
+				c.Assert(len(table.Columns), qt.Equals, 3)
+
+				// Check id column
+				idCol := table.Columns[0]
+				c.Assert(idCol.Name, qt.Equals, "id")
+				c.Assert(idCol.DataType, qt.Equals, "int")
+				c.Assert(idCol.IsNullable, qt.Equals, "NO")
+				c.Assert(idCol.IsAutoIncrement, qt.IsTrue)
+				c.Assert(idCol.IsPrimaryKey, qt.IsTrue)
+
+				// Check name column
+				nameCol := table.Columns[1]
+				c.Assert(nameCol.Name, qt.Equals, "name")
+				c.Assert(nameCol.DataType, qt.Equals, "varchar(255)")
+				c.Assert(nameCol.IsNullable, qt.Equals, "NO")
+				c.Assert(nameCol.IsAutoIncrement, qt.IsFalse)
+				c.Assert(nameCol.IsPrimaryKey, qt.IsFalse)
+
+				// Check email column
+				emailCol := table.Columns[2]
+				c.Assert(emailCol.Name, qt.Equals, "email")
+				c.Assert(emailCol.DataType, qt.Equals, "varchar(255)")
+				c.Assert(emailCol.IsNullable, qt.Equals, "YES")
+				c.Assert(emailCol.IsAutoIncrement, qt.IsFalse)
+				c.Assert(emailCol.IsPrimaryKey, qt.IsFalse)
+			},
+		},
+		{
+			name: "table with unique constraint",
+			ddl: "CREATE TABLE `products` (\n" +
+				"  `id` int NOT NULL AUTO_INCREMENT,\n" +
+				"  `sku` varchar(100) NOT NULL,\n" +
+				"  PRIMARY KEY (`id`),\n" +
+				"  UNIQUE KEY `uk_sku` (`sku`)\n" +
+				") ENGINE=InnoDB",
+			expectError: false,
+			validate: func(c *qt.C, table parsertypes.Table) {
+				c.Assert(table.Name, qt.Equals, "products")
+				c.Assert(len(table.Columns), qt.Equals, 2)
+
+				// Check sku column should be marked as unique
+				skuCol := table.Columns[1]
+				c.Assert(skuCol.Name, qt.Equals, "sku")
+				c.Assert(skuCol.IsUnique, qt.IsTrue)
+			},
+		},
+		{
+			name: "real MySQL SHOW CREATE TABLE output",
+			ddl: "CREATE TABLE `test_table` (\n" +
+				"  `id` int NOT NULL AUTO_INCREMENT,\n" +
+				"  `name` varchar(255) NOT NULL,\n" +
+				"  `status` enum('active','inactive') DEFAULT 'active',\n" +
+				"  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n" +
+				"  PRIMARY KEY (`id`),\n" +
+				"  UNIQUE KEY `unique_name` (`name`)\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+			expectError: false,
+			validate: func(c *qt.C, table parsertypes.Table) {
+				c.Assert(table.Name, qt.Equals, "test_table")
+				c.Assert(len(table.Columns), qt.Equals, 4)
+
+				// Check id column
+				idCol := table.Columns[0]
+				c.Assert(idCol.Name, qt.Equals, "id")
+				c.Assert(idCol.IsAutoIncrement, qt.IsTrue)
+				c.Assert(idCol.IsPrimaryKey, qt.IsTrue)
+
+				// Check name column
+				nameCol := table.Columns[1]
+				c.Assert(nameCol.Name, qt.Equals, "name")
+				c.Assert(nameCol.IsUnique, qt.IsTrue)
+
+				// Check status column (enum)
+				statusCol := table.Columns[2]
+				c.Assert(statusCol.Name, qt.Equals, "status")
+				c.Assert(statusCol.DataType, qt.Equals, "enum('active','inactive')")
+
+				// Check created_at column
+				createdCol := table.Columns[3]
+				c.Assert(createdCol.Name, qt.Equals, "created_at")
+				c.Assert(createdCol.DataType, qt.Equals, "timestamp")
+				c.Assert(createdCol.IsNullable, qt.Equals, "YES")
+			},
+		},
+		{
+			name:        "invalid DDL",
+			ddl:         "INVALID SQL STATEMENT",
+			expectError: true,
+			validate:    nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := qt.New(t)
+			reader := &MySQLReader{}
+
+			table, err := reader.parseTableFromDDL(test.ddl)
+
+			if test.expectError {
+				c.Assert(err, qt.IsNotNil)
+			} else {
+				c.Assert(err, qt.IsNil)
+				if test.validate != nil {
+					test.validate(c, table)
+				}
+			}
+		})
+	}
+}
 func TestMySQLReader_ReadSchema_Integration(t *testing.T) {
 	dsn := skipIfNoMySQL(t)
 	c := qt.New(t)
@@ -187,7 +318,7 @@ func TestMySQLReader_ReadSchema_Integration(t *testing.T) {
 
 	statusCol := findColumn(testTable.Columns, "status")
 	c.Assert(statusCol, qt.IsNotNil)
-	c.Assert(statusCol.DataType, qt.Equals, "enum")
+	c.Assert(statusCol.DataType, qt.Equals, "enum('active','inactive')")
 }
 
 func TestMySQLReader_ReadSchema_NoConnection(t *testing.T) {
@@ -258,8 +389,8 @@ func TestMySQLWriter_UtilityMethods(t *testing.T) {
 			},
 			{
 				name:     "with comments",
-				input:    "CREATE TABLE test (id INT); -- This is a comment; CREATE INDEX idx_test ON test (id);",
-				expected: []string{"CREATE TABLE test (id INT)", "CREATE INDEX idx_test ON test (id)"},
+				input:    "CREATE TABLE test (id INT); /* This is a comment; */ CREATE INDEX idx_test ON test (id);",
+				expected: []string{"CREATE TABLE test (id INT)", "/* This is a comment; */ CREATE INDEX idx_test ON test (id)"},
 			},
 			{
 				name:     "empty statements",
