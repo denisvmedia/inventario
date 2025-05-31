@@ -1040,10 +1040,103 @@ func (p *Parser) parseTableOptions(table *ast.CreateTableNode) error {
 				break
 			}
 
+		case "WITH":
+			// Handle PostgreSQL WITH clause
+			if err := p.parsePostgreSQLWithClause(table); err != nil {
+				return err
+			}
+
+		case "TABLESPACE":
+			// Handle PostgreSQL TABLESPACE
+			p.advance()
+			p.skipWhitespace()
+			value, err := p.expectIdentifier()
+			if err != nil {
+				return fmt.Errorf("expected tablespace name: %w", err)
+			}
+			table.SetOption("TABLESPACE", value)
+
 		default:
 			// Unknown option, stop parsing
 			break
 		}
+	}
+
+	return nil
+}
+
+// parsePostgreSQLWithClause parses PostgreSQL WITH clause for table options.
+func (p *Parser) parsePostgreSQLWithClause(table *ast.CreateTableNode) error {
+	if err := p.expect(lexer.TokenIdentifier, "WITH"); err != nil {
+		return err
+	}
+
+	p.skipWhitespace()
+
+	// Expect opening parenthesis
+	if err := p.expect(lexer.TokenOperator, "("); err != nil {
+		return fmt.Errorf("expected '(' after WITH: %w", err)
+	}
+
+	// Parse key-value pairs
+	for {
+		p.skipWhitespace()
+
+		// Check for closing parenthesis
+		if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
+			break
+		}
+
+		// Get option name
+		if p.current.Type != lexer.TokenIdentifier {
+			return fmt.Errorf("expected option name in WITH clause, got %s at position %d", p.current.Type, p.current.Start)
+		}
+		optionName := p.current.Value
+		p.advance()
+
+		p.skipWhitespace()
+
+		// Expect equals sign
+		if err := p.expect(lexer.TokenOperator, "="); err != nil {
+			return fmt.Errorf("expected '=' after option name '%s': %w", optionName, err)
+		}
+
+		p.skipWhitespace()
+
+		// Get option value (can be identifier, number, or boolean)
+		var optionValue string
+		switch p.current.Type {
+		case lexer.TokenIdentifier:
+			optionValue = p.current.Value
+			p.advance()
+		case lexer.TokenString:
+			optionValue = p.current.Value
+			p.advance()
+		default:
+			// Handle numeric values and other tokens
+			optionValue = p.current.Value
+			p.advance()
+		}
+
+		// Store the option
+		table.SetOption(optionName, optionValue)
+
+		p.skipWhitespace()
+
+		// Check for comma (more options) or closing parenthesis
+		if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
+			p.advance()
+			continue
+		} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
+			break
+		} else {
+			return fmt.Errorf("expected ',' or ')' in WITH clause at position %d", p.current.Start)
+		}
+	}
+
+	// Consume closing parenthesis
+	if err := p.expect(lexer.TokenOperator, ")"); err != nil {
+		return err
 	}
 
 	return nil

@@ -1245,6 +1245,85 @@ func TestParser_ParseOriginalProblematicSQL(t *testing.T) {
 	c.Assert(doubleCol.Type, qt.Equals, "DOUBLE PRECISION")
 }
 
+func TestParser_ParsePostgreSQLTableOptions(t *testing.T) {
+	tests := []struct {
+		name            string
+		sql             string
+		expectedOptions map[string]string
+	}{
+		{
+			name: "WITH clause with multiple options",
+			sql: `CREATE TABLE test (
+				id INTEGER PRIMARY KEY
+			) WITH (
+				fillfactor = 70,
+				autovacuum_enabled = true,
+				autovacuum_vacuum_threshold = 50
+			);`,
+			expectedOptions: map[string]string{
+				"fillfactor":                   "70",
+				"autovacuum_enabled":           "true",
+				"autovacuum_vacuum_threshold":  "50",
+			},
+		},
+		{
+			name: "WITH clause and TABLESPACE",
+			sql: `CREATE TABLE test (
+				id INTEGER PRIMARY KEY
+			) WITH (
+				fillfactor = 80
+			) TABLESPACE pg_default;`,
+			expectedOptions: map[string]string{
+				"fillfactor": "80",
+				"TABLESPACE": "pg_default",
+			},
+		},
+		{
+			name: "TABLESPACE only",
+			sql: `CREATE TABLE test (
+				id INTEGER PRIMARY KEY
+			) TABLESPACE custom_tablespace;`,
+			expectedOptions: map[string]string{
+				"TABLESPACE": "custom_tablespace",
+			},
+		},
+		{
+			name: "WITH clause with string values",
+			sql: `CREATE TABLE test (
+				id INTEGER PRIMARY KEY
+			) WITH (
+				toast_tuple_target = 128,
+				parallel_workers = 4
+			);`,
+			expectedOptions: map[string]string{
+				"toast_tuple_target": "128",
+				"parallel_workers":   "4",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			p := parser.NewParser(tt.sql)
+			statements, err := p.Parse()
+			c.Assert(err, qt.IsNil)
+			c.Assert(len(statements.Statements), qt.Equals, 1)
+
+			createTable := statements.Statements[0].(*ast.CreateTableNode)
+			c.Assert(len(createTable.Columns), qt.Equals, 1)
+
+			// Verify all expected options are present
+			for key, expectedValue := range tt.expectedOptions {
+				actualValue, exists := createTable.Options[key]
+				c.Assert(exists, qt.IsTrue, qt.Commentf("Option %s should exist", key))
+				c.Assert(actualValue, qt.Equals, expectedValue, qt.Commentf("Option %s should have value %s", key, expectedValue))
+			}
+		})
+	}
+}
+
 func TestParser_ParseExtendedPostgreSQLDemo(t *testing.T) {
 	c := qt.New(t)
 
@@ -1368,15 +1447,15 @@ func TestParser_ParseExtendedPostgreSQLDemo(t *testing.T) {
 		-- Table-level check constraints
 		CHECK (created_at <= updated_at),
 		CHECK (small_value BETWEEN 1 AND 1000)
-	);
-	-- Table options (commented out for now)
-	-- WITH (
-	--     fillfactor = 70,
-	--     autovacuum_enabled = true,
-	--     autovacuum_vacuum_threshold = 50,
-	--     autovacuum_analyze_threshold = 50
-	-- )
-	-- TABLESPACE pg_default;
+	)
+	-- Table options
+	WITH (
+		fillfactor = 70,
+		autovacuum_enabled = true,
+		autovacuum_vacuum_threshold = 50,
+		autovacuum_analyze_threshold = 50
+	)
+	TABLESPACE pg_default;
 `
 
 	p := parser.NewParser(sql)
@@ -1438,6 +1517,15 @@ func TestParser_ParseExtendedPostgreSQLDemo(t *testing.T) {
 
 	// Test that we have multiple constraints
 	c.Assert(len(createTable.Constraints) > 0, qt.IsTrue)
+
+	// Test table options from WITH clause
+	c.Assert(createTable.Options["fillfactor"], qt.Equals, "70")
+	c.Assert(createTable.Options["autovacuum_enabled"], qt.Equals, "true")
+	c.Assert(createTable.Options["autovacuum_vacuum_threshold"], qt.Equals, "50")
+	c.Assert(createTable.Options["autovacuum_analyze_threshold"], qt.Equals, "50")
+
+	// Test TABLESPACE option
+	c.Assert(createTable.Options["TABLESPACE"], qt.Equals, "pg_default")
 }
 
 func TestParser_ErrorHandling(t *testing.T) {
