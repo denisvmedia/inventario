@@ -10,6 +10,7 @@ import (
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/differ"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/internal/compare"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
@@ -315,27 +316,17 @@ func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 	c.Assert(tableDiff.ColumnsModified, qt.HasLen, 2)
 
 	// Check email column changes
-	emailDiff := findColumnDiff(tableDiff.ColumnsModified, "email")
+	emailDiff := compare.ColumnByName(tableDiff.ColumnsModified, "email")
 	c.Assert(emailDiff, qt.IsNotNil)
 	c.Assert(emailDiff.Changes["type"], qt.Equals, "text -> varchar")
 	c.Assert(emailDiff.Changes["nullable"], qt.Equals, "true -> false")
 	c.Assert(emailDiff.Changes["unique"], qt.Equals, "false -> true")
 
 	// Check status column changes
-	statusDiff := findColumnDiff(tableDiff.ColumnsModified, "status")
+	statusDiff := compare.ColumnByName(tableDiff.ColumnsModified, "status")
 	c.Assert(statusDiff, qt.IsNotNil)
 	c.Assert(statusDiff.Changes["nullable"], qt.Equals, "false -> true")
 	c.Assert(statusDiff.Changes["default"], qt.Equals, "'pending' -> 'active'")
-}
-
-// Helper function to find a column diff by name
-func findColumnDiff(diffs []differtypes.ColumnDiff, columnName string) *differtypes.ColumnDiff {
-	for _, diff := range diffs {
-		if diff.ColumnName == columnName {
-			return &diff
-		}
-	}
-	return nil
 }
 
 func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
@@ -693,13 +684,13 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 	c.Assert(tableDiff.ColumnsModified, qt.HasLen, 2)
 
 	// Check column modifications
-	emailDiff := findColumnDiff(tableDiff.ColumnsModified, "email")
+	emailDiff := compare.ColumnByName(tableDiff.ColumnsModified, "email")
 	c.Assert(emailDiff, qt.IsNotNil)
 	c.Assert(emailDiff.Changes["type"], qt.Equals, "text -> varchar")
 	c.Assert(emailDiff.Changes["nullable"], qt.Equals, "true -> false")
 	c.Assert(emailDiff.Changes["unique"], qt.Equals, "false -> true")
 
-	statusDiff := findColumnDiff(tableDiff.ColumnsModified, "status")
+	statusDiff := compare.ColumnByName(tableDiff.ColumnsModified, "status")
 	c.Assert(statusDiff, qt.IsNotNil)
 	c.Assert(statusDiff.Changes["default"], qt.Equals, "'pending' -> 'active'")
 

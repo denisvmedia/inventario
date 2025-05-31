@@ -10,7 +10,6 @@ import (
 
 // TestTypeNormalization tests the type comparison logic
 func TestTypeNormalization(t *testing.T) {
-
 	tests := []struct {
 		input    string
 		expected string
