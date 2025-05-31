@@ -1,7 +1,7 @@
 package builder
 
 import (
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 )
 
 // ColumnBuilder provides a fluent API for building column definitions

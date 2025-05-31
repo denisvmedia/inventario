@@ -3,8 +3,8 @@ package ast_demo
 import (
 	"fmt"
 
+	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/ast"
 	"github.com/denisvmedia/inventario/ptah/schema/builder"
 )
 
