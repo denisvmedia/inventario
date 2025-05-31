@@ -29,7 +29,7 @@ func TestTypeNormalization(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			c := qt.New(t)
-			result := differtypes.NormalizeType(tt.input)
+			result := normalize.Type(tt.input)
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}

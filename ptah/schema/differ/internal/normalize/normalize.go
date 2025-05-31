@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-// NormalizeType normalizes database type names for cross-platform comparison.
+// Type normalizes database type names for cross-platform comparison.
 //
 // This function converts database-specific type names to standardized forms that can be
 // compared across different database systems. It handles the variations in type naming
@@ -29,14 +29,14 @@ import (
 // # Example Usage
 //
 //	// These all normalize to "varchar"
-//	NormalizeType("VARCHAR(255)")  // → "varchar"
-//	NormalizeType("varchar(100)")  // → "varchar"
-//	NormalizeType("VARCHAR2")      // → "varchar"
+//	Type("VARCHAR(255)")  // → "varchar"
+//	Type("varchar(100)")  // → "varchar"
+//	Type("VARCHAR2")      // → "varchar"
 //
 //	// These all normalize to "boolean"
-//	NormalizeType("BOOLEAN")       // → "boolean"
-//	NormalizeType("TINYINT(1)")    // → "boolean"
-//	NormalizeType("BOOL")          // → "boolean"
+//	Type("BOOLEAN")       // → "boolean"
+//	Type("TINYINT(1)")    // → "boolean"
+//	Type("BOOL")          // → "boolean"
 //
 // # Parameters
 //
@@ -45,7 +45,7 @@ import (
 // # Return Value
 //
 // Returns a normalized type name suitable for cross-database comparison.
-func NormalizeType(typeName string) string {
+func Type(typeName string) string {
 	// Convert to lowercase for case-insensitive comparison
 	typeName = strings.ToLower(typeName)
 
@@ -74,7 +74,7 @@ func NormalizeType(typeName string) string {
 	}
 }
 
-// NormalizeDefaultValue normalizes default values for cross-database comparison.
+// DefaultValue normalizes default values for cross-database comparison.
 //
 // This function handles the variations in how different database systems represent
 // default values, ensuring that semantically equivalent defaults are recognized
@@ -96,17 +96,17 @@ func NormalizeType(typeName string) string {
 // # Example Usage
 //
 //	// Boolean normalization
-//	NormalizeDefaultValue("1", "boolean")     // → "true"
-//	NormalizeDefaultValue("0", "boolean")     // → "false"
-//	NormalizeDefaultValue("true", "boolean")  // → "true"
+//	DefaultValue("1", "boolean")     // → "true"
+//	DefaultValue("0", "boolean")     // → "false"
+//	DefaultValue("true", "boolean")  // → "true"
 //
 //	// Quote removal
-//	NormalizeDefaultValue("'hello'", "varchar")  // → "hello"
-//	NormalizeDefaultValue("\"world\"", "text")   // → "world"
+//	DefaultValue("'hello'", "varchar")  // → "hello"
+//	DefaultValue("\"world\"", "text")   // → "world"
 //
 //	// NULL handling
-//	NormalizeDefaultValue("NULL", "varchar")     // → ""
-//	NormalizeDefaultValue("", "integer")        // → ""
+//	DefaultValue("NULL", "varchar")     // → ""
+//	DefaultValue("", "integer")        // → ""
 //
 // # Parameters
 //
@@ -116,7 +116,7 @@ func NormalizeType(typeName string) string {
 // # Return Value
 //
 // Returns a normalized default value suitable for cross-database comparison.
-func NormalizeDefaultValue(defaultValue, typeName string) string {
+func DefaultValue(defaultValue, typeName string) string {
 	if defaultValue == "" {
 		return ""
 	}

@@ -1,10 +1,14 @@
 package mysql
 
 import (
+	"fmt"
+
 	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
@@ -293,3 +297,137 @@ func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, 
 	// Use the regular MySQL generation logic with the combined fields
 	return g.GenerateCreateTable(table, allFields, indexes, enums)
 }
+
+// GenerateMigrationSQL generates MySQL-specific migration SQL statements from schema differences.
+//
+// This method transforms the schema differences captured in the SchemaDiff into executable
+// MySQL SQL statements that can be applied to bring the database schema in line with the target
+// schema. The generated SQL follows MySQL-specific syntax and best practices.
+//
+// # Migration Order
+//
+// The SQL statements are generated in a specific order to avoid dependency conflicts:
+//  1. Create new tables (MySQL handles enums inline, so no separate enum creation needed)
+//  2. Modify existing tables (add/modify/remove columns)
+//  3. Add new indexes
+//  4. Remove indexes (safe operations)
+//  5. Remove tables (dangerous - commented out by default)
+//
+// # MySQL-Specific Features
+//
+//   - Inline ENUM syntax within column definitions
+//   - AUTO_INCREMENT for auto-increment functionality
+//   - MySQL-specific ALTER TABLE syntax
+//   - Support for MySQL table options (ENGINE, etc.)
+//
+// # Parameters
+//
+//   - diff: The schema differences to be applied
+//   - generated: The target schema parsed from Go struct annotations
+//
+// # Return Value
+//
+// Returns a slice of SQL statements as strings. Each statement is a complete SQL
+// command that can be executed independently. Comments and warnings are included
+// as SQL comments (lines starting with "--").
+func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult) []string {
+	var statements []string
+
+	// MySQL doesn't need separate enum creation - enums are handled inline in table definitions
+
+	// 1. Add new tables
+	for _, tableName := range diff.TablesAdded {
+		// Find the table in generated schema and create it
+		for _, table := range generated.Tables {
+			if table.Name == tableName {
+				// Use the existing MySQL table generation logic
+				createSQL := g.GenerateCreateTable(table, generated.Fields, generated.Indexes, generated.Enums)
+				statements = append(statements, createSQL)
+				break
+			}
+		}
+	}
+
+	// 2. Modify existing tables
+	for _, tableDiff := range diff.TablesModified {
+		statements = append(statements, fmt.Sprintf("-- Modify table: %s", tableDiff.TableName))
+
+		// Add new columns
+		for _, colName := range tableDiff.ColumnsAdded {
+			// Find the field definition for this column
+			for _, field := range generated.Fields {
+				if field.Name == colName {
+					column := g.convertFieldToColumn(field, generated.Enums)
+					// Generate ADD COLUMN statement using AST
+					alterNode := &ast.AlterTableNode{
+						Name:       tableDiff.TableName,
+						Operations: []ast.AlterOperation{&ast.AddColumnOperation{Column: column}},
+					}
+
+					// Create enum map for MySQL enum handling
+					enumMap := make(map[string][]string)
+					for _, enum := range generated.Enums {
+						enumMap[enum.Name] = enum.Values
+					}
+
+					// Generate ADD COLUMN statement using AST
+					result, err := g.renderer.Render(alterNode)
+					if err != nil {
+						statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate ADD COLUMN for %s.%s: %v", tableDiff.TableName, colName, err))
+					} else {
+						statements = append(statements, result)
+					}
+					break
+				}
+			}
+		}
+
+		// Modify existing columns
+		for _, colDiff := range tableDiff.ColumnsModified {
+			for changeType, change := range colDiff.Changes {
+				statements = append(statements, fmt.Sprintf("-- TODO: ALTER TABLE %s MODIFY COLUMN %s %s (%s);", tableDiff.TableName, colDiff.ColumnName, changeType, change))
+			}
+		}
+
+		// Remove columns (dangerous!)
+		for _, colName := range tableDiff.ColumnsRemoved {
+			statements = append(statements, fmt.Sprintf("-- WARNING: ALTER TABLE %s DROP COLUMN %s; -- This will delete data!", tableDiff.TableName, colName))
+		}
+	}
+
+	// 3. Add new indexes
+	for _, indexName := range diff.IndexesAdded {
+		// Find the index definition
+		for _, idx := range generated.Indexes {
+			if idx.Name == indexName {
+				indexNode := ast.NewIndex(idx.Name, idx.StructName, idx.Fields...)
+				if idx.Unique {
+					indexNode.Unique = true
+				}
+				result, err := g.renderer.Render(indexNode)
+				if err != nil {
+					statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate CREATE INDEX for %s: %v", indexName, err))
+				} else {
+					statements = append(statements, result)
+				}
+				break
+			}
+		}
+	}
+
+	// 4. Remove indexes (safe operations)
+	for _, indexName := range diff.IndexesRemoved {
+		statements = append(statements, fmt.Sprintf("DROP INDEX %s;", indexName))
+	}
+
+	// 5. Remove tables (dangerous!)
+	for _, tableName := range diff.TablesRemoved {
+		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TABLE %s; -- This will delete all data!", tableName))
+	}
+
+	// MySQL doesn't have separate enum types to remove - they're inline with tables
+
+	return statements
+}
+
+

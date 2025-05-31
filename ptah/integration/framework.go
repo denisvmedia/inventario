@@ -11,6 +11,7 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/executor"
 	"github.com/denisvmedia/inventario/ptah/migrator"
+	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/differ"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
@@ -328,7 +329,7 @@ func (vem *VersionedEntityManager) GenerateMigrationSQL(ctx context.Context, con
 	diff := differ.CompareSchemas(generated, dbSchema)
 
 	// Generate migration SQL
-	statements := diff.GenerateMigrationSQL(generated, conn.Info().Dialect)
+	statements := generators.GenerateMigrationSQL(diff, generated, conn.Info().Dialect)
 
 	return statements, nil
 }

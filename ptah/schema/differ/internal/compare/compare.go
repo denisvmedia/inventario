@@ -12,7 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
-// CompareTablesAndColumns performs comprehensive table and column comparison between generated and database schemas.
+// TablesAndColumns performs comprehensive table and column comparison between generated and database schemas.
 //
 // This function is the core table comparison engine that identifies structural differences
 // between the target schema (from Go struct annotations) and the current database schema.
@@ -33,7 +33,7 @@ import (
 //
 // # Embedded Field Handling
 //
-// The function properly handles embedded fields by delegating to CompareTableColumns(),
+// The function properly handles embedded fields by delegating to TableColumns(),
 // which processes embedded fields through the transform package to ensure generated
 // fields are correctly compared against database columns.
 //
@@ -71,7 +71,7 @@ import (
 //
 // Results are sorted alphabetically for consistent output across multiple runs,
 // ensuring deterministic migration generation and reliable testing.
-func CompareTablesAndColumns(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
+func TablesAndColumns(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
 	// Create maps for quick lookup
 	genTables := make(map[string]types.TableDirective)
 	for _, table := range generated.Tables {
@@ -99,7 +99,7 @@ func CompareTablesAndColumns(generated *parsertypes.PackageParseResult, database
 	// Find modified tables (compare columns)
 	for tableName, genTable := range genTables {
 		if dbTable, exists := dbTables[tableName]; exists {
-			tableDiff := CompareTableColumns(genTable, dbTable, generated)
+			tableDiff := TableColumns(genTable, dbTable, generated)
 			if len(tableDiff.ColumnsAdded) > 0 || len(tableDiff.ColumnsRemoved) > 0 || len(tableDiff.ColumnsModified) > 0 {
 				diff.TablesModified = append(diff.TablesModified, tableDiff)
 			}
@@ -111,7 +111,7 @@ func CompareTablesAndColumns(generated *parsertypes.PackageParseResult, database
 	sort.Strings(diff.TablesRemoved)
 }
 
-// CompareTableColumns performs detailed column-level comparison within a specific table.
+// TableColumns performs detailed column-level comparison within a specific table.
 //
 // This function is responsible for the complex task of comparing column structures
 // between a generated table definition and an existing database table. It handles
@@ -179,7 +179,7 @@ func CompareTablesAndColumns(generated *parsertypes.PackageParseResult, database
 // # Output Consistency
 //
 // Column lists are sorted alphabetically for deterministic output and reliable testing.
-func CompareTableColumns(genTable types.TableDirective, dbTable parsertypes.Table, generated *parsertypes.PackageParseResult) differtypes.TableDiff {
+func TableColumns(genTable types.TableDirective, dbTable parsertypes.Table, generated *parsertypes.PackageParseResult) differtypes.TableDiff {
 	tableDiff := differtypes.TableDiff{TableName: genTable.Name}
 
 	// Process embedded fields to get the complete field list (same as generators do)
@@ -217,7 +217,7 @@ func CompareTableColumns(genTable types.TableDirective, dbTable parsertypes.Tabl
 	// Find modified columns
 	for colName, genCol := range genColumns {
 		if dbCol, exists := dbColumns[colName]; exists {
-			colDiff := CompareColumns(genCol, dbCol)
+			colDiff := Columns(genCol, dbCol)
 			if len(colDiff.Changes) > 0 {
 				tableDiff.ColumnsModified = append(tableDiff.ColumnsModified, colDiff)
 			}
@@ -231,7 +231,7 @@ func CompareTableColumns(genTable types.TableDirective, dbTable parsertypes.Tabl
 	return tableDiff
 }
 
-// CompareColumns performs detailed property-level comparison between a generated column and database column.
+// Columns performs detailed property-level comparison between a generated column and database column.
 //
 // This function is the most granular level of schema comparison, analyzing individual
 // column properties to detect differences that require migration. It handles complex
@@ -249,7 +249,7 @@ func CompareTableColumns(genTable types.TableDirective, dbTable parsertypes.Tabl
 // # Complex Logic Areas
 //
 // **Type Normalization**:
-//   - Uses NormalizeType() to handle cross-database type variations
+//   - Uses Type() to handle cross-database type variations
 //   - Considers both DataType and UDTName from database introspection
 //   - Handles PostgreSQL user-defined types vs standard types
 //
@@ -314,17 +314,17 @@ func CompareTableColumns(genTable types.TableDirective, dbTable parsertypes.Tabl
 //   - **PostgreSQL**: UDT names, SERIAL types, native boolean types
 //   - **MySQL/MariaDB**: TINYINT boolean representation, AUTO_INCREMENT
 //   - **Type mapping**: Intelligent normalization for accurate comparison
-func CompareColumns(genCol types.SchemaField, dbCol parsertypes.Column) differtypes.ColumnDiff {
+func Columns(genCol types.SchemaField, dbCol parsertypes.Column) differtypes.ColumnDiff {
 	colDiff := differtypes.ColumnDiff{
 		ColumnName: genCol.Name,
 		Changes:    make(map[string]string),
 	}
 
 	// Compare data types (simplified)
-	genType := normalize.NormalizeType(genCol.Type)
-	dbType := normalize.NormalizeType(dbCol.DataType)
+	genType := normalize.Type(genCol.Type)
+	dbType := normalize.Type(dbCol.DataType)
 	if dbCol.UDTName != "" {
-		dbType = normalize.NormalizeType(dbCol.UDTName)
+		dbType = normalize.Type(dbCol.UDTName)
 	}
 
 	if genType != dbType {
@@ -367,8 +367,8 @@ func CompareColumns(genCol types.SchemaField, dbCol parsertypes.Column) differty
 	isAutoIncrement := dbCol.IsAutoIncrement || strings.Contains(strings.ToUpper(genCol.Type), "SERIAL")
 	if !isAutoIncrement {
 		// Normalize default values for comparison (especially for boolean types)
-		normalizedGenDefault := normalize.NormalizeDefaultValue(genDefault, genType)
-		normalizedDbDefault := normalize.NormalizeDefaultValue(dbDefault, dbType)
+		normalizedGenDefault := normalize.DefaultValue(genDefault, genType)
+		normalizedDbDefault := normalize.DefaultValue(dbDefault, dbType)
 
 		if normalizedGenDefault != normalizedDbDefault {
 			colDiff.Changes["default"] = fmt.Sprintf("'%s' -> '%s'", dbDefault, genDefault)
@@ -378,7 +378,7 @@ func CompareColumns(genCol types.SchemaField, dbCol parsertypes.Column) differty
 	return colDiff
 }
 
-// CompareEnums performs comprehensive enum type comparison between generated and database schemas.
+// Enums performs comprehensive enum type comparison between generated and database schemas.
 //
 // This function handles the comparison of enum type definitions, which is particularly
 // complex due to database-specific enum implementations and the challenges of enum
@@ -450,7 +450,7 @@ func CompareColumns(genCol types.SchemaField, dbCol parsertypes.Column) differty
 // # Output Consistency
 //
 // Results are sorted alphabetically for consistent output across multiple runs.
-func CompareEnums(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
+func Enums(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
 	// Create maps for quick lookup
 	genEnums := make(map[string]types.GlobalEnum)
 	for _, enum := range generated.Enums {
@@ -478,7 +478,7 @@ func CompareEnums(generated *parsertypes.PackageParseResult, database *parsertyp
 	// Find modified enums
 	for enumName, genEnum := range genEnums {
 		if dbEnum, exists := dbEnums[enumName]; exists {
-			enumDiff := CompareEnumValues(genEnum, dbEnum)
+			enumDiff := EnumValues(genEnum, dbEnum)
 			if len(enumDiff.ValuesAdded) > 0 || len(enumDiff.ValuesRemoved) > 0 {
 				diff.EnumsModified = append(diff.EnumsModified, enumDiff)
 			}
@@ -490,7 +490,7 @@ func CompareEnums(generated *parsertypes.PackageParseResult, database *parsertyp
 	sort.Strings(diff.EnumsRemoved)
 }
 
-// CompareEnumValues performs detailed value-level comparison between generated and database enum types.
+// EnumValues performs detailed value-level comparison between generated and database enum types.
 //
 // This function analyzes the specific values within an enum type to determine what
 // changes are needed to bring the database enum in line with the generated enum
@@ -560,7 +560,7 @@ func CompareEnums(generated *parsertypes.PackageParseResult, database *parsertyp
 //
 // Value lists are sorted alphabetically to ensure deterministic migration
 // generation and reliable testing across multiple runs.
-func CompareEnumValues(genEnum types.GlobalEnum, dbEnum parsertypes.Enum) differtypes.EnumDiff {
+func EnumValues(genEnum types.GlobalEnum, dbEnum parsertypes.Enum) differtypes.EnumDiff {
 	enumDiff := differtypes.EnumDiff{EnumName: genEnum.Name}
 
 	// Create sets for comparison
@@ -594,7 +594,7 @@ func CompareEnumValues(genEnum types.GlobalEnum, dbEnum parsertypes.Enum) differ
 	return enumDiff
 }
 
-// CompareIndexes performs index comparison between generated and database schemas with intelligent filtering.
+// Indexes performs index comparison between generated and database schemas with intelligent filtering.
 //
 // This function handles the comparison of database indexes, which requires careful
 // filtering to avoid false positives from automatically generated indexes (primary
@@ -671,7 +671,7 @@ func CompareEnumValues(genEnum types.GlobalEnum, dbEnum parsertypes.Enum) differ
 // - Time Complexity: O(n + m) where n=generated indexes, m=database indexes
 // - Space Complexity: O(n + m) for the boolean maps
 // - Index operations can be expensive on large tables in production
-func CompareIndexes(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
+func Indexes(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
 	// Create sets for comparison
 	genIndexes := make(map[string]bool)
 	for _, index := range generated.Indexes {

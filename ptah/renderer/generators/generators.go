@@ -24,6 +24,8 @@ import (
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mariadb"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/postgresql"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
@@ -81,6 +83,21 @@ type DialectGenerator interface {
 	//
 	// Returns a series of ALTER TABLE statements to migrate from old to new schema.
 	GenerateAlterStatements(oldFields, newFields []types.SchemaField) string
+
+	// GenerateMigrationSQL generates SQL statements to apply schema differences for migration.
+	//
+	// This method transforms the schema differences captured in the SchemaDiff into executable
+	// SQL statements that can be applied to bring the database schema in line with the target
+	// schema. The generated SQL follows database-specific syntax and best practices.
+	//
+	// Parameters:
+	//   - diff: The schema differences to be applied
+	//   - generated: The target schema parsed from Go struct annotations
+	//
+	// Returns a slice of SQL statements as strings. Each statement is a complete SQL
+	// command that can be executed independently. Comments and warnings are included
+	// as SQL comments (lines starting with "--").
+	GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult) []string
 
 	// GetDialectName returns the name identifier of the database dialect.
 	//
@@ -188,4 +205,25 @@ func GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.
 func GenerateAlterStatements(oldFields, newFields []types.SchemaField, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateAlterStatements(oldFields, newFields)
+}
+
+// GenerateMigrationSQL generates migration SQL statements for the given dialect.
+//
+// This is a convenience function that provides backward compatibility with existing code
+// that doesn't use the DialectGenerator interface directly. It transforms schema differences
+// into executable SQL statements for database migration.
+//
+// For new code, consider using GetDialectGenerator() and calling the method directly
+// on the returned generator, especially when generating multiple statements for the
+// same dialect to avoid repeated generator creation.
+//
+// Parameters:
+//   - diff: The schema differences to be applied
+//   - generated: The target schema parsed from Go struct annotations
+//   - dialect: The database dialect identifier
+//
+// Returns a slice of SQL statements for the specified dialect.
+func GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult, dialect string) []string {
+	generator := GetDialectGenerator(dialect)
+	return generator.GenerateMigrationSQL(diff, generated)
 }

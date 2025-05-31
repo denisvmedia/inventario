@@ -6,6 +6,7 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/executor"
 	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	types2 "github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
@@ -81,7 +82,7 @@ func TestWorkflowExample(t *testing.T) {
 			},
 		}
 
-		statements := diff.GenerateMigrationSQL(mockResult, "postgres")
+		statements := generators.GenerateMigrationSQL(diff, mockResult, "postgres")
 
 		// Should generate some statements
 		c.Assert(len(statements), qt.Not(qt.Equals), 0)

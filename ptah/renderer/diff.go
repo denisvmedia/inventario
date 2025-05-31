@@ -8,7 +8,7 @@ import (
 )
 
 // FormatSchemaDiff formats a schema difference for display
-func FormatSchemaDiff(diff *types.SchemaDiff) string {
+func FormatSchemaDiff(diff *differtypes.SchemaDiff) string {
 	var sb strings.Builder
 
 	if !diff.HasChanges() {

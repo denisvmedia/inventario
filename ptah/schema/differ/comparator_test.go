@@ -7,6 +7,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/ptr"
 
+	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/differ"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
@@ -420,7 +421,7 @@ func TestGenerateMigrationSQL_PostgreSQL(t *testing.T) {
 		},
 	}
 
-	statements := differ.GenerateMigrationSQL(diff, generated, "postgres")
+	statements := generators.GenerateMigrationSQL(diff, generated, "postgres")
 
 	c.Assert(statements, qt.Not(qt.HasLen), 0)
 
@@ -506,7 +507,7 @@ func TestGenerateMigrationSQL_NonPostgreSQL(t *testing.T) {
 		},
 	}
 
-	statements := differ.GenerateMigrationSQL(diff, generated, "mysql")
+	statements := generators.GenerateMigrationSQL(diff, generated, "mysql")
 
 	// For non-PostgreSQL dialects, enum operations should not generate SQL
 	for _, stmt := range statements {
@@ -840,7 +841,7 @@ func TestMapTypeToSQL_EnumHandling(t *testing.T) {
 			}
 
 			diff := differ.CompareSchemas(generated, database)
-			statements := differ.GenerateMigrationSQL(diff, generated, tt.dialect)
+			statements := generators.GenerateMigrationSQL(diff, generated, tt.dialect)
 
 			// Find the CREATE TABLE statement
 			var createTableSQL string

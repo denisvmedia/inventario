@@ -1,10 +1,15 @@
 package postgresql
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/denisvmedia/inventario/ptah/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
 	"github.com/denisvmedia/inventario/ptah/schema/ast"
+	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
+	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
@@ -296,4 +301,159 @@ func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaF
 	}
 
 	return result
+}
+
+// GenerateMigrationSQL generates PostgreSQL-specific migration SQL statements from schema differences.
+//
+// This method transforms the schema differences captured in the SchemaDiff into executable
+// PostgreSQL SQL statements that can be applied to bring the database schema in line with the target
+// schema. The generated SQL follows PostgreSQL-specific syntax and best practices.
+//
+// # Migration Order
+//
+// The SQL statements are generated in a specific order to avoid dependency conflicts:
+//  1. Create new enum types (required before tables that use them)
+//  2. Modify existing enum types (add new values)
+//  3. Create new tables
+//  4. Modify existing tables (add/modify/remove columns)
+//  5. Add new indexes
+//  6. Remove indexes (safe operations)
+//  7. Remove tables (dangerous - commented out by default)
+//  8. Remove enum types (dangerous - commented out by default)
+//
+// # PostgreSQL-Specific Features
+//
+//   - Native ENUM types with CREATE TYPE and ALTER TYPE statements
+//   - SERIAL columns for auto-increment functionality
+//   - Proper handling of enum value limitations (cannot remove values easily)
+//   - PostgreSQL-specific syntax for ALTER statements
+//
+// # Parameters
+//
+//   - diff: The schema differences to be applied
+//   - generated: The target schema parsed from Go struct annotations
+//
+// # Return Value
+//
+// Returns a slice of SQL statements as strings. Each statement is a complete SQL
+// command that can be executed independently. Comments and warnings are included
+// as SQL comments (lines starting with "--").
+func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult) []string {
+	var statements []string
+
+	// 1. Add new enums first (PostgreSQL requires enum types to exist before tables use them)
+	for _, enumName := range diff.EnumsAdded {
+		for _, enum := range generated.Enums {
+			if enum.Name == enumName {
+				values := make([]string, len(enum.Values))
+				for i, v := range enum.Values {
+					values[i] = "'" + v + "'"
+				}
+				sql := fmt.Sprintf("CREATE TYPE %s AS ENUM (%s);", enum.Name, strings.Join(values, ", "))
+				statements = append(statements, sql)
+				break
+			}
+		}
+	}
+
+	// 2. Modify existing enums (add values only - PostgreSQL doesn't support removing enum values easily)
+	for _, enumDiff := range diff.EnumsModified {
+		for _, value := range enumDiff.ValuesAdded {
+			sql := fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s';", enumDiff.EnumName, value)
+			statements = append(statements, sql)
+		}
+		// Note: PostgreSQL doesn't support removing enum values without recreating the enum
+		if len(enumDiff.ValuesRemoved) > 0 {
+			statements = append(statements, fmt.Sprintf("-- WARNING: Cannot remove enum values %v from %s without recreating the enum", enumDiff.ValuesRemoved, enumDiff.EnumName))
+		}
+	}
+
+	// 3. Add new tables
+	for _, tableName := range diff.TablesAdded {
+		// Find the table in generated schema and create it
+		for _, table := range generated.Tables {
+			if table.Name == tableName {
+				// Use the existing PostgreSQL table generation logic
+				createSQL := g.GenerateCreateTableWithoutEnums(table, generated.Fields, generated.Indexes, generated.Enums)
+				statements = append(statements, createSQL)
+				break
+			}
+		}
+	}
+
+	// 4. Modify existing tables
+	for _, tableDiff := range diff.TablesModified {
+		statements = append(statements, fmt.Sprintf("-- Modify table: %s", tableDiff.TableName))
+
+		// Add new columns
+		for _, colName := range tableDiff.ColumnsAdded {
+			// Find the field definition for this column
+			for _, field := range generated.Fields {
+				if field.Name == colName {
+					column := g.convertFieldToColumn(field, generated.Enums)
+					// Generate ADD COLUMN statement using AST
+					alterNode := &ast.AlterTableNode{
+						Name:       tableDiff.TableName,
+						Operations: []ast.AlterOperation{&ast.AddColumnOperation{Column: column}},
+					}
+					result, err := g.renderer.Render(alterNode)
+					if err != nil {
+						statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate ADD COLUMN for %s.%s: %v", tableDiff.TableName, colName, err))
+					} else {
+						statements = append(statements, result)
+					}
+					break
+				}
+			}
+		}
+
+		// Modify existing columns
+		for _, colDiff := range tableDiff.ColumnsModified {
+			for changeType, change := range colDiff.Changes {
+				statements = append(statements, fmt.Sprintf("-- TODO: ALTER TABLE %s ALTER COLUMN %s %s (%s);", tableDiff.TableName, colDiff.ColumnName, changeType, change))
+			}
+		}
+
+		// Remove columns (dangerous!)
+		for _, colName := range tableDiff.ColumnsRemoved {
+			statements = append(statements, fmt.Sprintf("-- WARNING: ALTER TABLE %s DROP COLUMN %s; -- This will delete data!", tableDiff.TableName, colName))
+		}
+	}
+
+	// 5. Add new indexes
+	for _, indexName := range diff.IndexesAdded {
+		// Find the index definition
+		for _, idx := range generated.Indexes {
+			if idx.Name == indexName {
+				indexNode := ast.NewIndex(idx.Name, idx.StructName, idx.Fields...)
+				if idx.Unique {
+					indexNode.Unique = true
+				}
+				result, err := g.renderer.Render(indexNode)
+				if err != nil {
+					statements = append(statements, fmt.Sprintf("-- ERROR: Failed to generate CREATE INDEX for %s: %v", indexName, err))
+				} else {
+					statements = append(statements, result)
+				}
+				break
+			}
+		}
+	}
+
+	// 6. Remove indexes (safe operations)
+	for _, indexName := range diff.IndexesRemoved {
+		statements = append(statements, fmt.Sprintf("DROP INDEX IF EXISTS %s;", indexName))
+	}
+
+	// 7. Remove tables (dangerous!)
+	for _, tableName := range diff.TablesRemoved {
+		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TABLE %s; -- This will delete all data!", tableName))
+	}
+
+	// 8. Remove enums (dangerous!)
+	for _, enumName := range diff.EnumsRemoved {
+		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TYPE %s; -- Make sure no tables use this enum!", enumName))
+	}
+
+	return statements
 }

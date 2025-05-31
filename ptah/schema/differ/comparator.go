@@ -104,160 +104,6 @@ import (
 	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
-// GenerateMigrationSQL generates SQL statements to apply the schema differences for a specific database dialect.
-//
-// This method transforms the schema differences captured in the SchemaDiff into executable
-// SQL statements that can be applied to bring the database schema in line with the target
-// schema. The generated SQL follows database-specific syntax and best practices.
-//
-// # Parameters
-//
-//   - generated: The target schema parsed from Go struct annotations
-//   - dialect: Target database dialect ("postgres", "mysql", "mariadb")
-//
-// # Migration Order
-//
-// The SQL statements are generated in a specific order to avoid dependency conflicts:
-//  1. Create new enum types (required before tables that use them)
-//  2. Modify existing enum types (add new values)
-//  3. Create new tables
-//  4. Modify existing tables (add/modify/remove columns)
-//  5. Add new indexes
-//  6. Remove indexes (safe operations)
-//  7. Remove tables (dangerous - commented out by default)
-//  8. Remove enum types (dangerous - commented out by default)
-//
-// # Safety Features
-//
-// The method includes several safety mechanisms:
-//   - Destructive operations are commented out with warnings
-//   - Enum value removal limitations are documented
-//   - Data loss warnings are included for dangerous operations
-//   - TODO comments are added for operations requiring manual review
-//
-// # Database-Specific Handling
-//
-//   - **PostgreSQL**: Native ENUM types, SERIAL columns, proper type handling
-//   - **MySQL/MariaDB**: Inline ENUM syntax, AUTO_INCREMENT, type mapping
-//   - **Cross-platform**: Intelligent type normalization and conversion
-//
-// # Example Usage
-//
-//	diff := CompareSchemas(generated, database)
-//	statements := GenerateMigrationSQL(diff, generated, "postgres")
-//
-//	// Review generated statements
-//	for i, stmt := range statements {
-//		fmt.Printf("-- Statement %d:\n%s\n\n", i+1, stmt)
-//	}
-//
-//	// Apply non-commented statements
-//	for _, stmt := range statements {
-//		if !strings.HasPrefix(stmt, "--") {
-//			_, err := db.Exec(stmt)
-//			if err != nil {
-//				log.Fatalf("Migration failed: %v", err)
-//			}
-//		}
-//	}
-//
-// # Return Value
-//
-// Returns a slice of SQL statements as strings. Each statement is a complete SQL
-// command that can be executed independently. Comments and warnings are included
-// as SQL comments (lines starting with "--").
-func GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult, dialect string) []string {
-	var statements []string
-
-	// 1. Add new enums first
-	for _, enumName := range diff.EnumsAdded {
-		for _, enum := range generated.Enums {
-			if enum.Name == enumName {
-				if dialect == "postgres" {
-					values := make([]string, len(enum.Values))
-					for i, v := range enum.Values {
-						values[i] = "'" + v + "'"
-					}
-					sql := fmt.Sprintf("CREATE TYPE %s AS ENUM (%s);", enum.Name, strings.Join(values, ", "))
-					statements = append(statements, sql)
-				}
-				break
-			}
-		}
-	}
-
-	// 2. Modify existing enums (add values only - PostgreSQL doesn't support removing enum values easily)
-	for _, enumDiff := range diff.EnumsModified {
-		if dialect == "postgres" {
-			for _, value := range enumDiff.ValuesAdded {
-				sql := fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s';", enumDiff.EnumName, value)
-				statements = append(statements, sql)
-			}
-			// Note: PostgreSQL doesn't support removing enum values without recreating the enum
-			if len(enumDiff.ValuesRemoved) > 0 {
-				statements = append(statements, fmt.Sprintf("-- WARNING: Cannot remove enum values %v from %s without recreating the enum", enumDiff.ValuesRemoved, enumDiff.EnumName))
-			}
-		}
-	}
-
-	// 3. Add new tables
-	for _, tableName := range diff.TablesAdded {
-		// Find the table in generated schema and create it
-		for _, table := range generated.Tables {
-			if table.Name == tableName {
-				// Generate basic CREATE TABLE SQL
-				createSQL := GenerateBasicCreateTableSQL(table, generated.Fields, dialect)
-				statements = append(statements, createSQL)
-				break
-			}
-		}
-	}
-
-	// 4. Modify existing tables
-	for _, tableDiff := range diff.TablesModified {
-		statements = append(statements, fmt.Sprintf("-- Modify table: %s", tableDiff.TableName))
-
-		// Add new columns
-		for _, colName := range tableDiff.ColumnsAdded {
-			statements = append(statements, fmt.Sprintf("-- TODO: ALTER TABLE %s ADD COLUMN %s ...;", tableDiff.TableName, colName))
-		}
-
-		// Modify existing columns
-		for _, colDiff := range tableDiff.ColumnsModified {
-			for changeType, change := range colDiff.Changes {
-				statements = append(statements, fmt.Sprintf("-- TODO: ALTER TABLE %s ALTER COLUMN %s %s (%s);", tableDiff.TableName, colDiff.ColumnName, changeType, change))
-			}
-		}
-
-		// Remove columns (dangerous!)
-		for _, colName := range tableDiff.ColumnsRemoved {
-			statements = append(statements, fmt.Sprintf("-- WARNING: ALTER TABLE %s DROP COLUMN %s; -- This will delete data!", tableDiff.TableName, colName))
-		}
-	}
-
-	// 5. Add new indexes
-	for _, indexName := range diff.IndexesAdded {
-		statements = append(statements, fmt.Sprintf("-- TODO: CREATE INDEX %s ON ...;", indexName))
-	}
-
-	// 6. Remove indexes
-	for _, indexName := range diff.IndexesRemoved {
-		statements = append(statements, fmt.Sprintf("DROP INDEX IF EXISTS %s;", indexName))
-	}
-
-	// 7. Remove tables (dangerous!)
-	for _, tableName := range diff.TablesRemoved {
-		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TABLE %s; -- This will delete all data!", tableName))
-	}
-
-	// 8. Remove enums (dangerous!)
-	for _, enumName := range diff.EnumsRemoved {
-		statements = append(statements, fmt.Sprintf("-- WARNING: DROP TYPE %s; -- Make sure no tables use this enum!", enumName))
-	}
-
-	return statements
-}
-
 // CompareSchemas compares a generated schema with a database schema and returns comprehensive differences.
 //
 // This is the main entry point for schema comparison in the Ptah migration system.
@@ -320,13 +166,13 @@ func CompareSchemas(generated *parsertypes.PackageParseResult, database *parsert
 	diff := &differtypes.SchemaDiff{}
 
 	// Compare tables and their column structures
-	compare.CompareTablesAndColumns(generated, database, diff)
+	compare.TablesAndColumns(generated, database, diff)
 
 	// Compare enum type definitions and values
-	compare.CompareEnums(generated, database, diff)
+	compare.Enums(generated, database, diff)
 
 	// Compare database index definitions
-	compare.CompareIndexes(generated, database, diff)
+	compare.Indexes(generated, database, diff)
 
 	return diff
 }

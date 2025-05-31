@@ -9,6 +9,7 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/executor"
 	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/differ"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
@@ -95,7 +96,7 @@ func migrateCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println("=== MIGRATION SQL ===")
 	fmt.Println()
 
-	statements := diff.GenerateMigrationSQL(result, conn.Info().Dialect)
+	statements := generators.GenerateMigrationSQL(diff, result, conn.Info().Dialect)
 
 	fmt.Println("-- Migration generated from schema differences")
 	fmt.Printf("-- Generated on: %s\n", "now") // You could add actual timestamp
