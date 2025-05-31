@@ -231,6 +231,10 @@ linters:
       # bmd exception rule (we currently use testify there)
       - path: '_test\.go$'
         text: 'function-result-limit:'
+      - path: '_test\.go$'
+        text: 'bool-literal-in-expr:'
+      - path: '_test\.go$'
+        text: 'unused-parameter:'
       - linters:
           - dupl
         path: '(jsonapi|apiserver|registry/.*)/.*\.go$'
@@ -239,6 +243,9 @@ linters:
         text: 'filename-format:'
       - path: '(test\_entities|test\_simple)/.*\.go$'
         text: 'var-naming:'
+      - path: 'ptah/examples/ast\_demo/.*\.go$'
+        linters:
+          - unused
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'

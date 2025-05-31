@@ -3,6 +3,7 @@ package stubs
 // This file demonstrates the difference between old verbose syntax and new simplified syntax
 
 // OLD VERBOSE SYNTAX (still supported for backward compatibility)
+//
 //migrator:schema:table name="old_syntax_users"
 type OldSyntaxUser struct {
 	//migrator:schema:field name="id" type="SERIAL" primary="true" not_null="true"
@@ -19,6 +20,7 @@ type OldSyntaxUser struct {
 }
 
 // NEW SIMPLIFIED SYNTAX (recommended)
+//
 //migrator:schema:table name="new_syntax_users"
 type NewSyntaxUser struct {
 	//migrator:schema:field name="id" type="SERIAL" primary not_null
@@ -35,6 +37,7 @@ type NewSyntaxUser struct {
 }
 
 // MIXED SYNTAX (also supported - you can mix both styles)
+//
 //migrator:schema:table name="mixed_syntax_posts"
 type MixedSyntaxPost struct {
 	//migrator:schema:field name="id" type="SERIAL" primary not_null
@@ -54,6 +57,7 @@ type MixedSyntaxPost struct {
 }
 
 // EMBEDDED FIELDS WITH SIMPLIFIED SYNTAX
+//
 //migrator:schema:embed
 type ModernTimestamps struct {
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
@@ -75,5 +79,5 @@ type ModernArticle struct {
 	ModernTimestamps
 
 	//migrator:embedded mode="json" name="metadata" type="JSONB" not_null platform.mysql.type="JSON"
-	Metadata map[string]interface{} `json:"metadata"`
+	Metadata map[string]any `json:"metadata"`
 }

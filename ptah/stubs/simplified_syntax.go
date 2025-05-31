@@ -57,6 +57,7 @@ type SimplifiedPost struct {
 var _ = SimplifiedPost{}
 
 // Embedded types with simplified syntax
+//
 //migrator:schema:embed
 type SimpleTimestamps struct {
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null default="CURRENT_TIMESTAMP"
@@ -93,7 +94,7 @@ type SimplifiedArticle struct {
 	SimpleAudit
 
 	//migrator:embedded mode="json" name="metadata" type="JSONB" platform.mysql.type="JSON" platform.mariadb.type="LONGTEXT"
-	Metadata map[string]interface{} `json:"metadata"`
+	Metadata map[string]any `json:"metadata"`
 
 	//migrator:embedded mode="relation" field="author_id" ref="simplified_users(id)" on_delete="CASCADE"
 	Author SimplifiedUser

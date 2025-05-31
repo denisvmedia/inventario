@@ -71,7 +71,7 @@ func GenerateMigrationFileName(version int, description, direction string) strin
 	desc := strings.ToLower(description)
 	desc = strings.ReplaceAll(desc, " ", "_")
 	desc = regexp.MustCompile(`[^a-z0-9_]`).ReplaceAllString(desc, "")
-	
+
 	return fmt.Sprintf("%010d_%s.%s.sql", version, desc, direction)
 }
 
@@ -108,17 +108,18 @@ func SortMigrationFiles(files []MigrationFile) {
 // where each version maps to a struct containing up and down migration files
 func GroupMigrationFiles(files []MigrationFile) map[int]MigrationPair {
 	groups := make(map[int]MigrationPair)
-	
+
 	for _, file := range files {
 		pair := groups[file.Version]
-		if file.Direction == "up" {
+		switch file.Direction {
+		case "up":
 			pair.Up = &file
-		} else if file.Direction == "down" {
+		case "down":
 			pair.Down = &file
 		}
 		groups[file.Version] = pair
 	}
-	
+
 	return groups
 }
 
@@ -169,13 +170,13 @@ func (mp MigrationPair) GetDescription() string {
 // Returns a list of versions that are missing either up or down migrations
 func ValidateMigrationPairs(pairs map[int]MigrationPair) []int {
 	var incomplete []int
-	
+
 	for version, pair := range pairs {
 		if !pair.IsComplete() {
 			incomplete = append(incomplete, version)
 		}
 	}
-	
+
 	sort.Ints(incomplete)
 	return incomplete
 }
@@ -186,14 +187,14 @@ func FindMigrationGaps(versions []int) []int {
 	if len(versions) == 0 {
 		return nil
 	}
-	
+
 	sort.Ints(versions)
 	var gaps []int
-	
+
 	for i := 1; i < len(versions); i++ {
 		current := versions[i]
 		previous := versions[i-1]
-		
+
 		// Check for gaps (this is a simple implementation)
 		// In practice, you might want more sophisticated gap detection
 		if current-previous > 1 {
@@ -202,6 +203,6 @@ func FindMigrationGaps(versions []int) []int {
 			}
 		}
 	}
-	
+
 	return gaps
 }

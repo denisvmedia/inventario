@@ -20,7 +20,7 @@ func NewMySQLRenderer() *MySQLRenderer {
 }
 
 // VisitEnum renders enum handling for MySQL (inline ENUM types)
-func (r *MySQLRenderer) VisitEnum(node *ast.EnumNode) error {
+func (r *MySQLRenderer) VisitEnum(_node *ast.EnumNode) error {
 	// MySQL doesn't have separate enum types like PostgreSQL
 	// Enums are defined inline in column definitions
 	// So this method doesn't render anything for MySQL
@@ -181,7 +181,7 @@ func (r *MySQLRenderer) renderTableOptions(options map[string]string) string {
 		var value string
 		var exists bool
 		for optKey, optValue := range options {
-			if strings.ToUpper(optKey) == strings.ToUpper(key) {
+			if strings.EqualFold(optKey, key) {
 				value = optValue
 				exists = true
 				break
@@ -208,7 +208,7 @@ func (r *MySQLRenderer) renderTableOptions(options map[string]string) string {
 	for key, value := range options {
 		found := false
 		for _, orderedKey := range orderedKeys {
-			if strings.ToUpper(key) == strings.ToUpper(orderedKey) {
+			if strings.EqualFold(key, orderedKey) {
 				found = true
 				break
 			}
@@ -316,7 +316,7 @@ func (r *MySQLRenderer) RenderSchema(statements *ast.StatementList) (string, err
 	return r.GetOutput(), nil
 }
 
-// Enhanced CREATE TABLE rendering with enum support
+// VisitCreateTableWithEnums provides enhanced CREATE TABLE rendering with enum support
 func (r *MySQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, enums map[string][]string) error {
 	// Table comment
 	if node.Comment != "" {

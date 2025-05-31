@@ -121,17 +121,17 @@ func (dc *DatabaseConnection) Writer() SchemaWriter {
 }
 
 // Query executes a query and returns the result rows
-func (dc *DatabaseConnection) Query(query string, args ...interface{}) (*sql.Rows, error) {
+func (dc *DatabaseConnection) Query(query string, args ...any) (*sql.Rows, error) {
 	return dc.db.Query(query, args...)
 }
 
 // QueryRow executes a query that returns a single row
-func (dc *DatabaseConnection) QueryRow(query string, args ...interface{}) *sql.Row {
+func (dc *DatabaseConnection) QueryRow(query string, args ...any) *sql.Row {
 	return dc.db.QueryRow(query, args...)
 }
 
 // Exec executes a query without returning any rows
-func (dc *DatabaseConnection) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (dc *DatabaseConnection) Exec(query string, args ...any) (sql.Result, error) {
 	return dc.db.Exec(query, args...)
 }
 
