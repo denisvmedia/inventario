@@ -353,7 +353,7 @@ func (vem *VersionedEntityManager) ApplyMigrationFromEntities(ctx context.Contex
 	vem.version++
 	upSQL := ""
 	for _, stmt := range statements {
-		upSQL += stmt + "\n"
+		upSQL += stmt + ";\n"
 	}
 
 	// For simplicity, we'll create a basic down migration that drops everything

@@ -1,4 +1,4 @@
-package ast_demo
+package main
 
 import (
 	"fmt"

@@ -5,38 +5,38 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
+	"github.com/denisvmedia/inventario/ptah/migration/schemadiff/types"
 )
 
 func TestSchemaDiff_HasChanges(t *testing.T) {
 	tests := []struct {
 		name     string
-		diff     *differtypes.SchemaDiff
+		diff     *types.SchemaDiff
 		expected bool
 	}{
 		{
 			name:     "no changes",
-			diff:     &differtypes.SchemaDiff{},
+			diff:     &types.SchemaDiff{},
 			expected: false,
 		},
 		{
 			name: "tables added",
-			diff: &differtypes.SchemaDiff{
+			diff: &types.SchemaDiff{
 				TablesAdded: []string{"users"},
 			},
 			expected: true,
 		},
 		{
 			name: "tables removed",
-			diff: &differtypes.SchemaDiff{
+			diff: &types.SchemaDiff{
 				TablesRemoved: []string{"old_table"},
 			},
 			expected: true,
 		},
 		{
 			name: "tables modified",
-			diff: &differtypes.SchemaDiff{
-				TablesModified: []differtypes.TableDiff{
+			diff: &types.SchemaDiff{
+				TablesModified: []types.TableDiff{
 					{TableName: "users", ColumnsAdded: []string{"email"}},
 				},
 			},
@@ -44,22 +44,22 @@ func TestSchemaDiff_HasChanges(t *testing.T) {
 		},
 		{
 			name: "enums added",
-			diff: &differtypes.SchemaDiff{
+			diff: &types.SchemaDiff{
 				EnumsAdded: []string{"status_enum"},
 			},
 			expected: true,
 		},
 		{
 			name: "enums removed",
-			diff: &differtypes.SchemaDiff{
+			diff: &types.SchemaDiff{
 				EnumsRemoved: []string{"old_enum"},
 			},
 			expected: true,
 		},
 		{
 			name: "enums modified",
-			diff: &differtypes.SchemaDiff{
-				EnumsModified: []differtypes.EnumDiff{
+			diff: &types.SchemaDiff{
+				EnumsModified: []types.EnumDiff{
 					{EnumName: "status", ValuesAdded: []string{"pending"}},
 				},
 			},
@@ -67,14 +67,14 @@ func TestSchemaDiff_HasChanges(t *testing.T) {
 		},
 		{
 			name: "indexes added",
-			diff: &differtypes.SchemaDiff{
+			diff: &types.SchemaDiff{
 				IndexesAdded: []string{"idx_user_email"},
 			},
 			expected: true,
 		},
 		{
 			name: "indexes removed",
-			diff: &differtypes.SchemaDiff{
+			diff: &types.SchemaDiff{
 				IndexesRemoved: []string{"old_index"},
 			},
 			expected: true,

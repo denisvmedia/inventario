@@ -1,13 +1,11 @@
-package ast_demo
+package main
 
 import (
 	"fmt"
 
-	builder2 "github.com/denisvmedia/inventario/ptah/core/builder"
-
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
-	"github.com/denisvmedia/inventario/ptah/renderer/dialects/postgresql"
+	"github.com/denisvmedia/inventario/ptah/core/astbuilder"
+	"github.com/denisvmedia/inventario/ptah/core/renderer"
 )
 
 // DemonstrateASTApproach shows how to use the new AST-based SQL generation
@@ -17,7 +15,7 @@ func DemonstrateASTApproach() {
 	// Example 1: Building a simple table using the fluent API
 	fmt.Println("1. Simple table using fluent API:")
 
-	table := builder2.NewTable("users").
+	table := astbuilder.NewTable("users").
 		Comment("User accounts table").
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().Unique().End().
@@ -27,7 +25,7 @@ func DemonstrateASTApproach() {
 		Build()
 
 	// Render for PostgreSQL
-	pgRenderer := postgresql.NewPostgreSQLRenderer()
+	pgRenderer := renderer.NewRenderer("postgresql")
 	pgSQL, err := pgRenderer.Render(table)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -38,7 +36,7 @@ func DemonstrateASTApproach() {
 	fmt.Println(pgSQL)
 
 	// Render for MySQL
-	mysqlRenderer := mysql.NewMySQLRenderer()
+	mysqlRenderer := renderer.NewRenderer("mysql")
 	mysqlSQL, err := mysqlRenderer.Render(table)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -51,7 +49,7 @@ func DemonstrateASTApproach() {
 	// Example 2: Building a more complex schema with enums and foreign keys
 	fmt.Println("\n2. Complex schema with enums and foreign keys:")
 
-	schema := builder2.NewSchema().
+	schema := astbuilder.NewSchema().
 		Comment("E-commerce database schema").
 		Enum("order_status", "pending", "processing", "shipped", "delivered", "cancelled").
 		Table("categories").
@@ -80,7 +78,7 @@ func DemonstrateASTApproach() {
 		Build()
 
 	// Render complete schema for PostgreSQL
-	pgSchemaSQL, err := pgRenderer.RenderSchema(schema)
+	pgSchemaSQL, err := renderer.RenderSQL("postgresql", schema)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return
@@ -107,7 +105,7 @@ func DemonstrateASTApproach() {
 		},
 	}
 
-	alterSQL, err := pgRenderer.Render(alterTable)
+	alterSQL, err := renderer.RenderSQL("postgresql", alterTable)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return
@@ -133,7 +131,7 @@ func DemonstrateASTApproach() {
 			ast.NewUniqueConstraint("uk_products_name", "name"),
 		)
 
-	directSQL, err := pgRenderer.Render(directTable)
+	directSQL, err := renderer.RenderSQL("postgresql", directTable)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return
@@ -165,14 +163,13 @@ func generateOldWay() string {
 	fmt.Println(`
 // Readable, type-safe, composable, testable
 func generateNewWay() string {
-    table := builder.NewTable("users").
+    table := astbuilder.NewTable("users").
         Column("id", "SERIAL").Primary().End().
         Column("email", "VARCHAR(255)").NotNull().Unique().End().
         Column("name", "VARCHAR(100)").NotNull().End().
         Build()
 
-    renderer := renderers.NewPostgreSQLRenderer()
-    sql, _ := renderer.Render(table)
+    sql, _ := renderer.RenderSQL("postgresql", table)
     return sql
 }`)
 
@@ -199,7 +196,7 @@ func ShowAdvancedFeatures() {
 		IndexCount:  0,
 	}
 
-	schema := builder2.NewSchema().
+	schema := astbuilder.NewSchema().
 		Table("users").
 		Column("id", "SERIAL").Primary().End().
 		Column("email", "VARCHAR(255)").NotNull().End().
@@ -221,8 +218,7 @@ func ShowAdvancedFeatures() {
 	transformer := &AuditTransformer{}
 	transformedSchema := transformer.Transform(schema)
 
-	renderer := postgresql.NewPostgreSQLRenderer()
-	sql, _ := renderer.RenderSchema(transformedSchema)
+	sql, _ := renderer.RenderSQL("postgresql", transformedSchema)
 	fmt.Println("Transformed schema with audit columns:")
 	fmt.Println(sql)
 }
@@ -240,15 +236,20 @@ func (a *SchemaAnalyzer) VisitCreateTable(node *ast.CreateTableNode) error {
 	return nil
 }
 
-func (a *SchemaAnalyzer) VisitAlterTable(node *ast.AlterTableNode) error { return nil }
-func (a *SchemaAnalyzer) VisitColumn(node *ast.ColumnNode) error         { return nil }
-func (a *SchemaAnalyzer) VisitConstraint(node *ast.ConstraintNode) error { return nil }
+func (a *SchemaAnalyzer) VisitAlterTable(node *ast.AlterTableNode) error   { return nil }
+func (a *SchemaAnalyzer) VisitColumn(node *ast.ColumnNode) error           { return nil }
+func (a *SchemaAnalyzer) VisitConstraint(node *ast.ConstraintNode) error   { return nil }
 func (a *SchemaAnalyzer) VisitIndex(node *ast.IndexNode) error {
 	a.IndexCount++
 	return nil
 }
-func (a *SchemaAnalyzer) VisitEnum(node *ast.EnumNode) error       { return nil }
-func (a *SchemaAnalyzer) VisitComment(node *ast.CommentNode) error { return nil }
+func (a *SchemaAnalyzer) VisitDropIndex(node *ast.DropIndexNode) error     { return nil }
+func (a *SchemaAnalyzer) VisitEnum(node *ast.EnumNode) error               { return nil }
+func (a *SchemaAnalyzer) VisitCreateType(node *ast.CreateTypeNode) error   { return nil }
+func (a *SchemaAnalyzer) VisitAlterType(node *ast.AlterTypeNode) error     { return nil }
+func (a *SchemaAnalyzer) VisitComment(node *ast.CommentNode) error         { return nil }
+func (a *SchemaAnalyzer) VisitDropTable(node *ast.DropTableNode) error     { return nil }
+func (a *SchemaAnalyzer) VisitDropType(node *ast.DropTypeNode) error       { return nil }
 
 // AuditTransformer adds audit columns to all tables
 type AuditTransformer struct{}

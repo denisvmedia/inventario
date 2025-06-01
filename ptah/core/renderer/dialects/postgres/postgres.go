@@ -246,7 +246,7 @@ func (r *Renderer) VisitCreateTable(node *ast.CreateTableNode) error {
 		}
 	}
 
-	r.w.Write(");")
+	r.w.Write(")")
 
 	// Table options (PostgreSQL-specific filtering applied)
 	if len(node.Options) > 0 {
@@ -254,7 +254,7 @@ func (r *Renderer) VisitCreateTable(node *ast.CreateTableNode) error {
 		r.w.Write(r.renderTableOptions(node.Options))
 	}
 
-	r.w.WriteLine("")
+	r.w.WriteLine(";")
 	r.w.WriteLine("")
 
 	return nil

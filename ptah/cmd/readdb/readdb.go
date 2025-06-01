@@ -2,12 +2,14 @@ package readdb
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
+	"github.com/denisvmedia/inventario/ptah/core/convert/dbschematogo"
+	"github.com/denisvmedia/inventario/ptah/core/renderer"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	"github.com/denisvmedia/inventario/ptah/renderer"
 )
 
 var readDBCmd = &cobra.Command{
@@ -72,7 +74,9 @@ func readDBCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	// Format and display the schema
-	output := renderer.FormatSchema(schema, conn.Info())
+	dbsch := dbschematogo.ConvertDBSchemaToGoSchema(schema)
+	statements :=renderer.GetOrderedCreateStatements(dbsch, conn.Info().Dialect)
+	output := strings.Join(statements, ";\n") + ";"
 	fmt.Print(output)
 
 	return nil

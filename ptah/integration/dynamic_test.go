@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"embed"
+	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -146,7 +147,5 @@ func getTestDatabaseURL() string {
 
 // getEnvVar is a helper to get environment variables
 func getEnvVar(key string) string {
-	// In a real implementation, this would use os.Getenv(key)
-	// For now, return empty to skip database tests
-	return ""
+	return os.Getenv(key)
 }
