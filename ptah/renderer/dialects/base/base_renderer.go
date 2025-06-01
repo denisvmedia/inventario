@@ -1,4 +1,4 @@
-package renderer
+package base
 
 import (
 	"fmt"
@@ -18,6 +18,14 @@ func NewBaseRenderer(dialect string) *BaseRenderer {
 	return &BaseRenderer{
 		dialect: dialect,
 	}
+}
+
+func (r *BaseRenderer) Dialect() string {
+	return r.dialect
+}
+
+func (r *BaseRenderer) DialectNormaized() string {
+	return strings.ToUpper(r.dialect)
 }
 
 // GetOutput returns the generated SQL
@@ -74,7 +82,7 @@ func (r *BaseRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 
 	// Render columns
 	for _, column := range node.Columns {
-		line, err := r.renderColumn(column)
+		line, err := r.RenderColumn(column)
 		if err != nil {
 			return fmt.Errorf("error rendering column %s: %w", column.Name, err)
 		}
@@ -83,7 +91,7 @@ func (r *BaseRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 
 	// Render table-level constraints
 	for _, constraint := range node.Constraints {
-		line, err := r.renderConstraint(constraint)
+		line, err := r.RenderConstraint(constraint)
 		if err != nil {
 			return fmt.Errorf("error rendering constraint: %w", err)
 		}
@@ -115,8 +123,8 @@ func (r *BaseRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 	return nil
 }
 
-// renderColumn renders a column definition
-func (r *BaseRenderer) renderColumn(column *ast.ColumnNode) (string, error) {
+// RenderColumn renders a column definition
+func (r *BaseRenderer) RenderColumn(column *ast.ColumnNode) (string, error) {
 	var parts []string
 
 	// Column name and type
@@ -157,8 +165,8 @@ func (r *BaseRenderer) renderColumn(column *ast.ColumnNode) (string, error) {
 	return strings.Join(parts, " "), nil
 }
 
-// renderConstraint renders a table-level constraint
-func (r *BaseRenderer) renderConstraint(constraint *ast.ConstraintNode) (string, error) {
+// RenderConstraint renders a table-level constraint
+func (r *BaseRenderer) RenderConstraint(constraint *ast.ConstraintNode) (string, error) {
 	switch constraint.Type {
 	case ast.PrimaryKeyConstraint:
 		return fmt.Sprintf("  PRIMARY KEY (%s)", strings.Join(constraint.Columns, ", ")), nil
@@ -224,7 +232,7 @@ func (r *BaseRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
 	for _, operation := range node.Operations {
 		switch op := operation.(type) {
 		case *ast.AddColumnOperation:
-			line, err := r.renderColumn(op.Column)
+			line, err := r.RenderColumn(op.Column)
 			if err != nil {
 				return fmt.Errorf("error rendering add column: %w", err)
 			}
@@ -236,7 +244,7 @@ func (r *BaseRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
 			r.WriteLinef("ALTER TABLE %s DROP COLUMN %s;", node.Name, op.ColumnName)
 
 		case *ast.ModifyColumnOperation:
-			line, err := r.renderColumn(op.Column)
+			line, err := r.RenderColumn(op.Column)
 			if err != nil {
 				return fmt.Errorf("error rendering modify column: %w", err)
 			}
@@ -256,14 +264,14 @@ func (r *BaseRenderer) VisitAlterTable(node *ast.AlterTableNode) error {
 // VisitColumn is called when visiting individual columns (used by other visitors)
 func (r *BaseRenderer) VisitColumn(node *ast.ColumnNode) error {
 	// This is typically called from within other visitors
-	// The actual rendering is done by renderColumn
+	// The actual rendering is done by RenderColumn
 	return nil
 }
 
 // VisitConstraint is called when visiting individual constraints (used by other visitors)
 func (r *BaseRenderer) VisitConstraint(node *ast.ConstraintNode) error {
 	// This is typically called from within other visitors
-	// The actual rendering is done by renderConstraint
+	// The actual rendering is done by RenderConstraint
 	return nil
 }
 

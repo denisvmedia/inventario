@@ -1,4 +1,4 @@
-package renderer_test
+package base_test
 
 import (
 	"testing"
@@ -6,46 +6,46 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
 )
 
 func TestBaseRenderer_BasicOperations(t *testing.T) {
 	tests := []struct {
 		name     string
-		setup    func(*renderer.BaseRenderer)
+		setup    func(*base.BaseRenderer)
 		expected string
 	}{
 		{
 			name: "Write",
-			setup: func(r *renderer.BaseRenderer) {
+			setup: func(r *base.BaseRenderer) {
 				r.Write("Hello")
 			},
 			expected: "Hello",
 		},
 		{
 			name: "WriteLine",
-			setup: func(r *renderer.BaseRenderer) {
+			setup: func(r *base.BaseRenderer) {
 				r.WriteLine("Hello")
 			},
 			expected: "Hello\n",
 		},
 		{
 			name: "Writef",
-			setup: func(r *renderer.BaseRenderer) {
+			setup: func(r *base.BaseRenderer) {
 				r.Writef("Hello %s", "World")
 			},
 			expected: "Hello World",
 		},
 		{
 			name: "WriteLinef",
-			setup: func(r *renderer.BaseRenderer) {
+			setup: func(r *base.BaseRenderer) {
 				r.WriteLinef("Hello %s", "World")
 			},
 			expected: "Hello World\n",
 		},
 		{
 			name: "Multiple operations",
-			setup: func(r *renderer.BaseRenderer) {
+			setup: func(r *base.BaseRenderer) {
 				r.Write("Hello")
 				r.Write(" ")
 				r.WriteLine("World")
@@ -59,7 +59,7 @@ func TestBaseRenderer_BasicOperations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewBaseRenderer("test")
+			renderer := base.NewBaseRenderer("test")
 			tt.setup(renderer)
 
 			c.Assert(renderer.GetOutput(), qt.Equals, tt.expected)
@@ -70,7 +70,7 @@ func TestBaseRenderer_BasicOperations(t *testing.T) {
 func TestBaseRenderer_Reset(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 	renderer.Write("Hello")
 	c.Assert(renderer.GetOutput(), qt.Equals, "Hello")
 
@@ -84,7 +84,7 @@ func TestBaseRenderer_Reset(t *testing.T) {
 func TestBaseRenderer_VisitComment(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 	comment := &ast.CommentNode{Text: "This is a test comment"}
 
 	err := renderer.VisitComment(comment)
@@ -96,7 +96,7 @@ func TestBaseRenderer_VisitComment(t *testing.T) {
 func TestBaseRenderer_VisitCreateTable_Simple(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 	table := &ast.CreateTableNode{
 		Name: "users",
 		Columns: []*ast.ColumnNode{
@@ -129,7 +129,7 @@ func TestBaseRenderer_VisitCreateTable_Simple(t *testing.T) {
 func TestBaseRenderer_VisitCreateTable_WithComment(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("mysql")
+	renderer := base.NewBaseRenderer("mysql")
 	table := &ast.CreateTableNode{
 		Name:    "users",
 		Comment: "User accounts table",
@@ -153,7 +153,7 @@ func TestBaseRenderer_VisitCreateTable_WithComment(t *testing.T) {
 func TestBaseRenderer_VisitCreateTable_WithOptions(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("mysql")
+	renderer := base.NewBaseRenderer("mysql")
 	table := &ast.CreateTableNode{
 		Name: "users",
 		Columns: []*ast.ColumnNode{
@@ -274,9 +274,9 @@ func TestBaseRenderer_RenderColumn_HappyPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewBaseRenderer("test")
+			renderer := base.NewBaseRenderer("test")
 
-			// Test through VisitCreateTable since renderColumn is private
+			// Test through VisitCreateTable since RenderColumn is private
 			table := &ast.CreateTableNode{
 				Name:    "test_table",
 				Columns: []*ast.ColumnNode{tt.column},
@@ -360,9 +360,9 @@ func TestBaseRenderer_VisitConstraint_HappyPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewBaseRenderer("test")
+			renderer := base.NewBaseRenderer("test")
 
-			// Test through VisitCreateTable since renderConstraint is private
+			// Test through VisitCreateTable since RenderConstraint is private
 			table := &ast.CreateTableNode{
 				Name:        "test_table",
 				Columns:     []*ast.ColumnNode{{Name: "id", Type: "INTEGER"}},
@@ -418,7 +418,7 @@ func TestBaseRenderer_VisitIndex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewBaseRenderer("test")
+			renderer := base.NewBaseRenderer("test")
 			err := renderer.VisitIndex(tt.index)
 
 			c.Assert(err, qt.IsNil)
@@ -430,7 +430,7 @@ func TestBaseRenderer_VisitIndex(t *testing.T) {
 func TestBaseRenderer_VisitAlterTable(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 	alterTable := &ast.AlterTableNode{
 		Name: "users",
 		Operations: []ast.AlterOperation{
@@ -467,7 +467,7 @@ func TestBaseRenderer_VisitAlterTable(t *testing.T) {
 func TestBaseRenderer_VisitEnum(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 	enum := &ast.EnumNode{
 		Name:   "status",
 		Values: []string{"active", "inactive", "pending"},
@@ -483,7 +483,7 @@ func TestBaseRenderer_VisitEnum(t *testing.T) {
 func TestBaseRenderer_Render(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 	comment := &ast.CommentNode{Text: "Test comment"}
 
 	output, err := renderer.Render(comment)
@@ -495,7 +495,7 @@ func TestBaseRenderer_Render(t *testing.T) {
 func TestBaseRenderer_VisitColumn_VisitConstraint(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 
 	// These methods should not error but also don't produce output directly
 	err := renderer.VisitColumn(&ast.ColumnNode{Name: "test"})
@@ -540,7 +540,7 @@ func TestBaseRenderer_RenderConstraint_UnhappyPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewBaseRenderer("test")
+			renderer := base.NewBaseRenderer("test")
 			table := &ast.CreateTableNode{
 				Name:        "test_table",
 				Columns:     []*ast.ColumnNode{{Name: "id", Type: "INTEGER"}},
@@ -612,7 +612,7 @@ func TestBaseRenderer_VisitCreateTable_EdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewBaseRenderer("test")
+			renderer := base.NewBaseRenderer("test")
 			err := renderer.VisitCreateTable(tt.table)
 
 			c.Assert(err, qt.IsNil)
@@ -625,7 +625,7 @@ func TestBaseRenderer_VisitCreateTable_EdgeCases(t *testing.T) {
 func TestBaseRenderer_VisitAlterTable_EdgeCases(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 
 	// Test with empty operations
 	alterTable := &ast.AlterTableNode{
@@ -643,7 +643,7 @@ func TestBaseRenderer_VisitAlterTable_EdgeCases(t *testing.T) {
 func TestBaseRenderer_Render_EdgeCases(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewBaseRenderer("test")
+	renderer := base.NewBaseRenderer("test")
 
 	// Test with a valid comment node
 	comment := &ast.CommentNode{Text: "test comment"}
@@ -709,7 +709,7 @@ func TestBaseRenderer_ConstraintRendering_ComprehensivePaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewBaseRenderer("test")
+			renderer := base.NewBaseRenderer("test")
 
 			table := &ast.CreateTableNode{
 				Name:        "test_table",
@@ -783,7 +783,7 @@ func TestBaseRenderer_ColumnRendering_AllFeatures(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewBaseRenderer("test")
+			renderer := base.NewBaseRenderer("test")
 
 			table := &ast.CreateTableNode{
 				Name:    "test_table",

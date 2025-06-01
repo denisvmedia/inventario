@@ -1,34 +1,30 @@
-package parser
+package goschema
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"log/slog"
-	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/types"
+	"github.com/denisvmedia/inventario/ptah/core/goschema/internal/parseutils"
 )
 
-func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []types.SchemaIndex, []types.TableDirective, []types.GlobalEnum) {
+func ParseFile(filename string) ([]EmbeddedField, []Field, []Index, []Table, []Enum) {
 	fset := token.NewFileSet()
-	fmt.Println(os.Getwd())
 	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
 		slog.Error("Failed to parse file", "error", err)
 		panic("Failed to parse file")
 	}
 
-	embeddedFields := []types.EmbeddedField{}
-	schemaFields := []types.SchemaField{}
-	schemaIndexes := []types.SchemaIndex{}
-	tableDirectives := []types.TableDirective{}
-	globalEnumsMap := map[string]types.GlobalEnum{}
+	var embeddedFields []EmbeddedField
+	var schemaFields []Field
+	var schemaIndexes []Index
+	var tableDirectives []Table
+	globalEnumsMap := make(map[string]Enum)
 
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
@@ -48,8 +44,8 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 			if genDecl.Doc != nil {
 				for _, comment := range genDecl.Doc.List {
 					if strings.HasPrefix(comment.Text, "//migrator:schema:table") {
-						kv := parseKeyValueComment(comment.Text)
-						tableDirectives = append(tableDirectives, types.TableDirective{
+						kv := parseutils.ParseKeyValueComment(comment.Text)
+						tableDirectives = append(tableDirectives, Table{
 							StructName: structName,
 							Name:       kv["name"],
 							Engine:     kv["engine"],
@@ -57,7 +53,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 							PrimaryKey: strings.Split(kv["primary_key"], ","),
 							Checks:     strings.Split(kv["checks"], ","),
 							CustomSQL:  kv["custom"],
-							Overrides:  parsePlatformSpecific(kv),
+							Overrides:  parseutils.ParsePlatformSpecific(kv),
 						})
 					}
 				}
@@ -68,7 +64,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 				}
 				for _, comment := range field.Doc.List {
 					if strings.HasPrefix(comment.Text, "//migrator:schema:field") {
-						kv := parseKeyValueComment(comment.Text)
+						kv := parseutils.ParseKeyValueComment(comment.Text)
 						for _, name := range field.Names {
 							enumRaw := kv["enum"]
 							var enum []string
@@ -83,7 +79,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 							fieldType := kv["type"]
 							if len(enumRaw) > 0 && kv["type"] == "ENUM" {
 								enumName := "enum_" + strings.ToLower(structName) + "_" + strings.ToLower(name.Name)
-								globalEnumsMap[enumName] = types.GlobalEnum{
+								globalEnumsMap[enumName] = Enum{
 									Name:   enumName,
 									Values: enum,
 								}
@@ -91,7 +87,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 								fieldType = enumName
 							}
 
-							schemaFields = append(schemaFields, types.SchemaField{
+							schemaFields = append(schemaFields, Field{
 								StructName:     structName,
 								FieldName:      name.Name,
 								Name:           kv["name"],
@@ -108,11 +104,11 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 								Enum:           enum,
 								Check:          kv["check"],
 								Comment:        kv["comment"],
-								Overrides:      parsePlatformSpecific(kv),
+								Overrides:      parseutils.ParsePlatformSpecific(kv),
 							})
 						}
 					} else if strings.HasPrefix(comment.Text, "//migrator:embedded") {
-						kv := parseKeyValueComment(comment.Text)
+						kv := parseutils.ParseKeyValueComment(comment.Text)
 						// Handle embedded fields - get the field type name
 						var fieldTypeName string
 						if field.Type != nil {
@@ -121,7 +117,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 							}
 						}
 
-						embeddedFields = append(embeddedFields, types.EmbeddedField{
+						embeddedFields = append(embeddedFields, EmbeddedField{
 							StructName:       structName,
 							Mode:             kv["mode"],
 							Prefix:           kv["prefix"],
@@ -135,15 +131,15 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 							OnUpdate:         kv["on_update"],
 							Comment:          kv["comment"],
 							EmbeddedTypeName: fieldTypeName,
-							Overrides:        parsePlatformSpecific(kv),
+							Overrides:        parseutils.ParsePlatformSpecific(kv),
 						})
 					} else if strings.HasPrefix(comment.Text, "//migrator:schema:index") {
-						kv := parseKeyValueComment(comment.Text)
+						kv := parseutils.ParseKeyValueComment(comment.Text)
 						fields := strings.Split(kv["fields"], ",")
 						for i := range fields {
 							fields[i] = strings.TrimSpace(fields[i])
 						}
-						schemaIndexes = append(schemaIndexes, types.SchemaIndex{
+						schemaIndexes = append(schemaIndexes, Index{
 							StructName: structName,
 							Name:       kv["name"],
 							Fields:     fields,
@@ -156,7 +152,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 		}
 	}
 
-	enums := make([]types.GlobalEnum, 0, len(globalEnumsMap))
+	enums := make([]Enum, 0, len(globalEnumsMap))
 	keys := make([]string, 0, len(globalEnumsMap))
 	for k := range globalEnumsMap {
 		keys = append(keys, k)
@@ -171,7 +167,7 @@ func ParseFile(filename string) ([]types.EmbeddedField, []types.SchemaField, []t
 
 // ParseFileWithDependencies parses a Go file and automatically discovers and parses
 // related files in the same directory to resolve embedded type references
-func ParseFileWithDependencies(filename string) ([]types.EmbeddedField, []types.SchemaField, []types.SchemaIndex, []types.TableDirective, []types.GlobalEnum) {
+func ParseFileWithDependencies(filename string) ([]EmbeddedField, []Field, []Index, []Table, []Enum) {
 	// Parse the main file
 	embeddedFields, fields, indexes, tables, enums := ParseFile(filename)
 
@@ -210,93 +206,4 @@ func ParseFileWithDependencies(filename string) ([]types.EmbeddedField, []types.
 	}
 
 	return embeddedFields, fields, indexes, tables, enums
-}
-
-func parseKeyValueComment(comment string) map[string]string {
-	result := make(map[string]string)
-
-	// First, handle key=value pairs (quoted and unquoted)
-	r := regexp.MustCompile(`(\w+(?:\.\w+)*)=(?:"([^"]*)"|([^\s]+))`)
-	matches := r.FindAllStringSubmatch(comment, -1)
-	for _, match := range matches {
-		key := match[1]
-		// match[2] is the quoted value (if quoted), match[3] is the unquoted value
-		if match[2] != "" {
-			result[key] = match[2] // Use quoted value
-		} else {
-			result[key] = match[3] // Use unquoted value
-		}
-	}
-
-	// Then, handle standalone boolean attributes (no =value)
-	// Remove all key=value pairs from the comment first
-	cleanComment := r.ReplaceAllString(comment, "")
-
-	// Find standalone words that could be boolean flags
-	boolRegex := regexp.MustCompile(`\b(\w+(?:\.\w+)*)\b`)
-	boolMatches := boolRegex.FindAllStringSubmatch(cleanComment, -1)
-
-	// Known boolean attributes that can be standalone
-	booleanAttrs := map[string]bool{
-		"not_null": true, "nullable": true, "primary": true, "unique": true,
-		"auto_increment": true, "index": true, "autoincrement": true,
-	}
-
-	for _, match := range boolMatches {
-		attr := match[1]
-		// Skip directive names and other non-boolean words
-		if attr == "migrator" || attr == "schema" || attr == "field" ||
-			attr == "table" || attr == "embed" || attr == "embedded" {
-			continue
-		}
-		// Only treat as boolean if it's a known boolean attribute or follows boolean naming pattern
-		if booleanAttrs[attr] || strings.HasSuffix(attr, "_null") ||
-			strings.HasPrefix(attr, "is_") || strings.HasPrefix(attr, "has_") {
-			// Only set if not already set by key=value parsing
-			if _, exists := result[attr]; !exists {
-				result[attr] = "true"
-			}
-		}
-	}
-
-	return result
-}
-
-func parsePlatformSpecific(kv map[string]string) map[string]map[string]string {
-	out := make(map[string]map[string]string)
-	for k, v := range kv {
-		// Only use platform. prefix, dropping override. completely
-		if strings.HasPrefix(k, "platform.") {
-			parts := strings.SplitN(k, ".", 3)
-
-			if len(parts) == 3 {
-				db := parts[1]
-				key := parts[2]
-				if _, ok := out[db]; !ok {
-					out[db] = make(map[string]string)
-				}
-				out[db][key] = v
-			}
-		}
-
-		// Move engine and comment to platform-specific attributes
-		if k == "engine" {
-			for _, dialect := range []string{"mysql", "mariadb"} {
-				if _, ok := out[dialect]; !ok {
-					out[dialect] = make(map[string]string)
-				}
-				out[dialect]["engine"] = v
-			}
-		}
-
-		if k == "comment" {
-			for _, dialect := range []string{"mysql", "mariadb"} {
-				if _, ok := out[dialect]; !ok {
-					out[dialect] = make(map[string]string)
-				}
-				out[dialect]["comment"] = v
-			}
-		}
-	}
-	return out
 }

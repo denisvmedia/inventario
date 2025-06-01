@@ -5,32 +5,30 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/core/platform"
 
-	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // Generator handles MariaDB-specific SQL generation using AST
 type Generator struct {
 	*base.Generator
-	renderer *renderer.MariaDBRenderer
+	renderer *MariaDBRenderer
 }
 
 // New creates a new MariaDB generator
 func New() *Generator {
 	return &Generator{
 		Generator: base.NewGenerator(platform.MariaDB),
-		renderer:  renderer.NewMariaDBRenderer(),
+		renderer:  NewMariaDBRenderer(),
 	}
 }
 
-// convertFieldToColumn converts a SchemaField to an AST ColumnNode for MariaDB
-func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
+// convertFieldToColumn converts a Field to an AST ColumnNode for MariaDB
+func (g *Generator) convertFieldToColumn(field goschema.Field, enums []goschema.Enum) *ast.ColumnNode {
 	ftype := field.Type
 
 	// Check for platform-specific type override (MariaDB-specific first, then MySQL fallback)
@@ -103,8 +101,8 @@ func (g *Generator) convertFieldToColumn(field types.SchemaField, enums []types.
 	return column
 }
 
-// convertTableDirectiveToAST converts a TableDirective to an AST CreateTableNode for MariaDB
-func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
+// convertTableDirectiveToAST converts a Table to an AST CreateTableNode for MariaDB
+func (g *Generator) convertTableDirectiveToAST(table goschema.Table, fields []goschema.Field, enums []goschema.Enum) *ast.CreateTableNode {
 	createTable := ast.NewCreateTable(table.Name)
 
 	// Set table comment
@@ -187,7 +185,7 @@ func (g *Generator) convertTableDirectiveToAST(table types.TableDirective, field
 }
 
 // GenerateCreateTable generates CREATE TABLE SQL for MariaDB using AST
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+func (g *Generator) GenerateCreateTable(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum) string {
 	// Convert table directive to AST
 	createTableNode := g.convertTableDirectiveToAST(table, fields, enums)
 
@@ -259,7 +257,7 @@ func (g *Generator) renderSchemaWithEnums(statements *ast.StatementList, enumMap
 }
 
 // GenerateAlterStatements generates ALTER statements for MariaDB using AST
-func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
+func (g *Generator) GenerateAlterStatements(oldFields, newFields []goschema.Field) string {
 	// Group fields by table name
 	tableOperations := make(map[string][]ast.AlterOperation)
 
@@ -310,7 +308,7 @@ func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaF
 }
 
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL for MariaDB with embedded field support
-func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+func (g *Generator) GenerateCreateTableWithEmbedded(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum, embeddedFields []goschema.EmbeddedField) string {
 	// Process embedded fields to generate additional schema fields
 	embeddedGeneratedFields := transform.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
 
@@ -354,7 +352,7 @@ func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, 
 // Returns a slice of SQL statements as strings. Each statement is a complete SQL
 // command that can be executed independently. Comments and warnings are included
 // as SQL comments (lines starting with "--").
-func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult) []string {
+func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *goschema.Database) []string {
 	var statements []string
 
 	// MariaDB doesn't need separate enum creation - enums are handled inline in table definitions
@@ -410,7 +408,7 @@ func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated
 		// Modify existing columns
 		for _, colDiff := range tableDiff.ColumnsModified {
 			// Find the target field definition for this column
-			var targetField *types.SchemaField
+			var targetField *goschema.Field
 			for _, field := range generated.Fields {
 				if field.StructName == tableDiff.TableName && field.Name == colDiff.ColumnName {
 					targetField = &field

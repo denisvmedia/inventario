@@ -1,24 +1,23 @@
 package executor
 
 import (
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 )
 
 // createTestParseResult creates a minimal PackageParseResult for testing
-func createTestParseResult() *parsertypes.PackageParseResult {
-	return &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+func createTestParseResult() *goschema.Database {
+	return &goschema.Database{
+		Tables: []goschema.Table{
 			{Name: "test_table", StructName: "TestTable"},
 		},
-		Fields: []types.SchemaField{
+		Fields: []goschema.Field{
 			{Name: "id", Type: "int", StructName: "TestTable"},
 			{Name: "name", Type: "string", StructName: "TestTable"},
 		},
-		Indexes: []types.SchemaIndex{},
-		Enums: []types.GlobalEnum{
+		Indexes: []goschema.Index{},
+		Enums: []goschema.Enum{
 			{Name: "test_status", Values: []string{"active", "inactive"}},
 		},
-		EmbeddedFields: []types.EmbeddedField{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 }

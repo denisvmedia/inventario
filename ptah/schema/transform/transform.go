@@ -3,7 +3,7 @@ package transform
 import (
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/types"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 )
 
 // ProcessEmbeddedFields processes embedded fields and generates corresponding schema fields based on embedding modes.
@@ -142,11 +142,11 @@ import (
 //
 // # Return Value
 //
-// Returns a slice of types.SchemaField representing the generated database fields.
+// Returns a slice of types.Field representing the generated database fields.
 // Each field is fully configured with appropriate types, constraints, and metadata
 // ready for further processing by schema converters.
-func ProcessEmbeddedFields(embeddedFields []types.EmbeddedField, allFields []types.SchemaField, structName string) []types.SchemaField {
-	var generatedFields []types.SchemaField
+func ProcessEmbeddedFields(embeddedFields []goschema.EmbeddedField, allFields []goschema.Field, structName string) []goschema.Field {
+	var generatedFields []goschema.Field
 
 	// Process each embedded field definition
 	for _, embedded := range embeddedFields {
@@ -204,7 +204,7 @@ func ProcessEmbeddedFields(embeddedFields []types.EmbeddedField, allFields []typ
 			}
 
 			// Create the JSON column field
-			generatedFields = append(generatedFields, types.SchemaField{
+			generatedFields = append(generatedFields, goschema.Field{
 				StructName: structName,
 				FieldName:  embedded.EmbeddedTypeName,
 				Name:       columnName,
@@ -239,7 +239,7 @@ func ProcessEmbeddedFields(embeddedFields []types.EmbeddedField, allFields []typ
 			foreignKeyName := "fk_" + strings.ToLower(structName) + "_" + strings.ToLower(embedded.Field)
 
 			// Create the foreign key field
-			generatedFields = append(generatedFields, types.SchemaField{
+			generatedFields = append(generatedFields, goschema.Field{
 				StructName:     structName,
 				FieldName:      embedded.EmbeddedTypeName,
 				Name:           embedded.Field,    // e.g., "user_id"

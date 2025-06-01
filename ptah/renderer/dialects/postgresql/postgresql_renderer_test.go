@@ -1,4 +1,4 @@
-package renderer_test
+package postgresql_test
 
 import (
 	"strings"
@@ -7,15 +7,15 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/postgresql"
 )
 
 func TestPostgreSQLRenderer_ImplementsVisitorInterface(t *testing.T) {
 	c := qt.New(t)
 
-	var _ ast.Visitor = (*renderer.PostgreSQLRenderer)(nil)
+	var _ ast.Visitor = (*postgresql.PostgreSQLRenderer)(nil)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	c.Assert(renderer, qt.IsNotNil)
 }
 
@@ -55,7 +55,7 @@ func TestPostgreSQLRenderer_VisitEnum(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			err := renderer.VisitEnum(tt.enum)
 
 			c.Assert(err, qt.IsNil)
@@ -67,7 +67,7 @@ func TestPostgreSQLRenderer_VisitEnum(t *testing.T) {
 func TestPostgreSQLRenderer_VisitCreateTable(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	table := &ast.CreateTableNode{
 		Name: "users",
 		Columns: []*ast.ColumnNode{
@@ -100,7 +100,7 @@ func TestPostgreSQLRenderer_VisitCreateTable(t *testing.T) {
 func TestPostgreSQLRenderer_VisitCreateTable_WithForeignKey(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	table := &ast.CreateTableNode{
 		Name: "profiles",
 		Columns: []*ast.ColumnNode{
@@ -136,7 +136,7 @@ func TestPostgreSQLRenderer_VisitCreateTable_WithForeignKey(t *testing.T) {
 func TestPostgreSQLRenderer_VisitAlterTable(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	alterTable := &ast.AlterTableNode{
 		Name: "users",
 		Operations: []ast.AlterOperation{
@@ -210,7 +210,7 @@ func TestPostgreSQLRenderer_ProcessFieldType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 
 			// Test through column rendering since processFieldType is private
 			column := &ast.ColumnNode{
@@ -236,7 +236,7 @@ func TestPostgreSQLRenderer_ProcessFieldType(t *testing.T) {
 func TestPostgreSQLRenderer_RenderTableOptions(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	table := &ast.CreateTableNode{
 		Name: "users",
 		Columns: []*ast.ColumnNode{
@@ -321,7 +321,7 @@ func TestPostgreSQLRenderer_RenderTableOptions_Comprehensive(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			table := &ast.CreateTableNode{
 				Name: "test_table",
 				Columns: []*ast.ColumnNode{
@@ -444,7 +444,7 @@ func TestPostgreSQLRenderer_VisitCreateTableWithEnums(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			err := renderer.VisitCreateTableWithEnums(tt.table, tt.enums)
 			c.Assert(err, qt.IsNil)
 
@@ -582,7 +582,7 @@ func TestPostgreSQLRenderer_VisitCreateTableWithEnums_Advanced(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			err := renderer.VisitCreateTableWithEnums(tt.table, tt.enums)
 			c.Assert(err, qt.IsNil)
 
@@ -693,7 +693,7 @@ func TestPostgreSQLRenderer_VisitCreateTableWithEnums_ColumnFeatures(t *testing.
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			err := renderer.VisitCreateTableWithEnums(tt.table, tt.enums)
 			c.Assert(err, qt.IsNil)
 
@@ -784,7 +784,7 @@ func TestPostgreSQLRenderer_VisitCreateTableWithEnums_TableComments(t *testing.T
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			err := renderer.VisitCreateTableWithEnums(tt.table, tt.enums)
 			c.Assert(err, qt.IsNil)
 
@@ -802,7 +802,7 @@ func TestPostgreSQLRenderer_VisitCreateTableWithEnums_TableComments(t *testing.T
 func TestPostgreSQLRenderer_RenderSchema(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	statements := &ast.StatementList{
 		Statements: []ast.Node{
 			&ast.EnumNode{
@@ -841,7 +841,7 @@ func TestPostgreSQLRenderer_RenderSchema(t *testing.T) {
 func TestPostgreSQLRenderer_Render(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	enum := &ast.EnumNode{
 		Name:   "status",
 		Values: []string{"active", "inactive"},
@@ -856,33 +856,33 @@ func TestPostgreSQLRenderer_Render(t *testing.T) {
 func TestPostgreSQLRenderer_VisitMethods(t *testing.T) {
 	tests := []struct {
 		name   string
-		test   func(*renderer.PostgreSQLRenderer) error
+		test   func(*postgresql.PostgreSQLRenderer) error
 		output string
 	}{
 		{
 			name: "VisitColumn",
-			test: func(r *renderer.PostgreSQLRenderer) error {
+			test: func(r *postgresql.PostgreSQLRenderer) error {
 				return r.VisitColumn(&ast.ColumnNode{Name: "test"})
 			},
 			output: "",
 		},
 		{
 			name: "VisitConstraint",
-			test: func(r *renderer.PostgreSQLRenderer) error {
+			test: func(r *postgresql.PostgreSQLRenderer) error {
 				return r.VisitConstraint(&ast.ConstraintNode{Name: "test"})
 			},
 			output: "",
 		},
 		{
 			name: "VisitIndex",
-			test: func(r *renderer.PostgreSQLRenderer) error {
+			test: func(r *postgresql.PostgreSQLRenderer) error {
 				return r.VisitIndex(&ast.IndexNode{Name: "test", Table: "table", Columns: []string{"col"}})
 			},
 			output: "CREATE INDEX test ON table (col);\n",
 		},
 		{
 			name: "VisitComment",
-			test: func(r *renderer.PostgreSQLRenderer) error {
+			test: func(r *postgresql.PostgreSQLRenderer) error {
 				return r.VisitComment(&ast.CommentNode{Text: "test"})
 			},
 			output: "-- test --\n",
@@ -893,7 +893,7 @@ func TestPostgreSQLRenderer_VisitMethods(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			err := tt.test(renderer)
 			c.Assert(err, qt.IsNil)
 			c.Assert(renderer.GetOutput(), qt.Equals, tt.output)
@@ -908,23 +908,23 @@ func TestPostgreSQLRenderer_VisitDropTable(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Basic DROP TABLE",
-			node: ast.NewDropTable("users"),
+			name:     "Basic DROP TABLE",
+			node:     ast.NewDropTable("users"),
 			expected: "DROP TABLE users;\n",
 		},
 		{
-			name: "DROP TABLE IF EXISTS",
-			node: ast.NewDropTable("users").SetIfExists(),
+			name:     "DROP TABLE IF EXISTS",
+			node:     ast.NewDropTable("users").SetIfExists(),
 			expected: "DROP TABLE IF EXISTS users;\n",
 		},
 		{
-			name: "DROP TABLE CASCADE",
-			node: ast.NewDropTable("users").SetCascade(),
+			name:     "DROP TABLE CASCADE",
+			node:     ast.NewDropTable("users").SetCascade(),
 			expected: "DROP TABLE users CASCADE;\n",
 		},
 		{
-			name: "DROP TABLE with all options",
-			node: ast.NewDropTable("users").SetIfExists().SetCascade().SetComment("Dangerous operation"),
+			name:     "DROP TABLE with all options",
+			node:     ast.NewDropTable("users").SetIfExists().SetCascade().SetComment("Dangerous operation"),
 			expected: "-- Dangerous operation\nDROP TABLE IF EXISTS users CASCADE;\n",
 		},
 	}
@@ -933,7 +933,7 @@ func TestPostgreSQLRenderer_VisitDropTable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			err := renderer.VisitDropTable(tt.node)
 
 			c.Assert(err, qt.IsNil)
@@ -949,23 +949,23 @@ func TestPostgreSQLRenderer_VisitDropType(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Basic DROP TYPE",
-			node: ast.NewDropType("status_enum"),
+			name:     "Basic DROP TYPE",
+			node:     ast.NewDropType("status_enum"),
 			expected: "DROP TYPE status_enum;\n",
 		},
 		{
-			name: "DROP TYPE IF EXISTS",
-			node: ast.NewDropType("status_enum").SetIfExists(),
+			name:     "DROP TYPE IF EXISTS",
+			node:     ast.NewDropType("status_enum").SetIfExists(),
 			expected: "DROP TYPE IF EXISTS status_enum;\n",
 		},
 		{
-			name: "DROP TYPE CASCADE",
-			node: ast.NewDropType("status_enum").SetCascade(),
+			name:     "DROP TYPE CASCADE",
+			node:     ast.NewDropType("status_enum").SetCascade(),
 			expected: "DROP TYPE status_enum CASCADE;\n",
 		},
 		{
-			name: "DROP TYPE with all options",
-			node: ast.NewDropType("status_enum").SetIfExists().SetCascade().SetComment("Remove unused enum"),
+			name:     "DROP TYPE with all options",
+			node:     ast.NewDropType("status_enum").SetIfExists().SetCascade().SetComment("Remove unused enum"),
 			expected: "-- Remove unused enum\nDROP TYPE IF EXISTS status_enum CASCADE;\n",
 		},
 	}
@@ -974,7 +974,7 @@ func TestPostgreSQLRenderer_VisitDropType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			err := renderer.VisitDropType(tt.node)
 
 			c.Assert(err, qt.IsNil)
@@ -986,7 +986,7 @@ func TestPostgreSQLRenderer_VisitDropType(t *testing.T) {
 func TestPostgreSQLRenderer_RenderAutoIncrement(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 
 	// Test through a column with auto increment
 	table := &ast.CreateTableNode{
@@ -1014,7 +1014,7 @@ func TestPostgreSQLRenderer_RenderAutoIncrement(t *testing.T) {
 func TestPostgreSQLRenderer_IsEnumType(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 
 	// Test through processFieldType which calls isEnumType
 	table := &ast.CreateTableNode{
@@ -1061,7 +1061,7 @@ func TestPostgreSQLRenderer_ProcessFieldType_EdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 
 			table := &ast.CreateTableNode{
 				Name: "test_table",
@@ -1086,7 +1086,7 @@ func TestPostgreSQLRenderer_ProcessFieldType_EdgeCases(t *testing.T) {
 func TestPostgreSQLRenderer_IndirectHelperMethods(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 
 	// Test renderAutoIncrement indirectly - PostgreSQL doesn't use AUTO_INCREMENT
 	// It's handled by SERIAL types, so renderAutoIncrement should return empty string
@@ -1191,7 +1191,7 @@ func TestPostgreSQLRenderer_RenderPostgreSQLModifyColumn(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 
 			// Test renderPostgreSQLModifyColumn indirectly through VisitAlterTable
 			alterTable := &ast.AlterTableNode{
@@ -1278,7 +1278,7 @@ func TestPostgreSQLRenderer_ComprehensiveColumnRendering(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 			table := &ast.CreateTableNode{
 				Name:    "test_table",
 				Columns: []*ast.ColumnNode{tt.column},
@@ -1298,7 +1298,7 @@ func TestPostgreSQLRenderer_ComprehensiveColumnRendering(t *testing.T) {
 func TestPostgreSQLRenderer_RenderSchema_ComprehensiveOrdering(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	statements := &ast.StatementList{
 		Statements: []ast.Node{
 			&ast.CreateTableNode{
@@ -1352,7 +1352,7 @@ func TestPostgreSQLRenderer_RenderSchema_ComprehensiveOrdering(t *testing.T) {
 func TestPostgreSQLRenderer_VisitCreateTable_ConstraintRendering(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 
 	// Test the regular VisitCreateTable method with constraints
 	table := &ast.CreateTableNode{
@@ -1399,7 +1399,7 @@ func TestPostgreSQLRenderer_VisitCreateTable_ConstraintRendering(t *testing.T) {
 func TestPostgreSQLRenderer_VisitCreateTable_OptionsHandling(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 
 	// PostgreSQL should render table options but filter out MySQL-specific ones like ENGINE
 	table := &ast.CreateTableNode{
@@ -1455,7 +1455,7 @@ func TestPostgreSQLRenderer_ProcessFieldType_MissingPaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 
 			table := &ast.CreateTableNode{
 				Name: "test_table",
@@ -1520,7 +1520,7 @@ func TestPostgreSQLRenderer_IsEnumType_DirectTesting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewPostgreSQLRenderer()
+			renderer := postgresql.NewPostgreSQLRenderer()
 
 			// Create a table that would use the enum type
 			table := &ast.CreateTableNode{
@@ -1548,7 +1548,7 @@ func TestPostgreSQLRenderer_IsEnumType_DirectTesting(t *testing.T) {
 func TestPostgreSQLRenderer_NeedsQuotedDefault(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 
 	// Test numeric types (should not need quotes)
 	c.Assert(renderer.NeedsQuotedDefault("INTEGER"), qt.IsFalse)

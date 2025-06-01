@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/generic"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestGenerator_New(t *testing.T) {
@@ -36,13 +36,13 @@ func TestGenerator_GenerateCreateTable_BasicTable(t *testing.T) {
 
 	generator := generic.New("sqlite")
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Comment:    "User accounts table",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -85,12 +85,12 @@ func TestGenerator_GenerateCreateTable_WithEnums(t *testing.T) {
 
 	generator := generic.New("sqlite")
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -112,7 +112,7 @@ func TestGenerator_GenerateCreateTable_WithEnums(t *testing.T) {
 		},
 	}
 
-	enums := []types.GlobalEnum{
+	enums := []goschema.Enum{
 		{
 			Name:   "user_status_enum",
 			Values: []string{"active", "inactive", "pending"},
@@ -139,12 +139,12 @@ func TestGenerator_GenerateCreateTable_WithIndexes(t *testing.T) {
 
 	generator := generic.New("sqlite")
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -165,7 +165,7 @@ func TestGenerator_GenerateCreateTable_WithIndexes(t *testing.T) {
 		},
 	}
 
-	indexes := []types.SchemaIndex{
+	indexes := []goschema.Index{
 		{
 			StructName: "User",
 			Name:       "idx_users_email",
@@ -197,13 +197,13 @@ func TestGenerator_GenerateCreateTable_CompositeKeys(t *testing.T) {
 
 	generator := generic.New("sqlite")
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "UserRole",
 		Name:       "user_roles",
 		PrimaryKey: []string{"user_id", "role_id"},
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "UserRole",
 			Name:       "user_id",
@@ -236,7 +236,7 @@ func TestGenerator_GenerateAlterStatements(t *testing.T) {
 
 	generator := generic.New("sqlite")
 
-	oldFields := []types.SchemaField{
+	oldFields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -245,7 +245,7 @@ func TestGenerator_GenerateAlterStatements(t *testing.T) {
 		},
 	}
 
-	newFields := []types.SchemaField{
+	newFields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -271,12 +271,12 @@ func TestGenerator_GenerateCreateTable_IgnoresDifferentStructs(t *testing.T) {
 
 	generator := generic.New("sqlite")
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -330,12 +330,12 @@ func TestGenerator_GenerateCreateTable_CustomDialectNames(t *testing.T) {
 
 			generator := generic.New(tt.dialectName)
 
-			table := types.TableDirective{
+			table := goschema.Table{
 				StructName: "User",
 				Name:       "users",
 			}
 
-			fields := []types.SchemaField{
+			fields := []goschema.Field{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -356,7 +356,7 @@ func TestGenerator_GenerateCreateTable_NoDialectSpecificTransformations(t *testi
 
 	generator := generic.New("sqlite")
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB", // Should be ignored for generic dialect
@@ -370,7 +370,7 @@ func TestGenerator_GenerateCreateTable_NoDialectSpecificTransformations(t *testi
 		},
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",

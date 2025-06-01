@@ -6,9 +6,9 @@ import (
 	"io/fs"
 	"time"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/migrator"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // GetDynamicScenarios returns all dynamic integration test scenarios that use versioned entities
@@ -141,7 +141,7 @@ func GetDynamicScenarios() []TestScenario {
 }
 
 // testDynamicBasicEvolution tests the basic evolution path through all versions
-func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicBasicEvolution(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	// Create versioned entity manager
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
@@ -254,7 +254,7 @@ func testDynamicBasicEvolution(ctx context.Context, conn *executor.DatabaseConne
 }
 
 // testDynamicSkipVersions tests non-sequential version application
-func testDynamicSkipVersions(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicSkipVersions(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -304,7 +304,7 @@ func testDynamicSkipVersions(ctx context.Context, conn *executor.DatabaseConnect
 }
 
 // testDynamicIdempotency tests applying the same version multiple times
-func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicIdempotency(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -345,7 +345,7 @@ func testDynamicIdempotency(ctx context.Context, conn *executor.DatabaseConnecti
 }
 
 // testDynamicPartialApply tests applying to a specific version, then continuing
-func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicPartialApply(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -394,7 +394,7 @@ func testDynamicPartialApply(ctx context.Context, conn *executor.DatabaseConnect
 }
 
 // testDynamicSchemaDiff tests schema diff generation between versions
-func testDynamicSchemaDiff(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicSchemaDiff(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -439,7 +439,7 @@ func testDynamicSchemaDiff(ctx context.Context, conn *executor.DatabaseConnectio
 }
 
 // testDynamicMigrationSQLGeneration tests SQL generation from entity changes
-func testDynamicMigrationSQLGeneration(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicMigrationSQLGeneration(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -486,7 +486,7 @@ func testDynamicMigrationSQLGeneration(ctx context.Context, conn *executor.Datab
 }
 
 // getCurrentMigrationVersion gets the current migration version from the database
-func getCurrentMigrationVersion(ctx context.Context, conn *executor.DatabaseConnection) (int, error) {
+func getCurrentMigrationVersion(ctx context.Context, conn *dbschema.DatabaseConnection) (int, error) {
 	// Query the schema_migrations table to get the highest version
 	query := "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
 	row := conn.QueryRow(query)
@@ -519,7 +519,7 @@ func containsSubstring(s, substr string) bool {
 }
 
 // findTable finds a table by name in a slice of tables
-func findTable(tables []types.TableDirective, name string) *types.TableDirective {
+func findTable(tables []goschema.Table, name string) *goschema.Table {
 	for i, table := range tables {
 		if table.Name == name {
 			return &tables[i]
@@ -529,7 +529,7 @@ func findTable(tables []types.TableDirective, name string) *types.TableDirective
 }
 
 // hasField checks if a field exists for a specific table
-func hasField(fields []types.SchemaField, tableName, fieldName string) bool {
+func hasField(fields []goschema.Field, tableName, fieldName string) bool {
 	for _, field := range fields {
 		if field.StructName == tableName && field.Name == fieldName {
 			return true
@@ -543,7 +543,7 @@ func hasField(fields []types.SchemaField, tableName, fieldName string) bool {
 // ============================================================================
 
 // testDynamicRollbackSingle tests rolling back one version (003 → 002)
-func testDynamicRollbackSingle(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicRollbackSingle(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -653,7 +653,7 @@ func testDynamicRollbackSingle(ctx context.Context, conn *executor.DatabaseConne
 }
 
 // testDynamicRollbackMultiple tests rolling back multiple versions (005 → 001)
-func testDynamicRollbackMultiple(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicRollbackMultiple(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -775,7 +775,7 @@ func testDynamicRollbackMultiple(ctx context.Context, conn *executor.DatabaseCon
 }
 
 // testDynamicRollbackToZero tests complete rollback to empty database
-func testDynamicRollbackToZero(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicRollbackToZero(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -883,7 +883,7 @@ func testDynamicRollbackToZero(ctx context.Context, conn *executor.DatabaseConne
 // ============================================================================
 
 // testDynamicPartialFailureRecovery tests recovery from migration failure mid-way
-func testDynamicPartialFailureRecovery(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicPartialFailureRecovery(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -941,7 +941,7 @@ func testDynamicPartialFailureRecovery(ctx context.Context, conn *executor.Datab
 }
 
 // testDynamicInvalidMigration tests handling of invalid/corrupted migration data
-func testDynamicInvalidMigration(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicInvalidMigration(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1008,7 +1008,7 @@ func testDynamicInvalidMigration(ctx context.Context, conn *executor.DatabaseCon
 }
 
 // testDynamicConcurrentMigrations tests concurrent migration attempts (locking behavior)
-func testDynamicConcurrentMigrations(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicConcurrentMigrations(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1025,7 +1025,7 @@ func testDynamicConcurrentMigrations(ctx context.Context, conn *executor.Databas
 
 	return recorder.RecordStep("Test Concurrent Migration Attempts", "Simulate concurrent migration attempts", func() error {
 		// Create two separate database connections to simulate concurrency
-		conn2, err := executor.ConnectToDatabase(conn.Info().URL)
+		conn2, err := dbschema.ConnectToDatabase(conn.Info().URL)
 		if err != nil {
 			return fmt.Errorf("failed to create second connection: %w", err)
 		}
@@ -1097,7 +1097,7 @@ func testDynamicConcurrentMigrations(ctx context.Context, conn *executor.Databas
 // ============================================================================
 
 // testDynamicCircularDependencies tests handling of circular foreign key dependencies
-func testDynamicCircularDependencies(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicCircularDependencies(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1166,7 +1166,7 @@ func testDynamicCircularDependencies(ctx context.Context, conn *executor.Databas
 }
 
 // testDynamicDataMigration tests migrations that require data transformation
-func testDynamicDataMigration(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicDataMigration(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1269,7 +1269,7 @@ func testDynamicDataMigration(ctx context.Context, conn *executor.DatabaseConnec
 }
 
 // testDynamicLargeTableMigration tests performance with large datasets during migration
-func testDynamicLargeTableMigration(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicLargeTableMigration(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1373,7 +1373,7 @@ func testDynamicLargeTableMigration(ctx context.Context, conn *executor.Database
 // ============================================================================
 
 // testDynamicEmptyMigrations tests versions with no actual schema changes
-func testDynamicEmptyMigrations(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicEmptyMigrations(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1439,7 +1439,7 @@ func testDynamicEmptyMigrations(ctx context.Context, conn *executor.DatabaseConn
 }
 
 // testDynamicDuplicateNames tests handling of duplicate table/field names across versions
-func testDynamicDuplicateNames(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicDuplicateNames(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1514,7 +1514,7 @@ func testDynamicDuplicateNames(ctx context.Context, conn *executor.DatabaseConne
 }
 
 // testDynamicReservedKeywords tests migrations involving SQL reserved keywords
-func testDynamicReservedKeywords(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicReservedKeywords(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1603,7 +1603,7 @@ func testDynamicReservedKeywords(ctx context.Context, conn *executor.DatabaseCon
 // ============================================================================
 
 // testDynamicDialectDifferences tests same migration across PostgreSQL/MySQL/MariaDB
-func testDynamicDialectDifferences(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicDialectDifferences(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1680,7 +1680,7 @@ func testDynamicDialectDifferences(ctx context.Context, conn *executor.DatabaseC
 }
 
 // testDynamicTypeMapping tests database-specific type conversions
-func testDynamicTypeMapping(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicTypeMapping(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1770,7 +1770,7 @@ func testDynamicTypeMapping(ctx context.Context, conn *executor.DatabaseConnecti
 // ============================================================================
 
 // testDynamicConstraintValidation tests constraint violations during migration
-func testDynamicConstraintValidation(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicConstraintValidation(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)
@@ -1861,7 +1861,7 @@ func testDynamicConstraintValidation(ctx context.Context, conn *executor.Databas
 }
 
 // testDynamicForeignKeyCascade tests cascading effects of table/field drops
-func testDynamicForeignKeyCascade(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+func testDynamicForeignKeyCascade(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
 	vem, err := NewVersionedEntityManager(fixtures)
 	if err != nil {
 		return fmt.Errorf("failed to create versioned entity manager: %w", err)

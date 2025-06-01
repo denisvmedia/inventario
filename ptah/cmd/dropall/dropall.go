@@ -9,7 +9,7 @@ import (
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 )
 
 var dropAllCmd = &cobra.Command{
@@ -55,16 +55,16 @@ func dropAllCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	if dryRun {
-		fmt.Printf("[DRY RUN] Would drop ALL tables and enums from database %s\n", executor.FormatDatabaseURL(dbURL))
+		fmt.Printf("[DRY RUN] Would drop ALL tables and enums from database %s\n", dbschema.FormatDatabaseURL(dbURL))
 		fmt.Println("=== DRY RUN: DROP ALL TABLES FROM DATABASE ===")
 	} else {
-		fmt.Printf("Dropping ALL tables and enums from database %s\n", executor.FormatDatabaseURL(dbURL))
+		fmt.Printf("Dropping ALL tables and enums from database %s\n", dbschema.FormatDatabaseURL(dbURL))
 		fmt.Println("=== DROP ALL TABLES FROM DATABASE ===")
 	}
 	fmt.Println()
 
 	// 1. Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		return fmt.Errorf("error connecting to database: %w", err)
 	}

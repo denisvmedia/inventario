@@ -4,14 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	qt "github.com/frankban/quicktest"
+
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	types2 "github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
-
-	qt "github.com/frankban/quicktest"
 )
 
 // TestWorkflowExample demonstrates the complete workflow
@@ -24,7 +23,7 @@ func TestWorkflowExample(t *testing.T) {
 
 		// Test password masking
 		url := "postgres://user:secret123@localhost:5432/mydb"
-		formatted := executor.FormatDatabaseURL(url)
+		formatted := dbschema.FormatDatabaseURL(url)
 		c.Assert(formatted, qt.Equals, "postgres://user:***@localhost:5432/mydb")
 	})
 
@@ -73,8 +72,8 @@ func TestWorkflowExample(t *testing.T) {
 
 		// Mock generated schema (simplified)
 		// In real usage, this would come from parsing Go entities
-		mockResult := &parsertypes.PackageParseResult{
-			Enums: []types.GlobalEnum{
+		mockResult := &goschema.Database{
+			Enums: []goschema.Enum{
 				{
 					Name:   "test_enum",
 					Values: []string{"value1", "value2"},
@@ -123,7 +122,7 @@ func TestDatabaseConnectionErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			conn, err := executor.ConnectToDatabase(tt.dbURL)
+			conn, err := dbschema.ConnectToDatabase(tt.dbURL)
 			c.Assert(err, qt.ErrorMatches, ".*"+tt.expected+".*")
 			c.Assert(conn, qt.IsNil)
 		})

@@ -1,7 +1,7 @@
 // Package transform provides converters for transforming schema types into AST nodes.
 //
-// This package serves as a bridge between the high-level schema definitions (types.SchemaField,
-// types.TableDirective, etc.) and the low-level AST nodes that represent SQL DDL statements.
+// This package serves as a bridge between the high-level schema definitions (types.Field,
+// types.Table, etc.) and the low-level AST nodes that represent SQL DDL statements.
 // The converters handle the translation of schema metadata into concrete SQL structures that
 // can be rendered by dialect-specific visitors.
 //
@@ -24,7 +24,7 @@
 //
 // Converting a simple field definition:
 //
-//	field := types.SchemaField{
+//	field := types.Field{
 //		Name:     "email",
 //		Type:     "VARCHAR(255)",
 //		Nullable: false,
@@ -36,12 +36,12 @@
 //
 // Converting a table with multiple fields:
 //
-//	table := types.TableDirective{
+//	table := types.Table{
 //		StructName: "User",
 //		Name:       "users",
 //		Comment:    "Application users",
 //	}
-//	fields := []types.SchemaField{
+//	fields := []types.Field{
 //		{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 //		{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: false, Unique: true},
 //	}
@@ -53,16 +53,16 @@
 // The package includes special handling for enum types. Fields with types starting with "enum_"
 // are validated against global enum definitions to ensure consistency:
 //
-//	enum := types.GlobalEnum{
+//	enum := types.Enum{
 //		Name:   "enum_status",
 //		Values: []string{"active", "inactive", "pending"},
 //	}
-//	field := types.SchemaField{
+//	field := types.Field{
 //		Name: "status",
 //		Type: "enum_status",
 //		Enum: []string{"active", "inactive"}, // Subset validation
 //	}
-//	column := transform.FromSchemaField(field, []types.GlobalEnum{enum})
+//	column := transform.FromSchemaField(field, []types.Enum{enum})
 //
 // # Error Handling
 //
@@ -76,10 +76,10 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 )
 
-// FromSchemaField converts a SchemaField to a ColumnNode with comprehensive attribute mapping.
+// FromSchemaField converts a Field to a ColumnNode with comprehensive attribute mapping.
 //
 // This function transforms a high-level field definition into a concrete column AST node,
 // handling all supported column attributes including constraints, defaults, foreign keys,
@@ -104,7 +104,7 @@ import (
 //
 // Basic column with constraints:
 //
-//	field := types.SchemaField{
+//	field := types.Field{
 //		Name:     "id",
 //		Type:     "SERIAL",
 //		Primary:  true,
@@ -116,7 +116,7 @@ import (
 //
 // Column with foreign key:
 //
-//	field := types.SchemaField{
+//	field := types.Field{
 //		Name:           "user_id",
 //		Type:           "INTEGER",
 //		Nullable:       false,
@@ -128,7 +128,7 @@ import (
 //
 // Column with default value and check constraint:
 //
-//	field := types.SchemaField{
+//	field := types.Field{
 //		Name:     "price",
 //		Type:     "DECIMAL(10,2)",
 //		Nullable: false,
@@ -141,16 +141,16 @@ import (
 //
 // Enum column with validation:
 //
-//	enum := types.GlobalEnum{
+//	enum := types.Enum{
 //		Name:   "enum_status",
 //		Values: []string{"active", "inactive", "pending"},
 //	}
-//	field := types.SchemaField{
+//	field := types.Field{
 //		Name: "status",
 //		Type: "enum_status",
 //		Enum: []string{"active", "inactive"}, // Subset of global enum
 //	}
-//	column := FromSchemaField(field, []types.GlobalEnum{enum})
+//	column := FromSchemaField(field, []types.Enum{enum})
 //	// Results in: status enum_status (with validation performed)
 //
 // # Enum Validation
@@ -164,7 +164,7 @@ import (
 //
 // Returns a fully configured *ast.ColumnNode ready for SQL generation by dialect-specific visitors.
 // The returned node contains all the attributes specified in the input field.
-func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.ColumnNode {
+func FromSchemaField(field goschema.Field, enums []goschema.Enum) *ast.ColumnNode {
 	column := ast.NewColumn(field.Name, field.Type)
 
 	// Validate enum type if field references an enum
@@ -211,7 +211,7 @@ func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.Col
 	return column
 }
 
-// FromTableDirective converts a TableDirective to a CreateTableNode with all associated columns and constraints.
+// FromTableDirective converts a Table to a CreateTableNode with all associated columns and constraints.
 //
 // This function creates a complete table definition by combining table metadata with its associated
 // field definitions. It handles table-level properties, adds all matching columns, and creates
@@ -235,12 +235,12 @@ func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.Col
 //
 // Basic table with simple primary key:
 //
-//	table := types.TableDirective{
+//	table := types.Table{
 //		StructName: "User",
 //		Name:       "users",
 //		Comment:    "Application users",
 //	}
-//	fields := []types.SchemaField{
+//	fields := []types.Field{
 //		{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 //		{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: false, Unique: true},
 //		{StructName: "User", Name: "created_at", Type: "TIMESTAMP", DefaultExpr: "NOW()"},
@@ -254,13 +254,13 @@ func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.Col
 //
 // Table with composite primary key:
 //
-//	table := types.TableDirective{
+//	table := types.Table{
 //		StructName: "UserRole",
 //		Name:       "user_roles",
 //		PrimaryKey: []string{"user_id", "role_id"},
 //		Comment:    "Many-to-many user roles",
 //	}
-//	fields := []types.SchemaField{
+//	fields := []types.Field{
 //		{StructName: "UserRole", Name: "user_id", Type: "INTEGER", Foreign: "users(id)"},
 //		{StructName: "UserRole", Name: "role_id", Type: "INTEGER", Foreign: "roles(id)"},
 //		{StructName: "UserRole", Name: "assigned_at", Type: "TIMESTAMP", DefaultExpr: "NOW()"},
@@ -275,13 +275,13 @@ func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.Col
 //
 // Table with database-specific options:
 //
-//	table := types.TableDirective{
+//	table := types.Table{
 //		StructName: "Product",
 //		Name:       "products",
 //		Engine:     "InnoDB",
 //		Comment:    "Product catalog",
 //	}
-//	fields := []types.SchemaField{
+//	fields := []types.Field{
 //		{StructName: "Product", Name: "id", Type: "INT", Primary: true, AutoInc: true},
 //		{StructName: "Product", Name: "name", Type: "VARCHAR(255)", Nullable: false},
 //	}
@@ -307,7 +307,7 @@ func FromSchemaField(field types.SchemaField, enums []types.GlobalEnum) *ast.Col
 //
 // Returns a fully configured *ast.CreateTableNode with all columns, constraints,
 // and table options ready for SQL generation.
-func FromTableDirective(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
+func FromTableDirective(table goschema.Table, fields []goschema.Field, enums []goschema.Enum) *ast.CreateTableNode {
 	createTable := ast.NewCreateTable(table.Name)
 
 	if table.Comment != "" {
@@ -335,7 +335,7 @@ func FromTableDirective(table types.TableDirective, fields []types.SchemaField, 
 	return createTable
 }
 
-// FromSchemaIndex converts a SchemaIndex to an IndexNode for database index creation.
+// FromSchemaIndex converts a Index to an IndexNode for database index creation.
 //
 // This function transforms index metadata into an AST node that can be rendered
 // as CREATE INDEX statements by dialect-specific visitors. It supports both
@@ -356,7 +356,7 @@ func FromTableDirective(table types.TableDirective, fields []types.SchemaField, 
 //
 // Simple single-column index:
 //
-//	index := types.SchemaIndex{
+//	index := types.Index{
 //		Name:       "idx_users_email",
 //		StructName: "users",
 //		Fields:     []string{"email"},
@@ -367,7 +367,7 @@ func FromTableDirective(table types.TableDirective, fields []types.SchemaField, 
 //
 // Unique composite index:
 //
-//	index := types.SchemaIndex{
+//	index := types.Index{
 //		Name:       "idx_user_roles_unique",
 //		StructName: "user_roles",
 //		Fields:     []string{"user_id", "role_id"},
@@ -379,7 +379,7 @@ func FromTableDirective(table types.TableDirective, fields []types.SchemaField, 
 //
 // Performance index for queries:
 //
-//	index := types.SchemaIndex{
+//	index := types.Index{
 //		Name:       "idx_posts_user_created",
 //		StructName: "posts",
 //		Fields:     []string{"user_id", "created_at"},
@@ -399,7 +399,7 @@ func FromTableDirective(table types.TableDirective, fields []types.SchemaField, 
 //
 // Returns a fully configured *ast.IndexNode ready for SQL generation.
 // The node contains the index name, target table, column list, and all specified options.
-func FromSchemaIndex(index types.SchemaIndex) *ast.IndexNode {
+func FromSchemaIndex(index goschema.Index) *ast.IndexNode {
 	indexNode := ast.NewIndex(index.Name, index.StructName, index.Fields...)
 
 	if index.Unique {
@@ -413,7 +413,7 @@ func FromSchemaIndex(index types.SchemaIndex) *ast.IndexNode {
 	return indexNode
 }
 
-// FromGlobalEnum converts a GlobalEnum to an EnumNode for database enum type creation.
+// FromGlobalEnum converts a Enum to an EnumNode for database enum type creation.
 //
 // This function transforms a global enum definition into an AST node that can be rendered
 // as CREATE TYPE statements (primarily for PostgreSQL) or equivalent enum handling for
@@ -427,7 +427,7 @@ func FromSchemaIndex(index types.SchemaIndex) *ast.IndexNode {
 //
 // Simple status enum:
 //
-//	enum := types.GlobalEnum{
+//	enum := types.Enum{
 //		Name:   "status_type",
 //		Values: []string{"active", "inactive", "pending"},
 //	}
@@ -436,7 +436,7 @@ func FromSchemaIndex(index types.SchemaIndex) *ast.IndexNode {
 //
 // User role enum:
 //
-//	enum := types.GlobalEnum{
+//	enum := types.Enum{
 //		Name:   "user_role",
 //		Values: []string{"admin", "moderator", "user", "guest"},
 //	}
@@ -455,7 +455,7 @@ func FromSchemaIndex(index types.SchemaIndex) *ast.IndexNode {
 //
 // Returns a *ast.EnumNode ready for SQL generation by dialect-specific visitors.
 // The visitor implementation determines how the enum is rendered for each database type.
-func FromGlobalEnum(enum types.GlobalEnum) *ast.EnumNode {
+func FromGlobalEnum(enum goschema.Enum) *ast.EnumNode {
 	return ast.NewEnum(enum.Name, enum.Values...)
 }
 
@@ -505,25 +505,25 @@ func isEnumType(fieldType string) bool {
 //
 // Valid enum field (subset of global enum):
 //
-//	globalEnum := types.GlobalEnum{
+//	globalEnum := types.Enum{
 //		Name:   "enum_status",
 //		Values: []string{"active", "inactive", "pending", "archived"},
 //	}
-//	field := types.SchemaField{
+//	field := types.Field{
 //		Name: "status",
 //		Type: "enum_status",
 //		Enum: []string{"active", "inactive"}, // Valid subset
 //	}
-//	validateEnumField(field, []types.GlobalEnum{globalEnum}) // No warnings
+//	validateEnumField(field, []types.Enum{globalEnum}) // No warnings
 //
 // Invalid enum field (contains values not in global enum):
 //
-//	field := types.SchemaField{
+//	field := types.Field{
 //		Name: "status",
 //		Type: "enum_status",
 //		Enum: []string{"active", "invalid_value"}, // "invalid_value" not in global enum
 //	}
-//	validateEnumField(field, []types.GlobalEnum{globalEnum}) // Logs warning
+//	validateEnumField(field, []types.Enum{globalEnum}) // Logs warning
 //
 // # Error Handling
 //
@@ -538,9 +538,9 @@ func isEnumType(fieldType string) bool {
 //   - Development-time consistency checking
 //   - Documentation of enum usage patterns
 //   - Debugging enum-related schema issues
-func validateEnumField(field types.SchemaField, enums []types.GlobalEnum) {
+func validateEnumField(field goschema.Field, enums []goschema.Enum) {
 	// Find the corresponding global enum
-	var globalEnum *types.GlobalEnum
+	var globalEnum *goschema.Enum
 	for _, enum := range enums {
 		if enum.Name == field.Type {
 			globalEnum = &enum

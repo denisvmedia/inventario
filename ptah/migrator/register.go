@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 )
 
 // RegisterMigrations registers all migrations with the migrator by scanning
@@ -82,7 +82,7 @@ func RegisterMigrations(migrator *Migrator, migrationsFS fs.FS) error {
 }
 
 // RunMigrations runs all pending migrations up to the latest version using the provided filesystem
-func RunMigrations(ctx context.Context, conn *executor.DatabaseConnection, migrationsFS fs.FS) error {
+func RunMigrations(ctx context.Context, conn *dbschema.DatabaseConnection, migrationsFS fs.FS) error {
 	migrator := NewMigrator(conn)
 
 	if err := RegisterMigrations(migrator, migrationsFS); err != nil {
@@ -97,7 +97,7 @@ func RunMigrations(ctx context.Context, conn *executor.DatabaseConnection, migra
 }
 
 // RunMigrationsDown runs down migrations to the specified target version using the provided filesystem
-func RunMigrationsDown(ctx context.Context, conn *executor.DatabaseConnection, targetVersion int, migrationsFS fs.FS) error {
+func RunMigrationsDown(ctx context.Context, conn *dbschema.DatabaseConnection, targetVersion int, migrationsFS fs.FS) error {
 	migrator := NewMigrator(conn)
 
 	if err := RegisterMigrations(migrator, migrationsFS); err != nil {
@@ -112,7 +112,7 @@ func RunMigrationsDown(ctx context.Context, conn *executor.DatabaseConnection, t
 }
 
 // GetMigrationStatus returns information about the current migration status using the provided filesystem
-func GetMigrationStatus(ctx context.Context, conn *executor.DatabaseConnection, migrationsFS fs.FS) (*MigrationStatus, error) {
+func GetMigrationStatus(ctx context.Context, conn *dbschema.DatabaseConnection, migrationsFS fs.FS) (*MigrationStatus, error) {
 	migrator := NewMigrator(conn)
 
 	if err := RegisterMigrations(migrator, migrationsFS); err != nil {
@@ -160,11 +160,11 @@ func RegisterGoMigration(migrator *Migrator, version int, description string, up
 // CreateMigrationFromSQL creates a migration from SQL strings
 // This is useful for programmatically creating migrations
 func CreateMigrationFromSQL(version int, description, upSQL, downSQL string) *Migration {
-	upFunc := func(ctx context.Context, conn *executor.DatabaseConnection) error {
+	upFunc := func(ctx context.Context, conn *dbschema.DatabaseConnection) error {
 		return executeSQLStatements(conn, upSQL)
 	}
 
-	downFunc := func(ctx context.Context, conn *executor.DatabaseConnection) error {
+	downFunc := func(ctx context.Context, conn *dbschema.DatabaseConnection) error {
 		return executeSQLStatements(conn, downSQL)
 	}
 
@@ -177,7 +177,7 @@ func CreateMigrationFromSQL(version int, description, upSQL, downSQL string) *Mi
 }
 
 // executeSQLStatements splits SQL into individual statements and executes them
-func executeSQLStatements(conn *executor.DatabaseConnection, sql string) error {
+func executeSQLStatements(conn *dbschema.DatabaseConnection, sql string) error {
 	// Split SQL by semicolons and execute each statement
 	statements := SplitSQLStatements(sql)
 

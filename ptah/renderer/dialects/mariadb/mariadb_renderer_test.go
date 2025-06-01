@@ -1,4 +1,4 @@
-package renderer_test
+package mariadb_test
 
 import (
 	"testing"
@@ -6,22 +6,22 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mariadb"
 )
 
 func TestMariaDBRenderer_ImplementsVisitorInterface(t *testing.T) {
 	c := qt.New(t)
 
-	var _ ast.Visitor = (*renderer.MariaDBRenderer)(nil)
+	var _ ast.Visitor = (*mariadb.MariaDBRenderer)(nil)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	c.Assert(renderer, qt.IsNotNil)
 }
 
 func TestMariaDBRenderer_VisitEnum(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	enum := &ast.EnumNode{
 		Name:   "status",
 		Values: []string{"active", "inactive"},
@@ -37,7 +37,7 @@ func TestMariaDBRenderer_VisitEnum(t *testing.T) {
 func TestMariaDBRenderer_VisitCreateTable(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	table := &ast.CreateTableNode{
 		Name: "users",
 		Columns: []*ast.ColumnNode{
@@ -77,7 +77,7 @@ func TestMariaDBRenderer_VisitCreateTable(t *testing.T) {
 func TestMariaDBRenderer_VisitCreateTable_WithComment(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	table := &ast.CreateTableNode{
 		Name:    "users",
 		Comment: "User accounts table",
@@ -101,7 +101,7 @@ func TestMariaDBRenderer_VisitCreateTable_WithComment(t *testing.T) {
 func TestMariaDBRenderer_RenderAutoIncrement(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	table := &ast.CreateTableNode{
 		Name: "users",
 		Columns: []*ast.ColumnNode{
@@ -125,7 +125,7 @@ func TestMariaDBRenderer_RenderAutoIncrement(t *testing.T) {
 func TestMariaDBRenderer_VisitAlterTable(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	alterTable := &ast.AlterTableNode{
 		Name: "users",
 		Operations: []ast.AlterOperation{
@@ -213,7 +213,7 @@ func TestMariaDBRenderer_RenderColumnWithEnums(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMariaDBRenderer()
+			renderer := mariadb.NewMariaDBRenderer()
 
 			// Test through VisitCreateTableWithEnums
 			enums := make(map[string][]string)
@@ -238,7 +238,7 @@ func TestMariaDBRenderer_RenderColumnWithEnums(t *testing.T) {
 func TestMariaDBRenderer_RenderSchema(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	statements := &ast.StatementList{
 		Statements: []ast.Node{
 			&ast.EnumNode{
@@ -270,7 +270,7 @@ func TestMariaDBRenderer_RenderSchema(t *testing.T) {
 func TestMariaDBRenderer_VisitCreateTableWithEnums(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	enums := map[string][]string{
 		"status":   {"active", "inactive", "pending"},
 		"priority": {"low", "high"},
@@ -296,7 +296,7 @@ func TestMariaDBRenderer_VisitCreateTableWithEnums(t *testing.T) {
 func TestMariaDBRenderer_RenderTableOptions(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 	table := &ast.CreateTableNode{
 		Name: "users",
 		Columns: []*ast.ColumnNode{
@@ -321,7 +321,7 @@ func TestMariaDBRenderer_RenderTableOptions(t *testing.T) {
 func TestMariaDBRenderer_InheritsFromMySQL(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMariaDBRenderer()
+	renderer := mariadb.NewMariaDBRenderer()
 
 	// Test that MariaDB renderer inherits MySQL functionality
 	// by testing a feature that should work the same way
@@ -414,7 +414,7 @@ func TestMariaDBRenderer_RenderColumnWithEnums_ComprehensivePaths(t *testing.T) 
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMariaDBRenderer()
+			renderer := mariadb.NewMariaDBRenderer()
 
 			table := &ast.CreateTableNode{
 				Name:    "test_table",
@@ -522,7 +522,7 @@ func TestMariaDBRenderer_VisitCreateTableWithEnums_EdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMariaDBRenderer()
+			renderer := mariadb.NewMariaDBRenderer()
 			err := renderer.VisitCreateTableWithEnums(tt.table, tt.enums)
 			c.Assert(err, qt.IsNil)
 
@@ -635,7 +635,7 @@ func TestMariaDBRenderer_VisitCreateTable_ConstraintRendering(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMariaDBRenderer()
+			renderer := mariadb.NewMariaDBRenderer()
 			// Use the regular VisitCreateTable method, not VisitCreateTableWithEnums
 			err := renderer.VisitCreateTable(tt.table)
 			c.Assert(err, qt.IsNil)
@@ -686,7 +686,7 @@ func TestMariaDBRenderer_VisitCreateTable_OptionsPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMariaDBRenderer()
+			renderer := mariadb.NewMariaDBRenderer()
 			table := &ast.CreateTableNode{
 				Name: "test_table",
 				Columns: []*ast.ColumnNode{
@@ -716,23 +716,23 @@ func TestMariaDBRenderer_VisitDropTable(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Basic DROP TABLE",
-			node: ast.NewDropTable("users"),
+			name:     "Basic DROP TABLE",
+			node:     ast.NewDropTable("users"),
 			expected: "DROP TABLE users;\n",
 		},
 		{
-			name: "DROP TABLE IF EXISTS",
-			node: ast.NewDropTable("users").SetIfExists(),
+			name:     "DROP TABLE IF EXISTS",
+			node:     ast.NewDropTable("users").SetIfExists(),
 			expected: "DROP TABLE IF EXISTS users;\n",
 		},
 		{
-			name: "DROP TABLE with CASCADE (ignored in MariaDB)",
-			node: ast.NewDropTable("users").SetCascade(),
+			name:     "DROP TABLE with CASCADE (ignored in MariaDB)",
+			node:     ast.NewDropTable("users").SetCascade(),
 			expected: "DROP TABLE users;\n",
 		},
 		{
-			name: "DROP TABLE with all options",
-			node: ast.NewDropTable("users").SetIfExists().SetCascade().SetComment("Dangerous operation"),
+			name:     "DROP TABLE with all options",
+			node:     ast.NewDropTable("users").SetIfExists().SetCascade().SetComment("Dangerous operation"),
 			expected: "-- Dangerous operation\nDROP TABLE IF EXISTS users;\n",
 		},
 	}
@@ -741,7 +741,7 @@ func TestMariaDBRenderer_VisitDropTable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMariaDBRenderer()
+			renderer := mariadb.NewMariaDBRenderer()
 			err := renderer.VisitDropTable(tt.node)
 
 			c.Assert(err, qt.IsNil)
@@ -757,13 +757,13 @@ func TestMariaDBRenderer_VisitDropType(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Basic DROP TYPE (not supported)",
-			node: ast.NewDropType("status_enum"),
+			name:     "Basic DROP TYPE (not supported)",
+			node:     ast.NewDropType("status_enum"),
 			expected: "-- MariaDB does not support DROP TYPE - enums are handled inline in column definitions\n",
 		},
 		{
-			name: "DROP TYPE with comment",
-			node: ast.NewDropType("status_enum").SetComment("Remove unused enum"),
+			name:     "DROP TYPE with comment",
+			node:     ast.NewDropType("status_enum").SetComment("Remove unused enum"),
 			expected: "-- Remove unused enum\n-- MariaDB does not support DROP TYPE - enums are handled inline in column definitions\n",
 		},
 	}
@@ -772,7 +772,7 @@ func TestMariaDBRenderer_VisitDropType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMariaDBRenderer()
+			renderer := mariadb.NewMariaDBRenderer()
 			err := renderer.VisitDropType(tt.node)
 
 			c.Assert(err, qt.IsNil)

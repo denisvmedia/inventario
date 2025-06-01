@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/core/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 		fmt.Println()
 	}
 
-	fmt.Println(generators.GenerateAlterStatements([]types.SchemaField{
+	fmt.Println(generators.GenerateAlterStatements([]goschema.Field{
 		{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: true},
 		{StructName: "User", Name: "name", Type: "TEXT", Nullable: false},
 	}, fields, platform.Postgres))

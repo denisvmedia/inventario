@@ -6,32 +6,31 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/ptr"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/internal/compare"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestTablesAndColumns_HappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		generated *parsertypes.PackageParseResult
-		database  *parsertypes.DatabaseSchema
+		generated *goschema.Database
+		database  *dbschematypes.DBSchema
 		expected  *differtypes.SchemaDiff
 	}{
 		{
 			name: "new table added",
-			generated: &parsertypes.PackageParseResult{
-				Tables: []types.TableDirective{
+			generated: &goschema.Database{
+				Tables: []goschema.Table{
 					{StructName: "User", Name: "users"},
 				},
-				Fields: []types.SchemaField{
+				Fields: []goschema.Field{
 					{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 				},
-				EmbeddedFields: []types.EmbeddedField{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Tables: []parsertypes.Table{},
+			database: &dbschematypes.DBSchema{
+				Tables: []dbschematypes.DBTable{},
 			},
 			expected: &differtypes.SchemaDiff{
 				TablesAdded: []string{"users"},
@@ -39,13 +38,13 @@ func TestTablesAndColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table removed",
-			generated: &parsertypes.PackageParseResult{
-				Tables:         []types.TableDirective{},
-				Fields:         []types.SchemaField{},
-				EmbeddedFields: []types.EmbeddedField{},
+			generated: &goschema.Database{
+				Tables:         []goschema.Table{},
+				Fields:         []goschema.Field{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Tables: []parsertypes.Table{
+			database: &dbschematypes.DBSchema{
+				Tables: []dbschematypes.DBTable{
 					{Name: "old_table"},
 				},
 			},
@@ -55,21 +54,21 @@ func TestTablesAndColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table modified - column added",
-			generated: &parsertypes.PackageParseResult{
-				Tables: []types.TableDirective{
+			generated: &goschema.Database{
+				Tables: []goschema.Table{
 					{StructName: "User", Name: "users"},
 				},
-				Fields: []types.SchemaField{
+				Fields: []goschema.Field{
 					{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 					{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: false},
 				},
-				EmbeddedFields: []types.EmbeddedField{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Tables: []parsertypes.Table{
+			database: &dbschematypes.DBSchema{
+				Tables: []dbschematypes.DBTable{
 					{
 						Name: "users",
-						Columns: []parsertypes.Column{
+						Columns: []dbschematypes.DBColumn{
 							{Name: "id", DataType: "integer", IsPrimaryKey: true},
 						},
 					},
@@ -86,22 +85,22 @@ func TestTablesAndColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name: "multiple changes",
-			generated: &parsertypes.PackageParseResult{
-				Tables: []types.TableDirective{
+			generated: &goschema.Database{
+				Tables: []goschema.Table{
 					{StructName: "User", Name: "users"},
 					{StructName: "Post", Name: "posts"},
 				},
-				Fields: []types.SchemaField{
+				Fields: []goschema.Field{
 					{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 					{StructName: "Post", Name: "id", Type: "SERIAL", Primary: true},
 				},
-				EmbeddedFields: []types.EmbeddedField{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Tables: []parsertypes.Table{
+			database: &dbschematypes.DBSchema{
+				Tables: []dbschematypes.DBTable{
 					{
 						Name: "users",
-						Columns: []parsertypes.Column{
+						Columns: []dbschematypes.DBColumn{
 							{Name: "id", DataType: "integer", IsPrimaryKey: true},
 							{Name: "legacy_field", DataType: "varchar"},
 						},
@@ -145,35 +144,35 @@ func TestTablesAndColumns_HappyPath(t *testing.T) {
 func TestTablesAndColumns_UnhappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		generated *parsertypes.PackageParseResult
-		database  *parsertypes.DatabaseSchema
+		generated *goschema.Database
+		database  *dbschematypes.DBSchema
 		expected  *differtypes.SchemaDiff
 	}{
 		{
 			name: "empty schemas",
-			generated: &parsertypes.PackageParseResult{
-				Tables:         []types.TableDirective{},
-				Fields:         []types.SchemaField{},
-				EmbeddedFields: []types.EmbeddedField{},
+			generated: &goschema.Database{
+				Tables:         []goschema.Table{},
+				Fields:         []goschema.Field{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Tables: []parsertypes.Table{},
+			database: &dbschematypes.DBSchema{
+				Tables: []dbschematypes.DBTable{},
 			},
 			expected: &differtypes.SchemaDiff{},
 		},
 		{
 			name: "nil embedded fields",
-			generated: &parsertypes.PackageParseResult{
-				Tables: []types.TableDirective{
+			generated: &goschema.Database{
+				Tables: []goschema.Table{
 					{StructName: "User", Name: "users"},
 				},
-				Fields: []types.SchemaField{
+				Fields: []goschema.Field{
 					{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 				},
 				EmbeddedFields: nil,
 			},
-			database: &parsertypes.DatabaseSchema{
-				Tables: []parsertypes.Table{},
+			database: &dbschematypes.DBSchema{
+				Tables: []dbschematypes.DBTable{},
 			},
 			expected: &differtypes.SchemaDiff{
 				TablesAdded: []string{"users"},
@@ -198,26 +197,26 @@ func TestTablesAndColumns_UnhappyPath(t *testing.T) {
 func TestTableColumns_HappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		genTable  types.TableDirective
-		dbTable   parsertypes.Table
-		generated *parsertypes.PackageParseResult
+		genTable  goschema.Table
+		dbTable   dbschematypes.DBTable
+		generated *goschema.Database
 		expected  differtypes.TableDiff
 	}{
 		{
 			name:     "column added",
-			genTable: types.TableDirective{StructName: "User", Name: "users"},
-			dbTable: parsertypes.Table{
+			genTable: goschema.Table{StructName: "User", Name: "users"},
+			dbTable: dbschematypes.DBTable{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "id", DataType: "integer", IsPrimaryKey: true},
 				},
 			},
-			generated: &parsertypes.PackageParseResult{
-				Fields: []types.SchemaField{
+			generated: &goschema.Database{
+				Fields: []goschema.Field{
 					{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 					{StructName: "User", Name: "email", Type: "VARCHAR(255)", Nullable: false},
 				},
-				EmbeddedFields: []types.EmbeddedField{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
 			expected: differtypes.TableDiff{
 				TableName:    "users",
@@ -226,19 +225,19 @@ func TestTableColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name:     "column removed",
-			genTable: types.TableDirective{StructName: "User", Name: "users"},
-			dbTable: parsertypes.Table{
+			genTable: goschema.Table{StructName: "User", Name: "users"},
+			dbTable: dbschematypes.DBTable{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "id", DataType: "integer", IsPrimaryKey: true},
 					{Name: "legacy_field", DataType: "varchar"},
 				},
 			},
-			generated: &parsertypes.PackageParseResult{
-				Fields: []types.SchemaField{
+			generated: &goschema.Database{
+				Fields: []goschema.Field{
 					{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 				},
-				EmbeddedFields: []types.EmbeddedField{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
 			expected: differtypes.TableDiff{
 				TableName:      "users",
@@ -263,21 +262,21 @@ func TestTableColumns_HappyPath(t *testing.T) {
 func TestTableColumns_WithEmbeddedFields(t *testing.T) {
 	c := qt.New(t)
 
-	genTable := types.TableDirective{StructName: "User", Name: "users"}
-	dbTable := parsertypes.Table{
+	genTable := goschema.Table{StructName: "User", Name: "users"}
+	dbTable := dbschematypes.DBTable{
 		Name: "users",
-		Columns: []parsertypes.Column{
+		Columns: []dbschematypes.DBColumn{
 			{Name: "id", DataType: "integer", IsPrimaryKey: true},
 		},
 	}
 
-	generated := &parsertypes.PackageParseResult{
-		Fields: []types.SchemaField{
+	generated := &goschema.Database{
+		Fields: []goschema.Field{
 			{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 			{StructName: "Timestamps", Name: "created_at", Type: "TIMESTAMP", Nullable: false},
 			{StructName: "Timestamps", Name: "updated_at", Type: "TIMESTAMP", Nullable: false},
 		},
-		EmbeddedFields: []types.EmbeddedField{
+		EmbeddedFields: []goschema.EmbeddedField{
 			{
 				StructName:       "User",
 				Mode:             "inline",
@@ -295,23 +294,23 @@ func TestTableColumns_WithEmbeddedFields(t *testing.T) {
 func TestTableColumns_UnhappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		genTable  types.TableDirective
-		dbTable   parsertypes.Table
-		generated *parsertypes.PackageParseResult
+		genTable  goschema.Table
+		dbTable   dbschematypes.DBTable
+		generated *goschema.Database
 		expected  differtypes.TableDiff
 	}{
 		{
 			name:     "no fields for struct",
-			genTable: types.TableDirective{StructName: "User", Name: "users"},
-			dbTable: parsertypes.Table{
+			genTable: goschema.Table{StructName: "User", Name: "users"},
+			dbTable: dbschematypes.DBTable{
 				Name:    "users",
-				Columns: []parsertypes.Column{},
+				Columns: []dbschematypes.DBColumn{},
 			},
-			generated: &parsertypes.PackageParseResult{
-				Fields: []types.SchemaField{
+			generated: &goschema.Database{
+				Fields: []goschema.Field{
 					{StructName: "Post", Name: "id", Type: "SERIAL", Primary: true}, // Different struct
 				},
-				EmbeddedFields: []types.EmbeddedField{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
 			expected: differtypes.TableDiff{
 				TableName: "users",
@@ -319,16 +318,16 @@ func TestTableColumns_UnhappyPath(t *testing.T) {
 		},
 		{
 			name:     "empty database table",
-			genTable: types.TableDirective{StructName: "User", Name: "users"},
-			dbTable: parsertypes.Table{
+			genTable: goschema.Table{StructName: "User", Name: "users"},
+			dbTable: dbschematypes.DBTable{
 				Name:    "users",
-				Columns: []parsertypes.Column{},
+				Columns: []dbschematypes.DBColumn{},
 			},
-			generated: &parsertypes.PackageParseResult{
-				Fields: []types.SchemaField{
+			generated: &goschema.Database{
+				Fields: []goschema.Field{
 					{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 				},
-				EmbeddedFields: []types.EmbeddedField{},
+				EmbeddedFields: []goschema.EmbeddedField{},
 			},
 			expected: differtypes.TableDiff{
 				TableName:    "users",
@@ -353,17 +352,17 @@ func TestTableColumns_UnhappyPath(t *testing.T) {
 func TestColumns_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		genCol   types.SchemaField
-		dbCol    parsertypes.Column
+		genCol   goschema.Field
+		dbCol    dbschematypes.DBColumn
 		expected differtypes.ColumnDiff
 	}{
 		{
 			name: "type change",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name: "name",
 				Type: "VARCHAR(255)",
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:     "name",
 				DataType: "TEXT",
 			},
@@ -376,12 +375,12 @@ func TestColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name: "nullable change",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:     "email",
 				Type:     "VARCHAR(255)",
 				Nullable: false,
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:       "email",
 				DataType:   "VARCHAR(255)",
 				IsNullable: "YES",
@@ -395,12 +394,12 @@ func TestColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name: "primary key change",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:    "id",
 				Type:    "SERIAL",
 				Primary: true,
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:         "id",
 				DataType:     "integer",
 				IsPrimaryKey: false,
@@ -414,12 +413,12 @@ func TestColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name: "unique constraint change",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:   "email",
 				Type:   "VARCHAR(255)",
 				Unique: true,
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:     "email",
 				DataType: "VARCHAR(255)",
 				IsUnique: false,
@@ -433,12 +432,12 @@ func TestColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name: "default value change",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:    "status",
 				Type:    "VARCHAR(50)",
 				Default: "'active'",
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:          "status",
 				DataType:      "VARCHAR(50)",
 				ColumnDefault: ptr.To("'inactive'"),
@@ -452,13 +451,13 @@ func TestColumns_HappyPath(t *testing.T) {
 		},
 		{
 			name: "multiple changes",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:     "name",
 				Type:     "TEXT",
 				Nullable: false,
 				Unique:   true,
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:       "name",
 				DataType:   "VARCHAR(100)",
 				IsNullable: "YES",
@@ -493,19 +492,19 @@ func TestColumns_HappyPath(t *testing.T) {
 func TestColumns_UnhappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		genCol   types.SchemaField
-		dbCol    parsertypes.Column
+		genCol   goschema.Field
+		dbCol    dbschematypes.DBColumn
 		expected differtypes.ColumnDiff
 	}{
 		{
 			name: "no changes",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:     "id",
 				Type:     "SERIAL",
 				Primary:  true,
 				Nullable: false,
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:         "id",
 				DataType:     "integer",
 				IsPrimaryKey: true,
@@ -518,13 +517,13 @@ func TestColumns_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "auto increment column ignores default",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:    "id",
 				Type:    "SERIAL",
 				Primary: true,
 				Default: "",
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:            "id",
 				DataType:        "integer",
 				IsPrimaryKey:    true,
@@ -538,13 +537,13 @@ func TestColumns_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "primary key forces not null",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:     "id",
 				Type:     "SERIAL",
 				Primary:  true,
 				Nullable: true, // This should be ignored for primary keys
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:         "id",
 				DataType:     "integer",
 				IsPrimaryKey: true,
@@ -575,19 +574,19 @@ func TestColumns_UnhappyPath(t *testing.T) {
 func TestEnums_HappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		generated *parsertypes.PackageParseResult
-		database  *parsertypes.DatabaseSchema
+		generated *goschema.Database
+		database  *dbschematypes.DBSchema
 		expected  *differtypes.SchemaDiff
 	}{
 		{
 			name: "enum added",
-			generated: &parsertypes.PackageParseResult{
-				Enums: []types.GlobalEnum{
+			generated: &goschema.Database{
+				Enums: []goschema.Enum{
 					{Name: "status_enum", Values: []string{"active", "inactive"}},
 				},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Enums: []parsertypes.Enum{},
+			database: &dbschematypes.DBSchema{
+				Enums: []dbschematypes.DBEnum{},
 			},
 			expected: &differtypes.SchemaDiff{
 				EnumsAdded: []string{"status_enum"},
@@ -595,11 +594,11 @@ func TestEnums_HappyPath(t *testing.T) {
 		},
 		{
 			name: "enum removed",
-			generated: &parsertypes.PackageParseResult{
-				Enums: []types.GlobalEnum{},
+			generated: &goschema.Database{
+				Enums: []goschema.Enum{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Enums: []parsertypes.Enum{
+			database: &dbschematypes.DBSchema{
+				Enums: []dbschematypes.DBEnum{
 					{Name: "old_enum", Values: []string{"value1", "value2"}},
 				},
 			},
@@ -609,13 +608,13 @@ func TestEnums_HappyPath(t *testing.T) {
 		},
 		{
 			name: "enum modified",
-			generated: &parsertypes.PackageParseResult{
-				Enums: []types.GlobalEnum{
+			generated: &goschema.Database{
+				Enums: []goschema.Enum{
 					{Name: "status_enum", Values: []string{"active", "inactive", "pending"}},
 				},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Enums: []parsertypes.Enum{
+			database: &dbschematypes.DBSchema{
+				Enums: []dbschematypes.DBEnum{
 					{Name: "status_enum", Values: []string{"active", "inactive"}},
 				},
 			},
@@ -631,14 +630,14 @@ func TestEnums_HappyPath(t *testing.T) {
 		},
 		{
 			name: "multiple enum changes",
-			generated: &parsertypes.PackageParseResult{
-				Enums: []types.GlobalEnum{
+			generated: &goschema.Database{
+				Enums: []goschema.Enum{
 					{Name: "status_enum", Values: []string{"active", "inactive"}},
 					{Name: "priority_enum", Values: []string{"low", "medium", "high"}},
 				},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Enums: []parsertypes.Enum{
+			database: &dbschematypes.DBSchema{
+				Enums: []dbschematypes.DBEnum{
 					{Name: "status_enum", Values: []string{"active", "inactive", "deprecated"}},
 					{Name: "old_enum", Values: []string{"value1"}},
 				},
@@ -680,26 +679,26 @@ func TestEnums_HappyPath(t *testing.T) {
 func TestEnums_UnhappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		generated *parsertypes.PackageParseResult
-		database  *parsertypes.DatabaseSchema
+		generated *goschema.Database
+		database  *dbschematypes.DBSchema
 		expected  *differtypes.SchemaDiff
 	}{
 		{
 			name: "empty schemas",
-			generated: &parsertypes.PackageParseResult{
-				Enums: []types.GlobalEnum{},
+			generated: &goschema.Database{
+				Enums: []goschema.Enum{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Enums: []parsertypes.Enum{},
+			database: &dbschematypes.DBSchema{
+				Enums: []dbschematypes.DBEnum{},
 			},
 			expected: &differtypes.SchemaDiff{},
 		},
 		{
 			name: "nil enums",
-			generated: &parsertypes.PackageParseResult{
+			generated: &goschema.Database{
 				Enums: nil,
 			},
-			database: &parsertypes.DatabaseSchema{
+			database: &dbschematypes.DBSchema{
 				Enums: nil,
 			},
 			expected: &differtypes.SchemaDiff{},
@@ -723,17 +722,17 @@ func TestEnums_UnhappyPath(t *testing.T) {
 func TestEnumValues_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		genEnum  types.GlobalEnum
-		dbEnum   parsertypes.Enum
+		genEnum  goschema.Enum
+		dbEnum   dbschematypes.DBEnum
 		expected differtypes.EnumDiff
 	}{
 		{
 			name: "values added",
-			genEnum: types.GlobalEnum{
+			genEnum: goschema.Enum{
 				Name:   "status_enum",
 				Values: []string{"active", "inactive", "pending", "archived"},
 			},
-			dbEnum: parsertypes.Enum{
+			dbEnum: dbschematypes.DBEnum{
 				Name:   "status_enum",
 				Values: []string{"active", "inactive"},
 			},
@@ -745,11 +744,11 @@ func TestEnumValues_HappyPath(t *testing.T) {
 		},
 		{
 			name: "values removed",
-			genEnum: types.GlobalEnum{
+			genEnum: goschema.Enum{
 				Name:   "status_enum",
 				Values: []string{"active", "inactive"},
 			},
-			dbEnum: parsertypes.Enum{
+			dbEnum: dbschematypes.DBEnum{
 				Name:   "status_enum",
 				Values: []string{"active", "inactive", "deprecated", "legacy"},
 			},
@@ -761,11 +760,11 @@ func TestEnumValues_HappyPath(t *testing.T) {
 		},
 		{
 			name: "mixed changes",
-			genEnum: types.GlobalEnum{
+			genEnum: goschema.Enum{
 				Name:   "priority_enum",
 				Values: []string{"low", "medium", "high", "critical"},
 			},
-			dbEnum: parsertypes.Enum{
+			dbEnum: dbschematypes.DBEnum{
 				Name:   "priority_enum",
 				Values: []string{"low", "medium", "urgent"},
 			},
@@ -793,17 +792,17 @@ func TestEnumValues_HappyPath(t *testing.T) {
 func TestEnumValues_UnhappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		genEnum  types.GlobalEnum
-		dbEnum   parsertypes.Enum
+		genEnum  goschema.Enum
+		dbEnum   dbschematypes.DBEnum
 		expected differtypes.EnumDiff
 	}{
 		{
 			name: "no changes",
-			genEnum: types.GlobalEnum{
+			genEnum: goschema.Enum{
 				Name:   "status_enum",
 				Values: []string{"active", "inactive"},
 			},
-			dbEnum: parsertypes.Enum{
+			dbEnum: dbschematypes.DBEnum{
 				Name:   "status_enum",
 				Values: []string{"active", "inactive"},
 			},
@@ -815,11 +814,11 @@ func TestEnumValues_UnhappyPath(t *testing.T) {
 		},
 		{
 			name: "empty enum values",
-			genEnum: types.GlobalEnum{
+			genEnum: goschema.Enum{
 				Name:   "empty_enum",
 				Values: []string{},
 			},
-			dbEnum: parsertypes.Enum{
+			dbEnum: dbschematypes.DBEnum{
 				Name:   "empty_enum",
 				Values: []string{},
 			},
@@ -847,19 +846,19 @@ func TestEnumValues_UnhappyPath(t *testing.T) {
 func TestIndexes_HappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		generated *parsertypes.PackageParseResult
-		database  *parsertypes.DatabaseSchema
+		generated *goschema.Database
+		database  *dbschematypes.DBSchema
 		expected  *differtypes.SchemaDiff
 	}{
 		{
 			name: "index added",
-			generated: &parsertypes.PackageParseResult{
-				Indexes: []types.SchemaIndex{
+			generated: &goschema.Database{
+				Indexes: []goschema.Index{
 					{Name: "idx_user_email"},
 				},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Indexes: []parsertypes.Index{},
+			database: &dbschematypes.DBSchema{
+				Indexes: []dbschematypes.DBIndex{},
 			},
 			expected: &differtypes.SchemaDiff{
 				IndexesAdded: []string{"idx_user_email"},
@@ -867,11 +866,11 @@ func TestIndexes_HappyPath(t *testing.T) {
 		},
 		{
 			name: "index removed",
-			generated: &parsertypes.PackageParseResult{
-				Indexes: []types.SchemaIndex{},
+			generated: &goschema.Database{
+				Indexes: []goschema.Index{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Indexes: []parsertypes.Index{
+			database: &dbschematypes.DBSchema{
+				Indexes: []dbschematypes.DBIndex{
 					{Name: "old_index", IsPrimary: false, IsUnique: false},
 				},
 			},
@@ -881,11 +880,11 @@ func TestIndexes_HappyPath(t *testing.T) {
 		},
 		{
 			name: "primary key index ignored",
-			generated: &parsertypes.PackageParseResult{
-				Indexes: []types.SchemaIndex{},
+			generated: &goschema.Database{
+				Indexes: []goschema.Index{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Indexes: []parsertypes.Index{
+			database: &dbschematypes.DBSchema{
+				Indexes: []dbschematypes.DBIndex{
 					{Name: "users_pkey", IsPrimary: true, IsUnique: false},
 				},
 			},
@@ -893,11 +892,11 @@ func TestIndexes_HappyPath(t *testing.T) {
 		},
 		{
 			name: "unique constraint index ignored",
-			generated: &parsertypes.PackageParseResult{
-				Indexes: []types.SchemaIndex{},
+			generated: &goschema.Database{
+				Indexes: []goschema.Index{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Indexes: []parsertypes.Index{
+			database: &dbschematypes.DBSchema{
+				Indexes: []dbschematypes.DBIndex{
 					{Name: "users_email_key", IsPrimary: false, IsUnique: true},
 				},
 			},
@@ -905,14 +904,14 @@ func TestIndexes_HappyPath(t *testing.T) {
 		},
 		{
 			name: "multiple index changes",
-			generated: &parsertypes.PackageParseResult{
-				Indexes: []types.SchemaIndex{
+			generated: &goschema.Database{
+				Indexes: []goschema.Index{
 					{Name: "idx_user_email"},
 					{Name: "idx_user_name"},
 				},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Indexes: []parsertypes.Index{
+			database: &dbschematypes.DBSchema{
+				Indexes: []dbschematypes.DBIndex{
 					{Name: "idx_user_email", IsPrimary: false, IsUnique: false},
 					{Name: "old_index", IsPrimary: false, IsUnique: false},
 					{Name: "users_pkey", IsPrimary: true, IsUnique: false}, // Should be ignored
@@ -941,37 +940,37 @@ func TestIndexes_HappyPath(t *testing.T) {
 func TestIndexes_UnhappyPath(t *testing.T) {
 	tests := []struct {
 		name      string
-		generated *parsertypes.PackageParseResult
-		database  *parsertypes.DatabaseSchema
+		generated *goschema.Database
+		database  *dbschematypes.DBSchema
 		expected  *differtypes.SchemaDiff
 	}{
 		{
 			name: "empty schemas",
-			generated: &parsertypes.PackageParseResult{
-				Indexes: []types.SchemaIndex{},
+			generated: &goschema.Database{
+				Indexes: []goschema.Index{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Indexes: []parsertypes.Index{},
+			database: &dbschematypes.DBSchema{
+				Indexes: []dbschematypes.DBIndex{},
 			},
 			expected: &differtypes.SchemaDiff{},
 		},
 		{
 			name: "nil indexes",
-			generated: &parsertypes.PackageParseResult{
+			generated: &goschema.Database{
 				Indexes: nil,
 			},
-			database: &parsertypes.DatabaseSchema{
+			database: &dbschematypes.DBSchema{
 				Indexes: nil,
 			},
 			expected: &differtypes.SchemaDiff{},
 		},
 		{
 			name: "only system indexes in database",
-			generated: &parsertypes.PackageParseResult{
-				Indexes: []types.SchemaIndex{},
+			generated: &goschema.Database{
+				Indexes: []goschema.Index{},
 			},
-			database: &parsertypes.DatabaseSchema{
-				Indexes: []parsertypes.Index{
+			database: &dbschematypes.DBSchema{
+				Indexes: []dbschematypes.DBIndex{
 					{Name: "users_pkey", IsPrimary: true, IsUnique: false},
 					{Name: "users_email_key", IsPrimary: false, IsUnique: true},
 				},
@@ -996,17 +995,17 @@ func TestIndexes_UnhappyPath(t *testing.T) {
 func TestColumns_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
-		genCol   types.SchemaField
-		dbCol    parsertypes.Column
+		genCol   goschema.Field
+		dbCol    dbschematypes.DBColumn
 		expected differtypes.ColumnDiff
 	}{
 		{
 			name: "UDT name takes precedence over data type",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name: "status",
 				Type: "status_enum",
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:     "status",
 				DataType: "USER-DEFINED",
 				UDTName:  "status_enum",
@@ -1018,13 +1017,13 @@ func TestColumns_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "SERIAL type detection for auto increment",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:    "id",
 				Type:    "SERIAL",
 				Primary: true,
 				Default: "",
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:            "id",
 				DataType:        "integer",
 				IsPrimaryKey:    true,
@@ -1038,12 +1037,12 @@ func TestColumns_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "null column default vs empty string",
-			genCol: types.SchemaField{
+			genCol: goschema.Field{
 				Name:    "description",
 				Type:    "TEXT",
 				Default: "",
 			},
-			dbCol: parsertypes.Column{
+			dbCol: dbschematypes.DBColumn{
 				Name:          "description",
 				DataType:      "TEXT",
 				ColumnDefault: nil, // NULL default
@@ -1074,21 +1073,21 @@ func TestTableColumns_EdgeCases(t *testing.T) {
 	c := qt.New(t)
 
 	// Test with column modifications
-	genTable := types.TableDirective{StructName: "User", Name: "users"}
-	dbTable := parsertypes.Table{
+	genTable := goschema.Table{StructName: "User", Name: "users"}
+	dbTable := dbschematypes.DBTable{
 		Name: "users",
-		Columns: []parsertypes.Column{
+		Columns: []dbschematypes.DBColumn{
 			{Name: "id", DataType: "integer", IsPrimaryKey: true},
 			{Name: "name", DataType: "VARCHAR(100)", IsNullable: "YES"},
 		},
 	}
 
-	generated := &parsertypes.PackageParseResult{
-		Fields: []types.SchemaField{
+	generated := &goschema.Database{
+		Fields: []goschema.Field{
 			{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 			{StructName: "User", Name: "name", Type: "VARCHAR(255)", Nullable: false}, // Type and nullable change
 		},
-		EmbeddedFields: []types.EmbeddedField{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
 	result := compare.TableColumns(genTable, dbTable, generated)
@@ -1103,17 +1102,17 @@ func TestTableColumns_EdgeCases(t *testing.T) {
 func TestTablesAndColumns_SortingConsistency(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "zebra_table"},
 			{StructName: "Post", Name: "alpha_table"},
 		},
-		Fields:         []types.SchemaField{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Fields:         []goschema.Field{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{Name: "zebra_old_table"},
 			{Name: "alpha_old_table"},
 		},

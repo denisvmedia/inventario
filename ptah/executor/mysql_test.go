@@ -8,7 +8,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
+	"github.com/denisvmedia/inventario/ptah/core/dbschema/types"
 )
 
 // skipIfNoMySQL checks if MySQL is available for testing and skips the test if not.
@@ -139,7 +139,7 @@ func TestMySQLReader_parseTableFromDDL(t *testing.T) {
 		name        string
 		ddl         string
 		expectError bool
-		validate    func(c *qt.C, table parsertypes.Table)
+		validate    func(c *qt.C, table dbschematypes.DBTable)
 	}{
 		{
 			name: "simple table with primary key",
@@ -150,7 +150,7 @@ func TestMySQLReader_parseTableFromDDL(t *testing.T) {
 				"  PRIMARY KEY (`id`)\n" +
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 			expectError: false,
-			validate: func(c *qt.C, table parsertypes.Table) {
+			validate: func(c *qt.C, table dbschematypes.DBTable) {
 				c.Assert(table.Name, qt.Equals, "users")
 				c.Assert(table.Type, qt.Equals, "BASE TABLE")
 				c.Assert(len(table.Columns), qt.Equals, 3)
@@ -189,7 +189,7 @@ func TestMySQLReader_parseTableFromDDL(t *testing.T) {
 				"  UNIQUE KEY `uk_sku` (`sku`)\n" +
 				") ENGINE=InnoDB",
 			expectError: false,
-			validate: func(c *qt.C, table parsertypes.Table) {
+			validate: func(c *qt.C, table dbschematypes.DBTable) {
 				c.Assert(table.Name, qt.Equals, "products")
 				c.Assert(len(table.Columns), qt.Equals, 2)
 
@@ -210,7 +210,7 @@ func TestMySQLReader_parseTableFromDDL(t *testing.T) {
 				"  UNIQUE KEY `unique_name` (`name`)\n" +
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
 			expectError: false,
-			validate: func(c *qt.C, table parsertypes.Table) {
+			validate: func(c *qt.C, table dbschematypes.DBTable) {
 				c.Assert(table.Name, qt.Equals, "test_table")
 				c.Assert(len(table.Columns), qt.Equals, 4)
 
@@ -295,7 +295,7 @@ func TestMySQLReader_ReadSchema_Integration(t *testing.T) {
 	c.Assert(schema.Tables, qt.Not(qt.HasLen), 0)
 
 	// Find our test table
-	var testTable *parsertypes.Table
+	var testTable *dbschematypes.DBTable
 	for i := range schema.Tables {
 		if schema.Tables[i].Name == "test_table" {
 			testTable = &schema.Tables[i]
@@ -552,13 +552,6 @@ func TestMySQLWriter_Integration(t *testing.T) {
 
 	writer := NewMySQLWriter(db, "")
 
-	t.Run("CheckSchemaExists with empty result", func(t *testing.T) {
-		result := createTestParseResult()
-		existing, err := writer.CheckSchemaExists(result)
-		c.Assert(err, qt.IsNil)
-		c.Assert(existing, qt.HasLen, 0)
-	})
-
 	t.Run("transaction lifecycle", func(t *testing.T) {
 		// Test successful transaction
 		err := writer.BeginTransaction()
@@ -615,7 +608,7 @@ func TestMySQLWriter_SchemaWriterInterface(t *testing.T) {
 }
 
 // Helper function to find a column by name
-func findColumn(columns []parsertypes.Column, name string) *parsertypes.Column {
+func findColumn(columns []dbschematypes.DBColumn, name string) *dbschematypes.DBColumn {
 	for i := range columns {
 		if columns[i].Name == name {
 			return &columns[i]

@@ -3,9 +3,11 @@ package ast_demo
 import (
 	"fmt"
 
-	"github.com/denisvmedia/inventario/ptah/core/ast"
 	builder2 "github.com/denisvmedia/inventario/ptah/core/builder"
-	"github.com/denisvmedia/inventario/ptah/renderer"
+
+	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/postgresql"
 )
 
 // DemonstrateASTApproach shows how to use the new AST-based SQL generation
@@ -25,7 +27,7 @@ func DemonstrateASTApproach() {
 		Build()
 
 	// Render for PostgreSQL
-	pgRenderer := renderer.NewPostgreSQLRenderer()
+	pgRenderer := postgresql.NewPostgreSQLRenderer()
 	pgSQL, err := pgRenderer.Render(table)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -36,7 +38,7 @@ func DemonstrateASTApproach() {
 	fmt.Println(pgSQL)
 
 	// Render for MySQL
-	mysqlRenderer := renderer.NewMySQLRenderer()
+	mysqlRenderer := mysql.NewMySQLRenderer()
 	mysqlSQL, err := mysqlRenderer.Render(table)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -219,7 +221,7 @@ func ShowAdvancedFeatures() {
 	transformer := &AuditTransformer{}
 	transformedSchema := transformer.Transform(schema)
 
-	renderer := renderer.NewPostgreSQLRenderer()
+	renderer := postgresql.NewPostgreSQLRenderer()
 	sql, _ := renderer.RenderSchema(transformedSchema)
 	fmt.Println("Transformed schema with audit columns:")
 	fmt.Println(sql)

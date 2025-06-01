@@ -7,29 +7,28 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/ptr"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/differ"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/internal/compare"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestCompareSchemas_EmptySchemas(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables:         []types.TableDirective{},
-		Fields:         []types.SchemaField{},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+	generated := &goschema.Database{
+		Tables:         []goschema.Table{},
+		Fields:         []goschema.Field{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables:  []parsertypes.Table{},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+	database := &dbschematypes.DBSchema{
+		Tables:  []dbschematypes.DBTable{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -48,21 +47,21 @@ func TestCompareSchemas_EmptySchemas(t *testing.T) {
 func TestCompareSchemas_TablesAdded(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "users"},
 			{StructName: "Post", Name: "posts"},
 		},
-		Fields:         []types.SchemaField{},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Fields:         []goschema.Field{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables:  []parsertypes.Table{},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+	database := &dbschematypes.DBSchema{
+		Tables:  []dbschematypes.DBTable{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -77,21 +76,21 @@ func TestCompareSchemas_TablesAdded(t *testing.T) {
 func TestCompareSchemas_TablesRemoved(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables:         []types.TableDirective{},
-		Fields:         []types.SchemaField{},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+	generated := &goschema.Database{
+		Tables:         []goschema.Table{},
+		Fields:         []goschema.Field{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{Name: "old_users"},
 			{Name: "old_posts"},
 		},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -106,21 +105,21 @@ func TestCompareSchemas_TablesRemoved(t *testing.T) {
 func TestCompareSchemas_EnumsAdded(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables:  []types.TableDirective{},
-		Fields:  []types.SchemaField{},
-		Indexes: []types.SchemaIndex{},
-		Enums: []types.GlobalEnum{
+	generated := &goschema.Database{
+		Tables:  []goschema.Table{},
+		Fields:  []goschema.Field{},
+		Indexes: []goschema.Index{},
+		Enums: []goschema.Enum{
 			{Name: "status_enum", Values: []string{"active", "inactive"}},
 			{Name: "role_enum", Values: []string{"admin", "user"}},
 		},
-		EmbeddedFields: []types.EmbeddedField{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables:  []parsertypes.Table{},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+	database := &dbschematypes.DBSchema{
+		Tables:  []dbschematypes.DBTable{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -135,21 +134,21 @@ func TestCompareSchemas_EnumsAdded(t *testing.T) {
 func TestCompareSchemas_EnumsRemoved(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables:         []types.TableDirective{},
-		Fields:         []types.SchemaField{},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+	generated := &goschema.Database{
+		Tables:         []goschema.Table{},
+		Fields:         []goschema.Field{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{},
-		Enums: []parsertypes.Enum{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{},
+		Enums: []dbschematypes.DBEnum{
 			{Name: "old_status", Values: []string{"active", "inactive"}},
 			{Name: "old_role", Values: []string{"admin", "user"}},
 		},
-		Indexes: []parsertypes.Index{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -164,22 +163,22 @@ func TestCompareSchemas_EnumsRemoved(t *testing.T) {
 func TestCompareSchemas_EnumsModified(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables:  []types.TableDirective{},
-		Fields:  []types.SchemaField{},
-		Indexes: []types.SchemaIndex{},
-		Enums: []types.GlobalEnum{
+	generated := &goschema.Database{
+		Tables:  []goschema.Table{},
+		Fields:  []goschema.Field{},
+		Indexes: []goschema.Index{},
+		Enums: []goschema.Enum{
 			{Name: "status_enum", Values: []string{"active", "inactive", "pending"}}, // Added "pending"
 		},
-		EmbeddedFields: []types.EmbeddedField{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{},
-		Enums: []parsertypes.Enum{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{},
+		Enums: []dbschematypes.DBEnum{
 			{Name: "status_enum", Values: []string{"active", "inactive", "deleted"}}, // Has "deleted" instead of "pending"
 		},
-		Indexes: []parsertypes.Index{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -198,21 +197,21 @@ func TestCompareSchemas_EnumsModified(t *testing.T) {
 func TestCompareSchemas_IndexesAddedAndRemoved(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{},
-		Fields: []types.SchemaField{},
-		Indexes: []types.SchemaIndex{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{},
+		Fields: []goschema.Field{},
+		Indexes: []goschema.Index{
 			{Name: "idx_user_email"},
 			{Name: "idx_user_name"},
 		},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{},
-		Enums:  []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{},
+		Enums:  []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{
 			{Name: "idx_user_email"},            // Exists in both
 			{Name: "old_idx_user_phone"},        // Only in database
 			{Name: "pk_users", IsPrimary: true}, // Primary key index - should be ignored
@@ -231,33 +230,33 @@ func TestCompareSchemas_IndexesAddedAndRemoved(t *testing.T) {
 func TestCompareSchemas_TablesModified_ColumnsAddedAndRemoved(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []types.SchemaField{
+		Fields: []goschema.Field{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "email", Type: "VARCHAR", Nullable: false}, // New field
 			{StructName: "User", Name: "name", Type: "VARCHAR", Nullable: false},  // Existing field
 		},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 					{Name: "name", DataType: "VARCHAR", IsNullable: "NO"},
 					{Name: "phone", DataType: "VARCHAR", IsNullable: "YES"}, // Field to be removed
 				},
 			},
 		},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -275,33 +274,33 @@ func TestCompareSchemas_TablesModified_ColumnsAddedAndRemoved(t *testing.T) {
 func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []types.SchemaField{
+		Fields: []goschema.Field{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "email", Type: "VARCHAR", Nullable: false, Unique: true},
 			{StructName: "User", Name: "status", Type: "VARCHAR", Nullable: true, Default: "'active'"},
 		},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                       // Type and nullable changed
 					{Name: "status", DataType: "VARCHAR", IsNullable: "NO", ColumnDefault: ptr.To("'pending'")}, // Nullable and default changed
 				},
 			},
 		},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -332,17 +331,17 @@ func TestCompareSchemas_TablesModified_ColumnsModified(t *testing.T) {
 func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []types.SchemaField{
+		Fields: []goschema.Field{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "name", Type: "VARCHAR", Nullable: false},
 		},
-		Indexes: []types.SchemaIndex{},
-		Enums:   []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{
+		Indexes: []goschema.Index{},
+		Enums:   []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{
 			{
 				StructName:       "User",
 				Mode:             "inline",
@@ -354,16 +353,16 @@ func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
 	// Mock the ProcessEmbeddedFields function behavior
 	// In real scenario, this would be called by the comparator
 	// For testing, we'll add the expected embedded fields to the Fields slice
-	generated.Fields = append(generated.Fields, []types.SchemaField{
+	generated.Fields = append(generated.Fields, []goschema.Field{
 		{StructName: "User", Name: "created_at", Type: "TIMESTAMP", Nullable: false},
 		{StructName: "User", Name: "updated_at", Type: "TIMESTAMP", Nullable: false},
 	}...)
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 					{Name: "name", DataType: "VARCHAR", IsNullable: "NO"},
 					{Name: "created_at", DataType: "TIMESTAMP", IsNullable: "NO"},
@@ -371,8 +370,8 @@ func TestCompareSchemas_WithEmbeddedFields(t *testing.T) {
 				},
 			},
 		},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -406,8 +405,8 @@ func TestGenerateMigrationSQL_PostgreSQL(t *testing.T) {
 		IndexesRemoved: []string{"old_index"},
 	}
 
-	generated := &parsertypes.PackageParseResult{
-		Enums: []types.GlobalEnum{
+	generated := &goschema.Database{
+		Enums: []goschema.Enum{
 			{Name: "status_enum", Values: []string{"active", "inactive"}},
 		},
 	}
@@ -492,8 +491,8 @@ func TestGenerateMigrationSQL_NonPostgreSQL(t *testing.T) {
 		},
 	}
 
-	generated := &parsertypes.PackageParseResult{
-		Enums: []types.GlobalEnum{
+	generated := &goschema.Database{
+		Enums: []goschema.Enum{
 			{Name: "status_enum", Values: []string{"active", "inactive"}},
 		},
 	}
@@ -510,29 +509,29 @@ func TestGenerateMigrationSQL_NonPostgreSQL(t *testing.T) {
 func TestCompareSchemas_PrimaryKeyHandling(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []types.SchemaField{
+		Fields: []goschema.Field{
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true, Nullable: true}, // Primary key should override nullable
 		},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 				},
 			},
 		},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -545,29 +544,29 @@ func TestCompareSchemas_PrimaryKeyHandling(t *testing.T) {
 func TestCompareSchemas_UDTNameHandling(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []types.SchemaField{
+		Fields: []goschema.Field{
 			{StructName: "User", Name: "status", Type: "status_enum", Nullable: false},
 		},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "status", DataType: "USER-DEFINED", UDTName: "status_enum", IsNullable: "NO"},
 				},
 			},
 		},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -580,29 +579,29 @@ func TestCompareSchemas_UDTNameHandling(t *testing.T) {
 func TestCompareSchemas_EmptyDefaultValues(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "users"},
 		},
-		Fields: []types.SchemaField{
+		Fields: []goschema.Field{
 			{StructName: "User", Name: "status", Type: "VARCHAR", Default: ""}, // Empty default
 		},
-		Indexes:        []types.SchemaIndex{},
-		Enums:          []types.GlobalEnum{},
-		EmbeddedFields: []types.EmbeddedField{},
+		Indexes:        []goschema.Index{},
+		Enums:          []goschema.Enum{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "status", DataType: "VARCHAR", ColumnDefault: nil}, // NULL default
 				},
 			},
 		},
-		Enums:   []parsertypes.Enum{},
-		Indexes: []parsertypes.Index{},
+		Enums:   []dbschematypes.DBEnum{},
+		Indexes: []dbschematypes.DBIndex{},
 	}
 
 	diff := differ.CompareSchemas(generated, database)
@@ -614,12 +613,12 @@ func TestCompareSchemas_EmptyDefaultValues(t *testing.T) {
 func TestCompareSchemas_ComplexScenario(t *testing.T) {
 	c := qt.New(t)
 
-	generated := &parsertypes.PackageParseResult{
-		Tables: []types.TableDirective{
+	generated := &goschema.Database{
+		Tables: []goschema.Table{
 			{StructName: "User", Name: "users"},
 			{StructName: "Post", Name: "posts"}, // New table
 		},
-		Fields: []types.SchemaField{
+		Fields: []goschema.Field{
 			// Users table
 			{StructName: "User", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "User", Name: "email", Type: "VARCHAR", Nullable: false, Unique: true},
@@ -628,22 +627,22 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 			{StructName: "Post", Name: "id", Type: "INTEGER", Primary: true},
 			{StructName: "Post", Name: "title", Type: "VARCHAR", Nullable: false},
 		},
-		Indexes: []types.SchemaIndex{
+		Indexes: []goschema.Index{
 			{Name: "idx_user_email"},
 			{Name: "idx_post_title"},
 		},
-		Enums: []types.GlobalEnum{
+		Enums: []goschema.Enum{
 			{Name: "user_status", Values: []string{"active", "inactive", "suspended"}}, // Modified enum
 			{Name: "post_status", Values: []string{"draft", "published"}},              // New enum
 		},
-		EmbeddedFields: []types.EmbeddedField{},
+		EmbeddedFields: []goschema.EmbeddedField{},
 	}
 
-	database := &parsertypes.DatabaseSchema{
-		Tables: []parsertypes.Table{
+	database := &dbschematypes.DBSchema{
+		Tables: []dbschematypes.DBTable{
 			{
 				Name: "users",
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 					{Name: "email", DataType: "TEXT", IsNullable: "YES", IsUnique: false},                           // Type and constraints changed
 					{Name: "status", DataType: "user_status", IsNullable: "NO", ColumnDefault: ptr.To("'pending'")}, // Default changed
@@ -652,16 +651,16 @@ func TestCompareSchemas_ComplexScenario(t *testing.T) {
 			},
 			{
 				Name: "old_logs", // Table to be removed
-				Columns: []parsertypes.Column{
+				Columns: []dbschematypes.DBColumn{
 					{Name: "id", DataType: "INTEGER", IsPrimaryKey: true, IsNullable: "NO"},
 				},
 			},
 		},
-		Enums: []parsertypes.Enum{
+		Enums: []dbschematypes.DBEnum{
 			{Name: "user_status", Values: []string{"active", "inactive", "deleted"}}, // "suspended" added, "deleted" removed
 			{Name: "old_priority", Values: []string{"low", "high"}},                  // Enum to be removed
 		},
-		Indexes: []parsertypes.Index{
+		Indexes: []dbschematypes.DBIndex{
 			{Name: "idx_user_email"},     // Exists in both
 			{Name: "old_idx_user_phone"}, // Index to be removed
 		},
@@ -808,11 +807,11 @@ func TestMapTypeToSQL_EnumHandling(t *testing.T) {
 			c := qt.New(t)
 			// We need to test the MapTypeToSQL function through the public API
 			// Create a simple schema diff and generate SQL to test the function indirectly
-			generated := &parsertypes.PackageParseResult{
-				Tables: []types.TableDirective{
+			generated := &goschema.Database{
+				Tables: []goschema.Table{
 					{StructName: "TestTable", Name: "test_table"},
 				},
-				Fields: []types.SchemaField{
+				Fields: []goschema.Field{
 					{
 						StructName: "TestTable",
 						Name:       "test_field",
@@ -821,14 +820,14 @@ func TestMapTypeToSQL_EnumHandling(t *testing.T) {
 						Nullable:   false,
 					},
 				},
-				Enums: []types.GlobalEnum{
+				Enums: []goschema.Enum{
 					{Name: "enum_status", Values: []string{"active", "inactive"}},
 				},
 			}
 
-			database := &parsertypes.DatabaseSchema{
-				Tables: []parsertypes.Table{},
-				Enums:  []parsertypes.Enum{},
+			database := &dbschematypes.DBSchema{
+				Tables: []dbschematypes.DBTable{},
+				Enums:  []dbschematypes.DBEnum{},
 			}
 
 			diff := differ.CompareSchemas(generated, database)

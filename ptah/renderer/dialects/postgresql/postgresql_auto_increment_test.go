@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/denisvmedia/inventario/ptah/schema/types"
-
 	qt "github.com/frankban/quicktest"
+
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 )
 
 func TestAutoIncrementConversion(t *testing.T) {
@@ -15,13 +15,13 @@ func TestAutoIncrementConversion(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		field        types.SchemaField
+		field        goschema.Field
 		expectedType string
 		description  string
 	}{
 		{
 			name: "INTEGER with auto_increment becomes SERIAL",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "id",
 				Type:    "INTEGER",
 				AutoInc: true,
@@ -32,7 +32,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "INT with auto_increment becomes SERIAL",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "sequence_id",
 				Type:    "INT",
 				AutoInc: true,
@@ -42,7 +42,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "BIGINT with auto_increment becomes BIGSERIAL",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "big_id",
 				Type:    "BIGINT",
 				AutoInc: true,
@@ -52,7 +52,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "SMALLINT with auto_increment becomes SMALLSERIAL",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "small_id",
 				Type:    "SMALLINT",
 				AutoInc: true,
@@ -62,7 +62,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "VARCHAR without auto_increment stays VARCHAR",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "name",
 				Type:    "VARCHAR(255)",
 				AutoInc: false,
@@ -72,7 +72,7 @@ func TestAutoIncrementConversion(t *testing.T) {
 		},
 		{
 			name: "Custom type with auto_increment becomes SERIAL",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "custom_id",
 				Type:    "CUSTOM_TYPE",
 				AutoInc: true,
@@ -94,12 +94,12 @@ func TestAutoIncrementInCreateTable(t *testing.T) {
 	c := qt.New(t)
 	generator := New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "TestTable",
 		Name:       "test_table",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "TestTable",
 			Name:       "id",
@@ -145,7 +145,7 @@ func TestPlatformSpecificOverride(t *testing.T) {
 	generator := New()
 
 	// Test that platform-specific overrides take precedence over auto_increment conversion
-	field := types.SchemaField{
+	field := goschema.Field{
 		Name:    "id",
 		Type:    "INTEGER",
 		AutoInc: true,

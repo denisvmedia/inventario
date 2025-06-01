@@ -6,9 +6,9 @@ import (
 	"io/fs"
 	"path/filepath"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/migrator"
-	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
 // GetAllScenarios returns all integration test scenarios
@@ -128,7 +128,7 @@ func GetAllScenarios() []TestScenario {
 }
 
 // testApplyIncrementalMigrations tests applying multiple sequential migrations
-func testApplyIncrementalMigrations(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testApplyIncrementalMigrations(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	// Get the basic migrations filesystem
@@ -168,7 +168,7 @@ func testApplyIncrementalMigrations(ctx context.Context, conn *executor.Database
 }
 
 // testRollbackMigrations tests rolling back migrations
-func testRollbackMigrations(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testRollbackMigrations(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
@@ -218,7 +218,7 @@ func testRollbackMigrations(ctx context.Context, conn *executor.DatabaseConnecti
 }
 
 // testUpgradeToSpecificVersion tests upgrading to a specific version
-func testUpgradeToSpecificVersion(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testUpgradeToSpecificVersion(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
@@ -268,7 +268,7 @@ func testUpgradeToSpecificVersion(ctx context.Context, conn *executor.DatabaseCo
 }
 
 // testCheckCurrentVersion tests querying the current migration version
-func testCheckCurrentVersion(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testCheckCurrentVersion(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
@@ -310,12 +310,12 @@ func testCheckCurrentVersion(ctx context.Context, conn *executor.DatabaseConnect
 }
 
 // testGenerateDesiredSchema tests extracting schema from entity definitions
-func testGenerateDesiredSchema(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testGenerateDesiredSchema(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	// Get the entities directory
 	entitiesDir := filepath.Join("fixtures", "entities")
 
 	// Parse entities
-	result, err := parser.ParsePackageRecursively(entitiesDir)
+	result, err := goschema.ParseDir(entitiesDir)
 	if err != nil {
 		return fmt.Errorf("failed to parse entities: %w", err)
 	}
@@ -352,7 +352,7 @@ func testGenerateDesiredSchema(ctx context.Context, conn *executor.DatabaseConne
 }
 
 // testReadActualDBSchema tests introspecting current schema from database
-func testReadActualDBSchema(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testReadActualDBSchema(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
@@ -394,7 +394,7 @@ func testReadActualDBSchema(ctx context.Context, conn *executor.DatabaseConnecti
 }
 
 // testDryRunSupport tests dry run functionality
-func testDryRunSupport(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testDryRunSupport(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")

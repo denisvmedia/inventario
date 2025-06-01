@@ -8,7 +8,7 @@ import (
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/migrator"
 )
 
@@ -29,10 +29,10 @@ migrations or for debugging migration issues.`,
 }
 
 const (
-	dbURLFlag        = "db-url"
-	migrationsFlag   = "migrations-dir"
-	verboseFlag      = "verbose"
-	jsonFlag         = "json"
+	dbURLFlag      = "db-url"
+	migrationsFlag = "migrations-dir"
+	verboseFlag    = "verbose"
+	jsonFlag       = "json"
 )
 
 var migrateStatusFlags = map[string]cobraflags.Flag{
@@ -78,7 +78,7 @@ func migrateStatusCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		return fmt.Errorf("error connecting to database: %w", err)
 	}
@@ -113,9 +113,9 @@ func outputJSON(status *migrator.MigrationStatus) error {
 	return nil
 }
 
-func outputHuman(status *migrator.MigrationStatus, conn *executor.DatabaseConnection, verbose bool) error {
+func outputHuman(status *migrator.MigrationStatus, conn *dbschema.DatabaseConnection, verbose bool) error {
 	fmt.Println("=== MIGRATION STATUS ===")
-	fmt.Printf("Database: %s\n", executor.FormatDatabaseURL("***"))
+	fmt.Printf("Database: %s\n", dbschema.FormatDatabaseURL("***"))
 	fmt.Printf("Dialect: %s\n", conn.Info().Dialect)
 	fmt.Printf("Schema: %s\n", conn.Info().Schema)
 	fmt.Println()
@@ -126,14 +126,14 @@ func outputHuman(status *migrator.MigrationStatus, conn *executor.DatabaseConnec
 
 	if status.HasPendingChanges {
 		fmt.Println("Status: ⚠️  Pending migrations available")
-		
+
 		if verbose && len(status.PendingMigrations) > 0 {
 			fmt.Println("\nPending migration versions:")
 			for _, version := range status.PendingMigrations {
 				fmt.Printf("  - %d\n", version)
 			}
 		}
-		
+
 		fmt.Println("\nRun 'migrate-up' to apply pending migrations.")
 	} else {
 		fmt.Println("Status: ✅ Database is up to date")
@@ -141,13 +141,13 @@ func outputHuman(status *migrator.MigrationStatus, conn *executor.DatabaseConnec
 
 	if verbose {
 		fmt.Println("\n=== DETAILED INFORMATION ===")
-		
+
 		if status.TotalMigrations == 0 {
 			fmt.Println("No migrations found in the migrations directory.")
 		} else {
 			appliedCount := status.TotalMigrations - len(status.PendingMigrations)
 			fmt.Printf("Applied migrations: %d\n", appliedCount)
-			
+
 			if len(status.PendingMigrations) > 0 {
 				fmt.Printf("Next migration to apply: %d\n", status.PendingMigrations[0])
 			}

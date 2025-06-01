@@ -9,6 +9,7 @@ import (
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
@@ -65,7 +66,7 @@ func generateCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// Parse the entire package recursively
-	result, err := parser.ParsePackageRecursively(absPath)
+	result, err := goschema.ParseDir(absPath)
 	if err != nil {
 		return fmt.Errorf("error parsing package: %w", err)
 	}
@@ -76,7 +77,7 @@ func generateCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// Print dependency information
-	fmt.Println(parser.GetDependencyInfo(result))
+	fmt.Println(goschema.GetDependencyInfo(result))
 	fmt.Println()
 
 	// Determine which dialects to generate

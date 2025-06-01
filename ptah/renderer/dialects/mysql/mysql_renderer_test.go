@@ -1,4 +1,4 @@
-package renderer_test
+package mysql_test
 
 import (
 	"testing"
@@ -6,22 +6,22 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
 )
 
 func TestMySQLRenderer_ImplementsVisitorInterface(t *testing.T) {
 	c := qt.New(t)
 
-	var _ ast.Visitor = (*renderer.MySQLRenderer)(nil)
+	var _ ast.Visitor = (*mysql.MySQLRenderer)(nil)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 	c.Assert(renderer, qt.IsNotNil)
 }
 
 func TestMySQLRenderer_VisitEnum(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 	enum := &ast.EnumNode{
 		Name:   "status",
 		Values: []string{"active", "inactive"},
@@ -68,7 +68,7 @@ func TestMySQLRenderer_ProcessFieldType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 
 			// Test through VisitCreateTableWithEnums since processFieldType is private
 			enums := make(map[string][]string)
@@ -123,7 +123,7 @@ func TestMySQLRenderer_ConvertDefaultExpression(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			r := renderer.NewMySQLRenderer()
+			r := mysql.NewMySQLRenderer()
 
 			// Test through VisitCreateTableWithEnums since convertDefaultExpression is private
 			table := &ast.CreateTableNode{
@@ -192,7 +192,7 @@ func TestMySQLRenderer_ConvertDefaultValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			r := renderer.NewMySQLRenderer()
+			r := mysql.NewMySQLRenderer()
 
 			// Test through VisitCreateTableWithEnums since convertDefaultValue is private
 			table := &ast.CreateTableNode{
@@ -293,7 +293,7 @@ func TestMySQLRenderer_VisitCreateTable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 			err := renderer.VisitCreateTable(tt.table)
 
 			c.Assert(err, qt.IsNil)
@@ -376,7 +376,7 @@ func TestMySQLRenderer_RenderTableOptions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 			table := &ast.CreateTableNode{
 				Name:    "test_table",
 				Columns: []*ast.ColumnNode{{Name: "id", Type: "INTEGER"}},
@@ -397,7 +397,7 @@ func TestMySQLRenderer_RenderTableOptions(t *testing.T) {
 func TestMySQLRenderer_VisitAlterTable(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 	alterTable := &ast.AlterTableNode{
 		Name: "users",
 		Operations: []ast.AlterOperation{
@@ -435,7 +435,7 @@ func TestMySQLRenderer_VisitAlterTable(t *testing.T) {
 func TestMySQLRenderer_RenderSchema(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 	statements := &ast.StatementList{
 		Statements: []ast.Node{
 			&ast.EnumNode{
@@ -467,7 +467,7 @@ func TestMySQLRenderer_RenderSchema(t *testing.T) {
 func TestMySQLRenderer_VisitCreateTableWithEnums(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 	enums := map[string][]string{
 		"status":   {"active", "inactive", "pending"},
 		"priority": {"low", "high"},
@@ -493,7 +493,7 @@ func TestMySQLRenderer_VisitCreateTableWithEnums(t *testing.T) {
 func TestMySQLRenderer_VisitIndex(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 	index := &ast.IndexNode{
 		Name:    "idx_users_email",
 		Table:   "users",
@@ -510,7 +510,7 @@ func TestMySQLRenderer_VisitIndex(t *testing.T) {
 func TestMySQLRenderer_HelperMethods(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 
 	// Test isEnumType and getEnumValues through VisitCreateTableWithEnums
 	enums := map[string][]string{
@@ -536,7 +536,7 @@ func TestMySQLRenderer_HelperMethods(t *testing.T) {
 func TestMySQLRenderer_RenderAutoIncrement(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 
 	// Test through a column with auto increment
 	table := &ast.CreateTableNode{
@@ -562,7 +562,7 @@ func TestMySQLRenderer_RenderAutoIncrement(t *testing.T) {
 func TestMySQLRenderer_IndirectHelperMethods(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 
 	// Test renderAutoIncrement indirectly through renderColumnWithEnums
 	table := &ast.CreateTableNode{
@@ -736,7 +736,7 @@ func TestMySQLRenderer_VisitCreateTableWithEnums_ComprehensivePaths(t *testing.T
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 			err := renderer.VisitCreateTableWithEnums(tt.table, tt.enums)
 			c.Assert(err, qt.IsNil)
 
@@ -751,7 +751,7 @@ func TestMySQLRenderer_VisitCreateTableWithEnums_ComprehensivePaths(t *testing.T
 func TestMySQLRenderer_VisitCreateTable_ConstraintRendering(t *testing.T) {
 	c := qt.New(t)
 
-	renderer := renderer.NewMySQLRenderer()
+	renderer := mysql.NewMySQLRenderer()
 
 	// Test the regular VisitCreateTable method with constraints
 	table := &ast.CreateTableNode{
@@ -813,7 +813,7 @@ func TestMySQLRenderer_VisitCreateTable_OptionsPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 			table := &ast.CreateTableNode{
 				Name: "test_table",
 				Columns: []*ast.ColumnNode{
@@ -876,7 +876,7 @@ func TestMySQLRenderer_IsEnumType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 
 			// Since isEnumType is private, we need to test it indirectly
 			// We'll create a table and check if enum types are properly handled
@@ -949,7 +949,7 @@ func TestMySQLRenderer_GetEnumValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 
 			// Since getEnumValues is private, we need to test it indirectly
 			// We'll create a table and check if enum values are properly used
@@ -1040,7 +1040,7 @@ func TestMySQLRenderer_RenderColumnWithEnums_UniqueConstraint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 			table := &ast.CreateTableNode{
 				Name:    "test_table",
 				Columns: []*ast.ColumnNode{tt.column},
@@ -1136,7 +1136,7 @@ func TestMySQLRenderer_RenderColumnWithEnums_CheckConstraint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 			table := &ast.CreateTableNode{
 				Name:    "test_table",
 				Columns: []*ast.ColumnNode{tt.column},
@@ -1160,23 +1160,23 @@ func TestMySQLRenderer_VisitDropTable(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Basic DROP TABLE",
-			node: ast.NewDropTable("users"),
+			name:     "Basic DROP TABLE",
+			node:     ast.NewDropTable("users"),
 			expected: "DROP TABLE users;\n",
 		},
 		{
-			name: "DROP TABLE IF EXISTS",
-			node: ast.NewDropTable("users").SetIfExists(),
+			name:     "DROP TABLE IF EXISTS",
+			node:     ast.NewDropTable("users").SetIfExists(),
 			expected: "DROP TABLE IF EXISTS users;\n",
 		},
 		{
-			name: "DROP TABLE with CASCADE (ignored in MySQL)",
-			node: ast.NewDropTable("users").SetCascade(),
+			name:     "DROP TABLE with CASCADE (ignored in MySQL)",
+			node:     ast.NewDropTable("users").SetCascade(),
 			expected: "DROP TABLE users;\n",
 		},
 		{
-			name: "DROP TABLE with all options",
-			node: ast.NewDropTable("users").SetIfExists().SetCascade().SetComment("Dangerous operation"),
+			name:     "DROP TABLE with all options",
+			node:     ast.NewDropTable("users").SetIfExists().SetCascade().SetComment("Dangerous operation"),
 			expected: "-- Dangerous operation\nDROP TABLE IF EXISTS users;\n",
 		},
 	}
@@ -1185,7 +1185,7 @@ func TestMySQLRenderer_VisitDropTable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 			err := renderer.VisitDropTable(tt.node)
 
 			c.Assert(err, qt.IsNil)
@@ -1201,13 +1201,13 @@ func TestMySQLRenderer_VisitDropType(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Basic DROP TYPE (not supported)",
-			node: ast.NewDropType("status_enum"),
+			name:     "Basic DROP TYPE (not supported)",
+			node:     ast.NewDropType("status_enum"),
 			expected: "-- MySQL does not support DROP TYPE - enums are handled inline in column definitions\n",
 		},
 		{
-			name: "DROP TYPE with comment",
-			node: ast.NewDropType("status_enum").SetComment("Remove unused enum"),
+			name:     "DROP TYPE with comment",
+			node:     ast.NewDropType("status_enum").SetComment("Remove unused enum"),
 			expected: "-- Remove unused enum\n-- MySQL does not support DROP TYPE - enums are handled inline in column definitions\n",
 		},
 	}
@@ -1216,7 +1216,7 @@ func TestMySQLRenderer_VisitDropType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			renderer := renderer.NewMySQLRenderer()
+			renderer := mysql.NewMySQLRenderer()
 			err := renderer.VisitDropType(tt.node)
 
 			c.Assert(err, qt.IsNil)

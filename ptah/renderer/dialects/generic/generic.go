@@ -3,32 +3,30 @@ package generic
 import (
 	"fmt"
 
-	"github.com/denisvmedia/inventario/ptah/renderer"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // Generator handles unknown dialects without applying dialect-specific transformations
 type Generator struct {
 	*base.Generator
-	renderer *renderer.BaseRenderer
+	renderer *base.BaseRenderer
 }
 
 // New creates a new generic generator
 func New(dialectName string) *Generator {
 	return &Generator{
 		Generator: base.NewGenerator(dialectName),
-		renderer:  renderer.NewBaseRenderer(dialectName),
+		renderer:  base.NewBaseRenderer(dialectName),
 	}
 }
 
 // GenerateCreateTable generates CREATE TABLE SQL for unknown dialects using AST
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string {
+func (g *Generator) GenerateCreateTable(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum) string {
 	// Use the base generator's schema generation method
-	schema := g.GenerateSchema([]types.TableDirective{table}, fields, indexes, enums)
+	schema := g.GenerateSchema([]goschema.Table{table}, fields, indexes, enums)
 
 	// Render using the base renderer by iterating through statements
 	result, err := g.renderer.Render(schema)
@@ -43,7 +41,7 @@ func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []typ
 }
 
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL for generic dialects with embedded field support
-func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+func (g *Generator) GenerateCreateTableWithEmbedded(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum, embeddedFields []goschema.EmbeddedField) string {
 	// Process embedded fields to generate additional schema fields
 	embeddedGeneratedFields := transform.ProcessEmbeddedFields(embeddedFields, fields, table.StructName)
 
@@ -55,7 +53,7 @@ func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, 
 }
 
 // GenerateAlterStatements generates ALTER statements for unknown dialects using AST
-func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaField) string {
+func (g *Generator) GenerateAlterStatements(oldFields, newFields []goschema.Field) string {
 	// For now, return a simple comment indicating this is not yet implemented with AST
 	// This would need to be implemented with proper ALTER TABLE AST nodes
 	return "-- ALTER statements not yet implemented with AST for generic dialect\n"
@@ -92,7 +90,7 @@ func (g *Generator) GenerateAlterStatements(oldFields, newFields []types.SchemaF
 //
 // Returns a slice of SQL statements as strings. Many statements may be commented out
 // with TODO or WARNING prefixes, requiring manual review before execution.
-func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult) []string {
+func (g *Generator) GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *goschema.Database) []string {
 	var statements []string
 
 	// Add a warning about using generic dialect

@@ -8,7 +8,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/cmd/migratedown"
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/migrator"
 )
 
@@ -45,7 +45,7 @@ func TestMigrateDownCommand_Integration(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	c.Assert(err, qt.IsNil)
 	defer conn.Close()
 

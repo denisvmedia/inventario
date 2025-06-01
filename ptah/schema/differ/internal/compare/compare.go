@@ -5,11 +5,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/internal/normalize"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // TablesAndColumns performs comprehensive table and column comparison between generated and database schemas.
@@ -71,14 +70,14 @@ import (
 //
 // Results are sorted alphabetically for consistent output across multiple runs,
 // ensuring deterministic migration generation and reliable testing.
-func TablesAndColumns(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
+func TablesAndColumns(generated *goschema.Database, database *dbschematypes.DBSchema, diff *differtypes.SchemaDiff) {
 	// Create maps for quick lookup
-	genTables := make(map[string]types.TableDirective)
+	genTables := make(map[string]goschema.Table)
 	for _, table := range generated.Tables {
 		genTables[table.Name] = table
 	}
 
-	dbTables := make(map[string]parsertypes.Table)
+	dbTables := make(map[string]dbschematypes.DBTable)
 	for _, table := range database.Tables {
 		dbTables[table.Name] = table
 	}
@@ -179,7 +178,7 @@ func TablesAndColumns(generated *parsertypes.PackageParseResult, database *parse
 // # Output Consistency
 //
 // Column lists are sorted alphabetically for deterministic output and reliable testing.
-func TableColumns(genTable types.TableDirective, dbTable parsertypes.Table, generated *parsertypes.PackageParseResult) differtypes.TableDiff {
+func TableColumns(genTable goschema.Table, dbTable dbschematypes.DBTable, generated *goschema.Database) differtypes.TableDiff {
 	tableDiff := differtypes.TableDiff{TableName: genTable.Name}
 
 	// Process embedded fields to get the complete field list (same as generators do)
@@ -189,14 +188,14 @@ func TableColumns(genTable types.TableDirective, dbTable parsertypes.Table, gene
 	allFields := append(generated.Fields, embeddedGeneratedFields...)
 
 	// Create maps for quick lookup
-	genColumns := make(map[string]types.SchemaField)
+	genColumns := make(map[string]goschema.Field)
 	for _, field := range allFields {
 		if field.StructName == genTable.StructName {
 			genColumns[field.Name] = field
 		}
 	}
 
-	dbColumns := make(map[string]parsertypes.Column)
+	dbColumns := make(map[string]dbschematypes.DBColumn)
 	for _, col := range dbTable.Columns {
 		dbColumns[col.Name] = col
 	}
@@ -314,7 +313,7 @@ func TableColumns(genTable types.TableDirective, dbTable parsertypes.Table, gene
 //   - **PostgreSQL**: UDT names, SERIAL types, native boolean types
 //   - **MySQL/MariaDB**: TINYINT boolean representation, AUTO_INCREMENT
 //   - **Type mapping**: Intelligent normalization for accurate comparison
-func Columns(genCol types.SchemaField, dbCol parsertypes.Column) differtypes.ColumnDiff {
+func Columns(genCol goschema.Field, dbCol dbschematypes.DBColumn) differtypes.ColumnDiff {
 	colDiff := differtypes.ColumnDiff{
 		ColumnName: genCol.Name,
 		Changes:    make(map[string]string),
@@ -559,14 +558,14 @@ func ColumnByName(diffs []differtypes.ColumnDiff, columnName string) *differtype
 // # Output Consistency
 //
 // Results are sorted alphabetically for consistent output across multiple runs.
-func Enums(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
+func Enums(generated *goschema.Database, database *dbschematypes.DBSchema, diff *differtypes.SchemaDiff) {
 	// Create maps for quick lookup
-	genEnums := make(map[string]types.GlobalEnum)
+	genEnums := make(map[string]goschema.Enum)
 	for _, enum := range generated.Enums {
 		genEnums[enum.Name] = enum
 	}
 
-	dbEnums := make(map[string]parsertypes.Enum)
+	dbEnums := make(map[string]dbschematypes.DBEnum)
 	for _, enum := range database.Enums {
 		dbEnums[enum.Name] = enum
 	}
@@ -669,7 +668,7 @@ func Enums(generated *parsertypes.PackageParseResult, database *parsertypes.Data
 //
 // Value lists are sorted alphabetically to ensure deterministic migration
 // generation and reliable testing across multiple runs.
-func EnumValues(genEnum types.GlobalEnum, dbEnum parsertypes.Enum) differtypes.EnumDiff {
+func EnumValues(genEnum goschema.Enum, dbEnum dbschematypes.DBEnum) differtypes.EnumDiff {
 	enumDiff := differtypes.EnumDiff{EnumName: genEnum.Name}
 
 	// Create sets for comparison
@@ -780,7 +779,7 @@ func EnumValues(genEnum types.GlobalEnum, dbEnum parsertypes.Enum) differtypes.E
 // - Time Complexity: O(n + m) where n=generated indexes, m=database indexes
 // - Space Complexity: O(n + m) for the boolean maps
 // - Index operations can be expensive on large tables in production
-func Indexes(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema, diff *differtypes.SchemaDiff) {
+func Indexes(generated *goschema.Database, database *dbschematypes.DBSchema, diff *differtypes.SchemaDiff) {
 	// Create sets for comparison
 	genIndexes := make(map[string]bool)
 	for _, index := range generated.Indexes {

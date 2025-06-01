@@ -1,4 +1,4 @@
-package executor
+package dbschema
 
 import (
 	"database/sql"
@@ -9,7 +9,8 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
+	"github.com/denisvmedia/inventario/ptah/dbschema/types"
+	"github.com/denisvmedia/inventario/ptah/executor"
 )
 
 // ConnectToDatabase creates a database connection from a URL
@@ -75,15 +76,15 @@ func ConnectToDatabase(dbURL string) (*DatabaseConnection, error) {
 	}
 
 	// Create appropriate schema reader and writer
-	var reader SchemaReader
-	var writer SchemaWriter
+	var reader executor.SchemaReader
+	var writer executor.SchemaWriter
 	switch dialect {
 	case "postgres":
-		reader = NewPostgreSQLReader(db, info.Schema)
-		writer = NewPostgreSQLWriter(db, info.Schema)
+		reader = executor.NewPostgreSQLReader(db, info.Schema)
+		writer = executor.NewPostgreSQLWriter(db, info.Schema)
 	case "mysql":
-		reader = NewMySQLReader(db, info.Schema)
-		writer = NewMySQLWriter(db, info.Schema)
+		reader = executor.NewMySQLReader(db, info.Schema)
+		writer = executor.NewMySQLWriter(db, info.Schema)
 	default:
 		db.Close()
 		return nil, fmt.Errorf("no schema reader available for dialect: %s", dialect)
@@ -100,23 +101,23 @@ func ConnectToDatabase(dbURL string) (*DatabaseConnection, error) {
 // DatabaseConnection represents a database connection with metadata
 type DatabaseConnection struct {
 	db     *sql.DB
-	info   parsertypes.DatabaseInfo
-	reader SchemaReader
-	writer SchemaWriter
+	info   types.DBInfo
+	reader executor.SchemaReader
+	writer executor.SchemaWriter
 }
 
 // Info returns the database connection information
-func (dc *DatabaseConnection) Info() parsertypes.DatabaseInfo {
+func (dc *DatabaseConnection) Info() types.DBInfo {
 	return dc.info
 }
 
 // Reader returns the schema reader
-func (dc *DatabaseConnection) Reader() SchemaReader {
+func (dc *DatabaseConnection) Reader() executor.SchemaReader {
 	return dc.reader
 }
 
 // Writer returns the schema writer
-func (dc *DatabaseConnection) Writer() SchemaWriter {
+func (dc *DatabaseConnection) Writer() executor.SchemaWriter {
 	return dc.writer
 }
 
@@ -179,8 +180,8 @@ func FormatDatabaseURL(dbURL string) string {
 }
 
 // getDatabaseInfo retrieves database metadata
-func getDatabaseInfo(db *sql.DB, dialect string, parsedURL *url.URL, originalURL string) (parsertypes.DatabaseInfo, error) {
-	info := parsertypes.DatabaseInfo{
+func getDatabaseInfo(db *sql.DB, dialect string, parsedURL *url.URL, originalURL string) (types.DBInfo, error) {
+	info := types.DBInfo{
 		Dialect: dialect,
 		URL:     originalURL,
 	}

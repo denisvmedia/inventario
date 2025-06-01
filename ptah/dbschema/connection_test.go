@@ -1,9 +1,11 @@
-package executor
+package dbschema_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 )
 
 func TestFormatDatabaseURL(t *testing.T) {
@@ -37,7 +39,7 @@ func TestFormatDatabaseURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := FormatDatabaseURL(tt.input)
+			result := dbschema.FormatDatabaseURL(tt.input)
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}
@@ -69,7 +71,7 @@ func TestConnectToDatabase_InvalidURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			conn, err := ConnectToDatabase(tt.dbURL)
+			conn, err := dbschema.ConnectToDatabase(tt.dbURL)
 			c.Assert(err, qt.ErrorMatches, ".*"+tt.errMsg+".*")
 			c.Assert(conn, qt.IsNil)
 		})
@@ -92,7 +94,7 @@ func TestConnectToDatabase_UnsupportedDialects(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			conn, err := ConnectToDatabase(tt.dbURL)
+			conn, err := dbschema.ConnectToDatabase(tt.dbURL)
 			c.Assert(err, qt.ErrorMatches, ".*"+tt.expected+".*")
 			c.Assert(conn, qt.IsNil)
 		})
@@ -105,7 +107,7 @@ func TestPostgreSQLConnection_NoServer(t *testing.T) {
 
 	// This test expects to fail since we don't have a PostgreSQL server running
 	// It's mainly to test that the connection logic works correctly
-	conn, err := ConnectToDatabase("postgres://user:pass@localhost:5432/testdb")
+	conn, err := dbschema.ConnectToDatabase("postgres://user:pass@localhost:5432/testdb")
 
 	// We expect an error because no PostgreSQL server is running
 	c.Assert(err, qt.IsNotNil)

@@ -1,22 +1,23 @@
-package renderer
+package mariadb
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
 )
 
 // MariaDBRenderer provides MariaDB-specific SQL rendering
 // MariaDB is largely compatible with MySQL, so it inherits most functionality
 type MariaDBRenderer struct {
-	*MySQLRenderer
+	*mysql.MySQLRenderer
 }
 
 // NewMariaDBRenderer creates a new MariaDB renderer
 func NewMariaDBRenderer() *MariaDBRenderer {
 	return &MariaDBRenderer{
-		MySQLRenderer: NewMySQLRenderer(),
+		MySQLRenderer: mysql.NewMySQLRenderer(),
 	}
 }
 
@@ -31,7 +32,7 @@ func (r *MariaDBRenderer) VisitEnum(node *ast.EnumNode) error {
 // renderColumn overrides MySQL column rendering with MariaDB-specific handling
 func (r *MariaDBRenderer) renderColumn(column *ast.ColumnNode) (string, error) {
 	// MariaDB uses the same column syntax as MySQL, so we can delegate
-	return r.MySQLRenderer.renderColumn(column)
+	return r.MySQLRenderer.RenderColumn(column)
 }
 
 // renderAutoIncrement renders MariaDB auto increment (same as MySQL)
@@ -64,7 +65,7 @@ func (r *MariaDBRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 
 	// Render table-level constraints
 	for _, constraint := range node.Constraints {
-		line, err := r.renderConstraint(constraint)
+		line, err := r.RenderConstraint(constraint)
 		if err != nil {
 			return fmt.Errorf("error rendering constraint: %w", err)
 		}
@@ -269,7 +270,7 @@ func (r *MariaDBRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, e
 
 	// Render table-level constraints
 	for _, constraint := range node.Constraints {
-		line, err := r.renderConstraint(constraint)
+		line, err := r.RenderConstraint(constraint)
 		if err != nil {
 			return fmt.Errorf("error rendering constraint: %w", err)
 		}

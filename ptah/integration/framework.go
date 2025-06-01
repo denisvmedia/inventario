@@ -10,12 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/migrator"
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
 	"github.com/denisvmedia/inventario/ptah/schema/differ"
-	"github.com/denisvmedia/inventario/ptah/schema/parser"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
 )
 
 // TestStep represents a single step within a test scenario
@@ -91,9 +90,9 @@ func (sr *StepRecorder) GetSteps() []TestStep {
 type TestScenario struct {
 	Name        string
 	Description string
-	TestFunc    func(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error
+	TestFunc    func(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error
 	// Optional enhanced test function that supports step recording
-	EnhancedTestFunc func(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error
+	EnhancedTestFunc func(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error
 }
 
 // TestRunner manages and executes integration tests
@@ -163,7 +162,7 @@ func (tr *TestRunner) runSingleTest(ctx context.Context, scenario TestScenario, 
 	}
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("Failed to connect to database: %v", err)
@@ -207,7 +206,7 @@ func (tr *TestRunner) runSingleTest(ctx context.Context, scenario TestScenario, 
 }
 
 // cleanDatabase drops all tables and resets the database to a clean state
-func (tr *TestRunner) cleanDatabase(_ctx context.Context, conn *executor.DatabaseConnection) error {
+func (tr *TestRunner) cleanDatabase(_ctx context.Context, conn *dbschema.DatabaseConnection) error {
 	// Drop all tables to ensure clean state
 	return conn.Writer().DropAllTables()
 }
@@ -308,12 +307,12 @@ func (vem *VersionedEntityManager) LoadEntityVersion(versionDir string) error {
 }
 
 // GenerateSchemaFromEntities parses the current entities and returns the schema
-func (vem *VersionedEntityManager) GenerateSchemaFromEntities() (*parsertypes.PackageParseResult, error) {
-	return parser.ParsePackageRecursively(vem.entitiesDir)
+func (vem *VersionedEntityManager) GenerateSchemaFromEntities() (*goschematypes.Database, error) {
+	return goschema.ParseDir(vem.entitiesDir)
 }
 
 // GenerateMigrationSQL compares current entities with database and generates migration SQL
-func (vem *VersionedEntityManager) GenerateMigrationSQL(_ctx context.Context, conn *executor.DatabaseConnection) ([]string, error) {
+func (vem *VersionedEntityManager) GenerateMigrationSQL(_ctx context.Context, conn *dbschema.DatabaseConnection) ([]string, error) {
 	// Parse current entities
 	generated, err := vem.GenerateSchemaFromEntities()
 	if err != nil {
@@ -336,7 +335,7 @@ func (vem *VersionedEntityManager) GenerateMigrationSQL(_ctx context.Context, co
 }
 
 // ApplyMigrationFromEntities generates and applies a migration from current entities
-func (vem *VersionedEntityManager) ApplyMigrationFromEntities(ctx context.Context, conn *executor.DatabaseConnection, description string) error {
+func (vem *VersionedEntityManager) ApplyMigrationFromEntities(ctx context.Context, conn *dbschema.DatabaseConnection, description string) error {
 	// Generate migration SQL
 	statements, err := vem.GenerateMigrationSQL(ctx, conn)
 	if err != nil {
@@ -371,7 +370,7 @@ func (vem *VersionedEntityManager) ApplyMigrationFromEntities(ctx context.Contex
 }
 
 // MigrateToVersion loads entities from a version and applies the migration
-func (vem *VersionedEntityManager) MigrateToVersion(ctx context.Context, conn *executor.DatabaseConnection, versionDir, description string) error {
+func (vem *VersionedEntityManager) MigrateToVersion(ctx context.Context, conn *dbschema.DatabaseConnection, versionDir, description string) error {
 	// Load entities for this version
 	if err := vem.LoadEntityVersion(versionDir); err != nil {
 		return fmt.Errorf("failed to load entity version %s: %w", versionDir, err)
@@ -403,11 +402,11 @@ func (tr *TestRunner) GetReport() *TestReport {
 
 // DatabaseHelper provides utility functions for database operations in tests
 type DatabaseHelper struct {
-	conn *executor.DatabaseConnection
+	conn *dbschema.DatabaseConnection
 }
 
 // NewDatabaseHelper creates a new database helper
-func NewDatabaseHelper(conn *executor.DatabaseConnection) *DatabaseHelper {
+func NewDatabaseHelper(conn *dbschema.DatabaseConnection) *DatabaseHelper {
 	return &DatabaseHelper{conn: conn}
 }
 
@@ -481,7 +480,7 @@ func (dh *DatabaseHelper) IsDryRun() bool {
 }
 
 // GetMigrationsFS returns the appropriate migrations filesystem for the database dialect
-func GetMigrationsFS(fixtures fs.FS, conn *executor.DatabaseConnection, migrationType string) (fs.FS, error) {
+func GetMigrationsFS(fixtures fs.FS, conn *dbschema.DatabaseConnection, migrationType string) (fs.FS, error) {
 	dialect := conn.Info().Dialect
 
 	// Try database-specific migrations first

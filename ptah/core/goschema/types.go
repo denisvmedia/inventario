@@ -1,7 +1,34 @@
-// Package types defines the core data structures used throughout the Ptah schema migration system.
+// Package goschematypes defines the core data structures used throughout the Ptah schema migration system.
 // These types represent the intermediate representation of database schema elements parsed from
 // Go struct annotations and used for generating database-specific migration SQL.
-package types
+package goschema
+
+// Database represents the complete database schema derived from Go struct annotations.
+//
+// This struct aggregates all database schema information discovered during the recursive
+// parsing process. It includes all entity types, their relationships, and dependency
+// information needed for proper migration generation.
+//
+// The result is processed to:
+//   - Remove duplicates that may occur when entities are defined in multiple files
+//   - Build dependency graphs based on foreign key relationships
+//   - Sort tables in topological order to ensure proper creation sequence
+//
+// Fields:
+//   - Tables: All table directives found in the project
+//   - Fields: All field definitions with their database mappings
+//   - Indexes: All index definitions for database optimization
+//   - Enums: Global enum definitions that can be referenced by fields
+//   - EmbeddedFields: Fields from embedded structs with their relation modes
+//   - Dependencies: Dependency graph mapping table names to their dependencies
+type Database struct {
+	Tables         []Table
+	Fields         []Field
+	Indexes        []Index
+	Enums          []Enum
+	EmbeddedFields []EmbeddedField
+	Dependencies   map[string][]string // table -> list of tables it depends on
+}
 
 // EmbeddedField represents an embedded field in a Go struct that should be handled specially
 // during schema generation. Embedded fields allow for composition and reuse of common field
@@ -43,11 +70,11 @@ type EmbeddedField struct {
 	Overrides        map[string]map[string]string // Platform-specific overrides
 }
 
-// SchemaField represents a database column/field definition parsed from Go struct field annotations.
+// Field represents a database column/field definition parsed from Go struct field annotations.
 // This is the core building block for table schema generation, containing all the metadata
 // needed to generate appropriate CREATE TABLE column definitions for different database platforms.
 //
-// SchemaField is created by parsing //migrator:schema:field annotations from Go struct fields:
+// Field is created by parsing //migrator:schema:field annotations from Go struct fields:
 //
 //	type Product struct {
 //	    //migrator:schema:field name="id" type="SERIAL" primary="true"
@@ -66,11 +93,11 @@ type EmbeddedField struct {
 //	    CategoryID int64
 //	}
 //
-// The SchemaField supports platform-specific overrides through the Overrides field:
+// The Field supports platform-specific overrides through the Overrides field:
 //
 //	//migrator:schema:field name="id" type="SERIAL" platform.mysql.type="INT AUTO_INCREMENT"
 //	ID int64
-type SchemaField struct {
+type Field struct {
 	StructName     string                       // Name of the Go struct this field belongs to
 	FieldName      string                       // Name of the Go struct field
 	Name           string                       // Database column name
@@ -90,11 +117,11 @@ type SchemaField struct {
 	Overrides      map[string]map[string]string // Platform-specific overrides (e.g., platform.mysql.type)
 }
 
-// SchemaIndex represents a database index definition parsed from Go struct annotations.
+// Index represents a database index definition parsed from Go struct annotations.
 // Indexes are used to improve query performance and enforce uniqueness constraints
 // on one or more columns.
 //
-// SchemaIndex is created by parsing //migrator:schema:index annotations:
+// Index is created by parsing //migrator:schema:index annotations:
 //
 //	type User struct {
 //	    //migrator:schema:field name="id" type="SERIAL" primary="true"
@@ -114,7 +141,7 @@ type SchemaField struct {
 //	    //migrator:schema:index name="idx_users_email_status" fields="email,status"
 //	    _ int
 //	}
-type SchemaIndex struct {
+type Index struct {
 	StructName string   // Name of the Go struct this index belongs to
 	Name       string   // Index name (e.g., "idx_users_email")
 	Fields     []string // Column names included in the index
@@ -122,11 +149,11 @@ type SchemaIndex struct {
 	Comment    string   // Index comment/description
 }
 
-// TableDirective represents a database table configuration parsed from Go struct annotations.
+// Table represents a database table configuration parsed from Go struct annotations.
 // This defines the overall table properties and metadata that will be used to generate
 // CREATE TABLE statements.
 //
-// TableDirective is created by parsing //migrator:schema:table annotations:
+// Table is created by parsing //migrator:schema:table annotations:
 //
 //	//migrator:schema:table name="users" comment="User accounts table"
 //	type User struct {
@@ -154,7 +181,7 @@ type SchemaIndex struct {
 //	    //migrator:schema:field name="role_id" type="INTEGER" foreign="roles(id)"
 //	    RoleID int64
 //	}
-type TableDirective struct {
+type Table struct {
 	StructName string                       // Name of the Go struct this table represents
 	Name       string                       // Database table name
 	Engine     string                       // Storage engine (MySQL/MariaDB specific, e.g., "InnoDB")
@@ -165,7 +192,7 @@ type TableDirective struct {
 	Overrides  map[string]map[string]string // Platform-specific overrides
 }
 
-// GlobalEnum represents a global enumeration type definition that can be shared across
+// Enum represents a global enumeration type definition that can be shared across
 // multiple tables and fields. Global enums are automatically generated when ENUM type
 // fields are defined in struct annotations.
 //
@@ -204,7 +231,7 @@ type TableDirective struct {
 //
 //	MySQL:
 //	  CREATE TABLE users (status ENUM('active', 'inactive', 'suspended') DEFAULT 'active');
-type GlobalEnum struct {
+type Enum struct {
 	Name   string   // The generated enum type name (e.g., "enum_user_status")
 	Values []string // The allowed enum values (e.g., ["active", "inactive", "suspended"])
 }

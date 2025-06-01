@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/core/builder"
+	"github.com/denisvmedia/inventario/ptah/core/astbuilder"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // Generator provides common functionality for all dialect generators using AST-based approach
@@ -31,18 +31,18 @@ func (g *Generator) GenerateTableComment(tableName string) *ast.CommentNode {
 	return ast.NewComment(commentText)
 }
 
-// GenerateColumn converts a SchemaField to a ColumnNode using AST builders
-func (g *Generator) GenerateColumn(field types.SchemaField, fieldType string, enums []types.GlobalEnum) *ast.ColumnNode {
+// GenerateColumn converts a Field to a ColumnNode using AST builders
+func (g *Generator) GenerateColumn(field goschema.Field, fieldType string, enums []goschema.Enum) *ast.ColumnNode {
 	return transform.FromSchemaField(field, enums)
 }
 
 // GenerateCreateTable converts table directive and fields to a CreateTableNode
-func (g *Generator) GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, enums []types.GlobalEnum) *ast.CreateTableNode {
+func (g *Generator) GenerateCreateTable(table goschema.Table, fields []goschema.Field, enums []goschema.Enum) *ast.CreateTableNode {
 	return transform.FromTableDirective(table, fields, enums)
 }
 
 // GenerateIndexes generates index AST nodes for a table
-func (g *Generator) GenerateIndexes(table types.TableDirective, indexes []types.SchemaIndex) []*ast.IndexNode {
+func (g *Generator) GenerateIndexes(table goschema.Table, indexes []goschema.Index) []*ast.IndexNode {
 	var indexNodes []*ast.IndexNode
 
 	for _, idx := range indexes {
@@ -57,7 +57,7 @@ func (g *Generator) GenerateIndexes(table types.TableDirective, indexes []types.
 }
 
 // GenerateForeignKeyConstraints generates foreign key constraint nodes
-func (g *Generator) GenerateForeignKeyConstraints(table types.TableDirective, fields []types.SchemaField) []*ast.ConstraintNode {
+func (g *Generator) GenerateForeignKeyConstraints(table goschema.Table, fields []goschema.Field) []*ast.ConstraintNode {
 	var constraints []*ast.ConstraintNode
 
 	for _, f := range fields {
@@ -82,7 +82,7 @@ func (g *Generator) GenerateForeignKeyConstraints(table types.TableDirective, fi
 }
 
 // GeneratePrimaryKeyConstraint generates primary key constraint for composite keys
-func (g *Generator) GeneratePrimaryKeyConstraint(table types.TableDirective) *ast.ConstraintNode {
+func (g *Generator) GeneratePrimaryKeyConstraint(table goschema.Table) *ast.ConstraintNode {
 	if len(table.PrimaryKey) > 1 {
 		return ast.NewPrimaryKeyConstraint(table.PrimaryKey...)
 	}
@@ -90,12 +90,12 @@ func (g *Generator) GeneratePrimaryKeyConstraint(table types.TableDirective) *as
 }
 
 // GenerateSchema generates a complete schema using the fluent API
-func (g *Generator) GenerateSchema(tables []types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) *ast.StatementList {
+func (g *Generator) GenerateSchema(tables []goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum) *ast.StatementList {
 	return g.GenerateSchemaWithEmbedded(tables, fields, indexes, enums, nil)
 }
 
 // GenerateSchemaWithEmbedded generates a complete schema with embedded field support
-func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) *ast.StatementList {
+func (g *Generator) GenerateSchemaWithEmbedded(tables []goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum, embeddedFields []goschema.EmbeddedField) *ast.StatementList {
 	schema := astbuilder.NewSchema()
 
 	// Add comment for the schema
@@ -125,7 +125,7 @@ func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fi
 		allFields := append(fields, embeddedGeneratedFields...)
 
 		// Sort fields to ensure primary keys come first, then other fields
-		var primaryFields, otherFields []types.SchemaField
+		var primaryFields, otherFields []goschema.Field
 		for _, field := range allFields {
 			if field.StructName == table.StructName {
 				if field.Primary {
@@ -210,7 +210,7 @@ func (g *Generator) GenerateSchemaWithEmbedded(tables []types.TableDirective, fi
 }
 
 // GenerateCreateTableWithEmbedded generates CREATE TABLE SQL with embedded field support (base implementation)
-func (g *Generator) GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string {
+func (g *Generator) GenerateCreateTableWithEmbedded(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum, embeddedFields []goschema.EmbeddedField) string {
 	// This is a base implementation that should be overridden by specific dialect generators
 	// Return a simple string representation (this should be overridden by dialect-specific generators)
 	return "-- Base implementation: use dialect-specific generator for proper SQL output"

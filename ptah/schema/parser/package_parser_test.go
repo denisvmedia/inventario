@@ -6,16 +6,15 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/schema/parser"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestParsePackageRecursively(t *testing.T) {
 	c := qt.New(t)
 
 	// Test parsing the stubs directory
-	result, err := parser.ParsePackageRecursively("../../stubs")
+	result, err := goschema.ParseDir("../../stubs")
 	c.Assert(err, qt.IsNil)
 
 	// Verify we found entities (includes all test files in stubs directory)
@@ -46,7 +45,7 @@ func TestParsePackageRecursively(t *testing.T) {
 func TestDependencyResolution(t *testing.T) {
 	c := qt.New(t)
 
-	result, err := parser.ParsePackageRecursively("../../stubs")
+	result, err := goschema.ParseDir("../../stubs")
 	c.Assert(err, qt.IsNil)
 
 	// Check that dependencies are correctly identified
@@ -58,7 +57,7 @@ func TestDependencyResolution(t *testing.T) {
 func TestDeduplication(t *testing.T) {
 	c := qt.New(t)
 
-	result, err := parser.ParsePackageRecursively("../../stubs")
+	result, err := goschema.ParseDir("../../stubs")
 	c.Assert(err, qt.IsNil)
 
 	// Verify no duplicate tables
@@ -93,7 +92,7 @@ func findIndex(slice []string, item string) int {
 func TestGetOrderedCreateStatements(t *testing.T) {
 	c := qt.New(t)
 
-	result, err := parser.ParsePackageRecursively("../../stubs")
+	result, err := goschema.ParseDir("../../stubs")
 	c.Assert(err, qt.IsNil)
 
 	statements := parser.GetOrderedCreateStatements(result, "postgres")
@@ -108,7 +107,7 @@ func TestGetOrderedCreateStatements(t *testing.T) {
 func TestEmbeddedFieldsInPackageParser(t *testing.T) {
 	c := qt.New(t)
 
-	result, err := parser.ParsePackageRecursively("../../stubs")
+	result, err := goschema.ParseDir("../../stubs")
 	c.Assert(err, qt.IsNil)
 
 	// Find the articles table statement
@@ -135,7 +134,7 @@ func TestEmbeddedFieldsInPackageParser(t *testing.T) {
 func TestPlatformSpecificOverrides(t *testing.T) {
 	c := qt.New(t)
 
-	result, err := parser.ParsePackageRecursively("../../stubs")
+	result, err := goschema.ParseDir("../../stubs")
 	c.Assert(err, qt.IsNil)
 
 	// Test PostgreSQL (default)
@@ -176,7 +175,7 @@ func TestPlatformSpecificOverrides(t *testing.T) {
 func TestGetDependencyInfo(t *testing.T) {
 	c := qt.New(t)
 
-	result, err := parser.ParsePackageRecursively("../../stubs")
+	result, err := goschema.ParseDir("../../stubs")
 	c.Assert(err, qt.IsNil)
 
 	info := parser.GetDependencyInfo(result)
@@ -228,7 +227,7 @@ func TestParsePackageRecursively_ErrorCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result, err := parser.ParsePackageRecursively(tt.rootDir)
+			result, err := goschema.ParseDir(tt.rootDir)
 
 			if tt.expectError {
 				c.Assert(err, qt.IsNotNil)
@@ -245,8 +244,8 @@ func TestGetDependencyInfo_EmptyResult(t *testing.T) {
 	c := qt.New(t)
 
 	// Create an empty result to test edge case
-	result := &parsertypes.PackageParseResult{
-		Tables:       []types.TableDirective{},
+	result := &goschema.Database{
+		Tables:       []goschema.Table{},
 		Dependencies: make(map[string][]string),
 	}
 

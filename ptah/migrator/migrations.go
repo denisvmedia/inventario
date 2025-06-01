@@ -8,7 +8,7 @@ import (
 	"sort"
 
 	"github.com/denisvmedia/inventario/ptah/core/sqlutil"
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 )
 
 //go:embed base/schema.sql
@@ -24,7 +24,7 @@ var recordMigrationSQL string
 var deleteMigrationSQL string
 
 // MigrationFunc represents a migration function that operates on a database connection
-type MigrationFunc func(context.Context, *executor.DatabaseConnection) error
+type MigrationFunc func(context.Context, *dbschema.DatabaseConnection) error
 
 // SplitSQLStatements splits a SQL string into individual statements using AST-based parsing.
 // This is needed because MySQL doesn't handle multiple statements in a single ExecuteSQL call.
@@ -36,7 +36,7 @@ func SplitSQLStatements(sql string) []string {
 // MigrationFuncFromSQLFilename returns a migration function that reads SQL from a file
 // in the provided filesystem and executes it using the database connection
 func MigrationFuncFromSQLFilename(filename string, fsys fs.FS) MigrationFunc {
-	return func(ctx context.Context, conn *executor.DatabaseConnection) error {
+	return func(ctx context.Context, conn *dbschema.DatabaseConnection) error {
 		sql, err := fs.ReadFile(fsys, filename)
 		if err != nil {
 			return fmt.Errorf("failed to read migration file: %w", err)
@@ -57,7 +57,7 @@ func MigrationFuncFromSQLFilename(filename string, fsys fs.FS) MigrationFunc {
 }
 
 // NoopMigrationFunc is a no-op migration function
-func NoopMigrationFunc(_ctx context.Context, _conn *executor.DatabaseConnection) error {
+func NoopMigrationFunc(_ctx context.Context, _conn *dbschema.DatabaseConnection) error {
 	return nil
 }
 
@@ -71,13 +71,13 @@ type Migration struct {
 
 // Migrator handles database migrations for ptah
 type Migrator struct {
-	conn        *executor.DatabaseConnection
+	conn        *dbschema.DatabaseConnection
 	migrations  []*Migration
 	initialized bool
 }
 
 // NewMigrator creates a new migrator with the given database connection
-func NewMigrator(conn *executor.DatabaseConnection) *Migrator {
+func NewMigrator(conn *dbschema.DatabaseConnection) *Migrator {
 	return &Migrator{
 		conn:       conn,
 		migrations: make([]*Migration, 0),

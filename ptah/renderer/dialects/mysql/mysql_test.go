@@ -5,10 +5,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestGenerator_New(t *testing.T) {
@@ -24,14 +23,14 @@ func TestGenerator_GenerateCreateTable_BasicTable(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Comment:    "User accounts table",
 		Engine:     "InnoDB",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -76,13 +75,13 @@ func TestGenerator_GenerateCreateTable_WithInlineEnums(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -105,7 +104,7 @@ func TestGenerator_GenerateCreateTable_WithInlineEnums(t *testing.T) {
 		},
 	}
 
-	enums := []types.GlobalEnum{
+	enums := []goschema.Enum{
 		{
 			Name:   "user_status_enum",
 			Values: []string{"active", "inactive", "pending"},
@@ -130,13 +129,13 @@ func TestGenerator_GenerateCreateTable_WithIndexes(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -158,7 +157,7 @@ func TestGenerator_GenerateCreateTable_WithIndexes(t *testing.T) {
 		},
 	}
 
-	indexes := []types.SchemaIndex{
+	indexes := []goschema.Index{
 		{
 			StructName: "User",
 			Name:       "idx_users_email",
@@ -190,13 +189,13 @@ func TestGenerator_GenerateCreateTable_WithTypeOverrides(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -227,7 +226,7 @@ func TestGenerator_GenerateCreateTable_WithTableOverrides(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Overrides: map[string]map[string]string{
@@ -239,7 +238,7 @@ func TestGenerator_GenerateCreateTable_WithTableOverrides(t *testing.T) {
 		},
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -261,12 +260,12 @@ func TestGenerator_GenerateCreateTable_WithCheckOverrides(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "Product",
 		Name:       "products",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "Product",
 			Name:       "price",
@@ -303,14 +302,14 @@ func TestGenerator_GenerateCreateTable_CompositeKeys(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "UserRole",
 		Name:       "user_roles",
 		PrimaryKey: []string{"user_id", "role_id"},
 		Engine:     "InnoDB",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "UserRole",
 			Name:       "user_id",
@@ -344,7 +343,7 @@ func TestGenerator_GenerateAlterStatements(t *testing.T) {
 
 	generator := mysql.New()
 
-	oldFields := []types.SchemaField{
+	oldFields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -353,7 +352,7 @@ func TestGenerator_GenerateAlterStatements(t *testing.T) {
 		},
 	}
 
-	newFields := []types.SchemaField{
+	newFields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -381,13 +380,13 @@ func TestGenerator_GenerateCreateTable_IgnoresDifferentStructs(t *testing.T) {
 
 	generator := mysql.New()
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Engine:     "InnoDB",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -432,8 +431,8 @@ func TestGenerator_GenerateMigrationSQL_ModifyColumn(t *testing.T) {
 	}
 
 	// Create generated schema with the target field
-	generated := &parsertypes.PackageParseResult{
-		Fields: []types.SchemaField{
+	generated := &goschema.Database{
+		Fields: []goschema.Field{
 			{
 				StructName: "users",
 				Name:       "email",
@@ -475,8 +474,8 @@ func TestGenerator_GenerateMigrationSQL_ModifyColumnWithEnum(t *testing.T) {
 	}
 
 	// Create generated schema with enum field
-	generated := &parsertypes.PackageParseResult{
-		Fields: []types.SchemaField{
+	generated := &goschema.Database{
+		Fields: []goschema.Field{
 			{
 				StructName: "users",
 				Name:       "status",
@@ -484,7 +483,7 @@ func TestGenerator_GenerateMigrationSQL_ModifyColumnWithEnum(t *testing.T) {
 				Nullable:   false,
 			},
 		},
-		Enums: []types.GlobalEnum{
+		Enums: []goschema.Enum{
 			{
 				Name:   "user_status_enum",
 				Values: []string{"active", "inactive", "pending"},

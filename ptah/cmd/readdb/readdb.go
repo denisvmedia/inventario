@@ -6,7 +6,7 @@ import (
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 )
 
@@ -44,12 +44,12 @@ func readDBCommand(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("database URL is required")
 	}
 
-	fmt.Printf("Reading schema from database: %s\n", executor.FormatDatabaseURL(dbURL))
+	fmt.Printf("Reading schema from database: %s\n", dbschema.FormatDatabaseURL(dbURL))
 	fmt.Println("=== DATABASE SCHEMA ===")
 	fmt.Println()
 
 	// Connect to the database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		fmt.Printf("Error connecting to database: %v\n", err)
 		fmt.Println()

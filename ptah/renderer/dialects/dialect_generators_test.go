@@ -5,9 +5,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/core/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer/generators"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestDialectGenerators_HappyPath(t *testing.T) {
@@ -54,7 +54,7 @@ func TestDialectGenerators_HappyPath(t *testing.T) {
 	}
 
 	// Common test data
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 		Overrides: map[string]map[string]string{
@@ -69,7 +69,7 @@ func TestDialectGenerators_HappyPath(t *testing.T) {
 		},
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -84,7 +84,7 @@ func TestDialectGenerators_HappyPath(t *testing.T) {
 		},
 	}
 
-	enums := []types.GlobalEnum{
+	enums := []goschema.Enum{
 		{
 			Name:   "user_status_enum",
 			Values: []string{"active", "inactive", "pending"},
@@ -137,7 +137,7 @@ func TestDialectGenerators_AlterStatements(t *testing.T) {
 		},
 	}
 
-	oldFields := []types.SchemaField{
+	oldFields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -145,7 +145,7 @@ func TestDialectGenerators_AlterStatements(t *testing.T) {
 		},
 	}
 
-	newFields := []types.SchemaField{
+	newFields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "email",
@@ -195,12 +195,12 @@ func TestDialectGenerators_GetDialectName(t *testing.T) {
 
 func TestDialectGenerators_BackwardCompatibility(t *testing.T) {
 	// Test that the old API still works exactly the same
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -216,8 +216,8 @@ func TestDialectGenerators_BackwardCompatibility(t *testing.T) {
 	c.Assert(result, qt.Contains, "id SERIAL PRIMARY KEY")
 
 	// Test GenerateAlterStatements backward compatibility
-	oldFields := []types.SchemaField{}
-	newFields := []types.SchemaField{
+	oldFields := []goschema.Field{}
+	newFields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "email",

@@ -5,28 +5,28 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 	tests := []struct {
 		name           string
-		embeddedFields []types.EmbeddedField
-		allFields      []types.SchemaField
+		embeddedFields []goschema.EmbeddedField
+		allFields      []goschema.Field
 		structName     string
-		expected       []types.SchemaField
+		expected       []goschema.Field
 	}{
 		{
 			name: "inline without prefix",
-			embeddedFields: []types.EmbeddedField{
+			embeddedFields: []goschema.EmbeddedField{
 				{
 					StructName:       "User",
 					Mode:             "inline",
 					EmbeddedTypeName: "Timestamps",
 				},
 			},
-			allFields: []types.SchemaField{
+			allFields: []goschema.Field{
 				{
 					StructName: "Timestamps",
 					FieldName:  "CreatedAt",
@@ -41,7 +41,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 				},
 			},
 			structName: "User",
-			expected: []types.SchemaField{
+			expected: []goschema.Field{
 				{
 					StructName: "User",
 					FieldName:  "CreatedAt",
@@ -58,7 +58,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 		},
 		{
 			name: "inline with prefix",
-			embeddedFields: []types.EmbeddedField{
+			embeddedFields: []goschema.EmbeddedField{
 				{
 					StructName:       "User",
 					Mode:             "inline",
@@ -66,7 +66,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 					EmbeddedTypeName: "AuditInfo",
 				},
 			},
-			allFields: []types.SchemaField{
+			allFields: []goschema.Field{
 				{
 					StructName: "AuditInfo",
 					FieldName:  "By",
@@ -81,7 +81,7 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 				},
 			},
 			structName: "User",
-			expected: []types.SchemaField{
+			expected: []goschema.Field{
 				{
 					StructName: "User",
 					FieldName:  "By",
@@ -118,13 +118,13 @@ func TestProcessEmbeddedFields_InlineMode(t *testing.T) {
 func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 	tests := []struct {
 		name           string
-		embeddedFields []types.EmbeddedField
+		embeddedFields []goschema.EmbeddedField
 		structName     string
-		expected       []types.SchemaField
+		expected       []goschema.Field
 	}{
 		{
 			name: "json mode with default name and type",
-			embeddedFields: []types.EmbeddedField{
+			embeddedFields: []goschema.EmbeddedField{
 				{
 					StructName:       "User",
 					Mode:             "json",
@@ -132,7 +132,7 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 				},
 			},
 			structName: "User",
-			expected: []types.SchemaField{
+			expected: []goschema.Field{
 				{
 					StructName: "User",
 					FieldName:  "Meta",
@@ -144,7 +144,7 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 		},
 		{
 			name: "json mode with custom name and type",
-			embeddedFields: []types.EmbeddedField{
+			embeddedFields: []goschema.EmbeddedField{
 				{
 					StructName:       "User",
 					Mode:             "json",
@@ -156,7 +156,7 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 				},
 			},
 			structName: "User",
-			expected: []types.SchemaField{
+			expected: []goschema.Field{
 				{
 					StructName: "User",
 					FieldName:  "Meta",
@@ -191,13 +191,13 @@ func TestProcessEmbeddedFields_JsonMode(t *testing.T) {
 func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 	tests := []struct {
 		name           string
-		embeddedFields []types.EmbeddedField
+		embeddedFields []goschema.EmbeddedField
 		structName     string
-		expected       []types.SchemaField
+		expected       []goschema.Field
 	}{
 		{
 			name: "relation mode with integer reference",
-			embeddedFields: []types.EmbeddedField{
+			embeddedFields: []goschema.EmbeddedField{
 				{
 					StructName:       "Post",
 					Mode:             "relation",
@@ -208,7 +208,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 				},
 			},
 			structName: "Post",
-			expected: []types.SchemaField{
+			expected: []goschema.Field{
 				{
 					StructName:     "Post",
 					FieldName:      "User",
@@ -222,7 +222,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 		},
 		{
 			name: "relation mode with varchar reference",
-			embeddedFields: []types.EmbeddedField{
+			embeddedFields: []goschema.EmbeddedField{
 				{
 					StructName:       "Post",
 					Mode:             "relation",
@@ -233,7 +233,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 				},
 			},
 			structName: "Post",
-			expected: []types.SchemaField{
+			expected: []goschema.Field{
 				{
 					StructName:     "Post",
 					FieldName:      "Category",
@@ -271,7 +271,7 @@ func TestProcessEmbeddedFields_RelationMode(t *testing.T) {
 func TestProcessEmbeddedFields_SkipMode(t *testing.T) {
 	c := qt.New(t)
 
-	embeddedFields := []types.EmbeddedField{
+	embeddedFields := []goschema.EmbeddedField{
 		{
 			StructName:       "User",
 			Mode:             "skip",
@@ -287,7 +287,7 @@ func TestProcessEmbeddedFields_SkipMode(t *testing.T) {
 func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 	c := qt.New(t)
 
-	embeddedFields := []types.EmbeddedField{
+	embeddedFields := []goschema.EmbeddedField{
 		{
 			StructName:       "User",
 			Mode:             "", // Empty mode should default to inline
@@ -295,7 +295,7 @@ func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 		},
 	}
 
-	allFields := []types.SchemaField{
+	allFields := []goschema.Field{
 		{
 			StructName: "Timestamps",
 			FieldName:  "CreatedAt",
@@ -314,7 +314,7 @@ func TestProcessEmbeddedFields_DefaultMode(t *testing.T) {
 func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 	c := qt.New(t)
 
-	embeddedFields := []types.EmbeddedField{
+	embeddedFields := []goschema.EmbeddedField{
 		{
 			StructName:       "User",
 			Mode:             "inline",
@@ -327,7 +327,7 @@ func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 		},
 	}
 
-	allFields := []types.SchemaField{
+	allFields := []goschema.Field{
 		{
 			StructName: "Timestamps",
 			FieldName:  "CreatedAt",
@@ -345,7 +345,7 @@ func TestProcessEmbeddedFields_FiltersByStructName(t *testing.T) {
 func TestProcessEmbeddedFields_RelationModeSkipsIncompleteFields(t *testing.T) {
 	c := qt.New(t)
 
-	embeddedFields := []types.EmbeddedField{
+	embeddedFields := []goschema.EmbeddedField{
 		{
 			StructName:       "Post",
 			Mode:             "relation",

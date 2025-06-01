@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 )
 
 //go:embed fixtures
@@ -88,7 +88,7 @@ func TestDynamicScenariosBasic(t *testing.T) {
 	ctx := context.Background()
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	c.Assert(err, qt.IsNil)
 	defer conn.Close()
 

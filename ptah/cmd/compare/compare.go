@@ -7,10 +7,10 @@ import (
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/renderer"
 	"github.com/denisvmedia/inventario/ptah/schema/differ"
-	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
 var compareCmd = &cobra.Command{
@@ -54,7 +54,7 @@ func compareCommand(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("database URL is required")
 	}
 
-	fmt.Printf("Comparing schema from %s with database %s\n", rootDir, executor.FormatDatabaseURL(dbURL))
+	fmt.Printf("Comparing schema from %s with database %s\n", rootDir, dbschema.FormatDatabaseURL(dbURL))
 	fmt.Println("=== SCHEMA COMPARISON ===")
 	fmt.Println()
 
@@ -64,13 +64,13 @@ func compareCommand(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("error resolving path: %w", err)
 	}
 
-	result, err := parser.ParsePackageRecursively(absPath)
+	result, err := goschema.ParseDir(absPath)
 	if err != nil {
 		return fmt.Errorf("error parsing Go entities: %w", err)
 	}
 
 	// 2. Connect to database and read schema
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		return fmt.Errorf("error connecting to database: %w", err)
 	}

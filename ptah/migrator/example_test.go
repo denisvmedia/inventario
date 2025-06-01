@@ -7,18 +7,18 @@ import (
 
 	"github.com/go-extras/go-kit/must"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
-	"github.com/denisvmedia/inventario/ptah/migrator"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	migrator_examples "github.com/denisvmedia/inventario/ptah/examples/migrator"
+	"github.com/denisvmedia/inventario/ptah/migrator"
 )
 
 // Example demonstrates how to use the migrator programmatically
 func ExampleMigrator() {
 	// This is a demonstration - in real usage you would have a valid database URL
 	dbURL := "postgres://user:pass@localhost/db"
-	
+
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		fmt.Printf("Failed to connect: %v\n", err)
 		return
@@ -32,7 +32,7 @@ func ExampleMigrator() {
 	migration := &migrator.Migration{
 		Version:     1,
 		Description: "Create users table",
-		Up: func(ctx context.Context, conn *executor.DatabaseConnection) error {
+		Up: func(ctx context.Context, conn *dbschema.DatabaseConnection) error {
 			return conn.Writer().ExecuteSQL(`
 				CREATE TABLE users (
 					id SERIAL PRIMARY KEY,
@@ -41,7 +41,7 @@ func ExampleMigrator() {
 				)
 			`)
 		},
-		Down: func(ctx context.Context, conn *executor.DatabaseConnection) error {
+		Down: func(ctx context.Context, conn *dbschema.DatabaseConnection) error {
 			return conn.Writer().ExecuteSQL("DROP TABLE users")
 		},
 	}
@@ -64,7 +64,7 @@ func ExampleRunMigrations() {
 	dbURL := "postgres://user:pass@localhost/db"
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		fmt.Printf("Failed to connect: %v\n", err)
 		return
@@ -91,7 +91,7 @@ func ExampleGetMigrationStatus() {
 	dbURL := "postgres://user:pass@localhost/db"
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		fmt.Printf("Failed to connect: %v\n", err)
 		return
@@ -152,7 +152,7 @@ func Example_registerMigrationsCustomFilesystem() {
 	dbURL := "postgres://user:pass@localhost/db"
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		fmt.Printf("Failed to connect: %v\n", err)
 		return

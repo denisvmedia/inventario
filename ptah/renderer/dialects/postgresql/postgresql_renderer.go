@@ -1,15 +1,16 @@
-package renderer
+package postgresql
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
 )
 
 // PostgreSQLRenderer provides PostgreSQL-specific SQL rendering
 type PostgreSQLRenderer struct {
-	*BaseRenderer
+	*base.BaseRenderer
 	// CurrentEnums stores enum names available in the current rendering context
 	CurrentEnums []string // TODO: make private
 }
@@ -20,7 +21,7 @@ var _ ast.Visitor = (*PostgreSQLRenderer)(nil)
 // NewPostgreSQLRenderer creates a new PostgreSQL renderer
 func NewPostgreSQLRenderer() *PostgreSQLRenderer {
 	return &PostgreSQLRenderer{
-		BaseRenderer: NewBaseRenderer("postgres"),
+		BaseRenderer: base.NewBaseRenderer("postgres"),
 		CurrentEnums: nil,
 	}
 }
@@ -147,9 +148,9 @@ func (r *PostgreSQLRenderer) processFieldType(fieldType string, enums []string) 
 func (r *PostgreSQLRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 	// Table comment
 	if node.Comment != "" {
-		r.WriteLinef("-- %s TABLE: %s (%s) --", strings.ToUpper(r.dialect), node.Name, node.Comment)
+		r.WriteLinef("-- %s TABLE: %s (%s) --", r.DialectNormaized(), node.Name, node.Comment)
 	} else {
-		r.WriteLinef("-- %s TABLE: %s --", strings.ToUpper(r.dialect), node.Name)
+		r.WriteLinef("-- %s TABLE: %s --", r.DialectNormaized(), node.Name)
 	}
 
 	// CREATE TABLE statement
@@ -168,7 +169,7 @@ func (r *PostgreSQLRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 
 	// Render table-level constraints
 	for _, constraint := range node.Constraints {
-		line, err := r.renderConstraint(constraint)
+		line, err := r.RenderConstraint(constraint)
 		if err != nil {
 			return fmt.Errorf("error rendering constraint: %w", err)
 		}
@@ -193,7 +194,7 @@ func (r *PostgreSQLRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 					Name:     fk.Name,
 				},
 			}
-			line, err := r.renderConstraint(constraint)
+			line, err := r.RenderConstraint(constraint)
 			if err != nil {
 				return fmt.Errorf("error rendering foreign key constraint: %w", err)
 			}
@@ -450,9 +451,9 @@ func (r *PostgreSQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode
 
 	// Table comment
 	if node.Comment != "" {
-		r.WriteLinef("-- %s TABLE: %s (%s) --", strings.ToUpper(r.dialect), node.Name, node.Comment)
+		r.WriteLinef("-- %s TABLE: %s (%s) --", r.DialectNormaized(), node.Name, node.Comment)
 	} else {
-		r.WriteLinef("-- %s TABLE: %s --", strings.ToUpper(r.dialect), node.Name)
+		r.WriteLinef("-- %s TABLE: %s --", r.DialectNormaized(), node.Name)
 	}
 
 	// CREATE TABLE statement
@@ -471,7 +472,7 @@ func (r *PostgreSQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode
 
 	// Render table-level constraints
 	for _, constraint := range node.Constraints {
-		line, err := r.renderConstraint(constraint)
+		line, err := r.RenderConstraint(constraint)
 		if err != nil {
 			return fmt.Errorf("error rendering constraint: %w", err)
 		}
@@ -496,7 +497,7 @@ func (r *PostgreSQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode
 					Name:     fk.Name,
 				},
 			}
-			line, err := r.renderConstraint(constraint)
+			line, err := r.RenderConstraint(constraint)
 			if err != nil {
 				return fmt.Errorf("error rendering foreign key constraint: %w", err)
 			}

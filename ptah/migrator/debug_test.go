@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 )
 
 func TestInitializeDebug(t *testing.T) {
@@ -16,7 +16,7 @@ func TestInitializeDebug(t *testing.T) {
 	dbURL := "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		t.Skipf("Skipping test: failed to connect to database: %v", err)
 	}

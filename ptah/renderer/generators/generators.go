@@ -19,14 +19,13 @@
 package generators
 
 import (
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/core/platform"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/generic"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mariadb"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/mysql"
 	"github.com/denisvmedia/inventario/ptah/renderer/dialects/postgresql"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // DialectGenerator defines the interface for database-specific SQL generation.
@@ -48,12 +47,12 @@ type DialectGenerator interface {
 	//
 	// Parameters:
 	//   - table: Table metadata including name and configuration
-	//   - fields: Column definitions with types, constraints, and metadata
-	//   - indexes: Index definitions for the table
+	//   - fields: DBColumn definitions with types, constraints, and metadata
+	//   - indexes: DBIndex definitions for the table
 	//   - enums: Global enum definitions that may be referenced by fields
 	//
 	// Returns a complete CREATE TABLE SQL statement ready for execution.
-	GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum) string
+	GenerateCreateTable(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum) string
 
 	// GenerateCreateTableWithEmbedded generates a CREATE TABLE SQL statement with embedded field support.
 	//
@@ -63,13 +62,13 @@ type DialectGenerator interface {
 	//
 	// Parameters:
 	//   - table: Table metadata including name and configuration
-	//   - fields: Column definitions with types, constraints, and metadata
-	//   - indexes: Index definitions for the table
+	//   - fields: DBColumn definitions with types, constraints, and metadata
+	//   - indexes: DBIndex definitions for the table
 	//   - enums: Global enum definitions that may be referenced by fields
 	//   - embeddedFields: Fields from embedded structs to be included in the table
 	//
 	// Returns a complete CREATE TABLE SQL statement with embedded fields included.
-	GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField) string
+	GenerateCreateTableWithEmbedded(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum, embeddedFields []goschema.EmbeddedField) string
 
 	// GenerateAlterStatements generates ALTER TABLE SQL statements for schema migrations.
 	//
@@ -82,7 +81,7 @@ type DialectGenerator interface {
 	//   - newFields: Target field definitions after migration
 	//
 	// Returns a series of ALTER TABLE statements to migrate from old to new schema.
-	GenerateAlterStatements(oldFields, newFields []types.SchemaField) string
+	GenerateAlterStatements(oldFields, newFields []goschema.Field) string
 
 	// GenerateMigrationSQL generates SQL statements to apply schema differences for migration.
 	//
@@ -97,7 +96,7 @@ type DialectGenerator interface {
 	// Returns a slice of SQL statements as strings. Each statement is a complete SQL
 	// command that can be executed independently. Comments and warnings are included
 	// as SQL comments (lines starting with "--").
-	GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult) []string
+	GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *goschema.Database) []string
 
 	// GetDialectName returns the name identifier of the database dialect.
 	//
@@ -157,7 +156,7 @@ func GetDialectGenerator(dialect string) DialectGenerator {
 //   - dialect: The database dialect identifier
 //
 // Returns a complete CREATE TABLE SQL statement for the specified dialect.
-func GenerateCreateTable(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, dialect string) string {
+func GenerateCreateTable(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateCreateTable(table, fields, indexes, enums)
 }
@@ -181,7 +180,7 @@ func GenerateCreateTable(table types.TableDirective, fields []types.SchemaField,
 //   - dialect: The database dialect identifier
 //
 // Returns a complete CREATE TABLE SQL statement with embedded fields for the specified dialect.
-func GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.SchemaField, indexes []types.SchemaIndex, enums []types.GlobalEnum, embeddedFields []types.EmbeddedField, dialect string) string {
+func GenerateCreateTableWithEmbedded(table goschema.Table, fields []goschema.Field, indexes []goschema.Index, enums []goschema.Enum, embeddedFields []goschema.EmbeddedField, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateCreateTableWithEmbedded(table, fields, indexes, enums, embeddedFields)
 }
@@ -202,7 +201,7 @@ func GenerateCreateTableWithEmbedded(table types.TableDirective, fields []types.
 //   - dialect: The database dialect identifier
 //
 // Returns a series of ALTER TABLE statements to migrate from old to new schema for the specified dialect.
-func GenerateAlterStatements(oldFields, newFields []types.SchemaField, dialect string) string {
+func GenerateAlterStatements(oldFields, newFields []goschema.Field, dialect string) string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateAlterStatements(oldFields, newFields)
 }
@@ -223,7 +222,7 @@ func GenerateAlterStatements(oldFields, newFields []types.SchemaField, dialect s
 //   - dialect: The database dialect identifier
 //
 // Returns a slice of SQL statements for the specified dialect.
-func GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *parsertypes.PackageParseResult, dialect string) []string {
+func GenerateMigrationSQL(diff *differtypes.SchemaDiff, generated *goschema.Database, dialect string) []string {
 	generator := GetDialectGenerator(dialect)
 	return generator.GenerateMigrationSQL(diff, generated)
 }

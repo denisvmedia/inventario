@@ -8,7 +8,7 @@ import (
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/migrator"
 )
 
@@ -30,12 +30,12 @@ before running down migrations in production.`,
 }
 
 const (
-	dbURLFlag        = "db-url"
-	migrationsFlag   = "migrations-dir"
-	targetFlag       = "target"
-	dryRunFlag       = "dry-run"
-	verboseFlag      = "verbose"
-	confirmFlag      = "confirm"
+	dbURLFlag      = "db-url"
+	migrationsFlag = "migrations-dir"
+	targetFlag     = "target"
+	dryRunFlag     = "dry-run"
+	verboseFlag    = "verbose"
+	confirmFlag    = "confirm"
 )
 
 var migrateDownFlags = map[string]cobraflags.Flag{
@@ -97,11 +97,11 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	if verbose {
-		fmt.Printf("Connecting to database: %s\n", executor.FormatDatabaseURL(dbURL))
+		fmt.Printf("Connecting to database: %s\n", dbschema.FormatDatabaseURL(dbURL))
 	}
 
 	// Connect to database
-	conn, err := executor.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(dbURL)
 	if err != nil {
 		return fmt.Errorf("error connecting to database: %w", err)
 	}
@@ -117,7 +117,7 @@ func migrateDownCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	fmt.Println("=== MIGRATE DOWN ===")
-	fmt.Printf("Database: %s\n", executor.FormatDatabaseURL(dbURL))
+	fmt.Printf("Database: %s\n", dbschema.FormatDatabaseURL(dbURL))
 	fmt.Printf("Dialect: %s\n", conn.Info().Dialect)
 	fmt.Printf("Migrations directory: %s\n", migrationsDir)
 	fmt.Printf("Target version: %d\n", targetVersion)

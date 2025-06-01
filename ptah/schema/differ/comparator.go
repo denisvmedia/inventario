@@ -98,10 +98,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
+	"github.com/denisvmedia/inventario/ptah/dbschema/types"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/differtypes"
 	"github.com/denisvmedia/inventario/ptah/schema/differ/internal/compare"
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 // CompareSchemas compares a generated schema with a database schema and returns comprehensive differences.
@@ -162,7 +162,7 @@ import (
 //
 // This function is read-only and thread-safe. It does not modify the input
 // parameters and can be called concurrently from multiple goroutines.
-func CompareSchemas(generated *parsertypes.PackageParseResult, database *parsertypes.DatabaseSchema) *differtypes.SchemaDiff {
+func CompareSchemas(generated *goschema.Database, database *types.DBSchema) *differtypes.SchemaDiff {
 	diff := &differtypes.SchemaDiff{}
 
 	// Compare tables and their column structures
@@ -251,7 +251,7 @@ func CompareSchemas(generated *parsertypes.PackageParseResult, database *parsert
 //   - PostgreSQL: SERIAL types, native syntax
 //   - MySQL/MariaDB: AUTO_INCREMENT, dialect-specific types
 //   - Cross-platform: Uses MapTypeToSQL() for type conversion
-func GenerateBasicCreateTableSQL(table types.TableDirective, fields []types.SchemaField, dialect string) string {
+func GenerateBasicCreateTableSQL(table goschema.Table, fields []goschema.Field, dialect string) string {
 	var columns []string
 	var primaryKeys []string
 
@@ -376,7 +376,7 @@ func GenerateBasicCreateTableSQL(table types.TableDirective, fields []types.Sche
 //   - PostgreSQL: SERIAL, BOOLEAN, native enum types
 //   - MySQL/MariaDB: AUTO_INCREMENT, TINYINT, inline ENUM syntax
 //   - Cross-platform: Intelligent type mapping via MapTypeToSQL()
-func GenerateColumnDefinition(field types.SchemaField, dialect string) string {
+func GenerateColumnDefinition(field goschema.Field, dialect string) string {
 	sqlType := MapTypeToSQL(field.Type, field.Enum, dialect)
 	colDef := field.Name + " " + sqlType
 

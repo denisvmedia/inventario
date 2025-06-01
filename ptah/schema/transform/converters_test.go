@@ -6,19 +6,19 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/schema/transform"
-	"github.com/denisvmedia/inventario/ptah/schema/types"
 )
 
 func TestFromSchemaField_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		field    types.SchemaField
+		field    goschema.Field
 		expected func(*ast.ColumnNode) bool
 	}{
 		{
 			name: "basic field",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:     "username",
 				Type:     "VARCHAR(255)",
 				Nullable: true,
@@ -31,7 +31,7 @@ func TestFromSchemaField_HappyPath(t *testing.T) {
 		},
 		{
 			name: "primary key field",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "id",
 				Type:    "SERIAL",
 				Primary: true,
@@ -45,7 +45,7 @@ func TestFromSchemaField_HappyPath(t *testing.T) {
 		},
 		{
 			name: "not null field",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:     "email",
 				Type:     "VARCHAR(255)",
 				Nullable: false,
@@ -58,7 +58,7 @@ func TestFromSchemaField_HappyPath(t *testing.T) {
 		},
 		{
 			name: "unique field",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:   "username",
 				Type:   "VARCHAR(100)",
 				Unique: true,
@@ -71,7 +71,7 @@ func TestFromSchemaField_HappyPath(t *testing.T) {
 		},
 		{
 			name: "auto increment field",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "id",
 				Type:    "INTEGER",
 				AutoInc: true,
@@ -99,12 +99,12 @@ func TestFromSchemaField_HappyPath(t *testing.T) {
 func TestFromSchemaField_WithDefaults(t *testing.T) {
 	tests := []struct {
 		name     string
-		field    types.SchemaField
+		field    goschema.Field
 		expected func(*ast.ColumnNode) bool
 	}{
 		{
 			name: "literal default",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "status",
 				Type:    "VARCHAR(20)",
 				Default: "'active'",
@@ -115,7 +115,7 @@ func TestFromSchemaField_WithDefaults(t *testing.T) {
 		},
 		{
 			name: "function default",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:        "created_at",
 				Type:        "TIMESTAMP",
 				DefaultExpr: "NOW()",
@@ -141,12 +141,12 @@ func TestFromSchemaField_WithDefaults(t *testing.T) {
 func TestFromSchemaField_WithConstraints(t *testing.T) {
 	tests := []struct {
 		name     string
-		field    types.SchemaField
+		field    goschema.Field
 		expected func(*ast.ColumnNode) bool
 	}{
 		{
 			name: "check constraint",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:  "age",
 				Type:  "INTEGER",
 				Check: "age >= 0 AND age <= 150",
@@ -157,7 +157,7 @@ func TestFromSchemaField_WithConstraints(t *testing.T) {
 		},
 		{
 			name: "comment",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:    "description",
 				Type:    "TEXT",
 				Comment: "User description",
@@ -168,7 +168,7 @@ func TestFromSchemaField_WithConstraints(t *testing.T) {
 		},
 		{
 			name: "foreign key",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name:           "user_id",
 				Type:           "INTEGER",
 				Foreign:        "users(id)",
@@ -197,7 +197,7 @@ func TestFromSchemaField_WithConstraints(t *testing.T) {
 func TestFromSchemaField_ComplexField(t *testing.T) {
 	c := qt.New(t)
 
-	field := types.SchemaField{
+	field := goschema.Field{
 		Name:           "user_id",
 		Type:           "INTEGER",
 		Nullable:       false,
@@ -232,17 +232,17 @@ func TestFromSchemaField_ComplexField(t *testing.T) {
 func TestFromTableDirective_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		table    types.TableDirective
-		fields   []types.SchemaField
+		table    goschema.Table
+		fields   []goschema.Field
 		expected func(*ast.CreateTableNode) bool
 	}{
 		{
 			name: "basic table",
-			table: types.TableDirective{
+			table: goschema.Table{
 				StructName: "User",
 				Name:       "users",
 			},
-			fields: []types.SchemaField{
+			fields: []goschema.Field{
 				{
 					StructName: "User",
 					Name:       "id",
@@ -265,13 +265,13 @@ func TestFromTableDirective_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with comment and engine",
-			table: types.TableDirective{
+			table: goschema.Table{
 				StructName: "Post",
 				Name:       "posts",
 				Comment:    "User posts",
 				Engine:     "InnoDB",
 			},
-			fields: []types.SchemaField{
+			fields: []goschema.Field{
 				{
 					StructName: "Post",
 					Name:       "id",
@@ -288,12 +288,12 @@ func TestFromTableDirective_HappyPath(t *testing.T) {
 		},
 		{
 			name: "table with composite primary key",
-			table: types.TableDirective{
+			table: goschema.Table{
 				StructName: "UserRole",
 				Name:       "user_roles",
 				PrimaryKey: []string{"user_id", "role_id"},
 			},
-			fields: []types.SchemaField{
+			fields: []goschema.Field{
 				{
 					StructName: "UserRole",
 					Name:       "user_id",
@@ -329,12 +329,12 @@ func TestFromTableDirective_HappyPath(t *testing.T) {
 func TestFromTableDirective_FiltersByStructName(t *testing.T) {
 	c := qt.New(t)
 
-	table := types.TableDirective{
+	table := goschema.Table{
 		StructName: "User",
 		Name:       "users",
 	}
 
-	fields := []types.SchemaField{
+	fields := []goschema.Field{
 		{
 			StructName: "User",
 			Name:       "id",
@@ -364,12 +364,12 @@ func TestFromTableDirective_FiltersByStructName(t *testing.T) {
 func TestFromSchemaIndex_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		index    types.SchemaIndex
+		index    goschema.Index
 		expected func(*ast.IndexNode) bool
 	}{
 		{
 			name: "basic index",
-			index: types.SchemaIndex{
+			index: goschema.Index{
 				Name:       "idx_users_email",
 				StructName: "users",
 				Fields:     []string{"email"},
@@ -384,7 +384,7 @@ func TestFromSchemaIndex_HappyPath(t *testing.T) {
 		},
 		{
 			name: "unique index",
-			index: types.SchemaIndex{
+			index: goschema.Index{
 				Name:       "idx_users_username",
 				StructName: "users",
 				Fields:     []string{"username"},
@@ -398,7 +398,7 @@ func TestFromSchemaIndex_HappyPath(t *testing.T) {
 		},
 		{
 			name: "composite index with comment",
-			index: types.SchemaIndex{
+			index: goschema.Index{
 				Name:       "idx_posts_user_created",
 				StructName: "posts",
 				Fields:     []string{"user_id", "created_at"},
@@ -430,12 +430,12 @@ func TestFromSchemaIndex_HappyPath(t *testing.T) {
 func TestFromGlobalEnum_HappyPath(t *testing.T) {
 	tests := []struct {
 		name     string
-		enum     types.GlobalEnum
+		enum     goschema.Enum
 		expected func(*ast.EnumNode) bool
 	}{
 		{
 			name: "basic enum",
-			enum: types.GlobalEnum{
+			enum: goschema.Enum{
 				Name:   "status",
 				Values: []string{"active", "inactive", "pending"},
 			},
@@ -449,7 +449,7 @@ func TestFromGlobalEnum_HappyPath(t *testing.T) {
 		},
 		{
 			name: "single value enum",
-			enum: types.GlobalEnum{
+			enum: goschema.Enum{
 				Name:   "boolean_status",
 				Values: []string{"true"},
 			},
@@ -461,7 +461,7 @@ func TestFromGlobalEnum_HappyPath(t *testing.T) {
 		},
 		{
 			name: "empty enum",
-			enum: types.GlobalEnum{
+			enum: goschema.Enum{
 				Name:   "empty_enum",
 				Values: []string{},
 			},
@@ -487,18 +487,18 @@ func TestFromGlobalEnum_HappyPath(t *testing.T) {
 func TestFromSchemaField_WithEnumValidation(t *testing.T) {
 	tests := []struct {
 		name     string
-		field    types.SchemaField
-		enums    []types.GlobalEnum
+		field    goschema.Field
+		enums    []goschema.Enum
 		expected func(*ast.ColumnNode) bool
 	}{
 		{
 			name: "enum field with valid global enum",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name: "status",
 				Type: "enum_user_status",
 				Enum: []string{"active", "inactive"},
 			},
-			enums: []types.GlobalEnum{
+			enums: []goschema.Enum{
 				{
 					Name:   "enum_user_status",
 					Values: []string{"active", "inactive", "pending"},
@@ -510,12 +510,12 @@ func TestFromSchemaField_WithEnumValidation(t *testing.T) {
 		},
 		{
 			name: "enum field with no matching global enum",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name: "status",
 				Type: "enum_unknown_status",
 				Enum: []string{"active"},
 			},
-			enums: []types.GlobalEnum{
+			enums: []goschema.Enum{
 				{
 					Name:   "enum_user_status",
 					Values: []string{"active", "inactive"},
@@ -527,11 +527,11 @@ func TestFromSchemaField_WithEnumValidation(t *testing.T) {
 		},
 		{
 			name: "non-enum field should not be validated",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name: "name",
 				Type: "VARCHAR(255)",
 			},
-			enums: []types.GlobalEnum{
+			enums: []goschema.Enum{
 				{
 					Name:   "enum_user_status",
 					Values: []string{"active", "inactive"},
@@ -543,12 +543,12 @@ func TestFromSchemaField_WithEnumValidation(t *testing.T) {
 		},
 		{
 			name: "enum field with invalid values should still work but warn",
-			field: types.SchemaField{
+			field: goschema.Field{
 				Name: "status",
 				Type: "enum_user_status",
 				Enum: []string{"active", "invalid_value"},
 			},
-			enums: []types.GlobalEnum{
+			enums: []goschema.Enum{
 				{
 					Name:   "enum_user_status",
 					Values: []string{"active", "inactive"},
@@ -616,14 +616,14 @@ func TestIsEnumType(t *testing.T) {
 
 			// We need to test the unexported function through the public API
 			// by checking if validation is triggered
-			field := types.SchemaField{
+			field := goschema.Field{
 				Name: "test_field",
 				Type: tt.fieldType,
 				Enum: []string{"test_value"},
 			}
 
 			// This should not panic regardless of the field type
-			result := transform.FromSchemaField(field, []types.GlobalEnum{})
+			result := transform.FromSchemaField(field, []goschema.Enum{})
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.Type, qt.Equals, tt.fieldType)
 		})

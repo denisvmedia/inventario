@@ -1,4 +1,4 @@
-package executor
+package postgres
 
 import (
 	"database/sql"
@@ -8,7 +8,9 @@ import (
 	qt "github.com/frankban/quicktest"
 	_ "github.com/lib/pq"
 
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
+	"github.com/denisvmedia/inventario/ptah/dbschema/internal/testutils"
+	"github.com/denisvmedia/inventario/ptah/dbschema/types"
+	"github.com/denisvmedia/inventario/ptah/executor"
 )
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -108,7 +110,7 @@ func TestPostgreSQLReader_ReadSchema_Integration(t *testing.T) {
 	c.Assert(schema.Tables, qt.Not(qt.HasLen), 0)
 
 	// Find our test table
-	var testTable *parsertypes.Table
+	var testTable *types.DBTable
 	for i := range schema.Tables {
 		if schema.Tables[i].Name == "test_table" {
 			testTable = &schema.Tables[i]
@@ -119,23 +121,23 @@ func TestPostgreSQLReader_ReadSchema_Integration(t *testing.T) {
 	c.Assert(testTable.Columns, qt.HasLen, 5)
 
 	// Verify column properties
-	idCol := findColumn(testTable.Columns, "id")
+	idCol := testutils.FindColumn(testTable.Columns, "id")
 	c.Assert(idCol, qt.IsNotNil)
 	c.Assert(idCol.IsAutoIncrement, qt.IsTrue)
 	c.Assert(idCol.IsPrimaryKey, qt.IsTrue)
 
-	nameCol := findColumn(testTable.Columns, "name")
+	nameCol := testutils.FindColumn(testTable.Columns, "name")
 	c.Assert(nameCol, qt.IsNotNil)
 	c.Assert(nameCol.IsNullable, qt.Equals, "NO")
 	c.Assert(nameCol.IsUnique, qt.IsTrue)
 
-	statusCol := findColumn(testTable.Columns, "status")
+	statusCol := testutils.FindColumn(testTable.Columns, "status")
 	c.Assert(statusCol, qt.IsNotNil)
 	c.Assert(statusCol.UDTName, qt.Equals, "test_status")
 
 	// Verify enums were read
 	c.Assert(schema.Enums, qt.Not(qt.HasLen), 0)
-	var testEnum *parsertypes.Enum
+	var testEnum *types.DBEnum
 	for i := range schema.Enums {
 		if schema.Enums[i].Name == "test_status" {
 			testEnum = &schema.Enums[i]
@@ -171,10 +173,10 @@ func TestPostgreSQLReader_enhanceTablesWithConstraints(t *testing.T) {
 	reader := NewPostgreSQLReader(nil, "public")
 
 	// Create test data
-	tables := []parsertypes.Table{
+	tables := []types.DBTable{
 		{
 			Name: "test_table",
-			Columns: []parsertypes.Column{
+			Columns: []types.DBColumn{
 				{Name: "id", IsPrimaryKey: false, IsUnique: false},
 				{Name: "email", IsPrimaryKey: false, IsUnique: false},
 				{Name: "name", IsPrimaryKey: false, IsUnique: false},
@@ -182,7 +184,7 @@ func TestPostgreSQLReader_enhanceTablesWithConstraints(t *testing.T) {
 		},
 	}
 
-	constraints := []parsertypes.Constraint{
+	constraints := []types.DBConstraint{
 		{TableName: "test_table", ColumnName: "id", Type: "PRIMARY KEY"},
 		{TableName: "test_table", ColumnName: "email", Type: "UNIQUE"},
 	}
@@ -191,15 +193,15 @@ func TestPostgreSQLReader_enhanceTablesWithConstraints(t *testing.T) {
 	reader.enhanceTablesWithConstraints(tables, constraints)
 
 	// Verify results
-	idCol := findColumn(tables[0].Columns, "id")
+	idCol := testutils.FindColumn(tables[0].Columns, "id")
 	c.Assert(idCol.IsPrimaryKey, qt.IsTrue)
 	c.Assert(idCol.IsUnique, qt.IsFalse)
 
-	emailCol := findColumn(tables[0].Columns, "email")
+	emailCol := testutils.FindColumn(tables[0].Columns, "email")
 	c.Assert(emailCol.IsPrimaryKey, qt.IsFalse)
 	c.Assert(emailCol.IsUnique, qt.IsTrue)
 
-	nameCol := findColumn(tables[0].Columns, "name")
+	nameCol := testutils.FindColumn(tables[0].Columns, "name")
 	c.Assert(nameCol.IsPrimaryKey, qt.IsFalse)
 	c.Assert(nameCol.IsUnique, qt.IsFalse)
 }
@@ -268,13 +270,6 @@ func TestPostgreSQLWriter_Integration(t *testing.T) {
 
 	writer := NewPostgreSQLWriter(db, "public")
 
-	t.Run("CheckSchemaExists with empty result", func(t *testing.T) {
-		result := createTestParseResult()
-		existing, err := writer.CheckSchemaExists(result)
-		c.Assert(err, qt.IsNil)
-		c.Assert(existing, qt.HasLen, 0)
-	})
-
 	t.Run("transaction lifecycle", func(t *testing.T) {
 		// Test successful transaction
 		err := writer.BeginTransaction()
@@ -318,6 +313,6 @@ func TestPostgreSQLWriter_Integration(t *testing.T) {
 func TestPostgreSQLWriter_SchemaWriterInterface(t *testing.T) {
 	c := qt.New(t)
 	writer := NewPostgreSQLWriter(nil, "public")
-	var _ SchemaWriter = writer
+	var _ executor.SchemaWriter = writer
 	c.Assert(writer, qt.IsNotNil)
 }

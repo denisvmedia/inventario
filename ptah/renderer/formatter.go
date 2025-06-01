@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/denisvmedia/inventario/ptah/schema/parser/parsertypes"
+	"github.com/denisvmedia/inventario/ptah/dbschema/types"
 )
 
 // FormatSchema formats a database schema for display
-func FormatSchema(schema *parsertypes.DatabaseSchema, info parsertypes.DatabaseInfo) string {
+func FormatSchema(schema *types.DBSchema, info types.DBInfo) string {
 	var sb strings.Builder
 
 	// Header
@@ -73,7 +73,7 @@ func FormatSchema(schema *parsertypes.DatabaseSchema, info parsertypes.DatabaseI
 }
 
 // formatColumn formats a column for display
-func formatColumn(col parsertypes.Column, indent string) string {
+func formatColumn(col types.DBColumn, indent string) string {
 	var parts []string
 
 	// Basic info
@@ -119,7 +119,7 @@ func formatColumn(col parsertypes.Column, indent string) string {
 }
 
 // formatConstraint formats a constraint for display
-func formatConstraint(constraint parsertypes.Constraint, indent string) string {
+func formatConstraint(constraint types.DBConstraint, indent string) string {
 	switch constraint.Type {
 	case "PRIMARY KEY":
 		return fmt.Sprintf("%s- PRIMARY KEY (%s)\n", indent, constraint.ColumnName)
@@ -147,7 +147,7 @@ func formatConstraint(constraint parsertypes.Constraint, indent string) string {
 }
 
 // formatIndex formats an index for display
-func formatIndex(index parsertypes.Index, indent string) string {
+func formatIndex(index types.DBIndex, indent string) string {
 	indexType := "INDEX"
 	if index.IsPrimary {
 		indexType = "PRIMARY KEY"
@@ -160,8 +160,8 @@ func formatIndex(index parsertypes.Index, indent string) string {
 }
 
 // getTableConstraints returns constraints for a specific table
-func getTableConstraints(constraints []parsertypes.Constraint, tableName string) []parsertypes.Constraint {
-	var result []parsertypes.Constraint
+func getTableConstraints(constraints []types.DBConstraint, tableName string) []types.DBConstraint {
+	var result []types.DBConstraint
 	for _, constraint := range constraints {
 		if constraint.TableName == tableName {
 			result = append(result, constraint)
@@ -171,8 +171,8 @@ func getTableConstraints(constraints []parsertypes.Constraint, tableName string)
 }
 
 // getTableIndexes returns indexes for a specific table
-func getTableIndexes(indexes []parsertypes.Index, tableName string) []parsertypes.Index {
-	var result []parsertypes.Index
+func getTableIndexes(indexes []types.DBIndex, tableName string) []types.DBIndex {
+	var result []types.DBIndex
 	for _, index := range indexes {
 		if index.TableName == tableName {
 			result = append(result, index)

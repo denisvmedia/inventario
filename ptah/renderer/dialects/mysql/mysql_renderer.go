@@ -1,21 +1,22 @@
-package renderer
+package mysql
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
+	"github.com/denisvmedia/inventario/ptah/renderer/dialects/base"
 )
 
 // MySQLRenderer provides MySQL-specific SQL rendering
 type MySQLRenderer struct {
-	*BaseRenderer
+	*base.BaseRenderer
 }
 
 // NewMySQLRenderer creates a new MySQL renderer
 func NewMySQLRenderer() *MySQLRenderer {
 	return &MySQLRenderer{
-		BaseRenderer: NewBaseRenderer("mysql"),
+		BaseRenderer: base.NewBaseRenderer("mysql"),
 	}
 }
 
@@ -260,9 +261,9 @@ func (r *MySQLRenderer) VisitIndex(node *ast.IndexNode) error {
 func (r *MySQLRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 	// Table comment
 	if node.Comment != "" {
-		r.WriteLinef("-- %s TABLE: %s (%s) --", strings.ToUpper(r.dialect), node.Name, node.Comment)
+		r.WriteLinef("-- %s TABLE: %s (%s) --", r.DialectNormaized(), node.Name, node.Comment)
 	} else {
-		r.WriteLinef("-- %s TABLE: %s --", strings.ToUpper(r.dialect), node.Name)
+		r.WriteLinef("-- %s TABLE: %s --", r.DialectNormaized(), node.Name)
 	}
 
 	// CREATE TABLE statement
@@ -272,7 +273,7 @@ func (r *MySQLRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 
 	// Render columns
 	for _, column := range node.Columns {
-		line, err := r.renderColumn(column)
+		line, err := r.RenderColumn(column)
 		if err != nil {
 			return fmt.Errorf("error rendering column %s: %w", column.Name, err)
 		}
@@ -281,7 +282,7 @@ func (r *MySQLRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 
 	// Render table-level constraints
 	for _, constraint := range node.Constraints {
-		line, err := r.renderConstraint(constraint)
+		line, err := r.RenderConstraint(constraint)
 		if err != nil {
 			return fmt.Errorf("error rendering constraint: %w", err)
 		}
@@ -335,9 +336,9 @@ func (r *MySQLRenderer) RenderSchema(statements *ast.StatementList) (string, err
 func (r *MySQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, enums map[string][]string) error {
 	// Table comment
 	if node.Comment != "" {
-		r.WriteLinef("-- %s TABLE: %s (%s) --", strings.ToUpper(r.dialect), node.Name, node.Comment)
+		r.WriteLinef("-- %s TABLE: %s (%s) --", r.DialectNormaized(), node.Name, node.Comment)
 	} else {
-		r.WriteLinef("-- %s TABLE: %s --", strings.ToUpper(r.dialect), node.Name)
+		r.WriteLinef("-- %s TABLE: %s --", r.DialectNormaized(), node.Name)
 	}
 
 	// CREATE TABLE statement
@@ -364,7 +365,7 @@ func (r *MySQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, enu
 
 	// Render table-level constraints
 	for _, constraint := range node.Constraints {
-		line, err := r.renderConstraint(constraint)
+		line, err := r.RenderConstraint(constraint)
 		if err != nil {
 			return fmt.Errorf("error rendering constraint: %w", err)
 		}

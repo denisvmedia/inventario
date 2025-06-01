@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 )
 
 // testTimestampVerification tests that applied_at timestamps are stored correctly
-func testTimestampVerification(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testTimestampVerification(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
@@ -59,7 +59,7 @@ func testTimestampVerification(ctx context.Context, conn *executor.DatabaseConne
 }
 
 // testManualPatchDetection tests detecting manual schema changes
-func testManualPatchDetection(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testManualPatchDetection(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
@@ -132,7 +132,7 @@ func testManualPatchDetection(ctx context.Context, conn *executor.DatabaseConnec
 }
 
 // testPermissionRestrictions tests behavior with limited database permissions
-func testPermissionRestrictions(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testPermissionRestrictions(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	// This test is challenging to implement without actually creating a restricted user
 	// For now, we'll simulate the scenario by testing error handling
 
@@ -170,7 +170,7 @@ func testPermissionRestrictions(ctx context.Context, conn *executor.DatabaseConn
 }
 
 // testCleanupSupport tests dropping all tables and re-running migrations
-func testCleanupSupport(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testCleanupSupport(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")

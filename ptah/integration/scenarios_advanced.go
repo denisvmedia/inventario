@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/denisvmedia/inventario/ptah/executor"
+	"github.com/denisvmedia/inventario/ptah/core/goschema"
+	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/migrator"
-	"github.com/denisvmedia/inventario/ptah/schema/parser"
 )
 
 // testOperationPlanning tests generating detailed operation plans
-func testOperationPlanning(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testOperationPlanning(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
 	if err != nil {
 		return fmt.Errorf("failed to get migrations filesystem: %w", err)
@@ -44,7 +44,7 @@ func testOperationPlanning(ctx context.Context, conn *executor.DatabaseConnectio
 }
 
 // testSchemaDiff tests comparing DB schema with entity definitions
-func testSchemaDiff(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testSchemaDiff(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	// Apply some migrations to create tables
@@ -65,7 +65,7 @@ func testSchemaDiff(ctx context.Context, conn *executor.DatabaseConnection, fixt
 
 	// Parse entity definitions
 	entitiesDir := filepath.Join("fixtures", "entities")
-	entityResult, err := parser.ParsePackageRecursively(entitiesDir)
+	entityResult, err := goschema.ParseDir(entitiesDir)
 	if err != nil {
 		return fmt.Errorf("failed to parse entities: %w", err)
 	}
@@ -86,7 +86,7 @@ func testSchemaDiff(ctx context.Context, conn *executor.DatabaseConnection, fixt
 }
 
 // testFailureDiagnostics tests handling of failing migrations
-func testFailureDiagnostics(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testFailureDiagnostics(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	// Use the failing migrations set
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "failing")
 	if err != nil {
@@ -122,7 +122,7 @@ func testFailureDiagnostics(ctx context.Context, conn *executor.DatabaseConnecti
 }
 
 // testIdempotencyReapply tests re-applying already applied migrations
-func testIdempotencyReapply(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testIdempotencyReapply(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
@@ -161,7 +161,7 @@ func testIdempotencyReapply(ctx context.Context, conn *executor.DatabaseConnecti
 }
 
 // testIdempotencyUpToDate tests running migrate up when already up-to-date
-func testIdempotencyUpToDate(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testIdempotencyUpToDate(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	helper := NewDatabaseHelper(conn)
 
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
@@ -197,20 +197,20 @@ func testIdempotencyUpToDate(ctx context.Context, conn *executor.DatabaseConnect
 }
 
 // testConcurrencyParallelMigrate tests parallel migration execution
-func testConcurrencyParallelMigrate(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testConcurrencyParallelMigrate(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "basic")
 	if err != nil {
 		return fmt.Errorf("failed to get migrations filesystem: %w", err)
 	}
 
 	// Create two separate connections for parallel execution
-	conn1, err := executor.ConnectToDatabase(conn.Info().URL)
+	conn1, err := dbschema.ConnectToDatabase(conn.Info().URL)
 	if err != nil {
 		return fmt.Errorf("failed to create first connection: %w", err)
 	}
 	defer conn1.Close()
 
-	conn2, err := executor.ConnectToDatabase(conn.Info().URL)
+	conn2, err := dbschema.ConnectToDatabase(conn.Info().URL)
 	if err != nil {
 		return fmt.Errorf("failed to create second connection: %w", err)
 	}
@@ -254,7 +254,7 @@ func testConcurrencyParallelMigrate(ctx context.Context, conn *executor.Database
 }
 
 // testPartialFailureRecovery tests handling of partial migration failures
-func testPartialFailureRecovery(ctx context.Context, conn *executor.DatabaseConnection, fixtures fs.FS) error {
+func testPartialFailureRecovery(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	// Use the partial failure migrations set
 	migrationsFS, err := GetMigrationsFS(fixtures, conn, "partial_failure")
 	if err != nil {
