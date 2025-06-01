@@ -24,6 +24,11 @@ func (r *BaseRenderer) Dialect() string {
 	return r.dialect
 }
 
+// GetDialect returns the database dialect this renderer targets
+func (r *BaseRenderer) GetDialect() string {
+	return r.dialect
+}
+
 func (r *BaseRenderer) DialectNormaized() string {
 	return strings.ToUpper(r.dialect)
 }

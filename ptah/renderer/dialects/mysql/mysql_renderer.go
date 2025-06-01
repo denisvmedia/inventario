@@ -300,14 +300,16 @@ func (r *MySQLRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 		}
 	}
 
-	r.Write(");")
+	r.Write(")")
 
 	// Table options (like ENGINE for MySQL)
 	if len(node.Options) > 0 {
 		r.Write(" ")
 		r.Write(r.renderTableOptions(node.Options))
+		r.WriteLine(";")
+	} else {
+		r.WriteLine(";")
 	}
-
 	r.WriteLine("")
 	// Only one newline instead of two for better spacing
 	return nil
@@ -383,14 +385,16 @@ func (r *MySQLRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, enu
 		}
 	}
 
-	r.Write(");")
+	r.Write(")")
 
 	// Table options
 	if len(node.Options) > 0 {
 		r.Write(" ")
 		r.Write(r.renderTableOptions(node.Options))
+		r.WriteLine(";")
+	} else {
+		r.WriteLine(";")
 	}
-
 	r.WriteLine("")
 	// Only one newline instead of two for better spacing
 	return nil

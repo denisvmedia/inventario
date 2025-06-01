@@ -21,6 +21,20 @@ func NewMariaDBRenderer() *MariaDBRenderer {
 	}
 }
 
+// GetDialect returns the database dialect this renderer targets
+func (r *MariaDBRenderer) GetDialect() string {
+	return "mariadb"
+}
+
+// Render overrides the base Render method to ensure proper method resolution for MariaDB
+func (r *MariaDBRenderer) Render(node ast.Node) (string, error) {
+	r.Reset()
+	if err := node.Accept(r); err != nil {
+		return "", err
+	}
+	return r.GetOutput(), nil
+}
+
 // VisitEnum renders enum handling for MariaDB (inline ENUM types like MySQL)
 func (r *MariaDBRenderer) VisitEnum(node *ast.EnumNode) error {
 	// MariaDB doesn't have separate enum types like PostgreSQL
@@ -83,7 +97,7 @@ func (r *MariaDBRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 		}
 	}
 
-	r.Write(");")
+	r.Write(")")
 
 	// Close table definition with MariaDB-specific options
 	if len(node.Options) > 0 {
@@ -94,6 +108,7 @@ func (r *MariaDBRenderer) VisitCreateTable(node *ast.CreateTableNode) error {
 		}
 	}
 
+	r.WriteLine(";")
 	r.WriteLine("")
 	// Only one newline instead of two for better spacing
 	return nil
@@ -286,7 +301,7 @@ func (r *MariaDBRenderer) VisitCreateTableWithEnums(node *ast.CreateTableNode, e
 	if len(node.Options) > 0 {
 		options := r.renderTableOptions(node.Options)
 		if options != "" {
-			r.WriteLinef("\n); %s", options)
+			r.WriteLinef("\n) %s;", options)
 		} else {
 			r.WriteLine("\n);")
 		}
