@@ -1,3 +1,5 @@
+//go:build integration
+
 package postgres_test
 
 import (
@@ -8,7 +10,8 @@ import (
 	qt "github.com/frankban/quicktest"
 	_ "github.com/lib/pq"
 
-	"github.com/denisvmedia/inventario/ptah/dbschema/internal/testutils"
+	"github.com/denisvmedia/inventario/ptah/internal/testutils"
+
 	"github.com/denisvmedia/inventario/ptah/dbschema/postgres"
 	"github.com/denisvmedia/inventario/ptah/dbschema/types"
 )

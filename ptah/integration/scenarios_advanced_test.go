@@ -30,7 +30,8 @@ func TestMigrationGeneratorValidation(t *testing.T) {
 
 	// Run the migration generator validation test
 	ctx := context.Background()
-	err = testMigrationGeneratorValidation(ctx, conn, testFixtures)
+	recorder := &StepRecorder{}
+	err = testMigrationGeneratorValidation(ctx, conn, testFixtures, recorder)
 	c.Assert(err, qt.IsNil)
 }
 

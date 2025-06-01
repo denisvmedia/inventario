@@ -187,9 +187,10 @@
 // This package integrates with other Ptah components:
 //
 //   - ptah/core/ast: Provides the underlying AST node types
-//   - ptah/schema/renderer: Renders AST nodes to dialect-specific SQL
-//   - ptah/schema/differ: Compares schemas for migration generation
-//   - ptah/schema/parser: Parses Go structs to generate builders
+//   - ptah/core/renderer: Renders AST nodes to dialect-specific SQL
+//   - ptah/migration/schemadiff: Compares schemas for migration generation
+//   - ptah/core/goschema: Parses Go structs to generate builders
+//   - ptah/core/parser: Parses SQL DDL to generate AST nodes
 //
 // The astbuilder package serves as the programmatic interface for schema construction
 // in the Ptah ecosystem, bridging high-level schema definitions and low-level

@@ -1,3 +1,5 @@
+//go:build integration
+
 package ptah_test
 
 import (

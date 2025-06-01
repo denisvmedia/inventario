@@ -50,60 +50,82 @@ Ptah is organized into several key packages that work together to provide compre
 
 ### Core Packages
 
-#### `schema/` - Schema Definition and Processing
-The schema package contains all components for parsing, transforming, and representing database schemas:
+#### `core/` - Core Schema Processing Components
+The core package contains all fundamental components for parsing, transforming, and representing database schemas:
 
 - **`ast/`** - Abstract Syntax Tree representation for SQL DDL statements
   - Provides database-agnostic AST nodes for CREATE TABLE, ALTER TABLE, CREATE INDEX, etc.
   - Implements visitor pattern for dialect-specific SQL generation
   - Core node types: `CreateTableNode`, `AlterTableNode`, `ColumnNode`, `ConstraintNode`, `IndexNode`, `EnumNode`
 
-- **`builder/`** - Go package parsing and entity extraction
+- **`astbuilder/`** - Fluent API for building SQL DDL AST nodes
+  - Provides convenient builder pattern for constructing complex schemas
+  - SchemaBuilder, TableBuilder, ColumnBuilder, IndexBuilder interfaces
+  - Integrates seamlessly with the core AST package
+
+- **`goschema/`** - Go package parsing and entity extraction
   - Recursively parses Go source files to discover entity definitions
   - Extracts table directives, field mappings, indexes, enums, and embedded fields
   - Handles dependency analysis and topological sorting for proper table creation order
 
-- **`parser/`** - Alternative parsing implementation
-  - Similar functionality to builder but with different implementation approach
-  - Provides package-level parsing with dependency resolution
+- **`parser/`** - SQL DDL token-to-AST parser
+  - Converts SQL DDL tokens into Abstract Syntax Tree nodes
+  - Supports CREATE TABLE, ALTER TABLE, CREATE INDEX, CREATE TYPE statements
+  - Provides comprehensive error handling and position information
 
-- **`differ/`** - Schema comparison and diff generation
-  - Compares generated schemas with live database schemas
-  - Generates detailed differences showing what needs to be added, removed, or modified
-  - Produces migration SQL statements to synchronize schemas
+- **`lexer/`** - SQL tokenization and lexical analysis
+  - Tokenizes SQL input for parser consumption
+  - Handles strings, comments, identifiers, operators, and whitespace
+  - Provides position tracking for error reporting
 
-- **`transform/`** - Schema transformation utilities
-  - Processes embedded fields and generates corresponding schema fields
+- **`renderer/`** - Dialect-specific SQL generation from AST
+  - Converts AST nodes to database-specific SQL statements
+  - Supports PostgreSQL, MySQL, MariaDB dialects
+  - Implements visitor pattern for extensible rendering
+
+- **`platform/`** - Database platform constants and identifiers
+  - Defines platform-specific constants used throughout the system
+  - Provides standardized platform identification
+
+- **`sqlutil/`** - SQL utility functions
+  - SQL statement splitting and comment removal
+  - AST-based parsing for proper handling of strings and comments
+
+- **`convert/`** - Schema conversion utilities
   - Converts between different schema representations
-  - Handles platform-specific transformations
+  - Handles transformations between goschema and database schema formats
 
-- **`types/`** - Common type definitions
-  - Defines core data structures used throughout the schema system
-  - Includes `SchemaField`, `TableDirective`, `SchemaIndex`, `GlobalEnum`, etc.
+#### `migration/` - Migration Management System
+Provides comprehensive database migration functionality:
 
-#### `renderer/` - SQL Generation
-Generates dialect-specific SQL from AST representations:
+- **`generator/`** - Dynamic migration file generation
+  - Generates up/down migration files from schema differences
+  - Compares Go entities with current database state
+  - Creates timestamped migration files with proper SQL
 
-- **`base.go`** - Common SQL rendering functionality shared across dialects
-- **`postgresql.go`** - PostgreSQL-specific SQL rendering with enum support
-- **`mysql.go`** - MySQL-specific SQL rendering and type mappings
-- **`mariadb.go`** - MariaDB-specific SQL rendering and optimizations
-- **`dialects/`** - Additional dialect-specific generators
-- **`generators/`** - Legacy string-based SQL generators (being replaced by AST approach)
+- **`migrator/`** - Migration execution engine
+  - Applies and rolls back database migrations
+  - Tracks migration history and versions
+  - Provides dry-run capabilities and transaction safety
 
-#### `executor/` - Database Operations
-Handles all database interactions and operations:
+- **`planner/`** - Migration planning and SQL generation
+  - Converts schema differences into executable SQL statements
+  - Dialect-specific planners for PostgreSQL, MySQL, MariaDB
+  - Handles dependency ordering and safety checks
 
-- Database connection management for PostgreSQL and MySQL
-- Schema reading and introspection
-- Schema writing and migration execution
-- Transaction-based operations with rollback support
-- Database cleaning and schema dropping capabilities
+- **`schemadiff/`** - Schema comparison and difference analysis
+  - Compares generated schemas with live database schemas
+  - Identifies tables, columns, indexes, and enum differences
+  - Provides detailed change analysis for migration planning
 
-#### `platform/` - Platform Constants
-Defines platform-specific constants and identifiers:
-- `Postgres`, `MySQL`, `MariaDB` constants
-- Used throughout the system for platform-specific logic
+#### `dbschema/` - Database Schema Operations
+Handles all database interactions and schema operations:
+
+- **Connection management** for PostgreSQL, MySQL, MariaDB
+- **Schema reading and introspection** from live databases
+- **Schema writing and migration execution** with transaction support
+- **Database cleaning and schema dropping** capabilities
+- **Type definitions** for database schema representation
 
 ### Command Line Interface
 
@@ -111,12 +133,14 @@ Defines platform-specific constants and identifiers:
 Provides command-line interface for all Ptah operations:
 
 - **`generate`** - Generate SQL schema from Go entities without touching database
-- **`writedb`** - Write generated schema directly to database (supports `--dry-run`)
 - **`readdb`** - Read and display current database schema
 - **`compare`** - Compare Go entities with current database schema
 - **`migrate`** - Generate migration SQL for schema differences
-- **`dropschema`** - Drop tables/enums from Go entities (DANGEROUS!) (supports `--dry-run`)
+- **`migrateup`** - Apply migrations to bring database up to latest version
+- **`migratedown`** - Roll back migrations to previous versions
+- **`migratestatus`** - Show current migration status and history
 - **`dropall`** - Drop ALL tables and enums in database (VERY DANGEROUS!) (supports `--dry-run`)
+- **`integration-test`** - Run comprehensive integration tests across database platforms
 
 ### Supporting Components
 
@@ -337,8 +361,8 @@ package main
 
 import (
     "fmt"
-    "github.com/denisvmedia/inventario/ptah/schema/ast"
-    "github.com/denisvmedia/inventario/ptah/renderer"
+    "github.com/denisvmedia/inventario/ptah/core/ast"
+    "github.com/denisvmedia/inventario/ptah/core/renderer"
 )
 
 func main() {
@@ -361,8 +385,8 @@ func main() {
         AddConstraint(ast.NewUniqueConstraint("uk_users_email", "email"))
 
     // Render for PostgreSQL
-    pgRenderer := renderer.NewPostgreSQLRenderer()
-    pgSQL, err := pgRenderer.Render(table)
+    pgRenderer := renderer.NewRenderer("postgresql")
+    pgSQL, err := renderer.RenderSQL("postgresql", table)
     if err != nil {
         panic(err)
     }
@@ -370,8 +394,7 @@ func main() {
     fmt.Println(pgSQL)
 
     // Render for MySQL
-    mysqlRenderer := renderer.NewMySQLRenderer()
-    mysqlSQL, err := mysqlRenderer.Render(table)
+    mysqlSQL, err := renderer.RenderSQL("mysql", table)
     if err != nil {
         panic(err)
     }
@@ -387,18 +410,23 @@ package main
 
 import (
     "fmt"
-    "github.com/denisvmedia/inventario/ptah/schema/builder"
+    "github.com/denisvmedia/inventario/ptah/core/goschema"
+    "github.com/denisvmedia/inventario/ptah/core/renderer"
 )
 
 func main() {
     // Parse Go entities from a directory
-    result, err := builder.ParsePackageRecursively("./models")
+    result, err := goschema.ParseDir("./models")
     if err != nil {
         panic(err)
     }
 
     // Generate ordered CREATE TABLE statements
-    statements := result.GetOrderedCreateStatements("postgresql")
+    statements, err := renderer.RenderSchemaSQL("postgresql", result)
+    if err != nil {
+        panic(err)
+    }
+
     for _, stmt := range statements {
         fmt.Println(stmt)
     }
@@ -412,30 +440,37 @@ package main
 
 import (
     "fmt"
-    "github.com/denisvmedia/inventario/ptah/schema/builder"
-    "github.com/denisvmedia/inventario/ptah/schema/differ"
-    "github.com/denisvmedia/inventario/ptah/executor"
+    "github.com/denisvmedia/inventario/ptah/core/goschema"
+    "github.com/denisvmedia/inventario/ptah/migration/schemadiff"
+    "github.com/denisvmedia/inventario/ptah/migration/planner"
+    "github.com/denisvmedia/inventario/ptah/dbschema"
 )
 
 func main() {
     // Parse Go entities
-    generated, err := builder.ParsePackageRecursively("./models")
+    generated, err := goschema.ParseDir("./models")
     if err != nil {
         panic(err)
     }
 
-    // Read database schema
+    // Connect to database and read schema
     dbURL := "postgres://user:pass@localhost:5432/database"
-    database, err := executor.ReadDatabaseSchema(dbURL)
+    conn, err := dbschema.ConnectToDatabase(dbURL)
+    if err != nil {
+        panic(err)
+    }
+    defer conn.Close()
+
+    database, err := conn.Reader().ReadSchema()
     if err != nil {
         panic(err)
     }
 
     // Compare schemas
-    diff := differ.CompareSchemas(generated, database)
+    diff := schemadiff.Compare(generated, database)
 
     // Generate migration SQL
-    migrationSQL := diff.GenerateMigrationSQL(generated, "postgres")
+    migrationSQL := planner.GenerateSchemaDiffSQLStatements(diff, generated, "postgres")
     for _, stmt := range migrationSQL {
         fmt.Println(stmt)
     }

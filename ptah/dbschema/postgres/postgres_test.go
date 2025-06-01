@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/ptah/dbschema/internal/testutils"
 	"github.com/denisvmedia/inventario/ptah/dbschema/types"
+	"github.com/denisvmedia/inventario/ptah/internal/testutils"
 )
 
 func TestNewPostgreSQLReader(t *testing.T) {
