@@ -4,12 +4,18 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sync"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
+	"github.com/denisvmedia/inventario/ptah/migration/generator"
 	"github.com/denisvmedia/inventario/ptah/migration/migrator"
+	"github.com/denisvmedia/inventario/ptah/migration/schemadiff"
+	difftypes "github.com/denisvmedia/inventario/ptah/migration/schemadiff/types"
 )
 
 // testOperationPlanning tests generating detailed operation plans
@@ -291,4 +297,331 @@ func testPartialFailureRecovery(ctx context.Context, conn *dbschema.DatabaseConn
 	}
 
 	return nil
+}
+
+// testMigrationGeneratorValidation tests the migration generator with forward and rollback migrations
+// This test validates the correctness of migration generation and application using the ptah/migration/generator module.
+// It ensures that the resulting database schema is consistent with goschema, and that schemadiff reports no differences.
+func testMigrationGeneratorValidation(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS, recorder *StepRecorder) error {
+	// Create versioned entity manager
+	vem, err := NewVersionedEntityManager(fixtures)
+	if err != nil {
+		return fmt.Errorf("failed to create versioned entity manager: %w", err)
+	}
+	defer vem.Cleanup()
+
+	migrationsDir, err := os.MkdirTemp("", "ptah_integration_test_migrations_*")
+	if err != nil {
+		return fmt.Errorf("failed to create migrations directory: %w", err)
+	}
+	migrationsFs := os.DirFS(migrationsDir)
+	dh := NewDatabaseHelper(conn)
+
+	err = recorder.RecordStep("1.1 Initial Migration", "Apply migrations from 000-initial", func() error {
+		// Step 1: Initial Migration (000-initial)
+		if err := vem.LoadEntityVersion("000-initial"); err != nil {
+			return err
+		}
+
+		_, err := generator.GenerateMigration(generator.GenerateMigrationOptions{
+			RootDir:   vem.GetEntitiesDir(),
+			DBConn:    conn,
+			OutputDir: migrationsDir,
+		})
+		if err != nil {
+			return err
+		}
+		if err := dh.MigrateUp(ctx, migrationsFs); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("1.2 Validate Initial Migration", "Validate schema consistency after initial migration", func() error {
+		// Validate Step 1: Database schema matches goschema output for 000-initial
+		if err := validateSchemaConsistency(ctx, conn, vem, "000-initial"); err != nil {
+			return fmt.Errorf("step 1 validation failed: %w", err)
+		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("2.1 Add Fields Migration", "Apply migrations from 001-add-fields", func() error {
+		// Step 2: Add Fields (001-add-fields)
+		if err := vem.LoadEntityVersion("001-add-fields"); err != nil {
+			return err
+		}
+
+		_, err = generator.GenerateMigration(generator.GenerateMigrationOptions{
+			RootDir:   vem.GetEntitiesDir(),
+			DBConn:    conn,
+			OutputDir: migrationsDir,
+		})
+		if err != nil {
+			return err
+		}
+		if err := dh.MigrateUp(ctx, migrationsFs); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("2.2 Validate Add Fields Migration", "Validate schema consistency after add fields migration", func() error {
+		// Validate Step 2: Database schema matches goschema output for 001-add-fields
+		if err := validateSchemaConsistency(ctx, conn, vem, "001-add-fields"); err != nil {
+			return fmt.Errorf("step 2 validation failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("3.1 Add Posts Migration", "Apply migrations from 002-add-posts", func() error {
+		// Step 3: Add Posts (002-add-posts)
+		if err := vem.LoadEntityVersion("002-add-posts"); err != nil {
+			return err
+		}
+		_, err = generator.GenerateMigration(generator.GenerateMigrationOptions{
+			RootDir:   vem.GetEntitiesDir(),
+			DBConn:    conn,
+			OutputDir: migrationsDir,
+		})
+		if err != nil {
+			return err
+		}
+		if err := dh.MigrateUp(ctx, migrationsFs); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("3.2 Validate Add Posts Migration", "Validate schema consistency after add posts migration", func() error {
+		// Validate Step 3: Database schema matches goschema output for 002-add-posts
+		if err := validateSchemaConsistency(ctx, conn, vem, "002-add-posts"); err != nil {
+			return fmt.Errorf("step 3 validation failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("4.1 Rollback to Add Fields", "Rollback to step 2 (001-add-fields)", func() error {
+		// Step 4: Rollback to Step 2 (001-add-fields)
+		if err := dh.MigrateDown(ctx, migrationsFs); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("4.2 Validate Rollback to Add Fields", "Validate schema consistency after rollback to add fields", func() error {
+		// Validate Step 4: Database schema matches goschema output for 001-add-fields
+		if err := vem.LoadEntityVersion("001-add-fields"); err != nil {
+			return err
+		}
+		if err := validateSchemaConsistency(ctx, conn, vem, "001-add-fields"); err != nil {
+			return fmt.Errorf("step 4 validation failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("5.1 Rollback to Initial", "Rollback to step 1 (000-initial)", func() error {
+		// Step 5: Rollback to Step 1 (000-initial)
+		if err := dh.MigrateDown(ctx, migrationsFs); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("5.2 Validate Rollback to Initial", "Validate schema consistency after rollback to initial", func() error {
+		// Validate Step 5: Database schema matches goschema output for 000-initial
+		if err := vem.LoadEntityVersion("000-initial"); err != nil {
+			return err
+		}
+		if err := validateSchemaConsistency(ctx, conn, vem, "000-initial"); err != nil {
+			return fmt.Errorf("step 5 validation failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("6.1 Rollback to Empty State", "Rollback to empty database state", func() error {
+		// Step 6: Rollback to Empty State
+		if err := dh.MigrateDown(ctx, migrationsFs); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("6.2 Validate Empty State", "Validate that database schema is empty", func() error {
+		// Validate Step 6: Database schema is empty
+		if err := validateEmptySchema(ctx, conn); err != nil {
+			return fmt.Errorf("step 6 validation failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("7.1 Apply All Migrations at Once", "Apply all 3 migrations sequentially from empty state", func() error {
+		// Step 7: Apply all migrations at once
+		if err := dh.MigrateUp(ctx, migrationsFs); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("7.2 Validate Final State", "Validate schema consistency after applying all migrations", func() error {
+		// Validate final state: Database schema matches goschema output for 002-add-posts
+		if err := validateSchemaConsistency(ctx, conn, vem, "002-add-posts"); err != nil {
+			return fmt.Errorf("final state validation failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("7.3 Drop Schema", "Drop all tables to clean up", func() error {
+		// Step 7.3: Drop the schema to clean up
+		if err := rollbackToEmptyState(ctx, conn); err != nil {
+			return fmt.Errorf("failed to drop schema: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = recorder.RecordStep("7.4 Validate Clean State", "Validate that database is clean after dropping schema", func() error {
+		// Validate clean state: Database schema is empty
+		if err := validateEmptySchema(ctx, conn); err != nil {
+			return fmt.Errorf("clean state validation failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateSchemaConsistency validates that the database schema matches the goschema output for a given version
+// and that schemadiff reports no differences
+func validateSchemaConsistency(ctx context.Context, conn *dbschema.DatabaseConnection, vem *VersionedEntityManager, versionDir string) error {
+	// Load entities for the specified version
+	if err := vem.LoadEntityVersion(versionDir); err != nil {
+		return fmt.Errorf("failed to load entity version %s: %w", versionDir, err)
+	}
+
+	// Generate expected schema from entities
+	expectedSchema, err := vem.GenerateSchemaFromEntities()
+	if err != nil {
+		return fmt.Errorf("failed to generate schema from entities: %w", err)
+	}
+
+	// Read actual database schema
+	actualSchema, err := conn.Reader().ReadSchema()
+	if err != nil {
+		return fmt.Errorf("failed to read database schema: %w", err)
+	}
+
+	// Compare schemas using schemadiff
+	diff := schemadiff.Compare(expectedSchema, actualSchema)
+
+	// Check if there are any differences
+	if hasSchemaChanges(diff) {
+		return fmt.Errorf("schema differences detected for version %s: %+v", versionDir, diff)
+	}
+
+	return nil
+}
+
+// rollbackToVersion performs a rollback to a specific version by generating and applying down migrations
+func rollbackToVersion(ctx context.Context, conn *dbschema.DatabaseConnection, vem *VersionedEntityManager, targetVersionDir, description string) error {
+	// Load target version entities
+	if err := vem.LoadEntityVersion(targetVersionDir); err != nil {
+		return fmt.Errorf("failed to load target version %s: %w", targetVersionDir, err)
+	}
+
+	// Generate migration SQL to reach target state
+	statements, err := vem.GenerateMigrationSQL(ctx, conn)
+	if err != nil {
+		return fmt.Errorf("failed to generate rollback migration SQL: %w", err)
+	}
+
+	// If no statements, we're already at the target state
+	if len(statements) == 0 {
+		return nil
+	}
+
+	// Apply the rollback migration
+	if err := vem.ApplyMigrationFromEntities(ctx, conn, description); err != nil {
+		return fmt.Errorf("failed to apply rollback migration: %w", err)
+	}
+
+	return nil
+}
+
+// rollbackToEmptyState drops all tables to return to an empty database state
+func rollbackToEmptyState(ctx context.Context, conn *dbschema.DatabaseConnection) error {
+	// Drop all tables to return to empty state
+	if err := conn.Writer().DropAllTables(); err != nil {
+		return fmt.Errorf("failed to drop all tables: %w", err)
+	}
+
+	return nil
+}
+
+// validateEmptySchema validates that the database schema is empty (no tables)
+func validateEmptySchema(ctx context.Context, conn *dbschema.DatabaseConnection) error {
+	// Read current schema
+	schema, err := conn.Reader().ReadSchema()
+	if err != nil {
+		return fmt.Errorf("failed to read database schema: %w", err)
+	}
+
+	// Check that there are no tables
+	if len(schema.Tables) > 0 {
+		return fmt.Errorf("expected empty schema but found %d tables", len(schema.Tables))
+	}
+
+	return nil
+}
+
+// hasSchemaChanges checks if a SchemaDiff contains any changes
+func hasSchemaChanges(diff *difftypes.SchemaDiff) bool {
+	return diff.HasChanges()
 }

@@ -113,6 +113,13 @@ func GetAllScenarios() []TestScenario {
 			TestFunc:    testPermissionRestrictions,
 		},
 
+		// Migration Generator Validation
+		{
+			Name:             "migration_generator_validation",
+			Description:      "Validate migration generator with forward and rollback migrations",
+			EnhancedTestFunc: testMigrationGeneratorValidation,
+		},
+
 		// Cleanup Support
 		{
 			Name:        "cleanup_support",

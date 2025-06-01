@@ -23,6 +23,8 @@ type GenerateMigrationOptions struct {
 	RootDir string
 	// DatabaseURL is the connection string for the database
 	DatabaseURL string
+	// DBConn is the database connection (optional, if not provided, a new connection will be created)
+	DBConn *dbschema.DatabaseConnection
 	// MigrationName is the name for the migration (optional, defaults to "migration")
 	MigrationName string
 	// OutputDir is the directory where migration files will be saved
@@ -56,11 +58,17 @@ func GenerateMigration(opts GenerateMigrationOptions) (*MigrationFiles, error) {
 	}
 
 	// 2. Connect to database and read current schema
-	conn, err := dbschema.ConnectToDatabase(opts.DatabaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("error connecting to database: %w", err)
+	var conn *dbschema.DatabaseConnection
+
+	if opts.DBConn != nil {
+		conn = opts.DBConn
+	} else {
+		conn, err := dbschema.ConnectToDatabase(opts.DatabaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("error connecting to database: %w", err)
+		}
+		defer conn.Close()
 	}
-	defer conn.Close()
 
 	dbSchema, err := conn.Reader().ReadSchema()
 	if err != nil {
@@ -77,6 +85,7 @@ func GenerateMigration(opts GenerateMigrationOptions) (*MigrationFiles, error) {
 
 	// 4. Generate migration version (timestamp)
 	version := migrator.GetNextMigrationVersion()
+	fmt.Println("Version: ", version)
 
 	// 5. Generate up migration SQL
 	upSQL, err := generateUpMigrationSQL(diff, generated, conn.Info().Dialect)
@@ -223,6 +232,19 @@ func createMigrationFiles(outputDir string, version int, migrationName, upSQL, d
 
 	upFilePath := filepath.Join(outputDir, upFileName)
 	downFilePath := filepath.Join(outputDir, downFileName)
+
+	for {
+		info, err := os.Stat(upFilePath)
+		if err != nil || info.Size() == 0 {
+			break
+		}
+
+		version++
+		upFileName = migrator.GenerateMigrationFileName(version, migrationName, "up")
+		downFileName = migrator.GenerateMigrationFileName(version, migrationName, "down")
+		upFilePath = filepath.Join(outputDir, upFileName)
+		downFilePath = filepath.Join(outputDir, downFileName)
+	}
 
 	// Write up migration file
 	if err := os.WriteFile(upFilePath, []byte(upSQL), 0644); err != nil {

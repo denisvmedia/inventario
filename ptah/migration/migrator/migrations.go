@@ -191,8 +191,8 @@ func (m *Migrator) MigrateUp(ctx context.Context) error {
 	return nil
 }
 
-// MigrateDown migrates the database down to the specified target version
-func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
+// MigrateDown migrates the database down to the previous version
+func (m *Migrator) MigrateDown(ctx context.Context) error {
 	// Initialize the migrations table
 	if err := m.Initialize(ctx); err != nil {
 		return fmt.Errorf("failed to initialize migrations table: %w", err)
@@ -204,6 +204,78 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int) error {
 		return fmt.Errorf("failed to get current version: %w", err)
 	}
 
+	targetVersion, err := m.GetPreviousMigrationVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get previous version: %w", err)
+	}
+
+	// Skip if already at or below target version (shouldn't happen)
+	if targetVersion >= currentVersion {
+		fmt.Printf("Target version %d is not less than current version %d\n", targetVersion, currentVersion) //nolint:forbidigo // Migration progress output is intentional
+		return nil
+	}
+
+	fmt.Printf("Current schema version: %d\n", currentVersion)  //nolint:forbidigo // Migration progress output is intentional
+	fmt.Printf("Target schema version: %d\n", targetVersion)    //nolint:forbidigo // Migration progress output is intentional
+	fmt.Printf("Available migrations: %d\n", len(m.migrations)) //nolint:forbidigo // Migration progress output is intentional
+
+	// Sort migrations by version in descending order for rollback
+	sort.Slice(m.migrations, func(i, j int) bool {
+		return m.migrations[i].Version > m.migrations[j].Version
+	})
+
+	// Apply down migrations for versions greater than target
+	for _, migration := range m.migrations {
+		if migration.Version <= targetVersion || migration.Version > currentVersion {
+			continue
+		}
+
+		fmt.Printf("Rolling back migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
+
+		// Begin transaction for this migration rollback
+		if err := m.conn.Writer().BeginTransaction(); err != nil {
+			return fmt.Errorf("failed to begin transaction for migration %d: %w", migration.Version, err)
+		}
+
+		// Apply down migration
+		if err := migration.Down(ctx, m.conn); err != nil {
+			_ = m.conn.Writer().RollbackTransaction()
+			return fmt.Errorf("failed to revert migration %d: %w", migration.Version, err)
+		}
+
+		// Remove migration record
+		deleteSQL := fmt.Sprintf(deleteMigrationSQL, migration.Version)
+		if err := m.conn.Writer().ExecuteSQL(deleteSQL); err != nil {
+			_ = m.conn.Writer().RollbackTransaction()
+			return fmt.Errorf("failed to record migration reversion %d: %w", migration.Version, err)
+		}
+
+		// Commit transaction
+		if err := m.conn.Writer().CommitTransaction(); err != nil {
+			return fmt.Errorf("failed to commit transaction for migration %d: %w", migration.Version, err)
+		}
+
+		fmt.Printf("Rolled back migration %d: %s\n", migration.Version, migration.Description) //nolint:forbidigo // Migration progress output is intentional
+	}
+
+	fmt.Printf("Successfully migrated down to version %d\n", targetVersion) //nolint:forbidigo // Migration progress output is intentional
+	return nil
+}
+
+// MigrateDownTo migrates the database down to the specified target version
+func (m *Migrator) MigrateDownTo(ctx context.Context, targetVersion int) error {
+	// Initialize the migrations table
+	if err := m.Initialize(ctx); err != nil {
+		return fmt.Errorf("failed to initialize migrations table: %w", err)
+	}
+
+	// Get the current version
+	currentVersion, err := m.GetCurrentVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current version: %w", err)
+	}
+
+	// Skip if already at or below target version (shouldn't happen)
 	if targetVersion >= currentVersion {
 		fmt.Printf("Target version %d is not less than current version %d\n", targetVersion, currentVersion) //nolint:forbidigo // Migration progress output is intentional
 		return nil
@@ -279,7 +351,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int) error {
 		return m.migrateUpTo(ctx, targetVersion)
 	} else {
 		// Migrate down to target version
-		return m.MigrateDown(ctx, targetVersion)
+		return m.MigrateDownTo(ctx, targetVersion)
 	}
 }
 
@@ -381,4 +453,30 @@ func (m *Migrator) GetPendingMigrations(ctx context.Context) ([]int, error) {
 
 	sort.Ints(pending)
 	return pending, nil
+}
+
+// GetPreviousMigrationVersion finds the previous migration version compared to the current one.
+// Returns an error and -1 if no previous migrations exist.
+func (m *Migrator) GetPreviousMigrationVersion(ctx context.Context) (int, error) {
+	currentVersion, err := m.GetCurrentVersion(ctx)
+	if err != nil {
+		return -1, fmt.Errorf("failed to get current version: %w", err)
+	}
+
+	// If current version is 0, there are no previous migrations
+	if currentVersion == 0 {
+		return -1, fmt.Errorf("no previous migrations exist")
+	}
+
+	// Sort migrations by version in descending order to find the highest version below current
+	m.sortMigrations()
+
+	previousVersion := -1
+	for _, migration := range m.migrations {
+		if migration.Version < currentVersion && migration.Version > previousVersion {
+			previousVersion = migration.Version
+		}
+	}
+
+	return previousVersion, nil
 }

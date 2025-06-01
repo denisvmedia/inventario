@@ -104,7 +104,7 @@ func RunMigrationsDown(ctx context.Context, conn *dbschema.DatabaseConnection, t
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 
-	if err := migrator.MigrateDown(ctx, targetVersion); err != nil {
+	if err := migrator.MigrateDownTo(ctx, targetVersion); err != nil {
 		return fmt.Errorf("failed to run down migrations: %w", err)
 	}
 

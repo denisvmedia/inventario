@@ -613,7 +613,7 @@ func testDynamicRollbackSingle(ctx context.Context, conn *dbschema.DatabaseConne
 
 	// Now rollback to version 3
 	return recorder.RecordStep("Rollback to Version 3", "Roll back from version 4 to version 3", func() error {
-		if err := m.MigrateDown(ctx, 3); err != nil {
+		if err := m.MigrateDownTo(ctx, 3); err != nil {
 			return fmt.Errorf("failed to rollback to version 3: %w", err)
 		}
 
@@ -735,7 +735,7 @@ func testDynamicRollbackMultiple(ctx context.Context, conn *dbschema.DatabaseCon
 
 	// Now rollback to version 2
 	return recorder.RecordStep("Rollback to Version 2", "Roll back from version 6 to version 2", func() error {
-		if err := m.MigrateDown(ctx, 2); err != nil {
+		if err := m.MigrateDownTo(ctx, 2); err != nil {
 			return fmt.Errorf("failed to rollback to version 2: %w", err)
 		}
 
@@ -839,7 +839,7 @@ func testDynamicRollbackToZero(ctx context.Context, conn *dbschema.DatabaseConne
 
 	// Now rollback to version 0 (empty database)
 	return recorder.RecordStep("Rollback to Version 0", "Complete rollback to empty database", func() error {
-		if err := m.MigrateDown(ctx, 0); err != nil {
+		if err := m.MigrateDownTo(ctx, 0); err != nil {
 			return fmt.Errorf("failed to rollback to version 0: %w", err)
 		}
 

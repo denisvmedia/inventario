@@ -290,7 +290,7 @@ func (vem *VersionedEntityManager) LoadEntityVersion(versionDir string) error {
 		}
 
 		// Read file from fixtures
-		filePath := versionPath + "/" + entry.Name()
+		filePath := filepath.Join(versionPath, entry.Name())
 		content, err := fs.ReadFile(vem.fixturesFS, filePath)
 		if err != nil {
 			return fmt.Errorf("failed to read fixture file %s: %w", filePath, err)
@@ -431,7 +431,25 @@ func (dh *DatabaseHelper) RollbackToVersion(ctx context.Context, migrationsFS fs
 	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
 		return err
 	}
-	return m.MigrateDown(ctx, targetVersion)
+	return m.MigrateDownTo(ctx, targetVersion)
+}
+
+// MigrateUp migrates the database up to the latest version
+func (dh *DatabaseHelper) MigrateUp(ctx context.Context, migrationsFS fs.FS) error {
+	m := migrator.NewMigrator(dh.conn)
+	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
+		return err
+	}
+	return m.MigrateUp(ctx)
+}
+
+// MigrateDown migrates down to the previous version
+func (dh *DatabaseHelper) MigrateDown(ctx context.Context, migrationsFS fs.FS) error {
+	m := migrator.NewMigrator(dh.conn)
+	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
+		return err
+	}
+	return m.MigrateDown(ctx)
 }
 
 // TableExists checks if a table exists in the database

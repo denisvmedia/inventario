@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the integration test binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/ptah-integration-test ./cmd/integration-test
+RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 GOOS=linux go build -o /app/ptah-integration-test ./cmd/integration-test
 
 # Final stage
 FROM alpine:latest
