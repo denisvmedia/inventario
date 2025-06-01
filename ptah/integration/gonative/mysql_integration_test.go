@@ -1,6 +1,6 @@
 //go:build integration
 
-package mysql_test
+package gonative_test
 
 import (
 	"database/sql"

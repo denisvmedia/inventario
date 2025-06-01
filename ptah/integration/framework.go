@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -272,11 +273,11 @@ func (vem *VersionedEntityManager) LoadEntityVersion(versionDir string) error {
 	var err error
 
 	// First try with "fixtures/" prefix (for embedded filesystem)
-	versionPath = "fixtures/entities/" + versionDir
+	versionPath = path.Join("fixtures", "entities", versionDir) // using path and not filepath see: https://github.com/golang/go/issues/44305
 	entries, err = fs.ReadDir(vem.fixturesFS, versionPath)
 	if err != nil {
 		// If that fails, try without "fixtures/" prefix (for mounted filesystem)
-		versionPath = "entities/" + versionDir
+		versionPath = path.Join("entities", versionDir)
 		entries, err = fs.ReadDir(vem.fixturesFS, versionPath)
 		if err != nil {
 			return fmt.Errorf("failed to read version directory %s (tried both fixtures/entities/%s and entities/%s): %w", versionDir, versionDir, versionDir, err)
@@ -290,14 +291,14 @@ func (vem *VersionedEntityManager) LoadEntityVersion(versionDir string) error {
 		}
 
 		// Read file from fixtures
-		filePath := filepath.Join(versionPath, entry.Name())
+		filePath := path.Join(versionPath, entry.Name())
 		content, err := fs.ReadFile(vem.fixturesFS, filePath)
 		if err != nil {
 			return fmt.Errorf("failed to read fixture file %s: %w", filePath, err)
 		}
 
 		// Write to temp entities directory
-		destPath := filepath.Join(vem.entitiesDir, entry.Name())
+		destPath := path.Join(vem.entitiesDir, entry.Name())
 		if err := os.WriteFile(destPath, content, 0644); err != nil {
 			return fmt.Errorf("failed to write entity file %s: %w", destPath, err)
 		}

@@ -225,6 +225,9 @@ func TestPlanner_GenerateMigrationSQL_TablesModified(t *testing.T) {
 				},
 			},
 			generated: &goschema.Database{
+				Tables: []goschema.Table{
+					{Name: "users", StructName: "User"},
+				},
 				Fields: []goschema.Field{
 					{Name: "created_at", Type: "TIMESTAMP", StructName: "User", Nullable: false},
 				},

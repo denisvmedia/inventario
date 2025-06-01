@@ -312,7 +312,7 @@ function run_unit_tests() {
         echo -e "${CYAN}Searching for unit tests in package: $PACKAGE (excluding integration tests)${NC}"
     else
         search_path="."
-        echo -e "${CYAN}Searching for unit tests in all packages (excluding integration tests)${NC}"
+        echo -e "${CYAN}Searching for unit tests in all packages (excluding integration tests and gonative folder)${NC}"
     fi
 
     # Find all *_integration_test.go files to exclude
@@ -327,14 +327,28 @@ function run_unit_tests() {
         done
     fi
 
-    # Build test command for unit tests (exclude integration tests)
+    # Build test command for unit tests (exclude integration tests and gonative folder)
     local test_args=("test")
 
-    # Add package specification
+    # Add package specification - exclude integration/gonative folder
     if [ -n "$PACKAGE" ]; then
         test_args+=("./$PACKAGE/...")
     else
-        test_args+=("./...")
+        # Use go list to get all packages but exclude integration/gonative
+        local all_packages
+        all_packages=$(go list ./... 2>/dev/null | grep -v "integration/gonative" || echo "./...")
+
+        if [ "$all_packages" = "./..." ]; then
+            # Fallback to ./... if go list fails
+            test_args+=("./...")
+        else
+            # Add each package individually
+            while IFS= read -r pkg; do
+                if [[ "$pkg" != *"integration/gonative"* ]]; then
+                    test_args+=("$pkg")
+                fi
+            done <<< "$all_packages"
+        fi
     fi
 
     # Add test pattern if specified
@@ -372,120 +386,84 @@ function run_unit_tests() {
     local html_output="$REPORTS_DIR/unit-tests-$timestamp.html"
     generate_html_report "$json_output" "$html_output" "Unit"
 
+    # Track generated reports (add to global array)
+    newly_generated_reports+=("unit-tests-$timestamp.json")
+    newly_generated_reports+=("unit-tests-$timestamp.txt")
+    newly_generated_reports+=("unit-tests-$timestamp.html")
+
     return $test_exit_code
 }
 
 function run_integration_tests() {
     print_section "Running Integration Tests"
 
-    # Find all integration test files
-    local search_path
+    # Only run integration tests from the gonative folder
+    local gonative_search_path="./integration/gonative"
     if [ -n "$PACKAGE" ]; then
-        search_path="./$PACKAGE"
-        echo -e "${CYAN}Searching for integration tests in package: $PACKAGE${NC}"
+        # If a specific package is requested, check if it's the gonative folder or contains it
+        if [[ "$PACKAGE" == *"integration/gonative"* ]]; then
+            local gonative_package="./$PACKAGE"
+            echo -e "${CYAN}Running integration tests in gonative package: $PACKAGE${NC}"
+        else
+            print_warning "Integration tests are only available in the integration/gonative folder. Skipping."
+            return 0
+        fi
     else
-        search_path="."
-        echo -e "${CYAN}Searching for integration tests in all packages${NC}"
+        local gonative_package="$gonative_search_path"
+        echo -e "${CYAN}Running integration tests in gonative folder: $gonative_search_path${NC}"
     fi
 
-    # Find all *_integration_test.go files
-    local integration_files
-    integration_files=$(find "$search_path" -name "*_integration_test.go" -type f 2>/dev/null)
-
-    if [ -z "$integration_files" ]; then
-        print_warning "No integration test files (*_integration_test.go) found"
+    # Check if gonative folder exists
+    if [ ! -d "$gonative_package" ]; then
+        print_warning "Integration test folder not found: $gonative_package"
         return 0
     fi
 
-    local file_count=$(echo "$integration_files" | wc -l)
-    echo -e "${CYAN}Found $file_count integration test file(s):${NC}"
-    echo "$integration_files" | while read -r file; do
-        echo -e "${NC}  - $file${NC}"
-    done
-
-    # Build test command for integration tests
-    # Run tests by specifying exact integration test files
+    # Build test command for integration tests in gonative folder
     local start_time=$(date +%s)
     local all_output=""
     local overall_exit_code=0
-
-    # Group integration test files by package directory
-    declare -A package_groups
-    while IFS= read -r file; do
-        local dir=$(dirname "$file")
-        if [ "$dir" = "." ]; then
-            local package_path="."
-        else
-            local package_path="$dir"
-        fi
-
-        if [ -z "${package_groups[$package_path]}" ]; then
-            package_groups[$package_path]="$file"
-        else
-            package_groups[$package_path]="${package_groups[$package_path]} $file"
-        fi
-    done <<< "$integration_files"
 
     # Output files with timestamp
     local timestamp=$(date +"%Y%m%d-%H%M%S")
     local json_output="$REPORTS_DIR/integration-tests-$timestamp.json"
     local text_output="$REPORTS_DIR/integration-tests-$timestamp.txt"
 
-    # Run tests for each package separately with specific files
-    for package_path in "${!package_groups[@]}"; do
-        local files="${package_groups[$package_path]}"
+    # Build test command for gonative package
+    local test_args=("test")
 
-        echo -e "${CYAN}Running integration tests in package: $package_path${NC}"
-        for file in $files; do
-            echo -e "${NC}  - $file${NC}"
-        done
+    # Add the gonative package
+    test_args+=("$gonative_package")
 
-        # Build test command for this package
-        local test_args=("test")
+    # Add build tags for integration tests
+    test_args+=("-tags" "integration")
 
-        # Add build tags for integration tests
-        test_args+=("-tags" "integration")
+    # Add verbose output, JSON for reporting, and timeout
+    test_args+=("-v" "-json" "-timeout" "10m")
 
-        # Add verbose output, JSON for reporting, and timeout
-        test_args+=("-v" "-json" "-timeout" "10m")
+    # Add test pattern if specified
+    if [ -n "$PATTERN" ]; then
+        test_args+=("-run" "$PATTERN")
+    fi
 
-        # Add test pattern if specified
-        if [ -n "$PATTERN" ]; then
-            test_args+=("-run" "$PATTERN")
-        fi
+    echo ""
+    print_step "Executing: go ${test_args[*]}"
+    echo ""
 
-        # Find all Go source files in the package (needed for test compilation)
-        local source_files
-        source_files=$(find "$package_path" -maxdepth 1 -name "*.go" -not -name "*_test.go" 2>/dev/null || true)
+    # Run tests for gonative package
+    local package_output
+    package_output=$(go "${test_args[@]}" 2>&1)
+    local exit_code=$?
 
-        # Add source files and integration test files to command
-        for source_file in $source_files; do
-            test_args+=("$source_file")
-        done
+    if [ $exit_code -ne 0 ]; then
+        overall_exit_code=$exit_code
+    fi
 
-        for test_file in $files; do
-            test_args+=("$test_file")
-        done
+    all_output="$package_output"
 
-        echo ""
-        print_step "Executing: go ${test_args[*]}"
-        echo ""
-
-        # Run tests for this package
-        local package_output
-        package_output=$(go "${test_args[@]}" 2>&1)
-        local exit_code=$?
-
-        if [ $exit_code -ne 0 ]; then
-            overall_exit_code=$exit_code
-        fi
-
-        all_output="$all_output$package_output"$'\n'
-
-        if [ "$DEBUG" = "true" ]; then
-            echo -e "${YELLOW}Debug: Package $package_path exit code: $exit_code${NC}"
-        fi
-    done
+    if [ "$DEBUG" = "true" ]; then
+        echo -e "${YELLOW}Debug: Gonative package exit code: $exit_code${NC}"
+    fi
 
     # Write combined output to files
     echo "$all_output" > "$json_output"
@@ -505,6 +483,11 @@ function run_integration_tests() {
     # Generate HTML report
     local html_output="$REPORTS_DIR/integration-tests-$timestamp.html"
     generate_html_report "$json_output" "$html_output" "Integration"
+
+    # Track generated reports (add to global array)
+    newly_generated_reports+=("integration-tests-$timestamp.json")
+    newly_generated_reports+=("integration-tests-$timestamp.txt")
+    newly_generated_reports+=("integration-tests-$timestamp.html")
 
     return $overall_exit_code
 }
@@ -560,6 +543,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Global array to track newly generated reports
+declare -a newly_generated_reports=()
 
 # Main execution
 main() {
@@ -635,11 +621,13 @@ main() {
     echo -e "${BLUE}Total duration: ${total_duration}s${NC}"
     echo -e "${YELLOW}Reports generated in: $REPORTS_DIR${NC}"
 
-    # List generated reports
-    if [ -d "$REPORTS_DIR" ]; then
+    # List newly generated reports
+    if [ ${#newly_generated_reports[@]} -gt 0 ]; then
         echo ""
         echo -e "${YELLOW}Generated reports:${NC}"
-        find "$REPORTS_DIR" -type f -exec basename {} \; | sed 's/^/  - /'
+        for report in "${newly_generated_reports[@]}"; do
+            echo "  - $report"
+        done
     fi
 
     if [ $overall_result -ne 0 ]; then

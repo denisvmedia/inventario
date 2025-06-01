@@ -658,7 +658,7 @@ function Run-UnitTests {
         Write-Host "Searching for unit tests in package: $Package (excluding integration tests)" -ForegroundColor Cyan
     } else {
         $searchPath = "."
-        Write-Host "Searching for unit tests in all packages (excluding integration tests)" -ForegroundColor Cyan
+        Write-Host "Searching for unit tests in all packages (excluding integration tests and gonative folder)" -ForegroundColor Cyan
     }
 
     # Find all *_integration_test.go files to exclude
@@ -672,14 +672,30 @@ function Run-UnitTests {
         }
     }
 
-    # Build test command for unit tests (exclude integration tests)
+    # Build test command for unit tests (exclude integration tests and gonative folder)
     $testArgs = @("test")
 
-    # Add package specification
+    # Add package specification - exclude integration/gonative folder
     if ($Package) {
         $testArgs += "./$Package/..."
     } else {
-        $testArgs += "./..."
+        # Use go list to get all packages but exclude integration/gonative
+        try {
+            $allPackages = & go list ./... 2>$null | Where-Object { $_ -notlike "*integration/gonative*" }
+            if ($allPackages.Count -gt 0) {
+                # Add each package individually
+                foreach ($pkg in $allPackages) {
+                    $testArgs += $pkg
+                }
+            } else {
+                # Fallback to ./... if go list fails
+                $testArgs += "./..."
+            }
+        } catch {
+            # Fallback to ./... if go list command fails
+            Write-Warning "Failed to get package list, using ./... (gonative tests may be included)"
+            $testArgs += "./..."
+        }
     }
 
     # Add test pattern if specified
@@ -748,121 +764,92 @@ function Run-UnitTests {
     $htmlOutput = Join-Path $ReportsDir "unit-tests-$timestamp.html"
     Generate-HTMLReport -JsonFile $jsonOutput -OutputFile $htmlOutput -TestType "Unit"
 
+    # Track generated reports
+    $script:newlyGeneratedReports += @(
+        "unit-tests-$timestamp.json",
+        "unit-tests-$timestamp.txt",
+        "unit-tests-$timestamp.html"
+    )
+
     return $testExitCode
 }
 
 function Run-IntegrationTests {
     Write-Section "Running Integration Tests"
 
-    # Find all integration test files
-    $integrationTestFiles = @()
+    # Only run integration tests from the gonative folder
+    $gonativeSearchPath = "./integration/gonative"
     if ($Package) {
-        $searchPath = "./$Package"
-        Write-Host "Searching for integration tests in package: $Package" -ForegroundColor Cyan
+        # If a specific package is requested, check if it's the gonative folder or contains it
+        if ($Package -like "*integration/gonative*" -or $Package -like "*integration\gonative*") {
+            $gonativePackage = "./$Package"
+            Write-Host "Running integration tests in gonative package: $Package" -ForegroundColor Cyan
+        } else {
+            Write-Warning "Integration tests are only available in the integration/gonative folder. Skipping."
+            return 0
+        }
     } else {
-        $searchPath = "."
-        Write-Host "Searching for integration tests in all packages" -ForegroundColor Cyan
+        $gonativePackage = $gonativeSearchPath
+        Write-Host "Running integration tests in gonative folder: $gonativeSearchPath" -ForegroundColor Cyan
     }
 
-    # Find all *_integration_test.go files
-    $integrationTestFiles = Get-ChildItem -Path $searchPath -Recurse -Filter "*_integration_test.go" | ForEach-Object { $_.FullName }
-
-    if ($integrationTestFiles.Count -eq 0) {
-        Write-Warning "No integration test files (*_integration_test.go) found"
+    # Check if gonative folder exists
+    if (-not (Test-Path $gonativePackage)) {
+        Write-Warning "Integration test folder not found: $gonativePackage"
         return 0
     }
 
-    Write-Host "Found $($integrationTestFiles.Count) integration test file(s):" -ForegroundColor Cyan
-    foreach ($file in $integrationTestFiles) {
-        $relativePath = Resolve-Path -Path $file -Relative
-        Write-Host "  - $relativePath" -ForegroundColor Gray
-    }
-
-    # Build test command for integration tests
-    # Run tests by specifying exact integration test files
+    # Build test command for integration tests in gonative folder
     $startTime = Get-Date
     $allOutput = @()
     $overallExitCode = 0
 
-    # Group integration test files by package directory
-    $packageGroups = @{}
-    foreach ($file in $integrationTestFiles) {
-        $dir = Split-Path -Path $file -Parent
-        $relativePath = Resolve-Path -Path $dir -Relative
-        $packagePath = $relativePath -replace '\\', '/' -replace '^\.\/', ''
-        if ($packagePath -eq '.') {
-            $packagePath = '.'
-        }
+    # Build test command for gonative package
+    $testArgs = @("test")
 
-        if (-not $packageGroups.ContainsKey($packagePath)) {
-            $packageGroups[$packagePath] = @()
-        }
-        $packageGroups[$packagePath] += $file
+    # Add the gonative package
+    $testArgs += $gonativePackage
+
+    # Add build tags for integration tests
+    $testArgs += "-tags"
+    $testArgs += "integration"
+
+    # Add verbose output and JSON for reporting
+    $testArgs += "-v"
+    $testArgs += "-json"
+
+    # Add timeout
+    $testArgs += "-timeout"
+    $testArgs += "${Timeout}m"
+
+    # Add test pattern if specified
+    if ($Pattern) {
+        $testArgs += "-run"
+        $testArgs += $Pattern
     }
 
-    # Run tests for each package separately with specific files
-    foreach ($packagePath in $packageGroups.Keys) {
-        $files = $packageGroups[$packagePath]
+    Write-Host ""
+    Write-Host "Executing: go $($testArgs -join ' ')" -ForegroundColor Yellow
+    Write-Host ""
 
-        Write-Host "Running integration tests in package: $packagePath" -ForegroundColor Cyan
-        foreach ($file in $files) {
-            $relativePath = Resolve-Path -Path $file -Relative
-            Write-Host "  - $relativePath" -ForegroundColor Gray
+    # Run tests for gonative package
+    try {
+        $output = & go $testArgs 2>&1
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0) {
+            $overallExitCode = $exitCode
         }
 
-        # Build test command for this package
-        $testArgs = @("test")
+        $allOutput += $output
 
-        # Add build tags for integration tests
-        $testArgs += "-tags"
-        $testArgs += "integration"
-
-        # Add verbose output and JSON for reporting
-        $testArgs += "-v"
-        $testArgs += "-json"
-
-        # Add timeout
-        $testArgs += "-timeout"
-        $testArgs += "${Timeout}m"
-
-        # Add test pattern if specified
-        if ($Pattern) {
-            $testArgs += "-run"
-            $testArgs += $Pattern
+        if ($Debug) {
+            Write-Host "Debug: Gonative package exit code: $exitCode" -ForegroundColor Yellow
         }
 
-        # Find all Go source files in the package (needed for test compilation)
-        $sourceFiles = Get-ChildItem -Path $packagePath -Filter "*.go" | Where-Object {
-            $_.Name -notlike "*_test.go"
-        } | ForEach-Object { $_.FullName }
-
-        # Add source files and integration test files
-        $testArgs += $sourceFiles
-        $testArgs += $files
-
-        Write-Host ""
-        Write-Host "Executing: go $($testArgs -join ' ')" -ForegroundColor Yellow
-        Write-Host ""
-
-        # Run tests for this package
-        try {
-            $output = & go $testArgs 2>&1
-            $exitCode = $LASTEXITCODE
-
-            if ($exitCode -ne 0) {
-                $overallExitCode = $exitCode
-            }
-
-            $allOutput += $output
-
-            if ($Debug) {
-                Write-Host "Debug: Package $packagePath exit code: $exitCode" -ForegroundColor Yellow
-            }
-
-        } catch {
-            Write-Error "Failed to execute go test for package $packagePath`: $_"
-            $overallExitCode = 1
-        }
+    } catch {
+        Write-Error "Failed to execute go test for gonative package: $_"
+        $overallExitCode = 1
     }
 
     # Output files with timestamp
@@ -889,12 +876,22 @@ function Run-IntegrationTests {
     $htmlOutput = Join-Path $ReportsDir "integration-tests-$timestamp.html"
     Generate-HTMLReport -JsonFile $jsonOutput -OutputFile $htmlOutput -TestType "Integration"
 
+    # Track generated reports
+    $script:newlyGeneratedReports += @(
+        "integration-tests-$timestamp.json",
+        "integration-tests-$timestamp.txt",
+        "integration-tests-$timestamp.html"
+    )
+
     return $overallExitCode
 }
 
 # Main execution
 try {
     $startTime = Get-Date
+
+    # Track newly generated reports
+    $newlyGeneratedReports = @()
 
     Write-Header "Ptah Comprehensive Test Runner with Reporting"
 
@@ -966,12 +963,12 @@ try {
     Write-Host "Total duration: $($totalDuration.ToString('mm\:ss'))" -ForegroundColor Blue
     Write-Host "Reports generated in: $ReportsDir" -ForegroundColor Yellow
 
-    # List generated reports
-    if (Test-Path $ReportsDir) {
+    # List newly generated reports
+    if ($newlyGeneratedReports.Count -gt 0) {
         Write-Host ""
         Write-Host "Generated reports:" -ForegroundColor Yellow
-        Get-ChildItem $ReportsDir -File | ForEach-Object {
-            Write-Host "  - $($_.Name)" -ForegroundColor Gray
+        foreach ($report in $newlyGeneratedReports) {
+            Write-Host "  - $report" -ForegroundColor Gray
         }
     }
 

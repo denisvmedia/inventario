@@ -1,6 +1,6 @@
 //go:build integration
 
-package ptah_test
+package gonative_test
 
 import (
 	"fmt"
@@ -23,12 +23,12 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 	// Get the stubs directory
 	currentDir, err := os.Getwd()
 	c.Assert(err, qt.IsNil)
-	stubsDir := filepath.Join(currentDir, "stubs")
+	stubsDir := filepath.Join(currentDir, "..", "..", "stubs")
 
 	// List all .go files in the stubs directory
 	files, err := filepath.Glob(filepath.Join(stubsDir, "*.go"))
 	c.Assert(err, qt.IsNil)
-	c.Assert(files, qt.Not(qt.HasLen), 0, qt.Commentf("No .go files found in stubs directory"))
+	c.Assert(files, qt.Not(qt.HasLen), 0, qt.Commentf("No .go files found in stubs directory (%s)", stubsDir))
 
 	for _, file := range files {
 		t.Run(filepath.Base(file), func(t *testing.T) {

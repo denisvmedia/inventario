@@ -1,6 +1,6 @@
 //go:build integration
 
-package renderer_test
+package gonative_test
 
 import (
 	"database/sql"
@@ -17,8 +17,8 @@ import (
 	"github.com/denisvmedia/inventario/ptah/core/renderer"
 )
 
-// skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
-func skipIfNoPostgreSQL(t *testing.T) string {
+// skipIfNoPostgreSQLRenderer checks if PostgreSQL is available for testing and skips the test if not.
+func skipIfNoPostgreSQLRenderer(t *testing.T) string {
 	t.Helper()
 
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
@@ -40,8 +40,8 @@ func skipIfNoPostgreSQL(t *testing.T) string {
 	return dsn
 }
 
-// skipIfNoMySQL checks if MySQL is available for testing and skips the test if not.
-func skipIfNoMySQL(t *testing.T) string {
+// skipIfNoMySQLRenderer checks if MySQL is available for testing and skips the test if not.
+func skipIfNoMySQLRenderer(t *testing.T) string {
 	t.Helper()
 
 	dsn := os.Getenv("MYSQL_TEST_DSN")
@@ -63,8 +63,8 @@ func skipIfNoMySQL(t *testing.T) string {
 	return dsn
 }
 
-// skipIfNoMariaDB checks if MariaDB is available for testing and skips the test if not.
-func skipIfNoMariaDB(t *testing.T) string {
+// skipIfNoMariaDBRenderer checks if MariaDB is available for testing and skips the test if not.
+func skipIfNoMariaDBRenderer(t *testing.T) string {
 	t.Helper()
 
 	dsn := os.Getenv("MARIADB_TEST_DSN")
@@ -87,7 +87,7 @@ func skipIfNoMariaDB(t *testing.T) string {
 }
 
 func TestPostgreSQLRenderer_Integration(t *testing.T) {
-	dsn := skipIfNoPostgreSQL(t)
+	dsn := skipIfNoPostgreSQLRenderer(t)
 	c := qt.New(t)
 
 	db, err := sql.Open("postgres", dsn)
@@ -160,7 +160,7 @@ func TestPostgreSQLRenderer_Integration(t *testing.T) {
 }
 
 func TestMySQLRenderer_Integration(t *testing.T) {
-	dsn := skipIfNoMySQL(t)
+	dsn := skipIfNoMySQLRenderer(t)
 	c := qt.New(t)
 
 	db, err := sql.Open("mysql", dsn)
@@ -239,7 +239,7 @@ func TestMySQLRenderer_Integration(t *testing.T) {
 }
 
 func TestMariaDBRenderer_Integration(t *testing.T) {
-	dsn := skipIfNoMariaDB(t)
+	dsn := skipIfNoMariaDBRenderer(t)
 	c := qt.New(t)
 
 	db, err := sql.Open("mysql", dsn)
@@ -328,7 +328,7 @@ func TestRenderer_DialectSpecificSQL(t *testing.T) {
 		{
 			name:     "PostgreSQL specific features",
 			dialect:  "postgresql",
-			skipFunc: skipIfNoPostgreSQL,
+			skipFunc: skipIfNoPostgreSQLRenderer,
 			driver:   "postgres",
 			contains: []string{"SERIAL", "POSTGRES TABLE"},
 			excludes: []string{"AUTO_INCREMENT", "ENGINE"},
@@ -336,7 +336,7 @@ func TestRenderer_DialectSpecificSQL(t *testing.T) {
 		{
 			name:     "MySQL specific features",
 			dialect:  "mysql",
-			skipFunc: skipIfNoMySQL,
+			skipFunc: skipIfNoMySQLRenderer,
 			driver:   "mysql",
 			contains: []string{"AUTO_INCREMENT", "ENGINE", "MYSQL TABLE"},
 			excludes: []string{"SERIAL"},
@@ -344,7 +344,7 @@ func TestRenderer_DialectSpecificSQL(t *testing.T) {
 		{
 			name:     "MariaDB specific features",
 			dialect:  "mariadb",
-			skipFunc: skipIfNoMariaDB,
+			skipFunc: skipIfNoMariaDBRenderer,
 			driver:   "mysql",
 			contains: []string{"AUTO_INCREMENT", "ENGINE", "MARIADB TABLE"},
 			excludes: []string{"SERIAL"},
@@ -437,7 +437,7 @@ func TestDropIndex_Integration(t *testing.T) {
 		{
 			name:     "PostgreSQL DROP INDEX",
 			dialect:  "postgresql",
-			skipFunc: skipIfNoPostgreSQL,
+			skipFunc: skipIfNoPostgreSQLRenderer,
 			driver:   "postgres",
 			setupSQL: "CREATE TABLE test_drop_index (id SERIAL PRIMARY KEY, email VARCHAR(255)); CREATE INDEX idx_test_email ON test_drop_index(email);",
 			contains: []string{"DROP INDEX", "IF EXISTS", "idx_test_email"},
@@ -445,7 +445,7 @@ func TestDropIndex_Integration(t *testing.T) {
 		{
 			name:     "MySQL DROP INDEX",
 			dialect:  "mysql",
-			skipFunc: skipIfNoMySQL,
+			skipFunc: skipIfNoMySQLRenderer,
 			driver:   "mysql",
 			setupSQL: "CREATE TABLE test_drop_index (id INT AUTO_INCREMENT PRIMARY KEY, email VARCHAR(255)); CREATE INDEX idx_test_email ON test_drop_index(email)",
 			contains: []string{"DROP INDEX", "idx_test_email", "ON test_drop_index"},
@@ -453,7 +453,7 @@ func TestDropIndex_Integration(t *testing.T) {
 		{
 			name:     "MariaDB DROP INDEX",
 			dialect:  "mariadb",
-			skipFunc: skipIfNoMariaDB,
+			skipFunc: skipIfNoMariaDBRenderer,
 			driver:   "mysql",
 			setupSQL: "CREATE TABLE test_drop_index (id INT AUTO_INCREMENT PRIMARY KEY, email VARCHAR(255)); CREATE INDEX idx_test_email ON test_drop_index(email)",
 			contains: []string{"DROP INDEX", "idx_test_email", "ON test_drop_index"},
@@ -596,7 +596,7 @@ func TestCreateType_Integration(t *testing.T) {
 		{
 			name:     "MariaDB CREATE TYPE (should generate comment)",
 			dialect:  "mariadb",
-			skipFunc: skipIfNoMariaDB,
+			skipFunc: skipIfNoMariaDBRenderer,
 			driver:   "mysql",
 			createType: func() *ast.CreateTypeNode {
 				enumDef := ast.NewEnumTypeDef("small", "medium", "large")
@@ -662,7 +662,7 @@ func TestAlterType_Integration(t *testing.T) {
 		{
 			name:     "PostgreSQL ALTER TYPE ADD VALUE",
 			dialect:  "postgresql",
-			skipFunc: skipIfNoPostgreSQL,
+			skipFunc: skipIfNoPostgreSQLRenderer,
 			driver:   "postgres",
 			setupSQL: "CREATE TYPE test_status AS ENUM ('active', 'inactive');",
 			alterType: func() *ast.AlterTypeNode {
@@ -676,7 +676,7 @@ func TestAlterType_Integration(t *testing.T) {
 		{
 			name:     "PostgreSQL ALTER TYPE RENAME VALUE",
 			dialect:  "postgresql",
-			skipFunc: skipIfNoPostgreSQL,
+			skipFunc: skipIfNoPostgreSQLRenderer,
 			driver:   "postgres",
 			setupSQL: "CREATE TYPE test_priority AS ENUM ('low', 'medium', 'high');",
 			alterType: func() *ast.AlterTypeNode {
@@ -690,7 +690,7 @@ func TestAlterType_Integration(t *testing.T) {
 		{
 			name:     "PostgreSQL ALTER TYPE RENAME TYPE",
 			dialect:  "postgresql",
-			skipFunc: skipIfNoPostgreSQL,
+			skipFunc: skipIfNoPostgreSQLRenderer,
 			driver:   "postgres",
 			setupSQL: "CREATE TYPE old_type_name AS ENUM ('value1', 'value2');",
 			alterType: func() *ast.AlterTypeNode {
@@ -704,7 +704,7 @@ func TestAlterType_Integration(t *testing.T) {
 		{
 			name:     "PostgreSQL ALTER TYPE MULTIPLE OPERATIONS",
 			dialect:  "postgresql",
-			skipFunc: skipIfNoPostgreSQL,
+			skipFunc: skipIfNoPostgreSQLRenderer,
 			driver:   "postgres",
 			setupSQL: "CREATE TYPE multi_status AS ENUM ('draft', 'published');",
 			alterType: func() *ast.AlterTypeNode {
@@ -722,7 +722,7 @@ func TestAlterType_Integration(t *testing.T) {
 		{
 			name:     "MySQL ALTER TYPE (should generate comment)",
 			dialect:  "mysql",
-			skipFunc: skipIfNoMySQL,
+			skipFunc: skipIfNoMySQLRenderer,
 			driver:   "mysql",
 			alterType: func() *ast.AlterTypeNode {
 				return ast.NewAlterType("some_type").
@@ -734,7 +734,7 @@ func TestAlterType_Integration(t *testing.T) {
 		{
 			name:     "MariaDB ALTER TYPE (should generate comment)",
 			dialect:  "mariadb",
-			skipFunc: skipIfNoMariaDB,
+			skipFunc: skipIfNoMariaDBRenderer,
 			driver:   "mysql",
 			alterType: func() *ast.AlterTypeNode {
 				return ast.NewAlterType("some_type").
