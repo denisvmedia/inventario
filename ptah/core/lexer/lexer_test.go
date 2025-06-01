@@ -392,7 +392,7 @@ func TestLexer_NextToken_ComplexSQL(t *testing.T) {
 			WHERE u.active = 'true' -- only active users
 			ORDER BY u.name;`,
 			expectedTypes: []lexer.TokenType{
-				lexer.TokenComment,    // -- Get user information
+				lexer.TokenComment, // -- Get user information
 				lexer.TokenWhitespace,
 				lexer.TokenIdentifier, // SELECT
 				lexer.TokenWhitespace,

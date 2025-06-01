@@ -23,8 +23,6 @@ func CreateTestParseResult() *goschema.Database {
 	}
 }
 
-
-
 func FindColumn(columns []types.DBColumn, name string) *types.DBColumn {
 	for i := range columns {
 		if columns[i].Name == name {

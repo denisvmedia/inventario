@@ -11,7 +11,7 @@ func TestGetAllScenarios(t *testing.T) {
 	c := qt.New(t)
 
 	scenarios := GetAllScenarios()
-	
+
 	// Should have both static and dynamic scenarios
 	c.Assert(len(scenarios) > 10, qt.IsTrue, qt.Commentf("Expected more than 10 scenarios, got %d", len(scenarios)))
 
@@ -24,7 +24,7 @@ func TestGetAllScenarios(t *testing.T) {
 	// Verify some key dynamic scenarios are present
 	dynamicScenarios := []string{
 		"dynamic_basic_evolution",
-		"dynamic_skip_versions", 
+		"dynamic_skip_versions",
 		"dynamic_idempotency",
 		"dynamic_partial_apply",
 		"dynamic_schema_diff",

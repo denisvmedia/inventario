@@ -39,7 +39,7 @@ func main() {
 	// Print information about each parsed statement
 	for i, stmt := range statements.Statements {
 		fmt.Printf("Statement %d:\n", i+1)
-		
+
 		switch s := stmt.(type) {
 		case *ast.CreateTableNode:
 			fmt.Printf("  Type: CREATE TABLE\n")

@@ -9,7 +9,7 @@
 // The package defines constants for all supported database platforms:
 //
 //   - Postgres: PostgreSQL database platform identifier
-//   - MySQL: MySQL database platform identifier  
+//   - MySQL: MySQL database platform identifier
 //   - MariaDB: MariaDB database platform identifier
 //
 // # Usage
@@ -60,10 +60,10 @@
 //
 // New database platforms can be added by:
 //
-//   1. Adding a new constant to this package
-//   2. Implementing dialect-specific renderers
-//   3. Adding platform support to migration planners
-//   4. Updating connection management code
+//  1. Adding a new constant to this package
+//  2. Implementing dialect-specific renderers
+//  3. Adding platform support to migration planners
+//  4. Updating connection management code
 //
 // # Backward Compatibility
 //

@@ -27,7 +27,7 @@ func main() {
 	entitiesDir := os.Args[1]
 	databaseURL := os.Args[2]
 	outputDir := os.Args[3]
-	
+
 	migrationName := "migration" // default
 	if len(os.Args) > 4 {
 		migrationName = os.Args[4]
@@ -91,11 +91,11 @@ func main() {
 func maskPassword(url string) string {
 	// Simple password masking - in a real implementation you might want more sophisticated parsing
 	// This is just for display purposes to avoid showing passwords in logs
-	
+
 	// Find the pattern user:password@
 	start := -1
 	end := -1
-	
+
 	for i := 0; i < len(url)-1; i++ {
 		if url[i] == ':' && url[i+1] == '/' && i+2 < len(url) && url[i+2] == '/' {
 			// Found ://
@@ -103,11 +103,11 @@ func maskPassword(url string) string {
 			break
 		}
 	}
-	
+
 	if start == -1 {
 		return url // No protocol found
 	}
-	
+
 	// Find the @ symbol after the protocol
 	for i := start; i < len(url); i++ {
 		if url[i] == '@' {
@@ -115,11 +115,11 @@ func maskPassword(url string) string {
 			break
 		}
 	}
-	
+
 	if end == -1 {
 		return url // No @ found, probably no password
 	}
-	
+
 	// Find the : between user and password
 	colonPos := -1
 	for i := start; i < end; i++ {
@@ -128,11 +128,11 @@ func maskPassword(url string) string {
 			break
 		}
 	}
-	
+
 	if colonPos == -1 {
 		return url // No : found, probably no password
 	}
-	
+
 	// Replace password with asterisks
 	masked := url[:colonPos+1] + "****" + url[end:]
 	return masked

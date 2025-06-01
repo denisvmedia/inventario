@@ -39,7 +39,6 @@
 //	mergedField := toschema.MergeFieldOverrides(postgresField, map[string]goschema.Field{
 //		"mysql": mysqlField,
 //	})
-//
 package toschema
 
 import (
@@ -384,9 +383,9 @@ func ToEnum(enum *ast.EnumNode) goschema.Enum {
 // # Statement Processing
 //
 // The function processes statements in any order and categorizes them:
-//   1. EnumNode statements become global enum definitions
-//   2. CreateTableNode statements become table definitions and field collections
-//   3. IndexNode statements become index definitions
+//  1. EnumNode statements become global enum definitions
+//  2. CreateTableNode statements become table definitions and field collections
+//  3. IndexNode statements become index definitions
 //
 // # Examples
 //

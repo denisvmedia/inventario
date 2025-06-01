@@ -36,17 +36,17 @@ func main() {
 	// Print detailed information about the parsed statement
 	for i, stmt := range statements.Statements {
 		fmt.Printf("Statement %d:\n", i+1)
-		
+
 		if createTable, ok := stmt.(*ast.CreateTableNode); ok {
 			fmt.Printf("  Type: CREATE TABLE\n")
 			fmt.Printf("  Table: %s\n", createTable.Name)
 			fmt.Printf("  Columns: %d\n", len(createTable.Columns))
 			fmt.Printf("  Constraints: %d\n", len(createTable.Constraints))
-			
+
 			fmt.Println("\n  Column Details:")
 			for j, col := range createTable.Columns {
 				fmt.Printf("    %d. %s %s", j+1, col.Name, col.Type)
-				
+
 				var attributes []string
 				if !col.Nullable {
 					attributes = append(attributes, "NOT NULL")
@@ -67,13 +67,13 @@ func main() {
 						attributes = append(attributes, fmt.Sprintf("DEFAULT %s", col.Default.Value))
 					}
 				}
-				
+
 				if len(attributes) > 0 {
 					fmt.Printf(" [%s]", fmt.Sprintf("%v", attributes))
 				}
 				fmt.Println()
 			}
-			
+
 			if len(createTable.Constraints) > 0 {
 				fmt.Println("\n  Constraints:")
 				for j, constraint := range createTable.Constraints {
@@ -87,14 +87,14 @@ func main() {
 					fmt.Println()
 				}
 			}
-			
+
 			if len(createTable.Options) > 0 {
 				fmt.Println("\n  Table Options:")
 				for key, value := range createTable.Options {
 					fmt.Printf("    %s = %s\n", key, value)
 				}
 			}
-			
+
 			if createTable.Comment != "" {
 				fmt.Printf("\n  Comment: %s\n", createTable.Comment)
 			}

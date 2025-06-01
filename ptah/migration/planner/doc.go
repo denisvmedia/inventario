@@ -141,10 +141,10 @@
 //
 // New database dialects can be added by:
 //
-//   1. Implementing the DialectGenerator interface
-//   2. Creating a new dialect package under dialects/
-//   3. Adding the dialect to the GetPlanner() factory function
-//   4. Implementing dialect-specific SQL generation logic
+//  1. Implementing the DialectGenerator interface
+//  2. Creating a new dialect package under dialects/
+//  3. Adding the dialect to the GetPlanner() factory function
+//  4. Implementing dialect-specific SQL generation logic
 //
 // # Thread Safety
 //

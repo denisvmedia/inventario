@@ -183,7 +183,7 @@ func runIntegrationTests(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Total Tests: %d\n", report.TotalTests)
 	fmt.Printf("   Passed: %d\n", report.PassedTests)
 	fmt.Printf("   Failed: %d\n", report.FailedTests)
-	
+
 	if report.TotalTests > 0 {
 		successRate := float64(report.PassedTests) / float64(report.TotalTests) * 100
 		fmt.Printf("   Success Rate: %.1f%%\n", successRate)

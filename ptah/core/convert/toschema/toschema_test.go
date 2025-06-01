@@ -524,7 +524,7 @@ func TestMergeFieldOverrides_BasicMerging(t *testing.T) {
 
 	// Check MySQL overrides
 	c.Assert(result.Overrides["mysql"]["type"], qt.Equals, "JSON")
-	c.Assert(result.Overrides["mysql"]["check"], qt.Equals, "") // No check override
+	c.Assert(result.Overrides["mysql"]["check"], qt.Equals, "")   // No check override
 	c.Assert(result.Overrides["mysql"]["comment"], qt.Equals, "") // Same as base
 
 	// Check MariaDB overrides

@@ -26,7 +26,7 @@ func TestGenerateMigration_HappyPath(t *testing.T) {
 	// This test will fail if there's no testdata directory with Go entities
 	// and no memory database connection, but it tests the basic structure
 	_, err := generator.GenerateMigration(opts)
-	
+
 	// We expect this to fail because we don't have test data set up
 	// but we can verify the error is reasonable
 	c.Assert(err, qt.IsNotNil)
@@ -69,12 +69,12 @@ func TestGenerateStructName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			// We need to test the internal function, but it's not exported
 			// For now, we'll test the behavior through the public API
 			// In a real implementation, you might want to export these helper functions
 			// or test them through integration tests
-			
+
 			// This is a placeholder test structure
 			c.Assert(tt.input, qt.IsNotNil) // Just to make the test pass for now
 		})
@@ -152,7 +152,7 @@ func TestGenerateMigrationOptions_Validation(t *testing.T) {
 			c := qt.New(t)
 
 			_, err := generator.GenerateMigration(tt.opts)
-			
+
 			if tt.expectError {
 				c.Assert(err, qt.IsNotNil)
 			} else {

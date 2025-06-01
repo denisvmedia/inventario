@@ -75,7 +75,7 @@ func readDBCommand(_ *cobra.Command, _ []string) error {
 
 	// Format and display the schema
 	dbsch := dbschematogo.ConvertDBSchemaToGoSchema(schema)
-	statements :=renderer.GetOrderedCreateStatements(dbsch, conn.Info().Dialect)
+	statements := renderer.GetOrderedCreateStatements(dbsch, conn.Info().Dialect)
 	output := strings.Join(statements, ";\n") + ";"
 	fmt.Print(output)
 

@@ -3,6 +3,7 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -25,7 +26,7 @@ func NewMySQLWriter(db *sql.DB, schema string) *Writer {
 // ExecuteSQL executes a SQL statement
 func (w *Writer) ExecuteSQL(sql string) error {
 	if w.dryRun {
-		fmt.Printf("[DRY RUN] Would execute SQL: %s\n", sql)
+		slog.Info("[DRY RUN] Would execute SQL", "sql", sql)
 		return nil
 	}
 
@@ -43,7 +44,7 @@ func (w *Writer) ExecuteSQL(sql string) error {
 // BeginTransaction starts a new transaction
 func (w *Writer) BeginTransaction() error {
 	if w.dryRun {
-		fmt.Println("[DRY RUN] Would begin transaction")
+		slog.Info("[DRY RUN] Would begin transaction")
 		return nil
 	}
 
@@ -62,7 +63,7 @@ func (w *Writer) BeginTransaction() error {
 // CommitTransaction commits the current transaction
 func (w *Writer) CommitTransaction() error {
 	if w.dryRun {
-		fmt.Println("[DRY RUN] Would commit transaction")
+		slog.Info("[DRY RUN] Would commit transaction")
 		return nil
 	}
 
@@ -78,7 +79,7 @@ func (w *Writer) CommitTransaction() error {
 // RollbackTransaction rolls back the current transaction
 func (w *Writer) RollbackTransaction() error {
 	if w.dryRun {
-		fmt.Println("[DRY RUN] Would rollback transaction")
+		slog.Info("[DRY RUN] Would rollback transaction")
 		return nil
 	}
 
@@ -93,7 +94,7 @@ func (w *Writer) RollbackTransaction() error {
 
 // DropAllTables drops ALL tables in the database (COMPLETE CLEANUP!)
 func (w *Writer) DropAllTables() error {
-	fmt.Println("WARNING: This will drop ALL tables in the database!")
+	slog.Info("WARNING: This will drop ALL tables in the database!")
 
 	// Start transaction
 	if err := w.BeginTransaction(); err != nil {
@@ -143,7 +144,7 @@ func (w *Writer) DropAllTables() error {
 	// Drop all tables
 	for _, tableName := range tables {
 		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", tableName)
-		fmt.Printf("Dropping table: %s\n", tableName)
+		slog.Info("Dropping table", "tableName", tableName)
 		if err := w.ExecuteSQL(dropSQL); err != nil {
 			return fmt.Errorf("failed to drop table %s: %w", tableName, err)
 		}
@@ -159,7 +160,7 @@ func (w *Writer) DropAllTables() error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	fmt.Printf("Successfully dropped %d tables\n", len(tables))
+	slog.Info("Successfully dropped tables", "count", len(tables))
 	return nil
 }
 

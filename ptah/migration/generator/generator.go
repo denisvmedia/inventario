@@ -2,6 +2,7 @@ package generator
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,7 +86,7 @@ func GenerateMigration(opts GenerateMigrationOptions) (*MigrationFiles, error) {
 
 	// 4. Generate migration version (timestamp)
 	version := migrator.GetNextMigrationVersion()
-	fmt.Println("Version: ", version)
+	slog.Debug("Generated migration version", "version", version)
 
 	// 5. Generate up migration SQL
 	upSQL, err := generateUpMigrationSQL(diff, generated, conn.Info().Dialect)

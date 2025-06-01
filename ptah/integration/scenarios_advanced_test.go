@@ -106,5 +106,3 @@ func TestValidateEmptySchema(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "expected empty schema but found")
 }
-
-

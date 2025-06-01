@@ -236,20 +236,20 @@ func (a *SchemaAnalyzer) VisitCreateTable(node *ast.CreateTableNode) error {
 	return nil
 }
 
-func (a *SchemaAnalyzer) VisitAlterTable(node *ast.AlterTableNode) error   { return nil }
-func (a *SchemaAnalyzer) VisitColumn(node *ast.ColumnNode) error           { return nil }
-func (a *SchemaAnalyzer) VisitConstraint(node *ast.ConstraintNode) error   { return nil }
+func (a *SchemaAnalyzer) VisitAlterTable(node *ast.AlterTableNode) error { return nil }
+func (a *SchemaAnalyzer) VisitColumn(node *ast.ColumnNode) error         { return nil }
+func (a *SchemaAnalyzer) VisitConstraint(node *ast.ConstraintNode) error { return nil }
 func (a *SchemaAnalyzer) VisitIndex(node *ast.IndexNode) error {
 	a.IndexCount++
 	return nil
 }
-func (a *SchemaAnalyzer) VisitDropIndex(node *ast.DropIndexNode) error     { return nil }
-func (a *SchemaAnalyzer) VisitEnum(node *ast.EnumNode) error               { return nil }
-func (a *SchemaAnalyzer) VisitCreateType(node *ast.CreateTypeNode) error   { return nil }
-func (a *SchemaAnalyzer) VisitAlterType(node *ast.AlterTypeNode) error     { return nil }
-func (a *SchemaAnalyzer) VisitComment(node *ast.CommentNode) error         { return nil }
-func (a *SchemaAnalyzer) VisitDropTable(node *ast.DropTableNode) error     { return nil }
-func (a *SchemaAnalyzer) VisitDropType(node *ast.DropTypeNode) error       { return nil }
+func (a *SchemaAnalyzer) VisitDropIndex(node *ast.DropIndexNode) error   { return nil }
+func (a *SchemaAnalyzer) VisitEnum(node *ast.EnumNode) error             { return nil }
+func (a *SchemaAnalyzer) VisitCreateType(node *ast.CreateTypeNode) error { return nil }
+func (a *SchemaAnalyzer) VisitAlterType(node *ast.AlterTypeNode) error   { return nil }
+func (a *SchemaAnalyzer) VisitComment(node *ast.CommentNode) error       { return nil }
+func (a *SchemaAnalyzer) VisitDropTable(node *ast.DropTableNode) error   { return nil }
+func (a *SchemaAnalyzer) VisitDropType(node *ast.DropTypeNode) error     { return nil }
 
 // AuditTransformer adds audit columns to all tables
 type AuditTransformer struct{}

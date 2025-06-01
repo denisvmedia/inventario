@@ -3,6 +3,7 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
@@ -46,7 +47,7 @@ func (w *PostgreSQLWriter) writeEnums(enums []goschema.Enum) error {
 			}
 
 			if exists {
-				fmt.Printf("Enum %s already exists, skipping...\n", enum.Name)
+				slog.Info("Enum already exists, skipping...", "enumName", enum.Name)
 				continue
 			}
 		}
@@ -60,7 +61,7 @@ func (w *PostgreSQLWriter) writeEnums(enums []goschema.Enum) error {
 		createEnumSQL := fmt.Sprintf("CREATE TYPE %s AS ENUM (%s)",
 			enum.Name, strings.Join(values, ", "))
 
-		fmt.Printf("Creating enum: %s\n", enum.Name)
+		slog.Info("Creating enum...", "enumName", enum.Name)
 		if err := w.ExecuteSQL(createEnumSQL); err != nil {
 			return fmt.Errorf("failed to create enum %s: %w", enum.Name, err)
 		}
@@ -71,7 +72,7 @@ func (w *PostgreSQLWriter) writeEnums(enums []goschema.Enum) error {
 // ExecuteSQL executes a SQL statement
 func (w *PostgreSQLWriter) ExecuteSQL(sql string) error {
 	if w.dryRun {
-		fmt.Printf("[DRY RUN] Would execute SQL: %s\n", sql)
+		slog.Info("[DRY RUN] Would execute SQL", "sql", sql)
 		return nil
 	}
 
@@ -89,7 +90,7 @@ func (w *PostgreSQLWriter) ExecuteSQL(sql string) error {
 // BeginTransaction starts a new transaction
 func (w *PostgreSQLWriter) BeginTransaction() error {
 	if w.dryRun {
-		fmt.Println("[DRY RUN] Would begin transaction")
+		slog.Info("[DRY RUN] Would begin transaction")
 		return nil
 	}
 
@@ -108,7 +109,7 @@ func (w *PostgreSQLWriter) BeginTransaction() error {
 // CommitTransaction commits the current transaction
 func (w *PostgreSQLWriter) CommitTransaction() error {
 	if w.dryRun {
-		fmt.Println("[DRY RUN] Would commit transaction")
+		slog.Info("[DRY RUN] Would commit transaction")
 		return nil
 	}
 
@@ -124,7 +125,7 @@ func (w *PostgreSQLWriter) CommitTransaction() error {
 // RollbackTransaction rolls back the current transaction
 func (w *PostgreSQLWriter) RollbackTransaction() error {
 	if w.dryRun {
-		fmt.Println("[DRY RUN] Would rollback transaction")
+		slog.Info("[DRY RUN] Would rollback transaction")
 		return nil
 	}
 
@@ -139,7 +140,7 @@ func (w *PostgreSQLWriter) RollbackTransaction() error {
 
 // DropAllTables drops ALL tables and enums in the database schema (COMPLETE CLEANUP!)
 func (w *PostgreSQLWriter) DropAllTables() error {
-	fmt.Println("WARNING: This will drop ALL tables and enums in the database!")
+	slog.Warn("WARNING: This will drop ALL tables and enums in the database!")
 
 	// Start transaction
 	if err := w.BeginTransaction(); err != nil {
@@ -231,7 +232,7 @@ func (w *PostgreSQLWriter) DropAllTables() error {
 	// Drop all tables with CASCADE to handle dependencies
 	for _, tableName := range tables {
 		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS \"%s\" CASCADE", tableName)
-		fmt.Printf("Dropping table: %s\n", tableName)
+		slog.Info("Dropping table...", "tableName", tableName)
 		if err := w.ExecuteSQL(dropSQL); err != nil {
 			return fmt.Errorf("failed to drop table %s: %w", tableName, err)
 		}
@@ -240,7 +241,7 @@ func (w *PostgreSQLWriter) DropAllTables() error {
 	// Drop all enums
 	for _, enumName := range enums {
 		dropSQL := fmt.Sprintf("DROP TYPE IF EXISTS \"%s\" CASCADE", enumName)
-		fmt.Printf("Dropping enum: %s\n", enumName)
+		slog.Info("Dropping enum...", "enumName", enumName)
 		if err := w.ExecuteSQL(dropSQL); err != nil {
 			return fmt.Errorf("failed to drop enum %s: %w", enumName, err)
 		}
@@ -249,7 +250,7 @@ func (w *PostgreSQLWriter) DropAllTables() error {
 	// Drop all sequences
 	for _, sequenceName := range sequences {
 		dropSQL := fmt.Sprintf("DROP SEQUENCE IF EXISTS \"%s\" CASCADE", sequenceName)
-		fmt.Printf("Dropping sequence: %s\n", sequenceName)
+		slog.Info("Dropping sequence...", "sequenceName", sequenceName)
 		if err := w.ExecuteSQL(dropSQL); err != nil {
 			return fmt.Errorf("failed to drop sequence %s: %w", sequenceName, err)
 		}
@@ -260,7 +261,7 @@ func (w *PostgreSQLWriter) DropAllTables() error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	fmt.Printf("Successfully dropped %d tables, %d enums, %d sequences\n", len(tables), len(enums), len(sequences))
+	slog.Info("All tables and enums dropped successfully!", "tables", len(tables), "enums", len(enums), "sequences", len(sequences))
 	return nil
 }
 

@@ -1763,7 +1763,7 @@ func (p *Parser) parseCommentStatement() (*ast.CommentNode, error) {
 	var objectName strings.Builder
 	for {
 		if p.current.Type == lexer.TokenIdentifier ||
-		   (p.current.Type == lexer.TokenOperator && p.current.Value == ".") {
+			(p.current.Type == lexer.TokenOperator && p.current.Value == ".") {
 			objectName.WriteString(p.current.Value)
 			p.advance()
 		} else {

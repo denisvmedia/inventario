@@ -64,7 +64,7 @@ func main() {
 	// Print detailed information about each parsed statement
 	for i, stmt := range statements.Statements {
 		fmt.Printf("Statement %d:\n", i+1)
-		
+
 		switch s := stmt.(type) {
 		case *ast.EnumNode:
 			fmt.Printf("  Type: CREATE TYPE (ENUM)\n")
@@ -80,11 +80,11 @@ func main() {
 			fmt.Printf("  Table: %s\n", s.Name)
 			fmt.Printf("  Columns: %d\n", len(s.Columns))
 			fmt.Printf("  Constraints: %d\n", len(s.Constraints))
-			
+
 			fmt.Println("\n  PostgreSQL Column Features:")
 			for j, col := range s.Columns {
 				fmt.Printf("    %d. %s %s", j+1, col.Name, col.Type)
-				
+
 				var features []string
 				if !col.Nullable {
 					features = append(features, "NOT NULL")
@@ -115,13 +115,13 @@ func main() {
 				if col.Comment != "" {
 					features = append(features, fmt.Sprintf("COLLATE %s", col.Comment))
 				}
-				
+
 				if len(features) > 0 {
 					fmt.Printf(" [%s]", fmt.Sprintf("%v", features))
 				}
 				fmt.Println()
 			}
-			
+
 			if len(s.Constraints) > 0 {
 				fmt.Println("\n  Table Constraints:")
 				for j, constraint := range s.Constraints {
