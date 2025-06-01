@@ -15,8 +15,6 @@ var (
 
 // Renderer provides MySQL-like-specific SQL rendering
 type Renderer struct {
-	// currentEnums stores enum names available in the current rendering context
-	currentEnums []string
 	dialect      string
 	dialectUpper string
 	w            *bufwriter.Writer

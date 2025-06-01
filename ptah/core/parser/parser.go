@@ -1457,12 +1457,13 @@ func (p *Parser) parseModifyOperation() (*ast.ModifyColumnOperation, error) {
 	p.skipWhitespace()
 
 	// For ALTER COLUMN, expect COLUMN keyword
-	if operation == "ALTER" {
+	switch operation {
+	case "ALTER":
 		if err := p.expect(lexer.TokenIdentifier, "COLUMN"); err != nil {
 			return nil, fmt.Errorf("expected COLUMN after ALTER: %w", err)
 		}
 		p.skipWhitespace()
-	} else if operation == "MODIFY" {
+	case "MODIFY":
 		// Optional COLUMN keyword for MODIFY
 		if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "COLUMN" {
 			p.advance()

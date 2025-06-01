@@ -7,6 +7,7 @@ package ast
 // the column itself.
 //
 // Example:
+//
 //	// Single column primary key
 //	pk := NewPrimaryKeyConstraint("id")
 //	// Composite primary key
@@ -25,6 +26,7 @@ func NewPrimaryKeyConstraint(columns ...string) *ConstraintNode {
 // dropping it in migrations).
 //
 // Example:
+//
 //	// Single column unique constraint
 //	unique := NewUniqueConstraint("uk_users_email", "email")
 //	// Multi-column unique constraint
@@ -44,6 +46,7 @@ func NewUniqueConstraint(name string, columns ...string) *ConstraintNode {
 // have composite keys.
 //
 // Example:
+//
 //	ref := &ForeignKeyRef{
 //		Table:    "users",
 //		Column:   "id",

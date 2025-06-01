@@ -32,3 +32,4 @@ coverage
 docker-compose.override.yaml
 ptah/integration/reports
 test-reports
+/ptah/lint/

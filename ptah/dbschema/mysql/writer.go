@@ -198,7 +198,7 @@ func (w *Writer) extractTableNameFromCreateIndex(sql string) string {
 }
 
 // tableExists checks if a table exists in the database
-func (w *Writer) tableExists(tableName string) bool {
+func (w *Writer) tableExists(tableName string) bool { //nolint:unused // TODO: verify why this is not used
 	if w.dryRun {
 		// In dry run mode, assume table doesn't exist to show all operations
 		return false

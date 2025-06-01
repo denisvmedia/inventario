@@ -29,7 +29,7 @@ func NewPostgreSQLWriter(db *sql.DB, schema string) *PostgreSQLWriter {
 }
 
 // writeEnums creates all enum types
-func (w *PostgreSQLWriter) writeEnums(enums []goschema.Enum) error {
+func (w *PostgreSQLWriter) writeEnums(enums []goschema.Enum) error { //nolint:unused // TODO: verify why this is not used
 	for _, enum := range enums {
 		// Check if enum already exists (skip in dry run mode)
 		var exists bool
