@@ -7,7 +7,6 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/dbschema/internal/testutils"
 	"github.com/denisvmedia/inventario/ptah/dbschema/types"
-	"github.com/denisvmedia/inventario/ptah/executor"
 )
 
 func TestNewPostgreSQLReader(t *testing.T) {
@@ -150,6 +149,6 @@ func TestPostgreSQLWriter_TransactionMethods_NoConnection(t *testing.T) {
 func TestPostgreSQLWriter_SchemaWriterInterface(t *testing.T) {
 	c := qt.New(t)
 	writer := NewPostgreSQLWriter(nil, "public")
-	var _ executor.SchemaWriter = writer
+	var _ types.SchemaWriter = writer
 	c.Assert(writer, qt.IsNotNil)
 }

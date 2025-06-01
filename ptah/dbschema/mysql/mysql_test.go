@@ -7,7 +7,6 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/core/sqlutil"
 	"github.com/denisvmedia/inventario/ptah/dbschema/types"
-	"github.com/denisvmedia/inventario/ptah/executor"
 )
 
 func TestNewMySQLReader(t *testing.T) {
@@ -464,6 +463,6 @@ func TestMySQLWriter_UtilityMethods(t *testing.T) {
 func TestMySQLWriter_SchemaWriterInterface(t *testing.T) {
 	c := qt.New(t)
 	writer := NewMySQLWriter(nil, "test")
-	var _ executor.SchemaWriter = writer
+	var _ types.SchemaWriter = writer
 	c.Assert(writer, qt.IsNotNil)
 }

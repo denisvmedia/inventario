@@ -10,7 +10,6 @@ import (
 	"github.com/denisvmedia/inventario/ptah/dbschema/mysql"
 	"github.com/denisvmedia/inventario/ptah/dbschema/postgres"
 	"github.com/denisvmedia/inventario/ptah/dbschema/types"
-	"github.com/denisvmedia/inventario/ptah/executor"
 )
 
 // ConnectToDatabase creates a database connection from a URL
@@ -76,8 +75,8 @@ func ConnectToDatabase(dbURL string) (*DatabaseConnection, error) {
 	}
 
 	// Create appropriate schema reader and writer
-	var reader executor.SchemaReader
-	var writer executor.SchemaWriter
+	var reader types.SchemaReader
+	var writer types.SchemaWriter
 	switch dialect {
 	case "postgres":
 		reader = postgres.NewPostgreSQLReader(db, info.Schema)
@@ -102,8 +101,8 @@ func ConnectToDatabase(dbURL string) (*DatabaseConnection, error) {
 type DatabaseConnection struct {
 	db     *sql.DB
 	info   types.DBInfo
-	reader executor.SchemaReader
-	writer executor.SchemaWriter
+	reader types.SchemaReader
+	writer types.SchemaWriter
 }
 
 // Info returns the database connection information
@@ -112,12 +111,12 @@ func (dc *DatabaseConnection) Info() types.DBInfo {
 }
 
 // Reader returns the schema reader
-func (dc *DatabaseConnection) Reader() executor.SchemaReader {
+func (dc *DatabaseConnection) Reader() types.SchemaReader {
 	return dc.reader
 }
 
 // Writer returns the schema writer
-func (dc *DatabaseConnection) Writer() executor.SchemaWriter {
+func (dc *DatabaseConnection) Writer() types.SchemaWriter {
 	return dc.writer
 }
 

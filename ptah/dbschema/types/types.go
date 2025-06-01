@@ -69,3 +69,19 @@ type DBInfo struct {
 	Schema  string `json:"schema"` // public, database name, etc.
 	URL     string `json:"url"`    // database connection URL (for reference)
 }
+
+// SchemaReader interface for reading database schemas
+type SchemaReader interface {
+	ReadSchema() (*DBSchema, error)
+}
+
+// SchemaWriter interface for writing schemas to databases
+type SchemaWriter interface {
+	DropAllTables() error
+	ExecuteSQL(sql string) error
+	BeginTransaction() error
+	CommitTransaction() error
+	RollbackTransaction() error
+	SetDryRun(dryRun bool)
+	IsDryRun() bool
+}
