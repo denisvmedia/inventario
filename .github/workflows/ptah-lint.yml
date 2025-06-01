@@ -35,9 +35,9 @@ jobs:
         run: go mod download
         working-directory: ptah
       
-      - name: Run unit tests
-        run: |
-          # Run unit tests excluding integration tests
-          # These tests don't require database connections
-          go test -v -race ./... -timeout 10m
-        working-directory: ptah
+      - name: Golint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          args: --timeout=30m
+          version: v2.1.6
+          working-directory: ptah
