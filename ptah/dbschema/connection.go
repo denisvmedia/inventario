@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	_ "github.com/go-sql-driver/mysql"
-
+	"github.com/denisvmedia/inventario/ptah/dbschema/mysql"
+	"github.com/denisvmedia/inventario/ptah/dbschema/postgres"
 	"github.com/denisvmedia/inventario/ptah/dbschema/types"
 	"github.com/denisvmedia/inventario/ptah/executor"
 )
@@ -80,11 +80,11 @@ func ConnectToDatabase(dbURL string) (*DatabaseConnection, error) {
 	var writer executor.SchemaWriter
 	switch dialect {
 	case "postgres":
-		reader = executor.NewPostgreSQLReader(db, info.Schema)
-		writer = executor.NewPostgreSQLWriter(db, info.Schema)
+		reader = postgres.NewPostgreSQLReader(db, info.Schema)
+		writer = postgres.NewPostgreSQLWriter(db, info.Schema)
 	case "mysql":
-		reader = executor.NewMySQLReader(db, info.Schema)
-		writer = executor.NewMySQLWriter(db, info.Schema)
+		reader = mysql.NewMySQLReader(db, info.Schema)
+		writer = mysql.NewMySQLWriter(db, info.Schema)
 	default:
 		db.Close()
 		return nil, fmt.Errorf("no schema reader available for dialect: %s", dialect)

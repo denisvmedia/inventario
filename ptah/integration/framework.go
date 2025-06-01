@@ -307,7 +307,7 @@ func (vem *VersionedEntityManager) LoadEntityVersion(versionDir string) error {
 }
 
 // GenerateSchemaFromEntities parses the current entities and returns the schema
-func (vem *VersionedEntityManager) GenerateSchemaFromEntities() (*goschematypes.Database, error) {
+func (vem *VersionedEntityManager) GenerateSchemaFromEntities() (*goschema.Database, error) {
 	return goschema.ParseDir(vem.entitiesDir)
 }
 
