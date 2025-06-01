@@ -47,7 +47,6 @@
 //
 //	// Convert without platform-specific overrides (uses defaults)
 //	defaultStatements := fromschema.FromDatabase(database, "")
-//
 package fromschema
 
 import (
@@ -224,98 +223,6 @@ func FromField(field goschema.Field, enums []goschema.Enum, targetPlatform strin
 	}
 
 	return column
-}
-
-// parseForeignKeyReference parses a foreign key reference string into an ast.ForeignKeyRef.
-//
-// The foreign key reference string should be in the format "table(column)" or just "table"
-// (which defaults to referencing the "id" column).
-//
-// Examples:
-//   - "users(id)" -> references users.id
-//   - "users" -> references users.id (default)
-//   - "categories(slug)" -> references categories.slug
-//
-// Returns nil if the reference string is malformed.
-func parseForeignKeyReference(foreign string) *ast.ForeignKeyRef {
-	if foreign == "" {
-		return nil
-	}
-
-	// Check if it contains parentheses for column specification
-	if strings.Contains(foreign, "(") && strings.Contains(foreign, ")") {
-		// Parse "table(column)" format
-		parts := strings.Split(foreign, "(")
-		if len(parts) != 2 {
-			return nil
-		}
-
-		table := strings.TrimSpace(parts[0])
-		columnPart := strings.TrimSpace(parts[1])
-
-		// Remove closing parenthesis
-		if !strings.HasSuffix(columnPart, ")") {
-			return nil
-		}
-		column := strings.TrimSuffix(columnPart, ")")
-
-		return &ast.ForeignKeyRef{
-			Table:  table,
-			Column: column,
-		}
-	}
-
-	// Default to "id" column if no column specified
-	return &ast.ForeignKeyRef{
-		Table:  strings.TrimSpace(foreign),
-		Column: "id",
-	}
-}
-
-// validateEnumField validates that enum field values are consistent with global enum definitions.
-//
-// This function performs validation for fields with enum types, ensuring that:
-//   - The referenced global enum exists
-//   - Any field-specific enum values are a subset of the global enum values
-//
-// Validation warnings are logged but do not stop the conversion process, allowing for
-// graceful handling of incomplete or evolving schema definitions.
-func validateEnumField(field goschema.Field, enums []goschema.Enum) {
-	if !strings.HasPrefix(field.Type, "enum_") {
-		return
-	}
-
-	// Find the corresponding global enum
-	var globalEnum *goschema.Enum
-	for _, enum := range enums {
-		if enum.Name == field.Type {
-			globalEnum = &enum
-			break
-		}
-	}
-
-	// If no global enum found, this might be an issue but we don't panic
-	// as the field might be using a custom enum type
-	if globalEnum == nil {
-		return
-	}
-
-	// If field has enum values, validate they match the global enum
-	if len(field.Enum) > 0 {
-		// Check that all field enum values exist in the global enum
-		globalEnumMap := make(map[string]bool)
-		for _, value := range globalEnum.Values {
-			globalEnumMap[value] = true
-		}
-
-		for _, fieldValue := range field.Enum {
-			if fieldValue != "" && !globalEnumMap[fieldValue] {
-				// Log warning - in a real implementation, you might want to use a proper logger
-				// For now, we'll just continue without panicking
-				_ = fieldValue // Suppress unused variable warning
-			}
-		}
-	}
 }
 
 // FromTable converts a goschema.Table to an ast.CreateTableNode with all associated columns and constraints.
@@ -554,26 +461,35 @@ func FromEnum(enum goschema.Enum) *ast.EnumNode {
 // FromDatabase converts a complete goschema.Database to an ast.StatementList containing all DDL statements.
 //
 // This function creates a comprehensive database schema by converting all schema elements
-// (enums, tables, indexes) into their corresponding AST nodes. The statements are ordered
+// (enums, tables, indexes, embedded fields) into their corresponding AST nodes. The statements are ordered
 // to ensure proper dependency resolution during SQL execution, with platform-specific
 // overrides applied throughout.
 //
 // # Parameters
 //
-//   - database: The complete database schema containing all tables, fields, indexes, and enums
+//   - database: The complete database schema containing all tables, fields, indexes, enums, and embedded fields
 //   - targetPlatform: Target database platform for applying platform-specific overrides
 //
 // # Statement Ordering
 //
 // The function generates statements in the following order to respect dependencies:
-//   1. Enum type definitions (CREATE TYPE statements)
-//   2. Table definitions (CREATE TABLE statements)
-//   3. Index definitions (CREATE INDEX statements)
+//  1. Enum type definitions (CREATE TYPE statements)
+//  2. Table definitions (CREATE TABLE statements) with embedded fields processed
+//  3. Index definitions (CREATE INDEX statements)
 //
 // This ordering ensures that:
 //   - Enum types are created before tables that reference them
 //   - Tables are created before indexes that reference them
 //   - Foreign key dependencies are handled by the table creation order
+//   - Embedded fields are processed and converted to regular fields before table creation
+//
+// # Embedded Field Processing
+//
+// The function processes embedded fields before creating tables, supporting four modes:
+//   - "inline": Expands embedded struct fields as individual table columns
+//   - "json": Serializes the entire embedded struct into a single JSON/JSONB column
+//   - "relation": Creates a foreign key relationship to another table
+//   - "skip": Completely ignores the embedded field during schema generation
 //
 // # Examples
 //
@@ -590,6 +506,9 @@ func FromEnum(enum goschema.Enum) *ast.EnumNode {
 //			{StructName: "User", Name: "id", Type: "SERIAL", Primary: true},
 //			{StructName: "User", Name: "status", Type: "user_status", Nullable: false},
 //		},
+//		EmbeddedFields: []goschema.EmbeddedField{
+//			{StructName: "User", Mode: "inline", EmbeddedTypeName: "Timestamps"},
+//		},
 //		Indexes: []goschema.Index{
 //			{Name: "idx_users_status", StructName: "users", Fields: []string{"status"}},
 //		},
@@ -598,7 +517,7 @@ func FromEnum(enum goschema.Enum) *ast.EnumNode {
 //
 // # Platform-Specific Processing
 //
-// All schema elements (tables, fields) are processed with platform-specific overrides
+// All schema elements (tables, fields, embedded fields) are processed with platform-specific overrides
 // applied based on the targetPlatform parameter. This ensures that the generated
 // AST nodes contain the appropriate configurations for the target database.
 //
@@ -611,6 +530,9 @@ func FromDatabase(database goschema.Database, targetPlatform string) *ast.Statem
 		Statements: make([]ast.Node, 0),
 	}
 
+	// Process embedded fields to generate additional fields for each table
+	allFields := processEmbeddedFields(database.EmbeddedFields, database.Fields)
+
 	// 1. Add enum definitions first (they may be referenced by tables)
 	for _, enum := range database.Enums {
 		enumNode := FromEnum(enum)
@@ -618,8 +540,9 @@ func FromDatabase(database goschema.Database, targetPlatform string) *ast.Statem
 	}
 
 	// 2. Add table definitions (they may be referenced by indexes)
+	// Use the combined field list that includes embedded field expansions
 	for _, table := range database.Tables {
-		tableNode := FromTable(table, database.Fields, database.Enums, targetPlatform)
+		tableNode := FromTable(table, allFields, database.Enums, targetPlatform)
 		statements.Statements = append(statements.Statements, tableNode)
 	}
 
@@ -630,4 +553,269 @@ func FromDatabase(database goschema.Database, targetPlatform string) *ast.Statem
 	}
 
 	return statements
+}
+
+// parseForeignKeyReference parses a foreign key reference string into an ast.ForeignKeyRef.
+//
+// The foreign key reference string should be in the format "table(column)" or just "table"
+// (which defaults to referencing the "id" column).
+//
+// Examples:
+//   - "users(id)" -> references users.id
+//   - "users" -> references users.id (default)
+//   - "categories(slug)" -> references categories.slug
+//
+// Returns nil if the reference string is malformed.
+func parseForeignKeyReference(foreign string) *ast.ForeignKeyRef {
+	if foreign == "" {
+		return nil
+	}
+
+	// Check if it contains parentheses for column specification
+	if strings.Contains(foreign, "(") && strings.Contains(foreign, ")") {
+		// Parse "table(column)" format
+		parts := strings.Split(foreign, "(")
+		if len(parts) != 2 {
+			return nil
+		}
+
+		table := strings.TrimSpace(parts[0])
+		columnPart := strings.TrimSpace(parts[1])
+
+		// Remove closing parenthesis
+		if !strings.HasSuffix(columnPart, ")") {
+			return nil
+		}
+		column := strings.TrimSuffix(columnPart, ")")
+
+		return &ast.ForeignKeyRef{
+			Table:  table,
+			Column: column,
+		}
+	}
+
+	// Default to "id" column if no column specified
+	return &ast.ForeignKeyRef{
+		Table:  strings.TrimSpace(foreign),
+		Column: "id",
+	}
+}
+
+// validateEnumField validates that enum field values are consistent with global enum definitions.
+//
+// This function performs validation for fields with enum types, ensuring that:
+//   - The referenced global enum exists
+//   - Any field-specific enum values are a subset of the global enum values
+//
+// Validation warnings are logged but do not stop the conversion process, allowing for
+// graceful handling of incomplete or evolving schema definitions.
+func validateEnumField(field goschema.Field, enums []goschema.Enum) {
+	if !strings.HasPrefix(field.Type, "enum_") {
+		return
+	}
+
+	// Find the corresponding global enum
+	var globalEnum *goschema.Enum
+	for _, enum := range enums {
+		if enum.Name == field.Type {
+			globalEnum = &enum
+			break
+		}
+	}
+
+	// If no global enum found, this might be an issue but we don't panic
+	// as the field might be using a custom enum type
+	if globalEnum == nil {
+		return
+	}
+
+	// If field has enum values, validate they match the global enum
+	if len(field.Enum) > 0 {
+		// Check that all field enum values exist in the global enum
+		globalEnumMap := make(map[string]bool)
+		for _, value := range globalEnum.Values {
+			globalEnumMap[value] = true
+		}
+
+		for _, fieldValue := range field.Enum {
+			if fieldValue != "" && !globalEnumMap[fieldValue] {
+				// Log warning - in a real implementation, you might want to use a proper logger
+				// For now, we'll just continue without panicking
+				_ = fieldValue // Suppress unused variable warning
+			}
+		}
+	}
+}
+
+// processEmbeddedFields processes embedded fields and generates corresponding schema fields based on embedding modes.
+//
+// This function is the core processor for handling embedded struct fields in Go structs, transforming them
+// into appropriate database schema fields according to the specified embedding mode. It supports four
+// distinct modes of embedding that provide different approaches to handling complex data structures
+// in relational databases.
+//
+// # Parameters
+//
+//   - embeddedFields: Collection of embedded field definitions to process
+//   - originalFields: Complete collection of schema fields from all parsed structs
+//
+// # Embedding Modes
+//
+// The function supports four embedding modes, each serving different architectural patterns:
+//
+// 1. **"inline"**: Expands embedded struct fields as individual table columns
+// 2. **"json"**: Serializes the entire embedded struct into a single JSON/JSONB column
+// 3. **"relation"**: Creates a foreign key relationship to another table
+// 4. **"skip"**: Completely ignores the embedded field during schema generation
+//
+// # Return Value
+//
+// Returns a combined slice of goschema.Field containing both the original fields and
+// the generated fields from embedded field processing. This combined list is ready
+// for use in table creation.
+func processEmbeddedFields(embeddedFields []goschema.EmbeddedField, originalFields []goschema.Field) []goschema.Field {
+	// Start with the original fields
+	allFields := make([]goschema.Field, len(originalFields))
+	copy(allFields, originalFields)
+
+	// Process embedded fields for each struct
+	structNames := getUniqueStructNames(embeddedFields)
+	for _, structName := range structNames {
+		generatedFields := processEmbeddedFieldsForStruct(embeddedFields, originalFields, structName)
+		allFields = append(allFields, generatedFields...)
+	}
+
+	return allFields
+}
+
+// getUniqueStructNames extracts unique struct names from embedded fields.
+func getUniqueStructNames(embeddedFields []goschema.EmbeddedField) []string {
+	structNameMap := make(map[string]bool)
+	for _, embedded := range embeddedFields {
+		structNameMap[embedded.StructName] = true
+	}
+
+	var structNames []string
+	for structName := range structNameMap {
+		structNames = append(structNames, structName)
+	}
+	return structNames
+}
+
+// processEmbeddedFieldsForStruct processes embedded fields for a specific struct and generates corresponding schema fields.
+//
+// This function implements the core logic for transforming embedded fields into database schema fields
+// according to their specified embedding mode. It processes only embedded fields that belong to the
+// specified structName.
+//
+// # Parameters
+//
+//   - embeddedFields: Collection of embedded field definitions to process
+//   - allFields: Complete collection of schema fields from all parsed structs
+//   - structName: Name of the target struct to process embedded fields for
+//
+// # Return Value
+//
+// Returns a slice of goschema.Field representing the generated database fields for the specified struct.
+// Each field is fully configured with appropriate types, constraints, and metadata.
+func processEmbeddedFieldsForStruct(embeddedFields []goschema.EmbeddedField, allFields []goschema.Field, structName string) []goschema.Field {
+	var generatedFields []goschema.Field
+
+	// Process each embedded field definition
+	for _, embedded := range embeddedFields {
+		// Filter: only process embedded fields for the target struct
+		if embedded.StructName != structName {
+			continue
+		}
+
+		switch embedded.Mode {
+		case "inline":
+			// INLINE MODE: Expand embedded struct fields as individual table columns
+			for _, field := range allFields {
+				if field.StructName == embedded.EmbeddedTypeName {
+					// Clone the field and reassign to target struct
+					newField := field
+					newField.StructName = structName
+
+					// Apply prefix to column name if specified
+					if embedded.Prefix != "" {
+						newField.Name = embedded.Prefix + field.Name
+					}
+
+					generatedFields = append(generatedFields, newField)
+				}
+			}
+
+		case "json":
+			// JSON MODE: Serialize embedded struct into a single JSON/JSONB column
+			columnName := embedded.Name
+			if columnName == "" {
+				// Auto-generate column name: "Meta" -> "meta_data"
+				columnName = strings.ToLower(embedded.EmbeddedTypeName) + "_data"
+			}
+
+			columnType := embedded.Type
+			if columnType == "" {
+				columnType = "JSONB" // Default to PostgreSQL JSONB for best performance
+			}
+
+			// Create the JSON column field
+			generatedFields = append(generatedFields, goschema.Field{
+				StructName: structName,
+				FieldName:  embedded.EmbeddedTypeName,
+				Name:       columnName,
+				Type:       columnType,
+				Nullable:   embedded.Nullable,
+				Comment:    embedded.Comment,
+				Overrides:  embedded.Overrides, // Platform-specific type overrides (JSON vs JSONB vs TEXT)
+			})
+
+		case "relation":
+			// RELATION MODE: Create a foreign key field linking to another table
+			if embedded.Field == "" || embedded.Ref == "" {
+				// Skip incomplete relation definitions - both field name and reference are required
+				continue
+			}
+
+			// Intelligent type inference based on reference pattern
+			refType := "INTEGER" // Default assumption: numeric primary key
+			if strings.Contains(embedded.Ref, "VARCHAR") || strings.Contains(embedded.Ref, "TEXT") ||
+				strings.Contains(strings.ToLower(embedded.Ref), "uuid") {
+				// Reference suggests string-based key (likely UUID)
+				refType = "VARCHAR(36)" // Standard UUID length
+			}
+
+			// Generate automatic foreign key constraint name following convention
+			foreignKeyName := "fk_" + strings.ToLower(structName) + "_" + strings.ToLower(embedded.Field)
+
+			// Create the foreign key field
+			generatedFields = append(generatedFields, goschema.Field{
+				StructName:     structName,
+				FieldName:      embedded.EmbeddedTypeName,
+				Name:           embedded.Field,    // e.g., "user_id"
+				Type:           refType,           // INTEGER or VARCHAR(36)
+				Nullable:       embedded.Nullable, // Can the relationship be optional?
+				Foreign:        embedded.Ref,      // e.g., "users(id)"
+				ForeignKeyName: foreignKeyName,    // e.g., "fk_posts_user_id"
+				Comment:        embedded.Comment,  // Documentation for the relationship
+			})
+
+		case "skip":
+			// SKIP MODE: Completely ignore this embedded field
+			continue
+
+		default:
+			// DEFAULT MODE: Fall back to inline behavior for unrecognized modes
+			for _, field := range allFields {
+				if field.StructName == embedded.EmbeddedTypeName {
+					// Clone field and reassign to target struct (no prefix applied)
+					newField := field
+					newField.StructName = structName
+					generatedFields = append(generatedFields, newField)
+				}
+			}
+		}
+	}
+
+	return generatedFields
 }

@@ -375,6 +375,81 @@ func (n *IndexNode) SetUnique() *IndexNode {
 	return n
 }
 
+// DropIndexNode represents a DROP INDEX statement.
+//
+// This node supports various DROP INDEX options including IF EXISTS,
+// and dialect-specific features. Different databases have different
+// syntax for dropping indexes (some require table name, others don't).
+type DropIndexNode struct {
+	// Name is the name of the index to drop
+	Name string
+	// Table is the name of the table (required for some databases like MySQL)
+	Table string
+	// IfExists indicates whether to use IF EXISTS clause
+	IfExists bool
+	// Comment is an optional comment for the drop operation
+	Comment string
+}
+
+// NewDropIndex creates a new DROP INDEX node with the specified index name.
+//
+// The node is created with IfExists=false by default. The table parameter
+// is optional and may be required depending on the database dialect.
+// Use the fluent API methods to configure options.
+//
+// Example:
+//
+//	dropIndex := NewDropIndex("idx_users_email")
+//	dropIndex := NewDropIndex("idx_users_email").SetTable("users").SetIfExists()
+func NewDropIndex(name string) *DropIndexNode {
+	return &DropIndexNode{
+		Name:     name,
+		IfExists: false,
+	}
+}
+
+// SetTable sets the table name for the DROP INDEX statement.
+//
+// Some databases (like MySQL) require the table name in DROP INDEX statements,
+// while others (like PostgreSQL) do not.
+//
+// Example:
+//
+//	dropIndex.SetTable("users")
+func (n *DropIndexNode) SetTable(table string) *DropIndexNode {
+	n.Table = table
+	return n
+}
+
+// SetIfExists sets the IF EXISTS option for the DROP INDEX statement.
+//
+// This makes the statement safe to execute even if the index doesn't exist.
+//
+// Example:
+//
+//	dropIndex.SetIfExists()
+func (n *DropIndexNode) SetIfExists() *DropIndexNode {
+	n.IfExists = true
+	return n
+}
+
+// SetComment sets a comment for the DROP INDEX operation.
+//
+// This comment can be used for documentation or warnings.
+//
+// Example:
+//
+//	dropIndex.SetComment("Remove unused index")
+func (n *DropIndexNode) SetComment(comment string) *DropIndexNode {
+	n.Comment = comment
+	return n
+}
+
+// Accept implements the Node interface for DropIndexNode.
+func (n *DropIndexNode) Accept(visitor Visitor) error {
+	return visitor.VisitDropIndex(n)
+}
+
 // CommentNode represents SQL comments that can be included in generated scripts.
 //
 // Comments are useful for documenting generated SQL and providing context
@@ -456,6 +531,86 @@ func (n *DropTableNode) SetComment(comment string) *DropTableNode {
 // Accept implements the Node interface for DropTableNode.
 func (n *DropTableNode) Accept(visitor Visitor) error {
 	return visitor.VisitDropTable(n)
+}
+
+// CreateTypeNode represents a CREATE TYPE statement with various type definitions.
+//
+// This node supports different type definitions including enums, composite types,
+// domains, and ranges. The specific type definition is determined by the TypeDef field.
+type CreateTypeNode struct {
+	// Name is the name of the type to create
+	Name string
+	// TypeDef contains the type definition (enum, composite, domain, etc.)
+	TypeDef TypeDefinition
+	// Comment is an optional comment for the type creation
+	Comment string
+}
+
+// NewCreateType creates a new CREATE TYPE node with the specified name and type definition.
+//
+// Example:
+//
+//	createType := NewCreateType("status", NewEnumTypeDef("active", "inactive"))
+//	createType := NewCreateType("address", NewCompositeTypeDef(fields...))
+func NewCreateType(name string, typeDef TypeDefinition) *CreateTypeNode {
+	return &CreateTypeNode{
+		Name:    name,
+		TypeDef: typeDef,
+	}
+}
+
+// SetComment sets a comment for the CREATE TYPE operation.
+//
+// Example:
+//
+//	createType.SetComment("User status enumeration")
+func (n *CreateTypeNode) SetComment(comment string) *CreateTypeNode {
+	n.Comment = comment
+	return n
+}
+
+// Accept implements the Node interface for CreateTypeNode.
+func (n *CreateTypeNode) Accept(visitor Visitor) error {
+	return visitor.VisitCreateType(n)
+}
+
+// AlterTypeNode represents an ALTER TYPE statement with one or more operations.
+//
+// This node can contain multiple operations like adding enum values, renaming values,
+// or modifying type properties. Each operation is represented by a specific
+// TypeOperation implementation.
+type AlterTypeNode struct {
+	// Name is the name of the type to alter
+	Name string
+	// Operations contains the list of operations to perform on the type
+	Operations []TypeOperation
+}
+
+// NewAlterType creates a new ALTER TYPE node with the specified type name.
+//
+// Example:
+//
+//	alterType := NewAlterType("status")
+func NewAlterType(name string) *AlterTypeNode {
+	return &AlterTypeNode{
+		Name:       name,
+		Operations: make([]TypeOperation, 0),
+	}
+}
+
+// AddOperation adds a type operation and returns the alter type node for chaining.
+//
+// Example:
+//
+//	alterType.AddOperation(NewAddEnumValueOperation("pending"))
+func (n *AlterTypeNode) AddOperation(operation TypeOperation) *AlterTypeNode {
+	n.Operations = append(n.Operations, operation)
+	return n
+}
+
+// Accept implements the Node interface for AlterTypeNode.
+func (n *AlterTypeNode) Accept(visitor Visitor) error {
+	return visitor.VisitAlterType(n)
 }
 
 // DropTypeNode represents a DROP TYPE statement (PostgreSQL-specific).

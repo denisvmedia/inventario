@@ -230,6 +230,44 @@ func TestIndexNode_SetUnique(t *testing.T) {
 	c.Assert(index.Unique, qt.IsTrue)
 }
 
+func TestNewDropIndex(t *testing.T) {
+	c := qt.New(t)
+
+	dropIndex := ast.NewDropIndex("idx_users_email")
+
+	c.Assert(dropIndex.Name, qt.Equals, "idx_users_email")
+	c.Assert(dropIndex.Table, qt.Equals, "")
+	c.Assert(dropIndex.IfExists, qt.IsFalse)
+	c.Assert(dropIndex.Comment, qt.Equals, "")
+}
+
+func TestDropIndexNode_FluentAPI(t *testing.T) {
+	c := qt.New(t)
+
+	dropIndex := ast.NewDropIndex("idx_users_email").
+		SetTable("users").
+		SetIfExists().
+		SetComment("Remove unused index")
+
+	c.Assert(dropIndex.Name, qt.Equals, "idx_users_email")
+	c.Assert(dropIndex.Table, qt.Equals, "users")
+	c.Assert(dropIndex.IfExists, qt.IsTrue)
+	c.Assert(dropIndex.Comment, qt.Equals, "Remove unused index")
+}
+
+func TestDropIndexNode_Accept(t *testing.T) {
+	c := qt.New(t)
+
+	visitor := &mocks.MockVisitor{}
+	dropIndex := ast.NewDropIndex("idx_users_email")
+
+	err := dropIndex.Accept(visitor)
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(visitor.VisitedNodes, qt.HasLen, 1)
+	c.Assert(visitor.VisitedNodes[0], qt.Equals, "DropIndex:idx_users_email")
+}
+
 func TestNewEnum(t *testing.T) {
 	c := qt.New(t)
 

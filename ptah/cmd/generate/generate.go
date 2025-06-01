@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
-	"github.com/denisvmedia/inventario/ptah/schema/parser"
+	"github.com/denisvmedia/inventario/ptah/core/renderer"
 )
 
 var generateCmd = &cobra.Command{
@@ -112,7 +112,7 @@ func generateCommand(_ *cobra.Command, _ []string) error {
 		}
 
 		// Generate table statements
-		statements := parser.GetOrderedCreateStatements(result, d)
+		statements := renderer.GetOrderedCreateStatements(result, d)
 
 		for i, statement := range statements {
 			fmt.Printf("-- Table %d/%d\n", i+1, len(result.Tables))

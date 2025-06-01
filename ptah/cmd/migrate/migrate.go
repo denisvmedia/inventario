@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
+	"github.com/denisvmedia/inventario/ptah/core/renderer"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/renderer/generators"
-	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/migration/planner"
+	"github.com/denisvmedia/inventario/ptah/migration/schemadiff"
 )
 
 var migrateCmd = &cobra.Command{
@@ -83,10 +83,11 @@ func migrateCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	// 3. Compare schemas
-	diff := differ.CompareSchemas(result, dbSchema)
+	diff := schemadiff.Compare(result, dbSchema)
 
 	// 4. Display differences summary
-	fmt.Print(renderer.FormatSchemaDiff(diff))
+	astNodes := planner.GenerateSchemaDiffAST(diff, result, conn.Info().Dialect)
+	fmt.Print(astNodes)
 
 	if !diff.HasChanges() {
 		return nil
@@ -96,7 +97,10 @@ func migrateCommand(_ *cobra.Command, _ []string) error {
 	fmt.Println("=== MIGRATION SQL ===")
 	fmt.Println()
 
-	statements := generators.GenerateMigrationSQL(diff, result, conn.Info().Dialect)
+	statements, err := renderer.RenderSQL(conn.Info().Dialect, astNodes...)
+	if err != nil {
+		return fmt.Errorf("error rendering SQL: %w", err)
+	}
 
 	fmt.Println("-- Migration generated from schema differences")
 	fmt.Printf("-- Generated on: %s\n", "now") // You could add actual timestamp

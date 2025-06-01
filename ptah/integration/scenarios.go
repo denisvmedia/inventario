@@ -8,7 +8,7 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	"github.com/denisvmedia/inventario/ptah/migrator"
+	migrator2 "github.com/denisvmedia/inventario/ptah/migration/migrator"
 )
 
 // GetAllScenarios returns all integration test scenarios
@@ -227,8 +227,8 @@ func testUpgradeToSpecificVersion(ctx context.Context, conn *dbschema.DatabaseCo
 	}
 
 	// Create migrator and register migrations
-	m := migrator.NewMigrator(conn)
-	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
+	m := migrator2.NewMigrator(conn)
+	if err := migrator2.RegisterMigrations(m, migrationsFS); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -287,8 +287,8 @@ func testCheckCurrentVersion(ctx context.Context, conn *dbschema.DatabaseConnect
 	}
 
 	// Apply first migration
-	m := migrator.NewMigrator(conn)
-	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
+	m := migrator2.NewMigrator(conn)
+	if err := migrator2.RegisterMigrations(m, migrationsFS); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 

@@ -12,9 +12,9 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	"github.com/denisvmedia/inventario/ptah/migrator"
-	"github.com/denisvmedia/inventario/ptah/renderer/generators"
-	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/migration/migrator"
+	"github.com/denisvmedia/inventario/ptah/migration/planner"
+	"github.com/denisvmedia/inventario/ptah/migration/schemadiff"
 )
 
 // TestStep represents a single step within a test scenario
@@ -326,10 +326,10 @@ func (vem *VersionedEntityManager) GenerateMigrationSQL(_ctx context.Context, co
 	}
 
 	// Compare schemas
-	diff := differ.CompareSchemas(generated, dbSchema)
+	diff := schemadiff.Compare(generated, dbSchema)
 
 	// Generate migration SQL
-	statements := generators.GenerateMigrationSQL(diff, generated, conn.Info().Dialect)
+	statements := planner.GenerateSchemaDiffSQLStatements(diff, generated, conn.Info().Dialect)
 
 	return statements, nil
 }

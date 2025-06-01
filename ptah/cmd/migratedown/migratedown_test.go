@@ -9,7 +9,7 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/cmd/migratedown"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	"github.com/denisvmedia/inventario/ptah/migrator"
+	"github.com/denisvmedia/inventario/ptah/migration/migrator"
 )
 
 func TestMigrateDownCommand_Creation(t *testing.T) {

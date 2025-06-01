@@ -924,3 +924,742 @@ func TestFromDatabase_PlatformOverrides(t *testing.T) {
 	c.Assert(len(tableNode2.Columns), qt.Equals, 1)
 	c.Assert(tableNode2.Columns[0].Type, qt.Equals, "JSONB") // Default type
 }
+
+func TestFromDatabase_EmbeddedFields_InlineMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		database goschema.Database
+		expected func(*ast.StatementList) bool
+	}{
+		{
+			name: "inline mode without prefix",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "User",
+						Name:       "users",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "User",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+					{
+						StructName: "Timestamps",
+						Name:       "created_at",
+						Type:       "TIMESTAMP",
+						Nullable:   false,
+					},
+					{
+						StructName: "Timestamps",
+						Name:       "updated_at",
+						Type:       "TIMESTAMP",
+						Nullable:   false,
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "User",
+						Mode:             "inline",
+						EmbeddedTypeName: "Timestamps",
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 3 columns: id + created_at + updated_at
+				return tableNode.Name == "users" &&
+					len(tableNode.Columns) == 3 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "created_at" &&
+					tableNode.Columns[2].Name == "updated_at"
+			},
+		},
+		{
+			name: "inline mode with prefix",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "Article",
+						Name:       "articles",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "Article",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+					{
+						StructName: "AuditInfo",
+						Name:       "by",
+						Type:       "TEXT",
+					},
+					{
+						StructName: "AuditInfo",
+						Name:       "reason",
+						Type:       "TEXT",
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "Article",
+						Mode:             "inline",
+						Prefix:           "audit_",
+						EmbeddedTypeName: "AuditInfo",
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 3 columns: id + audit_by + audit_reason
+				return tableNode.Name == "articles" &&
+					len(tableNode.Columns) == 3 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "audit_by" &&
+					tableNode.Columns[2].Name == "audit_reason"
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := fromschema.FromDatabase(test.database, "")
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(test.expected(result), qt.IsTrue)
+		})
+	}
+}
+
+func TestFromDatabase_EmbeddedFields_JsonMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		database goschema.Database
+		expected func(*ast.StatementList) bool
+	}{
+		{
+			name: "json mode with explicit name and type",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "User",
+						Name:       "users",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "User",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "User",
+						Mode:             "json",
+						Name:             "metadata",
+						Type:             "JSONB",
+						EmbeddedTypeName: "UserMeta",
+						Comment:          "User metadata in JSON format",
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 2 columns: id + metadata
+				return tableNode.Name == "users" &&
+					len(tableNode.Columns) == 2 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "metadata" &&
+					tableNode.Columns[1].Type == "JSONB" &&
+					tableNode.Columns[1].Comment == "User metadata in JSON format"
+			},
+		},
+		{
+			name: "json mode with auto-generated name and default type",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "Product",
+						Name:       "products",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "Product",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "Product",
+						Mode:             "json",
+						EmbeddedTypeName: "Meta", // Should generate "meta_data" column name
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 2 columns: id + meta_data
+				return tableNode.Name == "products" &&
+					len(tableNode.Columns) == 2 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "meta_data" &&
+					tableNode.Columns[1].Type == "JSONB" // Default type
+			},
+		},
+		{
+			name: "json mode with platform overrides",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "Article",
+						Name:       "articles",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "Article",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "Article",
+						Mode:             "json",
+						Name:             "content_data",
+						Type:             "JSONB",
+						EmbeddedTypeName: "Content",
+						Overrides: map[string]map[string]string{
+							"mysql":   {"type": "JSON"},
+							"mariadb": {"type": "LONGTEXT"},
+						},
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 2 columns: id + content_data
+				return tableNode.Name == "articles" &&
+					len(tableNode.Columns) == 2 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "content_data" &&
+					tableNode.Columns[1].Type == "JSONB" // Default type (no platform specified)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := fromschema.FromDatabase(test.database, "")
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(test.expected(result), qt.IsTrue)
+		})
+	}
+}
+
+func TestFromDatabase_EmbeddedFields_RelationMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		database goschema.Database
+		expected func(*ast.StatementList) bool
+	}{
+		{
+			name: "relation mode with integer reference",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "Post",
+						Name:       "posts",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "Post",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "Post",
+						Mode:             "relation",
+						Field:            "user_id",
+						Ref:              "users(id)",
+						EmbeddedTypeName: "User",
+						Comment:          "Reference to user",
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 2 columns: id + user_id
+				return tableNode.Name == "posts" &&
+					len(tableNode.Columns) == 2 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "user_id" &&
+					tableNode.Columns[1].Type == "INTEGER" &&
+					tableNode.Columns[1].ForeignKey != nil &&
+					tableNode.Columns[1].ForeignKey.Table == "users" &&
+					tableNode.Columns[1].ForeignKey.Column == "id" &&
+					tableNode.Columns[1].Comment == "Reference to user"
+			},
+		},
+		{
+			name: "relation mode with UUID reference",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "Order",
+						Name:       "orders",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "Order",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "Order",
+						Mode:             "relation",
+						Field:            "customer_uuid",
+						Ref:              "customers(uuid)",
+						EmbeddedTypeName: "Customer",
+						Nullable:         true,
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 2 columns: id + customer_uuid
+				return tableNode.Name == "orders" &&
+					len(tableNode.Columns) == 2 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "customer_uuid" &&
+					tableNode.Columns[1].Type == "VARCHAR(36)" && // UUID type inference
+					tableNode.Columns[1].Nullable == true &&
+					tableNode.Columns[1].ForeignKey != nil &&
+					tableNode.Columns[1].ForeignKey.Table == "customers" &&
+					tableNode.Columns[1].ForeignKey.Column == "uuid"
+			},
+		},
+		{
+			name: "relation mode with incomplete definition (should be skipped)",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "Comment",
+						Name:       "comments",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "Comment",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "Comment",
+						Mode:             "relation",
+						Field:            "", // Missing field name
+						Ref:              "posts(id)",
+						EmbeddedTypeName: "Post",
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have only 1 column: id (relation field skipped)
+				return tableNode.Name == "comments" &&
+					len(tableNode.Columns) == 1 &&
+					tableNode.Columns[0].Name == "id"
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := fromschema.FromDatabase(test.database, "")
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(test.expected(result), qt.IsTrue)
+		})
+	}
+}
+
+func TestFromDatabase_EmbeddedFields_SkipAndDefaultModes(t *testing.T) {
+	tests := []struct {
+		name     string
+		database goschema.Database
+		expected func(*ast.StatementList) bool
+	}{
+		{
+			name: "skip mode ignores embedded field",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "User",
+						Name:       "users",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "User",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+					{
+						StructName: "Internal",
+						Name:       "debug_info",
+						Type:       "TEXT",
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "User",
+						Mode:             "skip",
+						EmbeddedTypeName: "Internal",
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have only 1 column: id (Internal fields skipped)
+				return tableNode.Name == "users" &&
+					len(tableNode.Columns) == 1 &&
+					tableNode.Columns[0].Name == "id"
+			},
+		},
+		{
+			name: "default mode falls back to inline behavior",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "User",
+						Name:       "users",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "User",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+					{
+						StructName: "Timestamps",
+						Name:       "created_at",
+						Type:       "TIMESTAMP",
+						Nullable:   false,
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "User",
+						Mode:             "", // Empty mode should default to inline
+						EmbeddedTypeName: "Timestamps",
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 2 columns: id + created_at (inline behavior)
+				return tableNode.Name == "users" &&
+					len(tableNode.Columns) == 2 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "created_at"
+			},
+		},
+		{
+			name: "unrecognized mode falls back to inline behavior",
+			database: goschema.Database{
+				Tables: []goschema.Table{
+					{
+						StructName: "Product",
+						Name:       "products",
+					},
+				},
+				Fields: []goschema.Field{
+					{
+						StructName: "Product",
+						Name:       "id",
+						Type:       "SERIAL",
+						Primary:    true,
+					},
+					{
+						StructName: "Audit",
+						Name:       "created_by",
+						Type:       "VARCHAR(100)",
+					},
+				},
+				EmbeddedFields: []goschema.EmbeddedField{
+					{
+						StructName:       "Product",
+						Mode:             "unknown_mode", // Unrecognized mode
+						EmbeddedTypeName: "Audit",
+					},
+				},
+			},
+			expected: func(result *ast.StatementList) bool {
+				if len(result.Statements) != 1 {
+					return false
+				}
+				tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+				if !ok {
+					return false
+				}
+				// Should have 2 columns: id + created_by (inline behavior)
+				return tableNode.Name == "products" &&
+					len(tableNode.Columns) == 2 &&
+					tableNode.Columns[0].Name == "id" &&
+					tableNode.Columns[1].Name == "created_by"
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := fromschema.FromDatabase(test.database, "")
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(test.expected(result), qt.IsTrue)
+		})
+	}
+}
+
+func TestFromDatabase_EmbeddedFields_ComplexScenario(t *testing.T) {
+	c := qt.New(t)
+
+	// Complex scenario with multiple embedded fields using different modes
+	database := goschema.Database{
+		Tables: []goschema.Table{
+			{
+				StructName: "Article",
+				Name:       "articles",
+				Comment:    "Blog articles",
+			},
+		},
+		Fields: []goschema.Field{
+			// Article fields
+			{
+				StructName: "Article",
+				Name:       "id",
+				Type:       "SERIAL",
+				Primary:    true,
+			},
+			{
+				StructName: "Article",
+				Name:       "title",
+				Type:       "VARCHAR(255)",
+				Nullable:   false,
+			},
+			// Timestamps fields (for inline mode)
+			{
+				StructName: "Timestamps",
+				Name:       "created_at",
+				Type:       "TIMESTAMP",
+				Nullable:   false,
+			},
+			{
+				StructName: "Timestamps",
+				Name:       "updated_at",
+				Type:       "TIMESTAMP",
+				Nullable:   false,
+			},
+			// AuditInfo fields (for inline mode with prefix)
+			{
+				StructName: "AuditInfo",
+				Name:       "by",
+				Type:       "TEXT",
+			},
+			{
+				StructName: "AuditInfo",
+				Name:       "reason",
+				Type:       "TEXT",
+			},
+		},
+		EmbeddedFields: []goschema.EmbeddedField{
+			// Mode 1: inline without prefix
+			{
+				StructName:       "Article",
+				Mode:             "inline",
+				EmbeddedTypeName: "Timestamps",
+			},
+			// Mode 2: inline with prefix
+			{
+				StructName:       "Article",
+				Mode:             "inline",
+				Prefix:           "audit_",
+				EmbeddedTypeName: "AuditInfo",
+			},
+			// Mode 3: json mode
+			{
+				StructName:       "Article",
+				Mode:             "json",
+				Name:             "meta_data",
+				Type:             "JSONB",
+				EmbeddedTypeName: "Meta",
+				Comment:          "Article metadata",
+			},
+			// Mode 4: relation mode
+			{
+				StructName:       "Article",
+				Mode:             "relation",
+				Field:            "author_id",
+				Ref:              "users(id)",
+				EmbeddedTypeName: "User",
+				Comment:          "Article author",
+			},
+			// Mode 5: skip mode
+			{
+				StructName:       "Article",
+				Mode:             "skip",
+				EmbeddedTypeName: "Internal",
+			},
+		},
+	}
+
+	result := fromschema.FromDatabase(database, "")
+
+	c.Assert(result, qt.IsNotNil)
+	c.Assert(len(result.Statements), qt.Equals, 1)
+
+	tableNode, ok := result.Statements[0].(*ast.CreateTableNode)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(tableNode.Name, qt.Equals, "articles")
+	c.Assert(tableNode.Comment, qt.Equals, "Blog articles")
+
+	// Should have 8 columns total:
+	// 1. id (original)
+	// 2. title (original)
+	// 3. created_at (from Timestamps inline)
+	// 4. updated_at (from Timestamps inline)
+	// 5. audit_by (from AuditInfo inline with prefix)
+	// 6. audit_reason (from AuditInfo inline with prefix)
+	// 7. meta_data (from Meta json mode)
+	// 8. author_id (from User relation mode)
+	// Note: Internal fields are skipped
+	c.Assert(len(tableNode.Columns), qt.Equals, 8)
+
+	// Verify each column
+	columns := make(map[string]*ast.ColumnNode)
+	for _, col := range tableNode.Columns {
+		columns[col.Name] = col
+	}
+
+	// Original fields
+	c.Assert(columns["id"], qt.IsNotNil)
+	c.Assert(columns["id"].Type, qt.Equals, "SERIAL")
+	c.Assert(columns["id"].Primary, qt.IsTrue)
+
+	c.Assert(columns["title"], qt.IsNotNil)
+	c.Assert(columns["title"].Type, qt.Equals, "VARCHAR(255)")
+	c.Assert(columns["title"].Nullable, qt.IsFalse)
+
+	// Inline mode fields
+	c.Assert(columns["created_at"], qt.IsNotNil)
+	c.Assert(columns["created_at"].Type, qt.Equals, "TIMESTAMP")
+
+	c.Assert(columns["updated_at"], qt.IsNotNil)
+	c.Assert(columns["updated_at"].Type, qt.Equals, "TIMESTAMP")
+
+	// Inline mode with prefix fields
+	c.Assert(columns["audit_by"], qt.IsNotNil)
+	c.Assert(columns["audit_by"].Type, qt.Equals, "TEXT")
+
+	c.Assert(columns["audit_reason"], qt.IsNotNil)
+	c.Assert(columns["audit_reason"].Type, qt.Equals, "TEXT")
+
+	// JSON mode field
+	c.Assert(columns["meta_data"], qt.IsNotNil)
+	c.Assert(columns["meta_data"].Type, qt.Equals, "JSONB")
+	c.Assert(columns["meta_data"].Comment, qt.Equals, "Article metadata")
+
+	// Relation mode field
+	c.Assert(columns["author_id"], qt.IsNotNil)
+	c.Assert(columns["author_id"].Type, qt.Equals, "INTEGER")
+	c.Assert(columns["author_id"].Comment, qt.Equals, "Article author")
+	c.Assert(columns["author_id"].ForeignKey, qt.IsNotNil)
+	c.Assert(columns["author_id"].ForeignKey.Table, qt.Equals, "users")
+	c.Assert(columns["author_id"].ForeignKey.Column, qt.Equals, "id")
+}

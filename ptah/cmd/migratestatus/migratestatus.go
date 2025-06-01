@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	"github.com/denisvmedia/inventario/ptah/migrator"
+	"github.com/denisvmedia/inventario/ptah/migration/migrator"
 )
 
 var migrateStatusCmd = &cobra.Command{

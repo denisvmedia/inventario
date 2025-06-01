@@ -20,8 +20,14 @@ type Visitor interface {
 	VisitConstraint(*ConstraintNode) error
 	// VisitIndex renders a CREATE INDEX statement
 	VisitIndex(*IndexNode) error
-	// VisitEnum renders an enum type definition (PostgreSQL-specific)
+	// VisitDropIndex renders a DROP INDEX statement
+	VisitDropIndex(*DropIndexNode) error
+	// VisitEnum renders an enum type definition (PostgreSQL-specific, legacy)
 	VisitEnum(*EnumNode) error
+	// VisitCreateType renders a CREATE TYPE statement with various type definitions
+	VisitCreateType(*CreateTypeNode) error
+	// VisitAlterType renders an ALTER TYPE statement with various operations
+	VisitAlterType(*AlterTypeNode) error
 	// VisitComment renders a SQL comment
 	VisitComment(*CommentNode) error
 	// VisitDropTable renders a DROP TABLE statement

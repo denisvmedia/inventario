@@ -6,7 +6,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
-	"github.com/denisvmedia/inventario/ptah/core/builder"
+	"github.com/denisvmedia/inventario/ptah/core/astbuilder"
 )
 
 func TestNewSchema(t *testing.T) {

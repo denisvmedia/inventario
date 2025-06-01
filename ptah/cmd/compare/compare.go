@@ -9,8 +9,8 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	"github.com/denisvmedia/inventario/ptah/renderer"
-	"github.com/denisvmedia/inventario/ptah/schema/differ"
+	"github.com/denisvmedia/inventario/ptah/migration/planner"
+	"github.com/denisvmedia/inventario/ptah/migration/schemadiff"
 )
 
 var compareCmd = &cobra.Command{
@@ -82,10 +82,10 @@ func compareCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	// 3. Compare schemas
-	diff := differ.CompareSchemas(result, dbSchema)
+	diff := schemadiff.Compare(result, dbSchema)
 
 	// 4. Display differences
-	output := renderer.FormatSchemaDiff(diff)
+	output := planner.GenerateSchemaDiffSQLStatements(diff, result, conn.Info().Dialect)
 	fmt.Print(output)
 
 	return nil

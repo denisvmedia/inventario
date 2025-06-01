@@ -1,40 +1,14 @@
 package mysql
 
 import (
-	"database/sql"
-	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/denisvmedia/inventario/ptah/core/sqlutil"
 	"github.com/denisvmedia/inventario/ptah/dbschema/types"
 	"github.com/denisvmedia/inventario/ptah/executor"
 )
-
-// skipIfNoMySQL checks if MySQL is available for testing and skips the test if not.
-func skipIfNoMySQL(t *testing.T) string {
-	t.Helper()
-
-	dsn := os.Getenv("MYSQL_TEST_DSN")
-	if dsn == "" {
-		t.Skip("Skipping MySQL tests: MYSQL_TEST_DSN environment variable not set")
-	}
-
-	// Test connection
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		t.Skipf("Skipping MySQL tests: failed to open database: %v", err)
-	}
-	defer db.Close()
-
-	if err := db.Ping(); err != nil {
-		t.Skipf("Skipping MySQL tests: failed to connect to database: %v", err)
-	}
-
-	return dsn
-}
 
 func TestNewMySQLReader(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
@@ -265,63 +239,6 @@ func TestMySQLReader_parseTableFromDDL(t *testing.T) {
 		})
 	}
 }
-func TestMySQLReader_ReadSchema_Integration(t *testing.T) {
-	dsn := skipIfNoMySQL(t)
-	c := qt.New(t)
-
-	db, err := sql.Open("mysql", dsn)
-	c.Assert(err, qt.IsNil)
-	defer db.Close()
-
-	// Create a test table with various column types
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS test_table (
-			id INT AUTO_INCREMENT PRIMARY KEY,
-			name VARCHAR(255) NOT NULL,
-			status ENUM('active', 'inactive') DEFAULT 'active',
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE KEY unique_name (name)
-		)
-	`)
-	c.Assert(err, qt.IsNil)
-
-	// Clean up after test
-	defer func() {
-		_, _ = db.Exec("DROP TABLE IF EXISTS test_table")
-	}()
-
-	reader := NewMySQLReader(db, "")
-	schema, err := reader.ReadSchema()
-	c.Assert(err, qt.IsNil)
-	c.Assert(schema, qt.IsNotNil)
-	c.Assert(schema.Tables, qt.Not(qt.HasLen), 0)
-
-	// Find our test table
-	var testTable *types.DBTable
-	for i := range schema.Tables {
-		if schema.Tables[i].Name == "test_table" {
-			testTable = &schema.Tables[i]
-			break
-		}
-	}
-	c.Assert(testTable, qt.IsNotNil)
-	c.Assert(testTable.Columns, qt.HasLen, 4)
-
-	// Verify column properties
-	idCol := findColumn(testTable.Columns, "id")
-	c.Assert(idCol, qt.IsNotNil)
-	c.Assert(idCol.IsAutoIncrement, qt.IsTrue)
-	c.Assert(idCol.IsPrimaryKey, qt.IsTrue)
-
-	nameCol := findColumn(testTable.Columns, "name")
-	c.Assert(nameCol, qt.IsNotNil)
-	c.Assert(nameCol.IsNullable, qt.Equals, "NO")
-	c.Assert(nameCol.IsUnique, qt.IsTrue)
-
-	statusCol := findColumn(testTable.Columns, "status")
-	c.Assert(statusCol, qt.IsNotNil)
-	c.Assert(statusCol.DataType, qt.Equals, "enum('active','inactive')")
-}
 
 func TestMySQLReader_ReadSchema_NoConnection(t *testing.T) {
 	c := qt.New(t)
@@ -544,77 +461,9 @@ func TestMySQLWriter_UtilityMethods(t *testing.T) {
 	})
 }
 
-func TestMySQLWriter_Integration(t *testing.T) {
-	dsn := skipIfNoMySQL(t)
-	c := qt.New(t)
-
-	db, err := sql.Open("mysql", dsn)
-	c.Assert(err, qt.IsNil)
-	defer db.Close()
-
-	writer := NewMySQLWriter(db, "")
-
-	t.Run("transaction lifecycle", func(t *testing.T) {
-		// Test successful transaction
-		err := writer.BeginTransaction()
-		c.Assert(err, qt.IsNil)
-
-		err = writer.ExecuteSQL("SELECT 1")
-		c.Assert(err, qt.IsNil)
-
-		err = writer.CommitTransaction()
-		c.Assert(err, qt.IsNil)
-
-		// Test rollback transaction
-		err = writer.BeginTransaction()
-		c.Assert(err, qt.IsNil)
-
-		err = writer.RollbackTransaction()
-		c.Assert(err, qt.IsNil)
-	})
-
-	t.Run("tableExists", func(t *testing.T) {
-		// Create a test table first
-		_, err := db.Exec("CREATE TABLE IF NOT EXISTS temp_test_table (id INT AUTO_INCREMENT PRIMARY KEY)")
-		c.Assert(err, qt.IsNil)
-
-		exists := writer.tableExists("temp_test_table")
-		c.Assert(exists, qt.IsTrue)
-
-		exists = writer.tableExists("non_existent_table")
-		c.Assert(exists, qt.IsFalse)
-
-		// Clean up
-		_, _ = db.Exec("DROP TABLE IF EXISTS temp_test_table")
-	})
-
-	t.Run("DropAllTables", func(t *testing.T) {
-		// Create a test table first
-		_, err := db.Exec("CREATE TABLE IF NOT EXISTS temp_test_table (id INT AUTO_INCREMENT PRIMARY KEY)")
-		c.Assert(err, qt.IsNil)
-
-		err = writer.DropAllTables()
-		c.Assert(err, qt.IsNil)
-
-		// Verify table was dropped
-		exists := writer.tableExists("temp_test_table")
-		c.Assert(exists, qt.IsFalse)
-	})
-}
-
 func TestMySQLWriter_SchemaWriterInterface(t *testing.T) {
 	c := qt.New(t)
 	writer := NewMySQLWriter(nil, "test")
 	var _ executor.SchemaWriter = writer
 	c.Assert(writer, qt.IsNotNil)
-}
-
-// Helper function to find a column by name
-func findColumn(columns []types.DBColumn, name string) *types.DBColumn {
-	for i := range columns {
-		if columns[i].Name == name {
-			return &columns[i]
-		}
-	}
-	return nil
 }

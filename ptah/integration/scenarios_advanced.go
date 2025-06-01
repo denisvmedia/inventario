@@ -9,7 +9,7 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	"github.com/denisvmedia/inventario/ptah/migrator"
+	"github.com/denisvmedia/inventario/ptah/migration/migrator"
 )
 
 // testOperationPlanning tests generating detailed operation plans

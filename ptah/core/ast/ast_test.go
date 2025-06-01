@@ -42,9 +42,24 @@ func TestVisitorInterface_HappyPath(t *testing.T) {
 			expectedCall: "Index:idx_users_email",
 		},
 		{
+			name:         "DropIndexNode",
+			node:         &ast.DropIndexNode{Name: "idx_users_email"},
+			expectedCall: "DropIndex:idx_users_email",
+		},
+		{
 			name:         "EnumNode",
 			node:         &ast.EnumNode{Name: "status"},
 			expectedCall: "Enum:status",
+		},
+		{
+			name:         "CreateTypeNode",
+			node:         &ast.CreateTypeNode{Name: "status"},
+			expectedCall: "CreateType:status",
+		},
+		{
+			name:         "AlterTypeNode",
+			node:         &ast.AlterTypeNode{Name: "status"},
+			expectedCall: "AlterType:status",
 		},
 		{
 			name:         "CommentNode",
@@ -93,8 +108,20 @@ func TestVisitorInterface_ErrorPath(t *testing.T) {
 			node: &ast.IndexNode{Name: "idx_users_email"},
 		},
 		{
+			name: "DropIndexNode",
+			node: &ast.DropIndexNode{Name: "idx_users_email"},
+		},
+		{
 			name: "EnumNode",
 			node: &ast.EnumNode{Name: "status"},
+		},
+		{
+			name: "CreateTypeNode",
+			node: &ast.CreateTypeNode{Name: "status"},
+		},
+		{
+			name: "AlterTypeNode",
+			node: &ast.AlterTypeNode{Name: "status"},
 		},
 		{
 			name: "CommentNode",

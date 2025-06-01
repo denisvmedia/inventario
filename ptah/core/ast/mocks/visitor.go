@@ -52,6 +52,14 @@ func (m *MockVisitor) VisitIndex(node *ast.IndexNode) error {
 	return nil
 }
 
+func (m *MockVisitor) VisitDropIndex(node *ast.DropIndexNode) error {
+	m.VisitedNodes = append(m.VisitedNodes, "DropIndex:"+node.Name)
+	if m.ReturnError {
+		return errors.New("mock error")
+	}
+	return nil
+}
+
 func (m *MockVisitor) VisitEnum(node *ast.EnumNode) error {
 	m.VisitedNodes = append(m.VisitedNodes, "Enum:"+node.Name)
 	if m.ReturnError {
@@ -70,6 +78,22 @@ func (m *MockVisitor) VisitComment(node *ast.CommentNode) error {
 
 func (m *MockVisitor) VisitDropTable(node *ast.DropTableNode) error {
 	m.VisitedNodes = append(m.VisitedNodes, "DropTable:"+node.Name)
+	if m.ReturnError {
+		return errors.New("mock error")
+	}
+	return nil
+}
+
+func (m *MockVisitor) VisitCreateType(node *ast.CreateTypeNode) error {
+	m.VisitedNodes = append(m.VisitedNodes, "CreateType:"+node.Name)
+	if m.ReturnError {
+		return errors.New("mock error")
+	}
+	return nil
+}
+
+func (m *MockVisitor) VisitAlterType(node *ast.AlterTypeNode) error {
+	m.VisitedNodes = append(m.VisitedNodes, "AlterType:"+node.Name)
 	if m.ReturnError {
 		return errors.New("mock error")
 	}

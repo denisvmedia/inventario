@@ -8,14 +8,12 @@ import (
 
 	"github.com/denisvmedia/inventario/ptah/cmd/compare"
 	"github.com/denisvmedia/inventario/ptah/cmd/dropall"
-	"github.com/denisvmedia/inventario/ptah/cmd/dropschema"
 	"github.com/denisvmedia/inventario/ptah/cmd/generate"
 	"github.com/denisvmedia/inventario/ptah/cmd/migrate"
 	"github.com/denisvmedia/inventario/ptah/cmd/migratedown"
 	"github.com/denisvmedia/inventario/ptah/cmd/migratestatus"
 	"github.com/denisvmedia/inventario/ptah/cmd/migrateup"
 	"github.com/denisvmedia/inventario/ptah/cmd/readdb"
-	"github.com/denisvmedia/inventario/ptah/cmd/writedb"
 )
 
 const (
@@ -44,14 +42,12 @@ func Execute(args ...string) {
 
 	rootCmd.SetArgs(args)
 	rootCmd.AddCommand(generate.NewGenerateCommand())
-	rootCmd.AddCommand(writedb.NewWriteDBCommand())
 	rootCmd.AddCommand(readdb.NewReadDBCommand())
 	rootCmd.AddCommand(compare.NewCompareCommand())
 	rootCmd.AddCommand(migrate.NewMigrateCommand())
 	rootCmd.AddCommand(migrateup.NewMigrateUpCommand())
 	rootCmd.AddCommand(migratedown.NewMigrateDownCommand())
 	rootCmd.AddCommand(migratestatus.NewMigrateStatusCommand())
-	rootCmd.AddCommand(dropschema.NewDropSchemaCommand())
 	rootCmd.AddCommand(dropall.NewDropAllCommand())
 
 	err := rootCmd.Execute()
