@@ -205,6 +205,19 @@ func (r *Reader) convertASTToTable(node *ast.CreateTableNode) types.DBTable {
 	}
 
 	// Handle table-level constraints to update column flags
+	primaryKeyColumns := make(map[string]bool)
+
+	// First pass: identify primary key columns
+	for _, constraint := range node.Constraints {
+		if constraint.Type == ast.PrimaryKeyConstraint {
+			for _, colName := range constraint.Columns {
+				colName = strings.Trim(colName, "`")
+				primaryKeyColumns[colName] = true
+			}
+		}
+	}
+
+	// Second pass: apply constraints
 	for _, constraint := range node.Constraints {
 		switch constraint.Type {
 		case ast.PrimaryKeyConstraint:
@@ -219,11 +232,14 @@ func (r *Reader) convertASTToTable(node *ast.CreateTableNode) types.DBTable {
 			}
 		case ast.UniqueConstraint:
 			// Mark columns as unique (only if single column unique constraint)
+			// BUT skip if this column is already a primary key (primary keys are inherently unique)
 			if len(constraint.Columns) == 1 {
 				colName := strings.Trim(constraint.Columns[0], "`")
-				for i := range table.Columns {
-					if table.Columns[i].Name == colName {
-						table.Columns[i].IsUnique = true
+				if !primaryKeyColumns[colName] {
+					for i := range table.Columns {
+						if table.Columns[i].Name == colName {
+							table.Columns[i].IsUnique = true
+						}
 					}
 				}
 			}

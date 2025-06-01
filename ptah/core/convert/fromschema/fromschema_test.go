@@ -200,6 +200,84 @@ func TestFromField_ForeignKeys(t *testing.T) {
 	}
 }
 
+func TestFromField_EnumConversion(t *testing.T) {
+	tests := []struct {
+		name           string
+		field          goschema.Field
+		enums          []goschema.Enum
+		targetPlatform string
+		expectedType   string
+	}{
+		{
+			name: "PostgreSQL keeps enum type name",
+			field: goschema.Field{
+				Name: "status",
+				Type: "enum_user_status",
+			},
+			enums: []goschema.Enum{
+				{Name: "enum_user_status", Values: []string{"active", "inactive", "suspended"}},
+			},
+			targetPlatform: "postgres",
+			expectedType:   "enum_user_status",
+		},
+		{
+			name: "MySQL converts to inline enum",
+			field: goschema.Field{
+				Name: "status",
+				Type: "enum_user_status",
+			},
+			enums: []goschema.Enum{
+				{Name: "enum_user_status", Values: []string{"active", "inactive", "suspended"}},
+			},
+			targetPlatform: "mysql",
+			expectedType:   "ENUM('active', 'inactive', 'suspended')",
+		},
+		{
+			name: "MariaDB converts to inline enum",
+			field: goschema.Field{
+				Name: "status",
+				Type: "enum_user_status",
+			},
+			enums: []goschema.Enum{
+				{Name: "enum_user_status", Values: []string{"active", "inactive", "suspended"}},
+			},
+			targetPlatform: "mariadb",
+			expectedType:   "ENUM('active', 'inactive', 'suspended')",
+		},
+		{
+			name: "Non-enum field unchanged",
+			field: goschema.Field{
+				Name: "name",
+				Type: "VARCHAR(255)",
+			},
+			enums:          nil,
+			targetPlatform: "mysql",
+			expectedType:   "VARCHAR(255)",
+		},
+		{
+			name: "Enum field without matching enum definition unchanged",
+			field: goschema.Field{
+				Name: "status",
+				Type: "enum_unknown_status",
+			},
+			enums: []goschema.Enum{
+				{Name: "enum_user_status", Values: []string{"active", "inactive"}},
+			},
+			targetPlatform: "mysql",
+			expectedType:   "enum_unknown_status",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := fromschema.FromField(test.field, test.enums, test.targetPlatform)
+			c.Assert(result, qt.IsNotNil)
+			c.Assert(result.Type, qt.Equals, test.expectedType)
+		})
+	}
+}
+
 func TestFromField_CheckAndComment(t *testing.T) {
 	tests := []struct {
 		name     string

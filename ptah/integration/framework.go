@@ -346,6 +346,7 @@ func (vem *VersionedEntityManager) ApplyMigrationFromEntities(ctx context.Contex
 
 	if len(statements) == 0 {
 		// No changes needed - this is idempotent behavior
+		fmt.Println("No schema changes detected - migration is idempotent")
 		return nil
 	}
 

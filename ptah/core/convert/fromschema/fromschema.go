@@ -50,6 +50,7 @@
 package fromschema
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
@@ -173,12 +174,29 @@ func FromField(field goschema.Field, enums []goschema.Enum, targetPlatform strin
 		}
 	}
 
-	column := ast.NewColumn(field.Name, fieldType)
-
-	// Validate enum types if applicable
+	// Handle enum types for MySQL/MariaDB platforms
 	if strings.HasPrefix(field.Type, "enum_") && enums != nil {
+		// Validate enum field
 		validateEnumField(field, enums)
+
+		// For MySQL/MariaDB, convert enum type to inline enum values
+		if targetPlatform == "mysql" || targetPlatform == "mariadb" {
+			// Find the corresponding global enum
+			for _, enum := range enums {
+				if enum.Name == field.Type {
+					// Convert to inline ENUM syntax for MySQL/MariaDB
+					quotedValues := make([]string, len(enum.Values))
+					for i, value := range enum.Values {
+						quotedValues[i] = fmt.Sprintf("'%s'", value)
+					}
+					fieldType = fmt.Sprintf("ENUM(%s)", strings.Join(quotedValues, ", "))
+					break
+				}
+			}
+		}
 	}
+
+	column := ast.NewColumn(field.Name, fieldType)
 
 	// Set nullable - only override default if explicitly set to false
 	// The default behavior should be nullable=true (which ast.NewColumn already sets)

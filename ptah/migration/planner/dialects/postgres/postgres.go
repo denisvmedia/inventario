@@ -191,33 +191,62 @@ func (p *Planner) GenerateMigrationAST(diff *types.SchemaDiff, generated *gosche
 		// Add new columns
 		for _, colName := range tableDiff.ColumnsAdded {
 			// Find the field definition for this column
-			for _, field := range generated.Fields {
-				if field.Name == colName {
-					columnNode := fromschema.FromField(field, generated.Enums, "postgres")
-					// Generate ADD COLUMN statement using AST
-					alterNode := &ast.AlterTableNode{
-						Name:       tableDiff.TableName,
-						Operations: []ast.AlterOperation{&ast.AddColumnOperation{Column: columnNode}},
-					}
-					result = append(result, alterNode)
+			// We need to find the struct name that corresponds to this table name
+			var targetField *goschema.Field
+			var targetStructName string
+
+			// First, find the struct name for this table
+			for _, table := range generated.Tables {
+				if table.Name == tableDiff.TableName {
+					targetStructName = table.StructName
 					break
 				}
+			}
+
+			// Now find the field using the correct struct name
+			for _, field := range generated.Fields {
+				if field.StructName == targetStructName && field.Name == colName {
+					targetField = &field
+					break
+				}
+			}
+
+			if targetField != nil {
+				columnNode := fromschema.FromField(*targetField, generated.Enums, "postgres")
+				// Generate ADD COLUMN statement using AST
+				alterNode := &ast.AlterTableNode{
+					Name:       tableDiff.TableName,
+					Operations: []ast.AlterOperation{&ast.AddColumnOperation{Column: columnNode}},
+				}
+				result = append(result, alterNode)
 			}
 		}
 
 		// Modify existing columns
 		for _, colDiff := range tableDiff.ColumnsModified {
 			// Find the target field definition for this column
+			// We need to find the struct name that corresponds to this table name
 			var targetField *goschema.Field
+			var targetStructName string
+
+			// First, find the struct name for this table
+			for _, table := range generated.Tables {
+				if table.Name == tableDiff.TableName {
+					targetStructName = table.StructName
+					break
+				}
+			}
+
+			// Now find the field using the correct struct name
 			for _, field := range generated.Fields {
-				if field.StructName == tableDiff.TableName && field.Name == colDiff.ColumnName {
+				if field.StructName == targetStructName && field.Name == colDiff.ColumnName {
 					targetField = &field
 					break
 				}
 			}
 
 			if targetField == nil {
-				astCommentNode := ast.NewComment(fmt.Sprintf("ERROR: Could not find field definition for %s.%s", tableDiff.TableName, colDiff.ColumnName))
+				astCommentNode := ast.NewComment(fmt.Sprintf("ERROR: Could not find field definition for %s.%s (struct: %s)", tableDiff.TableName, colDiff.ColumnName, targetStructName))
 				result = append(result, astCommentNode)
 				continue
 			}

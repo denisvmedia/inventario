@@ -538,9 +538,19 @@ func (r *Renderer) renderPostgreSQLModifyColumn(tableName string, column *ast.Co
 	// Change column type (with USING clause for complex conversions if needed)
 	if columnType != column.Type {
 		// Type was transformed (e.g., enum handling), use the processed type
-		r.w.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s;", tableName, column.Name, columnType)
+		// For enum types, add USING clause to handle potential casting issues
+		if strings.HasPrefix(columnType, "enum_") {
+			r.w.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s USING %s::%s;", tableName, column.Name, columnType, column.Name, columnType)
+		} else {
+			r.w.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s;", tableName, column.Name, columnType)
+		}
 	} else {
-		r.w.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s;", tableName, column.Name, column.Type)
+		// For enum types, add USING clause to handle potential casting issues
+		if strings.HasPrefix(column.Type, "enum_") {
+			r.w.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s USING %s::%s;", tableName, column.Name, column.Type, column.Name, column.Type)
+		} else {
+			r.w.WriteLinef("ALTER TABLE %s ALTER COLUMN %s TYPE %s;", tableName, column.Name, column.Type)
+		}
 	}
 
 	// Change nullability
