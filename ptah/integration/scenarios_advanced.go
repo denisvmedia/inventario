@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/go-extras/go-kit/must"
-
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
 	"github.com/denisvmedia/inventario/ptah/migration/generator"
