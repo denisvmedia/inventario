@@ -128,8 +128,8 @@ jobs:
 
       - name: Build integration test binary
         run: |
-          go build -o integration-test ./cmd/integration-test
-        working-directory: ptah/integration
+          go build -o ./integration/integration-test ./cmd/integration-test
+        working-directory: ptah
 
       - name: Test integration binary help
         run: |
