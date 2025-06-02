@@ -270,18 +270,24 @@ func (p *Parser) parseCreateTable() (*ast.CreateTableNode, error) {
 		p.skipWhitespace()
 
 		// Check for comma or closing parenthesis
-		if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
+		if p.current.MatchOperatorValue(",") {
 			p.advance()
 			continue
-		} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
+		}
+
+		if p.current.MatchOperatorValue(")") {
 			break
-		} else if p.current.Type == lexer.TokenWhitespace {
+		}
+
+		if p.current.Type == lexer.TokenWhitespace {
 			// Skip whitespace and try again
 			p.skipWhitespace()
-			if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
+			if p.current.MatchOperatorValue(",") {
 				p.advance()
 				continue
-			} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
+			}
+
+			if p.current.MatchOperatorValue(")") {
 				break
 			}
 		}
@@ -1413,15 +1419,17 @@ func (p *Parser) handleTableAutoIncrement(table *ast.CreateTableNode) error {
 	p.skipWhitespace()
 	// Handle numeric values which might be tokenized as operators
 	var value string
-	if p.current.Type == lexer.TokenIdentifier {
+	switch {
+	case p.current.Type == lexer.TokenIdentifier:
 		value = p.current.Value
 		p.advance()
-	} else if p.current.Type == lexer.TokenOperator && isNumeric(p.current.Value) {
+	case p.current.Type == lexer.TokenOperator && isNumeric(p.current.Value):
 		value = p.current.Value
 		p.advance()
-	} else {
+	default:
 		return fmt.Errorf("expected auto increment value: got %s at position %d", p.current.Type, p.current.Start)
 	}
+
 	table.SetOption("AUTO_INCREMENT", value)
 	return nil
 }
@@ -1589,14 +1597,16 @@ func (p *Parser) parsePostgreSQLWithClause(table *ast.CreateTableNode) error {
 		p.skipWhitespace()
 
 		// Check for comma (more options) or closing parenthesis
-		if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
+		if p.current.MatchOperatorValue(",") {
 			p.advance()
 			continue
-		} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
-			break
-		} else {
-			return fmt.Errorf("expected ',' or ')' in WITH clause at position %d", p.current.Start)
 		}
+
+		if p.current.MatchOperatorValue(")") {
+			break
+		}
+
+		return fmt.Errorf("expected ',' or ')' in WITH clause at position %d", p.current.Start)
 	}
 
 	// Consume closing parenthesis
@@ -1809,14 +1819,16 @@ func (p *Parser) parseCreateIndex() (*ast.IndexNode, error) {
 
 		p.skipWhitespace()
 
-		if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
+		if p.current.MatchOperatorValue(",") {
 			p.advance()
 			continue
-		} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
-			break
-		} else {
-			return nil, fmt.Errorf("expected ',' or ')' in column list at position %d", p.current.Start)
 		}
+
+		if p.current.MatchOperatorValue(")") {
+			break
+		}
+
+		return nil, fmt.Errorf("expected ',' or ')' in column list at position %d", p.current.Start)
 	}
 
 	if err := p.expect(lexer.TokenOperator, ")"); err != nil {
@@ -1871,14 +1883,16 @@ func (p *Parser) parseCreateUniqueIndex() (*ast.IndexNode, error) {
 
 		p.skipWhitespace()
 
-		if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
+		if p.current.MatchOperatorValue(",") {
 			p.advance()
 			continue
-		} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
-			break
-		} else {
-			return nil, fmt.Errorf("expected ',' or ')' in column list at position %d", p.current.Start)
 		}
+
+		if p.current.MatchOperatorValue(")") {
+			break
+		}
+
+		return nil, fmt.Errorf("expected ',' or ')' in column list at position %d", p.current.Start)
 	}
 
 	if err := p.expect(lexer.TokenOperator, ")"); err != nil {
@@ -1945,14 +1959,16 @@ func (p *Parser) parseCreateType() (*ast.EnumNode, error) {
 
 		p.skipWhitespace()
 
-		if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
+		if p.current.MatchOperatorValue(",") {
 			p.advance()
 			continue
-		} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
-			break
-		} else {
-			return nil, fmt.Errorf("expected ',' or ')' in enum values at position %d", p.current.Start)
 		}
+
+		if p.current.MatchOperatorValue(")") {
+			break
+		}
+
+		return nil, fmt.Errorf("expected ',' or ')' in enum values at position %d", p.current.Start)
 	}
 
 	if err := p.expect(lexer.TokenOperator, ")"); err != nil {
@@ -2003,17 +2019,17 @@ func (p *Parser) parseCreateDomain() (*ast.CommentNode, error) {
 		}
 
 		keyword := strings.ToUpper(p.current.Value)
-		if keyword == "CHECK" {
-			p.advance()
-			p.skipWhitespace()
-			checkExpr, err := p.parseCheckExpression()
-			if err != nil {
-				return nil, fmt.Errorf("expected check expression: %w", err)
-			}
-			domainText += fmt.Sprintf(" CHECK (%s)", checkExpr)
-		} else {
+		if keyword != "CHECK" {
 			break
 		}
+
+		p.advance()
+		p.skipWhitespace()
+		checkExpr, err := p.parseCheckExpression()
+		if err != nil {
+			return nil, fmt.Errorf("expected check expression: %w", err)
+		}
+		domainText += fmt.Sprintf(" CHECK (%s)", checkExpr)
 	}
 
 	return ast.NewComment(domainText), nil
@@ -2043,14 +2059,9 @@ func (p *Parser) parseCommentStatement() (*ast.CommentNode, error) {
 
 	// Parse the object name (could be table.column for columns)
 	var objectName strings.Builder
-	for {
-		if p.current.Type == lexer.TokenIdentifier ||
-			(p.current.Type == lexer.TokenOperator && p.current.Value == ".") {
-			objectName.WriteString(p.current.Value)
-			p.advance()
-		} else {
-			break
-		}
+	for p.current.Type == lexer.TokenIdentifier || p.current.MatchOperatorValue(".") {
+		objectName.WriteString(p.current.Value)
+		p.advance()
 	}
 
 	p.skipWhitespace()

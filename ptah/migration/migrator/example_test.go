@@ -8,8 +8,8 @@ import (
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	migrator_examples "github.com/denisvmedia/inventario/ptah/examples/migrator"
-	migrator2 "github.com/denisvmedia/inventario/ptah/migration/migrator"
+	examples "github.com/denisvmedia/inventario/ptah/examples/migrator"
+	"github.com/denisvmedia/inventario/ptah/migration/migrator"
 )
 
 // Example demonstrates how to use the migrator programmatically
@@ -26,10 +26,10 @@ func ExampleMigrator() {
 	defer conn.Close()
 
 	// Create a migrator
-	m := migrator2.NewMigrator(conn)
+	m := migrator.NewMigrator(conn)
 
 	// Register a simple migration
-	migration := &migrator2.Migration{
+	migration := &migrator.Migration{
 		Version:     1,
 		Description: "Create users table",
 		Up: func(ctx context.Context, conn *dbschema.DatabaseConnection) error {
@@ -72,11 +72,11 @@ func ExampleRunMigrations() {
 	defer conn.Close()
 
 	// Get example migrations filesystem
-	exampleFS := migrator_examples.GetExampleMigrations()
+	exampleFS := examples.GetExampleMigrations()
 	migrationsFS := must.Must(fs.Sub(exampleFS, "migrations"))
 
 	// Run all migrations from the filesystem
-	err = migrator2.RunMigrations(context.Background(), conn, migrationsFS)
+	err = migrator.RunMigrations(context.Background(), conn, migrationsFS)
 	if err != nil {
 		fmt.Printf("Migration failed: %v\n", err)
 		return
@@ -99,11 +99,11 @@ func ExampleGetMigrationStatus() {
 	defer conn.Close()
 
 	// Get example migrations filesystem
-	exampleFS := migrator_examples.GetExampleMigrations()
+	exampleFS := examples.GetExampleMigrations()
 	migrationsFS := must.Must(fs.Sub(exampleFS, "migrations"))
 
 	// Get migration status
-	status, err := migrator2.GetMigrationStatus(context.Background(), conn, migrationsFS)
+	status, err := migrator.GetMigrationStatus(context.Background(), conn, migrationsFS)
 	if err != nil {
 		fmt.Printf("Failed to get status: %v\n", err)
 		return
@@ -132,7 +132,7 @@ func ExampleCreateMigrationFromSQL() {
 		DROP TABLE IF EXISTS products;
 	`
 
-	migration := migrator2.CreateMigrationFromSQL(2, "Create products table", upSQL, downSQL)
+	migration := migrator.CreateMigrationFromSQL(2, "Create products table", upSQL, downSQL)
 
 	fmt.Printf("Migration version: %d\n", migration.Version)
 	fmt.Printf("Migration description: %s\n", migration.Description)
@@ -160,12 +160,12 @@ func Example_registerMigrationsCustomFilesystem() {
 	defer conn.Close()
 
 	// Create a migrator
-	m := migrator2.NewMigrator(conn)
+	m := migrator.NewMigrator(conn)
 
 	// Option 1: Register from example migrations
-	exampleFS := migrator_examples.GetExampleMigrations()
+	exampleFS := examples.GetExampleMigrations()
 	migrationsFS := must.Must(fs.Sub(exampleFS, "migrations"))
-	err = migrator2.RegisterMigrations(m, migrationsFS)
+	err = migrator.RegisterMigrations(m, migrationsFS)
 	if err != nil {
 		fmt.Printf("Failed to register example migrations: %v\n", err)
 		return

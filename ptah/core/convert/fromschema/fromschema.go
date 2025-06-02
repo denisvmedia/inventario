@@ -281,6 +281,40 @@ func FromField(field goschema.Field, enums []goschema.Enum, targetPlatform strin
 	return column
 }
 
+func applyTablePlatformOverrides(createTable *ast.CreateTableNode, table goschema.Table, targetPlatform string) goschema.Table {
+	// Apply platform-specific overrides if available
+	if targetPlatform == "" || table.Overrides == nil {
+		return table
+	}
+	tableComment := table.Comment
+	tableEngine := table.Engine
+
+	platformOverrides, exists := table.Overrides[targetPlatform]
+	if !exists {
+		return table
+	}
+
+	// Override comment if specified
+	if commentOverride, ok := platformOverrides["comment"]; ok {
+		tableComment = commentOverride
+	}
+	// Override engine if specified
+	if engineOverride, ok := platformOverrides["engine"]; ok {
+		tableEngine = engineOverride
+	}
+	// Apply any other platform-specific options
+	for key, value := range platformOverrides {
+		if key != "comment" && key != "engine" {
+			createTable.SetOption(strings.ToUpper(key), value)
+		}
+	}
+
+	newTable := table
+	newTable.Comment = tableComment
+	newTable.Engine = tableEngine
+	return newTable
+}
+
 // FromTable converts a goschema.Table to an ast.CreateTableNode with all associated columns and constraints.
 //
 // This function creates a complete table definition by combining table metadata with its associated
@@ -359,29 +393,11 @@ func FromField(field goschema.Field, enums []goschema.Enum, targetPlatform strin
 func FromTable(table goschema.Table, fields []goschema.Field, enums []goschema.Enum, targetPlatform string) *ast.CreateTableNode {
 	createTable := ast.NewCreateTable(table.Name)
 
-	// Start with base table values
-	tableComment := table.Comment
-	tableEngine := table.Engine
+	newTable := applyTablePlatformOverrides(createTable, table, targetPlatform)
 
-	// Apply platform-specific overrides if available
-	if targetPlatform != "" && table.Overrides != nil {
-		if platformOverrides, exists := table.Overrides[targetPlatform]; exists {
-			// Override comment if specified
-			if commentOverride, ok := platformOverrides["comment"]; ok {
-				tableComment = commentOverride
-			}
-			// Override engine if specified
-			if engineOverride, ok := platformOverrides["engine"]; ok {
-				tableEngine = engineOverride
-			}
-			// Apply any other platform-specific options
-			for key, value := range platformOverrides {
-				if key != "comment" && key != "engine" {
-					createTable.SetOption(strings.ToUpper(key), value)
-				}
-			}
-		}
-	}
+	// Start with base table values
+	tableComment := newTable.Comment
+	tableEngine := newTable.Engine
 
 	// Set table comment (using potentially overridden value)
 	if tableComment != "" {

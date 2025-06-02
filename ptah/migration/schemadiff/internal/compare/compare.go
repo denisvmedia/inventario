@@ -185,7 +185,8 @@ func TableColumns(genTable goschema.Table, dbTable types.DBTable, generated *gos
 	embeddedGeneratedFields := processEmbeddedFieldsForStruct(generated.EmbeddedFields, generated.Fields, genTable.StructName)
 
 	// Combine original fields with embedded-generated fields
-	allFields := append(generated.Fields, embeddedGeneratedFields...)
+	allFields := append(([]goschema.Field)(nil), generated.Fields...)
+	allFields = append(allFields, embeddedGeneratedFields...)
 
 	// Create maps for quick lookup
 	genColumns := make(map[string]goschema.Field)

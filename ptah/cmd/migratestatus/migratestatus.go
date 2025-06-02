@@ -113,7 +113,7 @@ func outputJSON(status *migrator.MigrationStatus) error {
 	return nil
 }
 
-func outputHuman(status *migrator.MigrationStatus, conn *dbschema.DatabaseConnection, verbose bool) error {
+func outputHuman(status *migrator.MigrationStatus, conn *dbschema.DatabaseConnection, verbose bool) error { //revive:disable-line:flag-parameter // it's ok here
 	fmt.Println("=== MIGRATION STATUS ===")
 	fmt.Printf("Database: %s\n", dbschema.FormatDatabaseURL("***"))
 	fmt.Printf("Dialect: %s\n", conn.Info().Dialect)

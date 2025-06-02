@@ -424,10 +424,10 @@ func TestParser_ParseBacktickedIdentifiers(t *testing.T) {
 	c.Assert(len(createTable.Columns), qt.Equals, 2)
 
 	// Check first column
-	userIdColumn := createTable.Columns[0]
-	c.Assert(userIdColumn.Name, qt.Equals, "`user_id`")
-	c.Assert(userIdColumn.Type, qt.Equals, "INTEGER")
-	c.Assert(userIdColumn.Primary, qt.IsTrue)
+	userIDColumn := createTable.Columns[0]
+	c.Assert(userIDColumn.Name, qt.Equals, "`user_id`")
+	c.Assert(userIDColumn.Type, qt.Equals, "INTEGER")
+	c.Assert(userIDColumn.Primary, qt.IsTrue)
 
 	// Check second column
 	emailColumn := createTable.Columns[1]
@@ -1088,14 +1088,14 @@ func TestParser_ParsePostgreSQLComprehensiveDemo(t *testing.T) {
 	c.Assert(emailCol.Type, qt.Equals, "email_domain")
 
 	// Foreign key with cascading rules
-	userIdCol := createTable.Columns[19]
-	c.Assert(userIdCol.Name, qt.Equals, "user_id")
-	c.Assert(userIdCol.Type, qt.Equals, "INTEGER")
-	c.Assert(userIdCol.ForeignKey, qt.IsNotNil)
-	c.Assert(userIdCol.ForeignKey.Table, qt.Equals, "users")
-	c.Assert(userIdCol.ForeignKey.Column, qt.Equals, "id")
-	c.Assert(userIdCol.ForeignKey.OnDelete, qt.Equals, "CASCADE")
-	c.Assert(userIdCol.ForeignKey.OnUpdate, qt.Equals, "SET NULL")
+	userIDCol := createTable.Columns[19]
+	c.Assert(userIDCol.Name, qt.Equals, "user_id")
+	c.Assert(userIDCol.Type, qt.Equals, "INTEGER")
+	c.Assert(userIDCol.ForeignKey, qt.IsNotNil)
+	c.Assert(userIDCol.ForeignKey.Table, qt.Equals, "users")
+	c.Assert(userIDCol.ForeignKey.Column, qt.Equals, "id")
+	c.Assert(userIDCol.ForeignKey.OnDelete, qt.Equals, "CASCADE")
+	c.Assert(userIDCol.ForeignKey.OnUpdate, qt.Equals, "SET NULL")
 
 	// Test table-level constraints
 	c.Assert(len(createTable.Constraints), qt.Equals, 3)

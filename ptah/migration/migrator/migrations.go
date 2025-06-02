@@ -293,10 +293,10 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int) error {
 	if targetVersion > currentVersion {
 		// Migrate up to target version
 		return m.migrateUpTo(ctx, targetVersion)
-	} else {
-		// Migrate down to target version
-		return m.MigrateDownTo(ctx, targetVersion)
 	}
+
+	// Migrate down to target version
+	return m.MigrateDownTo(ctx, targetVersion)
 }
 
 // migrateUpTo migrates the database up to a specific version

@@ -235,6 +235,8 @@ linters:
         text: 'bool-literal-in-expr:'
       - path: '_test\.go$'
         text: 'unused-parameter:'
+      - path: '_test\.go$'
+        text: 'unchecked-type-assertion:'
       - linters:
           - dupl
         path: '(jsonapi|apiserver|registry/.*)/.*\.go$'
@@ -251,6 +253,8 @@ linters:
       - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
         linters:
           - gocognit
+          - nestif
+          - gocyclo
       - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
         text: 'deep-exit:'
       - path: 'cmd/.*\.go$'

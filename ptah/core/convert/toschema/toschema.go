@@ -651,11 +651,12 @@ func generateStructName(tableName string) string {
 	structName := result.String()
 
 	// Basic plural to singular conversion for common cases
-	if strings.HasSuffix(structName, "ies") {
+	switch {
+	case strings.HasSuffix(structName, "ies"):
 		structName = structName[:len(structName)-3] + "y"
-	} else if strings.HasSuffix(structName, "ses") {
+	case strings.HasSuffix(structName, "ses"):
 		structName = structName[:len(structName)-2]
-	} else if strings.HasSuffix(structName, "s") && !strings.HasSuffix(structName, "ss") {
+	case strings.HasSuffix(structName, "s") && !strings.HasSuffix(structName, "ss"):
 		structName = structName[:len(structName)-1]
 	}
 

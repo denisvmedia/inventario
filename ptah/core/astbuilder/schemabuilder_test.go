@@ -161,12 +161,12 @@ func TestSchemaBuilder_ComplexSchema(t *testing.T) {
 	c.Assert(len(postsTable.Columns), qt.Equals, 4)
 
 	// Check foreign key on user_id column
-	userIdColumn := postsTable.Columns[1]
-	c.Assert(userIdColumn.Name, qt.Equals, "user_id")
-	c.Assert(userIdColumn.ForeignKey, qt.IsNotNil)
-	c.Assert(userIdColumn.ForeignKey.Table, qt.Equals, "users")
-	c.Assert(userIdColumn.ForeignKey.Column, qt.Equals, "id")
-	c.Assert(userIdColumn.ForeignKey.Name, qt.Equals, "fk_posts_user")
+	userIDColumn := postsTable.Columns[1]
+	c.Assert(userIDColumn.Name, qt.Equals, "user_id")
+	c.Assert(userIDColumn.ForeignKey, qt.IsNotNil)
+	c.Assert(userIDColumn.ForeignKey.Table, qt.Equals, "users")
+	c.Assert(userIDColumn.ForeignKey.Column, qt.Equals, "id")
+	c.Assert(userIDColumn.ForeignKey.Name, qt.Equals, "fk_posts_user")
 }
 
 func TestSchemaBuilder_FluentChaining(t *testing.T) {

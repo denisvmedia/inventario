@@ -32,23 +32,23 @@ func NewReporter(report *TestReport) *Reporter {
 func (r *Reporter) GenerateReport(format ReportFormat, outputDir string) error {
 	timestamp := time.Now().Format("20060102-150405")
 	filename := fmt.Sprintf("%s-report.%s", timestamp, string(format))
-	filepath := filepath.Join(outputDir, filename)
+	fpath := filepath.Join(outputDir, filename)
 
 	switch format {
 	case FormatTXT:
-		return r.generateTextReport(filepath)
+		return r.generateTextReport(fpath)
 	case FormatJSON:
-		return r.generateJSONReport(filepath)
+		return r.generateJSONReport(fpath)
 	case FormatHTML:
-		return r.generateHTMLReport(filepath)
+		return r.generateHTMLReport(fpath)
 	default:
 		return fmt.Errorf("unsupported report format: %s", format)
 	}
 }
 
 // generateTextReport generates a plain text report
-func (r *Reporter) generateTextReport(filepath string) error {
-	file, err := os.Create(filepath)
+func (r *Reporter) generateTextReport(fpath string) error {
+	file, err := os.Create(fpath)
 	if err != nil {
 		return err
 	}
@@ -117,8 +117,8 @@ func (r *Reporter) generateTextReport(filepath string) error {
 }
 
 // generateJSONReport generates a JSON report
-func (r *Reporter) generateJSONReport(filepath string) error {
-	file, err := os.Create(filepath)
+func (r *Reporter) generateJSONReport(fpath string) error {
+	file, err := os.Create(fpath)
 	if err != nil {
 		return err
 	}
@@ -130,8 +130,8 @@ func (r *Reporter) generateJSONReport(filepath string) error {
 }
 
 // generateHTMLReport generates an HTML report
-func (r *Reporter) generateHTMLReport(filepath string) error {
-	file, err := os.Create(filepath)
+func (r *Reporter) generateHTMLReport(fpath string) error {
+	file, err := os.Create(fpath)
 	if err != nil {
 		return err
 	}

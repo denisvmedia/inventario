@@ -134,11 +134,11 @@ func runIntegrationTests(cmd *cobra.Command, args []string) error {
 		}
 
 		for _, scenarioName := range scenarios {
-			if scenario, exists := scenarioMap[scenarioName]; exists {
-				scenariosToRun = append(scenariosToRun, scenario)
-			} else {
+			scenario, exists := scenarioMap[scenarioName]
+			if !exists {
 				return fmt.Errorf("unknown scenario: %s", scenarioName)
 			}
+			scenariosToRun = append(scenariosToRun, scenario)
 		}
 	} else {
 		scenariosToRun = allScenarios

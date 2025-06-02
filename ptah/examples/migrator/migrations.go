@@ -1,4 +1,4 @@
-package migrator_examples
+package migrator
 
 import (
 	"embed"

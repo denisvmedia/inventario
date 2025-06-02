@@ -70,9 +70,9 @@ func (w *PostgreSQLWriter) writeEnums(enums []goschema.Enum) error { //nolint:un
 }
 
 // ExecuteSQL executes a SQL statement
-func (w *PostgreSQLWriter) ExecuteSQL(sql string) error {
+func (w *PostgreSQLWriter) ExecuteSQL(sqlExpr string) error {
 	if w.dryRun {
-		slog.Info("[DRY RUN] Would execute SQL", "sql", sql)
+		slog.Info("[DRY RUN] Would execute SQL", "sql", sqlExpr)
 		return nil
 	}
 
@@ -80,9 +80,9 @@ func (w *PostgreSQLWriter) ExecuteSQL(sql string) error {
 		return fmt.Errorf("no active transaction")
 	}
 
-	_, err := w.tx.Exec(sql)
+	_, err := w.tx.Exec(sqlExpr)
 	if err != nil {
-		return fmt.Errorf("SQL execution failed: %w\nSQL: %s", err, sql)
+		return fmt.Errorf("SQL execution failed: %w\nSQL: %s", err, sqlExpr)
 	}
 	return nil
 }
@@ -138,6 +138,82 @@ func (w *PostgreSQLWriter) RollbackTransaction() error {
 	return err
 }
 
+func (w *PostgreSQLWriter) collectAllObjects() (tables []string, enums []string, sequences []string, err error) { //revive:disable-line:function-result-limit // It's acceptable here
+	if w.dryRun {
+		// In dry run mode, simulate some tables/enums/sequences for demonstration
+		tables = []string{"example_table1", "example_table2"}
+		enums = []string{"example_enum1", "example_enum2"}
+		sequences = []string{"example_table1_id_seq", "example_table2_id_seq"}
+		return tables, enums, sequences, nil
+	}
+
+	// Get all tables in the schema
+	tablesQuery := `
+			SELECT table_name
+			FROM information_schema.tables
+			WHERE table_schema = $1 AND table_type = 'BASE TABLE'
+			ORDER BY table_name`
+
+	rows, err := w.db.Query(tablesQuery, w.schema)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to query tables: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to scan table name: %w", err)
+		}
+		tables = append(tables, tableName)
+	}
+
+	// Get all custom types (enums) in the schema
+	enumsQuery := `
+			SELECT typname
+			FROM pg_type t
+			JOIN pg_namespace n ON t.typnamespace = n.oid
+			WHERE n.nspname = $1 AND t.typtype = 'e'
+			ORDER BY typname`
+
+	enumRows, err := w.db.Query(enumsQuery, w.schema)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to query enums: %w", err)
+	}
+	defer enumRows.Close()
+
+	for enumRows.Next() {
+		var enumName string
+		if err := enumRows.Scan(&enumName); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to scan enum name: %w", err)
+		}
+		enums = append(enums, enumName)
+	}
+
+	// Get all sequences in the schema
+	sequencesQuery := `
+			SELECT sequence_name
+			FROM information_schema.sequences
+			WHERE sequence_schema = $1
+			ORDER BY sequence_name`
+
+	seqRows, err := w.db.Query(sequencesQuery, w.schema)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to query sequences: %w", err)
+	}
+	defer seqRows.Close()
+
+	for seqRows.Next() {
+		var sequenceName string
+		if err := seqRows.Scan(&sequenceName); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to scan sequence name: %w", err)
+		}
+		sequences = append(sequences, sequenceName)
+	}
+
+	return tables, enums, sequences, nil
+}
+
 // DropAllTables drops ALL tables and enums in the database schema (COMPLETE CLEANUP!)
 func (w *PostgreSQLWriter) DropAllTables() error {
 	slog.Warn("WARNING: This will drop ALL tables and enums in the database!")
@@ -150,83 +226,13 @@ func (w *PostgreSQLWriter) DropAllTables() error {
 	// Rollback on error, commit on success
 	defer func() {
 		if w.tx != nil {
-			w.RollbackTransaction()
+			w.RollbackTransaction() // TODO: weird - it always rolls back??
 		}
 	}()
 
-	var tables []string
-	var enums []string
-	var sequences []string
-
-	if w.dryRun {
-		// In dry run mode, simulate some tables/enums/sequences for demonstration
-		tables = []string{"example_table1", "example_table2"}
-		enums = []string{"example_enum1", "example_enum2"}
-		sequences = []string{"example_table1_id_seq", "example_table2_id_seq"}
-	} else {
-		// Get all tables in the schema
-		tablesQuery := `
-			SELECT table_name
-			FROM information_schema.tables
-			WHERE table_schema = $1 AND table_type = 'BASE TABLE'
-			ORDER BY table_name`
-
-		rows, err := w.db.Query(tablesQuery, w.schema)
-		if err != nil {
-			return fmt.Errorf("failed to query tables: %w", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var tableName string
-			if err := rows.Scan(&tableName); err != nil {
-				return fmt.Errorf("failed to scan table name: %w", err)
-			}
-			tables = append(tables, tableName)
-		}
-
-		// Get all custom types (enums) in the schema
-		enumsQuery := `
-			SELECT typname
-			FROM pg_type t
-			JOIN pg_namespace n ON t.typnamespace = n.oid
-			WHERE n.nspname = $1 AND t.typtype = 'e'
-			ORDER BY typname`
-
-		enumRows, err := w.db.Query(enumsQuery, w.schema)
-		if err != nil {
-			return fmt.Errorf("failed to query enums: %w", err)
-		}
-		defer enumRows.Close()
-
-		for enumRows.Next() {
-			var enumName string
-			if err := enumRows.Scan(&enumName); err != nil {
-				return fmt.Errorf("failed to scan enum name: %w", err)
-			}
-			enums = append(enums, enumName)
-		}
-
-		// Get all sequences in the schema
-		sequencesQuery := `
-			SELECT sequence_name
-			FROM information_schema.sequences
-			WHERE sequence_schema = $1
-			ORDER BY sequence_name`
-
-		seqRows, err := w.db.Query(sequencesQuery, w.schema)
-		if err != nil {
-			return fmt.Errorf("failed to query sequences: %w", err)
-		}
-		defer seqRows.Close()
-
-		for seqRows.Next() {
-			var sequenceName string
-			if err := seqRows.Scan(&sequenceName); err != nil {
-				return fmt.Errorf("failed to scan sequence name: %w", err)
-			}
-			sequences = append(sequences, sequenceName)
-		}
+	tables, enums, sequences, err := w.collectAllObjects()
+	if err != nil {
+		return err
 	}
 
 	// Drop all tables with CASCADE to handle dependencies

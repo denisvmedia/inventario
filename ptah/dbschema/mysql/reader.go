@@ -161,6 +161,34 @@ func (r *Reader) parseTableFromDDL(ddl string) (types.DBTable, error) {
 	return r.convertASTToTable(createTableNode), nil
 }
 
+func (r *Reader) applyColumnConstraint(table *types.DBTable, constraint *ast.ConstraintNode, primaryKeyColumns map[string]bool) {
+	switch constraint.Type {
+	case ast.PrimaryKeyConstraint:
+		// Mark columns as primary key
+		for _, colName := range constraint.Columns {
+			colName = strings.Trim(colName, "`")
+			for i := range table.Columns {
+				if table.Columns[i].Name == colName {
+					table.Columns[i].IsPrimaryKey = true
+				}
+			}
+		}
+	case ast.UniqueConstraint:
+		// Mark columns as unique (only if single column unique constraint)
+		// BUT skip if this column is already a primary key (primary keys are inherently unique)
+		if len(constraint.Columns) == 1 {
+			colName := strings.Trim(constraint.Columns[0], "`")
+			if !primaryKeyColumns[colName] {
+				for i := range table.Columns {
+					if table.Columns[i].Name == colName {
+						table.Columns[i].IsUnique = true
+					}
+				}
+			}
+		}
+	}
+}
+
 // convertASTToTable converts an AST CreateTableNode to parsertypes.DBTable
 func (r *Reader) convertASTToTable(node *ast.CreateTableNode) types.DBTable {
 	table := types.DBTable{
@@ -209,41 +237,18 @@ func (r *Reader) convertASTToTable(node *ast.CreateTableNode) types.DBTable {
 
 	// First pass: identify primary key columns
 	for _, constraint := range node.Constraints {
-		if constraint.Type == ast.PrimaryKeyConstraint {
-			for _, colName := range constraint.Columns {
-				colName = strings.Trim(colName, "`")
-				primaryKeyColumns[colName] = true
-			}
+		if constraint.Type != ast.PrimaryKeyConstraint {
+			continue
+		}
+		for _, colName := range constraint.Columns {
+			colName = strings.Trim(colName, "`")
+			primaryKeyColumns[colName] = true
 		}
 	}
 
 	// Second pass: apply constraints
 	for _, constraint := range node.Constraints {
-		switch constraint.Type {
-		case ast.PrimaryKeyConstraint:
-			// Mark columns as primary key
-			for _, colName := range constraint.Columns {
-				colName = strings.Trim(colName, "`")
-				for i := range table.Columns {
-					if table.Columns[i].Name == colName {
-						table.Columns[i].IsPrimaryKey = true
-					}
-				}
-			}
-		case ast.UniqueConstraint:
-			// Mark columns as unique (only if single column unique constraint)
-			// BUT skip if this column is already a primary key (primary keys are inherently unique)
-			if len(constraint.Columns) == 1 {
-				colName := strings.Trim(constraint.Columns[0], "`")
-				if !primaryKeyColumns[colName] {
-					for i := range table.Columns {
-						if table.Columns[i].Name == colName {
-							table.Columns[i].IsUnique = true
-						}
-					}
-				}
-			}
-		}
+		r.applyColumnConstraint(&table, constraint, primaryKeyColumns)
 	}
 
 	// Extract table comment from options

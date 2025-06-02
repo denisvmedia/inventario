@@ -49,6 +49,214 @@ func New() *Planner {
 	return &Planner{}
 }
 
+func (p *Planner) addEnumChangeWarnings(result []ast.Node, diff *types.SchemaDiff) []ast.Node {
+	if len(diff.EnumsAdded) > 0 {
+		astCommentNode := ast.NewComment(fmt.Sprintf("NOTE: MySQL enums are inline in column definitions. New enums: %v", diff.EnumsAdded))
+		result = append(result, astCommentNode)
+	}
+	return result
+}
+
+func (p *Planner) handleEnumModifications(result []ast.Node, diff *types.SchemaDiff) []ast.Node {
+	for _, enumDiff := range diff.EnumsModified {
+		if len(enumDiff.ValuesAdded) > 0 {
+			astCommentNode := ast.NewComment(fmt.Sprintf("WARNING: MySQL enum modifications require ALTER TABLE for each column using enum %s. Values added: %v", enumDiff.EnumName, enumDiff.ValuesAdded))
+			result = append(result, astCommentNode)
+		}
+		if len(enumDiff.ValuesRemoved) > 0 {
+			astCommentNode := ast.NewComment(fmt.Sprintf("WARNING: MySQL cannot remove enum values from %s without recreating the table. Values removed: %v", enumDiff.EnumName, enumDiff.ValuesRemoved))
+			result = append(result, astCommentNode)
+		}
+	}
+	return result
+}
+
+func (p *Planner) addNewTables(result []ast.Node, diff *types.SchemaDiff, generated *goschema.Database) []ast.Node {
+	for _, tableName := range diff.TablesAdded {
+		// Find the table in generated schema and create it
+		for _, table := range generated.Tables {
+			if table.Name == tableName {
+				astNode := ast.NewCreateTable(tableName)
+				for _, field := range generated.Fields {
+					if field.StructName == table.StructName {
+						columnNode := fromschema.FromField(field, generated.Enums, "mysql")
+						astNode.AddColumn(columnNode)
+					}
+				}
+				result = append(result, astNode)
+				break
+			}
+		}
+	}
+	return result
+}
+
+func (p *Planner) addNewTableColumns(result []ast.Node, tableDiff *types.TableDiff, generated *goschema.Database) []ast.Node {
+	for _, colName := range tableDiff.ColumnsAdded {
+		// Find the field definition for this column
+		// We need to find the struct name that corresponds to this table name
+		var targetField *goschema.Field
+		var targetStructName string
+
+		// First, find the struct name for this table
+		for _, table := range generated.Tables {
+			if table.Name == tableDiff.TableName {
+				targetStructName = table.StructName
+				break
+			}
+		}
+
+		// Now find the field using the correct struct name
+		for _, field := range generated.Fields {
+			if field.StructName == targetStructName && field.Name == colName {
+				targetField = &field
+				break
+			}
+		}
+
+		if targetField != nil {
+			columnNode := fromschema.FromField(*targetField, generated.Enums, "mysql")
+			// Generate ADD COLUMN statement using AST
+			alterNode := &ast.AlterTableNode{
+				Name:       tableDiff.TableName,
+				Operations: []ast.AlterOperation{&ast.AddColumnOperation{Column: columnNode}},
+			}
+			result = append(result, alterNode)
+		}
+	}
+	return result
+}
+
+func (p *Planner) modifyExistingColumns(result []ast.Node, tableDiff *types.TableDiff, generated *goschema.Database) []ast.Node {
+	for _, colDiff := range tableDiff.ColumnsModified {
+		// Find the target field definition for this column
+		// We need to find the struct name that corresponds to this table name
+		var targetField *goschema.Field
+		var targetStructName string
+
+		// First, find the struct name for this table
+		for _, table := range generated.Tables {
+			if table.Name == tableDiff.TableName {
+				targetStructName = table.StructName
+				break
+			}
+		}
+
+		// Now find the field using the correct struct name
+		for _, field := range generated.Fields {
+			if field.StructName == targetStructName && field.Name == colDiff.ColumnName {
+				targetField = &field
+				break
+			}
+		}
+
+		if targetField == nil {
+			astCommentNode := ast.NewComment(fmt.Sprintf("ERROR: Could not find field definition for %s.%s (struct: %s)", tableDiff.TableName, colDiff.ColumnName, targetStructName))
+			result = append(result, astCommentNode)
+			continue
+		}
+
+		// Create a column definition with the target field properties
+		columnNode := fromschema.FromField(*targetField, generated.Enums, "mysql")
+
+		// Generate ALTER COLUMN statements using AST
+		alterNode := &ast.AlterTableNode{
+			Name:       tableDiff.TableName,
+			Operations: []ast.AlterOperation{&ast.ModifyColumnOperation{Column: columnNode}},
+		}
+		result = append(result, alterNode)
+
+		// Add a comment showing what changes are being made
+		changesList := make([]string, 0, len(colDiff.Changes))
+		for changeType, change := range colDiff.Changes {
+			changesList = append(changesList, fmt.Sprintf("%s: %s", changeType, change))
+		}
+		astCommentNode := ast.NewComment(fmt.Sprintf("Modify column %s.%s: %s", tableDiff.TableName, colDiff.ColumnName, strings.Join(changesList, ", ")))
+		result = append(result, astCommentNode)
+	}
+	return result
+}
+
+func (p *Planner) removeColumns(result []ast.Node, tableDiff *types.TableDiff) []ast.Node {
+	for _, colName := range tableDiff.ColumnsRemoved {
+		// Generate DROP COLUMN statement using AST
+		alterNode := &ast.AlterTableNode{
+			Name:       tableDiff.TableName,
+			Operations: []ast.AlterOperation{&ast.DropColumnOperation{ColumnName: colName}},
+		}
+		result = append(result, alterNode)
+		astCommentNode := ast.NewComment(fmt.Sprintf("WARNING: Dropping column %s.%s - This will delete data!", tableDiff.TableName, colName))
+		result = append(result, astCommentNode)
+	}
+	return result
+}
+
+func (p *Planner) modifyExistingTables(result []ast.Node, diff *types.SchemaDiff, generated *goschema.Database) []ast.Node {
+	for _, tableDiff := range diff.TablesModified {
+		astCommentNode := ast.NewComment(fmt.Sprintf("Modify table: %s", tableDiff.TableName))
+		result = append(result, astCommentNode)
+
+		// Add new columns
+		result = p.addNewTableColumns(result, &tableDiff, generated)
+
+		// Modify existing columns
+		result = p.modifyExistingColumns(result, &tableDiff, generated)
+
+		// Remove columns (dangerous!)
+		result = p.removeColumns(result, &tableDiff)
+	}
+	return result
+}
+
+func (p *Planner) addNewIndexes(result []ast.Node, diff *types.SchemaDiff, generated *goschema.Database) []ast.Node {
+	for _, indexName := range diff.IndexesAdded {
+		// Find the index definition
+		for _, idx := range generated.Indexes {
+			if idx.Name == indexName {
+				indexNode := ast.NewIndex(idx.Name, idx.StructName, idx.Fields...)
+				if idx.Unique {
+					indexNode.Unique = true
+				}
+				if idx.Comment != "" {
+					indexNode.Comment = idx.Comment
+				}
+				result = append(result, indexNode)
+				break
+			}
+		}
+	}
+	return result
+}
+
+func (p *Planner) removeIndexes(result []ast.Node, diff *types.SchemaDiff) []ast.Node {
+	for _, indexName := range diff.IndexesRemoved {
+		dropIndexNode := ast.NewDropIndex(indexName).
+			SetIfExists()
+		result = append(result, dropIndexNode)
+	}
+	return result
+}
+
+func (p *Planner) removeTables(result []ast.Node, diff *types.SchemaDiff) []ast.Node {
+	for _, tableName := range diff.TablesRemoved {
+		dropTableNode := ast.NewDropTable(tableName).
+			SetIfExists().
+			SetCascade().
+			SetComment("WARNING: This will delete all data!")
+
+		result = append(result, dropTableNode)
+	}
+	return result
+}
+
+func (p *Planner) handleEnumRemovals(result []ast.Node, diff *types.SchemaDiff) []ast.Node {
+	for _, enumName := range diff.EnumsRemoved {
+		astCommentNode := ast.NewComment(fmt.Sprintf("WARNING: MySQL enum %s removal requires updating all tables that use this enum type!", enumName))
+		result = append(result, astCommentNode)
+	}
+	return result
+}
+
 // GenerateMigrationAST generates MySQL-specific migration AST statements from schema differences.
 //
 // This method transforms the schema differences captured in the SchemaDiff into executable
@@ -125,181 +333,28 @@ func (p *Planner) GenerateMigrationAST(diff *types.SchemaDiff, generated *gosche
 	// Enums are handled inline in column definitions, so we skip enum creation steps
 
 	// 1. Add enum change warnings (MySQL limitations)
-	if len(diff.EnumsAdded) > 0 {
-		astCommentNode := ast.NewComment(fmt.Sprintf("NOTE: MySQL enums are inline in column definitions. New enums: %v", diff.EnumsAdded))
-		result = append(result, astCommentNode)
-	}
+	result = p.addEnumChangeWarnings(result, diff)
 
 	// 2. Handle enum modifications (MySQL limitations)
-	for _, enumDiff := range diff.EnumsModified {
-		if len(enumDiff.ValuesAdded) > 0 {
-			astCommentNode := ast.NewComment(fmt.Sprintf("WARNING: MySQL enum modifications require ALTER TABLE for each column using enum %s. Values added: %v", enumDiff.EnumName, enumDiff.ValuesAdded))
-			result = append(result, astCommentNode)
-		}
-		if len(enumDiff.ValuesRemoved) > 0 {
-			astCommentNode := ast.NewComment(fmt.Sprintf("WARNING: MySQL cannot remove enum values from %s without recreating the table. Values removed: %v", enumDiff.EnumName, enumDiff.ValuesRemoved))
-			result = append(result, astCommentNode)
-		}
-	}
+	result = p.handleEnumModifications(result, diff)
 
 	// 3. Add new tables
-	for _, tableName := range diff.TablesAdded {
-		// Find the table in generated schema and create it
-		for _, table := range generated.Tables {
-			if table.Name == tableName {
-				astNode := ast.NewCreateTable(tableName)
-				for _, field := range generated.Fields {
-					if field.StructName == table.StructName {
-						columnNode := fromschema.FromField(field, generated.Enums, "mysql")
-						astNode.AddColumn(columnNode)
-					}
-				}
-				result = append(result, astNode)
-				break
-			}
-		}
-	}
+	result = p.addNewTables(result, diff, generated)
 
 	// 4. Modify existing tables
-	for _, tableDiff := range diff.TablesModified {
-		astCommentNode := ast.NewComment(fmt.Sprintf("Modify table: %s", tableDiff.TableName))
-		result = append(result, astCommentNode)
-
-		// Add new columns
-		for _, colName := range tableDiff.ColumnsAdded {
-			// Find the field definition for this column
-			// We need to find the struct name that corresponds to this table name
-			var targetField *goschema.Field
-			var targetStructName string
-
-			// First, find the struct name for this table
-			for _, table := range generated.Tables {
-				if table.Name == tableDiff.TableName {
-					targetStructName = table.StructName
-					break
-				}
-			}
-
-			// Now find the field using the correct struct name
-			for _, field := range generated.Fields {
-				if field.StructName == targetStructName && field.Name == colName {
-					targetField = &field
-					break
-				}
-			}
-
-			if targetField != nil {
-				columnNode := fromschema.FromField(*targetField, generated.Enums, "mysql")
-				// Generate ADD COLUMN statement using AST
-				alterNode := &ast.AlterTableNode{
-					Name:       tableDiff.TableName,
-					Operations: []ast.AlterOperation{&ast.AddColumnOperation{Column: columnNode}},
-				}
-				result = append(result, alterNode)
-			}
-		}
-
-		// Modify existing columns
-		for _, colDiff := range tableDiff.ColumnsModified {
-			// Find the target field definition for this column
-			// We need to find the struct name that corresponds to this table name
-			var targetField *goschema.Field
-			var targetStructName string
-
-			// First, find the struct name for this table
-			for _, table := range generated.Tables {
-				if table.Name == tableDiff.TableName {
-					targetStructName = table.StructName
-					break
-				}
-			}
-
-			// Now find the field using the correct struct name
-			for _, field := range generated.Fields {
-				if field.StructName == targetStructName && field.Name == colDiff.ColumnName {
-					targetField = &field
-					break
-				}
-			}
-
-			if targetField == nil {
-				astCommentNode := ast.NewComment(fmt.Sprintf("ERROR: Could not find field definition for %s.%s (struct: %s)", tableDiff.TableName, colDiff.ColumnName, targetStructName))
-				result = append(result, astCommentNode)
-				continue
-			}
-
-			// Create a column definition with the target field properties
-			columnNode := fromschema.FromField(*targetField, generated.Enums, "mysql")
-
-			// Generate ALTER COLUMN statements using AST
-			alterNode := &ast.AlterTableNode{
-				Name:       tableDiff.TableName,
-				Operations: []ast.AlterOperation{&ast.ModifyColumnOperation{Column: columnNode}},
-			}
-			result = append(result, alterNode)
-
-			// Add a comment showing what changes are being made
-			changesList := make([]string, 0, len(colDiff.Changes))
-			for changeType, change := range colDiff.Changes {
-				changesList = append(changesList, fmt.Sprintf("%s: %s", changeType, change))
-			}
-			astCommentNode := ast.NewComment(fmt.Sprintf("Modify column %s.%s: %s", tableDiff.TableName, colDiff.ColumnName, strings.Join(changesList, ", ")))
-			result = append(result, astCommentNode)
-		}
-
-		// Remove columns (dangerous!)
-		for _, colName := range tableDiff.ColumnsRemoved {
-			// Generate DROP COLUMN statement using AST
-			alterNode := &ast.AlterTableNode{
-				Name:       tableDiff.TableName,
-				Operations: []ast.AlterOperation{&ast.DropColumnOperation{ColumnName: colName}},
-			}
-			result = append(result, alterNode)
-			astCommentNode := ast.NewComment(fmt.Sprintf("WARNING: Dropping column %s.%s - This will delete data!", tableDiff.TableName, colName))
-			result = append(result, astCommentNode)
-		}
-	}
+	result = p.modifyExistingTables(result, diff, generated)
 
 	// 5. Add new indexes
-	for _, indexName := range diff.IndexesAdded {
-		// Find the index definition
-		for _, idx := range generated.Indexes {
-			if idx.Name == indexName {
-				indexNode := ast.NewIndex(idx.Name, idx.StructName, idx.Fields...)
-				if idx.Unique {
-					indexNode.Unique = true
-				}
-				if idx.Comment != "" {
-					indexNode.Comment = idx.Comment
-				}
-				result = append(result, indexNode)
-				break
-			}
-		}
-	}
+	result = p.addNewIndexes(result, diff, generated)
 
 	// 6. Remove indexes (safe operations)
-	for _, indexName := range diff.IndexesRemoved {
-		dropIndexNode := ast.NewDropIndex(indexName).
-			SetIfExists()
-		result = append(result, dropIndexNode)
-	}
+	result = p.removeIndexes(result, diff)
 
 	// 7. Remove tables (dangerous!)
-	for _, tableName := range diff.TablesRemoved {
-		dropTableNode := ast.NewDropTable(tableName).
-			SetIfExists().
-			SetCascade().
-			SetComment("WARNING: This will delete all data!")
-
-		result = append(result, dropTableNode)
-	}
+	result = p.removeTables(result, diff)
 
 	// 8. Handle enum removals (MySQL-specific warnings)
-	for _, enumName := range diff.EnumsRemoved {
-		astCommentNode := ast.NewComment(fmt.Sprintf("WARNING: MySQL enum %s removal requires updating all tables that use this enum type!", enumName))
-		result = append(result, astCommentNode)
-	}
+	result = p.handleEnumRemovals(result, diff)
 
 	return result
 }

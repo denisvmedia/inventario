@@ -24,9 +24,9 @@ func NewMySQLWriter(db *sql.DB, schema string) *Writer {
 }
 
 // ExecuteSQL executes a SQL statement
-func (w *Writer) ExecuteSQL(sql string) error {
+func (w *Writer) ExecuteSQL(sqlExpr string) error {
 	if w.dryRun {
-		slog.Info("[DRY RUN] Would execute SQL", "sql", sql)
+		slog.Info("[DRY RUN] Would execute SQL", "sql", sqlExpr)
 		return nil
 	}
 
@@ -34,9 +34,9 @@ func (w *Writer) ExecuteSQL(sql string) error {
 		return fmt.Errorf("no active transaction")
 	}
 
-	_, err := w.tx.Exec(sql)
+	_, err := w.tx.Exec(sqlExpr)
 	if err != nil {
-		return fmt.Errorf("SQL execution failed: %w\nSQL: %s", err, sql)
+		return fmt.Errorf("SQL execution failed: %w\nSQL: %s", err, sqlExpr)
 	}
 	return nil
 }
@@ -104,7 +104,7 @@ func (w *Writer) DropAllTables() error {
 	// Rollback on error, commit on success
 	defer func() {
 		if w.tx != nil {
-			w.RollbackTransaction()
+			w.RollbackTransaction() // TODO: weird - it always rolls back
 		}
 	}()
 
@@ -165,20 +165,20 @@ func (w *Writer) DropAllTables() error {
 }
 
 // isCreateTableStatement checks if a SQL statement is a CREATE TABLE statement
-func (w *Writer) isCreateTableStatement(sql string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "CREATE TABLE")
+func (w *Writer) isCreateTableStatement(sqlExpr string) bool {
+	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sqlExpr)), "CREATE TABLE")
 }
 
 // isCreateIndexStatement checks if a SQL statement is a CREATE INDEX statement
-func (w *Writer) isCreateIndexStatement(sql string) bool {
-	return strings.Contains(strings.ToUpper(strings.TrimSpace(sql)), "CREATE") &&
-		strings.Contains(strings.ToUpper(strings.TrimSpace(sql)), "INDEX")
+func (w *Writer) isCreateIndexStatement(sqlExpr string) bool {
+	return strings.Contains(strings.ToUpper(strings.TrimSpace(sqlExpr)), "CREATE") &&
+		strings.Contains(strings.ToUpper(strings.TrimSpace(sqlExpr)), "INDEX")
 }
 
 // extractTableNameFromCreateTable extracts table name from CREATE TABLE statement
-func (w *Writer) extractTableNameFromCreateTable(sql string) string {
+func (w *Writer) extractTableNameFromCreateTable(sqlExpr string) string {
 	// Simple regex to extract table name from "CREATE TABLE tablename ("
-	parts := strings.Fields(strings.TrimSpace(sql))
+	parts := strings.Fields(strings.TrimSpace(sqlExpr))
 	if len(parts) >= 3 && strings.ToUpper(parts[0]) == "CREATE" && strings.ToUpper(parts[1]) == "TABLE" {
 		return strings.TrimSuffix(parts[2], "(")
 	}
@@ -186,9 +186,9 @@ func (w *Writer) extractTableNameFromCreateTable(sql string) string {
 }
 
 // extractTableNameFromCreateIndex extracts table name from CREATE INDEX statement
-func (w *Writer) extractTableNameFromCreateIndex(sql string) string {
+func (w *Writer) extractTableNameFromCreateIndex(sqlExpr string) string {
 	// Look for "ON tablename" pattern
-	parts := strings.Fields(strings.TrimSpace(sql))
+	parts := strings.Fields(strings.TrimSpace(sqlExpr))
 	for i, part := range parts {
 		if strings.ToUpper(part) == "ON" && i+1 < len(parts) {
 			return strings.TrimSuffix(parts[i+1], "(")

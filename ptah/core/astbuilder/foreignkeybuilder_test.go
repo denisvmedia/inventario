@@ -167,17 +167,17 @@ func TestForeignKeyBuilder_MultipleForeignKeys(t *testing.T) {
 	c.Assert(len(result.Columns), qt.Equals, 2)
 
 	// Check first foreign key
-	userIdColumn := result.Columns[0]
-	c.Assert(userIdColumn.ForeignKey, qt.IsNotNil)
-	c.Assert(userIdColumn.ForeignKey.Table, qt.Equals, "users")
-	c.Assert(userIdColumn.ForeignKey.OnDelete, qt.Equals, "CASCADE")
+	userIDColumn := result.Columns[0]
+	c.Assert(userIDColumn.ForeignKey, qt.IsNotNil)
+	c.Assert(userIDColumn.ForeignKey.Table, qt.Equals, "users")
+	c.Assert(userIDColumn.ForeignKey.OnDelete, qt.Equals, "CASCADE")
 
 	// Check second foreign key
-	categoryIdColumn := result.Columns[1]
-	c.Assert(categoryIdColumn.ForeignKey, qt.IsNotNil)
-	c.Assert(categoryIdColumn.ForeignKey.Table, qt.Equals, "categories")
-	c.Assert(categoryIdColumn.ForeignKey.OnDelete, qt.Equals, "SET NULL")
-	c.Assert(categoryIdColumn.ForeignKey.OnUpdate, qt.Equals, "CASCADE")
+	categoryIDColumn := result.Columns[1]
+	c.Assert(categoryIDColumn.ForeignKey, qt.IsNotNil)
+	c.Assert(categoryIDColumn.ForeignKey.Table, qt.Equals, "categories")
+	c.Assert(categoryIDColumn.ForeignKey.OnDelete, qt.Equals, "SET NULL")
+	c.Assert(categoryIDColumn.ForeignKey.OnUpdate, qt.Equals, "CASCADE")
 }
 
 func TestForeignKeyBuilder_ComplexForeignKey(t *testing.T) {
