@@ -92,14 +92,14 @@ jobs:
           echo "PostgreSQL is ready!"
           
           echo "Waiting for MySQL..."
-          until mysqladmin ping -h localhost -P 3306 -u ptah_user -pptah_password --silent; do
+          until mysqladmin ping -h mysql -P 3306 -u ptah_user -pptah_password --silent; do
             echo "MySQL is unavailable - sleeping"
             sleep 2
           done
           echo "MySQL is ready!"
           
           echo "Waiting for MariaDB..."
-          until mysqladmin ping -h localhost -P 3307 -u ptah_user -pptah_password --silent; do
+          until mysqladmin ping -h mariadb -P 3307 -u ptah_user -pptah_password --silent; do
             echo "MariaDB is unavailable - sleeping"
             sleep 2
           done
@@ -114,14 +114,14 @@ jobs:
 
       - name: Run executor integration tests with MySQL
         env:
-          MYSQL_TEST_DSN: "ptah_user:ptah_password@tcp(localhost:3306)/ptah_test"
+          MYSQL_TEST_DSN: "ptah_user:ptah_password@tcp(mysql:3306)/ptah_test"
         run: |
           go test -v  ./integration/... -tags=integration -timeout 15m
         working-directory: ptah
 
       - name: Run executor integration tests with MariaDB
         env:
-          MARIADB_TEST_DSN: "ptah_user:ptah_password@tcp(localhost:3307)/ptah_test"
+          MARIADB_TEST_DSN: "ptah_user:ptah_password@tcp(mariadb:3307)/ptah_test"
         run: |
           go test -v  ./integration/... -tags=integration -timeout 15m
         working-directory: ptah
