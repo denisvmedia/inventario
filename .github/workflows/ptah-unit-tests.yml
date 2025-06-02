@@ -1,0 +1,43 @@
+name: Ptah Unit Tests
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'ptah/**'
+      - '.github/workflows/ptah-unit-tests.yml'
+  pull_request:
+    paths:
+      - 'ptah/**'
+      - '.github/workflows/ptah-unit-tests.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  unit-tests:
+    name: ptah-unit-tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.3'
+          cache: true
+          cache-dependency-path: ptah/go.sum
+      
+      - name: Install dependencies
+        run: go mod download
+        working-directory: ptah
+      
+      - name: Run unit tests
+        run: |
+          # Run unit tests excluding integration tests
+          # These tests don't require database connections
+          go test -v -race ./... -timeout 10m
+        working-directory: ptah

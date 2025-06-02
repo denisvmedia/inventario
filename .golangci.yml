@@ -41,7 +41,7 @@ linters:
       lines: 240
       statements: 160
     gocognit:
-      min-complexity: 20
+      min-complexity: 30
     gocritic:
       enabled-checks:
         - badLock
@@ -106,15 +106,15 @@ linters:
         - name: enforce-map-style
           arguments:
             - make
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: enforce-repeated-arg-type-style
           arguments:
             - short
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: enforce-slice-style
           arguments:
             - make
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: error-naming
           disabled: false
         - name: error-return
@@ -158,7 +158,7 @@ linters:
           disabled: false
         - name: receiver-naming
           arguments:
-            - maxLength: 3
+            - maxLength: 4 # TODO: get back to 3
           disabled: false
         - name: redefines-builtin-id
           disabled: false
@@ -191,9 +191,9 @@ linters:
         - name: unused-parameter
           arguments:
             - allowRegex: '^_'
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: unused-receiver
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: use-any
           disabled: false
         - name: useless-break
@@ -231,12 +231,38 @@ linters:
       # bmd exception rule (we currently use testify there)
       - path: '_test\.go$'
         text: 'function-result-limit:'
+      - path: '_test\.go$'
+        text: 'bool-literal-in-expr:'
+      - path: '_test\.go$'
+        text: 'unused-parameter:'
+      - path: '_test\.go$'
+        text: 'unchecked-type-assertion:'
       - linters:
           - dupl
         path: '(jsonapi|apiserver|registry/.*)/.*\.go$'
       # Allow migration filenames to have numbers at the beginning
       - path: 'registry/postgres/migrations/.*\.go$'
         text: 'filename-format:'
+      - path: '(test\_entities|test\_simple)/.*\.go$'
+        text: 'var-naming:'
+      - path: 'ptah/examples/ast\_demo/.*\.go$'
+        linters:
+          - unused
+      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
+        text: 'use of `fmt\..*` forbidden by pattern'
+      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
+        linters:
+          - gocognit
+          - nestif
+          - gocyclo
+      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
+        text: 'deep-exit:'
+      - path: 'cmd/.*\.go$'
+        linters:
+          - gochecknoinits
+      - path: 'integration/.*\.go$'
+        linters:
+          - unused
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'

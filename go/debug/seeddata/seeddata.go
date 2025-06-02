@@ -11,7 +11,7 @@ import (
 )
 
 // SeedData seeds the database with example data.
-func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
+func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's a seed function
 	ctx := context.Background()
 
 	// Create default system configuration with CZK as main currency
