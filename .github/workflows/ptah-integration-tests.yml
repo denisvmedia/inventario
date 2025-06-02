@@ -128,20 +128,20 @@ jobs:
 
       - name: Build integration test binary
         run: |
-          go build -o ./integration/integration-test ./cmd/integration-test
+          go build -o ./integration-test ./cmd/integration-test
         working-directory: ptah
 
       - name: Test integration binary help
         run: |
           ./integration-test --help
-        working-directory: ptah/integration
+        working-directory: ptah
 
       - name: Run basic smoke test
         env:
           POSTGRES_URL: "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
         run: |
           ./integration-test --scenarios=apply_incremental_migrations,check_current_version --databases=postgres --report=txt --output=./reports
-        working-directory: ptah/integration
+        working-directory: ptah
 
       - name: Run all databases comprehensive test
         env:
@@ -150,7 +150,7 @@ jobs:
           MARIADB_URL: "mariadb://ptah_user:ptah_password@tcp(127.0.0.1:3307)/ptah_test"
         run: |
           ./integration-test --report=html --verbose --output=./reports
-        working-directory: ptah/integration
+        working-directory: ptah
       
       - name: Upload integration test reports
         uses: actions/upload-artifact@v4
@@ -158,7 +158,7 @@ jobs:
         with:
           name: ptah-integration-test-reports
           path: |
-            ptah/integration/reports/
+            ptah/reports/
           retention-days: 7
       
       - name: Run dynamic integration tests
