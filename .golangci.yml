@@ -249,6 +249,9 @@ linters:
       - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
         text: 'use of `fmt\..*` forbidden by pattern'
       - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
+        linters:
+          - gocognit
+      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
         text: 'deep-exit:'
       - path: 'cmd/.*\.go$'
         linters:

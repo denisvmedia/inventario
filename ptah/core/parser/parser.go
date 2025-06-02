@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-extras/go-kit/ptr"
+
 	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/core/lexer"
 )
@@ -823,6 +825,156 @@ func (p *Parser) parseColumnType() (string, error) {
 	return typeName, nil
 }
 
+func (p *Parser) handleStringLiteral() (*ast.DefaultValue, error) {
+	value := p.current.Value
+	p.advance()
+
+	// Check for PostgreSQL type casting like '{}'::jsonb
+	if p.current.Type == lexer.TokenOperator && p.current.Value == ":" {
+		p.advance()
+		if p.current.Type == lexer.TokenOperator && p.current.Value == ":" {
+			p.advance()
+			if p.current.Type == lexer.TokenIdentifier {
+				value += "::" + p.current.Value
+				p.advance()
+			}
+		}
+	}
+
+	return &ast.DefaultValue{Value: value}, nil
+}
+
+func (p *Parser) parseArrayLiteral(value string) (*string, error) {
+	var result *string
+
+	p.skipWhitespace()
+
+	if !p.current.MatchOperatorValue("[") {
+		return result, nil
+	}
+
+	// Parse array literal
+	arrayLiteral := value + "["
+	p.advance()
+
+	// Collect array elements
+	for {
+		if p.current.Type == lexer.TokenEOF {
+			return result, fmt.Errorf("unexpected end of input while parsing array at position %d", p.current.Start)
+		}
+		if p.current.MatchOperatorValue("]") {
+			arrayLiteral += "]"
+			p.advance()
+			break
+		}
+		if p.current.MatchOperatorValue("[") {
+			return result, fmt.Errorf("nested arrays are not supported at position %d", p.current.Start)
+		}
+
+		arrayLiteral += p.current.Value
+		p.advance()
+	}
+
+	// Handle type cast like ::TEXT[]
+	if !p.current.MatchOperatorValue(":") {
+		// No type cast, return array literal
+		return ptr.To(arrayLiteral), nil
+	}
+	p.advance()
+	if !p.current.MatchOperatorValue(":") {
+		// return ptr.To(arrayLiteral), nil
+		return result, fmt.Errorf("expected '::' for type cast, got %s at position %d", p.current.Type, p.current.Start)
+	}
+	p.advance()
+	// Get the cast type
+	if p.current.Type != lexer.TokenIdentifier {
+		return ptr.To(arrayLiteral), nil
+	}
+
+	arrayLiteral += "::" + p.current.Value
+	p.advance()
+	// Handle array brackets in cast
+	if !p.current.MatchOperatorValue("[") {
+		return ptr.To(arrayLiteral), nil
+	}
+	arrayLiteral += "["
+	p.advance()
+	if !p.current.MatchOperatorValue("]") {
+		// return ptr.To(arrayLiteral), nil
+		return result, fmt.Errorf("expected ']' for array cast, got %s at position %d", p.current.Type, p.current.Start)
+	}
+	arrayLiteral += "]"
+	p.advance()
+
+	return ptr.To(arrayLiteral), nil
+}
+
+func (p *Parser) handleFunctionCallOrKeyword() (*ast.DefaultValue, error) {
+	value := p.current.Value
+	p.advance()
+
+	// Check if it's a function call
+	if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
+		// Parse function call
+		p.advance()
+		p.skipWhitespace()
+
+		// Consume closing parenthesis
+		if err := p.expect(lexer.TokenOperator, ")"); err != nil {
+			return nil, err
+		}
+
+		return &ast.DefaultValue{Expression: value + "()"}, nil
+	}
+
+	// Handle MySQL/PostgreSQL functions that can be used without parentheses
+	upperValue := strings.ToUpper(value)
+	if upperValue == "CURRENT_TIMESTAMP" || upperValue == "NOW" || upperValue == "CURRENT_DATE" || upperValue == "CURRENT_TIME" {
+		return &ast.DefaultValue{Expression: value + "()"}, nil
+	}
+
+	// Handle PostgreSQL-specific functions
+	if upperValue == "GEN_RANDOM_UUID" {
+		return &ast.DefaultValue{Expression: value + "()"}, nil
+	}
+
+	// Handle PostgreSQL array literals like ARRAY[]::TEXT[]
+	if upperValue == "ARRAY" {
+		pArrayLiteral, err := p.parseArrayLiteral(value)
+		if err != nil {
+			return nil, err
+		}
+
+		return &ast.DefaultValue{Expression: *pArrayLiteral}, nil
+	}
+
+	// Regular identifier/keyword
+	return &ast.DefaultValue{Value: value}, nil
+}
+
+func (p *Parser) handleNumber() (*ast.DefaultValue, error) {
+	if p.current.Value == "-" || p.current.Value == "+" {
+		sign := p.current.Value
+		p.advance()
+		p.skipWhitespace()
+		if p.current.Type == lexer.TokenIdentifier || p.current.Type == lexer.TokenOperator {
+			value := sign + p.current.Value
+			p.advance()
+			return &ast.DefaultValue{Value: value}, nil
+		}
+	}
+	// Check if it's a number that the lexer tokenized as an operator (like "0", "1", etc.)
+	// Numbers might be tokenized as operators by the simple lexer
+	value := p.current.Value
+	// Check if this looks like a number
+	if isNumeric(value) {
+		p.advance()
+		return &ast.DefaultValue{Value: value}, nil
+	}
+
+	return nil, fmt.Errorf("unexpected token for default value: %s at position %d", p.current.Value, p.current.Start)
+}
+
 // parseDefaultValue parses a default value (literal or function call).
 func (p *Parser) parseDefaultValue() (*ast.DefaultValue, error) {
 	p.skipWhitespace()
@@ -830,124 +982,13 @@ func (p *Parser) parseDefaultValue() (*ast.DefaultValue, error) {
 	switch p.current.Type {
 	case lexer.TokenString:
 		// String literal
-		value := p.current.Value
-		p.advance()
-
-		// Check for PostgreSQL type casting like '{}'::jsonb
-		if p.current.Type == lexer.TokenOperator && p.current.Value == ":" {
-			p.advance()
-			if p.current.Type == lexer.TokenOperator && p.current.Value == ":" {
-				p.advance()
-				if p.current.Type == lexer.TokenIdentifier {
-					value += "::" + p.current.Value
-					p.advance()
-				}
-			}
-		}
-
-		return &ast.DefaultValue{Value: value}, nil
-
+		return p.handleStringLiteral()
 	case lexer.TokenIdentifier:
 		// Could be a function call or keyword like NULL, TRUE, FALSE
-		value := p.current.Value
-		p.advance()
-
-		// Check if it's a function call
-		if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
-			// Parse function call
-			p.advance()
-			p.skipWhitespace()
-
-			// Consume closing parenthesis
-			if err := p.expect(lexer.TokenOperator, ")"); err != nil {
-				return nil, err
-			}
-
-			return &ast.DefaultValue{Expression: value + "()"}, nil
-		}
-
-		// Handle MySQL/PostgreSQL functions that can be used without parentheses
-		upperValue := strings.ToUpper(value)
-		if upperValue == "CURRENT_TIMESTAMP" || upperValue == "NOW" || upperValue == "CURRENT_DATE" || upperValue == "CURRENT_TIME" {
-			return &ast.DefaultValue{Expression: value + "()"}, nil
-		}
-
-		// Handle PostgreSQL-specific functions
-		if upperValue == "GEN_RANDOM_UUID" {
-			return &ast.DefaultValue{Expression: value + "()"}, nil
-		}
-
-		// Handle PostgreSQL array literals like ARRAY[]::TEXT[]
-		if upperValue == "ARRAY" {
-			p.skipWhitespace()
-			if p.current.Type == lexer.TokenOperator && p.current.Value == "[" {
-				// Parse array literal
-				arrayLiteral := value + "["
-				p.advance()
-
-				// Collect array elements
-				for {
-					if p.current.Type == lexer.TokenOperator && p.current.Value == "]" {
-						arrayLiteral += "]"
-						p.advance()
-						break
-					}
-					arrayLiteral += p.current.Value
-					p.advance()
-				}
-
-				// Handle type cast like ::TEXT[]
-				if p.current.Type == lexer.TokenOperator && p.current.Value == ":" {
-					p.advance()
-					if p.current.Type == lexer.TokenOperator && p.current.Value == ":" {
-						p.advance()
-						// Get the cast type
-						if p.current.Type == lexer.TokenIdentifier {
-							arrayLiteral += "::" + p.current.Value
-							p.advance()
-							// Handle array brackets in cast
-							if p.current.Type == lexer.TokenOperator && p.current.Value == "[" {
-								arrayLiteral += "["
-								p.advance()
-								if p.current.Type == lexer.TokenOperator && p.current.Value == "]" {
-									arrayLiteral += "]"
-									p.advance()
-								}
-							}
-						}
-					}
-				}
-
-				return &ast.DefaultValue{Expression: arrayLiteral}, nil
-			}
-		}
-
-		// Regular identifier/keyword
-		return &ast.DefaultValue{Value: value}, nil
-
+		return p.handleFunctionCallOrKeyword()
 	case lexer.TokenOperator:
 		// Could be a number (positive or negative) or just a number
-		if p.current.Value == "-" || p.current.Value == "+" {
-			sign := p.current.Value
-			p.advance()
-			p.skipWhitespace()
-			if p.current.Type == lexer.TokenIdentifier || p.current.Type == lexer.TokenOperator {
-				value := sign + p.current.Value
-				p.advance()
-				return &ast.DefaultValue{Value: value}, nil
-			}
-		}
-		// Check if it's a number that the lexer tokenized as an operator (like "0", "1", etc.)
-		// Numbers might be tokenized as operators by the simple lexer
-		value := p.current.Value
-		// Check if this looks like a number
-		if isNumeric(value) {
-			p.advance()
-			return &ast.DefaultValue{Value: value}, nil
-		}
-
-		return nil, fmt.Errorf("unexpected token for default value: %s at position %d", p.current.Value, p.current.Start)
-
+		return p.handleNumber()
 	default:
 		return nil, fmt.Errorf("expected default value, got %s at position %d", p.current.Type, p.current.Start)
 	}

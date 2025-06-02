@@ -2071,6 +2071,27 @@ func TestParser_ErrorHandling(t *testing.T) {
 			name: "Unsupported column attribute",
 			sql:  "CREATE TABLE users (id INTEGER UNSUPPORTED);",
 		},
+		{
+			name: "Broken array literal (invalid cast)",
+			sql: `CREATE TABLE test (
+					tags TEXT[] DEFAULT ARRAY[]:TEXT[],
+					matrix INT[][]
+				);`,
+		},
+		{
+			name: "Broken array literal (missing closing bracket)",
+			sql: `CREATE TABLE test (
+					tags TEXT[] DEFAULT ARRAY[::TEXT[],
+					matrix INT[][]
+				);`,
+		},
+		{
+			name: "Broken array literal (missing brackets)",
+			sql: `CREATE TABLE test (
+					tags TEXT[] DEFAULT ARRAY[::TEXT,
+					matrix INT
+				);`,
+		},
 	}
 
 	for _, tt := range tests {
