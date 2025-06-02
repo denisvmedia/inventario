@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"path/filepath"
+	"path"
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
@@ -319,7 +319,11 @@ func testCheckCurrentVersion(ctx context.Context, conn *dbschema.DatabaseConnect
 // testGenerateDesiredSchema tests extracting schema from entity definitions
 func testGenerateDesiredSchema(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	// Get the entities directory
-	entitiesDir := filepath.Join("fixtures", "entities")
+	entitiesDir := path.Join("fixtures", "entities")
+	if _, err := fs.Stat(fixtures, entitiesDir); err != nil {
+		// Fallback to local development path
+		entitiesDir = "integration/fixtures/entities"
+	}
 
 	// Parse entities
 	result, err := goschema.ParseDir(entitiesDir)

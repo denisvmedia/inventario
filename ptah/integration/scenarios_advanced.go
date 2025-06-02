@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"sync"
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
@@ -68,7 +68,11 @@ func testSchemaDiff(ctx context.Context, conn *dbschema.DatabaseConnection, fixt
 	}
 
 	// Parse entity definitions
-	entitiesDir := filepath.Join("fixtures", "entities")
+	entitiesDir := path.Join("fixtures", "entities")
+	if _, err := os.Stat(entitiesDir); os.IsNotExist(err) {
+		// Fallback to local development path
+		entitiesDir = "integration/fixtures/entities"
+	}
 	entityResult, err := goschema.ParseDir(entitiesDir)
 	if err != nil {
 		return fmt.Errorf("failed to parse entities: %w", err)
