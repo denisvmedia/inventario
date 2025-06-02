@@ -44,20 +44,12 @@ func main() {
 	fmt.Printf("Parsing Go file: %s\n", filename)
 	fmt.Println("Discovering embedded type dependencies...")
 
-	embeddedFields, fields, indexes, tables, enums := goschema.ParseFileWithDependencies(filename)
-
 	// Build the complete database schema
-	database := goschema.Database{
-		Tables:         tables,
-		Fields:         fields,
-		Indexes:        indexes,
-		Enums:          enums,
-		EmbeddedFields: embeddedFields,
-	}
+	database := goschema.ParseFileWithDependencies(filename)
 
 	// Generate DDL statements for all supported database dialects
 	fmt.Printf("\nFound %d tables, %d fields, %d indexes, %d enums\n",
-		len(tables), len(fields), len(indexes), len(enums))
+		len(database.Tables), len(database.Fields), len(database.Indexes), len(database.Enums))
 	fmt.Println("\nGenerating DDL statements for supported dialects:")
 	fmt.Println(strings.Repeat("=", 60))
 
@@ -67,7 +59,7 @@ func main() {
 	if shouldShowDetails() {
 		fmt.Println("\nDetailed Schema Information:")
 		fmt.Println(strings.Repeat("=", 60))
-		displaySchemaDetails(embeddedFields, fields, indexes, tables, enums)
+		displaySchemaDetails(database.EmbeddedFields, database.Fields, database.Indexes, database.Tables, database.Enums)
 	}
 }
 

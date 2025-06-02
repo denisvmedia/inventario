@@ -2067,6 +2067,10 @@ func TestParser_ErrorHandling(t *testing.T) {
 			name: "Unterminated column list",
 			sql:  "CREATE TABLE users (id INTEGER",
 		},
+		{
+			name: "Unsupported column attribute",
+			sql:  "CREATE TABLE users (id INTEGER UNSUPPORTED);",
+		},
 	}
 
 	for _, tt := range tests {

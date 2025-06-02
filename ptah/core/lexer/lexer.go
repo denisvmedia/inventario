@@ -1,6 +1,7 @@
 package lexer
 
 import (
+	"strings"
 	"unicode"
 )
 
@@ -47,6 +48,20 @@ type Token struct {
 	Value string
 	Start int
 	End   int
+}
+
+func (tt *Token) MatchOperatorValue(value string) bool {
+	if tt.Type != TokenOperator {
+		return false
+	}
+	return strings.EqualFold(tt.Value, value)
+}
+
+func (tt *Token) MatchIdentifierValue(value string) bool {
+	if tt.Type != TokenIdentifier {
+		return false
+	}
+	return strings.EqualFold(tt.Value, value)
 }
 
 // Lexer tokenizes SQL input

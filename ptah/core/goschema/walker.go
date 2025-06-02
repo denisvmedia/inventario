@@ -70,14 +70,14 @@ func ParseDir(rootDir string) (*Database, error) {
 		}
 
 		// Parse the file
-		embeddedFields, fields, indexes, tables, enums := ParseFile(path)
+		database := ParseFile(path)
 
 		// Add to result
-		result.EmbeddedFields = append(result.EmbeddedFields, embeddedFields...)
-		result.Fields = append(result.Fields, fields...)
-		result.Indexes = append(result.Indexes, indexes...)
-		result.Tables = append(result.Tables, tables...)
-		result.Enums = append(result.Enums, enums...)
+		result.EmbeddedFields = append(result.EmbeddedFields, database.EmbeddedFields...)
+		result.Fields = append(result.Fields, database.Fields...)
+		result.Indexes = append(result.Indexes, database.Indexes...)
+		result.Tables = append(result.Tables, database.Tables...)
+		result.Enums = append(result.Enums, database.Enums...)
 
 		return nil
 	})

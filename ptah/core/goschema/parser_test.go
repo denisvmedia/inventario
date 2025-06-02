@@ -247,14 +247,14 @@ type Product struct {
 	c.Assert(err, qt.IsNil)
 
 	// Parse the file
-	_, fields, _, _, enums := goschema.ParseFile(testFile)
+	database := goschema.ParseFile(testFile)
 
 	// Should have 4 fields and 1 enum
-	c.Assert(len(fields), qt.Equals, 4)
-	c.Assert(len(enums), qt.Equals, 1)
+	c.Assert(database.Fields, qt.HasLen, 4)
+	c.Assert(database.Enums, qt.HasLen, 1)
 
 	// Check that non-enum fields have nil Enum values
-	for _, field := range fields {
+	for _, field := range database.Fields {
 		switch field.Name {
 		case "id", "name", "active":
 			// These fields should have nil Enum values (not []string{""})
@@ -267,8 +267,8 @@ type Product struct {
 	}
 
 	// Check the global enum
-	c.Assert(enums[0].Name, qt.Equals, "enum_product_status")
-	c.Assert(enums[0].Values, qt.DeepEquals, []string{"draft", "active", "discontinued"})
+	c.Assert(database.Enums[0].Name, qt.Equals, "enum_product_status")
+	c.Assert(database.Enums[0].Values, qt.DeepEquals, []string{"draft", "active", "discontinued"})
 }
 
 func TestParsePackageRecursively(t *testing.T) {

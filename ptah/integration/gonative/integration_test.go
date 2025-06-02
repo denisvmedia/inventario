@@ -1,4 +1,4 @@
-//go:build integration
+//go:buildx integration
 
 package gonative_test
 
@@ -35,19 +35,19 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 			c := qt.New(t)
 
 			// Parse the entity file
-			_, fields, _, tables, enums := goschema.ParseFile(file)
+			database := goschema.ParseFile(file)
 
 			// Verify that we got data from the file
-			c.Assert(tables, qt.Not(qt.HasLen), 0, qt.Commentf("No table directives found in %s", file))
-			c.Assert(fields, qt.Not(qt.HasLen), 0, qt.Commentf("No fields found in %s", file))
+			c.Assert(database.Tables, qt.Not(qt.HasLen), 0, qt.Commentf("No table directives found in %s", file))
+			c.Assert(database.Fields, qt.Not(qt.HasLen), 0, qt.Commentf("No fields found in %s", file))
 
 			// For each table defined in the file, generate SQL for both Postgres and MySQL
-			for _, table := range tables {
+			for _, table := range database.Tables {
 				t.Run(table.Name, func(t *testing.T) {
 					c := qt.New(t)
 
 					// Generate PostgreSQL SQL using the AST approach
-					createTableNode := fromschema.FromTable(table, fields, enums, "postgres")
+					createTableNode := fromschema.FromTable(table, database.Fields, database.Enums, "postgres")
 					pgSQL, err := renderer.RenderSQL("postgres", createTableNode)
 					c.Assert(err, qt.IsNil)
 
@@ -56,17 +56,15 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 					c.Assert(pgSQL, qt.Contains, fmt.Sprintf("CREATE TABLE %s (", table.Name))
 
 					// For PostgreSQL, enums are created separately, so generate them if they exist
-					if len(enums) > 0 {
-						for _, enum := range enums {
-							enumNode := fromschema.FromEnum(enum)
-							enumSQL, err := renderer.RenderSQL("postgres", enumNode)
-							c.Assert(err, qt.IsNil)
-							c.Assert(enumSQL, qt.Contains, fmt.Sprintf("CREATE TYPE %s AS ENUM", enum.Name))
-						}
+					for _, enum := range database.Enums {
+						enumNode := fromschema.FromEnum(enum)
+						enumSQL, err := renderer.RenderSQL("postgres", enumNode)
+						c.Assert(err, qt.IsNil)
+						c.Assert(enumSQL, qt.Contains, fmt.Sprintf("CREATE TYPE %s AS ENUM", enum.Name))
 					}
 
 					// Generate MySQL SQL
-					createTableNodeMySQL := fromschema.FromTable(table, fields, enums, "mysql")
+					createTableNodeMySQL := fromschema.FromTable(table, database.Fields, database.Enums, "mysql")
 					mySQL, err := renderer.RenderSQL("mysql", createTableNodeMySQL)
 					c.Assert(err, qt.IsNil)
 
@@ -75,10 +73,10 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 					c.Assert(mySQL, qt.Contains, fmt.Sprintf("CREATE TABLE %s (", table.Name))
 
 					// Verify enums are handled in MySQL (they may be inlined or referenced by type name)
-					for _, field := range fields {
+					for _, field := range database.Fields {
 						if field.StructName == table.StructName {
 							// Check if field is an enum
-							for _, enum := range enums {
+							for _, enum := range database.Enums {
 								if field.Type == enum.Name {
 									// MySQL may use either inline ENUM(...) or enum type name
 									hasInlineEnum := strings.Contains(mySQL, fmt.Sprintf("%s ENUM(", field.Name))
@@ -94,7 +92,7 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 					c.Assert(mySQL, qt.Not(qt.Contains), "CREATE TYPE")
 
 					// Generate MariaDB SQL (may differ from MySQL due to platform-specific overrides)
-					createTableNodeMariaDB := fromschema.FromTable(table, fields, enums, "mariadb")
+					createTableNodeMariaDB := fromschema.FromTable(table, database.Fields, database.Enums, "mariadb")
 					mariaSQL, err := renderer.RenderSQL("mariadb", createTableNodeMariaDB)
 					c.Assert(err, qt.IsNil)
 
@@ -103,7 +101,7 @@ func TestGenerateCreateTableFromStubs(t *testing.T) {
 
 					// Verify MariaDB SQL contains the table structure (but may have different constraints due to platform overrides)
 					c.Assert(mariaSQL, qt.Contains, fmt.Sprintf("CREATE TABLE %s", table.Name))
-					for _, field := range fields {
+					for _, field := range database.Fields {
 						if field.StructName == table.StructName {
 							// Verify field is present (but don't check exact constraint syntax as it may differ)
 							c.Assert(mariaSQL, qt.Contains, field.Name)

@@ -6,6 +6,54 @@ import (
 	"strings"
 )
 
+func sortTablesProcessQueue(queue *[]string, sorted *[]Table, dependencies map[string][]string, inDegree map[string]int, tableMap map[string]Table) {
+	for len(*queue) > 0 {
+		// Remove first element from queue
+		current := (*queue)[0]
+		*queue = (*queue)[1:]
+
+		// Add to sorted result if table exists
+		if table, exists := tableMap[current]; exists {
+			*sorted = append(*sorted, table)
+		}
+
+		// Reduce in-degree of tables that depend on the current table
+		for tableName, deps := range dependencies {
+			for _, dep := range deps {
+				if dep != current {
+					continue
+				}
+				inDegree[tableName]--
+				if inDegree[tableName] == 0 {
+					*queue = append(*queue, tableName)
+				}
+			}
+		}
+	}
+}
+
+func checkForCircularDependencies(r *Database, sorted *[]Table) {
+	if len(*sorted) == len(r.Tables) {
+		// No circular dependencies
+		return
+	}
+
+	slog.Warn("Circular dependency detected in foreign key relationships. Some tables may not be ordered correctly.")
+	// Add remaining tables to the end
+	for _, table := range r.Tables {
+		found := false
+		for _, sortedTable := range *sorted {
+			if sortedTable.Name == table.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			*sorted = append(*sorted, table)
+		}
+	}
+}
+
 // sortTablesByDependencies performs topological sort to order tables by their dependencies.
 //
 // This method implements Kahn's algorithm for topological sorting to determine the correct
@@ -35,7 +83,7 @@ func sortTablesByDependencies(r *Database) {
 	}
 
 	// Perform topological sort using Kahn's algorithm
-	sorted := []Table{}
+	var sorted []Table
 	inDegree := make(map[string]int)
 
 	// Calculate in-degrees (how many dependencies each table has)
@@ -47,7 +95,7 @@ func sortTablesByDependencies(r *Database) {
 	}
 
 	// Find tables with no dependencies (in-degree 0)
-	queue := []string{}
+	var queue []string
 	for tableName, degree := range inDegree {
 		if degree == 0 {
 			queue = append(queue, tableName)
@@ -55,46 +103,10 @@ func sortTablesByDependencies(r *Database) {
 	}
 
 	// Process queue
-	for len(queue) > 0 {
-		// Remove first element from queue
-		current := queue[0]
-		queue = queue[1:]
-
-		// Add to sorted result if table exists
-		if table, exists := tableMap[current]; exists {
-			sorted = append(sorted, table)
-		}
-
-		// Reduce in-degree of tables that depend on the current table
-		for tableName, deps := range r.Dependencies {
-			for _, dep := range deps {
-				if dep == current {
-					inDegree[tableName]--
-					if inDegree[tableName] == 0 {
-						queue = append(queue, tableName)
-					}
-				}
-			}
-		}
-	}
+	sortTablesProcessQueue(&queue, &sorted, r.Dependencies, inDegree, tableMap)
 
 	// Check for circular dependencies
-	if len(sorted) != len(r.Tables) {
-		slog.Warn("Circular dependency detected in foreign key relationships. Some tables may not be ordered correctly.")
-		// Add remaining tables to the end
-		for _, table := range r.Tables {
-			found := false
-			for _, sortedTable := range sorted {
-				if sortedTable.Name == table.Name {
-					found = true
-					break
-				}
-			}
-			if !found {
-				sorted = append(sorted, table)
-			}
-		}
-	}
+	checkForCircularDependencies(r, &sorted)
 
 	// Update the tables slice with sorted order
 	r.Tables = sorted
@@ -128,39 +140,44 @@ func buildDependencyGraph(r *Database) {
 
 	// Analyze foreign key relationships
 	for _, field := range r.Fields {
-		if field.Foreign != "" {
-			// Parse foreign key reference (e.g., "users(id)" -> "users")
-			refTable := strings.Split(field.Foreign, "(")[0]
+		if field.Foreign == "" {
+			continue
+		}
+		// Parse foreign key reference (e.g., "users(id)" -> "users")
+		refTable := strings.Split(field.Foreign, "(")[0]
 
-			// Find the table that contains this field
-			for _, table := range r.Tables {
-				if table.StructName == field.StructName {
-					// Add dependency: table depends on refTable
-					if !slices.Contains(r.Dependencies[table.Name], refTable) {
-						r.Dependencies[table.Name] = append(r.Dependencies[table.Name], refTable)
-					}
-					break
-				}
+		// Find the table that contains this field
+		for _, table := range r.Tables {
+			if table.StructName != field.StructName {
+				continue
 			}
+			// Add dependency: table depends on refTable
+			if !slices.Contains(r.Dependencies[table.Name], refTable) {
+				r.Dependencies[table.Name] = append(r.Dependencies[table.Name], refTable)
+			}
+			break
 		}
 	}
 
 	// Analyze embedded field relationships (relation mode)
 	for _, embedded := range r.EmbeddedFields {
-		if embedded.Mode == "relation" && embedded.Ref != "" {
-			// Parse embedded relation reference (e.g., "users(id)" -> "users")
-			refTable := strings.Split(embedded.Ref, "(")[0]
+		if embedded.Mode != "relation" || embedded.Ref == "" {
+			continue
+		}
 
-			// Find the table that contains this embedded field
-			for _, table := range r.Tables {
-				if table.StructName == embedded.StructName {
-					// Add dependency: table depends on refTable
-					if !slices.Contains(r.Dependencies[table.Name], refTable) {
-						r.Dependencies[table.Name] = append(r.Dependencies[table.Name], refTable)
-					}
-					break
-				}
+		// Parse embedded relation reference (e.g., "users(id)" -> "users")
+		refTable := strings.Split(embedded.Ref, "(")[0]
+
+		// Find the table that contains this embedded field
+		for _, table := range r.Tables {
+			if table.StructName != embedded.StructName {
+				continue
 			}
+			// Add dependency: table depends on refTable
+			if !slices.Contains(r.Dependencies[table.Name], refTable) {
+				r.Dependencies[table.Name] = append(r.Dependencies[table.Name], refTable)
+			}
+			break
 		}
 	}
 }

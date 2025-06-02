@@ -332,6 +332,315 @@ func (p *Parser) parseTableElement(table *ast.CreateTableNode) error {
 	return nil
 }
 
+func (p *Parser) handleNotNull(column *ast.ColumnNode) error {
+	// Handle NOT NULL
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenIdentifier, "NULL"); err != nil {
+		return fmt.Errorf("expected NULL after NOT: %w", err)
+	}
+	column.SetNotNull()
+	return nil
+}
+
+func (p *Parser) handleNull(column *ast.ColumnNode) {
+	// Explicit NULL (default behavior)
+	p.advance()
+	column.Nullable = true
+}
+
+func (p *Parser) handlePrimaryKey(column *ast.ColumnNode) error {
+	// Handle PRIMARY KEY
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenIdentifier, "KEY"); err != nil {
+		return fmt.Errorf("expected KEY after PRIMARY: %w", err)
+	}
+	column.SetPrimary()
+	return nil
+}
+
+func (p *Parser) handleUnique(column *ast.ColumnNode) {
+	// Handle UNIQUE
+	p.advance()
+	column.SetUnique()
+}
+
+func (p *Parser) handleAutoIncrement(column *ast.ColumnNode) {
+	// Handle AUTO_INCREMENT / AUTOINCREMENT
+	p.advance()
+	column.SetAutoIncrement()
+}
+
+func (p *Parser) handleDefault(column *ast.ColumnNode) error {
+	// Handle DEFAULT
+	p.advance()
+	p.skipWhitespace()
+	defaultValue, err := p.parseDefaultValue()
+	if err != nil {
+		return fmt.Errorf("expected default value: %w", err)
+	}
+	if defaultValue.Expression != "" {
+		column.SetDefaultExpression(defaultValue.Expression)
+	} else {
+		column.SetDefault(defaultValue.Value)
+	}
+
+	return nil
+}
+
+func (p *Parser) handleCheck(column *ast.ColumnNode) error {
+	// Handle CHECK
+	p.advance()
+	p.skipWhitespace()
+	checkExpr, err := p.parseCheckExpression()
+	if err != nil {
+		return fmt.Errorf("expected check expression: %w", err)
+	}
+	column.SetCheck(checkExpr)
+	return nil
+}
+
+func (p *Parser) handleReferences(column *ast.ColumnNode) error {
+	// Handle REFERENCES
+	p.advance()
+	fkRef, err := p.parseForeignKeyReference()
+	if err != nil {
+		return fmt.Errorf("expected foreign key reference: %w", err)
+	}
+	column.ForeignKey = fkRef
+	return nil
+}
+
+func (p *Parser) handleAs(column *ast.ColumnNode) error {
+	// Handle AS (for generated columns)
+	// Handle MySQL/MariaDB virtual columns (AS (expression) STORED)
+	p.advance()
+	p.skipWhitespace()
+
+	// Parse the generation expression
+	if err := p.expect(lexer.TokenOperator, "("); err != nil {
+		return fmt.Errorf("expected '(' for generated expression: %w", err)
+	}
+
+	// Collect the expression until closing parenthesis
+	var expr strings.Builder
+	parenCount := 1
+	for parenCount > 0 && !p.isAtEnd() {
+		if p.current.Type == lexer.TokenOperator {
+			switch p.current.Value {
+			case "(":
+				parenCount++
+			case ")":
+				parenCount--
+			}
+		}
+		if parenCount > 0 {
+			expr.WriteString(p.current.Value)
+		}
+		p.advance()
+	}
+
+	// Parse STORED/VIRTUAL keyword
+	p.skipWhitespace()
+	if p.current.Type == lexer.TokenIdentifier {
+		storageType := strings.ToUpper(p.current.Value)
+		if storageType == "STORED" || storageType == "VIRTUAL" {
+			p.advance()
+		}
+	}
+
+	// Store as a check constraint for now (in a full implementation, add Generated field to ColumnNode)
+	column.SetCheck("AS (" + expr.String() + ") STORED")
+	return nil
+}
+
+func (p *Parser) handleGenerated(column *ast.ColumnNode) error {
+	// Handle PostgreSQL GENERATED columns
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenIdentifier, "ALWAYS"); err != nil {
+		return fmt.Errorf("expected ALWAYS after GENERATED: %w", err)
+	}
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenIdentifier, "AS"); err != nil {
+		return fmt.Errorf("expected AS after ALWAYS: %w", err)
+	}
+	p.skipWhitespace()
+
+	// Parse the generation expression
+	if err := p.expect(lexer.TokenOperator, "("); err != nil {
+		return fmt.Errorf("expected '(' for generated expression: %w", err)
+	}
+
+	// Collect the expression until closing parenthesis
+	var expr strings.Builder
+	parenCount := 1
+	for parenCount > 0 && !p.isAtEnd() {
+		if p.current.Type == lexer.TokenOperator {
+			switch p.current.Value {
+			case "(":
+				parenCount++
+			case ")":
+				parenCount--
+			}
+		}
+		if parenCount > 0 {
+			expr.WriteString(p.current.Value)
+		}
+		p.advance()
+	}
+
+	// Parse STORED keyword
+	p.skipWhitespace()
+	if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "STORED" {
+		p.advance()
+	}
+
+	// Store as a check constraint for now (in a full implementation, add Generated field to ColumnNode)
+	column.SetCheck("GENERATED ALWAYS AS (" + expr.String() + ") STORED")
+
+	return nil
+}
+
+func (p *Parser) handleCharacter(column *ast.ColumnNode) {
+	// Handle MySQL/MariaDB CHARACTER SET
+	p.advance()
+	p.skipWhitespace()
+	if p.current.Type != lexer.TokenIdentifier {
+		return
+	}
+
+	if strings.ToUpper(p.current.Value) != "SET" {
+		return
+	}
+
+	p.advance()
+	p.skipWhitespace()
+	if p.current.Type == lexer.TokenIdentifier {
+		// Store charset as comment for now
+		column.SetComment("CHARACTER SET " + p.current.Value)
+		p.advance()
+	}
+}
+
+func (p *Parser) handleCollate(column *ast.ColumnNode) error {
+	// Handle PostgreSQL/MySQL COLLATE
+	p.advance()
+	p.skipWhitespace()
+
+	var collation string
+	switch p.current.Type {
+	case lexer.TokenString:
+		// Quoted collation name like "C"
+		collation = p.current.Value
+		p.advance()
+	case lexer.TokenIdentifier:
+		// Unquoted collation name
+		collation = p.current.Value
+		p.advance()
+	default:
+		return fmt.Errorf("expected collation name: got %s at position %d", p.current.Type, p.current.Start)
+	}
+
+	// Store as comment for now (in a full implementation, add Collation field to ColumnNode)
+	column.SetComment("COLLATE " + collation)
+
+	return nil
+}
+
+func (p *Parser) handleOn(column *ast.ColumnNode) {
+	// Handle MySQL/MariaDB ON UPDATE syntax
+	p.advance()
+	p.skipWhitespace()
+	if !p.current.MatchIdentifierValue("UPDATE") {
+		return
+	}
+
+	p.advance()
+	p.skipWhitespace()
+
+	// Parse the update expression (usually CURRENT_TIMESTAMP)
+
+	if p.current.Type != lexer.TokenIdentifier {
+		return
+	}
+
+	updateExpr := p.current.Value
+	p.advance()
+
+	// Handle function calls like CURRENT_TIMESTAMP()
+
+	if !p.current.MatchOperatorValue("(") {
+		return
+	}
+	p.advance()
+	if !p.current.MatchOperatorValue(")") {
+		return
+	}
+
+	updateExpr += "()"
+	p.advance()
+
+	// Store as comment for now
+	column.SetComment("ON UPDATE " + updateExpr)
+}
+
+func (p *Parser) parseColumnConstraintsAndAttributes(column *ast.ColumnNode) error {
+	var err error
+	for {
+		// Check for timeout to prevent infinite loops
+		if err := p.checkTimeout(); err != nil {
+			return err
+		}
+
+		p.skipWhitespace()
+
+		if p.current.Type != lexer.TokenIdentifier {
+			break
+		}
+
+		keyword := strings.ToUpper(p.current.Value)
+		switch keyword {
+		case "NOT":
+			err = p.handleNotNull(column)
+		case "NULL":
+			p.handleNull(column)
+		case "PRIMARY":
+			err = p.handlePrimaryKey(column)
+		case "UNIQUE":
+			p.handleUnique(column)
+		case "AUTO_INCREMENT", "AUTOINCREMENT":
+			p.handleAutoIncrement(column)
+		case "DEFAULT":
+			err = p.handleDefault(column)
+		case "CHECK":
+			err = p.handleCheck(column)
+		case "REFERENCES":
+			err = p.handleReferences(column)
+		case "AS":
+			err = p.handleAs(column)
+		case "GENERATED":
+			err = p.handleGenerated(column)
+		case "CHARACTER":
+			p.handleCharacter(column)
+		case "COLLATE":
+			err = p.handleCollate(column)
+		case "ON":
+			p.handleOn(column)
+		default:
+			// Unknown keyword, stop parsing column attributes
+			err = fmt.Errorf("unsupported column attribute: %s at position %d", keyword, p.current.Start)
+		}
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // parseColumnDefinition parses a column definition.
 func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 	p.skipWhitespace()
@@ -351,218 +660,9 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 	}
 
 	column := ast.NewColumn(columnName, columnType)
-
-	// Parse column constraints and attributes
-	for {
-		// Check for timeout to prevent infinite loops
-		if err := p.checkTimeout(); err != nil {
-			return nil, err
-		}
-
-		p.skipWhitespace()
-
-		if p.current.Type != lexer.TokenIdentifier {
-			break
-		}
-
-		keyword := strings.ToUpper(p.current.Value)
-		switch keyword {
-		case "NOT":
-			// Handle NOT NULL
-			p.advance()
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenIdentifier, "NULL"); err != nil {
-				return nil, fmt.Errorf("expected NULL after NOT: %w", err)
-			}
-			column.SetNotNull()
-		case "NULL":
-			// Explicit NULL (default behavior)
-			p.advance()
-			column.Nullable = true
-		case "PRIMARY":
-			// Handle PRIMARY KEY
-			p.advance()
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenIdentifier, "KEY"); err != nil {
-				return nil, fmt.Errorf("expected KEY after PRIMARY: %w", err)
-			}
-			column.SetPrimary()
-		case "UNIQUE":
-			p.advance()
-			column.SetUnique()
-		case "AUTO_INCREMENT", "AUTOINCREMENT":
-			p.advance()
-			column.SetAutoIncrement()
-		case "DEFAULT":
-			p.advance()
-			p.skipWhitespace()
-			defaultValue, err := p.parseDefaultValue()
-			if err != nil {
-				return nil, fmt.Errorf("expected default value: %w", err)
-			}
-			if defaultValue.Expression != "" {
-				column.SetDefaultExpression(defaultValue.Expression)
-			} else {
-				column.SetDefault(defaultValue.Value)
-			}
-		case "CHECK":
-			p.advance()
-			p.skipWhitespace()
-			checkExpr, err := p.parseCheckExpression()
-			if err != nil {
-				return nil, fmt.Errorf("expected check expression: %w", err)
-			}
-			column.SetCheck(checkExpr)
-		case "REFERENCES":
-			// Handle foreign key reference
-			p.advance()
-			fkRef, err := p.parseForeignKeyReference()
-			if err != nil {
-				return nil, fmt.Errorf("expected foreign key reference: %w", err)
-			}
-			column.ForeignKey = fkRef
-		case "AS":
-			// Handle MySQL/MariaDB virtual columns (AS (expression) STORED)
-			p.advance()
-			p.skipWhitespace()
-
-			// Parse the generation expression
-			if err := p.expect(lexer.TokenOperator, "("); err != nil {
-				return nil, fmt.Errorf("expected '(' for generated expression: %w", err)
-			}
-
-			// Collect the expression until closing parenthesis
-			var expr strings.Builder
-			parenCount := 1
-			for parenCount > 0 && !p.isAtEnd() {
-				if p.current.Type == lexer.TokenOperator {
-					switch p.current.Value {
-					case "(":
-						parenCount++
-					case ")":
-						parenCount--
-					}
-				}
-				if parenCount > 0 {
-					expr.WriteString(p.current.Value)
-				}
-				p.advance()
-			}
-
-			// Parse STORED/VIRTUAL keyword
-			p.skipWhitespace()
-			if p.current.Type == lexer.TokenIdentifier {
-				storageType := strings.ToUpper(p.current.Value)
-				if storageType == "STORED" || storageType == "VIRTUAL" {
-					p.advance()
-				}
-			}
-
-			// Store as a check constraint for now (in a full implementation, add Generated field to ColumnNode)
-			column.SetCheck("AS (" + expr.String() + ") STORED")
-		case "GENERATED":
-			// Handle PostgreSQL GENERATED columns
-			p.advance()
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenIdentifier, "ALWAYS"); err != nil {
-				return nil, fmt.Errorf("expected ALWAYS after GENERATED: %w", err)
-			}
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenIdentifier, "AS"); err != nil {
-				return nil, fmt.Errorf("expected AS after ALWAYS: %w", err)
-			}
-			p.skipWhitespace()
-
-			// Parse the generation expression
-			if err := p.expect(lexer.TokenOperator, "("); err != nil {
-				return nil, fmt.Errorf("expected '(' for generated expression: %w", err)
-			}
-
-			// Collect the expression until closing parenthesis
-			var expr strings.Builder
-			parenCount := 1
-			for parenCount > 0 && !p.isAtEnd() {
-				if p.current.Type == lexer.TokenOperator {
-					switch p.current.Value {
-					case "(":
-						parenCount++
-					case ")":
-						parenCount--
-					}
-				}
-				if parenCount > 0 {
-					expr.WriteString(p.current.Value)
-				}
-				p.advance()
-			}
-
-			// Parse STORED keyword
-			p.skipWhitespace()
-			if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "STORED" {
-				p.advance()
-			}
-
-			// Store as a check constraint for now (in a full implementation, add Generated field to ColumnNode)
-			column.SetCheck("GENERATED ALWAYS AS (" + expr.String() + ") STORED")
-		case "CHARACTER":
-			// Handle MySQL/MariaDB CHARACTER SET
-			p.advance()
-			p.skipWhitespace()
-			if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "SET" {
-				p.advance()
-				p.skipWhitespace()
-				if p.current.Type == lexer.TokenIdentifier {
-					// Store charset as comment for now
-					column.SetComment("CHARACTER SET " + p.current.Value)
-					p.advance()
-				}
-			}
-		case "COLLATE":
-			// Handle PostgreSQL/MySQL COLLATE
-			p.advance()
-			p.skipWhitespace()
-
-			var collation string
-			if p.current.Type == lexer.TokenString {
-				// Quoted collation name like "C"
-				collation = p.current.Value
-				p.advance()
-			} else if p.current.Type == lexer.TokenIdentifier {
-				// Unquoted collation name
-				collation = p.current.Value
-				p.advance()
-			} else {
-				return nil, fmt.Errorf("expected collation name: got %s at position %d", p.current.Type, p.current.Start)
-			}
-
-			// Store as comment for now (in a full implementation, add Collation field to ColumnNode)
-			column.SetComment("COLLATE " + collation)
-		case "ON":
-			// Handle MySQL/MariaDB ON UPDATE syntax
-			p.advance()
-			p.skipWhitespace()
-			if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "UPDATE" {
-				p.advance()
-				p.skipWhitespace()
-				// Parse the update expression (usually CURRENT_TIMESTAMP)
-				if p.current.Type == lexer.TokenIdentifier {
-					updateExpr := p.current.Value
-					p.advance()
-					// Handle function calls like CURRENT_TIMESTAMP()
-					if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
-						p.advance()
-						if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
-							updateExpr += "()"
-							p.advance()
-						}
-					}
-					// Store as comment for now
-					column.SetComment("ON UPDATE " + updateExpr)
-				}
-			}
-		default:
-			// Unknown keyword, stop parsing column attributes
-		}
+	err = p.parseColumnConstraintsAndAttributes(column)
+	if err != nil {
+		return nil, err
 	}
 
 	return column, nil

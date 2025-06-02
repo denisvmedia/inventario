@@ -51,11 +51,105 @@ package fromschema
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/denisvmedia/inventario/ptah/core/ast"
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 )
+
+func applyPlatformOverrides(field goschema.Field, targetPlatform string) goschema.Field {
+	fieldType := field.Type
+	checkConstraint := field.Check
+	comment := field.Comment
+	defaultValue := field.Default
+	defaultExpr := field.DefaultExpr
+
+	// Apply platform-specific overrides if available
+	if targetPlatform == "" {
+		return field
+	}
+
+	if field.Overrides == nil {
+		return field
+	}
+
+	platformOverrides, exists := field.Overrides[targetPlatform]
+	if !exists {
+		return field
+	}
+
+	// Override type if specified
+	if typeOverride, ok := platformOverrides["type"]; ok {
+		fieldType = typeOverride
+	}
+	// Override check constraint if specified
+	if checkOverride, ok := platformOverrides["check"]; ok {
+		checkConstraint = checkOverride
+	}
+	// Override comment if specified
+	if commentOverride, ok := platformOverrides["comment"]; ok {
+		comment = commentOverride
+	}
+	// Override default value if specified
+	if defaultOverride, ok := platformOverrides["default"]; ok {
+		defaultValue = defaultOverride
+		defaultExpr = "" // Clear expression if literal default is overridden
+	}
+	// Override default expression if specified
+	if defaultExprOverride, ok := platformOverrides["default_expr"]; ok {
+		defaultExpr = defaultExprOverride
+		defaultValue = "" // Clear literal if expression default is overridden
+	}
+
+	newField := field // Shallow copy to avoid modifying original field
+	newField.Type = fieldType
+	newField.Check = checkConstraint
+	newField.Comment = comment
+	newField.Default = defaultValue
+	newField.DefaultExpr = defaultExpr
+
+	return newField
+}
+
+func handleEnumTypesForMySQLLike(field goschema.Field, enums []goschema.Enum, targetPlatform string) goschema.Field {
+	// Handle enum types for MySQL/MariaDB platforms
+	if !strings.HasPrefix(field.Type, "enum_") {
+		return field
+	}
+
+	if enums == nil {
+		return field
+	}
+	// Validate enum field
+	validateEnumField(field, enums)
+
+	if targetPlatform != "mysql" && targetPlatform != "mariadb" {
+		return field
+	}
+
+	fieldType := field.Type
+
+	// For MySQL/MariaDB, convert enum type to inline enum values
+	// Find the corresponding global enum
+	for _, enum := range enums {
+		if enum.Name != field.Type {
+			continue
+		}
+
+		// Convert to inline ENUM syntax for MySQL/MariaDB
+		quotedValues := make([]string, len(enum.Values))
+		for i, value := range enum.Values {
+			quotedValues[i] = fmt.Sprintf("'%s'", value) // TODO: properly escape
+		}
+		fieldType = fmt.Sprintf("ENUM(%s)", strings.Join(quotedValues, ", "))
+		break
+	}
+
+	newField := field
+	newField.Type = fieldType
+	return newField
+}
 
 // FromField converts a goschema.Field to an ast.ColumnNode with comprehensive attribute mapping.
 //
@@ -139,64 +233,10 @@ import (
 // The returned node contains all the attributes specified in the input field, with platform-specific
 // overrides applied when a matching platform is specified.
 func FromField(field goschema.Field, enums []goschema.Enum, targetPlatform string) *ast.ColumnNode {
-	// Start with base field values
-	fieldType := field.Type
-	checkConstraint := field.Check
-	comment := field.Comment
-	defaultValue := field.Default
-	defaultExpr := field.DefaultExpr
+	field = applyPlatformOverrides(field, targetPlatform)
+	field = handleEnumTypesForMySQLLike(field, enums, targetPlatform)
 
-	// Apply platform-specific overrides if available
-	if targetPlatform != "" && field.Overrides != nil {
-		if platformOverrides, exists := field.Overrides[targetPlatform]; exists {
-			// Override type if specified
-			if typeOverride, ok := platformOverrides["type"]; ok {
-				fieldType = typeOverride
-			}
-			// Override check constraint if specified
-			if checkOverride, ok := platformOverrides["check"]; ok {
-				checkConstraint = checkOverride
-			}
-			// Override comment if specified
-			if commentOverride, ok := platformOverrides["comment"]; ok {
-				comment = commentOverride
-			}
-			// Override default value if specified
-			if defaultOverride, ok := platformOverrides["default"]; ok {
-				defaultValue = defaultOverride
-				defaultExpr = "" // Clear expression if literal default is overridden
-			}
-			// Override default expression if specified
-			if defaultExprOverride, ok := platformOverrides["default_expr"]; ok {
-				defaultExpr = defaultExprOverride
-				defaultValue = "" // Clear literal if expression default is overridden
-			}
-		}
-	}
-
-	// Handle enum types for MySQL/MariaDB platforms
-	if strings.HasPrefix(field.Type, "enum_") && enums != nil {
-		// Validate enum field
-		validateEnumField(field, enums)
-
-		// For MySQL/MariaDB, convert enum type to inline enum values
-		if targetPlatform == "mysql" || targetPlatform == "mariadb" {
-			// Find the corresponding global enum
-			for _, enum := range enums {
-				if enum.Name == field.Type {
-					// Convert to inline ENUM syntax for MySQL/MariaDB
-					quotedValues := make([]string, len(enum.Values))
-					for i, value := range enum.Values {
-						quotedValues[i] = fmt.Sprintf("'%s'", value)
-					}
-					fieldType = fmt.Sprintf("ENUM(%s)", strings.Join(quotedValues, ", "))
-					break
-				}
-			}
-		}
-	}
-
-	column := ast.NewColumn(field.Name, fieldType)
+	column := ast.NewColumn(field.Name, field.Type)
 
 	// Set nullable - only override default if explicitly set to false
 	// The default behavior should be nullable=true (which ast.NewColumn already sets)
@@ -216,28 +256,26 @@ func FromField(field goschema.Field, enums []goschema.Enum, targetPlatform strin
 	}
 
 	// Set default values (using potentially overridden values)
-	if defaultValue != "" {
-		column.SetDefault(defaultValue)
-	} else if defaultExpr != "" {
-		column.SetDefaultExpression(defaultExpr)
+	switch {
+	case field.Default != "":
+		column.SetDefault(field.Default)
+	case field.DefaultExpr != "":
+		column.SetDefaultExpression(field.DefaultExpr)
 	}
 
 	// Set check constraint (using potentially overridden value)
-	if checkConstraint != "" {
-		column.SetCheck(checkConstraint)
+	if field.Check != "" {
+		column.SetCheck(field.Check)
 	}
 
 	// Set comment (using potentially overridden value)
-	if comment != "" {
-		column.SetComment(comment)
+	if field.Comment != "" {
+		column.SetComment(field.Comment)
 	}
 
 	// Set foreign key reference
-	if field.Foreign != "" {
-		fkRef := parseForeignKeyReference(field.Foreign)
-		if fkRef != nil {
-			column.SetForeignKey(fkRef.Table, fkRef.Column, field.ForeignKeyName)
-		}
+	if fkRef := parseForeignKeyReference(field.Foreign); fkRef != nil {
+		column.SetForeignKey(fkRef.Table, fkRef.Column, field.ForeignKeyName)
 	}
 
 	return column
@@ -720,6 +758,87 @@ func getUniqueStructNames(embeddedFields []goschema.EmbeddedField) []string {
 	return structNames
 }
 
+func processEmbeddedInlineMode(generatedFields []goschema.Field, embedded goschema.EmbeddedField, allFields []goschema.Field, structName string) []goschema.Field {
+	// INLINE MODE: Expand embedded struct fields as individual table columns
+	for _, field := range allFields {
+		if field.StructName != embedded.EmbeddedTypeName {
+			continue
+		}
+		// Clone the field and reassign to target struct
+		newField := field
+		newField.StructName = structName
+
+		// Apply prefix to column name if specified
+		if embedded.Prefix != "" {
+			newField.Name = embedded.Prefix + field.Name
+		}
+
+		generatedFields = append(generatedFields, newField)
+	}
+
+	return generatedFields
+}
+
+func processEmbeddedJSONMode(generatedFields []goschema.Field, embedded goschema.EmbeddedField, structName string) []goschema.Field {
+	// JSON MODE: Serialize embedded struct into a single JSON/JSONB column
+	columnName := embedded.Name
+	if columnName == "" {
+		// Auto-generate column name: "Meta" -> "meta_data"
+		columnName = strings.ToLower(embedded.EmbeddedTypeName) + "_data"
+	}
+
+	columnType := embedded.Type
+	if columnType == "" {
+		columnType = "JSONB" // Default to PostgreSQL JSONB for best performance
+	}
+
+	// Create the JSON column field
+	generatedFields = append(generatedFields, goschema.Field{
+		StructName: structName,
+		FieldName:  embedded.EmbeddedTypeName,
+		Name:       columnName,
+		Type:       columnType,
+		Nullable:   embedded.Nullable,
+		Comment:    embedded.Comment,
+		Overrides:  embedded.Overrides, // Platform-specific type overrides (JSON vs JSONB vs TEXT)
+	})
+
+	return generatedFields
+}
+
+func processEmbeddedRelationMode(generatedFields []goschema.Field, embedded goschema.EmbeddedField, structName string) []goschema.Field {
+	// RELATION MODE: Create a foreign key field linking to another table
+	if embedded.Field == "" || embedded.Ref == "" {
+		// Skip incomplete relation definitions - both field name and reference are required
+		return generatedFields
+	}
+
+	// Intelligent type inference based on reference pattern
+	refType := "INTEGER" // Default assumption: numeric primary key
+	if strings.Contains(embedded.Ref, "VARCHAR") || strings.Contains(embedded.Ref, "TEXT") ||
+		strings.Contains(strings.ToLower(embedded.Ref), "uuid") {
+		// Reference suggests string-based key (likely UUID)
+		refType = "VARCHAR(36)" // Standard UUID length
+	}
+
+	// Generate automatic foreign key constraint name following convention
+	foreignKeyName := "fk_" + strings.ToLower(structName) + "_" + strings.ToLower(embedded.Field)
+
+	// Create the foreign key field
+	generatedFields = append(generatedFields, goschema.Field{
+		StructName:     structName,
+		FieldName:      embedded.EmbeddedTypeName,
+		Name:           embedded.Field,    // e.g., "user_id"
+		Type:           refType,           // INTEGER or VARCHAR(36)
+		Nullable:       embedded.Nullable, // Can the relationship be optional?
+		Foreign:        embedded.Ref,      // e.g., "users(id)"
+		ForeignKeyName: foreignKeyName,    // e.g., "fk_posts_user_id"
+		Comment:        embedded.Comment,  // Documentation for the relationship
+	})
+
+	return generatedFields
+}
+
 // processEmbeddedFieldsForStruct processes embedded fields for a specific struct and generates corresponding schema fields.
 //
 // This function implements the core logic for transforming embedded fields into database schema fields
@@ -749,89 +868,20 @@ func processEmbeddedFieldsForStruct(embeddedFields []goschema.EmbeddedField, all
 		switch embedded.Mode {
 		case "inline":
 			// INLINE MODE: Expand embedded struct fields as individual table columns
-			for _, field := range allFields {
-				if field.StructName == embedded.EmbeddedTypeName {
-					// Clone the field and reassign to target struct
-					newField := field
-					newField.StructName = structName
-
-					// Apply prefix to column name if specified
-					if embedded.Prefix != "" {
-						newField.Name = embedded.Prefix + field.Name
-					}
-
-					generatedFields = append(generatedFields, newField)
-				}
-			}
-
+			generatedFields = processEmbeddedInlineMode(generatedFields, embedded, allFields, structName)
 		case "json":
 			// JSON MODE: Serialize embedded struct into a single JSON/JSONB column
-			columnName := embedded.Name
-			if columnName == "" {
-				// Auto-generate column name: "Meta" -> "meta_data"
-				columnName = strings.ToLower(embedded.EmbeddedTypeName) + "_data"
-			}
-
-			columnType := embedded.Type
-			if columnType == "" {
-				columnType = "JSONB" // Default to PostgreSQL JSONB for best performance
-			}
-
-			// Create the JSON column field
-			generatedFields = append(generatedFields, goschema.Field{
-				StructName: structName,
-				FieldName:  embedded.EmbeddedTypeName,
-				Name:       columnName,
-				Type:       columnType,
-				Nullable:   embedded.Nullable,
-				Comment:    embedded.Comment,
-				Overrides:  embedded.Overrides, // Platform-specific type overrides (JSON vs JSONB vs TEXT)
-			})
-
+			generatedFields = processEmbeddedJSONMode(generatedFields, embedded, structName)
 		case "relation":
 			// RELATION MODE: Create a foreign key field linking to another table
-			if embedded.Field == "" || embedded.Ref == "" {
-				// Skip incomplete relation definitions - both field name and reference are required
-				continue
-			}
-
-			// Intelligent type inference based on reference pattern
-			refType := "INTEGER" // Default assumption: numeric primary key
-			if strings.Contains(embedded.Ref, "VARCHAR") || strings.Contains(embedded.Ref, "TEXT") ||
-				strings.Contains(strings.ToLower(embedded.Ref), "uuid") {
-				// Reference suggests string-based key (likely UUID)
-				refType = "VARCHAR(36)" // Standard UUID length
-			}
-
-			// Generate automatic foreign key constraint name following convention
-			foreignKeyName := "fk_" + strings.ToLower(structName) + "_" + strings.ToLower(embedded.Field)
-
-			// Create the foreign key field
-			generatedFields = append(generatedFields, goschema.Field{
-				StructName:     structName,
-				FieldName:      embedded.EmbeddedTypeName,
-				Name:           embedded.Field,    // e.g., "user_id"
-				Type:           refType,           // INTEGER or VARCHAR(36)
-				Nullable:       embedded.Nullable, // Can the relationship be optional?
-				Foreign:        embedded.Ref,      // e.g., "users(id)"
-				ForeignKeyName: foreignKeyName,    // e.g., "fk_posts_user_id"
-				Comment:        embedded.Comment,  // Documentation for the relationship
-			})
-
+			generatedFields = processEmbeddedRelationMode(generatedFields, embedded, structName)
 		case "skip":
 			// SKIP MODE: Completely ignore this embedded field
 			continue
-
 		default:
 			// DEFAULT MODE: Fall back to inline behavior for unrecognized modes
-			for _, field := range allFields {
-				if field.StructName == embedded.EmbeddedTypeName {
-					// Clone field and reassign to target struct (no prefix applied)
-					newField := field
-					newField.StructName = structName
-					generatedFields = append(generatedFields, newField)
-				}
-			}
+			slog.Warn("Unrecognized embedding mode for struct - defaulting to inline mode", "mode", embedded.Mode, "struct", structName)
+			generatedFields = processEmbeddedInlineMode(generatedFields, embedded, allFields, structName)
 		}
 	}
 
