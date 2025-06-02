@@ -668,86 +668,79 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 	return column, nil
 }
 
-// parseColumnType parses a column data type (e.g., INTEGER, VARCHAR(255), DECIMAL(10,2), DOUBLE PRECISION).
-func (p *Parser) parseColumnType() (string, error) {
-	if p.current.Type != lexer.TokenIdentifier {
-		return "", fmt.Errorf("expected column type, got %s at position %d", p.current.Type, p.current.Start)
-	}
-
-	typeName := p.current.Value
-	p.advance()
-
+func (p *Parser) handleMultiWordType(typeName string) string {
 	// Handle multi-word types like DOUBLE PRECISION, CHARACTER VARYING, etc.
 	p.skipWhitespace()
-	if p.current.Type == lexer.TokenIdentifier {
-		firstWord := strings.ToUpper(typeName)
-		secondWord := strings.ToUpper(p.current.Value)
-
-		// Check for known multi-word type combinations
-		switch firstWord {
-		case "DOUBLE":
-			if secondWord == "PRECISION" {
-				typeName += " " + p.current.Value
-				p.advance()
-			}
-		case "CHARACTER":
-			if secondWord == "VARYING" {
-				typeName += " " + p.current.Value
-				p.advance()
-			}
-		case "TIME":
-			if secondWord == "WITH" || secondWord == "WITHOUT" {
-				typeName = p.current.Value + " " + typeName
-				p.advance()
-				p.skipWhitespace()
-				if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "TIME" {
-					typeName += " " + p.current.Value
-					p.advance()
-					p.skipWhitespace()
-					if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "ZONE" {
-						typeName += " " + p.current.Value
-						p.advance()
-					}
-				}
-			}
-		case "TIMESTAMP":
-			if secondWord == "WITH" || secondWord == "WITHOUT" {
-				typeName = p.current.Value + " " + typeName
-				p.advance()
-				p.skipWhitespace()
-				if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "TIME" {
-					typeName += " " + p.current.Value
-					p.advance()
-					p.skipWhitespace()
-					if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "ZONE" {
-						typeName += " " + p.current.Value
-						p.advance()
-					}
-				}
-			}
-		}
+	if p.current.Type != lexer.TokenIdentifier {
+		return typeName
 	}
 
-	// Check for type parameters (e.g., VARCHAR(255), NUMERIC(10,2))
-	p.skipWhitespace()
-	if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
-		typeName += "("
-		p.advance()
+	firstWord := strings.ToUpper(typeName)
+	secondWord := strings.ToUpper(p.current.Value)
 
-		// Collect everything inside parentheses
-		parenCount := 1
-		for parenCount > 0 && p.current.Type != lexer.TokenEOF {
-			if p.current.Type == lexer.TokenOperator && p.current.Value == "(" {
-				parenCount++
-			} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
-				parenCount--
-			}
-			typeName += p.current.Value
+	// Check for known multi-word type combinations
+	switch firstWord {
+	case "DOUBLE":
+		if secondWord == "PRECISION" {
+			typeName += " " + p.current.Value
 			p.advance()
 		}
+	case "CHARACTER":
+		if secondWord == "VARYING" {
+			typeName += " " + p.current.Value
+			p.advance()
+		}
+	case "TIME":
+		if secondWord != "WITH" && secondWord != "WITHOUT" {
+			break
+		}
+
+		typeName = p.current.Value + " " + typeName
+		p.advance()
+		p.skipWhitespace()
+
+		if !p.current.MatchIdentifierValue("TIME") {
+			break
+		}
+
+		typeName += " " + p.current.Value
+		p.advance()
+		p.skipWhitespace()
+		if !p.current.MatchIdentifierValue("ZONE") {
+			break
+		}
+
+		typeName += " " + p.current.Value
+		p.advance()
+	case "TIMESTAMP":
+		if secondWord != "WITH" && secondWord != "WITHOUT" {
+			break
+		}
+
+		typeName = p.current.Value + " " + typeName
+		p.advance()
+		p.skipWhitespace()
+
+		if !p.current.MatchIdentifierValue("TIME") {
+			break
+		}
+
+		typeName += " " + p.current.Value
+		p.advance()
+		p.skipWhitespace()
+
+		if !p.current.MatchIdentifierValue("ZONE") {
+			break
+		}
+
+		typeName += " " + p.current.Value
+		p.advance()
 	}
 
-	// Check for MySQL/MariaDB type modifiers (UNSIGNED, ZEROFILL, etc.)
+	return typeName
+}
+
+func (p *Parser) handleMySQLLikeTypeModifiers(typeName string) string {
 	p.skipWhitespace()
 	for p.current.Type == lexer.TokenIdentifier {
 		modifier := strings.ToUpper(p.current.Value)
@@ -758,29 +751,74 @@ func (p *Parser) parseColumnType() (string, error) {
 			p.skipWhitespace()
 		default:
 			// Not a type modifier, stop processing
-			goto arrayCheck
+			return typeName
 		}
 	}
+	return typeName
+}
 
-arrayCheck:
-	// Check for array notation (PostgreSQL) - must come after type parameters
+func (p *Parser) handlePostgresArrayNotation(typeName string) string {
 	p.skipWhitespace()
-	if p.current.Type == lexer.TokenOperator && p.current.Value == "[" {
-		typeName += "["
+	if !p.current.MatchOperatorValue("[") {
+		return typeName
+	}
+
+	typeName += "["
+	p.advance()
+
+	// Handle multi-dimensional arrays like INT[][] or NUMERIC(5,2)[]
+	for p.current.MatchOperatorValue("]") {
+		typeName += "]"
 		p.advance()
 
-		// Handle multi-dimensional arrays like INT[][] or NUMERIC(5,2)[]
-		for p.current.Type == lexer.TokenOperator && p.current.Value == "]" {
-			typeName += "]"
-			p.advance()
-			if p.current.Type == lexer.TokenOperator && p.current.Value == "[" {
-				typeName += "["
-				p.advance()
-			} else {
-				break
+		if !p.current.MatchOperatorValue("[") {
+			break
+		}
+
+		typeName += "["
+		p.advance()
+	}
+
+	return typeName
+}
+
+// parseColumnType parses a column data type (e.g., INTEGER, VARCHAR(255), DECIMAL(10,2), DOUBLE PRECISION).
+func (p *Parser) parseColumnType() (string, error) {
+	if p.current.Type != lexer.TokenIdentifier {
+		return "", fmt.Errorf("expected column type, got %s at position %d", p.current.Type, p.current.Start)
+	}
+
+	typeName := p.current.Value
+	p.advance()
+
+	// Handle multi-word types like DOUBLE PRECISION, CHARACTER VARYING, etc.
+	typeName = p.handleMultiWordType(typeName)
+
+	// Check for type parameters (e.g., VARCHAR(255), NUMERIC(10,2))
+	p.skipWhitespace()
+	if p.current.MatchOperatorValue("(") {
+		typeName += "("
+		p.advance()
+
+		// Collect everything inside parentheses
+		parenCount := 1
+		for parenCount > 0 && p.current.Type != lexer.TokenEOF {
+			switch {
+			case p.current.MatchOperatorValue("("):
+				parenCount++
+			case p.current.MatchOperatorValue(")"):
+				parenCount--
 			}
+			typeName += p.current.Value
+			p.advance()
 		}
 	}
+
+	// Check for MySQL/MariaDB type modifiers (UNSIGNED, ZEROFILL, etc.)
+	typeName = p.handleMySQLLikeTypeModifiers(typeName)
+
+	// Check for array notation (PostgreSQL) - must come after type parameters
+	typeName = p.handlePostgresArrayNotation(typeName)
 
 	return typeName, nil
 }
