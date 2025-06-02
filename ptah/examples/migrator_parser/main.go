@@ -116,9 +116,7 @@ func generateDDLForDialects(database *goschema.Database) {
 }
 
 // displaySchemaDetails shows detailed information about all parsed schema elements
-func displaySchemaDetails(embeddedFields []goschema.EmbeddedField, fields []goschema.Field,
-	indexes []goschema.Index, tables []goschema.Table, enums []goschema.Enum) {
-
+func displaySchemaDetails(embeddedFields []goschema.EmbeddedField, fields []goschema.Field, indexes []goschema.Index, tables []goschema.Table, enums []goschema.Enum) {
 	// Display embedded fields
 	if len(embeddedFields) > 0 {
 		fmt.Printf("\nEmbedded Fields (%d):\n", len(embeddedFields))
