@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"path"
+	"os"
 
 	"github.com/denisvmedia/inventario/ptah/core/goschema"
 	"github.com/denisvmedia/inventario/ptah/dbschema"
-	migrator2 "github.com/denisvmedia/inventario/ptah/migration/migrator"
+	"github.com/denisvmedia/inventario/ptah/migration/migrator"
 )
 
 // GetAllScenarios returns all integration test scenarios
@@ -234,8 +234,8 @@ func testUpgradeToSpecificVersion(ctx context.Context, conn *dbschema.DatabaseCo
 	}
 
 	// Create migrator and register migrations
-	m := migrator2.NewMigrator(conn)
-	if err := migrator2.RegisterMigrations(m, migrationsFS); err != nil {
+	m := migrator.NewMigrator(conn)
+	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -294,8 +294,8 @@ func testCheckCurrentVersion(ctx context.Context, conn *dbschema.DatabaseConnect
 	}
 
 	// Apply first migration
-	m := migrator2.NewMigrator(conn)
-	if err := migrator2.RegisterMigrations(m, migrationsFS); err != nil {
+	m := migrator.NewMigrator(conn)
+	if err := migrator.RegisterMigrations(m, migrationsFS); err != nil {
 		return fmt.Errorf("failed to register migrations: %w", err)
 	}
 
@@ -319,8 +319,8 @@ func testCheckCurrentVersion(ctx context.Context, conn *dbschema.DatabaseConnect
 // testGenerateDesiredSchema tests extracting schema from entity definitions
 func testGenerateDesiredSchema(ctx context.Context, conn *dbschema.DatabaseConnection, fixtures fs.FS) error {
 	// Get the entities directory
-	entitiesDir := path.Join("fixtures", "entities")
-	if _, err := fs.Stat(fixtures, entitiesDir); err != nil {
+	entitiesDir := "fixtures/entities"
+	if _, err := os.Stat(entitiesDir); err != nil {
 		// Fallback to local development path
 		entitiesDir = "integration/fixtures/entities"
 	}
