@@ -22,9 +22,9 @@
 //
 // # Core Interface
 //
-// The package provides a DialectGenerator interface for extensible dialect support:
+// The package provides a Planner interface for extensible dialect support:
 //
-//	type DialectGenerator interface {
+//	type Planner interface {
 //		GenerateMigrationAST(diff *types.SchemaDiff, generated *goschema.Database) []ast.Node
 //	}
 //
@@ -141,7 +141,7 @@
 //
 // New database dialects can be added by:
 //
-//  1. Implementing the DialectGenerator interface
+//  1. Implementing the Planner interface
 //  2. Creating a new dialect package under dialects/
 //  3. Adding the dialect to the GetPlanner() factory function
 //  4. Implementing dialect-specific SQL generation logic

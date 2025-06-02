@@ -1,0 +1,70 @@
+%%{ init: {
+  "theme": "default",
+  "themeVariables": {
+    "clusterBkg": "#f3f4f6",
+    "clusterBorder": "#9ca3af",
+    "primaryColor": "#2563eb",
+    "edgeLabelBackground":"#ffffff"
+  }
+} }%%
+graph TD
+
+    %% Input Sources
+    subgraph "Input Sources"
+        GO["Go Code<br/>(with Annotations)"]
+        SQL["SQL Statements"]
+        LIVE_DB[("Live Database")]
+    end
+
+    %% Parsing Layer
+    subgraph "Parsing Layer"
+        GOSCHEMA["goschema<br/>(Entity Extraction)"]
+        LEXER["lexer<br/>(SQL Tokenization)"]
+        PARSER["parser<br/>(SQL AST Construction)"]
+    end
+
+    %% Core Processing
+    subgraph "Core Processing"
+        AST["ast<br/>(Schema Representation)"]
+        ASTBUILDER["astbuilder<br/>(Fluent AST API)"]
+        RENDERER["renderer<br/>(SQL Generation)"]
+        DBSCHEMA["dbschema<br/>(Database Reading)"]
+        SCHEMADIFF["schemadiff<br/>(Schema Comparison)"]
+    end
+
+    %% Migration System
+    subgraph "Migration System"
+        GENERATOR["generator<br/>(Migration File Generation)"]
+        PLANNER["planner<br/>(Migration Planning)"]
+        MIGRATOR["migrator<br/>(Migration Execution)"]
+    end
+
+    %% Output
+    subgraph "Output"
+        DDL["SQL DDL Statements"]
+        DB_CHANGES["Database Changes"]
+        MIG_FILES["Migration Files"]
+    end
+
+    %% Flow
+    GO --> GOSCHEMA --> AST
+    SQL --> LEXER --> PARSER
+    PARSER --> AST
+    PARSER --> ASTBUILDER --> AST
+    GOSCHEMA --> ASTBUILDER
+    AST --> RENDERER --> DDL -.-> DB_CHANGES
+    LIVE_DB --> DBSCHEMA --> SCHEMADIFF
+    GOSCHEMA --> SCHEMADIFF
+    SCHEMADIFF --> PLANNER --> GENERATOR --> MIG_FILES --> MIGRATOR --> DB_CHANGES
+    DBSCHEMA --> DB_CHANGES
+
+    %% Styling blocks
+    classDef core fill:#e0f2fe,stroke:#0369a1,stroke-width:2px
+    classDef migration fill:#e0e7ff,stroke:#4338ca,stroke-width:2px
+    classDef db fill:#dcfce7,stroke:#15803d,stroke-width:2px
+    classDef main fill:#fee2e2,stroke:#b91c1c,stroke-width:2px
+
+    class GOSCHEMA,LEXER,PARSER,AST,ASTBUILDER,RENDERER,DBSCHEMA,SCHEMADIFF core
+    class GENERATOR,PLANNER,MIGRATOR,DDL,DB_CHANGES,MIG_FILES migration
+    class LIVE_DB db
+    class GO,SQL main
