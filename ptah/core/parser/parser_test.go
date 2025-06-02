@@ -2092,6 +2092,10 @@ func TestParser_ErrorHandling(t *testing.T) {
 					matrix INT
 				);`,
 		},
+		{
+			name: "Unknown table option",
+			sql:  "CREATE TABLE users (id INTEGER) UNKNOWN=OPTION;",
+		},
 	}
 
 	for _, tt := range tests {

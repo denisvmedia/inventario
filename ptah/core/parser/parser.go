@@ -1109,6 +1109,168 @@ func (p *Parser) parseForeignKeyReference() (*ast.ForeignKeyRef, error) {
 	return fkRef, nil
 }
 
+func (p *Parser) handleTableConstraintName(constraint *ast.ConstraintNode) error {
+	if !p.current.MatchIdentifierValue("CONSTRAINT") {
+		return nil
+	}
+
+	p.advance()
+	p.skipWhitespace()
+
+	// Get constraint name
+	name, err := p.expectIdentifier()
+	if err != nil {
+		return fmt.Errorf("expected constraint name: %w", err)
+	}
+	constraint.Name = name
+	p.skipWhitespace()
+
+	return nil
+}
+
+func (p *Parser) handleTableConstraintPrimaryKey(constraint *ast.ConstraintNode) error {
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenIdentifier, "KEY"); err != nil {
+		return fmt.Errorf("expected KEY after PRIMARY: %w", err)
+	}
+	constraint.Type = ast.PrimaryKeyConstraint
+	return nil
+}
+
+func (p *Parser) handleTableConstraintUnique(constraint *ast.ConstraintNode) error {
+	p.advance()
+	p.skipWhitespace()
+	// Optional KEY or INDEX keyword
+	if p.current.Type == lexer.TokenIdentifier {
+		keyword := strings.ToUpper(p.current.Value)
+		if keyword == "KEY" || keyword == "INDEX" {
+			p.advance()
+			p.skipWhitespace()
+			// Check for optional constraint name after UNIQUE KEY
+			if p.current.Type == lexer.TokenIdentifier && p.current.Value != "(" {
+				constraint.Name = p.current.Value
+				p.advance()
+				p.skipWhitespace()
+			}
+		}
+	}
+	constraint.Type = ast.UniqueConstraint
+
+	return nil
+}
+
+func (p *Parser) handleTableConstraintForeignKey(constraint *ast.ConstraintNode) error {
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenIdentifier, "KEY"); err != nil {
+		return fmt.Errorf("expected KEY after FOREIGN: %w", err)
+	}
+	constraint.Type = ast.ForeignKeyConstraint
+	return nil
+}
+
+func (p *Parser) handleTableConstraintCheck(constraint *ast.ConstraintNode) {
+	p.advance()
+	constraint.Type = ast.CheckConstraint
+}
+
+func (p *Parser) handleTableConstraintSpatial(constraint *ast.ConstraintNode) error {
+	p.advance()
+	p.skipWhitespace()
+	// Expect INDEX keyword
+	if err := p.expect(lexer.TokenIdentifier, "INDEX"); err != nil {
+		return fmt.Errorf("expected INDEX after SPATIAL: %w", err)
+	}
+	// Treat as a special unique constraint for now
+	constraint.Type = ast.UniqueConstraint
+	constraint.Name = "SPATIAL_INDEX"
+	return nil
+}
+
+func (p *Parser) handleTableConstraintIndex(constraint *ast.ConstraintNode) {
+	p.advance()
+	p.skipWhitespace()
+	// Check for optional constraint name after INDEX/KEY
+	if p.current.Type == lexer.TokenIdentifier && p.current.Value != "(" {
+		constraint.Name = p.current.Value
+		p.advance()
+		p.skipWhitespace()
+	}
+	// Treat as a unique constraint for now
+	constraint.Type = ast.UniqueConstraint
+}
+
+func (p *Parser) parseTableColumnList(constraint *ast.ConstraintNode) error {
+	// Parse column list for PRIMARY KEY, UNIQUE, FOREIGN KEY
+	if constraint.Type == ast.CheckConstraint {
+		return nil
+	}
+	if err := p.expect(lexer.TokenOperator, "("); err != nil {
+		return fmt.Errorf("expected '(' for constraint columns: %w", err)
+	}
+
+	p.skipWhitespace()
+
+	// Parse column names
+	for {
+		columnName, err := p.expectIdentifier()
+		if err != nil {
+			return fmt.Errorf("expected column name: %w", err)
+		}
+		constraint.Columns = append(constraint.Columns, columnName)
+
+		p.skipWhitespace()
+
+		if p.current.MatchOperatorValue(",") {
+			p.advance()
+			p.skipWhitespace()
+			continue
+		}
+
+		if p.current.MatchOperatorValue(")") {
+			break
+		}
+
+		return fmt.Errorf("expected ',' or ')' in column list at position %d", p.current.Start)
+	}
+
+	if err := p.expect(lexer.TokenOperator, ")"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Parser) handleTableForeignKey(constraint *ast.ConstraintNode) error {
+	if constraint.Type != ast.ForeignKeyConstraint {
+		return nil
+	}
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenIdentifier, "REFERENCES"); err != nil {
+		return fmt.Errorf("expected REFERENCES after FOREIGN KEY: %w", err)
+	}
+
+	fkRef, err := p.parseForeignKeyReference()
+	if err != nil {
+		return err
+	}
+	constraint.Reference = fkRef
+	return nil
+}
+
+func (p *Parser) handleTableCheck(constraint *ast.ConstraintNode) error {
+	if constraint.Type != ast.CheckConstraint {
+		return nil
+	}
+	expr, err := p.parseCheckExpression()
+	if err != nil {
+		return err
+	}
+	constraint.Expression = expr
+	return nil
+}
+
 // parseTableConstraint parses table-level constraints.
 func (p *Parser) parseTableConstraint() (*ast.ConstraintNode, error) {
 	p.skipWhitespace()
@@ -1116,17 +1278,8 @@ func (p *Parser) parseTableConstraint() (*ast.ConstraintNode, error) {
 	constraint := &ast.ConstraintNode{}
 
 	// Check for CONSTRAINT name
-	if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "CONSTRAINT" {
-		p.advance()
-		p.skipWhitespace()
-
-		// Get constraint name
-		name, err := p.expectIdentifier()
-		if err != nil {
-			return nil, fmt.Errorf("expected constraint name: %w", err)
-		}
-		constraint.Name = name
-		p.skipWhitespace()
+	if err := p.handleTableConstraintName(constraint); err != nil {
+		return nil, err
 	}
 
 	// Parse constraint type
@@ -1134,134 +1287,196 @@ func (p *Parser) parseTableConstraint() (*ast.ConstraintNode, error) {
 		return nil, fmt.Errorf("expected constraint type, got %s at position %d", p.current.Type, p.current.Start)
 	}
 
+	var err error
 	constraintType := strings.ToUpper(p.current.Value)
 	switch constraintType {
 	case "PRIMARY":
-		p.advance()
-		p.skipWhitespace()
-		if err := p.expect(lexer.TokenIdentifier, "KEY"); err != nil {
-			return nil, fmt.Errorf("expected KEY after PRIMARY: %w", err)
-		}
-		constraint.Type = ast.PrimaryKeyConstraint
-
+		err = p.handleTableConstraintPrimaryKey(constraint)
 	case "UNIQUE":
-		p.advance()
-		p.skipWhitespace()
-		// Optional KEY or INDEX keyword
-		if p.current.Type == lexer.TokenIdentifier {
-			keyword := strings.ToUpper(p.current.Value)
-			if keyword == "KEY" || keyword == "INDEX" {
-				p.advance()
-				p.skipWhitespace()
-				// Check for optional constraint name after UNIQUE KEY
-				if p.current.Type == lexer.TokenIdentifier && p.current.Value != "(" {
-					constraint.Name = p.current.Value
-					p.advance()
-					p.skipWhitespace()
-				}
-			}
-		}
-		constraint.Type = ast.UniqueConstraint
-
+		err = p.handleTableConstraintUnique(constraint)
 	case "FOREIGN":
-		p.advance()
-		p.skipWhitespace()
-		if err := p.expect(lexer.TokenIdentifier, "KEY"); err != nil {
-			return nil, fmt.Errorf("expected KEY after FOREIGN: %w", err)
-		}
-		constraint.Type = ast.ForeignKeyConstraint
-
+		err = p.handleTableConstraintForeignKey(constraint)
 	case "CHECK":
-		p.advance()
-		constraint.Type = ast.CheckConstraint
-
+		p.handleTableConstraintCheck(constraint)
 	case "SPATIAL":
-		p.advance()
-		p.skipWhitespace()
-		// Expect INDEX keyword
-		if err := p.expect(lexer.TokenIdentifier, "INDEX"); err != nil {
-			return nil, fmt.Errorf("expected INDEX after SPATIAL: %w", err)
-		}
-		// Treat as a special unique constraint for now
-		constraint.Type = ast.UniqueConstraint
-		constraint.Name = "SPATIAL_INDEX"
-
+		err = p.handleTableConstraintSpatial(constraint)
 	case "INDEX", "KEY":
-		p.advance()
-		p.skipWhitespace()
-		// Check for optional constraint name after INDEX/KEY
-		if p.current.Type == lexer.TokenIdentifier && p.current.Value != "(" {
-			constraint.Name = p.current.Value
-			p.advance()
-			p.skipWhitespace()
-		}
-		// Treat as a unique constraint for now
-		constraint.Type = ast.UniqueConstraint
-
+		p.handleTableConstraintIndex(constraint)
 	default:
-		return nil, fmt.Errorf("unsupported constraint type: %s at position %d", constraintType, p.current.Start)
+		err = fmt.Errorf("unsupported constraint type: %s at position %d", constraintType, p.current.Start)
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	p.skipWhitespace()
 
 	// Parse column list for PRIMARY KEY, UNIQUE, FOREIGN KEY
-	if constraint.Type != ast.CheckConstraint {
-		if err := p.expect(lexer.TokenOperator, "("); err != nil {
-			return nil, fmt.Errorf("expected '(' for constraint columns: %w", err)
-		}
-
-		p.skipWhitespace()
-
-		// Parse column names
-		for {
-			columnName, err := p.expectIdentifier()
-			if err != nil {
-				return nil, fmt.Errorf("expected column name: %w", err)
-			}
-			constraint.Columns = append(constraint.Columns, columnName)
-
-			p.skipWhitespace()
-
-			if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
-				p.advance()
-				p.skipWhitespace()
-				continue
-			} else if p.current.Type == lexer.TokenOperator && p.current.Value == ")" {
-				break
-			} else {
-				return nil, fmt.Errorf("expected ',' or ')' in column list at position %d", p.current.Start)
-			}
-		}
-
-		if err := p.expect(lexer.TokenOperator, ")"); err != nil {
-			return nil, err
-		}
+	err = p.parseTableColumnList(constraint)
+	if err != nil {
+		return nil, err
 	}
 
 	// Handle FOREIGN KEY REFERENCES
-	if constraint.Type == ast.ForeignKeyConstraint {
-		p.skipWhitespace()
-		if err := p.expect(lexer.TokenIdentifier, "REFERENCES"); err != nil {
-			return nil, fmt.Errorf("expected REFERENCES after FOREIGN KEY: %w", err)
-		}
-
-		fkRef, err := p.parseForeignKeyReference()
-		if err != nil {
-			return nil, err
-		}
-		constraint.Reference = fkRef
+	err = p.handleTableForeignKey(constraint)
+	if err != nil {
+		return nil, err
 	}
 
 	// Handle CHECK expression
-	if constraint.Type == ast.CheckConstraint {
-		expr, err := p.parseCheckExpression()
-		if err != nil {
-			return nil, err
-		}
-		constraint.Expression = expr
+	err = p.handleTableCheck(constraint)
+	if err != nil {
+		return nil, err
 	}
 
 	return constraint, nil
+}
+
+func (p *Parser) handleTableEngine(table *ast.CreateTableNode) error {
+	// Handle MySQL/MariaDB ENGINE
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenOperator, "="); err != nil {
+		return fmt.Errorf("expected '=' after ENGINE: %w", err)
+	}
+	p.skipWhitespace()
+	value, err := p.expectIdentifier()
+	if err != nil {
+		return fmt.Errorf("expected engine value: %w", err)
+	}
+	table.SetOption("ENGINE", value)
+	return nil
+}
+
+func (p *Parser) handleTableCharset(table *ast.CreateTableNode, option string) error {
+	// Handle CHARSET
+	p.advance()
+	p.skipWhitespace()
+	if option == "CHARACTER" {
+		if err := p.expect(lexer.TokenIdentifier, "SET"); err != nil {
+			return fmt.Errorf("expected SET after CHARACTER: %w", err)
+		}
+		p.skipWhitespace()
+	}
+	if err := p.expect(lexer.TokenOperator, "="); err != nil {
+		return fmt.Errorf("expected '=' after CHARSET: %w", err)
+	}
+	p.skipWhitespace()
+	value, err := p.expectIdentifier()
+	if err != nil {
+		return fmt.Errorf("expected charset value: %w", err)
+	}
+	table.SetOption("CHARSET", value)
+	return nil
+}
+
+func (p *Parser) handleTableCollate(table *ast.CreateTableNode) error {
+	// Handle COLLATE
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenOperator, "="); err != nil {
+		return fmt.Errorf("expected '=' after COLLATE: %w", err)
+	}
+	p.skipWhitespace()
+	value, err := p.expectIdentifier()
+	if err != nil {
+		return fmt.Errorf("expected collate value: %w", err)
+	}
+	table.SetOption("COLLATE", value)
+	return nil
+}
+
+func (p *Parser) handleTableComment(table *ast.CreateTableNode) error {
+	// Handle COMMENT
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenOperator, "="); err != nil {
+		return fmt.Errorf("expected '=' after COMMENT: %w", err)
+	}
+	p.skipWhitespace()
+	if p.current.Type != lexer.TokenString {
+		return fmt.Errorf("expected string for comment value at position %d", p.current.Start)
+	}
+	table.Comment = p.current.Value
+	p.advance()
+	return nil
+}
+
+func (p *Parser) handleTableAutoIncrement(table *ast.CreateTableNode) error {
+	// Handle AUTO_INCREMENT
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenOperator, "="); err != nil {
+		return fmt.Errorf("expected '=' after AUTO_INCREMENT: %w", err)
+	}
+	p.skipWhitespace()
+	// Handle numeric values which might be tokenized as operators
+	var value string
+	if p.current.Type == lexer.TokenIdentifier {
+		value = p.current.Value
+		p.advance()
+	} else if p.current.Type == lexer.TokenOperator && isNumeric(p.current.Value) {
+		value = p.current.Value
+		p.advance()
+	} else {
+		return fmt.Errorf("expected auto increment value: got %s at position %d", p.current.Type, p.current.Start)
+	}
+	table.SetOption("AUTO_INCREMENT", value)
+	return nil
+}
+
+func (p *Parser) handleTableDefault(table *ast.CreateTableNode) error {
+	// Handle DEFAULT CHARSET
+	// Handle DEFAULT CHARSET syntax
+	p.advance()
+	p.skipWhitespace()
+
+	if !p.current.MatchIdentifierValue("CHARSET") {
+		// Unknown DEFAULT option, stop parsing
+		return fmt.Errorf("unsupported DEFAULT option: %s at position %d", p.current.Value, p.current.Start)
+	}
+
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenOperator, "="); err != nil {
+		return fmt.Errorf("expected '=' after DEFAULT CHARSET: %w", err)
+	}
+	p.skipWhitespace()
+	value, err := p.expectIdentifier()
+	if err != nil {
+		return fmt.Errorf("expected charset value: %w", err)
+	}
+	table.SetOption("CHARSET", value)
+	return nil
+}
+
+func (p *Parser) handleRowFormat(table *ast.CreateTableNode) error {
+	// Handle ROW_FORMAT
+	p.advance()
+	p.skipWhitespace()
+	if err := p.expect(lexer.TokenOperator, "="); err != nil {
+		return fmt.Errorf("expected '=' after ROW_FORMAT: %w", err)
+	}
+	p.skipWhitespace()
+	value, err := p.expectIdentifier()
+	if err != nil {
+		return fmt.Errorf("expected row format value: %w", err)
+	}
+	table.SetOption("ROW_FORMAT", value)
+	return nil
+}
+
+func (p *Parser) handleTablespace(table *ast.CreateTableNode) error {
+	// Handle TABLESPACE
+	p.advance()
+	p.skipWhitespace()
+	value, err := p.expectIdentifier()
+	if err != nil {
+		return fmt.Errorf("expected tablespace name: %w", err)
+	}
+	table.SetOption("TABLESPACE", value)
+	return nil
 }
 
 // parseTableOptions parses table options like ENGINE, CHARSET, etc.
@@ -1278,139 +1493,37 @@ func (p *Parser) parseTableOptions(table *ast.CreateTableNode) error {
 			break
 		}
 
+		var err error
 		option := strings.ToUpper(p.current.Value)
 		switch option {
 		case "ENGINE":
-			p.advance()
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenOperator, "="); err != nil {
-				return fmt.Errorf("expected '=' after ENGINE: %w", err)
-			}
-			p.skipWhitespace()
-			value, err := p.expectIdentifier()
-			if err != nil {
-				return fmt.Errorf("expected engine value: %w", err)
-			}
-			table.SetOption("ENGINE", value)
-
+			err = p.handleTableEngine(table)
 		case "CHARSET", "CHARACTER":
-			p.advance()
-			p.skipWhitespace()
-			if option == "CHARACTER" {
-				if err := p.expect(lexer.TokenIdentifier, "SET"); err != nil {
-					return fmt.Errorf("expected SET after CHARACTER: %w", err)
-				}
-				p.skipWhitespace()
-			}
-			if err := p.expect(lexer.TokenOperator, "="); err != nil {
-				return fmt.Errorf("expected '=' after CHARSET: %w", err)
-			}
-			p.skipWhitespace()
-			value, err := p.expectIdentifier()
-			if err != nil {
-				return fmt.Errorf("expected charset value: %w", err)
-			}
-			table.SetOption("CHARSET", value)
-
+			err = p.handleTableCharset(table, option)
 		case "COLLATE":
-			p.advance()
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenOperator, "="); err != nil {
-				return fmt.Errorf("expected '=' after COLLATE: %w", err)
-			}
-			p.skipWhitespace()
-			value, err := p.expectIdentifier()
-			if err != nil {
-				return fmt.Errorf("expected collate value: %w", err)
-			}
-			table.SetOption("COLLATE", value)
-
+			err = p.handleTableCollate(table)
 		case "COMMENT":
-			p.advance()
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenOperator, "="); err != nil {
-				return fmt.Errorf("expected '=' after COMMENT: %w", err)
-			}
-			p.skipWhitespace()
-			if p.current.Type != lexer.TokenString {
-				return fmt.Errorf("expected string for comment value at position %d", p.current.Start)
-			}
-			table.Comment = p.current.Value
-			p.advance()
-
+			err = p.handleTableComment(table)
 		case "AUTO_INCREMENT":
-			p.advance()
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenOperator, "="); err != nil {
-				return fmt.Errorf("expected '=' after AUTO_INCREMENT: %w", err)
-			}
-			p.skipWhitespace()
-			// Handle numeric values which might be tokenized as operators
-			var value string
-			if p.current.Type == lexer.TokenIdentifier {
-				value = p.current.Value
-				p.advance()
-			} else if p.current.Type == lexer.TokenOperator && isNumeric(p.current.Value) {
-				value = p.current.Value
-				p.advance()
-			} else {
-				return fmt.Errorf("expected auto increment value: got %s at position %d", p.current.Type, p.current.Start)
-			}
-			table.SetOption("AUTO_INCREMENT", value)
-
+			err = p.handleTableAutoIncrement(table)
 		case "DEFAULT":
 			// Handle DEFAULT CHARSET syntax
-			p.advance()
-			p.skipWhitespace()
-			if p.current.Type == lexer.TokenIdentifier && strings.ToUpper(p.current.Value) == "CHARSET" {
-				p.advance()
-				p.skipWhitespace()
-				if err := p.expect(lexer.TokenOperator, "="); err != nil {
-					return fmt.Errorf("expected '=' after DEFAULT CHARSET: %w", err)
-				}
-				p.skipWhitespace()
-				value, err := p.expectIdentifier()
-				if err != nil {
-					return fmt.Errorf("expected charset value: %w", err)
-				}
-				table.SetOption("CHARSET", value)
-			} else {
-				// Unknown DEFAULT option, stop parsing
-				break
-			}
-
+			err = p.handleTableDefault(table)
 		case "WITH":
 			// Handle PostgreSQL WITH clause
-			if err := p.parsePostgreSQLWithClause(table); err != nil {
-				return err
-			}
-
+			err = p.parsePostgreSQLWithClause(table)
 		case "ROW_FORMAT":
-			p.advance()
-			p.skipWhitespace()
-			if err := p.expect(lexer.TokenOperator, "="); err != nil {
-				return fmt.Errorf("expected '=' after ROW_FORMAT: %w", err)
-			}
-			p.skipWhitespace()
-			value, err := p.expectIdentifier()
-			if err != nil {
-				return fmt.Errorf("expected row format value: %w", err)
-			}
-			table.SetOption("ROW_FORMAT", value)
-
+			err = p.handleRowFormat(table)
 		case "TABLESPACE":
 			// Handle PostgreSQL TABLESPACE
-			p.advance()
-			p.skipWhitespace()
-			value, err := p.expectIdentifier()
-			if err != nil {
-				return fmt.Errorf("expected tablespace name: %w", err)
-			}
-			table.SetOption("TABLESPACE", value)
-
+			err = p.handleTablespace(table)
 		default:
 			// Unknown option, stop parsing
-			break
+			err = fmt.Errorf("unsupported table option: %s at position %d", option, p.current.Start)
+		}
+
+		if err != nil {
+			return err
 		}
 	}
 
