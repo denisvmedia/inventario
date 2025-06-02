@@ -24,8 +24,12 @@
 /sample/
 /.db
 /bin/*
+coverage
 
 # Docker volumes and data
 /.docker/
 .env
 docker-compose.override.yaml
+ptah/integration/reports
+test-reports
+/ptah/lint/

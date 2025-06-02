@@ -19,7 +19,8 @@ var migrateCmd = &cobra.Command{
 }
 
 const (
-	dbDSNFlag = "db-dsn"
+	dbDSNFlag  = "db-dsn"
+	dryRunFlag = "dry-run"
 )
 
 var migrateFlags = map[string]cobraflags.Flag{
@@ -27,6 +28,11 @@ var migrateFlags = map[string]cobraflags.Flag{
 		Name:  dbDSNFlag,
 		Value: "",
 		Usage: "Database DSN (required). Supported types: postgres://, memory://, boltdb://",
+	},
+	dryRunFlag: &cobraflags.BoolFlag{
+		Name:  dryRunFlag,
+		Value: false,
+		Usage: "Show what migrations would be executed without making actual changes",
 	},
 }
 
@@ -38,9 +44,18 @@ func NewMigrateCommand() *cobra.Command {
 
 func migrateCommand(_ *cobra.Command, _ []string) error {
 	dsn := migrateFlags[dbDSNFlag].GetString()
+	dryRun := migrateFlags[dryRunFlag].GetBool()
 
 	if dsn == "" {
 		return fmt.Errorf("database DSN is required")
+	}
+
+	if dryRun {
+		// log.WithField(dbDSNFlag, dsn).Info("[DRY RUN] Would run migrations")
+		// fmt.Println("⚠️  [DRY RUN] Migration dry run mode is not yet fully implemented.")
+		// fmt.Println("⚠️  This would run migrations against the database.")
+		// fmt.Println("⚠️  For now, use the ptah tool 'migrate' command for dry run migration SQL generation.")
+		return fmt.Errorf("dry run mode is not yet implemented")
 	}
 
 	log.WithField(dbDSNFlag, dsn).Info("Running migrations")

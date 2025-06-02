@@ -1,0 +1,171 @@
+name: Ptah Integration Tests
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'ptah/**'
+      - '.github/workflows/ptah-integration-tests.yml'
+  pull_request:
+    paths:
+      - 'ptah/**'
+      - '.github/workflows/ptah-integration-tests.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  integration-tests:
+    name: ptah-integration-tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ptah_test
+          POSTGRES_USER: ptah_user
+          POSTGRES_PASSWORD: ptah_password
+        options: >-
+          --health-cmd "pg_isready -U ptah_user -d ptah_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: ptah_test
+          MYSQL_USER: ptah_user
+          MYSQL_PASSWORD: ptah_password
+          MYSQL_ROOT_PASSWORD: root_password
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u ptah_user -pptah_password"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --tmpfs /var/lib/mysql:rw,noexec,nosuid,size=1024m
+        ports:
+          - 3306:3306
+
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: ptah_test
+          MARIADB_USER: ptah_user
+          MARIADB_PASSWORD: ptah_password
+          MARIADB_ROOT_PASSWORD: root_password
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u ptah_user -pptah_password"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --tmpfs /var/lib/mysql:rw,noexec,nosuid,size=1024m
+        ports:
+          - 3307:3306
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.3'
+          cache: true
+          cache-dependency-path: ptah/go.sum
+      
+      - name: Install dependencies
+        run: go mod download
+        working-directory: ptah
+      
+      - name: Wait for databases to be ready
+        run: |
+          echo "Waiting for PostgreSQL..."
+          until pg_isready -h localhost -p 5432 -U ptah_user; do
+            echo "PostgreSQL is unavailable - sleeping"
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+          
+          echo "Waiting for MySQL..."
+          until mysqladmin ping -h 127.0.0.1 -P 3306 -u ptah_user -pptah_password --silent; do
+            echo "MySQL is unavailable - sleeping"
+            sleep 2
+          done
+          echo "MySQL is ready!"
+          
+          echo "Waiting for MariaDB..."
+          until mysqladmin ping -h 127.0.0.1 -P 3307 -u ptah_user -pptah_password --silent; do
+            echo "MariaDB is unavailable - sleeping"
+            sleep 2
+          done
+          echo "MariaDB is ready!"
+      
+      - name: Run executor integration tests with PostgreSQL
+        env:
+          POSTGRES_TEST_DSN: "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
+        run: |
+          go test -v  ./integration/... -tags=integration -timeout 15m
+        working-directory: ptah
+
+      - name: Run executor integration tests with MySQL
+        env:
+          MYSQL_TEST_DSN: "ptah_user:ptah_password@tcp(mysql:3306)/ptah_test"
+        run: |
+          go test -v  ./integration/... -tags=integration -timeout 15m
+        working-directory: ptah
+
+      - name: Run executor integration tests with MariaDB
+        env:
+          MARIADB_TEST_DSN: "ptah_user:ptah_password@tcp(mariadb:3307)/ptah_test"
+        run: |
+          go test -v  ./integration/... -tags=integration -timeout 15m
+        working-directory: ptah
+
+      - name: Build integration test binary
+        run: |
+          go build -o ./integration-test ./cmd/integration-test
+        working-directory: ptah
+
+      - name: Test integration binary help
+        run: |
+          ./integration-test --help
+        working-directory: ptah
+
+      - name: Run basic smoke test
+        env:
+          POSTGRES_URL: "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
+        run: |
+          ./integration-test --scenarios=apply_incremental_migrations,check_current_version --databases=postgres --report=txt --output=./reports
+        working-directory: ptah
+
+      - name: Run all databases comprehensive test
+        env:
+          POSTGRES_URL: "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
+          MYSQL_URL: "mysql://ptah_user:ptah_password@tcp(127.0.0.1:3306)/ptah_test"
+          MARIADB_URL: "mariadb://ptah_user:ptah_password@tcp(127.0.0.1:3307)/ptah_test"
+        run: |
+          ./integration-test --report=html --verbose --output=./reports
+        working-directory: ptah
+      
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ptah-integration-test-reports
+          path: |
+            ptah/reports/
+          retention-days: 7
+      
+      - name: Run dynamic integration tests
+        env:
+          POSTGRES_URL: "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
+          MYSQL_URL: "mysql://ptah_user:ptah_password@tcp(127.0.0.1:3306)/ptah_test"
+          MARIADB_URL: "mariadb://ptah_user:ptah_password@tcp(127.0.0.1:3307)/ptah_test"
+        run: |
+          go test -v -race ./integration -timeout 30m
+        working-directory: ptah
