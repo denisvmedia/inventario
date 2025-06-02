@@ -375,12 +375,10 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 				return nil, fmt.Errorf("expected NULL after NOT: %w", err)
 			}
 			column.SetNotNull()
-
 		case "NULL":
 			// Explicit NULL (default behavior)
 			p.advance()
 			column.Nullable = true
-
 		case "PRIMARY":
 			// Handle PRIMARY KEY
 			p.advance()
@@ -389,15 +387,12 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 				return nil, fmt.Errorf("expected KEY after PRIMARY: %w", err)
 			}
 			column.SetPrimary()
-
 		case "UNIQUE":
 			p.advance()
 			column.SetUnique()
-
 		case "AUTO_INCREMENT", "AUTOINCREMENT":
 			p.advance()
 			column.SetAutoIncrement()
-
 		case "DEFAULT":
 			p.advance()
 			p.skipWhitespace()
@@ -410,7 +405,6 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 			} else {
 				column.SetDefault(defaultValue.Value)
 			}
-
 		case "CHECK":
 			p.advance()
 			p.skipWhitespace()
@@ -419,7 +413,6 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 				return nil, fmt.Errorf("expected check expression: %w", err)
 			}
 			column.SetCheck(checkExpr)
-
 		case "REFERENCES":
 			// Handle foreign key reference
 			p.advance()
@@ -428,7 +421,6 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 				return nil, fmt.Errorf("expected foreign key reference: %w", err)
 			}
 			column.ForeignKey = fkRef
-
 		case "AS":
 			// Handle MySQL/MariaDB virtual columns (AS (expression) STORED)
 			p.advance()
@@ -468,7 +460,6 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 
 			// Store as a check constraint for now (in a full implementation, add Generated field to ColumnNode)
 			column.SetCheck("AS (" + expr.String() + ") STORED")
-
 		case "GENERATED":
 			// Handle PostgreSQL GENERATED columns
 			p.advance()
@@ -513,7 +504,6 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 
 			// Store as a check constraint for now (in a full implementation, add Generated field to ColumnNode)
 			column.SetCheck("GENERATED ALWAYS AS (" + expr.String() + ") STORED")
-
 		case "CHARACTER":
 			// Handle MySQL/MariaDB CHARACTER SET
 			p.advance()
@@ -527,7 +517,6 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 					p.advance()
 				}
 			}
-
 		case "COLLATE":
 			// Handle PostgreSQL/MySQL COLLATE
 			p.advance()
@@ -548,7 +537,6 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 
 			// Store as comment for now (in a full implementation, add Collation field to ColumnNode)
 			column.SetComment("COLLATE " + collation)
-
 		case "ON":
 			// Handle MySQL/MariaDB ON UPDATE syntax
 			p.advance()
@@ -572,10 +560,8 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 					column.SetComment("ON UPDATE " + updateExpr)
 				}
 			}
-
 		default:
 			// Unknown keyword, stop parsing column attributes
-			break
 		}
 	}
 

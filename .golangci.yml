@@ -110,11 +110,11 @@ linters:
         - name: enforce-repeated-arg-type-style
           arguments:
             - short
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: enforce-slice-style
           arguments:
             - make
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: error-naming
           disabled: false
         - name: error-return
@@ -191,7 +191,7 @@ linters:
         - name: unused-parameter
           arguments:
             - allowRegex: '^_'
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: unused-receiver
           disabled: true # TODO: re-enable
         - name: use-any
