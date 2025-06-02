@@ -146,8 +146,8 @@ jobs:
       - name: Run all databases comprehensive test
         env:
           POSTGRES_URL: "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
-          MYSQL_URL: "ptah_user:ptah_password@tcp(127.0.0.1:3306)/ptah_test"
-          MARIADB_URL: "ptah_user:ptah_password@tcp(127.0.0.1:3307)/ptah_test"
+          MYSQL_URL: "mysql://ptah_user:ptah_password@tcp(127.0.0.1:3306)/ptah_test"
+          MARIADB_URL: "mariadb://ptah_user:ptah_password@tcp(127.0.0.1:3307)/ptah_test"
         run: |
           ./integration-test --report=html --verbose --output=./reports
         working-directory: ptah
@@ -164,8 +164,8 @@ jobs:
       - name: Run dynamic integration tests
         env:
           POSTGRES_URL: "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
-          MYSQL_URL: "ptah_user:ptah_password@tcp(127.0.0.1:3306)/ptah_test"
-          MARIADB_URL: "ptah_user:ptah_password@tcp(127.0.0.1:3307)/ptah_test"
+          MYSQL_URL: "mysql://ptah_user:ptah_password@tcp(127.0.0.1:3306)/ptah_test"
+          MARIADB_URL: "mariadb://ptah_user:ptah_password@tcp(127.0.0.1:3307)/ptah_test"
         run: |
           go test -v -race ./integration -timeout 30m
         working-directory: ptah
