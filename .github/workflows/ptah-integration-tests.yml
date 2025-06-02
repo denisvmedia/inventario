@@ -140,7 +140,7 @@ jobs:
         env:
           POSTGRES_URL: "postgres://ptah_user:ptah_password@localhost:5432/ptah_test?sslmode=disable"
         run: |
-          ./integration-test --scenarios=apply_incremental_migrations,check_current_version --databases=postgres --report=txt
+          ./integration-test --scenarios=apply_incremental_migrations,check_current_version --databases=postgres --report=txt --output=./reports
         working-directory: ptah
 
       - name: Run all databases comprehensive test
@@ -149,7 +149,7 @@ jobs:
           MYSQL_URL: "ptah_user:ptah_password@tcp(localhost:3306)/ptah_test"
           MARIADB_URL: "ptah_user:ptah_password@tcp(localhost:3307)/ptah_test"
         run: |
-          ./integration-test --report=html --verbose
+          ./integration-test --report=html --verbose --output=./reports
         working-directory: ptah
       
       - name: Upload integration test reports

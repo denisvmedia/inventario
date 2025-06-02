@@ -7,23 +7,75 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/ptah/integration"
 )
 
-var (
-	reportFormat string
-	outputDir    string
-	databases    []string
-	scenarios    []string
-	verbose      bool
-
-	// List command flags
-	showStatic  bool
-	showDynamic bool
-	showAll     bool
+// Root command flag constants
+const (
+	reportFormatFlag = "report"
+	outputDirFlag    = "output"
+	databasesFlag    = "databases"
+	scenariosFlag    = "scenarios"
+	verboseFlag      = "verbose"
 )
+
+// List command flag constants
+const (
+	showStaticFlag  = "static"
+	showDynamicFlag = "dynamic"
+	showAllFlag     = "all"
+)
+
+// Root command flags
+var rootFlags = map[string]cobraflags.Flag{
+	reportFormatFlag: &cobraflags.StringFlag{
+		Name:  reportFormatFlag,
+		Value: "txt",
+		Usage: "Report format: txt, json, or html",
+	},
+	outputDirFlag: &cobraflags.StringFlag{
+		Name:  outputDirFlag,
+		Value: "/app/reports",
+		Usage: "Output directory for reports",
+	},
+	databasesFlag: &cobraflags.StringSliceFlag{
+		Name:  databasesFlag,
+		Value: []string{"postgres", "mysql", "mariadb"},
+		Usage: "Databases to test against",
+	},
+	scenariosFlag: &cobraflags.StringSliceFlag{
+		Name:  scenariosFlag,
+		Value: []string{},
+		Usage: "Specific scenarios to run (empty = all)",
+	},
+	verboseFlag: &cobraflags.BoolFlag{
+		Name:  verboseFlag,
+		Value: false,
+		Usage: "Enable verbose output",
+	},
+}
+
+// List command flags
+var listFlags = map[string]cobraflags.Flag{
+	showStaticFlag: &cobraflags.BoolFlag{
+		Name:  showStaticFlag,
+		Value: false,
+		Usage: "Show only static scenarios",
+	},
+	showDynamicFlag: &cobraflags.BoolFlag{
+		Name:  showDynamicFlag,
+		Value: false,
+		Usage: "Show only dynamic scenarios",
+	},
+	showAllFlag: &cobraflags.BoolFlag{
+		Name:  showAllFlag,
+		Value: true,
+		Usage: "Show all scenarios (default)",
+	},
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "ptah-integration-test",
@@ -51,17 +103,9 @@ before running specific tests with the --scenarios flag.`,
 }
 
 func init() {
-	// Root command flags
-	rootCmd.Flags().StringVar(&reportFormat, "report", "txt", "Report format: txt, json, or html")
-	rootCmd.Flags().StringVar(&outputDir, "output", "/app/reports", "Output directory for reports")
-	rootCmd.Flags().StringSliceVar(&databases, "databases", []string{"postgres", "mysql", "mariadb"}, "Databases to test against")
-	rootCmd.Flags().StringSliceVar(&scenarios, "scenarios", []string{}, "Specific scenarios to run (empty = all)")
-	rootCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
-
-	// List command flags
-	listCmd.Flags().BoolVar(&showStatic, "static", false, "Show only static scenarios")
-	listCmd.Flags().BoolVar(&showDynamic, "dynamic", false, "Show only dynamic scenarios")
-	listCmd.Flags().BoolVar(&showAll, "all", true, "Show all scenarios (default)")
+	// Register flags using cobraflags
+	cobraflags.RegisterMap(rootCmd, rootFlags)
+	cobraflags.RegisterMap(listCmd, listFlags)
 
 	// Add subcommands
 	rootCmd.AddCommand(listCmd)
@@ -76,6 +120,13 @@ func main() {
 
 func runIntegrationTests(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+
+	// Get flag values
+	reportFormat := rootFlags[reportFormatFlag].GetString()
+	outputDir := rootFlags[outputDirFlag].GetString()
+	databases := rootFlags[databasesFlag].GetStringSlice()
+	scenarios := rootFlags[scenariosFlag].GetStringSlice()
+	verbose := rootFlags[verboseFlag].GetBool()
 
 	// Validate report format
 	format := integration.ReportFormat(reportFormat)
@@ -202,6 +253,10 @@ func runIntegrationTests(cmd *cobra.Command, args []string) error {
 }
 
 func listScenarios(cmd *cobra.Command, args []string) error {
+	// Get flag values
+	showStatic := listFlags[showStaticFlag].GetBool()
+	showDynamic := listFlags[showDynamicFlag].GetBool()
+
 	// Get all scenarios
 	allScenarios := integration.GetAllScenarios()
 	staticScenarios := getStaticScenarios()
