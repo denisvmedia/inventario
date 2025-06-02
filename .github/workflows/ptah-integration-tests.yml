@@ -92,16 +92,14 @@ jobs:
           echo "PostgreSQL is ready!"
           
           echo "Waiting for MySQL..."
-          MYSQL_PWD=ptah_password mysqladmin ping -h 127.0.0.1 -P 3306 -u ptah_user
-          MYSQL_PWD=ptah_password mysqladmin ping -h 127.0.0.1 -P 3307 -u ptah_user
-          until mysqladmin ping -h mysql -P 3306 -u ptah_user -pptah_password --silent; do
+          until mysqladmin ping -h 127.0.0.1 -P 3306 -u ptah_user -pptah_password --silent; do
             echo "MySQL is unavailable - sleeping"
             sleep 2
           done
           echo "MySQL is ready!"
           
           echo "Waiting for MariaDB..."
-          until mysqladmin ping -h mariadb -P 3307 -u ptah_user -pptah_password --silent; do
+          until mysqladmin ping -h 127.0.0.1 -P 3307 -u ptah_user -pptah_password --silent; do
             echo "MariaDB is unavailable - sleeping"
             sleep 2
           done
