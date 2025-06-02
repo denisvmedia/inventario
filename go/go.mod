@@ -6,8 +6,6 @@ require github.com/denisvmedia/inventario/frontend v0.0.0
 
 replace github.com/denisvmedia/inventario/frontend => ../frontend
 
-require github.com/denisvmedia/inventario/ptah v0.0.0
-
 replace github.com/denisvmedia/inventario/ptah => ../ptah
 
 require (
@@ -24,7 +22,6 @@ require (
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/jellydator/validation v1.1.0
 	github.com/jmoiron/sqlx v1.4.0
-	github.com/lib/pq v1.10.9
 	github.com/mrosales/emoji-go v1.1.0
 	github.com/rs/cors v1.11.1
 	github.com/shopspring/decimal v1.4.0
@@ -53,7 +50,6 @@ require (
 	cloud.google.com/go/iam v1.5.2 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/storage v1.54.0 // indirect
-	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.10.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.1 // indirect
@@ -96,7 +92,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.0 // indirect
-	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
