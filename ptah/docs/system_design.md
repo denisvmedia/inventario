@@ -19,9 +19,9 @@ For a detailed visual representation of the system architecture, see the [Top-Le
 ```
 Go Code (Annotations) ──┐
                         ├─► Parsing Layer ──► Core Processing ──► Migration System ──► Database
-SQL Statements ─────────┘                                                              │
-                                                                                        │
-Live Database ──────────────────────────────────────────────────────────────────────┘
+SQL Statements ─────────┘                                                                  │
+                                                                                           │
+Live Database ─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 The system operates through four main layers:
