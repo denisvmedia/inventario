@@ -168,7 +168,7 @@ func (p *Parser) expect(tokenType lexer.TokenType, value string) error {
 	if p.current.Type != tokenType {
 		return fmt.Errorf("expected %s, got %s at position %d", tokenType, p.current.Type, p.current.Start)
 	}
-	if value != "" && strings.ToUpper(p.current.Value) != strings.ToUpper(value) {
+	if value != "" && !strings.EqualFold(p.current.Value, value) {
 		return fmt.Errorf("expected '%s', got '%s' at position %d", value, p.current.Value, p.current.Start)
 	}
 	p.advance()
@@ -444,9 +444,10 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 			parenCount := 1
 			for parenCount > 0 && !p.isAtEnd() {
 				if p.current.Type == lexer.TokenOperator {
-					if p.current.Value == "(" {
+					switch p.current.Value {
+					case "(":
 						parenCount++
-					} else if p.current.Value == ")" {
+					case ")":
 						parenCount--
 					}
 				}
@@ -491,9 +492,10 @@ func (p *Parser) parseColumnDefinition() (*ast.ColumnNode, error) {
 			parenCount := 1
 			for parenCount > 0 && !p.isAtEnd() {
 				if p.current.Type == lexer.TokenOperator {
-					if p.current.Value == "(" {
+					switch p.current.Value {
+					case "(":
 						parenCount++
-					} else if p.current.Value == ")" {
+					case ")":
 						parenCount--
 					}
 				}
@@ -842,9 +844,10 @@ func (p *Parser) parseCheckExpression() (string, error) {
 
 	for parenCount > 0 && !p.isAtEnd() {
 		if p.current.Type == lexer.TokenOperator {
-			if p.current.Value == "(" {
+			switch p.current.Value {
+			case "(":
 				parenCount++
-			} else if p.current.Value == ")" {
+			case ")":
 				parenCount--
 			}
 		}

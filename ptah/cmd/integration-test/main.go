@@ -212,19 +212,20 @@ func listScenarios(cmd *cobra.Command, args []string) error {
 	var title string
 
 	// Handle flag combinations
-	if showStatic && showDynamic {
+	switch {
+	case showStatic && showDynamic:
 		// Both flags set - show all
 		scenariosToShow = allScenarios
 		title = "All Test Scenarios"
-	} else if showStatic {
+	case showStatic:
 		// Only static
 		scenariosToShow = staticScenarios
 		title = "Static Test Scenarios"
-	} else if showDynamic {
+	case showDynamic:
 		// Only dynamic
 		scenariosToShow = dynamicScenarios
 		title = "Dynamic Test Scenarios"
-	} else {
+	default:
 		// Default - show all
 		scenariosToShow = allScenarios
 		title = "All Test Scenarios"

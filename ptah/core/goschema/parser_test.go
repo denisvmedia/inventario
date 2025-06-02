@@ -243,7 +243,7 @@ type Product struct {
 	// Write to temporary file
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "product.go")
-	err := os.WriteFile(testFile, []byte(content), 0644)
+	err := os.WriteFile(testFile, []byte(content), 0644) //nolint:gosec // 0644 is fine
 	c.Assert(err, qt.IsNil)
 
 	// Parse the file

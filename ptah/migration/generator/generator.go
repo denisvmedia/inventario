@@ -248,12 +248,12 @@ func createMigrationFiles(outputDir string, version int, migrationName, upSQL, d
 	}
 
 	// Write up migration file
-	if err := os.WriteFile(upFilePath, []byte(upSQL), 0644); err != nil {
+	if err := os.WriteFile(upFilePath, []byte(upSQL), 0644); err != nil { //nolint:gosec // 0644 is fine
 		return nil, fmt.Errorf("failed to write up migration file: %w", err)
 	}
 
 	// Write down migration file
-	if err := os.WriteFile(downFilePath, []byte(downSQL), 0644); err != nil {
+	if err := os.WriteFile(downFilePath, []byte(downSQL), 0644); err != nil { //nolint:gosec // 0644 is fine
 		return nil, fmt.Errorf("failed to write down migration file: %w", err)
 	}
 

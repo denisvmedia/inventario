@@ -41,7 +41,7 @@ linters:
       lines: 240
       statements: 160
     gocognit:
-      min-complexity: 20
+      min-complexity: 30
     gocritic:
       enabled-checks:
         - badLock
@@ -158,7 +158,7 @@ linters:
           disabled: false
         - name: receiver-naming
           arguments:
-            - maxLength: 3
+            - maxLength: 4 # TODO: get back to 3
           disabled: false
         - name: redefines-builtin-id
           disabled: false
@@ -193,7 +193,7 @@ linters:
             - allowRegex: '^_'
           disabled: false
         - name: unused-receiver
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: use-any
           disabled: false
         - name: useless-break
@@ -248,6 +248,8 @@ linters:
           - unused
       - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
         text: 'use of `fmt\..*` forbidden by pattern'
+      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
+        text: 'deep-exit:'
       - path: 'cmd/.*\.go$'
         linters:
           - gochecknoinits

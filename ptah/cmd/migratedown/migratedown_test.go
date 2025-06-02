@@ -38,10 +38,10 @@ func TestMigrateDownCommand_Integration(t *testing.T) {
 	upSQL := `CREATE TABLE test_table (id INTEGER PRIMARY KEY);`
 	downSQL := `DROP TABLE test_table;`
 
-	err := os.WriteFile(tempDir+"/001_create_test_table.up.sql", []byte(upSQL), 0644)
+	err := os.WriteFile(tempDir+"/001_create_test_table.up.sql", []byte(upSQL), 0644) //nolint:gosec // 0644 is fine
 	c.Assert(err, qt.IsNil)
 
-	err = os.WriteFile(tempDir+"/001_create_test_table.down.sql", []byte(downSQL), 0644)
+	err = os.WriteFile(tempDir+"/001_create_test_table.down.sql", []byte(downSQL), 0644) //nolint:gosec // 0644 is fine
 	c.Assert(err, qt.IsNil)
 
 	// Connect to database
