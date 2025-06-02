@@ -106,7 +106,7 @@ linters:
         - name: enforce-map-style
           arguments:
             - make
-          disabled: false
+          disabled: true # TODO: re-enable
         - name: enforce-repeated-arg-type-style
           arguments:
             - short

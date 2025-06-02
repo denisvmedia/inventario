@@ -109,7 +109,6 @@ func TestMySQLReader_parseEnumValues(t *testing.T) {
 
 // TestMySQLReader_parseTableFromDDL tests the new DDL parsing functionality
 func TestMySQLReader_parseTableFromDDL(t *testing.T) {
-
 	tests := []struct {
 		name        string
 		ddl         string

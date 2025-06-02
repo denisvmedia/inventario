@@ -1363,9 +1363,9 @@ func (p *Parser) parseAlterStatement() (*ast.AlterTableNode, error) {
 		if p.current.Type == lexer.TokenOperator && p.current.Value == "," {
 			p.advance()
 			continue
-		} else {
-			break
 		}
+
+		break
 	}
 
 	return alterNode, nil
