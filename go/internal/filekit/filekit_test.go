@@ -67,5 +67,5 @@ func TestUploadFileNameWithCurrentTime(t *testing.T) {
 
 	// Verify that the file extension is preserved
 	ext := filepath.Ext(fileName)
-	c.Assert(strings.HasSuffix(result, ext), qt.IsTrue)
+	c.Assert(filepath.Ext(result), qt.Equals, ext)
 }
