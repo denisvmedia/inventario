@@ -14,7 +14,62 @@ import (
 var seedCmd = &cobra.Command{
 	Use:   "seed",
 	Short: "Seed the database with example data",
-	Long:  `This command seeds the database with example data.`,
+	Long: `Seed populates your Inventario database with sample data to help you get started
+quickly. This is particularly useful for development, testing, or when you want to
+explore the application's features with realistic example data.
+
+The seeding process creates sample inventory items, locations, categories, and other
+data structures that demonstrate the full capabilities of the application. This allows
+you to immediately begin exploring features without manually creating initial data.
+
+USAGE EXAMPLES:
+
+  Seed with default in-memory database:
+    inventario seed
+
+  Seed a PostgreSQL database:
+    inventario seed --db-dsn="postgres://user:pass@localhost/inventario"
+
+  Seed a local BoltDB database:
+    inventario seed --db-dsn="boltdb://./inventario.db"
+
+  Preview what would be seeded (dry-run mode):
+    inventario seed --dry-run --db-dsn="postgres://user:pass@localhost/inventario"
+
+FLAG DETAILS:
+
+  --db-dsn (default "memory://")
+    Database connection string. Must match the same database you plan to use
+    with the 'run' command. Supported formats:
+    • PostgreSQL: "postgres://user:password@host:port/database?sslmode=disable"
+    • BoltDB: "boltdb://path/to/database.db"
+    • In-memory: "memory://" (useful for quick testing)
+
+  --dry-run (default false)
+    When enabled, shows what data would be created without making actual changes.
+    Note: Dry-run mode is not yet fully implemented and will return an error.
+    This flag is reserved for future functionality.
+
+SAMPLE DATA INCLUDES:
+  • Sample locations (rooms, storage areas, containers)
+  • Example inventory categories (electronics, books, tools, etc.)
+  • Various inventory items with different attributes
+  • Realistic metadata and relationships between items
+
+PREREQUISITES:
+  • Database must exist and be accessible
+  • Database schema must be up-to-date (run 'inventario migrate' first)
+  • For PostgreSQL, ensure the user has INSERT permissions
+  • For file-based databases, ensure write permissions to the directory
+
+WORKFLOW:
+  1. Create/prepare your database
+  2. Run migrations: inventario migrate --db-dsn="your-database-url"  
+  3. Seed with data: inventario seed --db-dsn="your-database-url"
+  4. Start the server: inventario run --db-dsn="your-database-url"
+
+WARNING: Seeding may create duplicate data if run multiple times on the same database.
+Consider backing up your database before seeding if it contains important data.`,
 	RunE:  seedCommand,
 }
 
