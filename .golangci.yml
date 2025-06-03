@@ -243,26 +243,9 @@ linters:
       # Allow migration filenames to have numbers at the beginning
       - path: 'registry/postgres/migrations/.*\.go$'
         text: 'filename-format:'
-      - path: '(test\_entities|test\_simple)/.*\.go$'
-        text: 'var-naming:'
-      - path: 'ptah/examples/ast\_demo/.*\.go$'
-        linters:
-          - unused
-      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
-        text: 'use of `fmt\..*` forbidden by pattern'
-      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
-        linters:
-          - gocognit
-          - nestif
-          - gocyclo
-      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
-        text: 'deep-exit:'
       - path: 'cmd/.*\.go$'
         linters:
           - gochecknoinits
-      - path: 'integration/.*\.go$'
-        linters:
-          - unused
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'
