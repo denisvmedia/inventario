@@ -6,10 +6,6 @@ require github.com/denisvmedia/inventario/frontend v0.0.0
 
 replace github.com/denisvmedia/inventario/frontend => ../frontend
 
-require github.com/denisvmedia/inventario/ptah v0.0.0
-
-replace github.com/denisvmedia/inventario/ptah => ../ptah
-
 require (
 	github.com/bojanz/currency v1.3.1
 	github.com/frankban/quicktest v1.14.6
