@@ -1,4 +1,4 @@
-//-go:build build
+//go:build with_frontend
 
 package apiserver
 
