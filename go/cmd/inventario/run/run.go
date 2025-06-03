@@ -75,7 +75,7 @@ SERVER ENDPOINTS:
   • Health Check: http://localhost:3333/api/health
 
 The server runs until interrupted (Ctrl+C) and gracefully shuts down active connections.`,
-	RunE:  runCommand,
+	RunE: runCommand,
 }
 
 const (

@@ -42,18 +42,18 @@ FLAG DETAILS:
   --db-dsn (REQUIRED)
     Database connection string specifying which database to migrate.
     Unlike other commands, this flag has no default and must be provided.
-    
+
     Supported database types:
     • PostgreSQL: "postgres://user:password@host:port/database?sslmode=disable"
       - Requires PostgreSQL 12 or later
       - User must have CREATE TABLE, CREATE INDEX, and INSERT permissions
       - Database must already exist (migrations don't create databases)
-    
+
     • BoltDB: "boltdb://path/to/database.db"
       - Creates the database file if it doesn't exist
       - Requires write permissions to the target directory
       - Suitable for single-user deployments and development
-    
+
     • Memory: "memory://"
       - Creates temporary in-memory database
       - Data is lost when the process exits
@@ -92,7 +92,7 @@ SAFETY NOTES:
   • Some migrations may be irreversible (e.g., dropping columns)
   • Always test migrations on a copy of production data first
   • Consider maintenance windows for production migration runs`,
-	RunE:  migrateCommand,
+	RunE: migrateCommand,
 }
 
 const (

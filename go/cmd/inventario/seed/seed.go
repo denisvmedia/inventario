@@ -64,13 +64,13 @@ PREREQUISITES:
 
 WORKFLOW:
   1. Create/prepare your database
-  2. Run migrations: inventario migrate --db-dsn="your-database-url"  
+  2. Run migrations: inventario migrate --db-dsn="your-database-url"
   3. Seed with data: inventario seed --db-dsn="your-database-url"
   4. Start the server: inventario run --db-dsn="your-database-url"
 
 WARNING: Seeding may create duplicate data if run multiple times on the same database.
 Consider backing up your database before seeding if it contains important data.`,
-	RunE:  seedCommand,
+	RunE: seedCommand,
 }
 
 const (

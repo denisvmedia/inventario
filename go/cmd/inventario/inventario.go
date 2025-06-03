@@ -18,7 +18,7 @@ const (
 var rootCmd = &cobra.Command{
 	Use:   "inventario",
 	Short: "Inventario application",
-	Long: `Inventario is a comprehensive personal inventory management application 
+	Long: `Inventario is a comprehensive personal inventory management application
 designed to help you organize, track, and manage your personal belongings.
 
 The application provides a web-based interface for managing your inventory items,
@@ -51,7 +51,7 @@ DATABASE SUPPORT:
   • In-memory: memory:// (for testing and development)
 
 Use "inventario [command] --help" for detailed information about each command.`,
-	Args:  cobra.NoArgs, // Disallow unknown subcommands
+	Args: cobra.NoArgs, // Disallow unknown subcommands
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		return cmd.Help()
 	},
