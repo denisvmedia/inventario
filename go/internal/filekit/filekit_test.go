@@ -3,7 +3,6 @@ package filekit_test
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -65,9 +64,7 @@ func TestUploadFileNameWithCurrentTime(t *testing.T) {
 	now := time.Now().Unix()
 	c.Assert(result, qt.Contains, fmt.Sprintf("%v", now))
 
-	// Verify that the file extension is preserved
+	// Verify that the generated name ends with the original extension
 	ext := filepath.Ext(fileName)
-	c.Assert(ext, qt.Satisfies, func(s string) bool {
-		return strings.HasSuffix(fileName, s)
-	})
+	c.Assert(filepath.Ext(result), qt.Equals, ext)
 }
