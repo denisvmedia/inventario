@@ -54,13 +54,13 @@ build: build-frontend build-backend
 # Build the Go backend
 .PHONY: build-backend
 build-backend:
-        $(call MKDIR,$(BIN_DIR))
-        $(CD) $(BACKEND_DIR) && $(GO_CMD) build -tags with_frontend -o ../$(BINARY_PATH) .
+	$(call MKDIR,$(BIN_DIR))
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -tags with_frontend -o ../$(BINARY_PATH) .
 
 .PHONY: build-backend-nofe
 build-backend-nofe:
-        $(call MKDIR,$(BIN_DIR))
-        $(CD) $(BACKEND_DIR) && $(GO_CMD) build -o ../$(BINARY_PATH) .
+	$(call MKDIR,$(BIN_DIR))
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -o ../$(BINARY_PATH) .
 
 # Build the frontend
 .PHONY: build-frontend
@@ -253,8 +253,8 @@ ifeq ($(OS),Windows_NT)
 	@echo Available commands:
 	@echo   all              - Build everything (default)
 	@echo   build            - Build backend and frontend
-       @echo   build-backend    - Build backend with embedded frontend
-       @echo   build-backend-nofe - Build backend without frontend
+	@echo   build-backend    - Build backend with embedded frontend
+	@echo   build-backend-nofe - Build backend without frontend
 	@echo   build-frontend   - Build only the frontend
 	@echo   run-backend      - Run the backend server
 	@echo   run-backend-postgres - Run the backend server with PostgreSQL
@@ -292,8 +292,8 @@ else
 	@echo "Available commands:"
 	@echo "  all              - Build everything (default)"
 	@echo "  build            - Build backend and frontend"
-       @echo "  build-backend    - Build backend with embedded frontend"
-       @echo "  build-backend-nofe - Build backend without frontend"
+	@echo "  build-backend    - Build backend with embedded frontend"
+	@echo "  build-backend-nofe - Build backend without frontend"
 	@echo "  build-frontend   - Build only the frontend"
 	@echo "  run-backend      - Run the backend server"
 	@echo "  run-backend-postgres - Run the backend server with PostgreSQL"
