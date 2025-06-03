@@ -57,8 +57,8 @@ github.com/AzureAD/microsoft-authentication-library-for-go v1.4.2 h1:oygO0locgZJ
 github.com/AzureAD/microsoft-authentication-library-for-go v1.4.2/go.mod h1:wP83P5OoQ5p6ip3ScPr0BAq0BvuPAvacpEuSzyouqAI=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
-github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0 h1:ErKg/3iS1AKcTkf3yixlZ54f9U1rljCkQyEXWUnIUxc=
-github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0/go.mod h1:yAZHSGnqScoU556rBOVkwLze6WP5N+U11RHuWaGVxwY=
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.28.0 h1:VaFXBL0NJpiFBtw4aVJpKHeKULVTcHpD+/G0ibZkcBw=
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.28.0/go.mod h1:JXkPazkEc/dZTHzOlzv2vT1DlpWSTbSLmu/1KY6Ly0I=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.52.0 h1:QFgWzcdmJlgEAwJz/zePYVJQxfoJGRtgIqZfIUFg5oQ=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.52.0/go.mod h1:ayYHuYU7iNcNtEs1K9k6D/Bju7u1VEHMQm5qQ1n3GtM=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.52.0 h1:0l8ynskVvq1dvIn5vJbFMf/a/3TqFpRmCMrruFbzlvk=
