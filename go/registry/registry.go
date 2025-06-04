@@ -88,6 +88,10 @@ type SettingsRegistry interface {
 	Patch(ctx context.Context, configfield string, value any) error
 }
 
+type ExportRegistry interface {
+	Registry[models.Export]
+}
+
 type Set struct {
 	LocationRegistry  LocationRegistry
 	AreaRegistry      AreaRegistry
@@ -96,6 +100,7 @@ type Set struct {
 	InvoiceRegistry   InvoiceRegistry
 	ManualRegistry    ManualRegistry
 	SettingsRegistry  SettingsRegistry
+	ExportRegistry    ExportRegistry
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {
@@ -109,6 +114,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.ManualRegistry, validation.Required),
 		validation.Field(&s.InvoiceRegistry, validation.Required),
 		validation.Field(&s.SettingsRegistry, validation.Required),
+		validation.Field(&s.ExportRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)
