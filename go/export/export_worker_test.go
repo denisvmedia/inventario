@@ -24,11 +24,11 @@ func TestNewExportWorker(t *testing.T) {
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	worker := NewExportWorker(exportService, registrySet)
 
-	c.Assert(worker, qt.Not(qt.IsNil))
+	c.Assert(worker, qt.IsNotNil)
 	c.Assert(worker.exportService, qt.Equals, exportService)
 	c.Assert(worker.registrySet, qt.Equals, registrySet)
 	c.Assert(worker.pollInterval, qt.Equals, 10*time.Second)
-	c.Assert(worker.stopCh, qt.Not(qt.IsNil))
+	c.Assert(worker.stopCh, qt.IsNotNil)
 	c.Assert(worker.isRunning, qt.IsFalse)
 }
 

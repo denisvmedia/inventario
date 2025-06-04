@@ -34,7 +34,7 @@ func TestNewExportService(t *testing.T) {
 
 	service := NewExportService(registrySet, exportDir, uploadLocation)
 
-	c.Assert(service, qt.Not(qt.IsNil))
+	c.Assert(service, qt.IsNotNil)
 	c.Assert(service.registrySet, qt.Equals, registrySet)
 	c.Assert(service.exportDir, qt.Equals, exportDir)
 	c.Assert(service.uploadLocation, qt.Equals, uploadLocation)
