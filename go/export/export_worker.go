@@ -10,6 +10,8 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+const defaultPollInterval = 10 * time.Second
+
 // ExportWorker processes export requests in the background
 type ExportWorker struct {
 	exportService   *ExportService
@@ -27,7 +29,7 @@ func NewExportWorker(exportService *ExportService, registrySet *registry.Set) *E
 	return &ExportWorker{
 		exportService: exportService,
 		registrySet:   registrySet,
-		pollInterval:  10 * time.Second, // Check for new exports every 10 seconds
+		pollInterval:  defaultPollInterval, // Check for new exports every 10 seconds
 		stopCh:        make(chan struct{}),
 	}
 }
