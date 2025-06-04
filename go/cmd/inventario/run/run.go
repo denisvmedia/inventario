@@ -16,7 +16,7 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/internal"
+	"github.com/denisvmedia/inventario/export"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
@@ -113,8 +113,8 @@ func runCommand(_ *cobra.Command, _ []string) error {
 
 	// Start export worker
 	exportDir := runFlags[exportDirFlag].GetString()
-	exportService := internal.NewExportService(registrySet, exportDir, params.UploadLocation)
-	exportWorker := internal.NewExportWorker(exportService, registrySet)
+	exportService := export.NewExportService(registrySet, exportDir, params.UploadLocation)
+	exportWorker := export.NewExportWorker(exportService, registrySet)
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

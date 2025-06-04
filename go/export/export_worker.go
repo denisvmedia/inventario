@@ -1,4 +1,4 @@
-package internal
+package export
 
 import (
 	"context"
@@ -19,6 +19,7 @@ type ExportWorker struct {
 	wg              sync.WaitGroup
 	isRunning       bool
 	mu              sync.RWMutex
+	stopped         bool
 }
 
 // NewExportWorker creates a new export worker
@@ -45,6 +46,11 @@ func (w *ExportWorker) Start(ctx context.Context) {
 
 	go func() {
 		defer w.wg.Done()
+		defer func() {
+			w.mu.Lock()
+			w.isRunning = false
+			w.mu.Unlock()
+		}()
 		w.run(ctx)
 	}()
 
@@ -56,15 +62,18 @@ func (w *ExportWorker) Stop() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if !w.isRunning {
+	if !w.isRunning || w.stopped {
 		return
 	}
 
+	w.stopped = true
 	close(w.stopCh)
-	w.wg.Wait()
 	w.isRunning = false
 
-	log.Println("Export worker stopped")
+	go func() {
+		w.wg.Wait()
+		log.Println("Export worker stopped")
+	}()
 }
 
 // IsRunning returns whether the worker is currently running
