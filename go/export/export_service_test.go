@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -89,7 +90,7 @@ func TestInventoryDataXMLStructure(t *testing.T) {
 	}
 
 	for _, expected := range expectedElements {
-		if !contains(xmlStr, expected) {
+		if !strings.Contains(xmlStr, expected) {
 			t.Errorf("Expected XML to contain %q, but it didn't. XML:\n%s", expected, xmlStr)
 		}
 	}
@@ -116,11 +117,7 @@ func TestExportServiceProcessExport_InvalidID(t *testing.T) {
 
 func TestExportServiceProcessExport_Success(t *testing.T) {
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -264,11 +261,11 @@ func TestGenerateExport(t *testing.T) {
 	// Check file name format
 	expectedPrefix := fmt.Sprintf("export_%s_", export.Type)
 	fileName := filepath.Base(filePath)
-	if !contains(fileName, expectedPrefix) {
+	if !strings.Contains(fileName, expectedPrefix) {
 		t.Errorf("Expected file name to contain %s, got %s", expectedPrefix, fileName)
 	}
 
-	if !contains(fileName, ".xml") {
+	if !strings.Contains(fileName, ".xml") {
 		t.Errorf("Expected file name to have .xml extension, got %s", fileName)
 	}
 
@@ -276,16 +273,3 @@ func TestGenerateExport(t *testing.T) {
 	os.Remove(filePath)
 }
 
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
-		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		func() bool {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
-			return false
-		}())))
-}
