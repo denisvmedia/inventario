@@ -1,6 +1,7 @@
 package export
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -136,7 +137,7 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 	c.Assert(updatedExport.Status == models.ExportStatusCompleted || updatedExport.Status == models.ExportStatusFailed, qt.IsTrue)
 }
 
-func TestGenerateXMLData(t *testing.T) {
+func TestStreamXMLExport(t *testing.T) {
 	c := qt.New(t)
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
@@ -165,16 +166,20 @@ func TestGenerateXMLData(t *testing.T) {
 				IncludeFileData: false,
 			}
 
-			data, err := service.generateXMLData(ctx, export)
+			var buf bytes.Buffer
+			err := service.streamXMLExport(ctx, export, &buf)
 			c.Assert(err, qt.IsNil)
-			c.Assert(data, qt.IsNotNil)
-			c.Assert(data.ExportType, qt.Equals, string(tc.exportType))
-			c.Assert(data.ExportDate, qt.Not(qt.Equals), "")
+			
+			xmlContent := buf.String()
+			c.Assert(xmlContent, qt.Contains, `<?xml version="1.0" encoding="UTF-8"?>`)
+			c.Assert(xmlContent, qt.Contains, fmt.Sprintf(`export_type="%s"`, tc.exportType))
+			c.Assert(xmlContent, qt.Contains, `<inventory`)
+			c.Assert(xmlContent, qt.Contains, `</inventory>`)
 		})
 	}
 }
 
-func TestGenerateXMLData_InvalidType(t *testing.T) {
+func TestStreamXMLExport_InvalidType(t *testing.T) {
 	c := qt.New(t)
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
@@ -189,7 +194,8 @@ func TestGenerateXMLData_InvalidType(t *testing.T) {
 		IncludeFileData: false,
 	}
 
-	_, err := service.generateXMLData(ctx, export)
+	var buf bytes.Buffer
+	err := service.streamXMLExport(ctx, export, &buf)
 	c.Assert(err, qt.IsNotNil)
 }
 

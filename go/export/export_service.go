@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,158 +151,208 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 	filename := fmt.Sprintf("export_%s_%s.xml", strings.ToLower(string(export.Type)), timestamp)
 	filePath := filepath.Join(s.exportDir, filename)
 
-	// Generate XML data
-	data, err := s.generateXMLData(ctx, export)
-	if err != nil {
-		return "", errkit.Wrap(err, "failed to generate XML data")
-	}
-
-	// Write XML to file
+	// Create file
 	file, err := os.Create(filePath)
 	if err != nil {
 		return "", errkit.Wrap(err, "failed to create export file")
 	}
 	defer file.Close()
 
-	// Write XML header
-	file.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-
-	// Marshal and write XML data
-	encoder := xml.NewEncoder(file)
-	encoder.Indent("", "  ")
-	if err := encoder.Encode(data); err != nil {
-		return "", errkit.Wrap(err, "failed to write XML data")
+	// Stream XML generation
+	if err := s.streamXMLExport(ctx, export, file); err != nil {
+		return "", errkit.Wrap(err, "failed to generate XML export")
 	}
 
 	return filePath, nil
 }
 
-// generateXMLData generates the XML data structure based on export type
-func (s *ExportService) generateXMLData(ctx context.Context, export models.Export) (*InventoryData, error) {
-	data := &InventoryData{
-		ExportDate: time.Now().Format("2006-01-02T15:04:05Z"),
-		ExportType: string(export.Type),
+// streamXMLExport streams XML data directly to the file writer
+func (s *ExportService) streamXMLExport(ctx context.Context, export models.Export, writer io.Writer) error {
+	// Write XML header
+	if _, err := writer.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")); err != nil {
+		return errkit.Wrap(err, "failed to write XML header")
+	}
+
+	// Start root element
+	exportDate := time.Now().Format("2006-01-02T15:04:05Z")
+	rootStart := fmt.Sprintf(`<inventory export_date="%s" export_type="%s">%s`, exportDate, string(export.Type), "\n")
+	if _, err := writer.Write([]byte(rootStart)); err != nil {
+		return errkit.Wrap(err, "failed to write root element")
 	}
 
 	switch export.Type {
 	case models.ExportTypeFullDatabase:
-		return s.exportFullDatabase(ctx, data, export.IncludeFileData)
+		if err := s.streamFullDatabase(ctx, writer, export.IncludeFileData); err != nil {
+			return errkit.Wrap(err, "failed to stream full database")
+		}
 	case models.ExportTypeLocations:
-		return s.exportLocations(ctx, data)
+		if err := s.streamLocations(ctx, writer); err != nil {
+			return errkit.Wrap(err, "failed to stream locations")
+		}
 	case models.ExportTypeAreas:
-		return s.exportAreas(ctx, data)
+		if err := s.streamAreas(ctx, writer); err != nil {
+			return errkit.Wrap(err, "failed to stream areas")
+		}
 	case models.ExportTypeCommodities:
-		return s.exportCommodities(ctx, data, export.IncludeFileData)
+		if err := s.streamCommodities(ctx, writer, export.IncludeFileData); err != nil {
+			return errkit.Wrap(err, "failed to stream commodities")
+		}
 	case models.ExportTypeSelectedItems:
-		return s.exportSelectedItems(ctx, data, export.SelectedItemIDs, export.IncludeFileData)
+		if err := s.streamSelectedItems(ctx, writer, export.SelectedItemIDs, export.IncludeFileData); err != nil {
+			return errkit.Wrap(err, "failed to stream selected items")
+		}
 	default:
-		return nil, errkit.NewEquivalent(fmt.Sprintf("unsupported export type: %s", export.Type), nil)
+		return errkit.NewEquivalent(fmt.Sprintf("unsupported export type: %s", export.Type), nil)
 	}
+
+	// End root element
+	if _, err := writer.Write([]byte("</inventory>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write closing root element")
+	}
+
+	return nil
 }
 
-func (s *ExportService) exportFullDatabase(ctx context.Context, data *InventoryData, includeFileData bool) (*InventoryData, error) {
-	// Export locations
+// streamFullDatabase streams all database content to the writer
+func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer, includeFileData bool) error {
+	if err := s.streamLocations(ctx, writer); err != nil {
+		return errkit.Wrap(err, "failed to stream locations")
+	}
+	if err := s.streamAreas(ctx, writer); err != nil {
+		return errkit.Wrap(err, "failed to stream areas")
+	}
+	if err := s.streamCommodities(ctx, writer, includeFileData); err != nil {
+		return errkit.Wrap(err, "failed to stream commodities")
+	}
+	return nil
+}
+
+// streamLocations streams locations to the writer
+func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer) error {
 	locations, err := s.registrySet.LocationRegistry.List(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get locations")
+		return errkit.Wrap(err, "failed to get locations")
 	}
+
+	if _, err := writer.Write([]byte("  <locations>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write locations start tag")
+	}
+
+	encoder := xml.NewEncoder(writer)
+	encoder.Indent("    ", "  ")
+
 	for _, loc := range locations {
-		data.Locations = append(data.Locations, &Location{
+		xmlLoc := &Location{
 			ID:      loc.ID,
 			Name:    loc.Name,
 			Address: loc.Address,
-		})
+		}
+		if err := encoder.Encode(xmlLoc); err != nil {
+			return errkit.Wrap(err, "failed to encode location")
+		}
 	}
 
-	// Export areas
+	if _, err := writer.Write([]byte("  </locations>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write locations end tag")
+	}
+
+	return nil
+}
+
+// streamAreas streams areas to the writer
+func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer) error {
 	areas, err := s.registrySet.AreaRegistry.List(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get areas")
+		return errkit.Wrap(err, "failed to get areas")
 	}
+
+	if _, err := writer.Write([]byte("  <areas>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write areas start tag")
+	}
+
+	encoder := xml.NewEncoder(writer)
+	encoder.Indent("    ", "  ")
+
 	for _, area := range areas {
-		data.Areas = append(data.Areas, &Area{
+		xmlArea := &Area{
 			ID:         area.ID,
 			Name:       area.Name,
 			LocationID: area.LocationID,
-		})
+		}
+		if err := encoder.Encode(xmlArea); err != nil {
+			return errkit.Wrap(err, "failed to encode area")
+		}
 	}
 
-	// Export commodities
+	if _, err := writer.Write([]byte("  </areas>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write areas end tag")
+	}
+
+	return nil
+}
+
+// streamCommodities streams commodities to the writer
+func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, includeFileData bool) error {
 	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get commodities")
+		return errkit.Wrap(err, "failed to get commodities")
 	}
+
+	if _, err := writer.Write([]byte("  <commodities>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write commodities start tag")
+	}
+
+	encoder := xml.NewEncoder(writer)
+	encoder.Indent("    ", "  ")
+
 	for _, commodity := range commodities {
 		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to convert commodity to XML")
+			return errkit.Wrap(err, "failed to convert commodity to XML")
 		}
-		data.Commodities = append(data.Commodities, xmlCommodity)
+		if err := encoder.Encode(xmlCommodity); err != nil {
+			return errkit.Wrap(err, "failed to encode commodity")
+		}
 	}
 
-	return data, nil
+	if _, err := writer.Write([]byte("  </commodities>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write commodities end tag")
+	}
+
+	return nil
 }
 
-func (s *ExportService) exportLocations(ctx context.Context, data *InventoryData) (*InventoryData, error) {
-	locations, err := s.registrySet.LocationRegistry.List(ctx)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get locations")
+// streamSelectedItems streams selected commodities to the writer
+func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, selectedItemIDs []string, includeFileData bool) error {
+	if _, err := writer.Write([]byte("  <commodities>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write commodities start tag")
 	}
-	for _, loc := range locations {
-		data.Locations = append(data.Locations, &Location{
-			ID:      loc.ID,
-			Name:    loc.Name,
-			Address: loc.Address,
-		})
-	}
-	return data, nil
-}
 
-func (s *ExportService) exportAreas(ctx context.Context, data *InventoryData) (*InventoryData, error) {
-	areas, err := s.registrySet.AreaRegistry.List(ctx)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get areas")
-	}
-	for _, area := range areas {
-		data.Areas = append(data.Areas, &Area{
-			ID:         area.ID,
-			Name:       area.Name,
-			LocationID: area.LocationID,
-		})
-	}
-	return data, nil
-}
+	encoder := xml.NewEncoder(writer)
+	encoder.Indent("    ", "  ")
 
-func (s *ExportService) exportCommodities(ctx context.Context, data *InventoryData, includeFileData bool) (*InventoryData, error) {
-	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get commodities")
-	}
-	for _, commodity := range commodities {
+	for _, itemID := range selectedItemIDs {
+		commodity, err := s.registrySet.CommodityRegistry.Get(ctx, itemID)
+		if err != nil {
+			continue // Skip items that can't be found
+		}
+
 		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to convert commodity to XML")
+			return errkit.Wrap(err, "failed to convert commodity to XML")
 		}
-		data.Commodities = append(data.Commodities, xmlCommodity)
+		if err := encoder.Encode(xmlCommodity); err != nil {
+			return errkit.Wrap(err, "failed to encode commodity")
+		}
 	}
-	return data, nil
+
+	if _, err := writer.Write([]byte("  </commodities>\n")); err != nil {
+		return errkit.Wrap(err, "failed to write commodities end tag")
+	}
+
+	return nil
 }
 
-func (s *ExportService) exportSelectedItems(ctx context.Context, data *InventoryData, selectedIDs []string, includeFileData bool) (*InventoryData, error) {
-	for _, id := range selectedIDs {
-		commodity, err := s.registrySet.CommodityRegistry.Get(ctx, id)
-		if err != nil {
-			// Skip items that don't exist
-			continue
-		}
-		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to convert commodity to XML")
-		}
-		data.Commodities = append(data.Commodities, xmlCommodity)
-	}
-	return data, nil
-}
 
 func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *models.Commodity, includeFileData bool) (*Commodity, error) {
 	xmlCommodity := &Commodity{

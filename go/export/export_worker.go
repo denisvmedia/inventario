@@ -5,12 +5,17 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
+
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
-const defaultPollInterval = 10 * time.Second
+const (
+	defaultPollInterval      = 10 * time.Second
+	maxConcurrentExports     = 3 // Limit concurrent export processing
+)
 
 // ExportWorker processes export requests in the background
 type ExportWorker struct {
@@ -22,6 +27,7 @@ type ExportWorker struct {
 	isRunning     bool
 	mu            sync.RWMutex
 	stopped       bool
+	semaphore     *semaphore.Weighted
 }
 
 // NewExportWorker creates a new export worker
@@ -31,6 +37,7 @@ func NewExportWorker(exportService *ExportService, registrySet *registry.Set) *E
 		registrySet:   registrySet,
 		pollInterval:  defaultPollInterval, // Check for new exports every 10 seconds
 		stopCh:        make(chan struct{}),
+		semaphore:     semaphore.NewWeighted(maxConcurrentExports),
 	}
 }
 
@@ -106,24 +113,30 @@ func (w *ExportWorker) run(ctx context.Context) {
 func (w *ExportWorker) processPendingExports(ctx context.Context) {
 	exports, err := w.registrySet.ExportRegistry.List(ctx)
 	if err != nil {
-		log.Printf("Failed to get exports: %v", err)
+		log.WithError(err).Error("Failed to get exports")
 		return
 	}
 
 	for _, export := range exports {
 		if export.Status == models.ExportStatusPending {
-			go w.processExport(ctx, export.ID)
+			// Use semaphore to limit concurrent goroutines
+			if w.semaphore.TryAcquire(1) {
+				go func(exportID string) {
+					defer w.semaphore.Release(1)
+					w.processExport(ctx, exportID)
+				}(export.ID)
+			}
 		}
 	}
 }
 
 // processExport processes a single export request
 func (w *ExportWorker) processExport(ctx context.Context, exportID string) {
-	log.Printf("Processing export: %s", exportID)
+	log.WithField("export_id", exportID).Info("Processing export")
 
 	if err := w.exportService.ProcessExport(ctx, exportID); err != nil {
-		log.Printf("Failed to process export %s: %v", exportID, err)
+		log.WithError(err).WithField("export_id", exportID).Error("Failed to process export")
 	} else {
-		log.Printf("Successfully processed export: %s", exportID)
+		log.WithField("export_id", exportID).Info("Successfully processed export")
 	}
 }
