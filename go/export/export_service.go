@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -102,14 +103,14 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	// Get the export request
 	export, err := s.registrySet.ExportRegistry.Get(ctx, exportID)
 	if err != nil {
-		return fmt.Errorf("failed to get export: %w", err)
+		return errkit.Wrap(err, "failed to get export")
 	}
 
 	// Update status to in_progress
 	export.Status = models.ExportStatusInProgress
 	_, err = s.registrySet.ExportRegistry.Update(ctx, *export)
 	if err != nil {
-		return fmt.Errorf("failed to update export status: %w", err)
+		return errkit.Wrap(err, "failed to update export status")
 	}
 
 	// Generate the export
@@ -119,7 +120,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
 		s.registrySet.ExportRegistry.Update(ctx, *export)
-		return fmt.Errorf("failed to generate export: %w", err)
+		return errkit.Wrap(err, "failed to generate export")
 	}
 
 	// Update status to completed
@@ -131,7 +132,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 
 	_, err = s.registrySet.ExportRegistry.Update(ctx, *export)
 	if err != nil {
-		return fmt.Errorf("failed to update export completion: %w", err)
+		return errkit.Wrap(err, "failed to update export completion")
 	}
 
 	return nil
@@ -141,7 +142,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 func (s *ExportService) generateExport(ctx context.Context, export models.Export) (string, error) {
 	// Create export directory if it doesn't exist
 	if err := os.MkdirAll(s.exportDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create export directory: %w", err)
+		return "", errkit.Wrap(err, "failed to create export directory")
 	}
 
 	// Generate filename
@@ -152,13 +153,13 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 	// Generate XML data
 	data, err := s.generateXMLData(ctx, export)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate XML data: %w", err)
+		return "", errkit.Wrap(err, "failed to generate XML data")
 	}
 
 	// Write XML to file
 	file, err := os.Create(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create export file: %w", err)
+		return "", errkit.Wrap(err, "failed to create export file")
 	}
 	defer file.Close()
 
@@ -169,7 +170,7 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 	encoder := xml.NewEncoder(file)
 	encoder.Indent("", "  ")
 	if err := encoder.Encode(data); err != nil {
-		return "", fmt.Errorf("failed to write XML data: %w", err)
+		return "", errkit.Wrap(err, "failed to write XML data")
 	}
 
 	return filePath, nil
@@ -202,7 +203,7 @@ func (s *ExportService) exportFullDatabase(ctx context.Context, data *InventoryD
 	// Export locations
 	locations, err := s.registrySet.LocationRegistry.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get locations: %w", err)
+		return nil, errkit.Wrap(err, "failed to get locations")
 	}
 	for _, loc := range locations {
 		data.Locations = append(data.Locations, &Location{
@@ -215,7 +216,7 @@ func (s *ExportService) exportFullDatabase(ctx context.Context, data *InventoryD
 	// Export areas
 	areas, err := s.registrySet.AreaRegistry.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get areas: %w", err)
+		return nil, errkit.Wrap(err, "failed to get areas")
 	}
 	for _, area := range areas {
 		data.Areas = append(data.Areas, &Area{
@@ -228,12 +229,12 @@ func (s *ExportService) exportFullDatabase(ctx context.Context, data *InventoryD
 	// Export commodities
 	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commodities: %w", err)
+		return nil, errkit.Wrap(err, "failed to get commodities")
 	}
 	for _, commodity := range commodities {
 		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert commodity to XML: %w", err)
+			return nil, errkit.Wrap(err, "failed to convert commodity to XML")
 		}
 		data.Commodities = append(data.Commodities, xmlCommodity)
 	}
@@ -244,7 +245,7 @@ func (s *ExportService) exportFullDatabase(ctx context.Context, data *InventoryD
 func (s *ExportService) exportLocations(ctx context.Context, data *InventoryData) (*InventoryData, error) {
 	locations, err := s.registrySet.LocationRegistry.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get locations: %w", err)
+		return nil, errkit.Wrap(err, "failed to get locations")
 	}
 	for _, loc := range locations {
 		data.Locations = append(data.Locations, &Location{
@@ -259,7 +260,7 @@ func (s *ExportService) exportLocations(ctx context.Context, data *InventoryData
 func (s *ExportService) exportAreas(ctx context.Context, data *InventoryData) (*InventoryData, error) {
 	areas, err := s.registrySet.AreaRegistry.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get areas: %w", err)
+		return nil, errkit.Wrap(err, "failed to get areas")
 	}
 	for _, area := range areas {
 		data.Areas = append(data.Areas, &Area{
@@ -274,12 +275,12 @@ func (s *ExportService) exportAreas(ctx context.Context, data *InventoryData) (*
 func (s *ExportService) exportCommodities(ctx context.Context, data *InventoryData, includeFileData bool) (*InventoryData, error) {
 	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commodities: %w", err)
+		return nil, errkit.Wrap(err, "failed to get commodities")
 	}
 	for _, commodity := range commodities {
 		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert commodity to XML: %w", err)
+			return nil, errkit.Wrap(err, "failed to convert commodity to XML")
 		}
 		data.Commodities = append(data.Commodities, xmlCommodity)
 	}
@@ -295,7 +296,7 @@ func (s *ExportService) exportSelectedItems(ctx context.Context, data *Inventory
 		}
 		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert commodity to XML: %w", err)
+			return nil, errkit.Wrap(err, "failed to convert commodity to XML")
 		}
 		data.Commodities = append(data.Commodities, xmlCommodity)
 	}
