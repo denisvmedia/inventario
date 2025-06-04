@@ -26,6 +26,9 @@
 /bin/*
 coverage
 
+# Export files
+/exports/
+
 # Docker volumes and data
 /.docker/
 .env

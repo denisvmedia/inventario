@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
+
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -24,24 +26,17 @@ func newTestRegistrySet() *registry.Set {
 }
 
 func TestNewExportService(t *testing.T) {
+	c := qt.New(t)
 	registrySet := &registry.Set{}
 	exportDir := "/tmp/exports"
 	uploadLocation := "/tmp/uploads"
 
 	service := NewExportService(registrySet, exportDir, uploadLocation)
 
-	if service == nil {
-		t.Fatal("NewExportService returned nil")
-	}
-	if service.registrySet != registrySet {
-		t.Errorf("Expected registrySet to be %v, got %v", registrySet, service.registrySet)
-	}
-	if service.exportDir != exportDir {
-		t.Errorf("Expected exportDir to be %s, got %s", exportDir, service.exportDir)
-	}
-	if service.uploadLocation != uploadLocation {
-		t.Errorf("Expected uploadLocation to be %s, got %s", uploadLocation, service.uploadLocation)
-	}
+	c.Assert(service, qt.Not(qt.IsNil))
+	c.Assert(service.registrySet, qt.Equals, registrySet)
+	c.Assert(service.exportDir, qt.Equals, exportDir)
+	c.Assert(service.uploadLocation, qt.Equals, uploadLocation)
 }
 
 func TestInventoryDataXMLStructure(t *testing.T) {
