@@ -344,11 +344,11 @@ func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *mo
 	}
 
 	// Convert URLs
-	for _, url := range commodity.URLs {
-		if url != nil {
+	for _, u := range commodity.URLs {
+		if u != nil {
 			xmlCommodity.URLs = append(xmlCommodity.URLs, &URL{
 				Name:  "", // URL model doesn't have a Name field
-				Value: url.String(),
+				Value: u.String(),
 			})
 		}
 	}

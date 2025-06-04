@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -89,14 +88,14 @@ func TestInventoryDataXMLStructure(t *testing.T) {
 	}
 
 	for _, expected := range expectedElements {
-		c.Assert(strings.Contains(xmlStr, expected), qt.IsTrue, qt.Commentf("Expected XML to contain %q, but it didn't. XML:\n%s", expected, xmlStr))
+		c.Assert(xmlStr, qt.Contains, expected)
 	}
 }
 
 func TestExportServiceProcessExport_InvalidID(t *testing.T) {
 	c := qt.New(t)
 	// Create a temporary directory for exports
-	tempDir := t.TempDir()
+	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -110,7 +109,7 @@ func TestExportServiceProcessExport_InvalidID(t *testing.T) {
 func TestExportServiceProcessExport_Success(t *testing.T) {
 	c := qt.New(t)
 	// Create a temporary directory for exports
-	tempDir := t.TempDir()
+	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -138,8 +137,9 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 }
 
 func TestGenerateXMLData(t *testing.T) {
+	c := qt.New(t)
 	// Create a temporary directory for exports
-	tempDir := t.TempDir()
+	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -177,7 +177,7 @@ func TestGenerateXMLData(t *testing.T) {
 func TestGenerateXMLData_InvalidType(t *testing.T) {
 	c := qt.New(t)
 	// Create a temporary directory for exports
-	tempDir := t.TempDir()
+	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -196,7 +196,7 @@ func TestGenerateXMLData_InvalidType(t *testing.T) {
 func TestGenerateExport(t *testing.T) {
 	c := qt.New(t)
 	// Create a temporary directory for exports
-	tempDir := t.TempDir()
+	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -219,8 +219,8 @@ func TestGenerateExport(t *testing.T) {
 	// Check file name format
 	expectedPrefix := fmt.Sprintf("export_%s_", export.Type)
 	fileName := filepath.Base(filePath)
-	c.Assert(strings.Contains(fileName, expectedPrefix), qt.IsTrue)
-	c.Assert(strings.Contains(fileName, ".xml"), qt.IsTrue)
+	c.Assert(fileName, qt.Contains, expectedPrefix)
+	c.Assert(fileName, qt.Contains, ".xml")
 
 	// Clean up
 	os.Remove(filePath)
