@@ -248,15 +248,17 @@ class="price-calculation-hint" :class="{
 
       <div class="form-group">
         <label for="purchaseDate">Purchase Date <span class="required-field">*</span></label>
-        <input
+        <DatePicker
           id="purchaseDate"
           v-model="formData.purchaseDate"
-          type="date"
-          required
-          class="form-control"
           :class="{ 'is-invalid': formErrors.purchaseDate }"
+          date-format="yy-mm-dd"
           placeholder="Select the date of purchase"
-        >
+          :max-date="new Date()"
+          class="w-100"
+          show-icon
+          :show-button-bar="true"
+        />
         <div v-if="formErrors.purchaseDate" class="error-message">{{ formErrors.purchaseDate }}</div>
       </div>
     </div>
@@ -317,6 +319,7 @@ import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES, COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { CURRENCY_CZK } from '@/constants/currencies'
 import Select from 'primevue/select'
+import DatePicker from 'primevue/datepicker'
 
 const props = defineProps({
   initialData: {
@@ -336,7 +339,7 @@ const props = defineProps({
       partNumbers: [],
       tags: [],
       status: COMMODITY_STATUS_IN_USE,
-      purchaseDate: new Date().toISOString().split('T')[0],
+      purchaseDate: new Date(),
       urls: [],
       comments: '',
       draft: false
@@ -397,7 +400,14 @@ const formErrors = reactive({
 // Watch for changes in initialData
 watch(() => props.initialData, (newValue) => {
   // Update formData with new values
-  Object.assign(formData, structuredClone(newValue))
+  const updatedData = structuredClone(newValue)
+  
+  // Convert purchase date string to Date object for DatePicker
+  if (updatedData.purchaseDate && typeof updatedData.purchaseDate === 'string') {
+    updatedData.purchaseDate = new Date(updatedData.purchaseDate)
+  }
+  
+  Object.assign(formData, updatedData)
 }, { deep: true })
 
 // Watch for areaFromUrl changes
@@ -508,12 +518,18 @@ const validateForm = () => {
   if (!formData.purchaseDate) {
     formErrors.purchaseDate = 'Purchase Date is required'
     isValid = false
-  }
-
-  const today = new Date().toISOString().split('T')[0]
-  if (formData.purchaseDate > today) {
-    formErrors.purchaseDate = 'Purchase Date cannot be in the future'
-    isValid = false
+  } else {
+    const purchaseDate = formData.purchaseDate instanceof Date 
+      ? formData.purchaseDate 
+      : new Date(formData.purchaseDate)
+    
+    const today = new Date()
+    today.setHours(23, 59, 59, 999) // Set to end of today
+    
+    if (purchaseDate > today) {
+      formErrors.purchaseDate = 'Purchase Date cannot be in the future'
+      isValid = false
+    }
   }
 
   if (formData.comments && formData.comments.length > 1000) {
@@ -537,8 +553,15 @@ const onSubmit = () => {
     console.log('CommodityForm: Form validation failed')
     return
   }
-  console.log('CommodityForm: Form validation passed, emitting submit event with data:', formData)
-  emit('submit', formData)
+  
+  // Convert Date object to string for API
+  const submissionData = { ...formData }
+  if (submissionData.purchaseDate instanceof Date) {
+    submissionData.purchaseDate = submissionData.purchaseDate.toISOString().split('T')[0]
+  }
+  
+  console.log('CommodityForm: Form validation passed, emitting submit event with data:', submissionData)
+  emit('submit', submissionData)
 }
 
 const onCancel = () => {
