@@ -1,6 +1,7 @@
 package run
 
 import (
+	"context"
 	"net/url"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/debug"
+	"github.com/denisvmedia/inventario/internal"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
@@ -31,6 +33,7 @@ const (
 	addrFlag           = "addr"
 	uploadLocationFlag = "upload-location"
 	dbDSNFlag          = "db-dsn"
+	exportDirFlag      = "export-dir"
 )
 
 func getFileURL(path string) string {
@@ -56,6 +59,11 @@ var runFlags = map[string]cobraflags.Flag{
 		Name:  dbDSNFlag,
 		Value: "memory://",
 		Usage: "Database DSN",
+	},
+	exportDirFlag: &cobraflags.StringFlag{
+		Name:  exportDirFlag,
+		Value: "exports",
+		Usage: "Directory to store export files",
 	},
 }
 
@@ -102,6 +110,18 @@ func runCommand(_ *cobra.Command, _ []string) error {
 		log.WithError(err).Error("Invalid server parameters")
 		return err
 	}
+
+	// Start export worker
+	exportDir := runFlags[exportDirFlag].GetString()
+	exportService := internal.NewExportService(registrySet, exportDir, params.UploadLocation)
+	exportWorker := internal.NewExportWorker(exportService, registrySet)
+	
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	
+	exportWorker.Start(ctx)
+	defer exportWorker.Stop()
+
 	errCh := srv.Run(bindAddr, apiserver.APIServer(params))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)

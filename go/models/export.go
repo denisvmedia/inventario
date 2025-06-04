@@ -85,7 +85,7 @@ type Export struct {
 	SelectedItemIDs   ValuerSlice[string] `json:"selected_item_ids" db:"selected_item_ids"`
 	FilePath          string             `json:"file_path" db:"file_path"`
 	CreatedDate       PDate              `json:"created_date" db:"created_date"`
-	CompletedDate     *PDate             `json:"completed_date" db:"completed_date"`
+	CompletedDate     PDate             `json:"completed_date" db:"completed_date"`
 	ErrorMessage      string             `json:"error_message" db:"error_message"`
 	Description       string             `json:"description" db:"description"`
 }

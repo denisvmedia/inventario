@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory export_date="2025-06-04T16:03:15Z" export_type="commodities">
+  <locations></locations>
+  <areas></areas>
+  <commodities>
+    <commodity id="25f704cf-3a1f-4ead-8050-47ce585a7bf2">
+      <commodity_name>Smart TV</commodity_name>
+      <short_name>TV</short_name>
+      <type>electronics</type>
+      <area_id>024739eb-ad60-4c57-81ee-a1d68b99e6c6</area_id>
+      <count>1</count>
+      <original_price>1299.99</original_price>
+      <original_price_currency>USD</original_price_currency>
+      <converted_original_price>29899.77</converted_original_price>
+      <current_price>899.99</current_price>
+      <serial_number>TV123456789</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>electronics</tag>
+        <tag>entertainment</tag>
+      </tags>
+      <status>in_use</status>
+      <purchase_date>2022-01-15</purchase_date>
+      <registered_date>2022-01-16</registered_date>
+      <urls></urls>
+      <comments>65-inch 4K Smart TV</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="ca58575d-4807-4eaf-8b8f-0c56138932c2">
+      <commodity_name>Sofa</commodity_name>
+      <short_name>Sofa</short_name>
+      <type>furniture</type>
+      <area_id>024739eb-ad60-4c57-81ee-a1d68b99e6c6</area_id>
+      <count>1</count>
+      <original_price>899.99</original_price>
+      <original_price_currency>USD</original_price_currency>
+      <converted_original_price>20699.77</converted_original_price>
+      <current_price>699.99</current_price>
+      <serial_number>SF987654321</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>furniture</tag>
+        <tag>living room</tag>
+      </tags>
+      <status>sold</status>
+      <purchase_date>2021-11-20</purchase_date>
+      <registered_date>2021-11-25</registered_date>
+      <urls></urls>
+      <comments>3-seat sectional sofa</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="e12e80f6-b3f3-4488-bb45-c2165b12344c">
+      <commodity_name>Refrigerator</commodity_name>
+      <short_name>Fridge</short_name>
+      <type>white_goods</type>
+      <area_id>0020437a-b874-4730-b36d-8e2c1e295305</area_id>
+      <count>1</count>
+      <original_price>1499.99</original_price>
+      <original_price_currency>EUR</original_price_currency>
+      <converted_original_price>37499.75</converted_original_price>
+      <current_price>27599.77</current_price>
+      <serial_number>RF123456789</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>appliance</tag>
+        <tag>kitchen</tag>
+      </tags>
+      <status>lost</status>
+      <purchase_date>2022-03-10</purchase_date>
+      <registered_date>2022-03-15</registered_date>
+      <urls></urls>
+      <comments>French door refrigerator with ice maker</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="51dabbb6-081a-4248-bf8a-a49061e7977c">
+      <commodity_name>Microwave Oven</commodity_name>
+      <short_name>Microwave</short_name>
+      <type>white_goods</type>
+      <area_id>0020437a-b874-4730-b36d-8e2c1e295305</area_id>
+      <count>1</count>
+      <original_price>199.99</original_price>
+      <original_price_currency>USD</original_price_currency>
+      <converted_original_price>4599.77</converted_original_price>
+      <current_price>3449.77</current_price>
+      <serial_number>MW987654321</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>appliance</tag>
+        <tag>kitchen</tag>
+      </tags>
+      <status>disposed</status>
+      <purchase_date>2022-02-05</purchase_date>
+      <registered_date>2022-02-10</registered_date>
+      <urls></urls>
+      <comments>1100W countertop microwave</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="ca12669f-ae4d-4b68-9907-0ed0aa265a30">
+      <commodity_name>Bed Frame</commodity_name>
+      <short_name>Bed</short_name>
+      <type>furniture</type>
+      <area_id>aec228a1-64f6-4f87-bac9-d9dea1d50f01</area_id>
+      <count>1</count>
+      <original_price>599.99</original_price>
+      <original_price_currency>USD</original_price_currency>
+      <converted_original_price>13799.77</converted_original_price>
+      <current_price>11499.77</current_price>
+      <serial_number>BF123456789</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>furniture</tag>
+        <tag>bedroom</tag>
+      </tags>
+      <status>written_off</status>
+      <purchase_date>2021-10-15</purchase_date>
+      <registered_date>2021-10-20</registered_date>
+      <urls></urls>
+      <comments>Queen size bed frame</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="59ce4b16-fccc-4af2-8395-b66c3a8eeb12">
+      <commodity_name>Laptop</commodity_name>
+      <short_name>Laptop</short_name>
+      <type>electronics</type>
+      <area_id>8484806f-faf6-4ff4-ad82-1ba08645a5a3</area_id>
+      <count>1</count>
+      <original_price>1299.99</original_price>
+      <original_price_currency>EUR</original_price_currency>
+      <converted_original_price>32499.75</converted_original_price>
+      <current_price>22499.75</current_price>
+      <serial_number>LT123456789</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>electronics</tag>
+        <tag>work</tag>
+      </tags>
+      <status>in_use</status>
+      <purchase_date>2022-05-10</purchase_date>
+      <registered_date>2022-05-15</registered_date>
+      <urls></urls>
+      <comments>15-inch business laptop</comments>
+      <draft>true</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="07ac0937-e17b-4ab9-85a7-646fb5af1f7d">
+      <commodity_name>Monitor</commodity_name>
+      <short_name>Monitor</short_name>
+      <type>electronics</type>
+      <area_id>8484806f-faf6-4ff4-ad82-1ba08645a5a3</area_id>
+      <count>2</count>
+      <original_price>349.99</original_price>
+      <original_price_currency>EUR</original_price_currency>
+      <converted_original_price>8749.75</converted_original_price>
+      <current_price>7499.75</current_price>
+      <serial_number>MN123456789</serial_number>
+      <extra_serial_numbers>
+        <serial_number>MN987654321</serial_number>
+      </extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>electronics</tag>
+        <tag>work</tag>
+      </tags>
+      <status>in_use</status>
+      <purchase_date>2022-05-10</purchase_date>
+      <registered_date>2022-05-15</registered_date>
+      <urls></urls>
+      <comments>27-inch 4K monitors</comments>
+      <draft>true</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="770dcc5d-6f9d-4e2f-ba56-3347787ab8b4">
+      <commodity_name>Projector</commodity_name>
+      <short_name>Projector</short_name>
+      <type>electronics</type>
+      <area_id>edd34dc3-b662-4998-9b38-9a41b7e127a9</area_id>
+      <count>1</count>
+      <original_price>799.99</original_price>
+      <original_price_currency>USD</original_price_currency>
+      <converted_original_price>18399.77</converted_original_price>
+      <current_price>16099.77</current_price>
+      <serial_number>PJ123456789</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>electronics</tag>
+        <tag>presentation</tag>
+      </tags>
+      <status>in_use</status>
+      <purchase_date>2022-04-20</purchase_date>
+      <registered_date>2022-04-25</registered_date>
+      <urls></urls>
+      <comments>4K projector for conference room</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="2c11455e-c864-4809-aadb-740927642353">
+      <commodity_name>Winter Clothes</commodity_name>
+      <short_name>Winter</short_name>
+      <type>clothes</type>
+      <area_id>346daf72-1b72-44f1-9acd-1dc84813bca6</area_id>
+      <count>10</count>
+      <original_price>1200</original_price>
+      <original_price_currency>CZK</original_price_currency>
+      <converted_original_price>0</converted_original_price>
+      <current_price>600</current_price>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>clothes</tag>
+        <tag>seasonal</tag>
+      </tags>
+      <status>in_use</status>
+      <purchase_date>2021-09-15</purchase_date>
+      <registered_date>2021-09-20</registered_date>
+      <urls></urls>
+      <comments>Winter clothes in storage</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="3aede581-6807-4025-b223-f63b9ba01e25">
+      <commodity_name>Camping Equipment</commodity_name>
+      <short_name>Camping</short_name>
+      <type>equipment</type>
+      <area_id>346daf72-1b72-44f1-9acd-1dc84813bca6</area_id>
+      <count>5</count>
+      <original_price>850</original_price>
+      <original_price_currency>EUR</original_price_currency>
+      <converted_original_price>21250</converted_original_price>
+      <current_price>17500</current_price>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>outdoor</tag>
+        <tag>seasonal</tag>
+      </tags>
+      <status>in_use</status>
+      <purchase_date>2021-07-10</purchase_date>
+      <registered_date>2021-07-15</registered_date>
+      <urls></urls>
+      <comments>Tent, sleeping bags, and other camping gear</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="3c80b416-4496-4526-9d48-fd36eb22f287">
+      <commodity_name>Coffee Machine</commodity_name>
+      <short_name>Coffee</short_name>
+      <type>white_goods</type>
+      <area_id>0020437a-b874-4730-b36d-8e2c1e295305</area_id>
+      <count>1</count>
+      <original_price>4500</original_price>
+      <original_price_currency>CZK</original_price_currency>
+      <converted_original_price>0</converted_original_price>
+      <current_price>0</current_price>
+      <serial_number>CM123456789</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>appliance</tag>
+        <tag>kitchen</tag>
+      </tags>
+      <status>in_use</status>
+      <purchase_date>2023-01-15</purchase_date>
+      <registered_date>2023-01-16</registered_date>
+      <urls></urls>
+      <comments>Espresso machine with milk frother</comments>
+      <draft>true</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+    <commodity id="8781ba0a-4a91-4a80-bd91-9d4218a24364">
+      <commodity_name>Desk Chair</commodity_name>
+      <short_name>Chair</short_name>
+      <type>furniture</type>
+      <area_id>8484806f-faf6-4ff4-ad82-1ba08645a5a3</area_id>
+      <count>1</count>
+      <original_price>249.99</original_price>
+      <original_price_currency>USD</original_price_currency>
+      <converted_original_price>5749.77</converted_original_price>
+      <current_price>0</current_price>
+      <serial_number>DC123456789</serial_number>
+      <extra_serial_numbers></extra_serial_numbers>
+      <part_numbers></part_numbers>
+      <tags>
+        <tag>furniture</tag>
+        <tag>work</tag>
+      </tags>
+      <status>in_use</status>
+      <purchase_date>2022-05-10</purchase_date>
+      <registered_date>2022-05-15</registered_date>
+      <urls></urls>
+      <comments>Ergonomic office chair</comments>
+      <draft>false</draft>
+      <images></images>
+      <invoices></invoices>
+      <manuals></manuals>
+    </commodity>
+  </commodities>
+</inventory>
