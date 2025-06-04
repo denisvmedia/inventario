@@ -195,7 +195,7 @@ func (s *ExportService) generateXMLData(ctx context.Context, export models.Expor
 	case models.ExportTypeSelectedItems:
 		return s.exportSelectedItems(ctx, data, export.SelectedItemIDs, export.IncludeFileData)
 	default:
-		return nil, fmt.Errorf("unsupported export type: %s", export.Type)
+		return nil, errkit.NewEquivalent(fmt.Sprintf("unsupported export type: %s", export.Type), nil)
 	}
 }
 

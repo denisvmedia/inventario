@@ -41,6 +41,7 @@ func TestNewExportService(t *testing.T) {
 }
 
 func TestInventoryDataXMLStructure(t *testing.T) {
+	c := qt.New(t)
 	// Test the XML marshaling of the InventoryData structure
 	data := &InventoryData{
 		ExportDate: "2024-01-01T00:00:00Z",
@@ -72,9 +73,7 @@ func TestInventoryDataXMLStructure(t *testing.T) {
 	}
 
 	xmlData, err := xml.MarshalIndent(data, "", "  ")
-	if err != nil {
-		t.Fatalf("Failed to marshal XML: %v", err)
-	}
+	c.Assert(err, qt.IsNil)
 
 	// Check that the XML contains expected elements
 	xmlStr := string(xmlData)
@@ -90,32 +89,26 @@ func TestInventoryDataXMLStructure(t *testing.T) {
 	}
 
 	for _, expected := range expectedElements {
-		if !strings.Contains(xmlStr, expected) {
-			t.Errorf("Expected XML to contain %q, but it didn't. XML:\n%s", expected, xmlStr)
-		}
+		c.Assert(strings.Contains(xmlStr, expected), qt.IsTrue, qt.Commentf("Expected XML to contain %q, but it didn't. XML:\n%s", expected, xmlStr))
 	}
 }
 
 func TestExportServiceProcessExport_InvalidID(t *testing.T) {
+	c := qt.New(t)
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	ctx := context.Background()
 
 	// Test with non-existent export ID
-	err = service.ProcessExport(ctx, "non-existent-id")
-	if err == nil {
-		t.Error("Expected error for non-existent export ID, got nil")
-	}
+	err := service.ProcessExport(ctx, "non-existent-id")
+	c.Assert(err, qt.IsNotNil)
 }
 
 func TestExportServiceProcessExport_Success(t *testing.T) {
+	c := qt.New(t)
 	// Create a temporary directory for exports
 	tempDir := t.TempDir()
 
@@ -131,34 +124,22 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 	}
 
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
-	if err != nil {
-		t.Fatalf("Failed to create export: %v", err)
-	}
+	c.Assert(err, qt.IsNil)
 
 	// Process the export
 	err = service.ProcessExport(ctx, createdExport.ID)
-	if err != nil {
-		t.Errorf("Unexpected error processing export: %v", err)
-	}
+	c.Assert(err, qt.IsNil)
 
 	// Verify the export was updated
 	updatedExport, err := registrySet.ExportRegistry.Get(ctx, createdExport.ID)
-	if err != nil {
-		t.Fatalf("Failed to get updated export: %v", err)
-	}
+	c.Assert(err, qt.IsNil)
 
-	if updatedExport.Status != models.ExportStatusCompleted && updatedExport.Status != models.ExportStatusFailed {
-		t.Errorf("Expected export status to be completed or failed, got %s", updatedExport.Status)
-	}
+	c.Assert(updatedExport.Status == models.ExportStatusCompleted || updatedExport.Status == models.ExportStatusFailed, qt.IsTrue)
 }
 
 func TestGenerateXMLData(t *testing.T) {
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -177,6 +158,7 @@ func TestGenerateXMLData(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
 			export := models.Export{
 				Type:            tc.exportType,
 				Status:          models.ExportStatusPending,
@@ -184,34 +166,18 @@ func TestGenerateXMLData(t *testing.T) {
 			}
 
 			data, err := service.generateXMLData(ctx, export)
-			if err != nil {
-				t.Errorf("Unexpected error generating XML data: %v", err)
-				return
-			}
-
-			if data == nil {
-				t.Error("Expected XML data, got nil")
-				return
-			}
-
-			if data.ExportType != string(tc.exportType) {
-				t.Errorf("Expected export type %s, got %s", tc.exportType, data.ExportType)
-			}
-
-			if data.ExportDate == "" {
-				t.Error("Expected export date to be set")
-			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(data, qt.IsNotNil)
+			c.Assert(data.ExportType, qt.Equals, string(tc.exportType))
+			c.Assert(data.ExportDate, qt.Not(qt.Equals), "")
 		})
 	}
 }
 
 func TestGenerateXMLData_InvalidType(t *testing.T) {
+	c := qt.New(t)
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -223,19 +189,14 @@ func TestGenerateXMLData_InvalidType(t *testing.T) {
 		IncludeFileData: false,
 	}
 
-	_, err = service.generateXMLData(ctx, export)
-	if err == nil {
-		t.Error("Expected error for invalid export type, got nil")
-	}
+	_, err := service.generateXMLData(ctx, export)
+	c.Assert(err, qt.IsNotNil)
 }
 
 func TestGenerateExport(t *testing.T) {
+	c := qt.New(t)
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	registrySet := newTestRegistrySet()
 	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
@@ -249,25 +210,17 @@ func TestGenerateExport(t *testing.T) {
 	}
 
 	filePath, err := service.generateExport(ctx, export)
-	if err != nil {
-		t.Fatalf("Unexpected error generating export: %v", err)
-	}
+	c.Assert(err, qt.IsNil)
 
 	// Check that file was created
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		t.Errorf("Export file was not created at %s", filePath)
-	}
+	_, err = os.Stat(filePath)
+	c.Assert(os.IsNotExist(err), qt.IsFalse)
 
 	// Check file name format
 	expectedPrefix := fmt.Sprintf("export_%s_", export.Type)
 	fileName := filepath.Base(filePath)
-	if !strings.Contains(fileName, expectedPrefix) {
-		t.Errorf("Expected file name to contain %s, got %s", expectedPrefix, fileName)
-	}
-
-	if !strings.Contains(fileName, ".xml") {
-		t.Errorf("Expected file name to have .xml extension, got %s", fileName)
-	}
+	c.Assert(strings.Contains(fileName, expectedPrefix), qt.IsTrue)
+	c.Assert(strings.Contains(fileName, ".xml"), qt.IsTrue)
 
 	// Clean up
 	os.Remove(filePath)
