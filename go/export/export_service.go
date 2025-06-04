@@ -32,11 +32,11 @@ func NewExportService(registrySet *registry.Set, exportDir, uploadLocation strin
 
 // InventoryData represents the root XML structure for exports
 type InventoryData struct {
-	XMLName     xml.Name    `xml:"inventory"`
-	ExportDate  string      `xml:"export_date,attr"`
-	ExportType  string      `xml:"export_type,attr"`
-	Locations   []*Location `xml:"locations>location,omitempty"`
-	Areas       []*Area     `xml:"areas>area,omitempty"`
+	XMLName     xml.Name     `xml:"inventory"`
+	ExportDate  string       `xml:"export_date,attr"`
+	ExportType  string       `xml:"export_type,attr"`
+	Locations   []*Location  `xml:"locations>location,omitempty"`
+	Areas       []*Area      `xml:"areas>area,omitempty"`
 	Commodities []*Commodity `xml:"commodities>commodity,omitempty"`
 }
 

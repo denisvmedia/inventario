@@ -2,7 +2,6 @@ package export
 
 import (
 	"context"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -17,9 +16,7 @@ func TestNewExportWorker(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	c.Assert(err, qt.IsNil)
-	defer os.RemoveAll(tempDir)
+	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	worker := NewExportWorker(exportService, registrySet)
@@ -37,9 +34,7 @@ func TestExportWorkerStartStop(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	c.Assert(err, qt.IsNil)
-	defer os.RemoveAll(tempDir)
+	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	worker := NewExportWorker(exportService, registrySet)
@@ -76,9 +71,7 @@ func TestExportWorkerIsRunning(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	c.Assert(err, qt.IsNil)
-	defer os.RemoveAll(tempDir)
+	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	worker := NewExportWorker(exportService, registrySet)
@@ -105,9 +98,7 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	c.Assert(err, qt.IsNil)
-	defer os.RemoveAll(tempDir)
+	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	worker := NewExportWorker(exportService, registrySet)
@@ -156,9 +147,7 @@ func TestExportWorkerProcessExport(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	// Create a temporary directory for exports
-	tempDir, err := os.MkdirTemp("", "export_test")
-	c.Assert(err, qt.IsNil)
-	defer os.RemoveAll(tempDir)
+	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	worker := NewExportWorker(exportService, registrySet)
@@ -185,7 +174,7 @@ func TestExportWorkerProcessExport(t *testing.T) {
 	c.Assert(updatedExport.Status, qt.Not(qt.Equals), models.ExportStatusPending, qt.Commentf("Export status should have changed from pending"))
 
 	// Status should be either completed or failed
-	c.Assert(updatedExport.Status == models.ExportStatusCompleted || updatedExport.Status == models.ExportStatusFailed, qt.IsTrue, 
+	c.Assert(updatedExport.Status == models.ExportStatusCompleted || updatedExport.Status == models.ExportStatusFailed, qt.IsTrue,
 		qt.Commentf("Expected export status to be completed or failed, got %s", updatedExport.Status))
 }
 
@@ -194,9 +183,7 @@ func TestExportWorkerConcurrentAccess(t *testing.T) {
 	// Test concurrent access to worker methods
 	registrySet := newTestRegistrySet()
 
-	tempDir, err := os.MkdirTemp("", "export_test")
-	c.Assert(err, qt.IsNil)
-	defer os.RemoveAll(tempDir)
+	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	worker := NewExportWorker(exportService, registrySet)
@@ -241,9 +228,7 @@ func TestExportWorkerContextCancellation(t *testing.T) {
 	// Test that worker respects context cancellation
 	registrySet := newTestRegistrySet()
 
-	tempDir, err := os.MkdirTemp("", "export_test")
-	c.Assert(err, qt.IsNil)
-	defer os.RemoveAll(tempDir)
+	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
 	worker := NewExportWorker(exportService, registrySet)

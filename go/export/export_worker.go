@@ -2,10 +2,10 @@ package export
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
+	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -14,14 +14,14 @@ const defaultPollInterval = 10 * time.Second
 
 // ExportWorker processes export requests in the background
 type ExportWorker struct {
-	exportService   *ExportService
-	registrySet     *registry.Set
-	pollInterval    time.Duration
-	stopCh          chan struct{}
-	wg              sync.WaitGroup
-	isRunning       bool
-	mu              sync.RWMutex
-	stopped         bool
+	exportService *ExportService
+	registrySet   *registry.Set
+	pollInterval  time.Duration
+	stopCh        chan struct{}
+	wg            sync.WaitGroup
+	isRunning     bool
+	mu            sync.RWMutex
+	stopped       bool
 }
 
 // NewExportWorker creates a new export worker
@@ -56,7 +56,7 @@ func (w *ExportWorker) Start(ctx context.Context) {
 		w.run(ctx)
 	}()
 
-	log.Println("Export worker started")
+	log.Print("Export worker started")
 }
 
 // Stop stops the export worker
@@ -74,7 +74,7 @@ func (w *ExportWorker) Stop() {
 
 	go func() {
 		w.wg.Wait()
-		log.Println("Export worker stopped")
+		log.Print("Export worker stopped")
 	}()
 }
 
