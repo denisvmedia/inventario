@@ -138,7 +138,7 @@ test: test-go test-frontend
 # Run end-to-end tests
 .PHONY: test-e2e
 test-e2e:
-	$(CD) $(FRONTEND_DIR) && npm run test:e2e
+	$(CD) e2e && npm install && npm run test
 
 # Seed the database
 .PHONY: seed-db
