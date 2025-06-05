@@ -241,12 +241,14 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer) e
 		return errkit.Wrap(err, "failed to get locations")
 	}
 
-	if _, err := writer.Write([]byte("  <locations>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write locations start tag")
-	}
-
 	encoder := xml.NewEncoder(writer)
-	encoder.Indent("    ", "  ")
+	encoder.Indent("  ", "  ")
+
+	// Start locations element
+	startElement := xml.StartElement{Name: xml.Name{Local: "locations"}}
+	if err := encoder.EncodeToken(startElement); err != nil {
+		return errkit.Wrap(err, "failed to encode locations start element")
+	}
 
 	for _, loc := range locations {
 		xmlLoc := &Location{
@@ -259,8 +261,14 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer) e
 		}
 	}
 
-	if _, err := writer.Write([]byte("  </locations>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write locations end tag")
+	// End locations element
+	endElement := xml.EndElement{Name: xml.Name{Local: "locations"}}
+	if err := encoder.EncodeToken(endElement); err != nil {
+		return errkit.Wrap(err, "failed to encode locations end element")
+	}
+
+	if err := encoder.Flush(); err != nil {
+		return errkit.Wrap(err, "failed to flush encoder")
 	}
 
 	return nil
@@ -273,12 +281,14 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer) error
 		return errkit.Wrap(err, "failed to get areas")
 	}
 
-	if _, err := writer.Write([]byte("  <areas>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write areas start tag")
-	}
-
 	encoder := xml.NewEncoder(writer)
-	encoder.Indent("    ", "  ")
+	encoder.Indent("  ", "  ")
+
+	// Start areas element
+	startElement := xml.StartElement{Name: xml.Name{Local: "areas"}}
+	if err := encoder.EncodeToken(startElement); err != nil {
+		return errkit.Wrap(err, "failed to encode areas start element")
+	}
 
 	for _, area := range areas {
 		xmlArea := &Area{
@@ -291,8 +301,14 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer) error
 		}
 	}
 
-	if _, err := writer.Write([]byte("  </areas>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write areas end tag")
+	// End areas element
+	endElement := xml.EndElement{Name: xml.Name{Local: "areas"}}
+	if err := encoder.EncodeToken(endElement); err != nil {
+		return errkit.Wrap(err, "failed to encode areas end element")
+	}
+
+	if err := encoder.Flush(); err != nil {
+		return errkit.Wrap(err, "failed to flush encoder")
 	}
 
 	return nil
@@ -305,12 +321,14 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 		return errkit.Wrap(err, "failed to get commodities")
 	}
 
-	if _, err := writer.Write([]byte("  <commodities>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write commodities start tag")
-	}
-
 	encoder := xml.NewEncoder(writer)
-	encoder.Indent("    ", "  ")
+	encoder.Indent("  ", "  ")
+
+	// Start commodities element
+	startElement := xml.StartElement{Name: xml.Name{Local: "commodities"}}
+	if err := encoder.EncodeToken(startElement); err != nil {
+		return errkit.Wrap(err, "failed to encode commodities start element")
+	}
 
 	for _, commodity := range commodities {
 		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
@@ -322,8 +340,14 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 		}
 	}
 
-	if _, err := writer.Write([]byte("  </commodities>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write commodities end tag")
+	// End commodities element
+	endElement := xml.EndElement{Name: xml.Name{Local: "commodities"}}
+	if err := encoder.EncodeToken(endElement); err != nil {
+		return errkit.Wrap(err, "failed to encode commodities end element")
+	}
+
+	if err := encoder.Flush(); err != nil {
+		return errkit.Wrap(err, "failed to flush encoder")
 	}
 
 	return nil
@@ -331,12 +355,14 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 
 // streamSelectedItems streams selected commodities to the writer
 func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, selectedItemIDs []string, includeFileData bool) error {
-	if _, err := writer.Write([]byte("  <commodities>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write commodities start tag")
-	}
-
 	encoder := xml.NewEncoder(writer)
-	encoder.Indent("    ", "  ")
+	encoder.Indent("  ", "  ")
+
+	// Start commodities element
+	startElement := xml.StartElement{Name: xml.Name{Local: "commodities"}}
+	if err := encoder.EncodeToken(startElement); err != nil {
+		return errkit.Wrap(err, "failed to encode commodities start element")
+	}
 
 	for _, itemID := range selectedItemIDs {
 		commodity, err := s.registrySet.CommodityRegistry.Get(ctx, itemID)
@@ -353,8 +379,14 @@ func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Write
 		}
 	}
 
-	if _, err := writer.Write([]byte("  </commodities>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write commodities end tag")
+	// End commodities element
+	endElement := xml.EndElement{Name: xml.Name{Local: "commodities"}}
+	if err := encoder.EncodeToken(endElement); err != nil {
+		return errkit.Wrap(err, "failed to encode commodities end element")
+	}
+
+	if err := encoder.Flush(); err != nil {
+		return errkit.Wrap(err, "failed to flush encoder")
 	}
 
 	return nil
