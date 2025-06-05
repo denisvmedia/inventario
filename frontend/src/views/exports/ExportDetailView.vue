@@ -1,12 +1,12 @@
 <template>
   <div class="export-detail">
+    <div class="breadcrumb-nav">
+      <router-link to="/exports" class="breadcrumb-link">
+        <font-awesome-icon icon="arrow-left" /> Back to Exports
+      </router-link>
+    </div>
     <div class="header">
       <h1>Export Details</h1>
-      <div class="header-actions">
-        <router-link to="/exports" class="btn btn-secondary">
-          <font-awesome-icon icon="arrow-left" /> Back to Exports
-        </router-link>
-      </div>
     </div>
 
     <div v-if="loading" class="loading">Loading export details...</div>
@@ -94,18 +94,29 @@
         <div class="card-body">
           <div class="action-buttons">
             <button 
-              @click="retryExport"
-              :disabled="retrying"
+              v-if="exportData.status === 'completed'"
+              class="btn btn-primary"
+              :disabled="downloading"
+              @click="downloadExport"
+            >
+              <font-awesome-icon :icon="downloading ? 'spinner' : 'download'" :spin="downloading" />
+              {{ downloading ? 'Downloading...' : 'Download Export' }}
+            </button>
+            
+            <button 
+              v-if="exportData.status === 'failed'"
               class="btn btn-warning"
+              :disabled="retrying"
+              @click="retryExport"
             >
               <font-awesome-icon :icon="retrying ? 'spinner' : 'redo'" :spin="retrying" />
               {{ retrying ? 'Retrying...' : 'Retry Export' }}
             </button>
             
             <button 
-              @click="deleteExport"
-              :disabled="deleting"
               class="btn btn-danger"
+              :disabled="deleting"
+              @click="deleteExport"
             >
               <font-awesome-icon :icon="deleting ? 'spinner' : 'trash'" :spin="deleting" />
               {{ deleting ? 'Deleting...' : 'Delete Export' }}
@@ -133,6 +144,7 @@ const loading = ref(true)
 const error = ref('')
 const retrying = ref(false)
 const deleting = ref(false)
+const downloading = ref(false)
 
 const loadExport = async () => {
   try {
@@ -234,6 +246,42 @@ const deleteExport = async () => {
   }
 }
 
+const downloadExport = async () => {
+  if (!exportData.value?.id) return
+  
+  try {
+    downloading.value = true
+    const response = await exportService.downloadExport(exportData.value.id)
+    
+    // Create blob and download link
+    const blob = new Blob([response.data], { type: 'application/xml' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    
+    // Try to get filename from Content-Disposition header
+    const contentDisposition = response.headers['content-disposition']
+    let filename = 'export.xml'
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+      if (filenameMatch) {
+        filename = filenameMatch[1].replace(/['"]/g, '')
+      }
+    }
+    
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (err: any) {
+    console.error('Error downloading export:', err)
+    alert('Failed to download export')
+  } finally {
+    downloading.value = false
+  }
+}
+
 onMounted(() => {
   loadExport()
   
@@ -258,21 +306,31 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
+.breadcrumb-nav {
+  margin-bottom: 20px;
+}
+
+.breadcrumb-link {
+  display: inline-flex;
   align-items: center;
+  gap: 8px;
+  color: #6c757d;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #495057;
+}
+
+.header {
   margin-bottom: 30px;
 }
 
 .header h1 {
   margin: 0;
   font-size: 2rem;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
 }
 
 .loading, .error {

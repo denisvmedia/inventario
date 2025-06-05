@@ -1,11 +1,11 @@
 <template>
   <div class="export-create">
-    <div class="header">
-      <h1>Create Export</h1>
-      <router-link to="/exports" class="btn btn-secondary">
+    <div class="breadcrumb-nav">
+      <router-link to="/exports" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Exports
       </router-link>
     </div>
+    <h1>Create New Export</h1>
 
     <div v-if="error" class="error-message">{{ error }}</div>
 
@@ -276,15 +276,26 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
+.breadcrumb-nav {
+  margin-bottom: 20px;
 }
 
-.header h1 {
-  margin: 0;
+.breadcrumb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #6c757d;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #495057;
+}
+
+h1 {
+  margin: 0 0 30px;
   font-size: 2rem;
 }
 

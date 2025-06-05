@@ -1508,6 +1508,31 @@ paths:
       summary: Update an export
       tags:
       - exports
+  /exports/{id}/download:
+    get:
+      consumes:
+      - application/octet-stream
+      description: Download an export XML file
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download an export file
+      tags:
+      - exports
   /locations:
     get:
       consumes:

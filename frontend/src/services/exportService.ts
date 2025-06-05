@@ -57,6 +57,15 @@ const exportService = {
         'Accept': 'application/vnd.api+json'
       }
     })
+  },
+
+  downloadExport(id: string) {
+    return axios.get(`${API_URL}/${id}/download`, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'application/xml'
+      }
+    })
   }
 }
 

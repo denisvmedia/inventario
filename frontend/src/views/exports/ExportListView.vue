@@ -9,7 +9,7 @@
       </div>
       <div class="header-actions">
         <router-link to="/exports/new" class="btn btn-primary">
-          <font-awesome-icon icon="plus" /> New Export
+          <font-awesome-icon icon="plus" /> New
         </router-link>
       </div>
     </div>
@@ -66,9 +66,18 @@
                 <font-awesome-icon icon="eye" /> View
               </router-link>
               <button 
-                @click="deleteExport(exportItem.id!)"
-                :disabled="deleting === exportItem.id"
+                v-if="exportItem.status === 'completed'"
+                class="btn btn-sm btn-primary"
+                :disabled="downloading === exportItem.id"
+                @click="downloadExport(exportItem.id!)"
+              >
+                <font-awesome-icon :icon="downloading === exportItem.id ? 'spinner' : 'download'" :spin="downloading === exportItem.id" />
+                {{ downloading === exportItem.id ? 'Downloading...' : 'Download' }}
+              </button>
+              <button 
                 class="btn btn-sm btn-danger"
+                :disabled="deleting === exportItem.id"
+                @click="deleteExport(exportItem.id!)"
               >
                 <font-awesome-icon icon="trash" />
                 {{ deleting === exportItem.id ? 'Deleting...' : 'Delete' }}
@@ -91,6 +100,7 @@ const exports = ref<Export[]>([])
 const loading = ref(true)
 const error = ref('')
 const deleting = ref<string | null>(null)
+const downloading = ref<string | null>(null)
 
 const loadExports = async () => {
   try {
@@ -155,6 +165,40 @@ const deleteExport = async (exportId: string) => {
     alert('Failed to delete export')
   } finally {
     deleting.value = null
+  }
+}
+
+const downloadExport = async (exportId: string) => {
+  try {
+    downloading.value = exportId
+    const response = await exportService.downloadExport(exportId)
+    
+    // Create blob and download link
+    const blob = new Blob([response.data], { type: 'application/xml' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    
+    // Try to get filename from Content-Disposition header
+    const contentDisposition = response.headers['content-disposition']
+    let filename = 'export.xml'
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+      if (filenameMatch) {
+        filename = filenameMatch[1].replace(/['"]/g, '')
+      }
+    }
+    
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (err: any) {
+    console.error('Error downloading export:', err)
+    alert('Failed to download export')
+  } finally {
+    downloading.value = null
   }
 }
 

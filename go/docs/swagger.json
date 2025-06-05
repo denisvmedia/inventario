@@ -1284,6 +1284,44 @@
                 }
             }
         },
+        "/exports/{id}/download": {
+            "get": {
+                "description": "Download an export XML file",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Download an export file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/locations": {
             "get": {
                 "description": "get locations",

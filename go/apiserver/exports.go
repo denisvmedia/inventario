@@ -2,11 +2,15 @@ package apiserver
 
 import (
 	"context"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"gocloud.dev/blob"
 
+	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -24,6 +28,7 @@ func exportFromContext(ctx context.Context) *models.Export {
 
 type exportsAPI struct {
 	exportRegistry registry.ExportRegistry
+	uploadLocation string
 }
 
 // listExports lists all exports.
@@ -176,6 +181,61 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// downloadExport downloads an export file.
+// @Summary Download an export file
+// @Description Download an export XML file
+// @Tags exports
+// @Accept octet-stream
+// @Produce octet-stream
+// @Param id path string true "Export ID"
+// @Success 200 {file} application/xml "Export file"
+// @Failure 404 {object} jsonapi.Errors "Not Found"
+// @Router /exports/{id}/download [get].
+func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
+	export := exportFromContext(r.Context())
+	if export == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	// Check if export is completed and has a file path
+	if export.Status != models.ExportStatusCompleted || export.FilePath == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	file, err := api.getDownloadFile(r.Context(), export.FilePath)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	defer file.Close()
+
+	w.Header().Set("Content-Type", "application/xml")
+	// Generate filename based on export description and type
+	filename := "export.xml"
+	if export.Description != "" {
+		filename = export.Description + ".xml"
+	}
+	attachmentHeader := mimekit.FormatContentDisposition(filename)
+	w.Header().Set("Content-Disposition", attachmentHeader)
+
+	if _, err := io.Copy(w, file); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
+	b, err := blob.OpenBucket(ctx, api.uploadLocation)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to open bucket")
+	}
+	defer b.Close()
+
+	return b.NewReader(context.Background(), filePath, nil)
+}
+
 func exportCtx(exportRegistry registry.ExportRegistry) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,9 +258,10 @@ func exportCtx(exportRegistry registry.ExportRegistry) func(next http.Handler) h
 }
 
 // Exports sets up the exports API routes.
-func Exports(exportRegistry registry.ExportRegistry) func(r chi.Router) {
+func Exports(exportRegistry registry.ExportRegistry, uploadLocation string) func(r chi.Router) {
 	api := &exportsAPI{
 		exportRegistry: exportRegistry,
+		uploadLocation: uploadLocation,
 	}
 
 	return func(r chi.Router) {
@@ -212,6 +273,7 @@ func Exports(exportRegistry registry.ExportRegistry) func(r chi.Router) {
 			r.Get("/", api.getExport)
 			r.Patch("/", api.updateExport)
 			r.Delete("/", api.deleteExport)
+			r.Get("/download", api.downloadExport)
 		})
 	}
 }
