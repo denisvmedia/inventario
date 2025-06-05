@@ -149,6 +149,69 @@ definitions:
           $ref: '#/definitions/jsonapi.Error'
         type: array
     type: object
+  jsonapi.ExportCreateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ExportCreateRequestData'
+    type: object
+  jsonapi.ExportCreateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Export'
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
+  jsonapi.ExportResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ExportResponseData'
+    type: object
+  jsonapi.ExportResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Export'
+      id:
+        type: string
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
+  jsonapi.ExportUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ExportUpdateRequestData'
+    type: object
+  jsonapi.ExportUpdateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Export'
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
+  jsonapi.ExportsMeta:
+    properties:
+      exports:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ExportsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.ExportResponseData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.ExportsMeta'
+    type: object
   jsonapi.FileUpdateParams:
     properties:
       path:
@@ -436,6 +499,57 @@ definitions:
     - CommodityTypeFurniture
     - CommodityTypeClothes
     - CommodityTypeOther
+  models.Export:
+    properties:
+      completed_date:
+        type: string
+      created_date:
+        type: string
+      description:
+        type: string
+      error_message:
+        type: string
+      file_path:
+        type: string
+      id:
+        type: string
+      include_file_data:
+        type: boolean
+      selected_item_ids:
+        items:
+          type: string
+        type: array
+      status:
+        $ref: '#/definitions/models.ExportStatus'
+      type:
+        $ref: '#/definitions/models.ExportType'
+    type: object
+  models.ExportStatus:
+    enum:
+    - pending
+    - in_progress
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - ExportStatusPending
+    - ExportStatusInProgress
+    - ExportStatusCompleted
+    - ExportStatusFailed
+  models.ExportType:
+    enum:
+    - full_database
+    - selected_items
+    - locations
+    - areas
+    - commodities
+    type: string
+    x-enum-varnames:
+    - ExportTypeFullDatabase
+    - ExportTypeSelectedItems
+    - ExportTypeLocations
+    - ExportTypeAreas
+    - ExportTypeCommodities
   models.Image:
     properties:
       commodity_id:
@@ -1273,6 +1387,127 @@ paths:
       summary: Get debug information
       tags:
       - debug
+  /exports:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get exports
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ExportsResponse'
+      summary: List exports
+      tags:
+      - exports
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new export
+      parameters:
+      - description: Export
+        in: body
+        name: export
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ExportCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create an export
+      tags:
+      - exports
+  /exports/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an export
+      tags:
+      - exports
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get export by ID
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get an export
+      tags:
+      - exports
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: update an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Export
+        in: body
+        name: export
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ExportUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update an export
+      tags:
+      - exports
   /locations:
     get:
       consumes:

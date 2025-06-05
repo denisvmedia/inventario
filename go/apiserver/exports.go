@@ -55,7 +55,7 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 // @Produce json-api
 // @Param id path string true "Export ID"
 // @Success 200 {object} jsonapi.ExportResponse "OK"
-// @Failure 404 {object} jsonapi.ErrorResponse "Not Found"
+// @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [get].
 func (api *exportsAPI) getExport(w http.ResponseWriter, r *http.Request) {
 	export := exportFromContext(r.Context())
@@ -78,7 +78,7 @@ func (api *exportsAPI) getExport(w http.ResponseWriter, r *http.Request) {
 // @Produce json-api
 // @Param export body jsonapi.ExportCreateRequest true "Export"
 // @Success 201 {object} jsonapi.ExportResponse "Created"
-// @Failure 422 {object} jsonapi.ErrorResponse "Unprocessable Entity"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Router /exports [post].
 func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 	var request jsonapi.ExportCreateRequest
@@ -116,8 +116,8 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Export ID"
 // @Param export body jsonapi.ExportUpdateRequest true "Export"
 // @Success 200 {object} jsonapi.ExportResponse "OK"
-// @Failure 404 {object} jsonapi.ErrorResponse "Not Found"
-// @Failure 422 {object} jsonapi.ErrorResponse "Unprocessable Entity"
+// @Failure 404 {object} jsonapi.Errors "Not Found"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Router /exports/{id} [patch].
 func (api *exportsAPI) updateExport(w http.ResponseWriter, r *http.Request) {
 	export := exportFromContext(r.Context())
@@ -156,7 +156,7 @@ func (api *exportsAPI) updateExport(w http.ResponseWriter, r *http.Request) {
 // @Produce json-api
 // @Param id path string true "Export ID"
 // @Success 204 "No Content"
-// @Failure 404 {object} jsonapi.ErrorResponse "Not Found"
+// @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [delete].
 func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 	export := exportFromContext(r.Context())
