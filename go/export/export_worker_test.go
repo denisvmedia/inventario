@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	qt "github.com/frankban/quicktest"
 
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
 )
 

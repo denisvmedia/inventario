@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"testing"
 
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	qt "github.com/frankban/quicktest"
 	"gocloud.dev/blob"
 
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"

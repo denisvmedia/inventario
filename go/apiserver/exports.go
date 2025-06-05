@@ -57,6 +57,8 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.ExportResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [get].
+//
+//nolint:revive // getExport is an HTTP handler, not a getter function
 func (api *exportsAPI) getExport(w http.ResponseWriter, r *http.Request) {
 	export := exportFromContext(r.Context())
 	if export == nil {

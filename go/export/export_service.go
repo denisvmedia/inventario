@@ -88,7 +88,7 @@ type URL struct {
 }
 
 type File struct {
-	XMLName      xml.Name `xml:",any"`
+	XMLName      xml.Name `xml:"file"`
 	ID           string   `xml:"id,attr"`
 	Path         string   `xml:"path"`
 	OriginalPath string   `xml:"original_path"`
@@ -235,6 +235,8 @@ func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer
 }
 
 // streamLocations streams locations to the writer
+//
+//nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
 func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer) error {
 	locations, err := s.registrySet.LocationRegistry.List(ctx)
 	if err != nil {
@@ -275,6 +277,8 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer) e
 }
 
 // streamAreas streams areas to the writer
+//
+//nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
 func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer) error {
 	areas, err := s.registrySet.AreaRegistry.List(ctx)
 	if err != nil {
