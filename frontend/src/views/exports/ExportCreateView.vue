@@ -299,7 +299,7 @@ onMounted(() => {
 .export-form {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
   padding: 30px;
 }
 
@@ -308,7 +308,7 @@ onMounted(() => {
 }
 
 .form-section h2 {
-  margin: 0 0 20px 0;
+  margin: 0 0 20px;
   font-size: 1.5rem;
   color: #333;
   border-bottom: 2px solid #007bff;

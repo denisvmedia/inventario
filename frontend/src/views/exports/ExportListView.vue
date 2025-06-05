@@ -176,7 +176,7 @@ onMounted(() => {
 }
 
 .header-title h1 {
-  margin: 0 0 5px 0;
+  margin: 0 0 5px;
   font-size: 2rem;
 }
 
@@ -208,7 +208,7 @@ onMounted(() => {
 .exports-table {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
   overflow: hidden;
 }
 
@@ -253,16 +253,50 @@ onMounted(() => {
   text-transform: uppercase;
 }
 
-.type-full_database { background-color: #e3f2fd; color: #1976d2; }
-.type-selected_items { background-color: #f3e5f5; color: #7b1fa2; }
-.type-locations { background-color: #e8f5e8; color: #388e3c; }
-.type-areas { background-color: #fff3e0; color: #f57c00; }
-.type-commodities { background-color: #fce4ec; color: #c2185b; }
+.type-full_database {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
 
-.status-pending { background-color: #fff3cd; color: #856404; }
-.status-in_progress { background-color: #d4edda; color: #155724; }
-.status-completed { background-color: #d1ecf1; color: #0c5460; }
-.status-failed { background-color: #f8d7da; color: #721c24; }
+.type-selected_items {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.type-locations {
+  background-color: #e8f5e8;
+  color: #388e3c;
+}
+
+.type-areas {
+  background-color: #fff3e0;
+  color: #f57c00;
+}
+
+.type-commodities {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.status-pending {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-in_progress {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-completed {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+.status-failed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
 
 .export-actions {
   display: flex;
