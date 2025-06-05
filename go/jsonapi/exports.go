@@ -11,7 +11,7 @@ import (
 )
 
 type ExportResponse struct {
-	HTTPStatusCode int                `json:"-"` // http response status code
+	HTTPStatusCode int                 `json:"-"` // http response status code
 	Data           *ExportResponseData `json:"data"`
 }
 

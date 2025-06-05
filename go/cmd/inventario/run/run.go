@@ -30,9 +30,9 @@ var runCmd = &cobra.Command{
 }
 
 const (
-	addrFlag               = "addr"
-	uploadLocationFlag     = "upload-location"
-	dbDSNFlag              = "db-dsn"
+	addrFlag                 = "addr"
+	uploadLocationFlag       = "upload-location"
+	dbDSNFlag                = "db-dsn"
 	maxConcurrentExportsFlag = "max-concurrent-exports"
 )
 
@@ -115,10 +115,10 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	maxConcurrentExports := runFlags[maxConcurrentExportsFlag].GetInt()
 	exportService := export.NewExportService(registrySet, params.UploadLocation)
 	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	exportWorker.Start(ctx)
 	defer exportWorker.Stop()
 

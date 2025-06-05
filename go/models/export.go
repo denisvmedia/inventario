@@ -51,11 +51,11 @@ type ExportType string
 
 // Export types. Adding a new type? Don't forget to update IsValid() method.
 const (
-	ExportTypeFullDatabase   ExportType = "full_database"
-	ExportTypeSelectedItems  ExportType = "selected_items"
-	ExportTypeLocations      ExportType = "locations"
-	ExportTypeAreas          ExportType = "areas"
-	ExportTypeCommodities    ExportType = "commodities"
+	ExportTypeFullDatabase  ExportType = "full_database"
+	ExportTypeSelectedItems ExportType = "selected_items"
+	ExportTypeLocations     ExportType = "locations"
+	ExportTypeAreas         ExportType = "areas"
+	ExportTypeCommodities   ExportType = "commodities"
 )
 
 func (e ExportType) IsValid() bool {
@@ -79,15 +79,15 @@ func (e ExportType) Validate() error {
 
 type Export struct {
 	EntityID
-	Type              ExportType          `json:"type" db:"type"`
-	Status            ExportStatus        `json:"status" db:"status"`
-	IncludeFileData   bool               `json:"include_file_data" db:"include_file_data"`
-	SelectedItemIDs   ValuerSlice[string] `json:"selected_item_ids" db:"selected_item_ids"`
-	FilePath          string             `json:"file_path" db:"file_path"`
-	CreatedDate       PDate              `json:"created_date" db:"created_date"`
-	CompletedDate     PDate             `json:"completed_date" db:"completed_date"`
-	ErrorMessage      string             `json:"error_message" db:"error_message"`
-	Description       string             `json:"description" db:"description"`
+	Type            ExportType          `json:"type" db:"type"`
+	Status          ExportStatus        `json:"status" db:"status"`
+	IncludeFileData bool                `json:"include_file_data" db:"include_file_data"`
+	SelectedItemIDs ValuerSlice[string] `json:"selected_item_ids" db:"selected_item_ids"`
+	FilePath        string              `json:"file_path" db:"file_path"`
+	CreatedDate     PDate               `json:"created_date" db:"created_date"`
+	CompletedDate   PDate               `json:"completed_date" db:"completed_date"`
+	ErrorMessage    string              `json:"error_message" db:"error_message"`
+	Description     string              `json:"description" db:"description"`
 }
 
 func (*Export) Validate() error {

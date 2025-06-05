@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	qt "github.com/frankban/quicktest"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
+	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/models"
 )
@@ -267,23 +267,23 @@ func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
 	exportService := NewExportService(registrySet, uploadLocation)
-	
+
 	// Test with different concurrent limits
 	worker1 := NewExportWorker(exportService, registrySet, 1)
 	worker2 := NewExportWorker(exportService, registrySet, 5)
-	
+
 	// The semaphore capacity should match the configured limit
 	// We can't directly access the semaphore capacity, but we can verify
 	// that the workers are created without panicking and can acquire resources
-	
+
 	// Test that worker1 (limit 1) can acquire 1 but blocks on second
 	c.Assert(worker1.semaphore.TryAcquire(1), qt.IsTrue)
 	c.Assert(worker1.semaphore.TryAcquire(1), qt.IsFalse) // Should fail as limit is 1
 	worker1.semaphore.Release(1)
-	
+
 	// Test that worker2 (limit 5) can acquire multiple resources
 	c.Assert(worker2.semaphore.TryAcquire(3), qt.IsTrue)
-	c.Assert(worker2.semaphore.TryAcquire(2), qt.IsTrue) // Should succeed as limit is 5
+	c.Assert(worker2.semaphore.TryAcquire(2), qt.IsTrue)  // Should succeed as limit is 5
 	c.Assert(worker2.semaphore.TryAcquire(1), qt.IsFalse) // Should fail as we've hit the limit
 	worker2.semaphore.Release(5)
 }

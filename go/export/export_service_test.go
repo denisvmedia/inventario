@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"testing"
 
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	qt "github.com/frankban/quicktest"
 	"gocloud.dev/blob"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -170,7 +170,7 @@ func TestStreamXMLExport(t *testing.T) {
 			var buf bytes.Buffer
 			err := service.streamXMLExport(ctx, export, &buf)
 			c.Assert(err, qt.IsNil)
-			
+
 			xmlContent := buf.String()
 			c.Assert(xmlContent, qt.Contains, `<?xml version="1.0" encoding="UTF-8"?>`)
 			c.Assert(xmlContent, qt.Contains, fmt.Sprintf(`export_type="%s"`, tc.exportType))

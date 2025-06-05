@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	entityNameExport = "export"
-	bucketNameExports = "exports"
+	entityNameExport          = "export"
+	bucketNameExports         = "exports"
 	bucketNameExportsChildren = "exports-children"
 )
 
@@ -34,8 +34,8 @@ func NewExportRegistry(db *bolt.DB) registry.ExportRegistry {
 }
 
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
-	return r.registry.Create(export, 
-		func(dbx.TransactionOrBucket, *models.Export) error { return nil }, 
+	return r.registry.Create(export,
+		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil })
 }
 
@@ -48,14 +48,14 @@ func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
 }
 
 func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*models.Export, error) {
-	return r.registry.Update(export, 
-		func(dbx.TransactionOrBucket, *models.Export) error { return nil }, 
+	return r.registry.Update(export,
+		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil })
 }
 
 func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
-	return r.registry.Delete(id, 
-		func(dbx.TransactionOrBucket, *models.Export) error { return nil }, 
+	return r.registry.Delete(id,
+		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil })
 }
 

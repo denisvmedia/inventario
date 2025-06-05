@@ -392,7 +392,6 @@ func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Write
 	return nil
 }
 
-
 func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *models.Commodity, includeFileData bool) (*Commodity, error) {
 	xmlCommodity := &Commodity{
 		ID:                     commodity.ID,

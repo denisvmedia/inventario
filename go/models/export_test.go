@@ -11,7 +11,7 @@ import (
 
 func TestExportStatus_IsValid(t *testing.T) {
 	c := qt.New(t)
-	
+
 	tests := []struct {
 		status models.ExportStatus
 		valid  bool
@@ -33,7 +33,7 @@ func TestExportStatus_IsValid(t *testing.T) {
 
 func TestExportType_IsValid(t *testing.T) {
 	c := qt.New(t)
-	
+
 	tests := []struct {
 		exportType models.ExportType
 		valid      bool

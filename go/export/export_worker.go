@@ -120,13 +120,13 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 		if export.Status != models.ExportStatusPending {
 			continue
 		}
-		
+
 		// Block until we can acquire a semaphore slot to limit concurrent goroutines
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			log.WithError(err).Error("Failed to acquire semaphore")
 			return
 		}
-		
+
 		go func(exportID string) {
 			defer w.semaphore.Release(1)
 			w.processExport(ctx, exportID)
