@@ -30,10 +30,11 @@ var runCmd = &cobra.Command{
 }
 
 const (
-	addrFlag           = "addr"
-	uploadLocationFlag = "upload-location"
-	dbDSNFlag          = "db-dsn"
-	exportDirFlag      = "export-dir"
+	addrFlag               = "addr"
+	uploadLocationFlag     = "upload-location"
+	dbDSNFlag              = "db-dsn"
+	exportDirFlag          = "export-dir"
+	maxConcurrentExportsFlag = "max-concurrent-exports"
 )
 
 func getFileURL(path string) string {
@@ -64,6 +65,11 @@ var runFlags = map[string]cobraflags.Flag{
 		Name:  exportDirFlag,
 		Value: "exports",
 		Usage: "Directory to store export files",
+	},
+	maxConcurrentExportsFlag: &cobraflags.IntFlag{
+		Name:  maxConcurrentExportsFlag,
+		Value: 3,
+		Usage: "Maximum number of concurrent export processes",
 	},
 }
 
@@ -113,8 +119,9 @@ func runCommand(_ *cobra.Command, _ []string) error {
 
 	// Start export worker
 	exportDir := runFlags[exportDirFlag].GetString()
+	maxConcurrentExports := runFlags[maxConcurrentExportsFlag].GetInt()
 	exportService := export.NewExportService(registrySet, exportDir, params.UploadLocation)
-	exportWorker := export.NewExportWorker(exportService, registrySet)
+	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

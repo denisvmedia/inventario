@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	defaultPollInterval      = 10 * time.Second
-	maxConcurrentExports     = 3 // Limit concurrent export processing
+	defaultPollInterval = 10 * time.Second
 )
 
 // ExportWorker processes export requests in the background
@@ -31,13 +30,13 @@ type ExportWorker struct {
 }
 
 // NewExportWorker creates a new export worker
-func NewExportWorker(exportService *ExportService, registrySet *registry.Set) *ExportWorker {
+func NewExportWorker(exportService *ExportService, registrySet *registry.Set, maxConcurrentExports int) *ExportWorker {
 	return &ExportWorker{
 		exportService: exportService,
 		registrySet:   registrySet,
 		pollInterval:  defaultPollInterval, // Check for new exports every 10 seconds
 		stopCh:        make(chan struct{}),
-		semaphore:     semaphore.NewWeighted(maxConcurrentExports),
+		semaphore:     semaphore.NewWeighted(int64(maxConcurrentExports)),
 	}
 }
 

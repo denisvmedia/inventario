@@ -19,7 +19,7 @@ func TestNewExportWorker(t *testing.T) {
 	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
-	worker := NewExportWorker(exportService, registrySet)
+	worker := NewExportWorker(exportService, registrySet, 3)
 
 	c.Assert(worker, qt.IsNotNil)
 	c.Assert(worker.exportService, qt.Equals, exportService)
@@ -37,7 +37,7 @@ func TestExportWorkerStartStop(t *testing.T) {
 	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
-	worker := NewExportWorker(exportService, registrySet)
+	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -74,7 +74,7 @@ func TestExportWorkerIsRunning(t *testing.T) {
 	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
-	worker := NewExportWorker(exportService, registrySet)
+	worker := NewExportWorker(exportService, registrySet, 3)
 
 	// Test initial state
 	c.Assert(worker.IsRunning(), qt.IsFalse, qt.Commentf("Worker should not be running initially"))
@@ -101,7 +101,7 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
-	worker := NewExportWorker(exportService, registrySet)
+	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx := context.Background()
 
@@ -150,7 +150,7 @@ func TestExportWorkerProcessExport(t *testing.T) {
 	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
-	worker := NewExportWorker(exportService, registrySet)
+	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx := context.Background()
 
@@ -186,7 +186,7 @@ func TestExportWorkerConcurrentAccess(t *testing.T) {
 	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
-	worker := NewExportWorker(exportService, registrySet)
+	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -231,7 +231,7 @@ func TestExportWorkerContextCancellation(t *testing.T) {
 	tempDir := c.TempDir()
 
 	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
-	worker := NewExportWorker(exportService, registrySet)
+	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -248,4 +248,33 @@ func TestExportWorkerContextCancellation(t *testing.T) {
 
 	// Worker should have stopped due to context cancellation
 	c.Assert(worker.IsRunning(), qt.IsFalse, qt.Commentf("Worker should have stopped after context cancellation"))
+}
+
+func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
+	c := qt.New(t)
+	registrySet := newTestRegistrySet()
+
+	// Create a temporary directory for exports
+	tempDir := c.TempDir()
+
+	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	
+	// Test with different concurrent limits
+	worker1 := NewExportWorker(exportService, registrySet, 1)
+	worker2 := NewExportWorker(exportService, registrySet, 5)
+	
+	// The semaphore capacity should match the configured limit
+	// We can't directly access the semaphore capacity, but we can verify
+	// that the workers are created without panicking and can acquire resources
+	
+	// Test that worker1 (limit 1) can acquire 1 but blocks on second
+	c.Assert(worker1.semaphore.TryAcquire(1), qt.IsTrue)
+	c.Assert(worker1.semaphore.TryAcquire(1), qt.IsFalse) // Should fail as limit is 1
+	worker1.semaphore.Release(1)
+	
+	// Test that worker2 (limit 5) can acquire multiple resources
+	c.Assert(worker2.semaphore.TryAcquire(3), qt.IsTrue)
+	c.Assert(worker2.semaphore.TryAcquire(2), qt.IsTrue) // Should succeed as limit is 5
+	c.Assert(worker2.semaphore.TryAcquire(1), qt.IsFalse) // Should fail as we've hit the limit
+	worker2.semaphore.Release(5)
 }
