@@ -5,10 +5,10 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -18,15 +18,13 @@ import (
 // ExportService handles the background processing of export requests
 type ExportService struct {
 	registrySet    *registry.Set
-	exportDir      string
 	uploadLocation string
 }
 
 // NewExportService creates a new export service
-func NewExportService(registrySet *registry.Set, exportDir, uploadLocation string) *ExportService {
+func NewExportService(registrySet *registry.Set, uploadLocation string) *ExportService {
 	return &ExportService{
 		registrySet:    registrySet,
-		exportDir:      exportDir,
 		uploadLocation: uploadLocation,
 	}
 }
@@ -139,31 +137,40 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	return nil
 }
 
-// generateExport generates the XML export file
+// generateExport generates the XML export file using blob storage
 func (s *ExportService) generateExport(ctx context.Context, export models.Export) (string, error) {
-	// Create export directory if it doesn't exist
-	if err := os.MkdirAll(s.exportDir, 0755); err != nil {
-		return "", errkit.Wrap(err, "failed to create export directory")
-	}
-
-	// Generate filename
-	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("export_%s_%s.xml", strings.ToLower(string(export.Type)), timestamp)
-	filePath := filepath.Join(s.exportDir, filename)
-
-	// Create file
-	file, err := os.Create(filePath)
+	// Open blob bucket
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
-		return "", errkit.Wrap(err, "failed to create export file")
+		return "", errkit.Wrap(err, "failed to open blob bucket")
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := b.Close(); closeErr != nil {
+			err = errkit.Wrap(closeErr, "failed to close blob bucket")
+		}
+	}()
+
+	// Generate blob key (filename)
+	timestamp := time.Now().Format("20060102_150405")
+	blobKey := fmt.Sprintf("exports/export_%s_%s.xml", strings.ToLower(string(export.Type)), timestamp)
+
+	// Create blob writer
+	writer, err := b.NewWriter(ctx, blobKey, nil)
+	if err != nil {
+		return "", errkit.Wrap(err, "failed to create blob writer")
+	}
+	defer func() {
+		if closeErr := writer.Close(); closeErr != nil {
+			err = errkit.Wrap(closeErr, "failed to close blob writer")
+		}
+	}()
 
 	// Stream XML generation
-	if err := s.streamXMLExport(ctx, export, file); err != nil {
+	if err := s.streamXMLExport(ctx, export, writer); err != nil {
 		return "", errkit.Wrap(err, "failed to generate XML export")
 	}
 
-	return filePath, nil
+	return blobKey, nil
 }
 
 // streamXMLExport streams XML data directly to the file writer

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 
 	"github.com/denisvmedia/inventario/models"
 )
@@ -15,10 +16,11 @@ func TestNewExportWorker(t *testing.T) {
 	c := qt.New(t)
 	registrySet := newTestRegistrySet()
 
-	// Create a temporary directory for exports
+	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
 	c.Assert(worker, qt.IsNotNil)
@@ -35,8 +37,9 @@ func TestExportWorkerStartStop(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -72,8 +75,9 @@ func TestExportWorkerIsRunning(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
 	// Test initial state
@@ -99,8 +103,9 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx := context.Background()
@@ -148,8 +153,9 @@ func TestExportWorkerProcessExport(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx := context.Background()
@@ -184,8 +190,9 @@ func TestExportWorkerConcurrentAccess(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -229,8 +236,9 @@ func TestExportWorkerContextCancellation(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -256,8 +264,9 @@ func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	exportService := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	exportService := NewExportService(registrySet, uploadLocation)
 	
 	// Test with different concurrent limits
 	worker1 := NewExportWorker(exportService, registrySet, 1)

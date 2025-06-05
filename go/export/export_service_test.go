@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"gocloud.dev/blob"
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -29,14 +29,12 @@ func newTestRegistrySet() *registry.Set {
 func TestNewExportService(t *testing.T) {
 	c := qt.New(t)
 	registrySet := &registry.Set{}
-	exportDir := "/tmp/exports"
 	uploadLocation := "/tmp/uploads"
 
-	service := NewExportService(registrySet, exportDir, uploadLocation)
+	service := NewExportService(registrySet, uploadLocation)
 
 	c.Assert(service, qt.IsNotNil)
 	c.Assert(service.registrySet, qt.Equals, registrySet)
-	c.Assert(service.exportDir, qt.Equals, exportDir)
 	c.Assert(service.uploadLocation, qt.Equals, uploadLocation)
 }
 
@@ -95,11 +93,12 @@ func TestInventoryDataXMLStructure(t *testing.T) {
 
 func TestExportServiceProcessExport_InvalidID(t *testing.T) {
 	c := qt.New(t)
-	// Create a temporary directory for exports
+	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
-	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
 	// Test with non-existent export ID
@@ -109,11 +108,12 @@ func TestExportServiceProcessExport_InvalidID(t *testing.T) {
 
 func TestExportServiceProcessExport_Success(t *testing.T) {
 	c := qt.New(t)
-	// Create a temporary directory for exports
+	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
-	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
 	// Create a test export in the database
@@ -139,11 +139,12 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 
 func TestStreamXMLExport(t *testing.T) {
 	c := qt.New(t)
-	// Create a temporary directory for exports
+	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
-	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
 	// Test different export types
@@ -181,11 +182,12 @@ func TestStreamXMLExport(t *testing.T) {
 
 func TestStreamXMLExport_InvalidType(t *testing.T) {
 	c := qt.New(t)
-	// Create a temporary directory for exports
+	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
-	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
 	export := models.Export{
@@ -201,11 +203,12 @@ func TestStreamXMLExport_InvalidType(t *testing.T) {
 
 func TestGenerateExport(t *testing.T) {
 	c := qt.New(t)
-	// Create a temporary directory for exports
+	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
-	service := NewExportService(registrySet, tempDir, "/tmp/uploads")
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
 	export := models.Export{
@@ -215,19 +218,24 @@ func TestGenerateExport(t *testing.T) {
 		IncludeFileData: false,
 	}
 
-	filePath, err := service.generateExport(ctx, export)
+	blobKey, err := service.generateExport(ctx, export)
 	c.Assert(err, qt.IsNil)
 
-	// Check that file was created
-	_, err = os.Stat(filePath)
-	c.Assert(os.IsNotExist(err), qt.IsFalse)
+	// Check that blob was created
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
 
-	// Check file name format
-	expectedPrefix := fmt.Sprintf("export_%s_", export.Type)
-	fileName := filepath.Base(filePath)
-	c.Assert(fileName, qt.Contains, expectedPrefix)
-	c.Assert(fileName, qt.Contains, ".xml")
+	exists, err := b.Exists(ctx, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsTrue)
+
+	// Check blob key format
+	expectedPrefix := fmt.Sprintf("exports/export_%s_", export.Type)
+	c.Assert(blobKey, qt.Contains, expectedPrefix)
+	c.Assert(blobKey, qt.Contains, ".xml")
 
 	// Clean up
-	os.Remove(filePath)
+	err = b.Delete(ctx, blobKey)
+	c.Assert(err, qt.IsNil)
 }
