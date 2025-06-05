@@ -24,8 +24,12 @@ export async function createCommodity(page: Page, recorder: TestRecorder,testCom
     await page.click('.p-select[id="originalPriceCurrency"]');
     await page.click(`.p-select-option-label:has-text("${testCommodity.originalPriceCurrency}")`);
 
-    // Set purchase date
-    await page.fill('#purchaseDate', testCommodity.purchaseDate);
+    // Set purchase date using PrimeVue DatePicker
+    // Wait for the DatePicker to be ready and find its input field
+    await page.waitForSelector('#purchaseDate', { state: 'visible' });
+    const datePickerInput = page.locator('#purchaseDate input');
+    await datePickerInput.waitFor({ state: 'visible' });
+    await datePickerInput.fill(testCommodity.purchaseDate);
 
     // Add serial number if provided
     if (testCommodity.serialNumber) {
