@@ -117,15 +117,19 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 	}
 
 	for _, export := range exports {
-		if export.Status == models.ExportStatusPending {
-			// Use semaphore to limit concurrent goroutines
-			if w.semaphore.TryAcquire(1) {
-				go func(exportID string) {
-					defer w.semaphore.Release(1)
-					w.processExport(ctx, exportID)
-				}(export.ID)
-			}
+		if export.Status != models.ExportStatusPending {
+			continue
 		}
+		
+		// Use semaphore to limit concurrent goroutines
+		if !w.semaphore.TryAcquire(1) {
+			continue
+		}
+		
+		go func(exportID string) {
+			defer w.semaphore.Release(1)
+			w.processExport(ctx, exportID)
+		}(export.ID)
 	}
 }
 
@@ -135,7 +139,7 @@ func (w *ExportWorker) processExport(ctx context.Context, exportID string) {
 
 	if err := w.exportService.ProcessExport(ctx, exportID); err != nil {
 		log.WithError(err).WithField("export_id", exportID).Error("Failed to process export")
-	} else {
-		log.WithField("export_id", exportID).Info("Successfully processed export")
+		return
 	}
+	log.WithField("export_id", exportID).Info("Successfully processed export")
 }
