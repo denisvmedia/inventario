@@ -8,6 +8,26 @@
         </div>
       </div>
       <div class="header-actions">
+        <div class="sort-controls">
+          <label for="sortBy" class="sort-label">Sort by:</label>
+          <Select
+            id="sortBy"
+            v-model="sortBy"
+            :options="sortOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="Select sorting"
+            class="sort-select"
+          />
+          <Button
+            :title="sortOrder === 'asc' ? 'Sort Ascending' : 'Sort Descending'"
+            :icon="sortOrder === 'asc' ? 'pi pi-sort-up' : 'pi pi-sort-down'"
+            @click="toggleSortOrder"
+            class="sort-order-btn"
+            severity="secondary"
+            text
+          />
+        </div>
         <div class="filter-toggle">
           <InputSwitch v-model="showInactiveItems" />
           <label class="toggle-label">Show drafts & inactive items</label>
@@ -83,6 +103,9 @@ import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice } from '@/services/currencyService'
 import Confirmation from "@/components/Confirmation.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
+import Select from 'primevue/select'
+import Button from 'primevue/button'
+import InputSwitch from 'primevue/inputswitch'
 
 const router = useRouter()
 const route = useRoute()
@@ -108,26 +131,99 @@ let highlightTimeout: number | null = null
 // Filter toggle state
 const showInactiveItems = ref(false)
 
+// Sorting state
+const sortBy = ref('name')
+const sortOrder = ref<'asc' | 'desc'>('asc')
+
+// Sort options
+const sortOptions = ref([
+  { label: 'Name', value: 'name' },
+  { label: 'Purchase Date', value: 'purchaseDate' },
+  { label: 'Location', value: 'location' },
+  { label: 'Area', value: 'area' },
+  { label: 'Type', value: 'type' },
+  { label: 'Status', value: 'status' }
+])
+
 // Computed property to check if there are locations and areas
 const hasLocationsAndAreas = computed(() => {
   return locations.value.length > 0 && areas.value.length > 0
 })
 
-// Filtered commodities based on toggle state
+// Filtered and sorted commodities
 const filteredCommodities = computed(() => {
-  if (showInactiveItems.value) {
-    return commodities.value
+  let filtered = commodities.value
+  
+  if (!showInactiveItems.value) {
+    filtered = filtered.filter(commodity => {
+      // Show only non-draft items with status 'in_use'
+      return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
+    })
   }
-
-  return commodities.value.filter(commodity => {
-    // Show only non-draft items with status 'in_use'
-    return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
+  
+  // Sort the filtered commodities
+  const sorted = [...filtered].sort((a, b) => {
+    let aValue: any, bValue: any
+    
+    switch (sortBy.value) {
+      case 'name':
+        aValue = a.attributes.name.toLowerCase()
+        bValue = b.attributes.name.toLowerCase()
+        break
+      case 'purchaseDate':
+        aValue = new Date(a.attributes.purchase_date || '1900-01-01')
+        bValue = new Date(b.attributes.purchase_date || '1900-01-01')
+        break
+      case 'location':
+        aValue = getLocationName(a.attributes.area_id).toLowerCase()
+        bValue = getLocationName(b.attributes.area_id).toLowerCase()
+        break
+      case 'area':
+        aValue = getAreaName(a.attributes.area_id).toLowerCase()
+        bValue = getAreaName(b.attributes.area_id).toLowerCase()
+        break
+      case 'type':
+        aValue = a.attributes.type.toLowerCase()
+        bValue = b.attributes.type.toLowerCase()
+        break
+      case 'status':
+        aValue = a.attributes.status.toLowerCase()
+        bValue = b.attributes.status.toLowerCase()
+        break
+      default:
+        aValue = a.attributes.name.toLowerCase()
+        bValue = b.attributes.name.toLowerCase()
+    }
+    
+    if (aValue < bValue) {
+      return sortOrder.value === 'asc' ? -1 : 1
+    }
+    if (aValue > bValue) {
+      return sortOrder.value === 'asc' ? 1 : -1
+    }
+    return 0
   })
+  
+  return sorted
 })
 
 // Map to store area and location information
 const areaMap = ref<Record<string, any>>({})
 const locationMap = ref<Record<string, any>>({})
+
+// Helper functions for sorting
+const getAreaName = (areaId: string) => {
+  return areaMap.value[areaId]?.name || 'Unknown Area'
+}
+
+const getLocationName = (areaId: string) => {
+  const locationId = areaMap.value[areaId]?.locationId
+  return locationMap.value[locationId]?.name || 'Unknown Location'
+}
+
+const toggleSortOrder = () => {
+  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+}
 
 // These functions are now handled by the CommodityListItem component
 
@@ -283,6 +379,34 @@ const deleteCommodity = async (id: string) => {
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #f8f9fa;
+  padding: 0.5rem 0.75rem;
+  border-radius: $default-radius;
+  border: 1px solid #e9ecef;
+}
+
+.sort-label {
+  font-size: 0.9rem;
+  margin: 0;
+  white-space: nowrap;
+  color: $text-color;
+}
+
+.sort-select {
+  min-width: 140px;
+}
+
+.sort-order-btn {
+  padding: 0.25rem;
+  height: 32px;
+  width: 32px;
 }
 
 .filter-toggle {

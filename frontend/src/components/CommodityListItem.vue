@@ -28,6 +28,13 @@
           {{ formatPrice(calculatePricePerUnit(commodity)) }} per unit
         </span>
       </div>
+      <div v-if="commodity.attributes.purchase_date" class="commodity-purchase-date">
+        <span class="purchase-date-label">
+          <font-awesome-icon icon="calendar" />
+          Purchased:
+        </span>
+        <span class="purchase-date-value">{{ formattedPurchaseDate }}</span>
+      </div>
       <div v-if="commodity.attributes.status" class="commodity-status" :class="{ 'with-draft': commodity.attributes.draft }">
         <span class="status" :class="commodity.attributes.status">{{ getStatusName(commodity.attributes.status) }}</span>
       </div>
@@ -44,9 +51,11 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watchEffect } from 'vue'
 import {calculatePricePerUnit, formatPrice, getDisplayPrice} from "@/services/currencyService.ts";
 import {COMMODITY_STATUSES} from "@/constants/commodityStatuses.ts";
 import {COMMODITY_TYPES} from "@/constants/commodityTypes.ts";
+import { formatDateWithSettings } from "@/services/dateService.ts";
 
 const props = defineProps({
   commodity: {
@@ -115,6 +124,15 @@ const getLocationName = (areaId: string) => {
   const locationId = props.areaMap[areaId]?.locationId
   return props.locationMap[locationId]?.name || 'Unknown Location'
 }
+
+// Reactive date formatting
+const formattedPurchaseDate = ref<string>('')
+
+watchEffect(async () => {
+  if (props.commodity.attributes.purchase_date) {
+    formattedPurchaseDate.value = await formatDateWithSettings(props.commodity.attributes.purchase_date)
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -140,6 +158,27 @@ const getLocationName = (areaId: string) => {
   font-size: 1.1rem;
   display: flex;
   flex-direction: column;
+}
+
+.commodity-purchase-date {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: $text-color;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  
+  .purchase-date-label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: $text-secondary-color;
+  }
+  
+  .purchase-date-value {
+    font-weight: 500;
+    color: $text-color;
+  }
 }
 
 .price-per-unit {
