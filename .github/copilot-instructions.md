@@ -1,3 +1,6 @@
+Project layout:
+  * e2e: end-to-end tests written with the help
+
 We use `github.com/frankban/quicktest` for in our tests. This package should always be imported with `qt` alias.
 
 When changing go code, make sure you run `golangci-lint run --timeout=10m`, which must always be successful.
@@ -23,3 +26,5 @@ In all the approaches make sure you follow best practices (general ones or speci
 When making changes, make sure that the existing documentation is still actual. Modify it accordingly, if it's not.
 
 When writing go code, make sure you have godoc comments. Keep good balance between verbosity and lack of documentation. Only be super detailed, where the complexity of the code demands that.
+
+Make sure you always have ending newline in all go, ts, js and md files.
