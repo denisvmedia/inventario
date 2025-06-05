@@ -62,3 +62,20 @@ export interface Invoice {
   size: number;
   url: string;
 }
+
+export type ExportStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+
+export type ExportType = 'full_database' | 'selected_items' | 'locations' | 'areas' | 'commodities';
+
+export interface Export {
+  id?: string;
+  type: ExportType;
+  status: ExportStatus;
+  include_file_data: boolean;
+  selected_item_ids: string[];
+  file_path: string;
+  created_date: string;
+  completed_date?: string;
+  error_message?: string;
+  description: string;
+}
