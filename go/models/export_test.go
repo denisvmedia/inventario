@@ -1,98 +1,105 @@
-package models
+package models_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	qt "github.com/frankban/quicktest"
+
+	"github.com/denisvmedia/inventario/models"
 )
 
 func TestExportStatus_IsValid(t *testing.T) {
+	c := qt.New(t)
+	
 	tests := []struct {
-		status ExportStatus
+		status models.ExportStatus
 		valid  bool
 	}{
-		{ExportStatusPending, true},
-		{ExportStatusInProgress, true},
-		{ExportStatusCompleted, true},
-		{ExportStatusFailed, true},
+		{models.ExportStatusPending, true},
+		{models.ExportStatusInProgress, true},
+		{models.ExportStatusCompleted, true},
+		{models.ExportStatusFailed, true},
 		{"invalid", false},
 		{"", false},
 	}
 
 	for _, test := range tests {
 		t.Run(string(test.status), func(t *testing.T) {
-			assert.Equal(t, test.valid, test.status.IsValid())
+			c.Assert(test.status.IsValid(), qt.Equals, test.valid)
 		})
 	}
 }
 
 func TestExportType_IsValid(t *testing.T) {
+	c := qt.New(t)
+	
 	tests := []struct {
-		exportType ExportType
+		exportType models.ExportType
 		valid      bool
 	}{
-		{ExportTypeFullDatabase, true},
-		{ExportTypeSelectedItems, true},
-		{ExportTypeLocations, true},
-		{ExportTypeAreas, true},
-		{ExportTypeCommodities, true},
+		{models.ExportTypeFullDatabase, true},
+		{models.ExportTypeSelectedItems, true},
+		{models.ExportTypeLocations, true},
+		{models.ExportTypeAreas, true},
+		{models.ExportTypeCommodities, true},
 		{"invalid", false},
 		{"", false},
 	}
 
 	for _, test := range tests {
 		t.Run(string(test.exportType), func(t *testing.T) {
-			assert.Equal(t, test.valid, test.exportType.IsValid())
+			c.Assert(test.exportType.IsValid(), qt.Equals, test.valid)
 		})
 	}
 }
 
 func TestExport_ValidateWithContext(t *testing.T) {
+	c := qt.New(t)
 	ctx := context.Background()
 
 	// Valid export
-	createdDate := Date("2023-01-01")
-	validExport := &Export{
-		Type:            ExportTypeFullDatabase,
-		Status:          ExportStatusPending,
+	createdDate := models.Date("2023-01-01")
+	validExport := &models.Export{
+		Type:            models.ExportTypeFullDatabase,
+		Status:          models.ExportStatusPending,
 		IncludeFileData: true,
 		CreatedDate:     &createdDate,
 		Description:     "Test export",
 	}
 
 	err := validExport.ValidateWithContext(ctx)
-	assert.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 
 	// Invalid export - empty type
-	invalidExport := &Export{
+	invalidExport := &models.Export{
 		Type:        "",
-		Status:      ExportStatusPending,
+		Status:      models.ExportStatusPending,
 		CreatedDate: &createdDate,
 	}
 
 	err = invalidExport.ValidateWithContext(ctx)
-	assert.Error(t, err)
+	c.Assert(err, qt.IsNotNil)
 
 	// Invalid export - selected items without IDs
-	invalidSelectedExport := &Export{
-		Type:            ExportTypeSelectedItems,
-		Status:          ExportStatusPending,
+	invalidSelectedExport := &models.Export{
+		Type:            models.ExportTypeSelectedItems,
+		Status:          models.ExportStatusPending,
 		CreatedDate:     &createdDate,
-		SelectedItemIDs: ValuerSlice[string]{},
+		SelectedItemIDs: models.ValuerSlice[string]{},
 	}
 
 	err = invalidSelectedExport.ValidateWithContext(ctx)
-	assert.Error(t, err)
+	c.Assert(err, qt.IsNotNil)
 
 	// Valid export - selected items with IDs
-	validSelectedExport := &Export{
-		Type:            ExportTypeSelectedItems,
-		Status:          ExportStatusPending,
+	validSelectedExport := &models.Export{
+		Type:            models.ExportTypeSelectedItems,
+		Status:          models.ExportStatusPending,
 		CreatedDate:     &createdDate,
-		SelectedItemIDs: ValuerSlice[string]{"id1", "id2"},
+		SelectedItemIDs: models.ValuerSlice[string]{"id1", "id2"},
 	}
 
 	err = validSelectedExport.ValidateWithContext(ctx)
-	assert.NoError(t, err)
+	c.Assert(err, qt.IsNil)
 }

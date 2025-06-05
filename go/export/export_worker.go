@@ -121,9 +121,10 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 			continue
 		}
 		
-		// Use semaphore to limit concurrent goroutines
-		if !w.semaphore.TryAcquire(1) {
-			continue
+		// Block until we can acquire a semaphore slot to limit concurrent goroutines
+		if err := w.semaphore.Acquire(ctx, 1); err != nil {
+			log.WithError(err).Error("Failed to acquire semaphore")
+			return
 		}
 		
 		go func(exportID string) {
