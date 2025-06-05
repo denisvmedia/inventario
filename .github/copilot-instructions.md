@@ -1,5 +1,15 @@
 Project layout:
-  * e2e: end-to-end tests written with the help
+  * /go - Backend Go code
+    * /registry - Data storage implementations
+      * /memory - In-memory storage implementation
+      * /boltb - Boltdb storage implementation
+      * /postgres - Postgres storage implementation
+  * /frontend - Vue.js 3 + TypeScript frontend
+  * /e2e - End-to-end tests
+
+We use `github.com/denisvmedia/inventario/internal/errkit` for errors, but for sentitel errors we use std `errors` package.
+
+We use `github.com/denisvmedia/inventario/internal/log` for loggig (and never `log` package). Using `log/slog` is not a mistake as well (but internal log should be preferred).
 
 We use `github.com/frankban/quicktest` for in our tests. This package should always be imported with `qt` alias.
 
