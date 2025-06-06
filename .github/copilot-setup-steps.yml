@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  setup:
+  copilot_setup:
     runs-on: ubuntu-latest
     steps:
       # Install system dependencies
