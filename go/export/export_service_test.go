@@ -76,10 +76,10 @@ func TestInventoryDataXMLStructure(t *testing.T) {
 	// Check that the XML contains expected elements
 	xmlStr := string(xmlData)
 	expectedElements := []string{
-		`<inventory export_date="2024-01-01T00:00:00Z" export_type="full_database">`,
+		`<inventory exportDate="2024-01-01T00:00:00Z" exportType="full_database">`,
 		`<locations>`,
 		`<location id="loc1">`,
-		`<location_name>Main Warehouse</location_name>`,
+		`<locationName>Main Warehouse</locationName>`,
 		`<areas>`,
 		`<area id="area1">`,
 		`<commodities>`,

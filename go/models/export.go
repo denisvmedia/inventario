@@ -118,15 +118,15 @@ func (e ExportSelectedItem) Validate() error {
 
 type Export struct {
 	EntityID
-	Type            ExportType                    `json:"type" db:"type"`
-	Status          ExportStatus                  `json:"status" db:"status"`
-	IncludeFileData bool                          `json:"include_file_data" db:"include_file_data"`
+	Type            ExportType                      `json:"type" db:"type"`
+	Status          ExportStatus                    `json:"status" db:"status"`
+	IncludeFileData bool                            `json:"include_file_data" db:"include_file_data"`
 	SelectedItems   ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
-	FilePath        string                        `json:"file_path" db:"file_path"`
-	CreatedDate     PDate                         `json:"created_date" db:"created_date"`
-	CompletedDate   PDate                         `json:"completed_date" db:"completed_date"`
-	ErrorMessage    string                        `json:"error_message" db:"error_message"`
-	Description     string                        `json:"description" db:"description"`
+	FilePath        string                          `json:"file_path" db:"file_path"`
+	CreatedDate     PDate                           `json:"created_date" db:"created_date"`
+	CompletedDate   PDate                           `json:"completed_date" db:"completed_date"`
+	ErrorMessage    string                          `json:"error_message" db:"error_message"`
+	Description     string                          `json:"description" db:"description"`
 }
 
 func (*Export) Validate() error {

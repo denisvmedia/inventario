@@ -32,8 +32,8 @@ func NewExportService(registrySet *registry.Set, uploadLocation string) *ExportS
 // InventoryData represents the root XML structure for exports
 type InventoryData struct {
 	XMLName     xml.Name     `xml:"inventory"`
-	ExportDate  string       `xml:"export_date,attr"`
-	ExportType  string       `xml:"export_type,attr"`
+	ExportDate  string       `xml:"exportDate,attr"`
+	ExportType  string       `xml:"exportType,attr"`
 	Locations   []*Location  `xml:"locations>location,omitempty"`
 	Areas       []*Area      `xml:"areas>area,omitempty"`
 	Commodities []*Commodity `xml:"commodities>commodity,omitempty"`
@@ -42,37 +42,37 @@ type InventoryData struct {
 type Location struct {
 	XMLName xml.Name `xml:"location"`
 	ID      string   `xml:"id,attr"`
-	Name    string   `xml:"location_name"`
+	Name    string   `xml:"locationName"`
 	Address string   `xml:"address"`
 }
 
 type Area struct {
 	XMLName    xml.Name `xml:"area"`
 	ID         string   `xml:"id,attr"`
-	Name       string   `xml:"area_name"`
-	LocationID string   `xml:"location_id"`
+	Name       string   `xml:"areaName"`
+	LocationID string   `xml:"locationId"`
 }
 
 type Commodity struct {
 	XMLName                xml.Name `xml:"commodity"`
 	ID                     string   `xml:"id,attr"`
-	Name                   string   `xml:"commodity_name"`
-	ShortName              string   `xml:"short_name,omitempty"`
+	Name                   string   `xml:"commodityName"`
+	ShortName              string   `xml:"shortName,omitempty"`
 	Type                   string   `xml:"type"`
-	AreaID                 string   `xml:"area_id"`
+	AreaID                 string   `xml:"areaId"`
 	Count                  int      `xml:"count"`
-	OriginalPrice          string   `xml:"original_price,omitempty"`
-	OriginalPriceCurrency  string   `xml:"original_price_currency,omitempty"`
-	ConvertedOriginalPrice string   `xml:"converted_original_price,omitempty"`
-	CurrentPrice           string   `xml:"current_price,omitempty"`
-	SerialNumber           string   `xml:"serial_number,omitempty"`
-	ExtraSerialNumbers     []string `xml:"extra_serial_numbers>serial_number,omitempty"`
-	PartNumbers            []string `xml:"part_numbers>part_number,omitempty"`
+	OriginalPrice          string   `xml:"originalPrice,omitempty"`
+	OriginalPriceCurrency  string   `xml:"originalPriceCurrency,omitempty"`
+	ConvertedOriginalPrice string   `xml:"convertedOriginalPrice,omitempty"`
+	CurrentPrice           string   `xml:"currentPrice,omitempty"`
+	SerialNumber           string   `xml:"serialNumber,omitempty"`
+	ExtraSerialNumbers     []string `xml:"extraSerialNumbers>serialNumber,omitempty"`
+	PartNumbers            []string `xml:"partNumbers>partNumber,omitempty"`
 	Tags                   []string `xml:"tags>tag,omitempty"`
 	Status                 string   `xml:"status"`
-	PurchaseDate           string   `xml:"purchase_date,omitempty"`
-	RegisteredDate         string   `xml:"registered_date,omitempty"`
-	LastModifiedDate       string   `xml:"last_modified_date,omitempty"`
+	PurchaseDate           string   `xml:"purchaseDate,omitempty"`
+	RegisteredDate         string   `xml:"registeredDate,omitempty"`
+	LastModifiedDate       string   `xml:"lastModifiedDate,omitempty"`
 	URLs                   []*URL   `xml:"urls>url,omitempty"`
 	Comments               string   `xml:"comments,omitempty"`
 	Draft                  bool     `xml:"draft"`
@@ -91,9 +91,9 @@ type File struct {
 	XMLName      xml.Name `xml:"file"`
 	ID           string   `xml:"id,attr"`
 	Path         string   `xml:"path"`
-	OriginalPath string   `xml:"original_path"`
+	OriginalPath string   `xml:"originalPath"`
 	Extension    string   `xml:"extension"`
-	MimeType     string   `xml:"mime_type"`
+	MimeType     string   `xml:"mimeType"`
 	Data         string   `xml:"data,omitempty"` // Base64 encoded file data if include_file_data is true
 }
 
