@@ -149,11 +149,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import exportService from '../../services/exportService'
-import locationService from '../../services/locationService'
-import areaService from '../../services/areaService'
-import commodityService from '../../services/commodityService'
-import type { Export, ExportType, Location, Area, Commodity, ResourceObject } from '../../types'
+import exportService from '@/services/exportService'
+import locationService from '@/services/locationService'
+import areaService from '@/services/areaService'
+import commodityService from '@/services/commodityService'
+import type { Export, ExportType, Location, Area, Commodity, ResourceObject } from '@/types'
 
 const router = useRouter()
 

@@ -93,8 +93,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import exportService from '../../services/exportService'
-import type { Export, ResourceObject } from '../../types'
+import exportService from '@/services/exportService'
+import type { Export, ResourceObject } from '@/types'
 
 const exports = ref<Export[]>([])
 const loading = ref(true)

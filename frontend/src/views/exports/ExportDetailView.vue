@@ -133,8 +133,8 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import exportService from '../../services/exportService'
-import type { Export } from '../../types'
+import exportService from '@/services/exportService'
+import type { Export } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
