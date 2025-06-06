@@ -12,42 +12,25 @@ steps:
   - name: Install essential build tools
     run: sudo apt-get install -y build-essential git curl wget ca-certificates gnupg lsb-release
 
-  # Install Go 1.24.3
-  - name: Install Go
-    run: |
-      GO_VERSION=1.24.3
-      wget -O go.tar.gz "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz"
-      sudo rm -rf /usr/local/go
-      sudo tar -C /usr/local -xzf go.tar.gz
-      rm go.tar.gz
-      # Set up Go environment variables
-      echo 'export PATH=/usr/local/go/bin:$PATH' >> ~/.bashrc
-      echo 'export GOPATH=$HOME/go' >> ~/.bashrc
-      echo 'export PATH=$GOPATH/bin:$PATH' >> ~/.bashrc
-      # Create GOPATH directory
-      mkdir -p $HOME/go/bin
-      # Export for current session
-      export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
-      export GOPATH=$HOME/go
+  # Install Go
+  - uses: actions/setup-go@v5
+    with:
+      go-version: '1.24.3'
+      cache: true
 
-  # Install Volta (Node.js version manager)
-  - name: Install Volta
+  # Install Node.js
+  - name: Read Node.js version from package.json
+    id: node
     run: |
-      curl https://get.volta.sh | bash
-      # Set up Volta environment variables
-      echo 'export VOLTA_HOME="$HOME/.volta"' >> ~/.bashrc
-      echo 'export PATH="$VOLTA_HOME/bin:$PATH"' >> ~/.bashrc
-      # Export for current session
-      export VOLTA_HOME="$HOME/.volta"
-      export PATH="$VOLTA_HOME/bin:$PATH"
+      echo "version=$(jq -r .volta.node package.json)" >> $GITHUB_OUTPUT
+    working-directory: frontend
 
-  # Install Node.js and npm using Volta (pinned versions from package.json)
-  - name: Install Node.js and npm via Volta
-    run: |
-      export VOLTA_HOME="$HOME/.volta"
-      export PATH="$VOLTA_HOME/bin:$PATH"
-      volta install node@22.16.0
-      volta install npm@11.4.1
+  - name: Set up Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: ${{ steps.node.outputs.version }}
+      cache: 'npm'
+      cache-dependency-path: frontend/package-lock.json
 
   # Install Docker and Docker Compose
   - name: Install Docker
@@ -77,32 +60,35 @@ steps:
   # Install project Go dependencies and tools
   - name: Install Go dependencies and tools
     run: |
-      # Set up environment
-      export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
-      export GOPATH=$HOME/go
-      
       # Download Go module dependencies
       cd go && go mod download
       
       # Install golangci-lint (version from workflow)
-      curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GOPATH/bin v2.1.6
-      
+      curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
+
+  - name: Check swag version in go.mod
+    id: swag_version
+    run: |
+      SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)
+      if [ -z "$SWAG_VERSION" ]; then
+        echo "github.com/swaggo/swag is not in go.mod" >&2
+        exit 1
+      fi
+      echo "SWAG_VERSION=$SWAG_VERSION" >> $GITHUB_OUTPUT
+    working-directory: go
+
+  - name: Install swag for Swagger documentation
+    run: |
       # Install swag for Swagger documentation (version from go.mod)
-      SWAG_VERSION=$(cd go && go list -m -f '{{.Version}}' github.com/swaggo/swag)
-      go install github.com/swaggo/swag/cmd/swag@${SWAG_VERSION}
+      go install github.com/swaggo/swag/cmd/swag@${{ steps.swag_version.outputs.SWAG_VERSION }}
 
   # Install frontend dependencies
   - name: Install frontend dependencies
-    run: |
-      export VOLTA_HOME="$HOME/.volta"
-      export PATH="$VOLTA_HOME/bin:$PATH"
-      cd frontend && npm ci
+    run: cd frontend && npm ci
 
   # Install e2e test dependencies and Playwright browsers
   - name: Install e2e dependencies and Playwright browsers
     run: |
-      export VOLTA_HOME="$HOME/.volta"
-      export PATH="$VOLTA_HOME/bin:$PATH"
       cd e2e && npm ci
       cd e2e && npx playwright install --with-deps
 
@@ -115,25 +101,11 @@ steps:
 
   # Build the project to verify everything works
   - name: Build project
-    run: |
-      # Set up environment
-      export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
-      export GOPATH=$HOME/go
-      export VOLTA_HOME="$HOME/.volta"
-      export PATH="$VOLTA_HOME/bin:$PATH"
-      
-      # Build the project
-      make build
+    run: make build
 
   # Run basic linting to verify tools are working
   - name: Verify linting tools
     run: |
-      # Set up environment
-      export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
-      export GOPATH=$HOME/go
-      export VOLTA_HOME="$HOME/.volta"
-      export PATH="$VOLTA_HOME/bin:$PATH"
-      
       # Run linters
       make lint-go
       make lint-frontend
