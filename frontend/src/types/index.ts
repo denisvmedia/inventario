@@ -72,6 +72,7 @@ export type ExportSelectedItemType = 'location' | 'area' | 'commodity';
 export interface ExportSelectedItem {
   id: string;
   type: ExportSelectedItemType;
+  include_all?: boolean;
 }
 
 export interface Export {

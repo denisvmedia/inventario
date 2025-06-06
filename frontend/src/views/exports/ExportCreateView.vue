@@ -382,6 +382,20 @@ const createExport = async () => {
     creating.value = true
     error.value = ''
 
+    // Build selected items with include_all information
+    const selectedItemsWithInclusion = (exportData.value.selected_items || []).map(item => {
+      const enrichedItem = { ...item }
+      
+      // Add include_all flag for locations and areas
+      if (item.type === 'location') {
+        enrichedItem.include_all = getLocationInclusion(item.id)
+      } else if (item.type === 'area') {
+        enrichedItem.include_all = getAreaInclusion(item.id)
+      }
+      
+      return enrichedItem
+    })
+
     const requestData = {
       data: {
         type: 'exports',
@@ -389,7 +403,7 @@ const createExport = async () => {
           type: exportData.value.type,
           description: exportData.value.description?.trim(),
           include_file_data: exportData.value.include_file_data,
-          selected_items: exportData.value.selected_items || [],
+          selected_items: selectedItemsWithInclusion,
           status: 'pending'
         }
       }
