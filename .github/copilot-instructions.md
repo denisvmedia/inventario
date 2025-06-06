@@ -1,46 +1,81 @@
-Project layout:
-  * /go - Backend Go code
-    * /registry - Data storage implementations
-      * /memory - In-memory storage implementation
-      * /boltb - Boltdb storage implementation
-      * /postgres - Postgres storage implementation
-  * /frontend - Vue.js 3 + TypeScript frontend, SCSS styles
-  * /e2e - End-to-end tests
+This is a Go-based personal inventory management application with a Vue.js 3 + TypeScript frontend. It supports multiple
+database backends (memory, BoltDB, PostgreSQL) and is designed for tracking personal items, their locations, and
+associated metadata. Please follow these guidelines when contributing:
 
-We use `github.com/denisvmedia/inventario/internal/errkit` for errors, but for sentitel errors we use std `errors` package.
+## Code Standards
 
-We use `github.com/denisvmedia/inventario/internal/log` for loggig (and never `log` package). Using `log/slog` is not a mistake as well (but internal log should be preferred).
+### Required Before Each Commit
+- Run `make lint-go && make test-go` before committing any Go changes to ensure proper code formatting, linting and testing
+- Run `make lint-frontend` before committing any frontend changes
 
-We use `github.com/frankban/quicktest` for in our tests. This package should always be imported with `qt` alias.
+### Development Flow
+- Test: `make test` (runs both Go and frontend tests)
+- Test backend only: `make test-go` (runs both Go tests)
+- Test backend only with PostgreSQL: `make test-go-postgres` (runs both Go tests including PostgreSQL, requires env var
+  in format: `POSTGRES_TEST_DSN=postgres://user:password@localhost:5432/inventario_test?sslmode=disable`)
+- Build: `make build` (builds both backend and frontend)
+- Build backend only: `make build-backend`
+- Build frontend only: `make build-frontend`
+- End-to-end tests: `make test-e2e` (run only when asked explicitely)
+- Seed DB with test data: `make seed-db` (requires app running on localhost:3333)
 
-When changing go code, make sure you run `golangci-lint run --timeout=10m`, which must always be successful.
+## Repository Structure
+- `go/`: Backend Go code and main application entry point
+  - `go/registry/`: Data storage implementations (memory, boltdb, postgres)
+  - `go/models/`: Data models and entity definitions
+  - `go/apiserver/`: HTTP API server implementation
+  - `go/internal/`: Internal packages (errkit, log, etc.)
+- `frontend/`: Vue.js 3 + TypeScript frontend with SCSS styles
+- `e2e/`: End-to-end tests using Playwright
+- `docs/`: Swagger API documentation (auto-generated)
+- `bin/`: Build output directory
 
-When changing go code, consider writing and/or updating unit tests.
+## Key Guidelines
 
-When changing go code, make sure you test it using `go test`, all the tests must pass (it's ok if DB tests are skipped, when you are not testing the DB). If the DB tests are needed, check `.github/workflows/go-test-postgres.yml` to understand how to run them.
+### Go Development
+- `cd go` before operating on go code
+- Use `github.com/denisvmedia/inventario/internal/errkit` for errors, but use std `errors` package for sentinel errors
+- Use `github.com/denisvmedia/inventario/internal/log` for logging (never use std `log` package). Using `log/slog` is
+   acceptable but internal log is preferred
+- Use `github.com/frankban/quicktest` for tests, always imported with `qt` alias
+- Write table-driven unit tests when possible, separating happy and unhappy paths
+- Follow Go best practices and idiomatic patterns
+- Write godoc comments for public APIs - balance verbosity with clarity
+- Maintain existing code structure and organization
+- Use dependency injection patterns where appropriate
 
-When changing frontend code, make sure you lint the code using `npm run lint:js` and `npm run lint:styles`.
+### Frontend Development
+- Use Vue.js 3 with TypeScript and Composition API
+- Use SCSS for all styling - check `frontend/src/assets/*.scss` to avoid duplicating styles 
+- Maintain consistent look and feel with existing views
+- Follow Vue.js best practices and component patterns
 
-When changing frontend code, make sure you testcode using `npm run test`.
+### Testing Requirements
+- Write unit tests for new Go functionality using quicktest
+- Run `make test-go` for Go tests (excludes PostgreSQL by default)
+- For PostgreSQL tests: set `POSTGRES_TEST_DSN` (e.g. `POSTGRES_TEST_DSN=postgres://user:password@localhost:5432/inventario_test?sslmode=disable`)
+   environment variable and run `make test-go-postgres` (PostgreSQL must be running according to the env var)
+- Run `make test-frontend` for frontend tests
+- Consider writing e2e tests for complex user flows (in `e2e/` directory)
+- All tests must pass before committing
 
-When changing go API entities make sure you run `swag init --output docs` to generate swagger docs. `swag` to use version must be taken as `SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)`. To install it use `go install github.com/swaggo/swag/cmd/swag@${SWAG_VERSION}`.
+### API Documentation
+- When changing Go API entities, regenerate Swagger docs:
+  ```bash
+  SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)
+  go install github.com/swaggo/swag/cmd/swag@${SWAG_VERSION}
+  swag init --output docs
+  ```
 
-When complex or breaking changes are done, make sure you run e2e tests. You can get more information on how to run them in `.github/workflows/e2e-tests.yml`.
+### Database Support
+- Support multiple backends: memory (default), BoltDB, PostgreSQL
+- Use appropriate registry implementations in `go/registry/`
+- Test database-specific code with appropriate test suites
+- Squash SQL migrations, which belong to the same pull request, to have only 1 up and 1 down migration per PR
 
-Consider writing or updating e2e tests if your changes may need you to do so (check e2e directory). But remain rational, since too many e2e tests may take too much time to run, so only the most important parts should be tests.
-
-If you update the tests, always run the corresponding command(s) to make sure they work the way you expect.
-
-In all the approaches make sure you follow best practices (general ones or specific to the language or library/framework).
-
-When making changes, make sure that the existing documentation is still actual. Modify it accordingly, if it's not.
-
-When writing go code, make sure you have godoc comments. Keep good balance between verbosity and lack of documentation. Only be super detailed, where the complexity of the code demands that.
-
-Make sure you always have ending newline in all go, ts, js and md files.
-
-Make sure you don't have trailing space anywhere (unless it is required by the format or explicitely stated by the user).
-
-Only use SCSS for styles in frontend. Make sure you use consistent styles with the existing views. If needed to create new styles, they should follow the same look and feel pattern.
-
-When creating styles in frontend, always check `frontend/src/assets/*.scss` to avoid duplicating the styles.
+### Code Quality
+- Ensure all files end with a newline (e,g, Go, TS, JS, MD files and other text files)
+- Remove trailing whitespace (unless required by format)
+- Follow consistent naming conventions
+- Document complex logic appropriately
+- Update existing documentation when making changes
