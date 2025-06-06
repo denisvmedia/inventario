@@ -1,0 +1,139 @@
+# GitHub Copilot setup steps for Inventario
+# This file configures the development environment for GitHub Copilot workspace.
+# See: https://docs.github.com/en/copilot/customizing-copilot/customizing-the-development-environment-for-copilot-coding-agent
+
+name: Setup Inventario development environment
+
+steps:
+  # Install system dependencies
+  - name: Update package lists
+    run: sudo apt-get update
+
+  - name: Install essential build tools
+    run: sudo apt-get install -y build-essential git curl wget ca-certificates gnupg lsb-release
+
+  # Install Go 1.24.3
+  - name: Install Go
+    run: |
+      GO_VERSION=1.24.3
+      wget -O go.tar.gz "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+      sudo rm -rf /usr/local/go
+      sudo tar -C /usr/local -xzf go.tar.gz
+      rm go.tar.gz
+      # Set up Go environment variables
+      echo 'export PATH=/usr/local/go/bin:$PATH' >> ~/.bashrc
+      echo 'export GOPATH=$HOME/go' >> ~/.bashrc
+      echo 'export PATH=$GOPATH/bin:$PATH' >> ~/.bashrc
+      # Create GOPATH directory
+      mkdir -p $HOME/go/bin
+      # Export for current session
+      export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+      export GOPATH=$HOME/go
+
+  # Install Volta (Node.js version manager)
+  - name: Install Volta
+    run: |
+      curl https://get.volta.sh | bash
+      # Set up Volta environment variables
+      echo 'export VOLTA_HOME="$HOME/.volta"' >> ~/.bashrc
+      echo 'export PATH="$VOLTA_HOME/bin:$PATH"' >> ~/.bashrc
+      # Export for current session
+      export VOLTA_HOME="$HOME/.volta"
+      export PATH="$VOLTA_HOME/bin:$PATH"
+
+  # Install Node.js and npm using Volta (pinned versions from package.json)
+  - name: Install Node.js and npm via Volta
+    run: |
+      export VOLTA_HOME="$HOME/.volta"
+      export PATH="$VOLTA_HOME/bin:$PATH"
+      volta install node@22.16.0
+      volta install npm@11.4.1
+
+  # Install Docker and Docker Compose
+  - name: Install Docker
+    run: |
+      # Add Docker's official GPG key
+      sudo install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      sudo chmod a+r /etc/apt/keyrings/docker.gpg
+      
+      # Add Docker repository
+      echo \
+        "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+        "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+        sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      
+      # Install Docker Engine
+      sudo apt-get update
+      sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      
+      # Add user to docker group (requires re-login to take effect)
+      sudo usermod -aG docker $USER
+
+  # Install PostgreSQL client tools for testing
+  - name: Install PostgreSQL client
+    run: sudo apt-get install -y postgresql-client
+
+  # Install project Go dependencies and tools
+  - name: Install Go dependencies and tools
+    run: |
+      # Set up environment
+      export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+      export GOPATH=$HOME/go
+      
+      # Download Go module dependencies
+      cd go && go mod download
+      
+      # Install golangci-lint (version from workflow)
+      curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GOPATH/bin v2.1.6
+      
+      # Install swag for Swagger documentation (version from go.mod)
+      SWAG_VERSION=$(cd go && go list -m -f '{{.Version}}' github.com/swaggo/swag)
+      go install github.com/swaggo/swag/cmd/swag@${SWAG_VERSION}
+
+  # Install frontend dependencies
+  - name: Install frontend dependencies
+    run: |
+      export VOLTA_HOME="$HOME/.volta"
+      export PATH="$VOLTA_HOME/bin:$PATH"
+      cd frontend && npm ci
+
+  # Install e2e test dependencies and Playwright browsers
+  - name: Install e2e dependencies and Playwright browsers
+    run: |
+      export VOLTA_HOME="$HOME/.volta"
+      export PATH="$VOLTA_HOME/bin:$PATH"
+      cd e2e && npm ci
+      cd e2e && npx playwright install --with-deps
+
+  # Create environment file for Docker setup
+  - name: Setup environment configuration
+    run: |
+      if [ ! -f .env ]; then
+        cp .env.example .env
+      fi
+
+  # Build the project to verify everything works
+  - name: Build project
+    run: |
+      # Set up environment
+      export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+      export GOPATH=$HOME/go
+      export VOLTA_HOME="$HOME/.volta"
+      export PATH="$VOLTA_HOME/bin:$PATH"
+      
+      # Build the project
+      make build
+
+  # Run basic linting to verify tools are working
+  - name: Verify linting tools
+    run: |
+      # Set up environment
+      export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+      export GOPATH=$HOME/go
+      export VOLTA_HOME="$HOME/.volta"
+      export PATH="$VOLTA_HOME/bin:$PATH"
+      
+      # Run linters
+      make lint-go
+      make lint-frontend

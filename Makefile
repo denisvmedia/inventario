@@ -154,7 +154,8 @@ lint-go:
 # Lint frontend code
 .PHONY: lint-frontend
 lint-frontend:
-	$(CD) $(FRONTEND_DIR) && npm run lint
+	$(CD) $(FRONTEND_DIR) && npm run lint:js
+	$(CD) $(FRONTEND_DIR) && npm run lint:styles
 
 # Run all linters
 .PHONY: lint
@@ -164,7 +165,7 @@ lint: lint-go lint-frontend
 .PHONY: clean
 clean:
 	$(call RM,$(BIN_DIR))
-	$(CD) $(FRONTEND_DIR) && npm run clean
+	$(call RM,$(FRONTEND_DIR)/dist)
 
 # Install dependencies
 .PHONY: deps
