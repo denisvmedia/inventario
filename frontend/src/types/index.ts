@@ -74,6 +74,8 @@ export interface ExportSelectedItem {
   type: ExportSelectedItemType;
   name?: string;
   include_all?: boolean;
+  location_id?: string; // For areas: which location they belong to
+  area_id?: string;     // For commodities: which area they belong to
 }
 
 export interface Export {

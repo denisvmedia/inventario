@@ -109,6 +109,9 @@ type ExportSelectedItem struct {
 	Type       ExportSelectedItemType `json:"type"`
 	Name       string                 `json:"name"`
 	IncludeAll bool                   `json:"include_all,omitempty"`
+	// Relationship fields for preserving hierarchy snapshot
+	LocationID string `json:"location_id,omitempty"` // For areas: which location they belong to
+	AreaID     string `json:"area_id,omitempty"`     // For commodities: which area they belong to
 }
 
 func (e ExportSelectedItem) Validate() error {

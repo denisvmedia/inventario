@@ -2422,11 +2422,19 @@ const docTemplate = `{
         "models.ExportSelectedItem": {
             "type": "object",
             "properties": {
+                "area_id": {
+                    "description": "For commodities: which area they belong to",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
                 "include_all": {
                     "type": "boolean"
+                },
+                "location_id": {
+                    "description": "Relationship fields for preserving hierarchy snapshot",
+                    "type": "string"
                 },
                 "name": {
                     "type": "string"

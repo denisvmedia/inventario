@@ -244,10 +244,11 @@ func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io
 	return b.NewReader(context.Background(), filePath, nil)
 }
 
-// enrichSelectedItemsWithNames fetches the names for selected items and adds them to the export
+// enrichSelectedItemsWithNames fetches the names and relationships for selected items and adds them to the export
 func (api *exportsAPI) enrichSelectedItemsWithNames(ctx context.Context, export *models.Export) error {
 	for i, item := range export.SelectedItems {
 		var name string
+		var locationID, areaID string
 		var err error
 
 		switch item.Type {
@@ -266,6 +267,7 @@ func (api *exportsAPI) enrichSelectedItemsWithNames(ctx context.Context, export 
 				name = "[Deleted Area " + item.ID + "]"
 			} else {
 				name = area.Name
+				locationID = area.LocationID // Store the relationship
 			}
 		case models.ExportSelectedItemTypeCommodity:
 			commodity, getErr := api.registrySet.CommodityRegistry.Get(ctx, item.ID)
@@ -274,6 +276,7 @@ func (api *exportsAPI) enrichSelectedItemsWithNames(ctx context.Context, export 
 				name = "[Deleted Commodity " + item.ID + "]"
 			} else {
 				name = commodity.Name
+				areaID = commodity.AreaID // Store the relationship
 			}
 		default:
 			name = "[Unknown Item " + item.ID + "]"
@@ -283,8 +286,10 @@ func (api *exportsAPI) enrichSelectedItemsWithNames(ctx context.Context, export 
 			return errkit.Wrap(err, "failed to fetch item name")
 		}
 
-		// Update the item with the name
+		// Update the item with the name and relationships
 		export.SelectedItems[i].Name = name
+		export.SelectedItems[i].LocationID = locationID
+		export.SelectedItems[i].AreaID = areaID
 	}
 
 	return nil
