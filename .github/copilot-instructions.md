@@ -4,7 +4,7 @@ Project layout:
       * /memory - In-memory storage implementation
       * /boltb - Boltdb storage implementation
       * /postgres - Postgres storage implementation
-  * /frontend - Vue.js 3 + TypeScript frontend
+  * /frontend - Vue.js 3 + TypeScript frontend, SCSS styles
   * /e2e - End-to-end tests
 
 We use `github.com/denisvmedia/inventario/internal/errkit` for errors, but for sentitel errors we use std `errors` package.
@@ -40,3 +40,5 @@ When writing go code, make sure you have godoc comments. Keep good balance betwe
 Make sure you always have ending newline in all go, ts, js and md files.
 
 Make sure you don't have trailing space anywhere (unless it is required by the format or explicitely stated by the user).
+
+Only use SCSS for styles in frontend. Make sure you use consistent styles with the existing views. If needed to create new styles, they should follow the same look and feel pattern.
