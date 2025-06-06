@@ -27,7 +27,7 @@ func exportFromContext(ctx context.Context) *models.Export {
 }
 
 type exportsAPI struct {
-	exportRegistry registry.ExportRegistry
+	registrySet    *registry.Set
 	uploadLocation string
 }
 
@@ -40,7 +40,7 @@ type exportsAPI struct {
 // @Success 200 {object} jsonapi.ExportsResponse "OK"
 // @Router /exports [get].
 func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
-	exports, err := api.exportRegistry.List(r.Context())
+	exports, err := api.registrySet.ExportRegistry.List(r.Context())
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -101,7 +101,15 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 		export.Status = models.ExportStatusPending
 	}
 
-	createdExport, err := api.exportRegistry.Create(r.Context(), export)
+	// Enrich selected items with names from the database
+	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
+		if err := api.enrichSelectedItemsWithNames(r.Context(), &export); err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+	}
+
+	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), export)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -143,7 +151,7 @@ func (api *exportsAPI) updateExport(w http.ResponseWriter, r *http.Request) {
 	updatedExport := request.Data.ToModel()
 	updatedExport.ID = export.ID
 
-	result, err := api.exportRegistry.Update(r.Context(), updatedExport)
+	result, err := api.registrySet.ExportRegistry.Update(r.Context(), updatedExport)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -172,7 +180,7 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := api.exportRegistry.Delete(r.Context(), export.ID)
+	err := api.registrySet.ExportRegistry.Delete(r.Context(), export.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -236,7 +244,53 @@ func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io
 	return b.NewReader(context.Background(), filePath, nil)
 }
 
-func exportCtx(exportRegistry registry.ExportRegistry) func(next http.Handler) http.Handler {
+// enrichSelectedItemsWithNames fetches the names for selected items and adds them to the export
+func (api *exportsAPI) enrichSelectedItemsWithNames(ctx context.Context, export *models.Export) error {
+	for i, item := range export.SelectedItems {
+		var name string
+		var err error
+
+		switch item.Type {
+		case models.ExportSelectedItemTypeLocation:
+			location, getErr := api.registrySet.LocationRegistry.Get(ctx, item.ID)
+			if getErr != nil {
+				// If item doesn't exist, use a fallback name
+				name = "[Deleted Location " + item.ID + "]"
+			} else {
+				name = location.Name
+			}
+		case models.ExportSelectedItemTypeArea:
+			area, getErr := api.registrySet.AreaRegistry.Get(ctx, item.ID)
+			if getErr != nil {
+				// If item doesn't exist, use a fallback name
+				name = "[Deleted Area " + item.ID + "]"
+			} else {
+				name = area.Name
+			}
+		case models.ExportSelectedItemTypeCommodity:
+			commodity, getErr := api.registrySet.CommodityRegistry.Get(ctx, item.ID)
+			if getErr != nil {
+				// If item doesn't exist, use a fallback name
+				name = "[Deleted Commodity " + item.ID + "]"
+			} else {
+				name = commodity.Name
+			}
+		default:
+			name = "[Unknown Item " + item.ID + "]"
+		}
+
+		if err != nil {
+			return errkit.Wrap(err, "failed to fetch item name")
+		}
+
+		// Update the item with the name
+		export.SelectedItems[i].Name = name
+	}
+
+	return nil
+}
+
+func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			exportID := chi.URLParam(r, "id")
@@ -245,7 +299,7 @@ func exportCtx(exportRegistry registry.ExportRegistry) func(next http.Handler) h
 				return
 			}
 
-			export, err := exportRegistry.Get(r.Context(), exportID)
+			export, err := registrySet.ExportRegistry.Get(r.Context(), exportID)
 			if err != nil {
 				renderEntityError(w, r, err)
 				return
@@ -258,10 +312,10 @@ func exportCtx(exportRegistry registry.ExportRegistry) func(next http.Handler) h
 }
 
 // Exports sets up the exports API routes.
-func Exports(exportRegistry registry.ExportRegistry, uploadLocation string) func(r chi.Router) {
+func Exports(params Params) func(r chi.Router) {
 	api := &exportsAPI{
-		exportRegistry: exportRegistry,
-		uploadLocation: uploadLocation,
+		registrySet:    params.RegistrySet,
+		uploadLocation: params.UploadLocation,
 	}
 
 	return func(r chi.Router) {
@@ -269,7 +323,7 @@ func Exports(exportRegistry registry.ExportRegistry, uploadLocation string) func
 		r.Post("/", api.createExport)
 
 		r.Route("/{id}", func(r chi.Router) {
-			r.Use(exportCtx(exportRegistry))
+			r.Use(exportCtx(params.RegistrySet))
 			r.Get("/", api.getExport)
 			r.Patch("/", api.updateExport)
 			r.Delete("/", api.deleteExport)

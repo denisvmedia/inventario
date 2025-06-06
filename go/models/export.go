@@ -107,6 +107,7 @@ func (e ExportSelectedItemType) Validate() error {
 type ExportSelectedItem struct {
 	ID         string                 `json:"id"`
 	Type       ExportSelectedItemType `json:"type"`
+	Name       string                 `json:"name"`
 	IncludeAll bool                   `json:"include_all,omitempty"`
 }
 
@@ -114,6 +115,7 @@ func (e ExportSelectedItem) Validate() error {
 	return validation.ValidateStruct(&e,
 		validation.Field(&e.ID, validation.Required, validation.Length(1, 100)),
 		validation.Field(&e.Type, validation.Required),
+		validation.Field(&e.Name, validation.Required, validation.Length(1, 500)),
 	)
 }
 

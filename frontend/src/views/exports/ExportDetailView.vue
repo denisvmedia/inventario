@@ -233,7 +233,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import exportService from '@/services/exportService'
 import commodityService from '@/services/commodityService'
-import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import type { Export } from '@/types'
 
@@ -299,7 +298,7 @@ const loadExport = async () => {
   }
 }
 
-const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, include_all?: boolean}>) => {
+const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, name?: string, include_all?: boolean}>) => {
   try {
     loadingItems.value = true
     selectedItemsDetails.value = []
@@ -309,46 +308,40 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
       standaloneCommodities: []
     }
     
-    // Create lookup maps for selected items with their include_all flag
+    // Create lookup maps for selected items with their include_all flag and names
     const locationItems = new Map()
     const areaItems = new Map()
     const commodityItems = new Map()
     
     items.forEach(item => {
+      const itemData = {
+        name: item.name || `[Unknown ${item.type} ${item.id}]`,
+        includeAll: item.include_all || false
+      }
+      
       if (item.type === 'location') {
-        locationItems.set(item.id, item.include_all || false)
+        locationItems.set(item.id, itemData)
       } else if (item.type === 'area') {
-        areaItems.set(item.id, item.include_all || false)
+        areaItems.set(item.id, itemData)
       } else if (item.type === 'commodity') {
-        commodityItems.set(item.id, true)
+        commodityItems.set(item.id, itemData)
       }
     })
     
-    // Fetch all data needed for hierarchy display
-    const [allLocationsData, allAreasData, allCommoditiesData] = await Promise.all([
-      locationService.getLocations().catch(() => ({data: {data: []}})),
+    // Fetch relationship data to build hierarchy (we still need this for the structure)
+    const [allAreasData, allCommoditiesData] = await Promise.all([
       areaService.getAreas().catch(() => ({data: {data: []}})),
       commodityService.getCommodities().catch(() => ({data: {data: []}}))
     ])
     
-    // Build lookup maps
-    const allLocations = new Map()
-    const allAreas = new Map()
-    const allCommodities = new Map()
+    // Build lookup maps for relationships
     const areasByLocation = new Map()
     const commoditiesByArea = new Map()
     
-    // Populate lookup maps
-    if (allLocationsData.data?.data) {
-      allLocationsData.data.data.forEach((loc: any) => {
-        allLocations.set(loc.id, {id: loc.id, name: loc.attributes.name})
-      })
-    }
-    
+    // Populate relationship maps
     if (allAreasData.data?.data) {
       allAreasData.data.data.forEach((area: any) => {
-        const areaData = {id: area.id, name: area.attributes.name, locationId: area.attributes.location_id}
-        allAreas.set(area.id, areaData)
+        const areaData = {id: area.id, locationId: area.attributes.location_id}
         
         if (!areasByLocation.has(area.attributes.location_id)) {
           areasByLocation.set(area.attributes.location_id, [])
@@ -359,8 +352,7 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
     
     if (allCommoditiesData.data?.data) {
       allCommoditiesData.data.data.forEach((commodity: any) => {
-        const commodityData = {id: commodity.id, name: commodity.attributes.name, areaId: commodity.attributes.area_id}
-        allCommodities.set(commodity.id, commodityData)
+        const commodityData = {id: commodity.id, areaId: commodity.attributes.area_id}
         
         if (!commoditiesByArea.has(commodity.attributes.area_id)) {
           commoditiesByArea.set(commodity.attributes.area_id, [])
@@ -372,34 +364,34 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
     // Process selected locations
     const processedAreaIds = new Set()
     
-    for (const [locationId, includeAll] of locationItems) {
-      const location = allLocations.get(locationId)
-      if (!location) continue
-      
+    for (const [locationId, locationData] of locationItems) {
       let locationAreasData = []
       
-      if (!includeAll) {
+      if (!locationData.includeAll) {
         // Process individual areas under this location that are explicitly selected
         const locationAreas = areasByLocation.get(locationId) || []
         for (const area of locationAreas) {
           if (areaItems.has(area.id)) {
             processedAreaIds.add(area.id)
             
-            const areaIncludeAll = areaItems.get(area.id)
+            const areaData = areaItems.get(area.id)
             let areaCommoditiesData = []
             
-            if (!areaIncludeAll) {
+            if (!areaData.includeAll) {
               // Get individual commodities in this area
               const areaCommodities = commoditiesByArea.get(area.id) || []
               areaCommoditiesData = areaCommodities
                 .filter(commodity => commodityItems.has(commodity.id))
-                .map(commodity => ({id: commodity.id, name: commodity.name}))
+                .map(commodity => ({
+                  id: commodity.id, 
+                  name: commodityItems.get(commodity.id).name
+                }))
             }
             
             locationAreasData.push({
               id: area.id,
-              name: area.name,
-              includeAll: areaIncludeAll,
+              name: areaData.name,
+              includeAll: areaData.includeAll,
               commodities: areaCommoditiesData
             })
           }
@@ -408,55 +400,80 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
       
       hierarchicalItems.value.locations.push({
         id: locationId,
-        name: location.name,
-        includeAll,
+        name: locationData.name,
+        includeAll: locationData.includeAll,
         areas: locationAreasData
       })
     }
     
     // Process standalone areas (not under selected locations)
-    for (const [areaId, includeAll] of areaItems) {
+    for (const [areaId, areaData] of areaItems) {
       if (processedAreaIds.has(areaId)) continue
       
-      const area = allAreas.get(areaId)
-      if (!area) continue
+      // Find area's location to check if parent location is selected
+      let areaLocationId = null
+      for (const [locationId, areas] of areasByLocation) {
+        if (areas.some((area: any) => area.id === areaId)) {
+          areaLocationId = locationId
+          break
+        }
+      }
       
       // Skip if parent location is selected
-      if (locationItems.has(area.locationId)) continue
+      if (areaLocationId && locationItems.has(areaLocationId)) continue
       
       let areaCommoditiesData = []
       
-      if (!includeAll) {
+      if (!areaData.includeAll) {
         // Get individual commodities in this area
         const areaCommodities = commoditiesByArea.get(areaId) || []
         areaCommoditiesData = areaCommodities
           .filter(commodity => commodityItems.has(commodity.id))
-          .map(commodity => ({id: commodity.id, name: commodity.name}))
+          .map(commodity => ({
+            id: commodity.id, 
+            name: commodityItems.get(commodity.id).name
+          }))
       }
       
       hierarchicalItems.value.standaloneAreas.push({
         id: areaId,
-        name: area.name,
-        includeAll,
+        name: areaData.name,
+        includeAll: areaData.includeAll,
         commodities: areaCommoditiesData
       })
     }
     
     // Process standalone commodities (not under selected areas or locations)
-    for (const commodityId of commodityItems.keys()) {
-      const commodity = allCommodities.get(commodityId)
-      if (!commodity) continue
+    for (const [commodityId, commodityData] of commodityItems) {
+      // Find commodity's area and location to check if parents are selected
+      let commodityAreaId = null
+      let commodityLocationId = null
+      
+      for (const [areaId, commodities] of commoditiesByArea) {
+        if (commodities.some((commodity: any) => commodity.id === commodityId)) {
+          commodityAreaId = areaId
+          break
+        }
+      }
+      
+      if (commodityAreaId) {
+        for (const [locationId, areas] of areasByLocation) {
+          if (areas.some((area: any) => area.id === commodityAreaId)) {
+            commodityLocationId = locationId
+            break
+          }
+        }
+      }
       
       // Skip if parent area is selected
-      if (areaItems.has(commodity.areaId)) continue
+      if (commodityAreaId && areaItems.has(commodityAreaId)) continue
       
       // Skip if parent location is selected
-      const area = allAreas.get(commodity.areaId)
-      if (area && locationItems.has(area.locationId)) continue
+      if (commodityLocationId && locationItems.has(commodityLocationId)) continue
       
       hierarchicalItems.value.standaloneCommodities.push({
         id: commodityId,
-        name: commodity.name
+        name: commodityData.name
       })
     }
     

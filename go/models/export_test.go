@@ -98,8 +98,8 @@ func TestExport_ValidateWithContext(t *testing.T) {
 		Status:      models.ExportStatusPending,
 		CreatedDate: &createdDate,
 		SelectedItems: models.ValuerSlice[models.ExportSelectedItem]{
-			{ID: "id1", Type: models.ExportSelectedItemTypeCommodity},
-			{ID: "id2", Type: models.ExportSelectedItemTypeLocation},
+			{ID: "id1", Type: models.ExportSelectedItemTypeCommodity, Name: "Test Commodity"},
+			{ID: "id2", Type: models.ExportSelectedItemTypeLocation, Name: "Test Location"},
 		},
 	}
 

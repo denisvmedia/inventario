@@ -2405,10 +2405,10 @@ const docTemplate = `{
                 "include_file_data": {
                     "type": "boolean"
                 },
-                "selected_item_ids": {
+                "selected_items": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/models.ExportSelectedItem"
                     }
                 },
                 "status": {
@@ -2418,6 +2418,36 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.ExportType"
                 }
             }
+        },
+        "models.ExportSelectedItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "include_all": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/models.ExportSelectedItemType"
+                }
+            }
+        },
+        "models.ExportSelectedItemType": {
+            "type": "string",
+            "enum": [
+                "location",
+                "area",
+                "commodity"
+            ],
+            "x-enum-varnames": [
+                "ExportSelectedItemTypeLocation",
+                "ExportSelectedItemTypeArea",
+                "ExportSelectedItemTypeCommodity"
+            ]
         },
         "models.ExportStatus": {
             "type": "string",

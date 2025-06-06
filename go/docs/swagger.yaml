@@ -515,15 +515,36 @@ definitions:
         type: string
       include_file_data:
         type: boolean
-      selected_item_ids:
+      selected_items:
         items:
-          type: string
+          $ref: '#/definitions/models.ExportSelectedItem'
         type: array
       status:
         $ref: '#/definitions/models.ExportStatus'
       type:
         $ref: '#/definitions/models.ExportType'
     type: object
+  models.ExportSelectedItem:
+    properties:
+      id:
+        type: string
+      include_all:
+        type: boolean
+      name:
+        type: string
+      type:
+        $ref: '#/definitions/models.ExportSelectedItemType'
+    type: object
+  models.ExportSelectedItemType:
+    enum:
+    - location
+    - area
+    - commodity
+    type: string
+    x-enum-varnames:
+    - ExportSelectedItemTypeLocation
+    - ExportSelectedItemTypeArea
+    - ExportSelectedItemTypeCommodity
   models.ExportStatus:
     enum:
     - pending
