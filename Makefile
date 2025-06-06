@@ -32,7 +32,7 @@ BINARY_PATH=$(BIN_DIR)/$(BINARY_NAME)$(BINARY_EXT)
 
 # Server configuration
 SERVER_ADDR=:3333
-UPLOAD_LOCATION=file://$(CURRENT_DIR)/uploads?create_dir=1
+UPLOAD_LOCATION=file://./uploads?create_dir=1
 DB_DSN=memory://
 
 # Database configuration examples
