@@ -91,21 +91,3 @@ steps:
     run: |
       cd e2e && npm ci
       cd e2e && npx playwright install --with-deps
-
-  # Create environment file for Docker setup
-  - name: Setup environment configuration
-    run: |
-      if [ ! -f .env ]; then
-        cp .env.example .env
-      fi
-
-  # Build the project to verify everything works
-  - name: Build project
-    run: make build
-
-  # Run basic linting to verify tools are working
-  - name: Verify linting tools
-    run: |
-      # Run linters
-      make lint-go
-      make lint-frontend
