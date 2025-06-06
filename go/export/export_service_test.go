@@ -173,7 +173,7 @@ func TestStreamXMLExport(t *testing.T) {
 
 			xmlContent := buf.String()
 			c.Assert(xmlContent, qt.Contains, `<?xml version="1.0" encoding="UTF-8"?>`)
-			c.Assert(xmlContent, qt.Contains, fmt.Sprintf(`export_type="%s"`, tc.exportType))
+			c.Assert(xmlContent, qt.Contains, fmt.Sprintf(`exportType="%s"`, tc.exportType))
 			c.Assert(xmlContent, qt.Contains, `<inventory`)
 			c.Assert(xmlContent, qt.Contains, `</inventory>`)
 		})

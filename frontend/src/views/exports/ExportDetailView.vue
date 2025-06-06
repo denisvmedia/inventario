@@ -31,7 +31,7 @@
         <button
           class="btn btn-danger"
           :disabled="deleting"
-          @click="deleteExport"
+          @click="confirmDelete"
         >
           <font-awesome-icon :icon="deleting ? 'spinner' : 'trash'" :spin="deleting" />
           {{ deleting ? 'Deleting...' : 'Delete' }}
@@ -190,7 +190,7 @@
           <h2>Actions</h2>
         </div>
         <div class="card-body">
-          <div class="action-buttons right-aligned">
+          <div class="actions right-aligned">
             <button
               v-if="exportData.status === 'completed'"
               class="btn btn-primary"
@@ -214,7 +214,7 @@
             <button
               class="btn btn-danger"
               :disabled="deleting"
-              @click="deleteExport"
+              @click="confirmDelete"
             >
               <font-awesome-icon :icon="deleting ? 'spinner' : 'trash'" :spin="deleting" />
               {{ deleting ? 'Deleting...' : 'Delete Export' }}
@@ -224,6 +224,18 @@
       </div>
 
     </div>
+    
+    <!-- Export Delete Confirmation Dialog -->
+    <Confirmation
+      v-model:visible="showDeleteDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this export?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDelete"
+    />
   </div>
 </template>
 
@@ -233,6 +245,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import exportService from '@/services/exportService'
 import type { Export } from '@/types'
+import Confirmation from '@/components/Confirmation.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -243,6 +256,7 @@ const error = ref('')
 const retrying = ref(false)
 const deleting = ref(false)
 const downloading = ref(false)
+const showDeleteDialog = ref(false)
 const loadingItems = ref(false)
 const selectedItemsDetails = ref<Array<{id: string, name: string, type: string}>>([])
 const hierarchicalItems = ref<{
@@ -498,12 +512,17 @@ const retryExport = async () => {
   }
 }
 
+const confirmDelete = () => {
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = () => {
+  deleteExport()
+  showDeleteDialog.value = false
+}
+
 const deleteExport = async () => {
   if (!exportData.value?.id) return
-
-  if (!confirm('Are you sure you want to delete this export?')) {
-    return
-  }
 
   try {
     deleting.value = true
@@ -589,11 +608,6 @@ onMounted(() => {
 .header h1 {
   margin: 0;
   font-size: 2rem;
-}
-
-.header .actions {
-  display: flex;
-  gap: 10px;
 }
 
 .export-content {
@@ -830,15 +844,6 @@ onMounted(() => {
   border-radius: $default-radius;
   font-family: monospace;
   white-space: pre-wrap;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 15px;
-}
-
-.action-buttons.right-aligned {
-  justify-content: flex-end;
 }
 
 .btn-warning {

@@ -182,7 +182,7 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 
 	// Start root element
 	exportDate := time.Now().Format("2006-01-02T15:04:05Z")
-	rootStart := fmt.Sprintf(`<inventory export_date="%s" export_type="%s">%s`, exportDate, string(export.Type), "\n")
+	rootStart := fmt.Sprintf(`<inventory exportDate="%s" exportType="%s">%s`, exportDate, string(export.Type), "\n")
 	if _, err := writer.Write([]byte(rootStart)); err != nil {
 		return errkit.Wrap(err, "failed to write root element")
 	}
