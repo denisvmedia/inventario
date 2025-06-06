@@ -38,3 +38,5 @@ When making changes, make sure that the existing documentation is still actual. 
 When writing go code, make sure you have godoc comments. Keep good balance between verbosity and lack of documentation. Only be super detailed, where the complexity of the code demands that.
 
 Make sure you always have ending newline in all go, ts, js and md files.
+
+Make sure you don't have trailing space anywhere (unless it is required by the format or explicitely stated by the user).
