@@ -94,15 +94,15 @@
         </div>
       </div>
 
-      <div v-if="exportData.selected_item_ids && exportData.selected_item_ids.length > 0" class="export-card">
+      <div v-if="exportData.selected_items && exportData.selected_items.length > 0" class="export-card">
         <div class="card-header">
           <h2>Selected Items</h2>
-          <span class="count-badge">{{ exportData.selected_item_ids.length }} items</span>
+          <span class="count-badge">{{ exportData.selected_items.length }} items</span>
         </div>
         <div class="card-body">
           <div v-if="loadingItems" class="loading-items">Loading item details...</div>
           <div v-else class="selected-items">
-            <div v-for="item in selectedItemsDetails" :key="item.id" class="item-details">
+            <div v-for="item in selectedItemsDetails" :key="`${item.type}-${item.id}`" class="item-details">
               <div class="item-name">{{ item.name }}</div>
               <div class="item-type">{{ item.type }}</div>
             </div>
@@ -167,6 +167,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import exportService from '@/services/exportService'
 import commodityService from '@/services/commodityService'
+import locationService from '@/services/locationService'
+import areaService from '@/services/areaService'
 import type { Export } from '@/types'
 
 const route = useRoute()
@@ -195,8 +197,8 @@ const loadExport = async () => {
       }
       
       // Load selected items details if available
-      if (exportData.value.selected_item_ids && exportData.value.selected_item_ids.length > 0) {
-        await loadSelectedItemsDetails(exportData.value.selected_item_ids)
+      if (exportData.value.selected_items && exportData.value.selected_items.length > 0) {
+        await loadSelectedItemsDetails(exportData.value.selected_items)
       }
     }
   } catch (err: any) {
@@ -207,33 +209,57 @@ const loadExport = async () => {
   }
 }
 
-const loadSelectedItemsDetails = async (itemIds: string[]) => {
+const loadSelectedItemsDetails = async (items: Array<{id: string, type: string}>) => {
   try {
     loadingItems.value = true
     selectedItemsDetails.value = []
     
-    // Fetch details for each item ID
-    const itemPromises = itemIds.map(async (itemId) => {
+    // Fetch details for each item based on its type
+    const itemPromises = items.map(async (item) => {
       try {
-        const response = await commodityService.getCommodity(itemId)
+        let response
+        let itemType = ''
+        
+        switch (item.type) {
+          case 'location':
+            response = await locationService.getLocation(item.id)
+            itemType = 'Location'
+            break
+          case 'area':
+            response = await areaService.getArea(item.id)
+            itemType = 'Area'
+            break
+          case 'commodity':
+            response = await commodityService.getCommodity(item.id)
+            itemType = 'Commodity'
+            break
+          default:
+            return {
+              id: item.id,
+              name: `Unknown Item (${item.type})`,
+              type: 'Unknown'
+            }
+        }
+        
         if (response.data && response.data.data) {
           return {
-            id: itemId,
+            id: item.id,
             name: response.data.data.attributes.name,
-            type: 'Commodity' // Since we're using commodityService, we know it's a commodity
+            type: itemType
           }
         }
+        
         return {
-          id: itemId,
+          id: item.id,
           name: 'Unknown Item',
-          type: 'Unknown'
+          type: itemType || 'Unknown'
         }
       } catch (err) {
-        console.error(`Error fetching details for item ${itemId}:`, err)
+        console.error(`Error fetching details for ${item.type} ${item.id}:`, err)
         return {
-          id: itemId,
-          name: `Item ${itemId}`,
-          type: 'Unknown'
+          id: item.id,
+          name: `${item.type} ${item.id}`,
+          type: item.type.charAt(0).toUpperCase() + item.type.slice(1)
         }
       }
     })

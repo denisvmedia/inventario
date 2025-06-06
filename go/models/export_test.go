@@ -83,10 +83,10 @@ func TestExport_ValidateWithContext(t *testing.T) {
 
 	// Invalid export - selected items without IDs
 	invalidSelectedExport := &models.Export{
-		Type:            models.ExportTypeSelectedItems,
-		Status:          models.ExportStatusPending,
-		CreatedDate:     &createdDate,
-		SelectedItemIDs: models.ValuerSlice[string]{},
+		Type:          models.ExportTypeSelectedItems,
+		Status:        models.ExportStatusPending,
+		CreatedDate:   &createdDate,
+		SelectedItems: models.ValuerSlice[models.ExportSelectedItem]{},
 	}
 
 	err = invalidSelectedExport.ValidateWithContext(ctx)
@@ -94,10 +94,13 @@ func TestExport_ValidateWithContext(t *testing.T) {
 
 	// Valid export - selected items with IDs
 	validSelectedExport := &models.Export{
-		Type:            models.ExportTypeSelectedItems,
-		Status:          models.ExportStatusPending,
-		CreatedDate:     &createdDate,
-		SelectedItemIDs: models.ValuerSlice[string]{"id1", "id2"},
+		Type:        models.ExportTypeSelectedItems,
+		Status:      models.ExportStatusPending,
+		CreatedDate: &createdDate,
+		SelectedItems: models.ValuerSlice[models.ExportSelectedItem]{
+			{ID: "id1", Type: models.ExportSelectedItemTypeCommodity},
+			{ID: "id2", Type: models.ExportSelectedItemTypeLocation},
+		},
 	}
 
 	err = validSelectedExport.ValidateWithContext(ctx)

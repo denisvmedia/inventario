@@ -67,12 +67,19 @@ export type ExportStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 
 export type ExportType = 'full_database' | 'selected_items' | 'locations' | 'areas' | 'commodities';
 
+export type ExportSelectedItemType = 'location' | 'area' | 'commodity';
+
+export interface ExportSelectedItem {
+  id: string;
+  type: ExportSelectedItemType;
+}
+
 export interface Export {
   id?: string;
   type: ExportType;
   status: ExportStatus;
   include_file_data: boolean;
-  selected_item_ids: string[];
+  selected_items: ExportSelectedItem[];
   file_path: string;
   created_date: string;
   completed_date?: string;

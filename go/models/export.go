@@ -12,6 +12,7 @@ import (
 var (
 	_ validation.Validatable            = (*ExportStatus)(nil)
 	_ validation.Validatable            = (*ExportType)(nil)
+	_ validation.Validatable            = (*ExportSelectedItem)(nil)
 	_ validation.Validatable            = (*Export)(nil)
 	_ validation.ValidatableWithContext = (*Export)(nil)
 	_ IDable                            = (*Export)(nil)
@@ -77,17 +78,55 @@ func (e ExportType) Validate() error {
 	return nil
 }
 
+type ExportSelectedItemType string
+
+// Export selected item types. Adding a new type? Don't forget to update IsValid() method.
+const (
+	ExportSelectedItemTypeLocation  ExportSelectedItemType = "location"
+	ExportSelectedItemTypeArea      ExportSelectedItemType = "area"
+	ExportSelectedItemTypeCommodity ExportSelectedItemType = "commodity"
+)
+
+func (e ExportSelectedItemType) IsValid() bool {
+	switch e {
+	case ExportSelectedItemTypeLocation,
+		ExportSelectedItemTypeArea,
+		ExportSelectedItemTypeCommodity:
+		return true
+	}
+	return false
+}
+
+func (e ExportSelectedItemType) Validate() error {
+	if !e.IsValid() {
+		return validation.NewError("invalid_export_selected_item_type", "invalid export selected item type")
+	}
+	return nil
+}
+
+type ExportSelectedItem struct {
+	ID   string                 `json:"id"`
+	Type ExportSelectedItemType `json:"type"`
+}
+
+func (e ExportSelectedItem) Validate() error {
+	return validation.ValidateStruct(&e,
+		validation.Field(&e.ID, validation.Required, validation.Length(1, 100)),
+		validation.Field(&e.Type, validation.Required),
+	)
+}
+
 type Export struct {
 	EntityID
-	Type            ExportType          `json:"type" db:"type"`
-	Status          ExportStatus        `json:"status" db:"status"`
-	IncludeFileData bool                `json:"include_file_data" db:"include_file_data"`
-	SelectedItemIDs ValuerSlice[string] `json:"selected_item_ids" db:"selected_item_ids"`
-	FilePath        string              `json:"file_path" db:"file_path"`
-	CreatedDate     PDate               `json:"created_date" db:"created_date"`
-	CompletedDate   PDate               `json:"completed_date" db:"completed_date"`
-	ErrorMessage    string              `json:"error_message" db:"error_message"`
-	Description     string              `json:"description" db:"description"`
+	Type            ExportType                    `json:"type" db:"type"`
+	Status          ExportStatus                  `json:"status" db:"status"`
+	IncludeFileData bool                          `json:"include_file_data" db:"include_file_data"`
+	SelectedItems   ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
+	FilePath        string                        `json:"file_path" db:"file_path"`
+	CreatedDate     PDate                         `json:"created_date" db:"created_date"`
+	CompletedDate   PDate                         `json:"completed_date" db:"completed_date"`
+	ErrorMessage    string                        `json:"error_message" db:"error_message"`
+	Description     string                        `json:"description" db:"description"`
 }
 
 func (*Export) Validate() error {
@@ -106,10 +145,10 @@ func (e *Export) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&e.FilePath, validation.Length(0, 500)),
 	)
 
-	// Validate selected item IDs only for selected_items type
+	// Validate selected items only for selected_items type
 	if e.Type == ExportTypeSelectedItems {
 		fields = append(fields,
-			validation.Field(&e.SelectedItemIDs, validation.Required, validation.Length(1, 1000)),
+			validation.Field(&e.SelectedItems, validation.Required, validation.Length(1, 1000)),
 		)
 	}
 

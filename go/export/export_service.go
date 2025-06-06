@@ -205,7 +205,7 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 			return errkit.Wrap(err, "failed to stream commodities")
 		}
 	case models.ExportTypeSelectedItems:
-		if err := s.streamSelectedItems(ctx, writer, export.SelectedItemIDs, export.IncludeFileData); err != nil {
+		if err := s.streamSelectedItems(ctx, writer, export.SelectedItems, export.IncludeFileData); err != nil {
 			return errkit.Wrap(err, "failed to stream selected items")
 		}
 	default:
@@ -357,36 +357,111 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 	return nil
 }
 
-// streamSelectedItems streams selected commodities to the writer
-func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, selectedItemIDs []string, includeFileData bool) error {
+// streamSelectedItems streams selected items (locations, areas, commodities) to the writer
+func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, selectedItems []models.ExportSelectedItem, includeFileData bool) error {
 	encoder := xml.NewEncoder(writer)
 	encoder.Indent("  ", "  ")
 
-	// Start commodities element
-	startElement := xml.StartElement{Name: xml.Name{Local: "commodities"}}
-	if err := encoder.EncodeToken(startElement); err != nil {
-		return errkit.Wrap(err, "failed to encode commodities start element")
-	}
+	// Group items by type for better organization
+	locations := make([]string, 0)
+	areas := make([]string, 0)
+	commodities := make([]string, 0)
 
-	for _, itemID := range selectedItemIDs {
-		commodity, err := s.registrySet.CommodityRegistry.Get(ctx, itemID)
-		if err != nil {
-			continue // Skip items that can't be found
-		}
-
-		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
-		if err != nil {
-			return errkit.Wrap(err, "failed to convert commodity to XML")
-		}
-		if err := encoder.Encode(xmlCommodity); err != nil {
-			return errkit.Wrap(err, "failed to encode commodity")
+	for _, item := range selectedItems {
+		switch item.Type {
+		case models.ExportSelectedItemTypeLocation:
+			locations = append(locations, item.ID)
+		case models.ExportSelectedItemTypeArea:
+			areas = append(areas, item.ID)
+		case models.ExportSelectedItemTypeCommodity:
+			commodities = append(commodities, item.ID)
 		}
 	}
 
-	// End commodities element
-	endElement := xml.EndElement{Name: xml.Name{Local: "commodities"}}
-	if err := encoder.EncodeToken(endElement); err != nil {
-		return errkit.Wrap(err, "failed to encode commodities end element")
+	// Export locations if any
+	if len(locations) > 0 {
+		startElement := xml.StartElement{Name: xml.Name{Local: "locations"}}
+		if err := encoder.EncodeToken(startElement); err != nil {
+			return errkit.Wrap(err, "failed to encode locations start element")
+		}
+
+		for _, locationID := range locations {
+			location, err := s.registrySet.LocationRegistry.Get(ctx, locationID)
+			if err != nil {
+				continue // Skip items that can't be found
+			}
+
+			xmlLocation := &Location{
+				ID:      location.ID,
+				Name:    location.Name,
+				Address: location.Address,
+			}
+			if err := encoder.Encode(xmlLocation); err != nil {
+				return errkit.Wrap(err, "failed to encode location")
+			}
+		}
+
+		endElement := xml.EndElement{Name: xml.Name{Local: "locations"}}
+		if err := encoder.EncodeToken(endElement); err != nil {
+			return errkit.Wrap(err, "failed to encode locations end element")
+		}
+	}
+
+	// Export areas if any
+	if len(areas) > 0 {
+		startElement := xml.StartElement{Name: xml.Name{Local: "areas"}}
+		if err := encoder.EncodeToken(startElement); err != nil {
+			return errkit.Wrap(err, "failed to encode areas start element")
+		}
+
+		for _, areaID := range areas {
+			area, err := s.registrySet.AreaRegistry.Get(ctx, areaID)
+			if err != nil {
+				continue // Skip items that can't be found
+			}
+
+			xmlArea := &Area{
+				ID:         area.ID,
+				Name:       area.Name,
+				LocationID: area.LocationID,
+			}
+			if err := encoder.Encode(xmlArea); err != nil {
+				return errkit.Wrap(err, "failed to encode area")
+			}
+		}
+
+		endElement := xml.EndElement{Name: xml.Name{Local: "areas"}}
+		if err := encoder.EncodeToken(endElement); err != nil {
+			return errkit.Wrap(err, "failed to encode areas end element")
+		}
+	}
+
+	// Export commodities if any
+	if len(commodities) > 0 {
+		startElement := xml.StartElement{Name: xml.Name{Local: "commodities"}}
+		if err := encoder.EncodeToken(startElement); err != nil {
+			return errkit.Wrap(err, "failed to encode commodities start element")
+		}
+
+		for _, commodityID := range commodities {
+			commodity, err := s.registrySet.CommodityRegistry.Get(ctx, commodityID)
+			if err != nil {
+				continue // Skip items that can't be found
+			}
+
+			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
+			if err != nil {
+				return errkit.Wrap(err, "failed to convert commodity to XML")
+			}
+			if err := encoder.Encode(xmlCommodity); err != nil {
+				return errkit.Wrap(err, "failed to encode commodity")
+			}
+		}
+
+		endElement := xml.EndElement{Name: xml.Name{Local: "commodities"}}
+		if err := encoder.EncodeToken(endElement); err != nil {
+			return errkit.Wrap(err, "failed to encode commodities end element")
+		}
 	}
 
 	if err := encoder.Flush(); err != nil {
