@@ -270,28 +270,12 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+@use '@/assets/main' as *;
+
 .export-create {
-  padding: 20px;
   max-width: 800px;
   margin: 0 auto;
-}
-
-.breadcrumb-nav {
-  margin-bottom: 20px;
-}
-
-.breadcrumb-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #6c757d;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s;
-}
-
-.breadcrumb-link:hover {
-  color: #495057;
+  padding: 20px;
 }
 
 h1 {
@@ -299,18 +283,10 @@ h1 {
   font-size: 2rem;
 }
 
-.error-message {
-  background-color: #f8d7da;
-  color: #721c24;
-  padding: 12px;
-  border-radius: 4px;
-  margin-bottom: 20px;
-}
-
 .export-form {
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   padding: 30px;
 }
 
@@ -321,8 +297,8 @@ h1 {
 .form-section h2 {
   margin: 0 0 20px;
   font-size: 1.5rem;
-  color: #333;
-  border-bottom: 2px solid #007bff;
+  color: $text-color;
+  border-bottom: 2px solid $primary-color;
   padding-bottom: 10px;
 }
 
@@ -334,7 +310,7 @@ h1 {
   display: block;
   margin-bottom: 8px;
   font-weight: 600;
-  color: #333;
+  color: $text-color;
 }
 
 .form-group input,
@@ -342,8 +318,8 @@ h1 {
 .form-group textarea {
   width: 100%;
   padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   font-size: 1rem;
 }
 
@@ -354,7 +330,7 @@ h1 {
 
 .form-help {
   font-size: 0.85rem;
-  color: #666;
+  color: $text-secondary-color;
   margin-top: 5px;
 }
 
@@ -374,7 +350,7 @@ h1 {
   display: flex;
   gap: 2px;
   margin-bottom: 15px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid $border-color;
 }
 
 .tab-button {
@@ -384,36 +360,30 @@ h1 {
   cursor: pointer;
   border-bottom: 2px solid transparent;
   font-weight: 500;
-  color: #666;
+  color: $text-secondary-color;
   transition: all 0.2s;
 }
 
 .tab-button.active {
-  color: #007bff;
-  border-bottom-color: #007bff;
+  color: $primary-color;
+  border-bottom-color: $primary-color;
 }
 
 .tab-button:hover {
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
 }
 
 .selection-content {
   max-height: 300px;
   overflow-y: auto;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
   padding: 15px;
-}
-
-.loading {
-  text-align: center;
-  padding: 20px;
-  color: #666;
 }
 
 .no-items {
   text-align: center;
-  color: #666;
+  color: $text-secondary-color;
   padding: 20px;
 }
 
@@ -429,61 +399,16 @@ h1 {
   gap: 8px;
   cursor: pointer;
   padding: 8px;
-  border-radius: 4px;
+  border-radius: $default-radius;
   transition: background-color 0.2s;
 }
 
 .item-checkbox:hover {
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
 }
 
 .item-checkbox input[type="checkbox"] {
   width: auto;
   margin: 0;
-}
-
-.form-actions {
-  display: flex;
-  gap: 15px;
-  justify-content: flex-end;
-  padding-top: 20px;
-  border-top: 1px solid #eee;
-}
-
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 1rem;
-  font-weight: 500;
-  transition: background-color 0.2s;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background-color: #007bff;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-
-.btn-secondary {
-  background-color: #6c757d;
-  color: white;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: #545b62;
 }
 </style>

@@ -300,46 +300,17 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+@use '@/assets/main' as *;
+
 .export-detail {
-  padding: 20px;
   max-width: 1000px;
   margin: 0 auto;
-}
-
-.breadcrumb-nav {
-  margin-bottom: 20px;
-}
-
-.breadcrumb-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #6c757d;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s;
-}
-
-.breadcrumb-link:hover {
-  color: #495057;
-}
-
-.header {
-  margin-bottom: 30px;
+  padding: 20px;
 }
 
 .header h1 {
   margin: 0;
   font-size: 2rem;
-}
-
-.loading, .error {
-  text-align: center;
-  padding: 40px 20px;
-}
-
-.error {
-  color: #dc3545;
 }
 
 .export-content {
@@ -350,13 +321,13 @@ onMounted(() => {
 
 .export-card {
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   overflow: hidden;
 }
 
 .error-card {
-  border-left: 4px solid #dc3545;
+  border-left: 4px solid $error-color;
 }
 
 .card-header {
@@ -364,8 +335,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background-color: #f8f9fa;
-  border-bottom: 1px solid #eee;
+  background-color: $light-bg-color;
+  border-bottom: 1px solid $border-color;
 }
 
 .card-header h2 {
@@ -386,7 +357,7 @@ onMounted(() => {
 .info-item label {
   display: block;
   font-weight: 600;
-  color: #666;
+  color: $text-secondary-color;
   margin-bottom: 5px;
   text-transform: uppercase;
   font-size: 0.8rem;
@@ -395,7 +366,7 @@ onMounted(() => {
 
 .info-item .value {
   font-size: 1rem;
-  color: #333;
+  color: $text-color;
 }
 
 .status-badge,
@@ -403,7 +374,7 @@ onMounted(() => {
 .bool-badge,
 .count-badge {
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: $default-radius;
   font-size: 0.8rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -476,9 +447,9 @@ onMounted(() => {
 }
 
 .item-id {
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: $default-radius;
   font-family: monospace;
   font-size: 0.85rem;
   border: 1px solid #dee2e6;
@@ -488,7 +459,7 @@ onMounted(() => {
   background-color: #f8d7da;
   color: #721c24;
   padding: 15px;
-  border-radius: 4px;
+  border-radius: $default-radius;
   font-family: monospace;
   white-space: pre-wrap;
 }
@@ -498,43 +469,6 @@ onMounted(() => {
   gap: 15px;
 }
 
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 1rem;
-  font-weight: 500;
-  transition: background-color 0.2s;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background-color: #007bff;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-
-.btn-secondary {
-  background-color: #6c757d;
-  color: white;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: #545b62;
-}
-
 .btn-warning {
   background-color: #ffc107;
   color: #212529;
@@ -542,14 +476,5 @@ onMounted(() => {
 
 .btn-warning:hover:not(:disabled) {
   background-color: #e0a800;
-}
-
-.btn-danger {
-  background-color: #dc3545;
-  color: white;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background-color: #c82333;
 }
 </style>

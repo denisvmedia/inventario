@@ -208,15 +208,12 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.export-list {
-  padding: 20px;
-}
+@use '@/assets/main' as *;
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
+.export-list {
+  max-width: $container-max-width;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 .header-title h1 {
@@ -225,7 +222,7 @@ onMounted(() => {
 }
 
 .export-count {
-  color: #666;
+  color: $text-secondary-color;
   font-size: 0.9rem;
 }
 
@@ -235,24 +232,15 @@ onMounted(() => {
   align-items: center;
 }
 
-.loading, .error, .empty {
-  text-align: center;
-  padding: 40px 20px;
-}
-
-.error {
-  color: #dc3545;
-}
-
 .empty-message p {
-  color: #666;
+  color: $text-secondary-color;
   margin-bottom: 20px;
 }
 
 .exports-table {
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
   overflow: hidden;
 }
 
@@ -265,17 +253,17 @@ onMounted(() => {
 .table td {
   padding: 12px;
   text-align: left;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid $border-color;
 }
 
 .table th {
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
   font-weight: 600;
-  color: #333;
+  color: $text-color;
 }
 
 .export-row:hover {
-  background-color: #f8f9fa;
+  background-color: $light-bg-color;
 }
 
 .export-description .description-text {
@@ -283,7 +271,7 @@ onMounted(() => {
 }
 
 .export-description .error-message {
-  color: #dc3545;
+  color: $error-color;
   font-size: 0.8rem;
   margin-top: 4px;
 }
@@ -291,7 +279,7 @@ onMounted(() => {
 .type-badge,
 .status-badge {
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: $default-radius;
   font-size: 0.8rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -346,51 +334,6 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   white-space: nowrap;
-}
-
-.btn {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.8rem;
-  transition: background-color 0.2s;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background-color: #007bff;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-
-.btn-secondary {
-  background-color: #6c757d;
-  color: white;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: #545b62;
-}
-
-.btn-danger {
-  background-color: #dc3545;
-  color: white;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background-color: #c82333;
 }
 
 .btn-sm {
