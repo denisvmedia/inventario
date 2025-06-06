@@ -42,3 +42,5 @@ Make sure you always have ending newline in all go, ts, js and md files.
 Make sure you don't have trailing space anywhere (unless it is required by the format or explicitely stated by the user).
 
 Only use SCSS for styles in frontend. Make sure you use consistent styles with the existing views. If needed to create new styles, they should follow the same look and feel pattern.
+
+When creating styles in frontend, always check `frontend/src/assets/*.scss` to avoid duplicating the styles.
