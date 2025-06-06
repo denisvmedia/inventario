@@ -101,10 +101,76 @@
         </div>
         <div class="card-body">
           <div v-if="loadingItems" class="loading-items">Loading item details...</div>
-          <div v-else class="selected-items">
-            <div v-for="item in selectedItemsDetails" :key="`${item.type}-${item.id}`" class="item-details">
-              <div class="item-name">{{ item.name }}</div>
-              <div class="item-type">{{ item.type }}</div>
+          <div v-else class="selected-items-hierarchy">
+            <div v-for="location in hierarchicalItems.locations" :key="location.id" class="hierarchy-item location-item">
+              <div class="item-header">
+                <div class="item-info">
+                  <span class="item-name">{{ location.name }}</span>
+                  <span class="item-type">Location</span>
+                </div>
+                <div v-if="location.includeAll" class="inclusion-badge">
+                  includes all areas and commodities
+                </div>
+              </div>
+              
+              <div v-if="location.areas.length > 0" class="sub-items">
+                <div v-for="area in location.areas" :key="area.id" class="hierarchy-item area-item">
+                  <div class="item-header">
+                    <div class="item-info">
+                      <span class="item-name">{{ area.name }}</span>
+                      <span class="item-type">Area</span>
+                    </div>
+                    <div v-if="area.includeAll" class="inclusion-badge">
+                      includes all commodities
+                    </div>
+                  </div>
+                  
+                  <div v-if="area.commodities.length > 0" class="sub-items">
+                    <div v-for="commodity in area.commodities" :key="commodity.id" class="hierarchy-item commodity-item">
+                      <div class="item-header">
+                        <div class="item-info">
+                          <span class="item-name">{{ commodity.name }}</span>
+                          <span class="item-type">Commodity</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Standalone areas (not under any selected location) -->
+            <div v-for="area in hierarchicalItems.standaloneAreas" :key="area.id" class="hierarchy-item area-item">
+              <div class="item-header">
+                <div class="item-info">
+                  <span class="item-name">{{ area.name }}</span>
+                  <span class="item-type">Area</span>
+                </div>
+                <div v-if="area.includeAll" class="inclusion-badge">
+                  includes all commodities
+                </div>
+              </div>
+              
+              <div v-if="area.commodities.length > 0" class="sub-items">
+                <div v-for="commodity in area.commodities" :key="commodity.id" class="hierarchy-item commodity-item">
+                  <div class="item-header">
+                    <div class="item-info">
+                      <span class="item-name">{{ commodity.name }}</span>
+                      <span class="item-type">Commodity</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Standalone commodities (not under any selected area) -->
+            <div v-for="commodity in hierarchicalItems.standaloneCommodities" :key="commodity.id" class="hierarchy-item commodity-item">
+              <div class="item-header">
+                <div class="item-info">
+                  <span class="item-name">{{ commodity.name }}</span>
+                  <span class="item-type">Commodity</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -182,6 +248,30 @@ const deleting = ref(false)
 const downloading = ref(false)
 const loadingItems = ref(false)
 const selectedItemsDetails = ref<Array<{id: string, name: string, type: string}>>([])
+const hierarchicalItems = ref<{
+  locations: Array<{
+    id: string
+    name: string
+    includeAll: boolean
+    areas: Array<{
+      id: string
+      name: string
+      includeAll: boolean
+      commodities: Array<{id: string, name: string}>
+    }>
+  }>
+  standaloneAreas: Array<{
+    id: string
+    name: string
+    includeAll: boolean
+    commodities: Array<{id: string, name: string}>
+  }>
+  standaloneCommodities: Array<{id: string, name: string}>
+}>({
+  locations: [],
+  standaloneAreas: [],
+  standaloneCommodities: []
+})
 
 const loadExport = async () => {
   try {
@@ -197,7 +287,7 @@ const loadExport = async () => {
       }
       
       // Load selected items details if available
-      if (exportData.value.selected_items && exportData.value.selected_items.length > 0) {
+      if (exportData.value?.selected_items && exportData.value.selected_items.length > 0) {
         await loadSelectedItemsDetails(exportData.value.selected_items)
       }
     }
@@ -213,58 +303,204 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string}>
   try {
     loadingItems.value = true
     selectedItemsDetails.value = []
+    hierarchicalItems.value = {
+      locations: [],
+      standaloneAreas: [],
+      standaloneCommodities: []
+    }
     
-    // Fetch details for each item based on its type
-    const itemPromises = items.map(async (item) => {
-      try {
-        let response
-        let itemType = ''
+    // Separate items by type
+    const locationIds = items.filter(item => item.type === 'location').map(item => item.id)
+    const areaIds = items.filter(item => item.type === 'area').map(item => item.id)
+    const commodityIds = items.filter(item => item.type === 'commodity').map(item => item.id)
+    
+    // Fetch all data needed for hierarchy analysis
+    const [locationsData, areasData, commoditiesData, allLocationsData, allAreasData, allCommoditiesData] = await Promise.all([
+      // Get selected items data
+      Promise.all(locationIds.map(id => locationService.getLocation(id).catch(() => null))),
+      Promise.all(areaIds.map(id => areaService.getArea(id).catch(() => null))),
+      Promise.all(commodityIds.map(id => commodityService.getCommodity(id).catch(() => null))),
+      // Get all data for hierarchy analysis
+      locationService.getLocations().catch(() => ({data: {data: []}})),
+      areaService.getAreas().catch(() => ({data: {data: []}})),
+      commodityService.getCommodities().catch(() => ({data: {data: []}}))
+    ])
+    
+    // Build lookup maps
+    const allLocations = new Map()
+    const allAreas = new Map()
+    const allCommodities = new Map()
+    const areasByLocation = new Map()
+    const commoditiesByArea = new Map()
+    
+    // Populate lookup maps
+    if (allLocationsData.data?.data) {
+      allLocationsData.data.data.forEach((loc: any) => {
+        allLocations.set(loc.id, {id: loc.id, name: loc.attributes.name})
+      })
+    }
+    
+    if (allAreasData.data?.data) {
+      allAreasData.data.data.forEach((area: any) => {
+        const areaData = {id: area.id, name: area.attributes.name, locationId: area.attributes.location_id}
+        allAreas.set(area.id, areaData)
         
-        switch (item.type) {
-          case 'location':
-            response = await locationService.getLocation(item.id)
-            itemType = 'Location'
-            break
-          case 'area':
-            response = await areaService.getArea(item.id)
-            itemType = 'Area'
-            break
-          case 'commodity':
-            response = await commodityService.getCommodity(item.id)
-            itemType = 'Commodity'
-            break
-          default:
-            return {
-              id: item.id,
-              name: `Unknown Item (${item.type})`,
-              type: 'Unknown'
-            }
+        if (!areasByLocation.has(area.attributes.location_id)) {
+          areasByLocation.set(area.attributes.location_id, [])
         }
+        areasByLocation.get(area.attributes.location_id).push(areaData)
+      })
+    }
+    
+    if (allCommoditiesData.data?.data) {
+      allCommoditiesData.data.data.forEach((commodity: any) => {
+        const commodityData = {id: commodity.id, name: commodity.attributes.name, areaId: commodity.attributes.area_id}
+        allCommodities.set(commodity.id, commodityData)
         
-        if (response.data && response.data.data) {
-          return {
-            id: item.id,
-            name: response.data.data.attributes.name,
-            type: itemType
+        if (!commoditiesByArea.has(commodity.attributes.area_id)) {
+          commoditiesByArea.set(commodity.attributes.area_id, [])
+        }
+        commoditiesByArea.get(commodity.attributes.area_id).push(commodityData)
+      })
+    }
+    
+    // Process selected locations
+    const processedLocationIds = new Set()
+    const processedAreaIds = new Set()
+    
+    for (const locationData of locationsData) {
+      if (!locationData?.data?.data) continue
+      
+      const location = locationData.data.data
+      const locationId = location.id
+      const locationName = location.attributes.name
+      
+      processedLocationIds.add(locationId)
+      
+      // Check if this location includes all areas and commodities
+      const locationAreas = areasByLocation.get(locationId) || []
+      const selectedAreasInLocation = areaIds.filter(areaId => {
+        const area = allAreas.get(areaId)
+        return area && area.locationId === locationId
+      })
+      
+      let includeAll = false
+      let locationAreasData = []
+      
+      // Check if all areas in this location are selected
+      if (selectedAreasInLocation.length === locationAreas.length && locationAreas.length > 0) {
+        // Check if all commodities in all areas are also selected
+        let allCommoditiesSelected = true
+        for (const area of locationAreas) {
+          const areaCommodities = commoditiesByArea.get(area.id) || []
+          const selectedCommoditiesInArea = commodityIds.filter(commodityId => {
+            const commodity = allCommodities.get(commodityId)
+            return commodity && commodity.areaId === area.id
+          })
+          if (selectedCommoditiesInArea.length !== areaCommodities.length) {
+            allCommoditiesSelected = false
+            break
           }
         }
-        
-        return {
-          id: item.id,
-          name: 'Unknown Item',
-          type: itemType || 'Unknown'
-        }
-      } catch (err) {
-        console.error(`Error fetching details for ${item.type} ${item.id}:`, err)
-        return {
-          id: item.id,
-          name: `${item.type} ${item.id}`,
-          type: item.type.charAt(0).toUpperCase() + item.type.slice(1)
+        includeAll = allCommoditiesSelected
+      }
+      
+      if (!includeAll) {
+        // Process individual areas under this location
+        for (const areaId of selectedAreasInLocation) {
+          const area = allAreas.get(areaId)
+          if (!area) continue
+          
+          processedAreaIds.add(areaId)
+          
+          const areaCommodities = commoditiesByArea.get(areaId) || []
+          const selectedCommoditiesInArea = commodityIds.filter(commodityId => {
+            const commodity = allCommodities.get(commodityId)
+            return commodity && commodity.areaId === areaId
+          })
+          
+          const areaIncludeAll = selectedCommoditiesInArea.length === areaCommodities.length && areaCommodities.length > 0
+          
+          const areaCommoditiesData = areaIncludeAll ? [] : selectedCommoditiesInArea.map(commodityId => {
+            const commodity = allCommodities.get(commodityId)
+            return {id: commodityId, name: commodity?.name || 'Unknown Commodity'}
+          })
+          
+          locationAreasData.push({
+            id: areaId,
+            name: area.name,
+            includeAll: areaIncludeAll,
+            commodities: areaCommoditiesData
+          })
         }
       }
-    })
+      
+      hierarchicalItems.value.locations.push({
+        id: locationId,
+        name: locationName,
+        includeAll,
+        areas: locationAreasData
+      })
+    }
     
-    selectedItemsDetails.value = await Promise.all(itemPromises)
+    // Process standalone areas (not under selected locations)
+    for (const areaData of areasData) {
+      if (!areaData?.data?.data) continue
+      
+      const area = areaData.data.data
+      const areaId = area.id
+      
+      if (processedAreaIds.has(areaId)) continue
+      
+      const areaName = area.attributes.name
+      const locationId = area.attributes.location_id
+      
+      // Skip if parent location is selected
+      if (processedLocationIds.has(locationId)) continue
+      
+      const areaCommodities = commoditiesByArea.get(areaId) || []
+      const selectedCommoditiesInArea = commodityIds.filter(commodityId => {
+        const commodity = allCommodities.get(commodityId)
+        return commodity && commodity.areaId === areaId
+      })
+      
+      const areaIncludeAll = selectedCommoditiesInArea.length === areaCommodities.length && areaCommodities.length > 0
+      
+      const areaCommoditiesData = areaIncludeAll ? [] : selectedCommoditiesInArea.map(commodityId => {
+        const commodity = allCommodities.get(commodityId)
+        return {id: commodityId, name: commodity?.name || 'Unknown Commodity'}
+      })
+      
+      hierarchicalItems.value.standaloneAreas.push({
+        id: areaId,
+        name: areaName,
+        includeAll: areaIncludeAll,
+        commodities: areaCommoditiesData
+      })
+    }
+    
+    // Process standalone commodities (not under selected areas or locations)
+    for (const commodityData of commoditiesData) {
+      if (!commodityData?.data?.data) continue
+      
+      const commodity = commodityData.data.data
+      const commodityId = commodity.id
+      const commodityName = commodity.attributes.name
+      const areaId = commodity.attributes.area_id
+      
+      // Skip if parent area is selected
+      if (areaIds.includes(areaId)) continue
+      
+      // Skip if parent location is selected
+      const area = allAreas.get(areaId)
+      if (area && processedLocationIds.has(area.locationId)) continue
+      
+      hierarchicalItems.value.standaloneCommodities.push({
+        id: commodityId,
+        name: commodityName
+      })
+    }
+    
   } catch (err) {
     console.error('Error loading selected items details:', err)
   } finally {
@@ -563,6 +799,79 @@ onMounted(() => {
   color: #495057;
 }
 
+.selected-items-hierarchy {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.hierarchy-item {
+  border-left: 3px solid transparent;
+  padding-left: 15px;
+  position: relative;
+
+  .item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background-color: rgb(255 255 255 / 70%);
+    border-radius: $default-radius;
+    margin-bottom: 10px;
+  }
+
+  .item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .item-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: $text-color;
+  }
+
+  .item-type {
+    font-size: 0.875rem;
+    color: $text-secondary-color;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .sub-items {
+    margin-top: 5px;
+    padding-left: 0;
+  }
+
+  &.location-item {
+    border-left-color: #1976d2;
+    background-color: #f8fffe;
+  }
+
+  &.area-item {
+    border-left-color: #f57c00;
+    background-color: #fffef8;
+    margin-left: 15px;
+  }
+
+  &.commodity-item {
+    border-left-color: #c2185b;
+    background-color: #fefff8;
+    margin-left: 30px;
+  }
+}
+
+.inclusion-badge {
+  background-color: #e8f5e8;
+  color: #2e7d32;
+  padding: 4px 8px;
+  border-radius: $default-radius;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-style: italic;
+}
+
 .selected-items {
   display: flex;
   flex-direction: column;
@@ -574,20 +883,6 @@ onMounted(() => {
   padding: 12px;
   border-radius: $default-radius;
   border: 1px solid #dee2e6;
-}
-
-.item-name {
-  font-weight: 600;
-  font-size: 1rem;
-  color: $text-color;
-  margin-bottom: 4px;
-}
-
-.item-type {
-  font-size: 0.875rem;
-  color: $text-secondary-color;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .loading-items {
