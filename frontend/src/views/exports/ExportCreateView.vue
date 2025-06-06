@@ -269,7 +269,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .export-create {
   padding: 20px;
   max-width: 800px;

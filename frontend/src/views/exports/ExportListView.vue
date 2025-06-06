@@ -207,7 +207,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .export-list {
   padding: 20px;
 }

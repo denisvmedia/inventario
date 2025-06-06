@@ -299,7 +299,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .export-detail {
   padding: 20px;
   max-width: 1000px;
