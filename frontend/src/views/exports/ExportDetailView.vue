@@ -7,6 +7,36 @@
     </div>
     <div class="header">
       <h1>Export Details</h1>
+      <div v-if="exportData" class="actions">
+        <button
+          v-if="exportData.status === 'completed'"
+          class="btn btn-primary"
+          :disabled="downloading"
+          @click="downloadExport"
+        >
+          <font-awesome-icon :icon="downloading ? 'spinner' : 'download'" :spin="downloading" />
+          {{ downloading ? 'Downloading...' : 'Download' }}
+        </button>
+
+        <button
+          v-if="exportData.status === 'failed'"
+          class="btn btn-warning"
+          :disabled="retrying"
+          @click="retryExport"
+        >
+          <font-awesome-icon :icon="retrying ? 'spinner' : 'redo'" :spin="retrying" />
+          {{ retrying ? 'Retrying...' : 'Retry' }}
+        </button>
+
+        <button
+          class="btn btn-danger"
+          :disabled="deleting"
+          @click="deleteExport"
+        >
+          <font-awesome-icon :icon="deleting ? 'spinner' : 'trash'" :spin="deleting" />
+          {{ deleting ? 'Deleting...' : 'Delete' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="loading">Loading export details...</div>
@@ -58,7 +88,7 @@
 
             <div v-if="exportData.file_path" class="info-item">
               <label>File Location</label>
-              <div class="value">{{ exportData.file_path }}</div>
+              <div class="value file-path">{{ exportData.file_path }}</div>
             </div>
           </div>
         </div>
@@ -70,9 +100,11 @@
           <span class="count-badge">{{ exportData.selected_item_ids.length }} items</span>
         </div>
         <div class="card-body">
-          <div class="selected-items">
-            <div v-for="itemId in exportData.selected_item_ids" :key="itemId" class="item-id">
-              {{ itemId }}
+          <div v-if="loadingItems" class="loading-items">Loading item details...</div>
+          <div v-else class="selected-items">
+            <div v-for="item in selectedItemsDetails" :key="item.id" class="item-details">
+              <div class="item-name">{{ item.name }}</div>
+              <div class="item-type">{{ item.type }}</div>
             </div>
           </div>
         </div>
@@ -92,7 +124,7 @@
           <h2>Actions</h2>
         </div>
         <div class="card-body">
-          <div class="action-buttons">
+          <div class="action-buttons right-aligned">
             <button
               v-if="exportData.status === 'completed'"
               class="btn btn-primary"
@@ -134,6 +166,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import exportService from '@/services/exportService'
+import commodityService from '@/services/commodityService'
 import type { Export } from '@/types'
 
 const route = useRoute()
@@ -145,6 +178,8 @@ const error = ref('')
 const retrying = ref(false)
 const deleting = ref(false)
 const downloading = ref(false)
+const loadingItems = ref(false)
+const selectedItemsDetails = ref<Array<{id: string, name: string, type: string}>>([])
 
 const loadExport = async () => {
   try {
@@ -158,12 +193,56 @@ const loadExport = async () => {
         id: response.data.data.id,
         ...response.data.data.attributes
       }
+      
+      // Load selected items details if available
+      if (exportData.value.selected_item_ids && exportData.value.selected_item_ids.length > 0) {
+        await loadSelectedItemsDetails(exportData.value.selected_item_ids)
+      }
     }
   } catch (err: any) {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to load export'
     console.error('Error loading export:', err)
   } finally {
     loading.value = false
+  }
+}
+
+const loadSelectedItemsDetails = async (itemIds: string[]) => {
+  try {
+    loadingItems.value = true
+    selectedItemsDetails.value = []
+    
+    // Fetch details for each item ID
+    const itemPromises = itemIds.map(async (itemId) => {
+      try {
+        const response = await commodityService.getCommodity(itemId)
+        if (response.data && response.data.data) {
+          return {
+            id: itemId,
+            name: response.data.data.attributes.name,
+            type: 'Commodity' // Since we're using commodityService, we know it's a commodity
+          }
+        }
+        return {
+          id: itemId,
+          name: 'Unknown Item',
+          type: 'Unknown'
+        }
+      } catch (err) {
+        console.error(`Error fetching details for item ${itemId}:`, err)
+        return {
+          id: itemId,
+          name: `Item ${itemId}`,
+          type: 'Unknown'
+        }
+      }
+    })
+    
+    selectedItemsDetails.value = await Promise.all(itemPromises)
+  } catch (err) {
+    console.error('Error loading selected items details:', err)
+  } finally {
+    loadingItems.value = false
   }
 }
 
@@ -308,9 +387,21 @@ onMounted(() => {
   padding: 20px;
 }
 
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
 .header h1 {
   margin: 0;
   font-size: 2rem;
+}
+
+.header .actions {
+  display: flex;
+  gap: 10px;
 }
 
 .export-content {
@@ -367,6 +458,12 @@ onMounted(() => {
 .info-item .value {
   font-size: 1rem;
   color: $text-color;
+}
+
+.file-path {
+  word-break: break-all;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .status-badge,
@@ -442,18 +539,38 @@ onMounted(() => {
 
 .selected-items {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.item-id {
+.item-details {
   background-color: $light-bg-color;
-  padding: 4px 8px;
+  padding: 12px;
   border-radius: $default-radius;
-  font-family: monospace;
-  font-size: 0.85rem;
   border: 1px solid #dee2e6;
 }
+
+.item-name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: $text-color;
+  margin-bottom: 4px;
+}
+
+.item-type {
+  font-size: 0.875rem;
+  color: $text-secondary-color;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.loading-items {
+  text-align: center;
+  padding: 20px;
+  color: $text-secondary-color;
+  font-style: italic;
+}
+
 
 .error-message {
   background-color: #f8d7da;
@@ -467,6 +584,10 @@ onMounted(() => {
 .action-buttons {
   display: flex;
   gap: 15px;
+}
+
+.action-buttons.right-aligned {
+  justify-content: flex-end;
 }
 
 .btn-warning {
