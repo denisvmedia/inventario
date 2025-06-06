@@ -72,10 +72,11 @@ jobs:
       - name: Install Go dependencies and tools
         run: |
           # Download Go module dependencies
-          cd go && go mod download
+          go mod download
           
           # Install golangci-lint (version from workflow)
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
+        working-directory: go
 
       - name: Check swag version in go.mod
         id: swag_version
@@ -95,10 +96,12 @@ jobs:
 
       # Install frontend dependencies
       - name: Install frontend dependencies
-        run: cd frontend && npm ci
+        run: npm ci
+        working-directory: frontend
 
       # Install e2e test dependencies and Playwright browsers
       - name: Install e2e dependencies and Playwright browsers
         run: |
-          cd e2e && npm ci
-          cd e2e && npx playwright install --with-deps
+          npm ci
+          npx playwright install --with-deps
+        working-directory: e2e
