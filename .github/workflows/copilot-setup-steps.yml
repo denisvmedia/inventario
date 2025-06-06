@@ -19,7 +19,7 @@ jobs:
         run: sudo apt-get install -y build-essential git curl wget ca-certificates gnupg lsb-release
 
       - name: Install essential build tools
-        run: pwd && ls -lia
+        run: pwd && ls -lia && ls -lia ..
 
       # Install Go
       - uses: actions/setup-go@v5
