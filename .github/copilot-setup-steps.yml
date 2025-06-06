@@ -4,90 +4,96 @@
 
 name: Setup Inventario development environment
 
-steps:
-  # Install system dependencies
-  - name: Update package lists
-    run: sudo apt-get update
+on:
+  workflow_dispatch:
 
-  - name: Install essential build tools
-    run: sudo apt-get install -y build-essential git curl wget ca-certificates gnupg lsb-release
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      # Install system dependencies
+      - name: Update package lists
+        run: sudo apt-get update
 
-  # Install Go
-  - uses: actions/setup-go@v5
-    with:
-      go-version: '1.24.3'
-      cache: true
+      - name: Install essential build tools
+        run: sudo apt-get install -y build-essential git curl wget ca-certificates gnupg lsb-release
 
-  # Install Node.js
-  - name: Read Node.js version from package.json
-    id: node
-    run: |
-      echo "version=$(jq -r .volta.node package.json)" >> $GITHUB_OUTPUT
-    working-directory: frontend
+      # Install Go
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.3'
+          cache: true
 
-  - name: Set up Node.js
-    uses: actions/setup-node@v4
-    with:
-      node-version: ${{ steps.node.outputs.version }}
-      cache: 'npm'
-      cache-dependency-path: frontend/package-lock.json
+      # Install Node.js
+      - name: Read Node.js version from package.json
+        id: node
+        run: |
+          echo "version=$(jq -r .volta.node package.json)" >> $GITHUB_OUTPUT
+        working-directory: frontend
 
-  # Install Docker and Docker Compose
-  - name: Install Docker
-    run: |
-      # Add Docker's official GPG key
-      sudo install -m 0755 -d /etc/apt/keyrings
-      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-      sudo chmod a+r /etc/apt/keyrings/docker.gpg
-      
-      # Add Docker repository
-      echo \
-        "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-        "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-        sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-      
-      # Install Docker Engine
-      sudo apt-get update
-      sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-      
-      # Add user to docker group (requires re-login to take effect)
-      sudo usermod -aG docker $USER
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
-  # Install PostgreSQL client tools for testing
-  - name: Install PostgreSQL client
-    run: sudo apt-get install -y postgresql-client
+      # Install Docker and Docker Compose
+      - name: Install Docker
+        run: |
+          # Add Docker's official GPG key
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          sudo chmod a+r /etc/apt/keyrings/docker.gpg
+          
+          # Add Docker repository
+          echo \
+            "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+            "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+            sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          
+          # Install Docker Engine
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          
+          # Add user to docker group (requires re-login to take effect)
+          sudo usermod -aG docker $USER
 
-  # Install project Go dependencies and tools
-  - name: Install Go dependencies and tools
-    run: |
-      # Download Go module dependencies
-      cd go && go mod download
-      
-      # Install golangci-lint (version from workflow)
-      curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
+      # Install PostgreSQL client tools for testing
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
 
-  - name: Check swag version in go.mod
-    id: swag_version
-    run: |
-      SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)
-      if [ -z "$SWAG_VERSION" ]; then
-        echo "github.com/swaggo/swag is not in go.mod" >&2
-        exit 1
-      fi
-      echo "SWAG_VERSION=$SWAG_VERSION" >> $GITHUB_OUTPUT
-    working-directory: go
+      # Install project Go dependencies and tools
+      - name: Install Go dependencies and tools
+        run: |
+          # Download Go module dependencies
+          cd go && go mod download
+          
+          # Install golangci-lint (version from workflow)
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
 
-  - name: Install swag for Swagger documentation
-    run: |
-      # Install swag for Swagger documentation (version from go.mod)
-      go install github.com/swaggo/swag/cmd/swag@${{ steps.swag_version.outputs.SWAG_VERSION }}
+      - name: Check swag version in go.mod
+        id: swag_version
+        run: |
+          SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)
+          if [ -z "$SWAG_VERSION" ]; then
+            echo "github.com/swaggo/swag is not in go.mod" >&2
+            exit 1
+          fi
+          echo "SWAG_VERSION=$SWAG_VERSION" >> $GITHUB_OUTPUT
+        working-directory: go
 
-  # Install frontend dependencies
-  - name: Install frontend dependencies
-    run: cd frontend && npm ci
+      - name: Install swag for Swagger documentation
+        run: |
+          # Install swag for Swagger documentation (version from go.mod)
+          go install github.com/swaggo/swag/cmd/swag@${{ steps.swag_version.outputs.SWAG_VERSION }}
 
-  # Install e2e test dependencies and Playwright browsers
-  - name: Install e2e dependencies and Playwright browsers
-    run: |
-      cd e2e && npm ci
-      cd e2e && npx playwright install --with-deps
+      # Install frontend dependencies
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      # Install e2e test dependencies and Playwright browsers
+      - name: Install e2e dependencies and Playwright browsers
+        run: |
+          cd e2e && npm ci
+          cd e2e && npx playwright install --with-deps
