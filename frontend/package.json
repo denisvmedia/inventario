@@ -7,10 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "lint": "npm run lint:js & npm run lint:styles & wait",
     "lint:js": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx",
     "lint:js:fix": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
     "lint:styles": "stylelint \"src/**/*.{scss,vue}\"",
     "lint:styles:fix": "stylelint \"src/**/*.{scss,vue}\" --fix",
+    "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
