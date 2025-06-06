@@ -12,7 +12,7 @@
     <form @submit.prevent="createExport" class="export-form">
       <div class="form-section">
         <h2>Export Details</h2>
-        
+
         <div class="form-group">
           <label for="description">Description</label>
           <textarea
@@ -123,7 +123,7 @@
             <span>Include file data (images, invoices, manuals)</span>
           </label>
           <div class="form-help">
-            When enabled, exported XML will include base64-encoded file data. 
+            When enabled, exported XML will include base64-encoded file data.
             This makes the export larger but fully self-contained.
           </div>
         </div>
@@ -177,11 +177,11 @@ const canSubmit = computed(() => {
   if (!exportData.value.type || !exportData.value.description?.trim()) {
     return false
   }
-  
+
   if (exportData.value.type === 'selected_items') {
     return exportData.value.selected_item_ids && exportData.value.selected_item_ids.length > 0
   }
-  
+
   return true
 })
 
@@ -249,7 +249,7 @@ const createExport = async () => {
     }
 
     const response = await exportService.createExport(requestData)
-    
+
     if (response.data && response.data.data) {
       router.push(`/exports/${response.data.data.id}`)
     } else {

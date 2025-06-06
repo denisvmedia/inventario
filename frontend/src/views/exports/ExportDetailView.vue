@@ -12,7 +12,7 @@
     <div v-if="loading" class="loading">Loading export details...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="exportData" class="export-content">
-      
+
       <div class="export-card">
         <div class="card-header">
           <h2>Export Information</h2>
@@ -20,14 +20,14 @@
             {{ formatExportStatus(exportData.status) }}
           </span>
         </div>
-        
+
         <div class="card-body">
           <div class="info-grid">
             <div class="info-item">
               <label>Description</label>
               <div class="value">{{ exportData.description || 'No description' }}</div>
             </div>
-            
+
             <div class="info-item">
               <label>Type</label>
               <div class="value">
@@ -36,7 +36,7 @@
                 </span>
               </div>
             </div>
-            
+
             <div class="info-item">
               <label>Include File Data</label>
               <div class="value">
@@ -45,17 +45,17 @@
                 </span>
               </div>
             </div>
-            
+
             <div class="info-item">
               <label>Created</label>
               <div class="value">{{ formatDate(exportData.created_date) }}</div>
             </div>
-            
+
             <div v-if="exportData.completed_date" class="info-item">
               <label>Completed</label>
               <div class="value">{{ formatDate(exportData.completed_date) }}</div>
             </div>
-            
+
             <div v-if="exportData.file_path" class="info-item">
               <label>File Location</label>
               <div class="value">{{ exportData.file_path }}</div>
@@ -93,7 +93,7 @@
         </div>
         <div class="card-body">
           <div class="action-buttons">
-            <button 
+            <button
               v-if="exportData.status === 'completed'"
               class="btn btn-primary"
               :disabled="downloading"
@@ -102,8 +102,8 @@
               <font-awesome-icon :icon="downloading ? 'spinner' : 'download'" :spin="downloading" />
               {{ downloading ? 'Downloading...' : 'Download Export' }}
             </button>
-            
-            <button 
+
+            <button
               v-if="exportData.status === 'failed'"
               class="btn btn-warning"
               :disabled="retrying"
@@ -112,8 +112,8 @@
               <font-awesome-icon :icon="retrying ? 'spinner' : 'redo'" :spin="retrying" />
               {{ retrying ? 'Retrying...' : 'Retry Export' }}
             </button>
-            
-            <button 
+
+            <button
               class="btn btn-danger"
               :disabled="deleting"
               @click="deleteExport"
@@ -152,7 +152,7 @@ const loadExport = async () => {
     error.value = ''
     const exportId = route.params.id as string
     const response = await exportService.getExport(exportId)
-    
+
     if (response.data && response.data.data) {
       exportData.value = {
         id: response.data.data.id,
@@ -199,10 +199,10 @@ const formatDate = (dateString: string) => {
 
 const retryExport = async () => {
   if (!exportData.value?.id) return
-  
+
   try {
     retrying.value = true
-    
+
     // Update export status to pending to retry
     const requestData = {
       data: {
@@ -216,7 +216,7 @@ const retryExport = async () => {
         }
       }
     }
-    
+
     await exportService.updateExport(exportData.value.id, requestData)
     await loadExport() // Reload to show updated status
   } catch (err: any) {
@@ -229,7 +229,7 @@ const retryExport = async () => {
 
 const deleteExport = async () => {
   if (!exportData.value?.id) return
-  
+
   if (!confirm('Are you sure you want to delete this export?')) {
     return
   }
@@ -248,17 +248,17 @@ const deleteExport = async () => {
 
 const downloadExport = async () => {
   if (!exportData.value?.id) return
-  
+
   try {
     downloading.value = true
     const response = await exportService.downloadExport(exportData.value.id)
-    
+
     // Create blob and download link
     const blob = new Blob([response.data], { type: 'application/xml' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    
+
     // Try to get filename from Content-Disposition header
     const contentDisposition = response.headers['content-disposition']
     let filename = 'export.xml'
@@ -268,7 +268,7 @@ const downloadExport = async () => {
         filename = filenameMatch[1].replace(/['"]/g, '')
       }
     }
-    
+
     link.download = filename
     document.body.appendChild(link)
     link.click()
@@ -284,7 +284,7 @@ const downloadExport = async () => {
 
 onMounted(() => {
   loadExport()
-  
+
   // Auto-refresh if export is in progress
   const interval = setInterval(() => {
     if (exportData.value?.status === 'pending' || exportData.value?.status === 'in_progress') {
@@ -293,7 +293,7 @@ onMounted(() => {
       clearInterval(interval)
     }
   }, 5000)
-  
+
   // Cleanup interval on component unmount
   return () => clearInterval(interval)
 })

@@ -65,7 +65,7 @@
               <router-link :to="`/exports/${exportItem.id}`" class="btn btn-sm btn-secondary">
                 <font-awesome-icon icon="eye" /> View
               </router-link>
-              <button 
+              <button
                 v-if="exportItem.status === 'completed'"
                 class="btn btn-sm btn-primary"
                 :disabled="downloading === exportItem.id"
@@ -74,7 +74,7 @@
                 <font-awesome-icon :icon="downloading === exportItem.id ? 'spinner' : 'download'" :spin="downloading === exportItem.id" />
                 {{ downloading === exportItem.id ? 'Downloading...' : 'Download' }}
               </button>
-              <button 
+              <button
                 class="btn btn-sm btn-danger"
                 :disabled="deleting === exportItem.id"
                 @click="deleteExport(exportItem.id!)"
@@ -172,13 +172,13 @@ const downloadExport = async (exportId: string) => {
   try {
     downloading.value = exportId
     const response = await exportService.downloadExport(exportId)
-    
+
     // Create blob and download link
     const blob = new Blob([response.data], { type: 'application/xml' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    
+
     // Try to get filename from Content-Disposition header
     const contentDisposition = response.headers['content-disposition']
     let filename = 'export.xml'
@@ -188,7 +188,7 @@ const downloadExport = async (exportId: string) => {
         filename = filenameMatch[1].replace(/['"]/g, '')
       }
     }
-    
+
     link.download = filename
     document.body.appendChild(link)
     link.click()
