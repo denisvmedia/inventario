@@ -1,3 +1,16 @@
+Project layout:
+  * /go - Backend Go code
+    * /registry - Data storage implementations
+      * /memory - In-memory storage implementation
+      * /boltb - Boltdb storage implementation
+      * /postgres - Postgres storage implementation
+  * /frontend - Vue.js 3 + TypeScript frontend, SCSS styles
+  * /e2e - End-to-end tests
+
+We use `github.com/denisvmedia/inventario/internal/errkit` for errors, but for sentitel errors we use std `errors` package.
+
+We use `github.com/denisvmedia/inventario/internal/log` for loggig (and never `log` package). Using `log/slog` is not a mistake as well (but internal log should be preferred).
+
 We use `github.com/frankban/quicktest` for in our tests. This package should always be imported with `qt` alias.
 
 When changing go code, make sure you run `golangci-lint run --timeout=10m`, which must always be successful.
@@ -23,3 +36,9 @@ In all the approaches make sure you follow best practices (general ones or speci
 When making changes, make sure that the existing documentation is still actual. Modify it accordingly, if it's not.
 
 When writing go code, make sure you have godoc comments. Keep good balance between verbosity and lack of documentation. Only be super detailed, where the complexity of the code demands that.
+
+Make sure you always have ending newline in all go, ts, js and md files.
+
+Make sure you don't have trailing space anywhere (unless it is required by the format or explicitely stated by the user).
+
+Only use SCSS for styles in frontend. Make sure you use consistent styles with the existing views. If needed to create new styles, they should follow the same look and feel pattern.
