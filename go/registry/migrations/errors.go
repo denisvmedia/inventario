@@ -5,5 +5,5 @@ import (
 )
 
 var (
-	ErrUnknownDatabaseType = errors.New("migrunknown database type")
+	ErrUnknownDatabaseType = errors.New("unknown database type")
 )

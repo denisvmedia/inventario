@@ -2,9 +2,11 @@ package boltdb
 
 import (
 	"context"
+	"time"
 
 	bolt "go.etcd.io/bbolt"
 
+	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/boltdb/dbx"
@@ -35,7 +37,28 @@ func NewExportRegistry(db *bolt.DB) registry.ExportRegistry {
 
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
 	return r.registry.Create(export,
-		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
+		func(tx dbx.TransactionOrBucket, e *models.Export) error {
+			// Validate required fields
+			if e.Description == "" {
+				return errkit.WithStack(registry.ErrFieldRequired, "field_name", "Description")
+			}
+			if e.Type == "" {
+				return errkit.WithStack(registry.ErrFieldRequired, "field_name", "Type")
+			}
+
+			// Set created date if not set
+			if e.CreatedDate == nil {
+				now := models.Date(time.Now().Format("2006-01-02"))
+				e.CreatedDate = &now
+			}
+
+			// Set default status if not set
+			if e.Status == "" {
+				e.Status = models.ExportStatusPending
+			}
+
+			return nil
+		},
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 	)
 }
@@ -50,7 +73,17 @@ func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
 
 func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*models.Export, error) {
 	return r.registry.Update(export,
-		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
+		func(tx dbx.TransactionOrBucket, e *models.Export) error {
+			// Validate required fields
+			if e.Description == "" {
+				return errkit.WithStack(registry.ErrFieldRequired, "field_name", "Description")
+			}
+			if e.Type == "" {
+				return errkit.WithStack(registry.ErrFieldRequired, "field_name", "Type")
+			}
+
+			return nil
+		},
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 	)
 }
