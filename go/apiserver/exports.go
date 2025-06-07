@@ -193,7 +193,8 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set headers to optimize streaming and prevent browser preloading
-	downloadutils.SetStreamingHeaders(w, "application/xml", attrs.Size, filename)
+	// downloadutils.SetStreamingHeaders(w, "application/xml", attrs.Size, filename)
+	downloadutils.SetStreamingHeaders(w, "application/octet-stream", attrs.Size, filename)
 
 	// Use chunked copying to prevent browser buffering
 	if err := downloadutils.CopyFileInChunks(w, file); err != nil {
