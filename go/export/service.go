@@ -22,6 +22,11 @@ type ExportService struct {
 	uploadLocation string
 }
 
+// ExportArgs contains arguments for export operations
+type ExportArgs struct {
+	IncludeFileData bool
+}
+
 // NewExportService creates a new export service
 func NewExportService(registrySet *registry.Set, uploadLocation string) *ExportService {
 	return &ExportService{
@@ -190,7 +195,8 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 
 	switch export.Type {
 	case models.ExportTypeFullDatabase:
-		if err := s.streamFullDatabase(ctx, writer, export.IncludeFileData); err != nil {
+		args := ExportArgs{IncludeFileData: export.IncludeFileData}
+		if err := s.streamFullDatabase(ctx, writer, args); err != nil {
 			return errkit.Wrap(err, "failed to stream full database")
 		}
 	case models.ExportTypeLocations:
@@ -202,11 +208,13 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 			return errkit.Wrap(err, "failed to stream areas")
 		}
 	case models.ExportTypeCommodities:
-		if err := s.streamCommodities(ctx, writer, export.IncludeFileData); err != nil {
+		args := ExportArgs{IncludeFileData: export.IncludeFileData}
+		if err := s.streamCommodities(ctx, writer, args); err != nil {
 			return errkit.Wrap(err, "failed to stream commodities")
 		}
 	case models.ExportTypeSelectedItems:
-		if err := s.streamSelectedItems(ctx, writer, export.SelectedItems, export.IncludeFileData); err != nil {
+		args := ExportArgs{IncludeFileData: export.IncludeFileData}
+		if err := s.streamSelectedItems(ctx, writer, export.SelectedItems, args); err != nil {
 			return errkit.Wrap(err, "failed to stream selected items")
 		}
 	default:
@@ -222,14 +230,14 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 }
 
 // streamFullDatabase streams all database content to the writer
-func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer, includeFileData bool) error {
+func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer, args ExportArgs) error {
 	if err := s.streamLocations(ctx, writer); err != nil {
 		return errkit.Wrap(err, "failed to stream locations")
 	}
 	if err := s.streamAreas(ctx, writer); err != nil {
 		return errkit.Wrap(err, "failed to stream areas")
 	}
-	if err := s.streamCommodities(ctx, writer, includeFileData); err != nil {
+	if err := s.streamCommodities(ctx, writer, args); err != nil {
 		return errkit.Wrap(err, "failed to stream commodities")
 	}
 	return nil
@@ -320,7 +328,7 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer) error
 }
 
 // streamCommodities streams commodities to the writer
-func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, includeFileData bool) error {
+func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, args ExportArgs) error {
 	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodities")
@@ -336,7 +344,7 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 	}
 
 	for _, commodity := range commodities {
-		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
+		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, args)
 		if err != nil {
 			return errkit.Wrap(err, "failed to convert commodity to XML")
 		}
@@ -359,7 +367,7 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 }
 
 // streamSelectedItems streams selected items (locations, areas, commodities) to the writer
-func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, selectedItems []models.ExportSelectedItem, includeFileData bool) error {
+func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, selectedItems []models.ExportSelectedItem, args ExportArgs) error {
 	encoder := xml.NewEncoder(writer)
 	encoder.Indent("  ", "  ")
 
@@ -373,7 +381,7 @@ func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Write
 	if err := s.streamSelectedAreas(ctx, encoder, areas); err != nil {
 		return err
 	}
-	if err := s.streamSelectedCommodities(ctx, encoder, commodities, includeFileData); err != nil {
+	if err := s.streamSelectedCommodities(ctx, encoder, commodities, args); err != nil {
 		return err
 	}
 
@@ -461,7 +469,7 @@ func (s *ExportService) streamEntitySection(ctx context.Context, encoder *xml.En
 }
 
 // streamSelectedCommodities streams commodity data to the XML encoder
-func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *xml.Encoder, commodityIDs []string, includeFileData bool) error {
+func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *xml.Encoder, commodityIDs []string, args ExportArgs) error {
 	if len(commodityIDs) == 0 {
 		return nil
 	}
@@ -477,7 +485,7 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 			continue // Skip items that can't be found
 		}
 
-		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, includeFileData)
+		xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, args)
 		if err != nil {
 			return errkit.Wrap(err, "failed to convert commodity to XML")
 		}
@@ -494,7 +502,7 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 	return nil
 }
 
-func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *models.Commodity, includeFileData bool) (*Commodity, error) {
+func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *models.Commodity, args ExportArgs) (*Commodity, error) {
 	xmlCommodity := &Commodity{
 		ID:                     commodity.ID,
 		Name:                   commodity.Name,
@@ -545,7 +553,7 @@ func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *mo
 	}
 
 	// Handle file attachments (images, invoices, manuals)
-	if err := s.addFileAttachments(ctx, commodity.ID, xmlCommodity, includeFileData); err != nil {
+	if err := s.addFileAttachments(ctx, commodity.ID, xmlCommodity, args); err != nil {
 		return nil, errkit.Wrap(err, "failed to add file attachments")
 	}
 
@@ -553,19 +561,19 @@ func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *mo
 }
 
 // addFileAttachments adds file attachments (images, invoices, manuals) to the XML commodity
-func (s *ExportService) addFileAttachments(ctx context.Context, commodityID string, xmlCommodity *Commodity, includeFileData bool) error {
+func (s *ExportService) addFileAttachments(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs) error {
 	// Add images
-	if err := s.addImages(ctx, commodityID, xmlCommodity, includeFileData); err != nil {
+	if err := s.addImages(ctx, commodityID, xmlCommodity, args); err != nil {
 		return errkit.Wrap(err, "failed to add images")
 	}
 
 	// Add invoices
-	if err := s.addInvoices(ctx, commodityID, xmlCommodity, includeFileData); err != nil {
+	if err := s.addInvoices(ctx, commodityID, xmlCommodity, args); err != nil {
 		return errkit.Wrap(err, "failed to add invoices")
 	}
 
 	// Add manuals
-	if err := s.addManuals(ctx, commodityID, xmlCommodity, includeFileData); err != nil {
+	if err := s.addManuals(ctx, commodityID, xmlCommodity, args); err != nil {
 		return errkit.Wrap(err, "failed to add manuals")
 	}
 
@@ -573,7 +581,7 @@ func (s *ExportService) addFileAttachments(ctx context.Context, commodityID stri
 }
 
 // addImages adds images to the XML commodity
-func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCommodity *Commodity, includeFileData bool) error {
+func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs) error {
 	imageIDs, err := s.registrySet.CommodityRegistry.GetImages(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get images")
@@ -594,7 +602,7 @@ func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCo
 		}
 
 		// Include file data if requested
-		if includeFileData {
+		if args.IncludeFileData {
 			data, err := s.getFileData(ctx, image.OriginalPath)
 			if err != nil {
 				// Don't fail the entire export if one file can't be read
@@ -610,7 +618,7 @@ func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCo
 }
 
 // addInvoices adds invoices to the XML commodity
-func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xmlCommodity *Commodity, includeFileData bool) error {
+func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs) error {
 	invoiceIDs, err := s.registrySet.CommodityRegistry.GetInvoices(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get invoices")
@@ -631,7 +639,7 @@ func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xml
 		}
 
 		// Include file data if requested
-		if includeFileData {
+		if args.IncludeFileData {
 			data, err := s.getFileData(ctx, invoice.OriginalPath)
 			if err != nil {
 				// Don't fail the entire export if one file can't be read
@@ -647,7 +655,7 @@ func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xml
 }
 
 // addManuals adds manuals to the XML commodity
-func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlCommodity *Commodity, includeFileData bool) error {
+func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs) error {
 	manualIDs, err := s.registrySet.CommodityRegistry.GetManuals(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get manuals")
@@ -668,7 +676,7 @@ func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlC
 		}
 
 		// Include file data if requested
-		if includeFileData {
+		if args.IncludeFileData {
 			data, err := s.getFileData(ctx, manual.OriginalPath)
 			if err != nil {
 				// Don't fail the entire export if one file can't be read

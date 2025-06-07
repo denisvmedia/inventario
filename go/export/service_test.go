@@ -332,7 +332,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Test with file data included
-	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, true)
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: true})
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
@@ -363,7 +363,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(xmlCommodity.Invoices[0].Data, qt.Equals, expectedInvoiceBase64)
 
 	// Test without file data
-	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, false)
+	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: false})
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodityNoData.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodityNoData.Invoices, qt.HasLen, 1)
@@ -492,7 +492,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 	}
 
 	// Test with file data included
-	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, true)
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: true})
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)

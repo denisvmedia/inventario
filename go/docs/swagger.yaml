@@ -181,21 +181,6 @@ definitions:
         example: exports
         type: string
     type: object
-  jsonapi.ExportUpdateRequest:
-    properties:
-      data:
-        $ref: '#/definitions/jsonapi.ExportUpdateRequestData'
-    type: object
-  jsonapi.ExportUpdateRequestData:
-    properties:
-      attributes:
-        $ref: '#/definitions/models.Export'
-      type:
-        enum:
-        - exports
-        example: exports
-        type: string
-    type: object
   jsonapi.ExportsMeta:
     properties:
       exports:
@@ -1499,40 +1484,6 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Get an export
-      tags:
-      - exports
-    patch:
-      consumes:
-      - application/vnd.api+json
-      description: update an export
-      parameters:
-      - description: Export ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Export
-        in: body
-        name: export
-        required: true
-        schema:
-          $ref: '#/definitions/jsonapi.ExportUpdateRequest'
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/jsonapi.ExportResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Update an export
       tags:
       - exports
   /exports/{id}/download:

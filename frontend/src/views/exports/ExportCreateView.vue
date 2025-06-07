@@ -735,7 +735,7 @@ h1 {
 
 .is-invalid {
   border-color: $error-color !important;
-  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+  box-shadow: 0 0 0 0.2rem rgb(220 53 69 / 25%) !important;
 }
 
 /* PrimeVue Select error styling */

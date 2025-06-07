@@ -1231,57 +1231,6 @@
                         }
                     }
                 }
-            },
-            "patch": {
-                "description": "update an export",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Update an export",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Export",
-                        "name": "export",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable Entity",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
             }
         },
         "/exports/{id}/download": {
@@ -1892,29 +1841,6 @@
                 },
                 "id": {
                     "type": "string"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "exports"
-                    ],
-                    "example": "exports"
-                }
-            }
-        },
-        "jsonapi.ExportUpdateRequest": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/jsonapi.ExportUpdateRequestData"
-                }
-            }
-        },
-        "jsonapi.ExportUpdateRequestData": {
-            "type": "object",
-            "properties": {
-                "attributes": {
-                    "$ref": "#/definitions/models.Export"
                 },
                 "type": {
                     "type": "string",
