@@ -75,6 +75,7 @@ func TestExport_ValidateWithContext(t *testing.T) {
 	invalidExport := &models.Export{
 		Type:        "",
 		Status:      models.ExportStatusPending,
+		Description: "Test export",
 		CreatedDate: &createdDate,
 	}
 
@@ -85,6 +86,7 @@ func TestExport_ValidateWithContext(t *testing.T) {
 	invalidSelectedExport := &models.Export{
 		Type:          models.ExportTypeSelectedItems,
 		Status:        models.ExportStatusPending,
+		Description:   "Test export",
 		CreatedDate:   &createdDate,
 		SelectedItems: models.ValuerSlice[models.ExportSelectedItem]{},
 	}
@@ -96,6 +98,7 @@ func TestExport_ValidateWithContext(t *testing.T) {
 	validSelectedExport := &models.Export{
 		Type:        models.ExportTypeSelectedItems,
 		Status:      models.ExportStatusPending,
+		Description: "Test export description",
 		CreatedDate: &createdDate,
 		SelectedItems: models.ValuerSlice[models.ExportSelectedItem]{
 			{ID: "id1", Type: models.ExportSelectedItemTypeCommodity, Name: "Test Commodity"},
