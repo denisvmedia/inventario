@@ -3,7 +3,15 @@ import {createLocation, deleteLocation} from "./includes/locations.js";
 import {createArea, deleteArea, verifyAreaHasCommodities} from "./includes/areas.js";
 import {createCommodity, deleteCommodity, BACK_TO_COMMODITIES} from "./includes/commodities.js";
 import {createExport, deleteExport, verifyExportDetails, verifySelectedItems} from "./includes/exports.js";
-import {navigateTo, TO_LOCATIONS, TO_EXPORTS, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA} from "./includes/navigate.js";
+import {
+  navigateTo,
+  TO_LOCATIONS,
+  TO_EXPORTS,
+  TO_AREA_COMMODITIES,
+  FROM_LOCATIONS_AREA,
+  TO_COMMODITIES
+} from "./includes/navigate.js";
+import {expect} from "@playwright/test";
 
 test.describe('Export CRUD Operations', () => {
   // Test data with timestamps to ensure uniqueness
@@ -57,14 +65,9 @@ test.describe('Export CRUD Operations', () => {
     // Create an export
     await createExport(page, recorder, testExport, testLocation.name, testArea.name, testCommodity.name);
     
-    // Verify export was created - should be in the exports list
+    // Verify export was created - should be in the export details
     await page.waitForSelector(`text=${testExport.description}`);
     await recorder.takeScreenshot('exports-list-02-after-create');
-
-    // Click on the export to view details
-    await page.click(`text=${testExport.description}`);
-    await page.waitForSelector('h1:has-text("Export Details")');
-    await recorder.takeScreenshot('exports-detail-01-view');
 
     // Verify export details
     await verifyExportDetails(page, recorder, testExport);
@@ -79,14 +82,15 @@ test.describe('Export CRUD Operations', () => {
     // Delete the export
     await deleteExport(page, recorder, testExport.description);
 
-    // Verify export was deleted - should not be in the list anymore
-    await navigateTo(page, recorder, TO_EXPORTS);
-    await page.waitForTimeout(1000);
-    await recorder.takeScreenshot('exports-list-03-after-delete');
-
     // Cleanup - delete the test entities
+    await navigateTo(page, recorder, TO_COMMODITIES);
+    // Navigate to commodity detail page
+    await page.click(`text=${testCommodity.name}`);
     await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_COMMODITIES);
-    await deleteArea(page, recorder, testArea.name);
+
+    // Delete area and location
+    await navigateTo(page, recorder, TO_LOCATIONS);
+    await deleteArea(page, recorder, testArea.name, testLocation.name);
     await deleteLocation(page, recorder, testLocation.name);
   });
 

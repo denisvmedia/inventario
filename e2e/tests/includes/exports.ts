@@ -105,15 +105,8 @@ export async function createExport(page: Page, recorder: TestRecorder, testExpor
 export async function deleteExport(page: Page, recorder: TestRecorder, exportDescription: string) {
     await recorder.takeScreenshot('exports-delete-01-before-delete');
 
-    // Navigate to the export if not already there
-    const exportRow = page.locator(`tr:has-text("${exportDescription}")`);
-    if (await exportRow.isVisible()) {
-        // Click on the export row to go to detail view
-        await exportRow.click();
-    } else {
-        // If we're already in detail view, great
-        await page.waitForSelector('h1:has-text("Export Details")');
-    }
+    // Check if we're in detail view
+    await page.waitForSelector('h1:has-text("Export Details")');
 
     // Click the delete button
     await page.click('button:has-text("Delete")');
