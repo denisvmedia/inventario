@@ -3,6 +3,7 @@ package export
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 	"testing"
@@ -345,6 +346,10 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(xmlCommodity.Images[0].MimeType, qt.Equals, "image/jpeg")
 	c.Assert(xmlCommodity.Images[0].Data, qt.Not(qt.Equals), "")
 
+	// Verify base64 data matches original file content for image
+	expectedImageBase64 := base64.StdEncoding.EncodeToString(testImageData)
+	c.Assert(xmlCommodity.Images[0].Data, qt.Equals, expectedImageBase64)
+
 	// Check invoice file data
 	c.Assert(xmlCommodity.Invoices[0].ID, qt.Equals, createdInvoice.ID)
 	c.Assert(xmlCommodity.Invoices[0].Path, qt.Equals, "test-invoice")
@@ -352,6 +357,10 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(xmlCommodity.Invoices[0].Extension, qt.Equals, ".pdf")
 	c.Assert(xmlCommodity.Invoices[0].MimeType, qt.Equals, "application/pdf")
 	c.Assert(xmlCommodity.Invoices[0].Data, qt.Not(qt.Equals), "")
+
+	// Verify base64 data matches original file content for invoice
+	expectedInvoiceBase64 := base64.StdEncoding.EncodeToString(testInvoiceData)
+	c.Assert(xmlCommodity.Invoices[0].Data, qt.Equals, expectedInvoiceBase64)
 
 	// Test without file data
 	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, false)
@@ -362,4 +371,190 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	// Check that no file data is included
 	c.Assert(xmlCommodityNoData.Images[0].Data, qt.Equals, "")
 	c.Assert(xmlCommodityNoData.Invoices[0].Data, qt.Equals, "")
+}
+
+func TestBase64FileDataVerification(t *testing.T) {
+	c := qt.New(t)
+	// Create a temporary directory for uploads
+	tempDir := c.TempDir()
+
+	// Create interconnected registries
+	locationRegistry := memory.NewLocationRegistry()
+	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+	imageRegistry := memory.NewImageRegistry(commodityRegistry)
+	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
+	manualRegistry := memory.NewManualRegistry(commodityRegistry)
+	exportRegistry := memory.NewExportRegistry()
+
+	registrySet := &registry.Set{
+		LocationRegistry:  locationRegistry,
+		AreaRegistry:      areaRegistry,
+		CommodityRegistry: commodityRegistry,
+		ImageRegistry:     imageRegistry,
+		InvoiceRegistry:   invoiceRegistry,
+		ManualRegistry:    manualRegistry,
+		ExportRegistry:    exportRegistry,
+	}
+
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	service := NewExportService(registrySet, uploadLocation)
+	ctx := context.Background()
+
+	// Create test data
+	location := models.Location{EntityID: models.EntityID{ID: "loc1"}, Name: "Location 1", Address: "Address 1"}
+	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
+	c.Assert(err, qt.IsNil)
+
+	area := models.Area{EntityID: models.EntityID{ID: "area1"}, Name: "Area 1", LocationID: createdLocation.ID}
+	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
+	c.Assert(err, qt.IsNil)
+
+	commodity := models.Commodity{
+		EntityID: models.EntityID{ID: "commodity1"},
+		Name:     "Test Commodity",
+		Type:     models.CommodityTypeElectronics,
+		AreaID:   createdArea.ID,
+		Count:    1,
+		Status:   models.CommodityStatusInUse,
+	}
+	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
+	c.Assert(err, qt.IsNil)
+
+	// Create test files with different types of content
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+
+	// Test various file types and content
+	testFiles := []struct {
+		path     string
+		data     []byte
+		fileType string
+		ext      string
+		mime     string
+	}{
+		{"image.jpg", []byte("binary-image-data-with-special-chars\x00\x01\x02\xFF"), "image", ".jpg", "image/jpeg"},
+		{"invoice.pdf", []byte("PDF content with unicode: ñáéíóú 测试"), "invoice", ".pdf", "application/pdf"},
+		{"manual.txt", []byte("Simple text content"), "manual", ".txt", "text/plain"},
+	}
+
+	var createdFiles []string
+	for _, tf := range testFiles {
+		// Write file to blob storage
+		err = b.WriteAll(ctx, tf.path, tf.data, nil)
+		c.Assert(err, qt.IsNil)
+
+		// Create corresponding model based on file type
+		switch tf.fileType {
+		case "image":
+			image := models.Image{
+				EntityID:    models.EntityID{ID: "img-" + tf.path},
+				CommodityID: createdCommodity.ID,
+				File: &models.File{
+					Path:         "img-" + tf.path,
+					OriginalPath: tf.path,
+					Ext:          tf.ext,
+					MIMEType:     tf.mime,
+				},
+			}
+			_, err := registrySet.ImageRegistry.Create(ctx, image)
+			c.Assert(err, qt.IsNil)
+		case "invoice":
+			invoice := models.Invoice{
+				EntityID:    models.EntityID{ID: "inv-" + tf.path},
+				CommodityID: createdCommodity.ID,
+				File: &models.File{
+					Path:         "inv-" + tf.path,
+					OriginalPath: tf.path,
+					Ext:          tf.ext,
+					MIMEType:     tf.mime,
+				},
+			}
+			_, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
+			c.Assert(err, qt.IsNil)
+		case "manual":
+			manual := models.Manual{
+				EntityID:    models.EntityID{ID: "man-" + tf.path},
+				CommodityID: createdCommodity.ID,
+				File: &models.File{
+					Path:         "man-" + tf.path,
+					OriginalPath: tf.path,
+					Ext:          tf.ext,
+					MIMEType:     tf.mime,
+				},
+			}
+			_, err := registrySet.ManualRegistry.Create(ctx, manual)
+			c.Assert(err, qt.IsNil)
+		}
+
+		createdFiles = append(createdFiles, tf.path)
+	}
+
+	// Test with file data included
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, true)
+	c.Assert(err, qt.IsNil)
+	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
+	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
+	c.Assert(xmlCommodity.Manuals, qt.HasLen, 1)
+
+	// Verify each file's base64 data matches the original content exactly
+	for _, tf := range testFiles {
+		expectedBase64 := base64.StdEncoding.EncodeToString(tf.data)
+
+		switch tf.fileType {
+		case "image":
+			c.Assert(xmlCommodity.Images[0].Data, qt.Equals, expectedBase64,
+				qt.Commentf("Image base64 data should match original file content"))
+
+			// Also verify that the base64 can be decoded back to original data
+			decodedData, err := base64.StdEncoding.DecodeString(xmlCommodity.Images[0].Data)
+			c.Assert(err, qt.IsNil)
+			c.Assert(decodedData, qt.DeepEquals, tf.data)
+
+		case "invoice":
+			c.Assert(xmlCommodity.Invoices[0].Data, qt.Equals, expectedBase64,
+				qt.Commentf("Invoice base64 data should match original file content"))
+
+			// Also verify that the base64 can be decoded back to original data
+			decodedData, err := base64.StdEncoding.DecodeString(xmlCommodity.Invoices[0].Data)
+			c.Assert(err, qt.IsNil)
+			c.Assert(decodedData, qt.DeepEquals, tf.data)
+
+		case "manual":
+			c.Assert(xmlCommodity.Manuals[0].Data, qt.Equals, expectedBase64,
+				qt.Commentf("Manual base64 data should match original file content"))
+
+			// Also verify that the base64 can be decoded back to original data
+			decodedData, err := base64.StdEncoding.DecodeString(xmlCommodity.Manuals[0].Data)
+			c.Assert(err, qt.IsNil)
+			c.Assert(decodedData, qt.DeepEquals, tf.data)
+		}
+	}
+
+	// Test full export with file data and verify base64 encoding in XML
+	export := models.Export{
+		Type:            models.ExportTypeFullDatabase,
+		Status:          models.ExportStatusPending,
+		IncludeFileData: true,
+	}
+
+	var buf bytes.Buffer
+	err = service.streamXMLExport(ctx, export, &buf)
+	c.Assert(err, qt.IsNil)
+
+	xmlContent := buf.String()
+
+	// Verify that all expected base64 data is present in the XML
+	for _, tf := range testFiles {
+		expectedBase64 := base64.StdEncoding.EncodeToString(tf.data)
+		c.Assert(xmlContent, qt.Contains, expectedBase64,
+			qt.Commentf("Full export XML should contain base64 data for %s", tf.fileType))
+	}
+
+	// Clean up test files
+	for _, filePath := range createdFiles {
+		err = b.Delete(ctx, filePath)
+		c.Assert(err, qt.IsNil)
+	}
 }

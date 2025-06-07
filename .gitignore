@@ -5,6 +5,7 @@
 *.so
 *.dylib
 /inventario
+go/inventario
 
 # Test binary, built with `go test -c`
 *.test
