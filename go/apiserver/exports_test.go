@@ -122,3 +122,67 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	c.Assert(response.Data, quicktest.HasLen, 1)
 	c.Assert(response.Data[0].ID, quicktest.Equals, created1.ID)
 }
+
+func TestExportListWithDeletedParameter(t *testing.T) {
+	c := quicktest.New(t)
+
+	// Create test registry
+	registrySet := &registry.Set{
+		ExportRegistry: memory.NewExportRegistry(),
+	}
+
+	// Create test exports
+	export1 := models.Export{
+		Type:        models.ExportTypeFullDatabase,
+		Description: "Active export",
+		Status:      models.ExportStatusCompleted,
+	}
+
+	export2 := models.Export{
+		Type:        models.ExportTypeLocations,
+		Description: "Export to be deleted",
+		Status:      models.ExportStatusCompleted,
+	}
+
+	created1, err := registrySet.ExportRegistry.Create(context.Background(), export1)
+	c.Assert(err, quicktest.IsNil)
+
+	created2, err := registrySet.ExportRegistry.Create(context.Background(), export2)
+	c.Assert(err, quicktest.IsNil)
+
+	// Soft delete one export
+	err = registrySet.ExportRegistry.Delete(context.Background(), created2.ID)
+	c.Assert(err, quicktest.IsNil)
+
+	// Create router with export routes
+	r := chi.NewRouter()
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+
+	params := Params{
+		RegistrySet:    registrySet,
+		UploadLocation: "memory://",
+	}
+	r.Route("/exports", Exports(params))
+
+	// Test list endpoint with include_deleted=true
+	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, quicktest.Equals, http.StatusOK)
+
+	var response jsonapi.ExportsResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	c.Assert(err, quicktest.IsNil)
+
+	// Should return both exports (active and deleted)
+	c.Assert(response.Data, quicktest.HasLen, 2)
+
+	// Verify we have both exports
+	exportIDs := make([]string, len(response.Data))
+	for i, exp := range response.Data {
+		exportIDs[i] = exp.ID
+	}
+	c.Assert(exportIDs, quicktest.Contains, created1.ID)
+	c.Assert(exportIDs, quicktest.Contains, created2.ID)
+}

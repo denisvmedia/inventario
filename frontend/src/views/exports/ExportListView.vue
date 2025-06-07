@@ -8,16 +8,9 @@
         </div>
       </div>
       <div class="header-actions">
-        <div class="toggle-container">
-          <label class="toggle-label">
-            <input
-              type="checkbox"
-              v-model="showDeleted"
-              @change="loadExports"
-              class="toggle-checkbox"
-            />
-            <span class="toggle-text">Show deleted exports</span>
-          </label>
+        <div class="filter-toggle">
+          <InputSwitch v-model="showDeleted" @change="loadExports" />
+          <label class="toggle-label">Show deleted exports</label>
         </div>
         <router-link to="/exports/new" class="btn btn-primary">
           <font-awesome-icon icon="plus" /> New
@@ -144,17 +137,12 @@ const loadExports = async () => {
   try {
     loading.value = true
     error.value = ''
-    const response = await exportService.getExports()
+    const response = await exportService.getExports(showDeleted.value)
     if (response.data && response.data.data) {
-      let exportList = response.data.data.map((item: ResourceObject<Export>) => ({
+      const exportList = response.data.data.map((item: ResourceObject<Export>) => ({
         id: item.id,
         ...item.attributes
       }))
-
-      // Filter out deleted exports if showDeleted is false
-      if (!showDeleted.value) {
-        exportList = exportList.filter(exp => !isExportDeleted(exp))
-      }
 
       exports.value = exportList
     }
@@ -292,26 +280,15 @@ onMounted(() => {
   align-items: center;
 }
 
-.toggle-container {
-  display: flex;
-  align-items: center;
-}
-
-.toggle-label {
+.filter-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
+}
+
+.toggle-label {
   font-size: 0.9rem;
   color: $text-secondary-color;
-}
-
-.toggle-checkbox {
-  margin: 0;
-  cursor: pointer;
-}
-
-.toggle-text {
   user-select: none;
 }
 

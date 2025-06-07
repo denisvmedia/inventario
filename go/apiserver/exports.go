@@ -38,10 +38,22 @@ type exportsAPI struct {
 // @Tags exports
 // @Accept json-api
 // @Produce json-api
+// @Param include_deleted query bool false "Include deleted exports"
 // @Success 200 {object} jsonapi.ExportsResponse "OK"
 // @Router /exports [get].
 func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
-	exports, err := api.registrySet.ExportRegistry.List(r.Context())
+	// Check if we should include deleted exports
+	includeDeleted := r.URL.Query().Get("include_deleted") == "true"
+
+	var exports []*models.Export
+	var err error
+
+	if includeDeleted {
+		exports, err = api.registrySet.ExportRegistry.ListWithDeleted(r.Context())
+	} else {
+		exports, err = api.registrySet.ExportRegistry.List(r.Context())
+	}
+
 	if err != nil {
 		internalServerError(w, r, err)
 		return

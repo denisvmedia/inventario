@@ -3,8 +3,10 @@ import axios from 'axios'
 const API_URL = '/api/v1/exports'
 
 const exportService = {
-  getExports() {
+  getExports(includeDeleted = false) {
+    const params = includeDeleted ? { include_deleted: 'true' } : {}
     return axios.get(API_URL, {
+      params,
       headers: {
         'Accept': 'application/vnd.api+json'
       }
