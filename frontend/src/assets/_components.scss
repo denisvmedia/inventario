@@ -162,12 +162,7 @@ label {
   margin: 0 auto;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
+// Header styles moved to shared _header.scss
 
 .actions {
   display: flex;

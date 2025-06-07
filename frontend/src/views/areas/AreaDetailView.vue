@@ -377,12 +377,7 @@ const deleteCommodity = async (id: string) => {
   }
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-}
+// Header styles are now in shared _header.scss
 
 .title-section {
   display: flex;
@@ -398,18 +393,6 @@ const deleteCommodity = async (id: string) => {
   font-style: italic;
   margin-top: 0;
   margin-bottom: 0.5rem;
-}
-
-.total-value {
-  font-size: 1rem;
-  color: $text-color;
-  margin-top: 0.25rem;
-
-  .value-amount {
-    font-weight: bold;
-    color: $primary-color;
-    font-size: 1.1rem;
-  }
 }
 
 .actions {

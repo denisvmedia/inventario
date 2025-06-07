@@ -264,33 +264,7 @@ onMounted(() => {
   padding: 20px;
 }
 
-.header-title h1 {
-  margin: 0 0 5px;
-  font-size: 2rem;
-}
-
-.export-count {
-  color: $text-secondary-color;
-  font-size: 0.9rem;
-}
-
-.header-actions {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-}
-
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.toggle-label {
-  font-size: 0.9rem;
-  color: $text-secondary-color;
-  user-select: none;
-}
+// Header styles are now in shared _header.scss
 
 .empty-message p {
   color: $text-secondary-color;

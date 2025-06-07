@@ -272,38 +272,7 @@ const deleteCommodity = async (id: string) => {
   padding: 20px;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-// Filter toggle styles are now in shared _filter-toggle.scss
-
-.header-title {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.total-value {
-  font-size: 1rem;
-  color: $text-color;
-  margin-top: 0.5rem;
-
-  .value-amount {
-    font-weight: bold;
-    color: $primary-color;
-    font-size: 1.1rem;
-  }
-}
+// Header styles are now in shared _header.scss
 
 .loading, .error, .empty {
   text-align: center;
