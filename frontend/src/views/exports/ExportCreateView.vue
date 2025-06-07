@@ -28,19 +28,16 @@
 
         <div class="form-group">
           <label for="type">Export Type</label>
-          <select
+          <Select
             id="type"
             v-model="exportData.type"
-            required
+            :options="exportTypeOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="Select export type..."
+            class="w-100"
             @change="onTypeChange"
-          >
-            <option value="">Select export type...</option>
-            <option value="full_database">Full Database</option>
-            <option value="locations">Locations Only</option>
-            <option value="areas">Areas Only</option>
-            <option value="commodities">Commodities Only</option>
-            <option value="selected_items">Selected Items</option>
-          </select>
+          />
           <div class="form-help">Choose what data to include in the export</div>
         </div>
 
@@ -50,13 +47,13 @@
             <div v-if="loadingItems" class="loading">Loading items...</div>
             <div v-else class="selection-tree">
               <!-- Locations -->
-              <div v-for="location in locations" :key="location.id" class="tree-item location-item">
+              <div v-for="location in locations" :key="location.id" :data-location_id="location.id" class="tree-item location-item">
                 <div class="item-header">
                   <label class="item-checkbox">
                     <input
                       type="checkbox"
                       :checked="isLocationSelected(location.id)"
-                      @change="toggleLocation(location.id, $event.target.checked)"
+                      @change="toggleLocation(location.id, ($event.target as HTMLInputElement).checked)"
                     />
                     <span class="item-name">{{ location.name }}</span>
                     <span class="item-type">Location</span>
@@ -64,13 +61,13 @@
                 </div>
 
                 <!-- Location expanded content -->
-                <div v-if="isLocationSelected(location.id)" class="item-content">
+                <div v-if="isLocationSelected(location.id)" class="item-content" :data-location_id="location.id">
                   <div class="inclusion-toggle">
                     <label class="checkbox-label">
                       <input
                         type="checkbox"
                         :checked="getLocationInclusion(location.id)"
-                        @change="setLocationInclusion(location.id, $event.target.checked)"
+                        @change="setLocationInclusion(location.id, ($event.target as HTMLInputElement).checked)"
                       />
                       <span>Include all areas and commodities in this location</span>
                     </label>
@@ -78,13 +75,13 @@
 
                   <!-- Areas in this location -->
                   <div v-if="!getLocationInclusion(location.id)" class="sub-items">
-                    <div v-for="area in getAreasForLocation(location.id)" :key="area.id" class="tree-item area-item">
+                    <div v-for="area in getAreasForLocation(location.id)" :key="area.id" :data-location_id="location.id" :data-area_id="area.id" class="tree-item area-item">
                       <div class="item-header">
                         <label class="item-checkbox">
                           <input
                             type="checkbox"
                             :checked="isAreaSelected(area.id)"
-                            @change="toggleArea(area.id, $event.target.checked)"
+                            @change="toggleArea(area.id, ($event.target as HTMLInputElement).checked)"
                           />
                           <span class="item-name">{{ area.name }}</span>
                           <span class="item-type">Area</span>
@@ -92,13 +89,13 @@
                       </div>
 
                       <!-- Area expanded content -->
-                      <div v-if="isAreaSelected(area.id)" class="item-content">
+                      <div v-if="isAreaSelected(area.id)" class="item-content" :data-location_id="location.id" :data-area_id="area.id">
                         <div class="inclusion-toggle">
                           <label class="checkbox-label">
                             <input
                               type="checkbox"
                               :checked="getAreaInclusion(area.id)"
-                              @change="setAreaInclusion(area.id, $event.target.checked)"
+                              @change="setAreaInclusion(area.id, ($event.target as HTMLInputElement).checked)"
                             />
                             <span>Include all commodities in this area</span>
                           </label>
@@ -106,13 +103,13 @@
 
                         <!-- Commodities in this area -->
                         <div v-if="!getAreaInclusion(area.id)" class="sub-items">
-                          <div v-for="commodity in getCommoditiesForArea(area.id)" :key="commodity.id" class="tree-item commodity-item">
+                          <div v-for="commodity in getCommoditiesForArea(area.id)" :key="commodity.id" :data-location_id="location.id" :data-area_id="area.id" :data-commodity_id="commodity.id" class="tree-item commodity-item">
                             <div class="item-header">
                               <label class="item-checkbox">
                                 <input
                                   type="checkbox"
                                   :checked="isCommoditySelected(commodity.id)"
-                                  @change="toggleCommodity(commodity.id, $event.target.checked)"
+                                  @change="toggleCommodity(commodity.id, ($event.target as HTMLInputElement).checked)"
                                 />
                                 <span class="item-name">{{ commodity.name }}</span>
                                 <span class="item-type">Commodity</span>
@@ -135,8 +132,8 @@
         <div class="form-group">
           <label class="checkbox-label">
             <input
-              type="checkbox"
               v-model="exportData.include_file_data"
+              type="checkbox"
             />
             <span>Include file data (images, invoices, manuals)</span>
           </label>
@@ -174,6 +171,14 @@ import commodityService from '@/services/commodityService'
 import type { Export, ExportType, Location, Area, Commodity, ResourceObject } from '@/types'
 
 const router = useRouter()
+
+const exportTypeOptions = ref([
+  { label: 'Full Database', value: 'full_database' },
+  { label: 'Locations Only', value: 'locations' },
+  { label: 'Areas Only', value: 'areas' },
+  { label: 'Commodities Only', value: 'commodities' },
+  { label: 'Selected Items', value: 'selected_items' }
+])
 
 const exportData = ref<Partial<Export>>({
   type: '' as ExportType,
@@ -305,23 +310,23 @@ const toggleLocation = (locationId: string, selected: boolean) => {
     }
   } else {
     // Remove location and all its children
-    exportData.value.selected_items = exportData.value.selected_items.filter(item => 
+    exportData.value.selected_items = exportData.value.selected_items.filter(item =>
       !(item.id === locationId && item.type === 'location')
     )
     locationInclusions.value.delete(locationId)
-    
+
     // Also remove any areas and commodities in this location
     const areasInLocation = getAreasForLocation(locationId)
     areasInLocation.forEach(area => {
-      exportData.value.selected_items = exportData.value.selected_items!.filter(item => 
+      exportData.value.selected_items = exportData.value.selected_items!.filter(item =>
         !(item.id === area.id && item.type === 'area')
       )
       areaInclusions.value.delete(area.id)
-      
+
       // Remove commodities in this area
       const commoditiesInArea = getCommoditiesForArea(area.id)
       commoditiesInArea.forEach(commodity => {
-        exportData.value.selected_items = exportData.value.selected_items!.filter(item => 
+        exportData.value.selected_items = exportData.value.selected_items!.filter(item =>
           !(item.id === commodity.id && item.type === 'commodity')
         )
       })
@@ -342,15 +347,15 @@ const toggleArea = (areaId: string, selected: boolean) => {
     }
   } else {
     // Remove area and all its commodities
-    exportData.value.selected_items = exportData.value.selected_items.filter(item => 
+    exportData.value.selected_items = exportData.value.selected_items.filter(item =>
       !(item.id === areaId && item.type === 'area')
     )
     areaInclusions.value.delete(areaId)
-    
+
     // Also remove any commodities in this area
     const commoditiesInArea = getCommoditiesForArea(areaId)
     commoditiesInArea.forEach(commodity => {
-      exportData.value.selected_items = exportData.value.selected_items!.filter(item => 
+      exportData.value.selected_items = exportData.value.selected_items!.filter(item =>
         !(item.id === commodity.id && item.type === 'commodity')
       )
     })
@@ -369,7 +374,7 @@ const toggleCommodity = (commodityId: string, selected: boolean) => {
     }
   } else {
     // Remove commodity
-    exportData.value.selected_items = exportData.value.selected_items.filter(item => 
+    exportData.value.selected_items = exportData.value.selected_items.filter(item =>
       !(item.id === commodityId && item.type === 'commodity')
     )
   }
@@ -385,14 +390,14 @@ const createExport = async () => {
     // Build selected items with include_all information
     const selectedItemsWithInclusion = (exportData.value.selected_items || []).map(item => {
       const enrichedItem = { ...item }
-      
+
       // Add include_all flag for locations and areas
       if (item.type === 'location') {
         enrichedItem.include_all = getLocationInclusion(item.id)
       } else if (item.type === 'area') {
         enrichedItem.include_all = getAreaInclusion(item.id)
       }
-      
+
       return enrichedItem
     })
 
@@ -482,6 +487,10 @@ h1 {
   border: 1px solid $border-color;
   border-radius: $default-radius;
   font-size: 1rem;
+}
+
+.w-100 {
+  width: 100%;
 }
 
 .form-group textarea {

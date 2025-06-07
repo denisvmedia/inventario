@@ -6,7 +6,7 @@ export async function createExport(page: Page, recorder: TestRecorder, testExpor
 
     // Click the New button to show the export form
     await page.click('a:has-text("New")');
-    await page.waitForSelector('h1:has-text("Create Export")');
+    await page.waitForSelector('h1:has-text("Create New Export")');
 
     // Fill in the export form
     await page.fill('#description', testExport.description);
@@ -36,47 +36,69 @@ export async function createExport(page: Page, recorder: TestRecorder, testExpor
         await page.waitForSelector('.selection-tree');
         
         // Find and expand the location
-        const locationItem = page.locator(`.tree-item:has-text("${locationName}")`);
+        const locationItem = page.locator(`xpath=//span[contains(@class, "item-name") and text()="${locationName}"]/ancestor::div[contains(@class, "location-item")]`);
         await locationItem.waitFor();
+
+        // Get the location ID for later use
+        const locationId = await locationItem.getAttribute('data-location_id');
+        console.log('Location ID: ' + locationId);
         
         // Click the location to select it
-        const locationCheckbox = locationItem.locator('.item-checkbox');
-        await locationCheckbox.click();
+        await locationItem.click();
         
         // Turn off "Include all areas and commodities" to drill down
-        const locationToggle = locationItem.locator('.p-toggleswitch');
-        if (await locationToggle.isVisible()) {
-            await locationToggle.click();
-        }
-        
+        const locationToggle = page.locator(`.item-content[data-location_id="${locationId}"]`);
+        await locationToggle.waitFor({ state: 'visible' });
+        await locationToggle.click();
+
         // Wait for areas to appear and select the specific area
-        const areaItem = page.locator(`.tree-item:has-text("${areaName}")`);
+        // const areaItem = page.locator(`.tree-item.area-item .item-name:has-text("${areaName}")`);
+        // await areaItem.waitFor();
+
+        // using xpath to find the area item
+        const areaItem = page.locator(`xpath=//span[contains(@class, "item-name") and text()="${areaName}"]/ancestor::div[contains(@class, "area-item")]`);
         await areaItem.waitFor();
-        
-        const areaCheckbox = areaItem.locator('.item-checkbox');
-        await areaCheckbox.click();
+
+        // Get the area ID for later use
+        const areaId = await areaItem.getAttribute('data-area_id');
+        console.log('Area ID: ' + areaId);
+
+        // Click the area to select it
+        await areaItem.click();
         
         // Turn off "Include all commodities" to drill down to specific commodity
-        const areaToggle = areaItem.locator('.p-toggleswitch');
-        if (await areaToggle.isVisible()) {
-            await areaToggle.click();
-        }
-        
+        const areaToggle = page.locator(`.item-content[data-area_id="${areaId}"]`);
+        await areaToggle.waitFor({ state: 'visible' });
+        await areaToggle.click();
+
         // Wait for commodities to appear and select the specific commodity
-        const commodityItem = page.locator(`.tree-item:has-text("${commodityName}")`);
+        const commodityItem = page.locator(`.tree-item.commodity-item[data-area_id="${areaId}"] .item-name:has-text("${commodityName}")`);
         await commodityItem.waitFor();
-        
-        const commodityCheckbox = commodityItem.locator('.item-checkbox');
-        await commodityCheckbox.click();
-        
+
+        // Click the commodity to select it
+        await commodityItem.click();
+
+        // Verify that items are selected (check for visual indicators)
+        await expect(locationItem.locator('> .item-header input[type="checkbox"]')).toHaveAttribute('checked');
+        await expect(areaItem.locator('> .item-header input[type="checkbox"]')).toHaveAttribute('checked');
+        await expect(commodityItem.locator('..').locator('input[type="checkbox"]')).toHaveAttribute('checked');
+
         await recorder.takeScreenshot('exports-create-03-items-selected');
     }
 
     // Submit the form
-    await page.click('button:has-text("Create Export")');
+    await page.click('button.btn[type=submit]');
 
-    // Wait to be redirected to the exports list
-    await page.waitForSelector('h1:has-text("Exports")');
+    // Wait to be redirected to the export detail page
+    await page.waitForSelector('h1:has-text("Export Details")');
+    await page.waitForSelector('h2:has-text("Export Information")');
+
+    // Wait for export to be processed (status should become completed)
+    await page.waitForSelector('.card-header .status-badge.status-completed', { timeout: 30000 });
+
+    // Verify the export was created successfully
+    await expect(page.locator(`text=${testExport.description}`)).toBeVisible();
+
     await recorder.takeScreenshot('exports-create-04-after-create');
 }
 
@@ -97,11 +119,11 @@ export async function deleteExport(page: Page, recorder: TestRecorder, exportDes
     await page.click('button:has-text("Delete")');
 
     // Wait for confirmation dialog
-    await page.waitForSelector('.confirmation-dialog');
+    await page.waitForSelector('.confirmation-modal');
     await recorder.takeScreenshot('exports-delete-02-confirmation');
 
     // Confirm deletion
-    await page.click('.confirmation-dialog button:has-text("Delete")');
+    await page.click('.confirmation-modal button:has-text("Delete")');
 
     // Wait to be redirected back to exports list
     await page.waitForSelector('h1:has-text("Exports")');
@@ -110,10 +132,6 @@ export async function deleteExport(page: Page, recorder: TestRecorder, exportDes
 
 export async function verifyExportDetails(page: Page, recorder: TestRecorder, testExport: any) {
     await recorder.takeScreenshot('exports-verify-01-details');
-
-    // Verify description
-    await expect(page.locator('text=' + testExport.description)).toBeVisible();
-
     // Verify type
     const typeMap = {
         'full_database': 'Full Database',
@@ -123,19 +141,91 @@ export async function verifyExportDetails(page: Page, recorder: TestRecorder, te
         'commodities': 'Commodities'
     };
     const expectedTypeLabel = typeMap[testExport.type as keyof typeof typeMap] || testExport.type;
-    await expect(page.locator(`text=${expectedTypeLabel}`)).toBeVisible();
+
+    // Verify Export Information section
+    await expect(page.locator('h1:has-text("Export Details")')).toBeVisible();
+
+    // Verify Export Information section
+    await expect(page.locator('h2:has-text("Export Information")')).toBeVisible();
 
     // Verify status (should be one of: Pending, In Progress, Completed, Failed)
     const statusLocator = page.locator('.status-badge');
     await expect(statusLocator).toBeVisible();
-    
+    // Verify status text
+    await expect(statusLocator).toHaveText('Completed');
+
+    // Verify description
+    await expect(page.locator('text=' + testExport.description)).toBeVisible();
+
+    // Verify include file data setting
+    await expect(page.locator('text=Include File Data')).toBeVisible();
+    const expectedFileDataText = testExport.includeFileData ? 'Yes' : 'No';
+    await expect(page.locator(`.bool-badge:has-text("${expectedFileDataText}")`)).toBeVisible();
+
+    // Verify completed date is present
+    await expect(page.locator('.info-item > label:has-text("Completed")')).toBeVisible();
+
+    // Verify type is present
+    await expect(page.locator('text=Type')).toBeVisible();
+    await expect(page.locator(`.type-badge:has-text("${expectedTypeLabel}")`)).toBeVisible();
+
     // Verify creation date is present
-    await expect(page.locator('text=Created Date')).toBeVisible();
+    await expect(page.locator('text=Created')).toBeVisible();
+
+    // Verify file path is present
+    await expect(page.locator('text=File Location')).toBeVisible();
+    await expect(page.locator('.file-path')).toBeVisible();
+
+    // Verify download button is available
+    const downloadButtonCount = await page.locator('button:has-text("Download")').count();
+    expect(downloadButtonCount).toBe(2);
+
+    await expect(page.locator(`h2:has-text("${expectedTypeLabel}")`)).toBeVisible();
+
+    // // If there's an error, verify error message section
+    // const errorSection = page.locator('.error-card');
+    // if (await errorSection.isVisible()) {
+    //     await expect(page.locator('h2:has-text("Error Details")')).toBeVisible();
+    //     await expect(page.locator('.error-message')).toBeVisible();
+    // }
 
     await recorder.takeScreenshot('exports-verify-02-verified');
 }
 
-// Constants for navigation
-export const TO_EXPORT_CREATE = 'export-create';
-export const TO_EXPORT_DETAIL = 'export-detail';
-export const BACK_TO_EXPORTS = 'back-to-exports';
+export async function verifySelectedItems(page: Page, recorder: TestRecorder, expectedItems: {locationName?: string, areaName?: string, commodityName?: string}) {
+    await recorder.takeScreenshot('exports-verify-selected-items-01-before');
+
+    // Verify Selected Items section is present
+    await expect(page.locator('h2:has-text("Selected Items")')).toBeVisible();
+
+    // Verify count badge shows at least 1 item
+    const countBadge = page.locator('.count-badge');
+    await expect(countBadge).toBeVisible();
+    const countText = await countBadge.textContent();
+    expect(countText).toMatch(/\d+ items?/);
+
+    // Wait for items to load (in case there's a loading state)
+    await page.waitForSelector('.selected-items-hierarchy', { timeout: 10000 });
+
+    // Verify hierarchical structure is displayed
+    await expect(page.locator('.selected-items-hierarchy')).toBeVisible();
+
+    // If specific items are expected, verify they are present
+    if (expectedItems.locationName) {
+        await expect(page.locator(`.location-item .item-name:has-text("${expectedItems.locationName}")`)).toBeVisible();
+        await expect(page.locator(`.location-item .item-type:has-text("Location")`)).toBeVisible();
+    }
+
+    if (expectedItems.areaName) {
+        await expect(page.locator(`.area-item .item-name:has-text("${expectedItems.areaName}")`)).toBeVisible();
+        await expect(page.locator(`.area-item .item-type:has-text("Area")`)).toBeVisible();
+    }
+
+    if (expectedItems.commodityName) {
+        await expect(page.locator(`.commodity-item .item-name:has-text("${expectedItems.commodityName}")`)).toBeVisible();
+        await expect(page.locator(`.commodity-item .item-type:has-text("Commodity")`)).toBeVisible();
+    }
+
+    await recorder.takeScreenshot('exports-verify-selected-items-02-verified');
+}
+

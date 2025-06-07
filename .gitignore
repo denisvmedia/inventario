@@ -22,7 +22,7 @@
 /uploads/
 /go/uploads/
 /sample/
-/.db
+*.db
 /bin/*
 coverage
 

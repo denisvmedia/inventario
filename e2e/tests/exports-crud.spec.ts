@@ -1,9 +1,9 @@
 import {test} from '../fixtures/app-fixture.js';
 import {createLocation, deleteLocation} from "./includes/locations.js";
-import {createArea, deleteArea} from "./includes/areas.js";
+import {createArea, deleteArea, verifyAreaHasCommodities} from "./includes/areas.js";
 import {createCommodity, deleteCommodity, BACK_TO_COMMODITIES} from "./includes/commodities.js";
-import {createExport, deleteExport, verifyExportDetails} from "./includes/exports.js";
-import {navigateTo, TO_EXPORTS} from "./includes/navigate.js";
+import {createExport, deleteExport, verifyExportDetails, verifySelectedItems} from "./includes/exports.js";
+import {navigateTo, TO_LOCATIONS, TO_EXPORTS, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA} from "./includes/navigate.js";
 
 test.describe('Export CRUD Operations', () => {
   // Test data with timestamps to ensure uniqueness
@@ -38,9 +38,16 @@ test.describe('Export CRUD Operations', () => {
 
   test('should create, view, and delete an export', async ({ page, recorder }) => {
     // Create prerequisite entities
-    await navigateTo(page, recorder, TO_EXPORTS);
+    console.log('Creating a new location');
+    await navigateTo(page, recorder, TO_LOCATIONS);
     await createLocation(page, recorder, testLocation);
+
+    console.log('Creating a new area');
     await createArea(page, recorder, testArea);
+
+    console.log('Creating a new commodity');
+    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
+    await verifyAreaHasCommodities(page, recorder);
     await createCommodity(page, recorder, testCommodity);
 
     // Navigate to exports
@@ -62,11 +69,12 @@ test.describe('Export CRUD Operations', () => {
     // Verify export details
     await verifyExportDetails(page, recorder, testExport);
 
-    // Test download button if export is completed (might be pending/in-progress in tests)
-    const downloadButton = page.locator('button:has-text("Download")');
-    if (await downloadButton.isVisible()) {
-      await recorder.takeScreenshot('exports-detail-02-download-available');
-    }
+    // Verify selected items are displayed correctly
+    await verifySelectedItems(page, recorder, {
+      locationName: testLocation.name,
+      areaName: testArea.name,
+      commodityName: testCommodity.name
+    });
 
     // Delete the export
     await deleteExport(page, recorder, testExport.description);
@@ -103,7 +111,11 @@ test.describe('Export CRUD Operations', () => {
     // View export details
     await page.click(`text=${fullDatabaseExport.description}`);
     await page.waitForSelector('h1:has-text("Export Details")');
-    
+
+    // Verify export details and information
+    await verifyExportDetails(page, recorder, fullDatabaseExport);
+    await verifyExportInformation(page, recorder, fullDatabaseExport);
+
     // Verify it shows as full database type
     await page.waitForSelector('text=Full Database');
     await recorder.takeScreenshot('exports-full-03-details');

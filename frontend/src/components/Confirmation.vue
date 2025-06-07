@@ -17,8 +17,8 @@
     </div>
     <template #footer>
       <div class="confirmation-actions">
-        <button class="btn btn-secondary" @click="cancel">{{ cancelLabel }}</button>
         <button :class="['btn', `btn-${confirmButtonClass}`]" @click="confirm">{{ confirmLabel }}</button>
+        <button class="btn btn-secondary" @click="cancel">{{ cancelLabel }}</button>
       </div>
     </template>
   </Dialog>

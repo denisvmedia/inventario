@@ -38,7 +38,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="exportItem in exports" :key="exportItem.id" class="export-row">
+          <tr v-for="exportItem in exports" :key="exportItem.id" class="export-row" @click="viewExport(exportItem.id!)">
             <td class="export-description">
               <div class="description-text">{{ exportItem.description || 'No description' }}</div>
               <div v-if="exportItem.error_message" class="error-message">
@@ -62,14 +62,14 @@
               {{ exportItem.completed_date ? formatDate(exportItem.completed_date) : '-' }}
             </td>
             <td class="export-actions">
-              <router-link :to="`/exports/${exportItem.id}`" class="btn btn-sm btn-secondary">
+              <router-link :to="`/exports/${exportItem.id}`" class="btn btn-sm btn-secondary" @click.stop>
                 <font-awesome-icon icon="eye" /> View
               </router-link>
               <button
                 v-if="exportItem.status === 'completed'"
                 class="btn btn-sm btn-primary"
                 :disabled="downloading === exportItem.id"
-                @click="downloadExport(exportItem.id!)"
+                @click.stop="downloadExport(exportItem.id!)"
               >
                 <font-awesome-icon :icon="downloading === exportItem.id ? 'spinner' : 'download'" :spin="downloading === exportItem.id" />
                 {{ downloading === exportItem.id ? 'Downloading...' : 'Download' }}
@@ -77,7 +77,7 @@
               <button
                 class="btn btn-sm btn-danger"
                 :disabled="deleting === exportItem.id"
-                @click="deleteExport(exportItem.id!)"
+                @click.stop="deleteExport(exportItem.id!)"
               >
                 <font-awesome-icon icon="trash" />
                 {{ deleting === exportItem.id ? 'Deleting...' : 'Delete' }}
@@ -87,20 +87,39 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Export Delete Confirmation Dialog -->
+    <Confirmation
+      v-model:visible="showDeleteDialog"
+      title="Confirm Delete"
+      message="Are you sure you want to delete this export?"
+      confirm-label="Delete"
+      cancel-label="Cancel"
+      confirm-button-class="danger"
+      confirmationIcon="exclamation-triangle"
+      @confirm="onConfirmDelete"
+      @cancel="onCancelDelete"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import Confirmation from '@/components/Confirmation.vue'
 import exportService from '@/services/exportService'
 import type { Export, ResourceObject } from '@/types'
+
+const router = useRouter()
 
 const exports = ref<Export[]>([])
 const loading = ref(true)
 const error = ref('')
 const deleting = ref<string | null>(null)
 const downloading = ref<string | null>(null)
+const showDeleteDialog = ref(false)
+const exportToDelete = ref<string | null>(null)
 
 const loadExports = async () => {
   try {
@@ -151,21 +170,35 @@ const formatDate = (dateString: string) => {
   }
 }
 
-const deleteExport = async (exportId: string) => {
-  if (!confirm('Are you sure you want to delete this export?')) {
-    return
-  }
+const viewExport = (exportId: string) => {
+  router.push(`/exports/${exportId}`)
+}
+
+const deleteExport = (exportId: string) => {
+  exportToDelete.value = exportId
+  showDeleteDialog.value = true
+}
+
+const onConfirmDelete = async () => {
+  if (!exportToDelete.value) return
 
   try {
-    deleting.value = exportId
-    await exportService.deleteExport(exportId)
-    exports.value = exports.value.filter(exp => exp.id !== exportId)
+    deleting.value = exportToDelete.value
+    await exportService.deleteExport(exportToDelete.value)
+    exports.value = exports.value.filter(exp => exp.id !== exportToDelete.value)
   } catch (err: any) {
     console.error('Error deleting export:', err)
-    alert('Failed to delete export')
+    error.value = 'Failed to delete export: ' + (err.message || 'Unknown error')
   } finally {
     deleting.value = null
+    exportToDelete.value = null
+    showDeleteDialog.value = false
   }
+}
+
+const onCancelDelete = () => {
+  exportToDelete.value = null
+  showDeleteDialog.value = false
 }
 
 const downloadExport = async (exportId: string) => {
@@ -196,7 +229,7 @@ const downloadExport = async (exportId: string) => {
     window.URL.revokeObjectURL(url)
   } catch (err: any) {
     console.error('Error downloading export:', err)
-    alert('Failed to download export')
+    error.value = 'Failed to download export: ' + (err.message || 'Unknown error')
   } finally {
     downloading.value = null
   }
@@ -262,8 +295,13 @@ onMounted(() => {
   color: $text-color;
 }
 
-.export-row:hover {
-  background-color: $light-bg-color;
+.export-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: $light-bg-color;
+  }
 }
 
 .export-description .description-text {
