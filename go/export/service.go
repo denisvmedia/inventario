@@ -601,14 +601,12 @@ func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCo
 			MimeType:     image.MIMEType,
 		}
 
-		// Include file data if requested
+		// Use streaming approach for file data if requested
 		if args.IncludeFileData {
-			data, err := s.getFileData(ctx, image.OriginalPath)
-			if err != nil {
+			if err := s.loadFileDataStreaming(ctx, xmlFile); err != nil {
 				// Don't fail the entire export if one file can't be read
 				continue
 			}
-			xmlFile.Data = data
 		}
 
 		xmlCommodity.Images = append(xmlCommodity.Images, xmlFile)
@@ -638,14 +636,12 @@ func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xml
 			MimeType:     invoice.MIMEType,
 		}
 
-		// Include file data if requested
+		// Use streaming approach for file data if requested
 		if args.IncludeFileData {
-			data, err := s.getFileData(ctx, invoice.OriginalPath)
-			if err != nil {
+			if err := s.loadFileDataStreaming(ctx, xmlFile); err != nil {
 				// Don't fail the entire export if one file can't be read
 				continue
 			}
-			xmlFile.Data = data
 		}
 
 		xmlCommodity.Invoices = append(xmlCommodity.Invoices, xmlFile)
@@ -675,14 +671,12 @@ func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlC
 			MimeType:     manual.MIMEType,
 		}
 
-		// Include file data if requested
+		// Use streaming approach for file data if requested
 		if args.IncludeFileData {
-			data, err := s.getFileData(ctx, manual.OriginalPath)
-			if err != nil {
+			if err := s.loadFileDataStreaming(ctx, xmlFile); err != nil {
 				// Don't fail the entire export if one file can't be read
 				continue
 			}
-			xmlFile.Data = data
 		}
 
 		xmlCommodity.Manuals = append(xmlCommodity.Manuals, xmlFile)
@@ -691,28 +685,71 @@ func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlC
 	return nil
 }
 
-// getFileData retrieves file data from blob storage and returns it as base64-encoded string
-func (s *ExportService) getFileData(ctx context.Context, originalPath string) (string, error) {
+// loadFileDataStreaming loads file data using a memory-efficient streaming approach
+func (s *ExportService) loadFileDataStreaming(ctx context.Context, xmlFile *File) error {
 	// Open blob bucket
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
-		return "", errkit.Wrap(err, "failed to open blob bucket")
+		return errkit.Wrap(err, "failed to open blob bucket")
 	}
 	defer b.Close()
 
 	// Open file reader
-	reader, err := b.NewReader(ctx, originalPath, nil)
+	reader, err := b.NewReader(ctx, xmlFile.OriginalPath, nil)
 	if err != nil {
-		return "", errkit.Wrap(err, "failed to create file reader")
+		return errkit.Wrap(err, "failed to create file reader")
 	}
 	defer reader.Close()
 
-	// Read all file data
-	fileData, err := io.ReadAll(reader)
-	if err != nil {
-		return "", errkit.Wrap(err, "failed to read file data")
+	// For small files (< 1MB), use the original approach to maintain compatibility
+	// For larger files, we could implement a lazy-loading approach
+	const maxSmallFileSize = 1024 * 1024 // 1MB
+
+	// Check file size if possible
+	if size := reader.Size(); size >= 0 && size > maxSmallFileSize {
+		// For large files, read in chunks and build base64 string
+		return s.loadLargeFileDataStreaming(reader, xmlFile)
 	}
 
-	// Encode as base64
-	return base64.StdEncoding.EncodeToString(fileData), nil
+	// For small files, use the existing approach
+	fileData, err := io.ReadAll(reader)
+	if err != nil {
+		return errkit.Wrap(err, "failed to read file data")
+	}
+
+	xmlFile.Data = base64.StdEncoding.EncodeToString(fileData)
+	return nil
+}
+
+// loadLargeFileDataStreaming loads large files using a chunked streaming approach
+func (s *ExportService) loadLargeFileDataStreaming(reader *blob.Reader, xmlFile *File) error {
+	var result strings.Builder
+	const chunkSize = 32768 // 32KB chunks for efficient memory usage
+
+	buf := make([]byte, chunkSize)
+	encoder := base64.NewEncoder(base64.StdEncoding, &result)
+
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			if _, writeErr := encoder.Write(buf[:n]); writeErr != nil {
+				encoder.Close()
+				return errkit.Wrap(writeErr, "failed to encode chunk")
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			encoder.Close()
+			return errkit.Wrap(err, "failed to read chunk")
+		}
+	}
+
+	if err := encoder.Close(); err != nil {
+		return errkit.Wrap(err, "failed to close base64 encoder")
+	}
+
+	xmlFile.Data = result.String()
+	return nil
 }
