@@ -287,3 +287,53 @@ func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
 	c.Assert(worker2.semaphore.TryAcquire(1), qt.IsFalse) // Should fail as we've hit the limit
 	worker2.semaphore.Release(5)
 }
+
+func TestExportWorkerCleanupDeletedExports(t *testing.T) {
+	c := qt.New(t)
+	registrySet := newTestRegistrySet()
+
+	// Create a temporary directory for uploads
+	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+
+	exportService := NewExportService(registrySet, uploadLocation)
+	worker := NewExportWorker(exportService, registrySet, 3)
+
+	ctx := context.Background()
+
+	// Create a test export
+	export := models.Export{
+		Type:        models.ExportTypeFullDatabase,
+		Description: "Test export for cleanup",
+		Status:      models.ExportStatusCompleted,
+		FilePath:    "test/export.xml",
+	}
+
+	created, err := registrySet.ExportRegistry.Create(ctx, export)
+	c.Assert(err, qt.IsNil)
+
+	// Soft delete the export
+	err = registrySet.ExportRegistry.Delete(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Verify it's in the deleted list
+	deletedExports, err := registrySet.ExportRegistry.ListDeleted(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(deletedExports), qt.Equals, 1)
+
+	// Run cleanup (this will try to delete the file and hard delete the record)
+	worker.cleanupDeletedExports(ctx)
+
+	// Give some time for the goroutine to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// The export should be hard deleted even if file deletion fails
+	// (the worker continues with hard delete even if file deletion fails)
+	_, err = registrySet.ExportRegistry.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNotNil)
+
+	// Verify deleted list is empty
+	deletedExports, err = registrySet.ExportRegistry.ListDeleted(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(deletedExports), qt.Equals, 0)
+}

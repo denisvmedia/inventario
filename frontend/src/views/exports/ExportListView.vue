@@ -8,6 +8,17 @@
         </div>
       </div>
       <div class="header-actions">
+        <div class="toggle-container">
+          <label class="toggle-label">
+            <input
+              type="checkbox"
+              v-model="showDeleted"
+              @change="loadExports"
+              class="toggle-checkbox"
+            />
+            <span class="toggle-text">Show deleted exports</span>
+          </label>
+        </div>
         <router-link to="/exports/new" class="btn btn-primary">
           <font-awesome-icon icon="plus" /> New
         </router-link>
@@ -38,7 +49,9 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="exportItem in exports" :key="exportItem.id" class="export-row" @click="viewExport(exportItem.id!)">
+          <tr v-for="exportItem in exports" :key="exportItem.id"
+              :class="['export-row', { 'deleted': isExportDeleted(exportItem) }]"
+              @click="viewExport(exportItem.id!)">
             <td class="export-description">
               <div class="description-text">{{ exportItem.description || 'No description' }}</div>
               <div v-if="exportItem.error_message" class="error-message">
@@ -51,8 +64,8 @@
               </span>
             </td>
             <td class="export-status">
-              <span class="status-badge" :class="`status-${exportItem.status}`">
-                {{ formatExportStatus(exportItem.status) }}
+              <span class="status-badge" :class="getExportStatusClasses(exportItem)">
+                {{ getExportDisplayStatus(exportItem) }}
               </span>
             </td>
             <td class="export-date">
@@ -66,7 +79,7 @@
                 <font-awesome-icon icon="eye" /> View
               </router-link>
               <button
-                v-if="exportItem.status === 'completed'"
+                v-if="exportItem.status === 'completed' && canPerformOperations(exportItem)"
                 class="btn btn-sm btn-primary"
                 :disabled="downloading === exportItem.id"
                 @click.stop="downloadExport(exportItem.id!)"
@@ -75,6 +88,7 @@
                 {{ downloading === exportItem.id ? 'Downloading...' : 'Download' }}
               </button>
               <button
+                v-if="canPerformOperations(exportItem)"
                 class="btn btn-sm btn-danger"
                 :disabled="deleting === exportItem.id"
                 @click.stop="deleteExport(exportItem.id!)"
@@ -82,6 +96,9 @@
                 <font-awesome-icon icon="trash" />
                 {{ deleting === exportItem.id ? 'Deleting...' : 'Delete' }}
               </button>
+              <span v-else-if="isExportDeleted(exportItem)" class="deleted-indicator">
+                <font-awesome-icon icon="trash" /> Deleted
+              </span>
             </td>
           </tr>
         </tbody>
@@ -109,6 +126,7 @@ import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import Confirmation from '@/components/Confirmation.vue'
 import exportService from '@/services/exportService'
+import { isExportDeleted, canPerformOperations, getExportDisplayStatus, getExportStatusClasses } from '@/utils/exportUtils'
 import type { Export, ResourceObject } from '@/types'
 
 const router = useRouter()
@@ -120,6 +138,7 @@ const deleting = ref<string | null>(null)
 const downloading = ref<string | null>(null)
 const showDeleteDialog = ref(false)
 const exportToDelete = ref<string | null>(null)
+const showDeleted = ref(false)
 
 const loadExports = async () => {
   try {
@@ -127,10 +146,17 @@ const loadExports = async () => {
     error.value = ''
     const response = await exportService.getExports()
     if (response.data && response.data.data) {
-      exports.value = response.data.data.map((item: ResourceObject<Export>) => ({
+      let exportList = response.data.data.map((item: ResourceObject<Export>) => ({
         id: item.id,
         ...item.attributes
       }))
+
+      // Filter out deleted exports if showDeleted is false
+      if (!showDeleted.value) {
+        exportList = exportList.filter(exp => !isExportDeleted(exp))
+      }
+
+      exports.value = exportList
     }
   } catch (err: any) {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to load exports'
@@ -185,7 +211,8 @@ const onConfirmDelete = async () => {
   try {
     deleting.value = exportToDelete.value
     await exportService.deleteExport(exportToDelete.value)
-    exports.value = exports.value.filter(exp => exp.id !== exportToDelete.value)
+    // Reload exports to reflect the soft delete
+    await loadExports()
   } catch (err: any) {
     console.error('Error deleting export:', err)
     error.value = 'Failed to delete export: ' + (err.message || 'Unknown error')
@@ -261,8 +288,31 @@ onMounted(() => {
 
 .header-actions {
   display: flex;
-  gap: 10px;
+  gap: 15px;
   align-items: center;
+}
+
+.toggle-container {
+  display: flex;
+  align-items: center;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: $text-secondary-color;
+}
+
+.toggle-checkbox {
+  margin: 0;
+  cursor: pointer;
+}
+
+.toggle-text {
+  user-select: none;
 }
 
 .empty-message p {
@@ -368,6 +418,12 @@ onMounted(() => {
   color: #721c24;
 }
 
+.export-status--deleted {
+  background-color: #f5f5f5;
+  color: #6c757d;
+  text-decoration: line-through;
+}
+
 .export-actions {
   display: flex;
   gap: 8px;
@@ -377,5 +433,16 @@ onMounted(() => {
 .btn-sm {
   padding: 4px 8px;
   font-size: 0.75rem;
+}
+
+.deleted-indicator {
+  color: #6c757d;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.export-row.deleted {
+  opacity: 0.6;
+  background-color: #f8f9fa;
 }
 </style>

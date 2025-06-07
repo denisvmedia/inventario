@@ -87,6 +87,16 @@ export interface Export {
   file_path: string;
   created_date: string;
   completed_date?: string;
+  deleted_at?: string;
   error_message?: string;
   description: string;
+  // Export statistics
+  file_size?: number;
+  location_count?: number;
+  area_count?: number;
+  commodity_count?: number;
+  image_count?: number;
+  invoice_count?: number;
+  manual_count?: number;
+  binary_data_size?: number;
 }

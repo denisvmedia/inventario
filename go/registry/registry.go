@@ -90,6 +90,15 @@ type SettingsRegistry interface {
 
 type ExportRegistry interface {
 	Registry[models.Export]
+
+	// ListWithDeleted returns all exports including soft deleted ones
+	ListWithDeleted(ctx context.Context) ([]*models.Export, error)
+
+	// ListDeleted returns only soft deleted exports
+	ListDeleted(ctx context.Context) ([]*models.Export, error)
+
+	// HardDelete permanently deletes an export from the database
+	HardDelete(ctx context.Context, id string) error
 }
 
 type Set struct {

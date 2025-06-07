@@ -206,6 +206,28 @@ func (s *ExportService) generateExportWithStats(ctx context.Context, export mode
 	return blobKey, stats, nil
 }
 
+// DeleteExportFile deletes an export file from blob storage
+func (s *ExportService) DeleteExportFile(ctx context.Context, filePath string) error {
+	// Open blob bucket
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return errkit.Wrap(err, "failed to open blob bucket")
+	}
+	defer func() {
+		if closeErr := b.Close(); closeErr != nil {
+			err = errkit.Wrap(closeErr, "failed to close blob bucket")
+		}
+	}()
+
+	// Delete the file
+	err = b.Delete(ctx, filePath)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete export file")
+	}
+
+	return nil
+}
+
 // getFileSize gets the size of a file in blob storage
 func (s *ExportService) getFileSize(ctx context.Context, filePath string) (int64, error) {
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)

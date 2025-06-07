@@ -68,7 +68,20 @@ func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, er
 }
 
 func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
-	return r.registry.List()
+	allExports, err := r.registry.List()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter out deleted exports
+	var activeExports []*models.Export
+	for _, export := range allExports {
+		if !export.IsDeleted() {
+			activeExports = append(activeExports, export)
+		}
+	}
+
+	return activeExports, nil
 }
 
 func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*models.Export, error) {
@@ -89,12 +102,67 @@ func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*mod
 }
 
 func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
+	_, err := r.registry.Update(models.Export{EntityID: models.EntityID{ID: id}},
+		func(tx dbx.TransactionOrBucket, e *models.Export) error {
+			// Check if already deleted
+			if e.IsDeleted() {
+				return errkit.WithStack(registry.ErrNotFound, "export already deleted")
+			}
+
+			// Set deleted_at timestamp
+			now := models.Date(time.Now().Format("2006-01-02"))
+			e.DeletedAt = &now
+			return nil
+		},
+		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
+	)
+	return err
+}
+
+func (r *ExportRegistry) Count(ctx context.Context) (int, error) {
+	allExports, err := r.registry.List()
+	if err != nil {
+		return 0, err
+	}
+
+	// Count only non-deleted exports
+	count := 0
+	for _, export := range allExports {
+		if !export.IsDeleted() {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
+// ListWithDeleted returns all exports including soft deleted ones
+func (r *ExportRegistry) ListWithDeleted(ctx context.Context) ([]*models.Export, error) {
+	return r.registry.List()
+}
+
+// ListDeleted returns only soft deleted exports
+func (r *ExportRegistry) ListDeleted(ctx context.Context) ([]*models.Export, error) {
+	allExports, err := r.registry.List()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter for deleted exports only
+	var deletedExports []*models.Export
+	for _, export := range allExports {
+		if export.IsDeleted() {
+			deletedExports = append(deletedExports, export)
+		}
+	}
+
+	return deletedExports, nil
+}
+
+// HardDelete permanently deletes an export from the database
+func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 	return r.registry.Delete(id,
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 	)
-}
-
-func (r *ExportRegistry) Count(ctx context.Context) (int, error) {
-	return r.registry.Count()
 }

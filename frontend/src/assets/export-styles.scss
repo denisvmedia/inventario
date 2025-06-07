@@ -1,0 +1,155 @@
+// Shared export styles for consistent UI across export components
+
+// Export status styling
+.export-status--pending {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.export-status--in-progress {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.export-status--completed {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+.export-status--failed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.export-status--deleted {
+  background-color: #f5f5f5;
+  color: #6c757d;
+  text-decoration: line-through;
+  position: relative;
+}
+
+.export-status--deleted::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: #6c757d;
+  transform: translateY(-50%);
+}
+
+// Deleted export indicators
+.deleted-indicator {
+  color: #6c757d;
+  font-size: 0.75rem;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.deleted-date {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.deleted-status {
+  color: #6c757d;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// Export row styling for deleted items
+.export-row.deleted {
+  opacity: 0.6;
+  background-color: #f8f9fa;
+}
+
+.export-row.deleted:hover {
+  background-color: #e9ecef;
+}
+
+// Export card styling for deleted items
+.export-card.deleted {
+  background-color: #f8f9fa;
+  border-left: 4px solid #6c757d;
+  opacity: 0.8;
+}
+
+// Toggle switch styling
+.toggle-container {
+  display: flex;
+  align-items: center;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #6c757d;
+  user-select: none;
+}
+
+.toggle-checkbox {
+  margin: 0;
+  cursor: pointer;
+  accent-color: #007bff;
+}
+
+.toggle-text {
+  user-select: none;
+}
+
+// Status badge base styling
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  display: inline-block;
+}
+
+// Utility classes for export states
+.export-disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.export-warning {
+  border-left: 4px solid #ffc107;
+}
+
+.export-error {
+  border-left: 4px solid #dc3545;
+}
+
+.export-success {
+  border-left: 4px solid #28a745;
+}
+
+// Animation for status changes
+.status-transition {
+  transition: all 0.3s ease;
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .toggle-label {
+    font-size: 0.8rem;
+  }
+  
+  .deleted-indicator {
+    font-size: 0.7rem;
+  }
+  
+  .status-badge {
+    font-size: 0.7rem;
+    padding: 3px 6px;
+  }
+}

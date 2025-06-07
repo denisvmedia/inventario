@@ -144,6 +144,7 @@ type Export struct {
 	FilePath        string                          `json:"file_path" db:"file_path"`
 	CreatedDate     PDate                           `json:"created_date" db:"created_date"`
 	CompletedDate   PDate                           `json:"completed_date" db:"completed_date"`
+	DeletedAt       PDate                           `json:"deleted_at" db:"deleted_at"`
 	ErrorMessage    string                          `json:"error_message" db:"error_message"`
 	Description     string                          `json:"description" db:"description"`
 	// Export statistics
@@ -195,4 +196,14 @@ func (e *Export) UnmarshalJSON(data []byte) error {
 
 	*e = Export(*tmp)
 	return nil
+}
+
+// IsDeleted returns true if the export has been soft deleted
+func (e *Export) IsDeleted() bool {
+	return e.DeletedAt != nil
+}
+
+// CanPerformOperations returns true if operations can be performed on this export
+func (e *Export) CanPerformOperations() bool {
+	return !e.IsDeleted()
 }

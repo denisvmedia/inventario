@@ -13,30 +13,33 @@ import (
 )
 
 const (
-	defaultPollInterval = 10 * time.Second
+	defaultPollInterval    = 10 * time.Second
+	defaultCleanupInterval = 1 * time.Hour // Clean up deleted exports every hour
 )
 
 // ExportWorker processes export requests in the background
 type ExportWorker struct {
-	exportService *ExportService
-	registrySet   *registry.Set
-	pollInterval  time.Duration
-	stopCh        chan struct{}
-	wg            sync.WaitGroup
-	isRunning     bool
-	mu            sync.RWMutex
-	stopped       bool
-	semaphore     *semaphore.Weighted
+	exportService   *ExportService
+	registrySet     *registry.Set
+	pollInterval    time.Duration
+	cleanupInterval time.Duration
+	stopCh          chan struct{}
+	wg              sync.WaitGroup
+	isRunning       bool
+	mu              sync.RWMutex
+	stopped         bool
+	semaphore       *semaphore.Weighted
 }
 
 // NewExportWorker creates a new export worker
 func NewExportWorker(exportService *ExportService, registrySet *registry.Set, maxConcurrentExports int) *ExportWorker {
 	return &ExportWorker{
-		exportService: exportService,
-		registrySet:   registrySet,
-		pollInterval:  defaultPollInterval, // Check for new exports every 10 seconds
-		stopCh:        make(chan struct{}),
-		semaphore:     semaphore.NewWeighted(int64(maxConcurrentExports)),
+		exportService:   exportService,
+		registrySet:     registrySet,
+		pollInterval:    defaultPollInterval,    // Check for new exports every 10 seconds
+		cleanupInterval: defaultCleanupInterval, // Clean up deleted exports every hour
+		stopCh:          make(chan struct{}),
+		semaphore:       semaphore.NewWeighted(int64(maxConcurrentExports)),
 	}
 }
 
@@ -96,6 +99,9 @@ func (w *ExportWorker) run(ctx context.Context) {
 	ticker := time.NewTicker(w.pollInterval)
 	defer ticker.Stop()
 
+	cleanupTicker := time.NewTicker(w.cleanupInterval)
+	defer cleanupTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -104,6 +110,8 @@ func (w *ExportWorker) run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			w.processPendingExports(ctx)
+		case <-cleanupTicker.C:
+			w.cleanupDeletedExports(ctx)
 		}
 	}
 }
@@ -143,4 +151,48 @@ func (w *ExportWorker) processExport(ctx context.Context, exportID string) {
 		return
 	}
 	log.WithField("export_id", exportID).Info("Successfully processed export")
+}
+
+// cleanupDeletedExports finds and cleans up soft deleted exports
+func (w *ExportWorker) cleanupDeletedExports(ctx context.Context) {
+	deletedExports, err := w.registrySet.ExportRegistry.ListDeleted(ctx)
+	if err != nil {
+		log.WithError(err).Error("Failed to get deleted exports")
+		return
+	}
+
+	for _, export := range deletedExports {
+		// Block until we can acquire a semaphore slot to limit concurrent goroutines
+		if err := w.semaphore.Acquire(ctx, 1); err != nil {
+			log.WithError(err).Error("Failed to acquire semaphore for cleanup")
+			return
+		}
+
+		go func(exportID string, filePath string) {
+			defer w.semaphore.Release(1)
+			w.cleanupDeletedExport(ctx, exportID, filePath)
+		}(export.ID, export.FilePath)
+	}
+}
+
+// cleanupDeletedExport cleans up a single deleted export
+func (w *ExportWorker) cleanupDeletedExport(ctx context.Context, exportID, filePath string) {
+	log.WithField("export_id", exportID).Info("Cleaning up deleted export")
+
+	// Delete the file if it exists
+	if filePath != "" {
+		if err := w.exportService.DeleteExportFile(ctx, filePath); err != nil {
+			log.WithError(err).WithField("export_id", exportID).WithField("file_path", filePath).Error("Failed to delete export file, continuing with record cleanup")
+		} else {
+			log.WithField("export_id", exportID).WithField("file_path", filePath).Info("Deleted export file")
+		}
+	}
+
+	// Hard delete the export record
+	if err := w.registrySet.ExportRegistry.HardDelete(ctx, exportID); err != nil {
+		log.WithError(err).WithField("export_id", exportID).Error("Failed to hard delete export")
+		return
+	}
+
+	log.WithField("export_id", exportID).Info("Successfully cleaned up deleted export")
 }

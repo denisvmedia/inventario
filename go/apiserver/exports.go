@@ -166,6 +166,12 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if export is deleted
+	if export.IsDeleted() {
+		http.NotFound(w, r)
+		return
+	}
+
 	// Check if export is completed and has a file path
 	if export.Status != models.ExportStatusCompleted || export.FilePath == "" {
 		http.NotFound(w, r)

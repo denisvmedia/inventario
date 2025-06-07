@@ -1,5 +1,5 @@
 <template>
-  <div class="export-detail">
+  <div class="export-detail" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
     <div class="breadcrumb-nav">
       <router-link to="/exports" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Exports
@@ -9,7 +9,7 @@
       <h1>Export Details</h1>
       <div v-if="exportData" class="actions">
         <button
-          v-if="exportData.status === 'completed'"
+          v-if="exportData.status === 'completed' && canPerformOperations(exportData)"
           class="btn btn-primary"
           :disabled="downloading"
           @click="downloadExport"
@@ -29,6 +29,7 @@
         </button>
 
         <button
+          v-if="canPerformOperations(exportData)"
           class="btn btn-danger"
           :disabled="deleting"
           @click="confirmDelete"
@@ -36,6 +37,9 @@
           <font-awesome-icon :icon="deleting ? 'spinner' : 'trash'" :spin="deleting" />
           {{ deleting ? 'Deleting...' : 'Delete' }}
         </button>
+        <div v-else-if="isExportDeleted(exportData)" class="deleted-status">
+          <font-awesome-icon icon="trash" /> This export has been deleted
+        </div>
       </div>
     </div>
 
@@ -46,8 +50,8 @@
       <div class="export-card">
         <div class="card-header">
           <h2>Export Information</h2>
-          <span class="status-badge" :class="`status-${exportData.status}`">
-            {{ formatExportStatus(exportData.status) }}
+          <span class="status-badge" :class="getExportStatusClasses(exportData)">
+            {{ getExportDisplayStatus(exportData) }}
           </span>
         </div>
 
@@ -84,6 +88,11 @@
             <div v-if="exportData.completed_date" class="info-item">
               <label>Completed</label>
               <div class="value">{{ formatDateTime(exportData.completed_date) }}</div>
+            </div>
+
+            <div v-if="exportData.deleted_at" class="info-item">
+              <label>Deleted</label>
+              <div class="value deleted-date">{{ formatDateTime(exportData.deleted_at) }}</div>
             </div>
 
             <div v-if="exportData.file_path" class="info-item">
@@ -294,6 +303,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import exportService from '@/services/exportService'
+import { isExportDeleted, canPerformOperations, getExportDisplayStatus, getExportStatusClasses } from '@/utils/exportUtils'
 import type { Export } from '@/types'
 import Confirmation from '@/components/Confirmation.vue'
 
@@ -779,6 +789,12 @@ onMounted(() => {
   color: #721c24;
 }
 
+.export-status--deleted {
+  background-color: #f5f5f5;
+  color: #6c757d;
+  text-decoration: line-through;
+}
+
 .type-full_database {
   background-color: #e3f2fd;
   color: #1976d2;
@@ -929,5 +945,27 @@ onMounted(() => {
 
 .btn-warning:hover:not(:disabled) {
   background-color: #e0a800;
+}
+
+.deleted-status {
+  color: #6c757d;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deleted-date {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.export-detail.deleted {
+  opacity: 0.8;
+}
+
+.export-detail.deleted .export-card {
+  background-color: #f8f9fa;
+  border-left: 4px solid #6c757d;
 }
 </style>
