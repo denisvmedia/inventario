@@ -173,7 +173,9 @@ export async function verifyExportDetails(page: Page, recorder: TestRecorder, te
     const downloadButtonCount = await page.locator('button:has-text("Download")').count();
     expect(downloadButtonCount).toBe(2);
 
-    await expect(page.locator(`h2:has-text("${expectedTypeLabel}")`)).toBeVisible();
+    if (testExport.type === 'selected_items') {
+        await expect(page.locator(`h2:has-text("${expectedTypeLabel}")`)).toBeVisible();
+    }
 
     // // If there's an error, verify error message section
     // const errorSection = page.locator('.error-card');

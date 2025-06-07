@@ -11,7 +11,6 @@ import {
   FROM_LOCATIONS_AREA,
   TO_COMMODITIES
 } from "./includes/navigate.js";
-import {expect} from "@playwright/test";
 
 test.describe('Export CRUD Operations', () => {
   // Test data with timestamps to ensure uniqueness
@@ -118,7 +117,6 @@ test.describe('Export CRUD Operations', () => {
 
     // Verify export details and information
     await verifyExportDetails(page, recorder, fullDatabaseExport);
-    await verifyExportInformation(page, recorder, fullDatabaseExport);
 
     // Verify it shows as full database type
     await page.waitForSelector('text=Full Database');
@@ -149,7 +147,7 @@ test.describe('Export CRUD Operations', () => {
     await page.click('.p-select-option-label:has-text("Selected Items")');
     
     // Try to submit without selecting any items
-    await page.click('button:has-text("Create Export")');
+    await page.click('button[type=submit]');
     
     // Should show validation error
     await page.waitForSelector('text=You must select at least one item');

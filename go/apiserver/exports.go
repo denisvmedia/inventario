@@ -94,7 +94,7 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	export := request.Data.ToModel()
+	export := *request.Data.Attributes
 
 	// Set status to pending if not set
 	if export.Status == "" {

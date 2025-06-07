@@ -209,7 +209,7 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 			return errkit.Wrap(err, "failed to stream selected items")
 		}
 	default:
-		return errkit.NewEquivalent(fmt.Sprintf("unsupported export type: %s", export.Type), nil)
+		return errkit.WithFields(ErrUnsupportedExportType, "type", export.Type)
 	}
 
 	// End root element

@@ -85,38 +85,40 @@ func (rd *ExportsResponse) Render(_w http.ResponseWriter, r *http.Request) error
 
 // ExportCreateRequestData is request data for creating an export.
 type ExportCreateRequestData struct {
-	Type       string        `json:"type" example:"exports" enums:"exports"`
-	Attributes models.Export `json:"attributes"`
+	Type       string         `json:"type" example:"exports" enums:"exports"`
+	Attributes *models.Export `json:"attributes"`
 }
 
-func (d *ExportCreateRequestData) ToModel() models.Export {
-	return d.Attributes
+func (cd *ExportCreateRequestData) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&cd.Type, validation.Required, validation.In("exports")),
+		validation.Field(&cd.Attributes, validation.Required),
+	)
+	return validation.ValidateStructWithContext(ctx, cd, fields...)
 }
 
 type ExportCreateRequest struct {
 	Data *ExportCreateRequestData `json:"data"`
 }
 
-func (*ExportCreateRequest) Bind(_r *http.Request) error {
-	return nil
-}
+var _ render.Binder = (*ExportCreateRequest)(nil)
 
-func (r *ExportCreateRequest) ValidateWithContext(ctx context.Context) error {
-	fields := make([]*validation.FieldRules, 0)
-
-	fields = append(fields,
-		validation.Field(&r.Data, validation.Required),
-	)
-
-	if err := validation.ValidateStructWithContext(ctx, r, fields...); err != nil {
+func (cr *ExportCreateRequest) Bind(r *http.Request) error {
+	err := cr.ValidateWithContext(r.Context())
+	if err != nil {
 		return err
 	}
 
-	if r.Data != nil {
-		return r.Data.Attributes.ValidateWithContext(ctx)
-	}
-
 	return nil
+}
+
+func (cr *ExportCreateRequest) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&cr.Data, validation.Required),
+	)
+	return validation.ValidateStructWithContext(ctx, cr, fields...)
 }
 
 // ExportUpdateRequestData is request data for updating an export.
@@ -133,24 +135,19 @@ type ExportUpdateRequest struct {
 	Data *ExportUpdateRequestData `json:"data"`
 }
 
-func (*ExportUpdateRequest) Bind(_r *http.Request) error {
-	return nil
-}
-
-func (r *ExportUpdateRequest) ValidateWithContext(ctx context.Context) error {
-	fields := make([]*validation.FieldRules, 0)
-
-	fields = append(fields,
-		validation.Field(&r.Data, validation.Required),
-	)
-
-	if err := validation.ValidateStructWithContext(ctx, r, fields...); err != nil {
+func (ur *ExportUpdateRequest) Bind(r *http.Request) error {
+	err := ur.ValidateWithContext(r.Context())
+	if err != nil {
 		return err
 	}
 
-	if r.Data != nil {
-		return r.Data.Attributes.ValidateWithContext(ctx)
-	}
-
 	return nil
+}
+
+func (ur *ExportUpdateRequest) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&ur.Data, validation.Required),
+	)
+	return validation.ValidateStructWithContext(ctx, ur, fields...)
 }

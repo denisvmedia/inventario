@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/jellydator/validation"
-
-	"github.com/denisvmedia/inventario/models/rules"
 )
 
 var (
@@ -42,6 +40,10 @@ func (e ExportStatus) IsValid() bool {
 }
 
 func (e ExportStatus) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (e ExportStatus) ValidateWithContext(context.Context) error {
 	if !e.IsValid() {
 		return validation.NewError("invalid_export_status", "invalid export status")
 	}
@@ -72,6 +74,10 @@ func (e ExportType) IsValid() bool {
 }
 
 func (e ExportType) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (e ExportType) ValidateWithContext(context.Context) error {
 	if !e.IsValid() {
 		return validation.NewError("invalid_export_type", "invalid export type")
 	}
@@ -98,6 +104,10 @@ func (e ExportSelectedItemType) IsValid() bool {
 }
 
 func (e ExportSelectedItemType) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (e ExportSelectedItemType) ValidateWithContext(context.Context) error {
 	if !e.IsValid() {
 		return validation.NewError("invalid_export_selected_item_type", "invalid export selected item type")
 	}
@@ -115,10 +125,13 @@ type ExportSelectedItem struct {
 }
 
 func (e ExportSelectedItem) Validate() error {
-	return validation.ValidateStruct(&e,
+	return ErrMustUseValidateWithContext
+}
+
+func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, &e,
 		validation.Field(&e.ID, validation.Required, validation.Length(1, 100)),
 		validation.Field(&e.Type, validation.Required),
-		validation.Field(&e.Name, validation.Required, validation.Length(1, 500)),
 	)
 }
 
@@ -143,12 +156,8 @@ func (e *Export) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&e.Type, rules.NotEmpty),
-		validation.Field(&e.Status, rules.NotEmpty),
-		validation.Field(&e.CreatedDate, rules.NotEmpty),
-		validation.Field(&e.Description, validation.Length(0, 500)),
-		validation.Field(&e.ErrorMessage, validation.Length(0, 1000)),
-		validation.Field(&e.FilePath, validation.Length(0, 500)),
+		validation.Field(&e.Description, validation.Required, validation.Length(0, 500)),
+		validation.Field(&e.Type, validation.Required),
 	)
 
 	// Validate selected items only for selected_items type

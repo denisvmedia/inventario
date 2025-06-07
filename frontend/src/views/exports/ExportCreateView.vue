@@ -22,7 +22,9 @@
             rows="3"
             maxlength="500"
             required
+            :class="{ 'is-invalid': formErrors.description }"
           ></textarea>
+          <div v-if="formErrors.description" class="error-message">{{ formErrors.description }}</div>
           <div class="form-help">Describe what this export contains</div>
         </div>
 
@@ -36,8 +38,10 @@
             option-value="value"
             placeholder="Select export type..."
             class="w-100"
+            :class="{ 'is-invalid': formErrors.type }"
             @change="onTypeChange"
           />
+          <div v-if="formErrors.type" class="error-message">{{ formErrors.type }}</div>
           <div class="form-help">Choose what data to include in the export</div>
         </div>
 
@@ -124,6 +128,7 @@
               </div>
             </div>
           </div>
+          <div v-if="formErrors.selected_items" class="error-message">{{ formErrors.selected_items }}</div>
           <div class="form-help">
             Selected: {{ exportData.selected_items ? exportData.selected_items.length : 0 }} item(s)
           </div>
@@ -157,11 +162,13 @@
         </button>
       </div>
     </form>
+
+    <div v-if="formError" class="form-error">{{ formError }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import exportService from '@/services/exportService'
@@ -198,6 +205,15 @@ const areaInclusions = ref<Map<string, boolean>>(new Map())
 const creating = ref(false)
 const error = ref('')
 const loadingItems = ref(false)
+
+// Form error handling
+const formError = ref<string | null>(null)
+const formErrors = reactive({
+  description: '',
+  type: '',
+  selected_items: '',
+  include_file_data: ''
+})
 
 const canSubmit = computed(() => {
   if (!exportData.value.type || !exportData.value.description?.trim()) {
@@ -380,12 +396,72 @@ const toggleCommodity = (commodityId: string, selected: boolean) => {
   }
 }
 
+// Function to scroll to the first error in the form
+const scrollToFirstError = () => {
+  // Use nextTick to ensure the DOM has updated with error messages
+  nextTick(() => {
+    // Find the first element with an error message
+    const firstErrorElement = document.querySelector('.error-message')
+    if (firstErrorElement) {
+      // Find the parent form group to scroll to
+      const formGroup = firstErrorElement.closest('.form-group')
+      if (formGroup) {
+        // Scroll the form group into view with some padding at the top
+        formGroup.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }
+  })
+}
+
+// Form validation function
+const validateForm = () => {
+  let isValid = true
+
+  // Reset errors
+  Object.keys(formErrors).forEach(key => {
+    formErrors[key] = ''
+  })
+
+  // Validate description
+  if (!exportData.value.description?.trim()) {
+    formErrors.description = 'Description is required'
+    isValid = false
+  }
+
+  // Validate type
+  if (!exportData.value.type) {
+    formErrors.type = 'Export type is required'
+    isValid = false
+  }
+
+  // Validate selected items if type is 'selected_items'
+  if (exportData.value.type === 'selected_items') {
+    if (!exportData.value.selected_items || exportData.value.selected_items.length === 0) {
+      formErrors.selected_items = 'At least one item must be selected'
+      isValid = false
+    }
+  }
+
+  // If validation failed, scroll to the first error
+  if (!isValid) {
+    scrollToFirstError()
+  }
+
+  return isValid
+}
+
 const createExport = async () => {
   if (!canSubmit.value) return
+
+  // Validate form first
+  if (!validateForm()) {
+    return
+  }
 
   try {
     creating.value = true
     error.value = ''
+    formError.value = null
 
     // Build selected items with include_all information
     const selectedItemsWithInclusion = (exportData.value.selected_items || []).map(item => {
@@ -422,8 +498,45 @@ const createExport = async () => {
       router.push('/exports')
     }
   } catch (err: any) {
-    error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to create export'
     console.error('Error creating export:', err)
+
+    if (err.response) {
+      console.error('Response status:', err.response.status)
+      console.error('Response data:', err.response.data)
+
+      // Extract validation errors if present
+      const apiErrors = err.response.data.errors?.[0]?.error?.error?.data?.attributes || {}
+
+      // Map backend errors to form errors
+      if (apiErrors && Object.keys(apiErrors).length > 0) {
+        const unknownErrors = {}
+
+        Object.keys(apiErrors).forEach(key => {
+          // Convert snake_case to camelCase
+          const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+          if (formErrors.hasOwnProperty(camelKey)) {
+            formErrors[camelKey] = apiErrors[key]
+            delete(unknownErrors[key])
+          } else {
+            unknownErrors[key] = apiErrors[key]
+          }
+        })
+
+        // If there are field errors, show a general message and scroll to first error
+        if (Object.keys(unknownErrors).length === 0) {
+          formError.value = 'Please correct the errors above (x).'
+          scrollToFirstError()
+        } else {
+          formError.value = 'Please correct the errors above. Additional errors: ' + JSON.stringify(unknownErrors)
+          scrollToFirstError()
+        }
+      } else {
+        // No field-specific errors, show general error
+        formError.value = `Failed to create export: ${err.response.status} - ${JSON.stringify(err.response.data)}`
+      }
+    } else {
+      formError.value = 'Failed to create export: ' + (err.message || 'Unknown error')
+    }
   } finally {
     creating.value = false
   }
@@ -600,5 +713,37 @@ h1 {
 
 .sub-items {
   margin-top: 10px;
+}
+
+/* Error handling styles */
+.error-message {
+  color: $error-color;
+  font-size: 0.875rem;
+  margin-top: 5px;
+  display: block;
+}
+
+.form-error {
+  background-color: #fee;
+  border: 1px solid $error-color;
+  border-radius: $default-radius;
+  color: $error-color;
+  padding: 15px;
+  margin-top: 20px;
+  font-weight: 500;
+}
+
+.is-invalid {
+  border-color: $error-color !important;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+}
+
+/* PrimeVue Select error styling */
+:deep(.p-select.is-invalid) {
+  border-color: $error-color !important;
+
+  .p-select-label {
+    border-color: $error-color !important;
+  }
 }
 </style>
