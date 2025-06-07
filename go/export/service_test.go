@@ -113,7 +113,7 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
@@ -208,7 +208,7 @@ func TestGenerateExport(t *testing.T) {
 	tempDir := c.TempDir()
 
 	registrySet := newTestRegistrySet()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
@@ -265,7 +265,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 		ExportRegistry:    exportRegistry,
 	}
 
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
@@ -397,7 +397,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 		ExportRegistry:    exportRegistry,
 	}
 
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
 	ctx := context.Background()
 
