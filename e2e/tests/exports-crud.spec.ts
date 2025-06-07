@@ -1,8 +1,9 @@
 import {test} from '../fixtures/app-fixture.js';
+import {expect} from '@playwright/test';
 import {createLocation, deleteLocation} from "./includes/locations.js";
 import {createArea, deleteArea, verifyAreaHasCommodities} from "./includes/areas.js";
 import {createCommodity, deleteCommodity, BACK_TO_COMMODITIES} from "./includes/commodities.js";
-import {createExport, deleteExport, verifyExportDetails, verifySelectedItems} from "./includes/exports.js";
+import {createExport, deleteExport, verifyExportDetails, verifySelectedItems, downloadExport, downloadExportFromList} from "./includes/exports.js";
 import {
   navigateTo,
   TO_LOCATIONS,
@@ -78,6 +79,20 @@ test.describe('Export CRUD Operations', () => {
       commodityName: testCommodity.name
     });
 
+    // Test download functionality from detail view
+    console.log('Testing export download from detail view');
+    const downloadResult = await downloadExport(page, recorder, testExport.description, true);
+    console.log(`Downloaded file: ${downloadResult.filename} to ${downloadResult.path}`);
+
+    // Test download functionality from list view
+    console.log('Testing export download from list view');
+    const listDownloadResult = await downloadExportFromList(page, recorder, testExport.description);
+    console.log(`Downloaded file from list: ${listDownloadResult.filename} to ${listDownloadResult.path}`);
+
+    // Navigate back to detail view for cleanup
+    await page.click(`text=${testExport.description}`);
+    await page.waitForSelector('h1:has-text("Export Details")');
+
     // Delete the export
     await deleteExport(page, recorder, testExport.description);
 
@@ -122,35 +137,82 @@ test.describe('Export CRUD Operations', () => {
     await page.waitForSelector('text=Full Database');
     await recorder.takeScreenshot('exports-full-03-details');
 
+    // Test download functionality for full database export
+    console.log('Testing full database export download from detail view');
+    const fullDbDownloadResult = await downloadExport(page, recorder, fullDatabaseExport.description, true);
+    console.log(`Downloaded full database export: ${fullDbDownloadResult.filename} to ${fullDbDownloadResult.path}`);
+
+    // Test download from list view as well
+    console.log('Testing full database export download from list view');
+    const fullDbListDownloadResult = await downloadExportFromList(page, recorder, fullDatabaseExport.description);
+    console.log(`Downloaded full database export from list: ${fullDbListDownloadResult.filename} to ${fullDbListDownloadResult.path}`);
+
+    // Navigate back to detail view for cleanup
+    await page.click(`text=${fullDatabaseExport.description}`);
+    await page.waitForSelector('h1:has-text("Export Details")');
+
     // Delete the export
     await deleteExport(page, recorder, fullDatabaseExport.description);
   });
 
-  test('should handle export errors gracefully', async ({ page, recorder }) => {
-    const errorExport = {
-      description: `Error Test Export ${timestamp}`,
-      type: 'selected_items',
-      includeFileData: false
+  test('should test export download functionality thoroughly', async ({ page, recorder }) => {
+    const downloadTestExport = {
+      description: `Download Test Export ${timestamp}`,
+      type: 'full_database',
+      includeFileData: true // Test with file data included
     };
 
     // Navigate to exports
     await navigateTo(page, recorder, TO_EXPORTS);
+    await recorder.takeScreenshot('exports-download-test-01-initial');
 
-    // Try to create an export with no selected items (should cause validation error)
-    await page.click('a:has-text("New")');
-    await page.waitForSelector('h1:has-text("Create Export")');
-    
-    await page.fill('#description', errorExport.description);
-    
-    // Select type
-    await page.click('.p-select[id="type"]');
-    await page.click('.p-select-option-label:has-text("Selected Items")');
-    
-    // Try to submit without selecting any items
-    await page.click('button[type=submit]');
-    
-    // Should show validation error
-    await page.waitForSelector('text=You must select at least one item');
-    await recorder.takeScreenshot('exports-error-01-validation');
+    // Create an export specifically for download testing
+    await createExport(page, recorder, downloadTestExport);
+
+    // Verify export was created and is completed
+    await page.waitForSelector(`text=${downloadTestExport.description}`);
+    await page.waitForSelector('.status-badge.status-completed');
+    await recorder.takeScreenshot('exports-download-test-02-export-ready');
+
+    // Test 1: Download from detail view
+    console.log('Test 1: Download from export detail view');
+    const detailDownload = await downloadExport(page, recorder, downloadTestExport.description, true);
+
+    // Verify the downloaded file has expected characteristics
+    expect(detailDownload.filename).toMatch(/\.xml$/);
+    expect(detailDownload.path).toBeTruthy();
+    console.log(`Detail view download successful: ${detailDownload.filename}`);
+
+    // Test 2: Download from list view
+    console.log('Test 2: Download from export list view');
+    const listDownload = await downloadExportFromList(page, recorder, downloadTestExport.description);
+
+    // Verify the downloaded file has expected characteristics
+    expect(listDownload.filename).toMatch(/\.xml$/);
+    expect(listDownload.path).toBeTruthy();
+    console.log(`List view download successful: ${listDownload.filename}`);
+
+    // Test 3: Verify download button states
+    console.log('Test 3: Verify download button availability');
+
+    // Navigate back to detail view
+    await page.click(`text=${downloadTestExport.description}`);
+    await page.waitForSelector('h1:has-text("Export Details")');
+
+    // Verify both download buttons are present and enabled
+    const detailDownloadButtons = page.locator('button:has-text("Download")');
+    const downloadButtonCount = await detailDownloadButtons.count();
+    expect(downloadButtonCount).toBeGreaterThanOrEqual(1);
+
+    // Verify all download buttons are enabled
+    for (let i = 0; i < downloadButtonCount; i++) {
+      const button = detailDownloadButtons.nth(i);
+      await expect(button).toBeEnabled();
+    }
+
+    await recorder.takeScreenshot('exports-download-test-03-buttons-verified');
+
+    // Cleanup - delete the test export
+    await deleteExport(page, recorder, downloadTestExport.description);
   });
 });

@@ -112,7 +112,7 @@
                   includes all areas and commodities
                 </div>
               </div>
-              
+
               <div v-if="location.areas.length > 0" class="sub-items">
                 <div v-for="area in location.areas" :key="area.id" class="hierarchy-item area-item">
                   <div class="item-header">
@@ -124,7 +124,7 @@
                       includes all commodities
                     </div>
                   </div>
-                  
+
                   <div v-if="area.commodities.length > 0" class="sub-items">
                     <div v-for="commodity in area.commodities" :key="commodity.id" class="hierarchy-item commodity-item">
                       <div class="item-header">
@@ -138,7 +138,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- Standalone areas (not under any selected location) -->
             <div v-for="area in hierarchicalItems.standaloneAreas" :key="area.id" class="hierarchy-item area-item">
               <div class="item-header">
@@ -150,7 +150,7 @@
                   includes all commodities
                 </div>
               </div>
-              
+
               <div v-if="area.commodities.length > 0" class="sub-items">
                 <div v-for="commodity in area.commodities" :key="commodity.id" class="hierarchy-item commodity-item">
                   <div class="item-header">
@@ -162,7 +162,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- Standalone commodities (not under any selected area) -->
             <div v-for="commodity in hierarchicalItems.standaloneCommodities" :key="commodity.id" class="hierarchy-item commodity-item">
               <div class="item-header">
@@ -224,7 +224,7 @@
       </div>
 
     </div>
-    
+
     <!-- Export Delete Confirmation Dialog -->
     <Confirmation
       v-model:visible="showDeleteDialog"
@@ -296,7 +296,7 @@ const loadExport = async () => {
         id: response.data.data.id,
         ...response.data.data.attributes
       }
-      
+
       // Load selected items details if available
       if (exportData.value?.selected_items && exportData.value.selected_items.length > 0) {
         await loadSelectedItemsDetails(exportData.value.selected_items)
@@ -305,6 +305,7 @@ const loadExport = async () => {
   } catch (err: any) {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to load export'
     console.error('Error loading export:', err)
+    throw err
   } finally {
     loading.value = false
   }
@@ -319,12 +320,12 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
       standaloneAreas: [],
       standaloneCommodities: []
     }
-    
+
     // Create lookup maps for selected items with their include_all flag and names
     const locationItems = new Map()
     const areaItems = new Map()
     const commodityItems = new Map()
-    
+
     items.forEach(item => {
       const itemData = {
         name: item.name || `[Unknown ${item.type} ${item.id}]`,
@@ -332,7 +333,7 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
         locationId: item.location_id || null,
         areaId: item.area_id || null
       }
-      
+
       if (item.type === 'location') {
         locationItems.set(item.id, itemData)
       } else if (item.type === 'area') {
@@ -341,22 +342,22 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
         commodityItems.set(item.id, itemData)
       }
     })
-    
+
     // Build hierarchy using stored relationship data instead of fetching from database
     const processedAreaIds = new Set()
-    
+
     // Process selected locations
     for (const [locationId, locationData] of locationItems) {
       let locationAreasData = []
-      
+
       if (!locationData.includeAll) {
         // Find areas that belong to this location and are explicitly selected
         for (const [areaId, areaData] of areaItems) {
           if (areaData.locationId === locationId) {
             processedAreaIds.add(areaId)
-            
+
             let areaCommoditiesData = []
-            
+
             if (!areaData.includeAll) {
               // Find commodities that belong to this area and are explicitly selected
               for (const [commodityId, commodityData] of commodityItems) {
@@ -368,7 +369,7 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
                 }
               }
             }
-            
+
             locationAreasData.push({
               id: areaId,
               name: areaData.name,
@@ -378,7 +379,7 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
           }
         }
       }
-      
+
       hierarchicalItems.value.locations.push({
         id: locationId,
         name: locationData.name,
@@ -386,17 +387,17 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
         areas: locationAreasData
       })
     }
-    
+
     // Process standalone areas (not under selected locations)
     for (const [areaId, areaData] of areaItems) {
       if (processedAreaIds.has(areaId)) continue
-      
+
       // Check if parent location is selected - if so, skip this area (it's already included under location)
       const parentLocationSelected = areaData.locationId && locationItems.has(areaData.locationId)
       if (parentLocationSelected) continue
-      
+
       let areaCommoditiesData = []
-      
+
       if (!areaData.includeAll) {
         // Find commodities that belong to this area and are explicitly selected
         for (const [commodityId, commodityData] of commodityItems) {
@@ -408,7 +409,7 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
           }
         }
       }
-      
+
       hierarchicalItems.value.standaloneAreas.push({
         id: areaId,
         name: areaData.name,
@@ -416,13 +417,13 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
         commodities: areaCommoditiesData
       })
     }
-    
+
     // Process standalone commodities (not under selected areas)
     for (const [commodityId, commodityData] of commodityItems) {
       // Check if parent area is selected - if so, skip this commodity (it's already included under area)
       const parentAreaSelected = commodityData.areaId && areaItems.has(commodityData.areaId)
       if (parentAreaSelected) continue
-      
+
       // Also check if parent location is selected and includes all
       let parentLocationIncludesAll = false
       if (commodityData.areaId) {
@@ -438,13 +439,13 @@ const loadSelectedItemsDetails = async (items: Array<{id: string, type: string, 
         }
       }
       if (parentLocationIncludesAll) continue
-      
+
       hierarchicalItems.value.standaloneCommodities.push({
         id: commodityId,
         name: commodityData.name
       })
     }
-    
+
   } catch (err: any) {
     console.error('Error loading selected items details:', err)
   } finally {
@@ -578,7 +579,10 @@ onMounted(() => {
   // Auto-refresh if export is in progress
   const interval = setInterval(() => {
     if (exportData.value?.status === 'pending' || exportData.value?.status === 'in_progress') {
-      loadExport()
+      loadExport().catch(err => {
+        console.error('Error refreshing export:', err)
+        clearInterval(interval)
+      })
     } else {
       clearInterval(interval)
     }

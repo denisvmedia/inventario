@@ -25,7 +25,9 @@ export async function createExport(page: Page, recorder: TestRecorder, testExpor
 
     // Set include file data if specified
     if (testExport.includeFileData) {
-        await page.check('#includeFileData');
+        // The checkbox doesn't have an ID, so we need to find it by its label text
+        const includeFileDataCheckbox = page.locator('label:has-text("Include file data") input[type="checkbox"]');
+        await includeFileDataCheckbox.check();
     }
 
     // If it's a selected items export, we need to select specific items
@@ -222,5 +224,81 @@ export async function verifySelectedItems(page: Page, recorder: TestRecorder, ex
     }
 
     await recorder.takeScreenshot('exports-verify-selected-items-02-verified');
+}
+
+export async function downloadExport(page: Page, recorder: TestRecorder, exportDescription: string, fromDetailView: boolean = true) {
+    await recorder.takeScreenshot('exports-download-01-before-download');
+
+    let downloadButton;
+    if (fromDetailView) {
+        // We're in the export detail view - use the download button in the actions section
+        downloadButton = page.locator('button:has-text("Download Export")');
+    } else {
+        // We're in the export list view - find the download button for the specific export
+        const exportRow = page.locator(`tr:has(td:has-text("${exportDescription}"))`);
+        downloadButton = exportRow.locator('button:has-text("Download")');
+    }
+
+    // Verify download button is visible and enabled
+    await expect(downloadButton).toBeVisible();
+    await expect(downloadButton).toBeEnabled();
+
+    // Set up download promise before clicking
+    const downloadPromise = page.waitForEvent('download');
+
+    // Click the download button
+    await downloadButton.click();
+    await recorder.takeScreenshot('exports-download-02-button-clicked');
+
+    // Wait for the download to start
+    const download = await downloadPromise;
+
+    // Get the suggested filename and verify it's an XML file
+    const suggestedFilename = download.suggestedFilename();
+    console.log(`Downloaded export file: ${suggestedFilename}`);
+    expect(suggestedFilename).toMatch(/\.xml$/);
+
+    // Verify the filename contains some meaningful content (not just "export.xml")
+    if (exportDescription && exportDescription.trim() !== '') {
+        // If we have a description, the filename should be based on it
+        const expectedFilenameBase = exportDescription.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+        if (expectedFilenameBase) {
+            expect(suggestedFilename).toContain(expectedFilenameBase.substring(0, 20)); // Check first 20 chars to be flexible
+        }
+    }
+
+    // Save to a temp path to verify the download completed successfully
+    const filePath = await download.path();
+    expect(filePath).toBeTruthy();
+    console.log(`Export file saved to: ${filePath}`);
+
+    await recorder.takeScreenshot('exports-download-03-completed');
+
+    return {
+        filename: suggestedFilename,
+        path: filePath
+    };
+}
+
+export async function downloadExportFromList(page: Page, recorder: TestRecorder, exportDescription: string) {
+    await recorder.takeScreenshot('exports-download-list-01-before');
+
+    // Navigate to exports list if not already there
+    const isInList = await page.locator('h1:has-text("Exports")').isVisible();
+    if (!isInList) {
+        await page.click('a:has-text("Back to Exports")');
+        await page.waitForSelector('h1:has-text("Exports")');
+    }
+
+    // Find the export row and download button
+    const exportRow = page.locator(`tr:has(td:has-text("${exportDescription}"))`);
+    await expect(exportRow).toBeVisible();
+
+    // Verify the export status is "Completed" before attempting download
+    const statusBadge = exportRow.locator('.status-badge.status-completed');
+    await expect(statusBadge).toBeVisible();
+
+    // Use the downloadExport function with fromDetailView = false
+    return await downloadExport(page, recorder, exportDescription, false);
 }
 

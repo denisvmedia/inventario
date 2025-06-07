@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"path"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -122,47 +123,6 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// updateExport updates an export.
-// @Summary Update an export
-// @Description update an export
-// @Tags exports
-// @Accept json-api
-// @Produce json-api
-// @Param id path string true "Export ID"
-// @Param export body jsonapi.ExportUpdateRequest true "Export"
-// @Success 200 {object} jsonapi.ExportResponse "OK"
-// @Failure 404 {object} jsonapi.Errors "Not Found"
-// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
-// @Router /exports/{id} [patch].
-func (api *exportsAPI) updateExport(w http.ResponseWriter, r *http.Request) {
-	export := exportFromContext(r.Context())
-	if export == nil {
-		unprocessableEntityError(w, r, nil)
-		return
-	}
-
-	var request jsonapi.ExportUpdateRequest
-	if err := render.Bind(r, &request); err != nil {
-		unprocessableEntityError(w, r, err)
-		return
-	}
-
-	// Update export fields
-	updatedExport := request.Data.ToModel()
-	updatedExport.ID = export.ID
-
-	result, err := api.registrySet.ExportRegistry.Update(r.Context(), updatedExport)
-	if err != nil {
-		renderEntityError(w, r, err)
-		return
-	}
-
-	if err := render.Render(w, r, jsonapi.NewExportResponse(result)); err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-}
-
 // deleteExport deletes an export.
 // @Summary Delete an export
 // @Description delete an export
@@ -221,9 +181,9 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/xml")
 	// Generate filename based on export description and type
-	filename := "export.xml"
-	if export.Description != "" {
-		filename = export.Description + ".xml"
+	filename := path.Base(export.FilePath)
+	if filename == "" {
+		filename = "export.xml"
 	}
 	attachmentHeader := mimekit.FormatContentDisposition(filename)
 	w.Header().Set("Content-Disposition", attachmentHeader)
@@ -330,7 +290,6 @@ func Exports(params Params) func(r chi.Router) {
 		r.Route("/{id}", func(r chi.Router) {
 			r.Use(exportCtx(params.RegistrySet))
 			r.Get("/", api.getExport)
-			r.Patch("/", api.updateExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
 		})

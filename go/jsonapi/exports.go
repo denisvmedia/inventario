@@ -120,34 +120,3 @@ func (cr *ExportCreateRequest) ValidateWithContext(ctx context.Context) error {
 	)
 	return validation.ValidateStructWithContext(ctx, cr, fields...)
 }
-
-// ExportUpdateRequestData is request data for updating an export.
-type ExportUpdateRequestData struct {
-	Type       string        `json:"type" example:"exports" enums:"exports"`
-	Attributes models.Export `json:"attributes"`
-}
-
-func (d *ExportUpdateRequestData) ToModel() models.Export {
-	return d.Attributes
-}
-
-type ExportUpdateRequest struct {
-	Data *ExportUpdateRequestData `json:"data"`
-}
-
-func (ur *ExportUpdateRequest) Bind(r *http.Request) error {
-	err := ur.ValidateWithContext(r.Context())
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (ur *ExportUpdateRequest) ValidateWithContext(ctx context.Context) error {
-	fields := make([]*validation.FieldRules, 0)
-	fields = append(fields,
-		validation.Field(&ur.Data, validation.Required),
-	)
-	return validation.ValidateStructWithContext(ctx, ur, fields...)
-}
