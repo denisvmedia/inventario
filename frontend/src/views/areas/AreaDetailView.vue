@@ -377,12 +377,7 @@ const deleteCommodity = async (id: string) => {
   }
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-}
+// Header styles are now in shared _header.scss
 
 .title-section {
   display: flex;
@@ -398,18 +393,6 @@ const deleteCommodity = async (id: string) => {
   font-style: italic;
   margin-top: 0;
   margin-bottom: 0.5rem;
-}
-
-.total-value {
-  font-size: 1rem;
-  color: $text-color;
-  margin-top: 0.25rem;
-
-  .value-amount {
-    font-weight: bold;
-    color: $primary-color;
-    font-size: 1.1rem;
-  }
 }
 
 .actions {
@@ -450,22 +433,7 @@ const deleteCommodity = async (id: string) => {
   gap: 1rem;
 }
 
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: #f8f9fa;
-  padding: 0.5rem 0.75rem;
-  border-radius: $default-radius;
-  border: 1px solid #e9ecef;
-}
-
-.toggle-label {
-  font-size: 0.9rem;
-  margin: 0;
-  white-space: nowrap;
-  color: $text-color;
-}
+// Filter toggle styles are now in shared _filter-toggle.scss
 
 .commodities-grid {
   display: grid;

@@ -11,7 +11,7 @@ import {
 import {
   FROM_COMMODITIES,
   FROM_LOCATIONS_AREA,
-  navitateTo,
+  navigateTo,
   TO_AREA_COMMODITIES,
   TO_LOCATIONS
 } from "./includes/navigate.js";
@@ -60,7 +60,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
   test('should perform full CRUD operations on a commodity', async ({ page, recorder }) => {
     // STEP 1: CREATE LOCATION - First create a location
     console.log('Step 1: Creating a new location');
-    await navitateTo(page, TO_LOCATIONS);
+    await navigateTo(page, recorder, TO_LOCATIONS);
     await createLocation(page, recorder, testLocation);
 
     // STEP 2: CREATE AREA - Create a new area in-place in the location list view
@@ -69,7 +69,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // STEP 3: CREATE COMMODITY - Create a new commodity
     console.log('Step 3: Creating a new commodity');
-    await navitateTo(page, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
+    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
     await createCommodity(page, recorder, testCommodity);
 
@@ -91,7 +91,7 @@ test.describe('Commodity Simple CRUD Operations', () => {
 
     // STEP 7: CLEANUP - Delete the area and location
     console.log('Step 7: Cleaning up - deleting the area and location');
-    await navitateTo(page, TO_LOCATIONS, FROM_COMMODITIES);
+    await navigateTo(page, recorder, TO_LOCATIONS, FROM_COMMODITIES);
 
     // Wait for the areas section to be visible after location expansion
     await page.waitForSelector('.areas-header');

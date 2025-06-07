@@ -5,7 +5,7 @@ import path from 'path';
 import {createLocation} from "./includes/locations.js";
 import {createArea, verifyAreaHasCommodities} from "./includes/areas.js";
 import {createCommodity, verifyCommodityDetails} from "./includes/commodities.js";
-import {FROM_LOCATIONS_AREA, navitateTo, TO_AREA_COMMODITIES, TO_LOCATIONS} from "./includes/navigate.js";
+import {FROM_LOCATIONS_AREA, navigateTo, TO_AREA_COMMODITIES, TO_LOCATIONS} from "./includes/navigate.js";
 import {deleteFile, downloadFile, fileinfo, imageviewer, uploadFile} from "./includes/uploads.js";
 
 test.describe('File Uploads and Properties Tests', () => {
@@ -41,7 +41,7 @@ test.describe('File Uploads and Properties Tests', () => {
 
     // STEP 1: CREATE LOCATION - First create a location
     console.log(`Step ${step++}: Creating a new location`);
-    await navitateTo(page, TO_LOCATIONS);
+    await navigateTo(page, recorder, TO_LOCATIONS);
     await createLocation(page, recorder, testLocation);
 
     // STEP 2: CREATE AREA - Create a new area
@@ -50,7 +50,7 @@ test.describe('File Uploads and Properties Tests', () => {
 
     // STEP 3: CREATE COMMODITY - Create a new commodity
     console.log(`Step ${step++}: Creating a new commodity`);
-    await navitateTo(page, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
+    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
     await createCommodity(page, recorder, testCommodity);
 

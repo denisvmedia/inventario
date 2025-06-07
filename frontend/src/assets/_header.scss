@@ -1,0 +1,69 @@
+// Shared header styles for consistent UI across all views
+@use 'variables' as *;
+
+// Main header container
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+}
+
+// Header title section
+.header-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  h1 {
+    margin: 0 0 5px;
+    font-size: 2rem;
+  }
+}
+
+// Header actions section (buttons, toggles, etc.)
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+// Count displays (export count, commodity count, etc.)
+.export-count,
+.commodity-count,
+.item-count {
+  color: $text-secondary-color;
+  font-size: 0.9rem;
+}
+
+// Total value displays
+.total-value {
+  font-size: 1rem;
+  color: $text-color;
+  margin-top: 0.5rem;
+
+  .value-amount {
+    font-weight: bold;
+    color: $primary-color;
+    font-size: 1.1rem;
+  }
+}
+
+// Responsive adjustments for headers
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .header-actions {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .header-title h1 {
+    font-size: 1.5rem;
+  }
+}

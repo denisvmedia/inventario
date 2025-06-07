@@ -5,6 +5,7 @@
 *.so
 *.dylib
 /inventario
+go/inventario
 
 # Test binary, built with `go test -c`
 *.test
@@ -22,9 +23,12 @@
 /uploads/
 /go/uploads/
 /sample/
-/.db
+*.db
 /bin/*
 coverage
+
+# Export files
+/exports/
 
 # Docker volumes and data
 /.docker/

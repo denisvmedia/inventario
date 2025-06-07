@@ -17,8 +17,15 @@ export async function createArea(page: Page, recorder: TestRecorder, testArea: a
     await recorder.takeScreenshot('area-create-02-created');
 }
 
-export async function deleteArea(page: Page, recorder: TestRecorder, areaName: string) {
+export async function deleteArea(page: Page, recorder: TestRecorder, areaName: string, locationName?: string) {
     const areaCard = page.locator(`.area-card:has-text("${areaName}")`);
+
+    if (locationName && !await areaCard.isVisible()) {
+        // Navigate to the location detail page
+        await page.click(`.location-card:has-text("${locationName}")`);
+    }
+
+    await areaCard.waitFor({ state: 'visible' });
     await areaCard.locator('.area-actions button[title="Delete"]').click();
     await recorder.takeScreenshot('area-delete-01-confirm');
     await page.click('.confirmation-modal button:has-text("Delete")');

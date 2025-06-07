@@ -18,6 +18,9 @@ type multiError struct {
 func (e *multiError) Error() string {
 	var errorMessages []string
 	for _, err := range e.errs {
+		if err == nil {
+			continue
+		}
 		errorMessages = append(errorMessages, err.Error())
 	}
 	return strings.Join(errorMessages, "\n")

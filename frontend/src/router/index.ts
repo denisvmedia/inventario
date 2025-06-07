@@ -62,6 +62,22 @@ const routes = [
     name: 'commodity-print',
     component: () => import('../views/commodities/CommodityPrintView.vue')
   },
+  // Exports
+  {
+    path: '/exports',
+    name: 'exports',
+    component: () => import('../views/exports/ExportListView.vue')
+  },
+  {
+    path: '/exports/new',
+    name: 'export-create',
+    component: () => import('../views/exports/ExportCreateView.vue')
+  },
+  {
+    path: '/exports/:id',
+    name: 'export-detail',
+    component: () => import('../views/exports/ExportDetailView.vue')
+  },
   // Settings
   {
     path: '/settings',

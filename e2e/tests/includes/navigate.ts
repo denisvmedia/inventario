@@ -6,8 +6,9 @@ export const TO_LOCATIONS = 'locations';
 export const TO_COMMODITIES = 'commodities';
 export const TO_AREA_COMMODITIES = 'area-commodities';
 export const TO_SETTINGS = 'settings';
+export const TO_EXPORTS = 'exports';
 
-export type TypeTo = typeof TO_HOME | typeof TO_LOCATIONS | typeof TO_COMMODITIES | typeof TO_AREA_COMMODITIES | typeof TO_SETTINGS;
+export type TypeTo = typeof TO_HOME | typeof TO_LOCATIONS | typeof TO_COMMODITIES | typeof TO_AREA_COMMODITIES | typeof TO_SETTINGS | typeof TO_EXPORTS;
 
 export const FROM_HOME = 'home';
 export const FROM_LOCATIONS = 'locations';
@@ -17,7 +18,7 @@ export const FROM_SETTINGS = 'settings';
 
 export type TypeFrom = typeof FROM_HOME | typeof FROM_LOCATIONS | typeof FROM_LOCATIONS_AREA | typeof FROM_COMMODITIES | typeof FROM_SETTINGS;
 
-export async function navitateTo(page: Page, to : TypeTo, from?: TypeFrom, source?: string) {
+export async function navigateTo(page: Page, recorder: any, to : TypeTo, from?: TypeFrom, source?: string) {
     switch (to) {
         case TO_HOME:
             await page.goto('/');
@@ -47,6 +48,9 @@ export async function navitateTo(page: Page, to : TypeTo, from?: TypeFrom, sourc
             break;
         case TO_SETTINGS:
             await page.goto('/settings');
+            break;
+        case TO_EXPORTS:
+            await page.goto('/exports');
             break;
     }
 }

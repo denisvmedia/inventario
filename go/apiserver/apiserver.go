@@ -117,6 +117,7 @@ func APIServer(params Params) http.Handler {
 		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
 		r.With(defaultAPIMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/exports", Exports(params))
 		r.Route("/currencies", Currencies())
 		r.Route("/uploads", Uploads(params))
 		r.Route("/seed", Seed(params.RegistrySet))
