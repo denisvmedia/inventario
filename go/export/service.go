@@ -28,6 +28,17 @@ type ExportArgs struct {
 	IncludeFileData bool
 }
 
+// ExportStats tracks statistics during export generation
+type ExportStats struct {
+	LocationCount  int
+	AreaCount      int
+	CommodityCount int
+	ImageCount     int
+	InvoiceCount   int
+	ManualCount    int
+	BinaryDataSize int64
+}
+
 // NewExportService creates a new export service
 func NewExportService(registrySet *registry.Set, uploadLocation string) *ExportService {
 	return &ExportService{
@@ -119,14 +130,28 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return errkit.Wrap(err, "failed to update export status")
 	}
 
-	// Generate the export
-	filePath, err := s.generateExport(ctx, *export)
+	// Generate the export and collect statistics
+	filePath, stats, err := s.generateExportWithStats(ctx, *export)
 	if err != nil {
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
 		s.registrySet.ExportRegistry.Update(ctx, *export)
 		return errkit.Wrap(err, "failed to generate export")
+	}
+
+	// Store statistics in export record
+	export.LocationCount = stats.LocationCount
+	export.AreaCount = stats.AreaCount
+	export.CommodityCount = stats.CommodityCount
+	export.ImageCount = stats.ImageCount
+	export.InvoiceCount = stats.InvoiceCount
+	export.ManualCount = stats.ManualCount
+	export.BinaryDataSize = stats.BinaryDataSize
+
+	// Get file size
+	if fileSize, err := s.getFileSize(ctx, filePath); err == nil {
+		export.FileSize = fileSize
 	}
 
 	// Update status to completed
@@ -144,12 +169,12 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	return nil
 }
 
-// generateExport generates the XML export file using blob storage
-func (s *ExportService) generateExport(ctx context.Context, export models.Export) (string, error) {
+// generateExportWithStats generates the XML export file using blob storage and returns statistics
+func (s *ExportService) generateExportWithStats(ctx context.Context, export models.Export) (string, *ExportStats, error) {
 	// Open blob bucket
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
-		return "", errkit.Wrap(err, "failed to open blob bucket")
+		return "", nil, errkit.Wrap(err, "failed to open blob bucket")
 	}
 	defer func() {
 		if closeErr := b.Close(); closeErr != nil {
@@ -164,7 +189,7 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 	// Create blob writer
 	writer, err := b.NewWriter(ctx, blobKey, nil)
 	if err != nil {
-		return "", errkit.Wrap(err, "failed to create blob writer")
+		return "", nil, errkit.Wrap(err, "failed to create blob writer")
 	}
 	defer func() {
 		if closeErr := writer.Close(); closeErr != nil {
@@ -172,82 +197,99 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 		}
 	}()
 
-	// Stream XML generation
-	if err := s.streamXMLExport(ctx, export, writer); err != nil {
-		return "", errkit.Wrap(err, "failed to generate XML export")
+	// Stream XML generation with statistics tracking
+	stats, err := s.streamXMLExportWithStats(ctx, export, writer)
+	if err != nil {
+		return "", nil, errkit.Wrap(err, "failed to generate XML export")
 	}
 
-	return blobKey, nil
+	return blobKey, stats, nil
 }
 
-// streamXMLExport streams XML data directly to the file writer
-func (s *ExportService) streamXMLExport(ctx context.Context, export models.Export, writer io.Writer) error {
+// getFileSize gets the size of a file in blob storage
+func (s *ExportService) getFileSize(ctx context.Context, filePath string) (int64, error) {
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to open bucket")
+	}
+	defer b.Close()
+
+	attrs, err := b.Attributes(ctx, filePath)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to get file attributes")
+	}
+
+	return attrs.Size, nil
+}
+
+// streamXMLExportWithStats streams XML data directly to the file writer and tracks statistics
+func (s *ExportService) streamXMLExportWithStats(ctx context.Context, export models.Export, writer io.Writer) (*ExportStats, error) {
+	stats := &ExportStats{}
+
 	// Write XML header
 	if _, err := writer.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")); err != nil {
-		return errkit.Wrap(err, "failed to write XML header")
+		return nil, errkit.Wrap(err, "failed to write XML header")
 	}
 
 	// Start root element
 	exportDate := time.Now().Format("2006-01-02T15:04:05Z")
 	rootStart := fmt.Sprintf(`<inventory exportDate="%s" exportType="%s">%s`, exportDate, string(export.Type), "\n")
 	if _, err := writer.Write([]byte(rootStart)); err != nil {
-		return errkit.Wrap(err, "failed to write root element")
+		return nil, errkit.Wrap(err, "failed to write root element")
 	}
 
 	switch export.Type {
 	case models.ExportTypeFullDatabase:
 		args := ExportArgs{IncludeFileData: export.IncludeFileData}
-		if err := s.streamFullDatabase(ctx, writer, args); err != nil {
-			return errkit.Wrap(err, "failed to stream full database")
+		if err := s.streamFullDatabaseWithStats(ctx, writer, args, stats); err != nil {
+			return nil, errkit.Wrap(err, "failed to stream full database")
 		}
 	case models.ExportTypeLocations:
-		if err := s.streamLocations(ctx, writer); err != nil {
-			return errkit.Wrap(err, "failed to stream locations")
+		if err := s.streamLocationsWithStats(ctx, writer, stats); err != nil {
+			return nil, errkit.Wrap(err, "failed to stream locations")
 		}
 	case models.ExportTypeAreas:
-		if err := s.streamAreas(ctx, writer); err != nil {
-			return errkit.Wrap(err, "failed to stream areas")
+		if err := s.streamAreasWithStats(ctx, writer, stats); err != nil {
+			return nil, errkit.Wrap(err, "failed to stream areas")
 		}
 	case models.ExportTypeCommodities:
 		args := ExportArgs{IncludeFileData: export.IncludeFileData}
-		if err := s.streamCommodities(ctx, writer, args); err != nil {
-			return errkit.Wrap(err, "failed to stream commodities")
+		if err := s.streamCommoditiesWithStats(ctx, writer, args, stats); err != nil {
+			return nil, errkit.Wrap(err, "failed to stream commodities")
 		}
 	case models.ExportTypeSelectedItems:
 		args := ExportArgs{IncludeFileData: export.IncludeFileData}
-		if err := s.streamSelectedItems(ctx, writer, export.SelectedItems, args); err != nil {
-			return errkit.Wrap(err, "failed to stream selected items")
+		if err := s.streamSelectedItemsWithStats(ctx, writer, export.SelectedItems, args, stats); err != nil {
+			return nil, errkit.Wrap(err, "failed to stream selected items")
 		}
 	default:
-		return errkit.WithFields(ErrUnsupportedExportType, "type", export.Type)
+		return nil, errkit.WithFields(ErrUnsupportedExportType, "type", export.Type)
 	}
 
 	// End root element
 	if _, err := writer.Write([]byte("</inventory>\n")); err != nil {
-		return errkit.Wrap(err, "failed to write closing root element")
+		return nil, errkit.Wrap(err, "failed to write closing root element")
 	}
 
-	return nil
+	return stats, nil
 }
 
-// streamFullDatabase streams all database content to the writer
-func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer, args ExportArgs) error {
-	if err := s.streamLocations(ctx, writer); err != nil {
+// streamFullDatabaseWithStats streams all database content to the writer and tracks statistics
+func (s *ExportService) streamFullDatabaseWithStats(ctx context.Context, writer io.Writer, args ExportArgs, stats *ExportStats) error {
+	if err := s.streamLocationsWithStats(ctx, writer, stats); err != nil {
 		return errkit.Wrap(err, "failed to stream locations")
 	}
-	if err := s.streamAreas(ctx, writer); err != nil {
+	if err := s.streamAreasWithStats(ctx, writer, stats); err != nil {
 		return errkit.Wrap(err, "failed to stream areas")
 	}
-	if err := s.streamCommodities(ctx, writer, args); err != nil {
+	if err := s.streamCommoditiesWithStats(ctx, writer, args, stats); err != nil {
 		return errkit.Wrap(err, "failed to stream commodities")
 	}
 	return nil
 }
 
-// streamLocations streams locations to the writer
-//
-//nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
-func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer) error {
+// streamLocationsWithStats streams locations to the writer and tracks statistics
+func (s *ExportService) streamLocationsWithStats(ctx context.Context, writer io.Writer, stats *ExportStats) error {
 	locations, err := s.registrySet.LocationRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get locations")
@@ -271,6 +313,7 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer) e
 		if err := encoder.Encode(xmlLoc); err != nil {
 			return errkit.Wrap(err, "failed to encode location")
 		}
+		stats.LocationCount++
 	}
 
 	// End locations element
@@ -286,10 +329,8 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer) e
 	return nil
 }
 
-// streamAreas streams areas to the writer
-//
-//nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
-func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer) error {
+// streamAreasWithStats streams areas to the writer and tracks statistics
+func (s *ExportService) streamAreasWithStats(ctx context.Context, writer io.Writer, stats *ExportStats) error {
 	areas, err := s.registrySet.AreaRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get areas")
@@ -313,6 +354,7 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer) error
 		if err := encoder.Encode(xmlArea); err != nil {
 			return errkit.Wrap(err, "failed to encode area")
 		}
+		stats.AreaCount++
 	}
 
 	// End areas element
@@ -328,8 +370,8 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer) error
 	return nil
 }
 
-// streamCommodities streams commodities to the writer
-func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, args ExportArgs) error {
+// streamCommoditiesWithStats streams commodities to the writer and tracks statistics
+func (s *ExportService) streamCommoditiesWithStats(ctx context.Context, writer io.Writer, args ExportArgs, stats *ExportStats) error {
 	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodities")
@@ -347,12 +389,12 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 	for _, commodity := range commodities {
 		// Use streaming approach for commodities with file data
 		if args.IncludeFileData {
-			if err := s.streamCommodityDirectly(ctx, encoder, commodity, args); err != nil {
+			if err := s.streamCommodityDirectlyWithStats(ctx, encoder, commodity, args, stats); err != nil {
 				return errkit.Wrap(err, "failed to stream commodity")
 			}
 		} else {
 			// Use traditional approach for commodities without file data
-			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, args)
+			xmlCommodity, err := s.convertCommodityToXMLWithStats(ctx, commodity, args, stats)
 			if err != nil {
 				return errkit.Wrap(err, "failed to convert commodity to XML")
 			}
@@ -360,6 +402,7 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 				return errkit.Wrap(err, "failed to encode commodity")
 			}
 		}
+		stats.CommodityCount++
 	}
 
 	// End commodities element
@@ -375,22 +418,22 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 	return nil
 }
 
-// streamSelectedItems streams selected items (locations, areas, commodities) to the writer
-func (s *ExportService) streamSelectedItems(ctx context.Context, writer io.Writer, selectedItems []models.ExportSelectedItem, args ExportArgs) error {
+// streamSelectedItemsWithStats streams selected items (locations, areas, commodities) to the writer and tracks statistics
+func (s *ExportService) streamSelectedItemsWithStats(ctx context.Context, writer io.Writer, selectedItems []models.ExportSelectedItem, args ExportArgs, stats *ExportStats) error {
 	encoder := xml.NewEncoder(writer)
 	encoder.Indent("  ", "  ")
 
 	// Group items by type for better organization
 	locations, areas, commodities := s.groupSelectedItemsByType(selectedItems)
 
-	// Export each type of item
-	if err := s.streamSelectedLocations(ctx, encoder, locations); err != nil {
+	// Export each type of item with statistics tracking
+	if err := s.streamSelectedLocationsWithStats(ctx, encoder, locations, stats); err != nil {
 		return err
 	}
-	if err := s.streamSelectedAreas(ctx, encoder, areas); err != nil {
+	if err := s.streamSelectedAreasWithStats(ctx, encoder, areas, stats); err != nil {
 		return err
 	}
-	if err := s.streamSelectedCommodities(ctx, encoder, commodities, args); err != nil {
+	if err := s.streamSelectedCommoditiesWithStats(ctx, encoder, commodities, args, stats); err != nil {
 		return err
 	}
 
@@ -417,13 +460,14 @@ func (s *ExportService) groupSelectedItemsByType(selectedItems []models.ExportSe
 	return locations, areas, commodities
 }
 
-// streamSelectedLocations streams location data to the XML encoder
-func (s *ExportService) streamSelectedLocations(ctx context.Context, encoder *xml.Encoder, locationIDs []string) error {
-	return s.streamEntitySection(ctx, encoder, "locations", locationIDs, func(ctx context.Context, id string) (any, error) {
+// streamSelectedLocationsWithStats streams location data to the XML encoder and tracks statistics
+func (s *ExportService) streamSelectedLocationsWithStats(ctx context.Context, encoder *xml.Encoder, locationIDs []string, stats *ExportStats) error {
+	return s.streamEntitySectionWithStats(ctx, encoder, "locations", locationIDs, stats, func(ctx context.Context, id string) (any, error) {
 		location, err := s.registrySet.LocationRegistry.Get(ctx, id)
 		if err != nil {
 			return nil, err
 		}
+		stats.LocationCount++
 		return &Location{
 			ID:      location.ID,
 			Name:    location.Name,
@@ -432,13 +476,14 @@ func (s *ExportService) streamSelectedLocations(ctx context.Context, encoder *xm
 	})
 }
 
-// streamSelectedAreas streams area data to the XML encoder
-func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.Encoder, areaIDs []string) error {
-	return s.streamEntitySection(ctx, encoder, "areas", areaIDs, func(ctx context.Context, id string) (any, error) {
+// streamSelectedAreasWithStats streams area data to the XML encoder and tracks statistics
+func (s *ExportService) streamSelectedAreasWithStats(ctx context.Context, encoder *xml.Encoder, areaIDs []string, stats *ExportStats) error {
+	return s.streamEntitySectionWithStats(ctx, encoder, "areas", areaIDs, stats, func(ctx context.Context, id string) (any, error) {
 		area, err := s.registrySet.AreaRegistry.Get(ctx, id)
 		if err != nil {
 			return nil, err
 		}
+		stats.AreaCount++
 		return &Area{
 			ID:         area.ID,
 			Name:       area.Name,
@@ -447,8 +492,8 @@ func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.En
 	})
 }
 
-// streamEntitySection streams a section of entities to the XML encoder
-func (s *ExportService) streamEntitySection(ctx context.Context, encoder *xml.Encoder, sectionName string, entityIDs []string, entityLoader func(context.Context, string) (any, error)) error {
+// streamEntitySectionWithStats streams a section of entities to the XML encoder and tracks statistics
+func (s *ExportService) streamEntitySectionWithStats(ctx context.Context, encoder *xml.Encoder, sectionName string, entityIDs []string, stats *ExportStats, entityLoader func(context.Context, string) (any, error)) error {
 	if len(entityIDs) == 0 {
 		return nil
 	}
@@ -477,8 +522,8 @@ func (s *ExportService) streamEntitySection(ctx context.Context, encoder *xml.En
 	return nil
 }
 
-// streamSelectedCommodities streams commodity data to the XML encoder
-func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *xml.Encoder, commodityIDs []string, args ExportArgs) error {
+// streamSelectedCommoditiesWithStats streams commodity data to the XML encoder and tracks statistics
+func (s *ExportService) streamSelectedCommoditiesWithStats(ctx context.Context, encoder *xml.Encoder, commodityIDs []string, args ExportArgs, stats *ExportStats) error {
 	if len(commodityIDs) == 0 {
 		return nil
 	}
@@ -496,12 +541,12 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 
 		// Use streaming approach for commodities with file data
 		if args.IncludeFileData {
-			if err := s.streamCommodityDirectly(ctx, encoder, commodity, args); err != nil {
+			if err := s.streamCommodityDirectlyWithStats(ctx, encoder, commodity, args, stats); err != nil {
 				return errkit.Wrap(err, "failed to stream commodity")
 			}
 		} else {
 			// Use traditional approach for commodities without file data
-			xmlCommodity, err := s.convertCommodityToXML(ctx, commodity, args)
+			xmlCommodity, err := s.convertCommodityToXMLWithStats(ctx, commodity, args, stats)
 			if err != nil {
 				return errkit.Wrap(err, "failed to convert commodity to XML")
 			}
@@ -509,6 +554,7 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 				return errkit.Wrap(err, "failed to encode commodity")
 			}
 		}
+		stats.CommodityCount++
 	}
 
 	endElement := xml.EndElement{Name: xml.Name{Local: "commodities"}}
@@ -519,7 +565,8 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 	return nil
 }
 
-func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *models.Commodity, args ExportArgs) (*Commodity, error) {
+// convertCommodityToXMLWithStats converts a commodity to XML format and tracks statistics
+func (s *ExportService) convertCommodityToXMLWithStats(ctx context.Context, commodity *models.Commodity, args ExportArgs, stats *ExportStats) (*Commodity, error) {
 	xmlCommodity := &Commodity{
 		ID:                     commodity.ID,
 		Name:                   commodity.Name,
@@ -569,36 +616,40 @@ func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *mo
 		}
 	}
 
-	// Handle file attachments (images, invoices, manuals)
-	if err := s.addFileAttachments(ctx, commodity.ID, xmlCommodity, args); err != nil {
+	// Handle file attachments (images, invoices, manuals) with statistics tracking
+	if err := s.addFileAttachmentsWithStats(ctx, commodity.ID, xmlCommodity, args, stats); err != nil {
 		return nil, errkit.Wrap(err, "failed to add file attachments")
 	}
 
 	return xmlCommodity, nil
 }
 
-// addFileAttachments adds file attachments (images, invoices, manuals) to the XML commodity
-func (s *ExportService) addFileAttachments(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs) error {
+// addFileAttachmentsWithStats adds file attachments (images, invoices, manuals) to the XML commodity and tracks statistics
+func (s *ExportService) addFileAttachmentsWithStats(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs, stats *ExportStats) error {
+	// Only count and add files if file data is included
+	if !args.IncludeFileData {
+		return nil
+	}
 	// Add images
-	if err := s.addImages(ctx, commodityID, xmlCommodity, args); err != nil {
+	if err := s.addImagesWithStats(ctx, commodityID, xmlCommodity, args, stats); err != nil {
 		return errkit.Wrap(err, "failed to add images")
 	}
 
 	// Add invoices
-	if err := s.addInvoices(ctx, commodityID, xmlCommodity, args); err != nil {
+	if err := s.addInvoicesWithStats(ctx, commodityID, xmlCommodity, args, stats); err != nil {
 		return errkit.Wrap(err, "failed to add invoices")
 	}
 
 	// Add manuals
-	if err := s.addManuals(ctx, commodityID, xmlCommodity, args); err != nil {
+	if err := s.addManualsWithStats(ctx, commodityID, xmlCommodity, args, stats); err != nil {
 		return errkit.Wrap(err, "failed to add manuals")
 	}
 
 	return nil
 }
 
-// addImages adds images to the XML commodity
-func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs) error {
+// addImagesWithStats adds images to the XML commodity and tracks statistics
+func (s *ExportService) addImagesWithStats(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs, stats *ExportStats) error {
 	imageIDs, err := s.registrySet.CommodityRegistry.GetImages(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get images")
@@ -622,20 +673,21 @@ func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCo
 		// The streamFileAttachmentsDirectly method handles file data streaming
 		// This traditional approach is only used for non-streaming exports
 		if args.IncludeFileData {
-			if err := s.loadFileDataStreaming(ctx, xmlFile); err != nil {
+			if err := s.loadFileDataStreamingWithStats(ctx, xmlFile, stats); err != nil {
 				// Don't fail the entire export if one file can't be read
 				continue
 			}
 		}
 
 		xmlCommodity.Images = append(xmlCommodity.Images, xmlFile)
+		stats.ImageCount++
 	}
 
 	return nil
 }
 
-// addInvoices adds invoices to the XML commodity
-func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs) error {
+// addInvoicesWithStats adds invoices to the XML commodity and tracks statistics
+func (s *ExportService) addInvoicesWithStats(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs, stats *ExportStats) error {
 	invoiceIDs, err := s.registrySet.CommodityRegistry.GetInvoices(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get invoices")
@@ -658,20 +710,21 @@ func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xml
 		// Note: File data loading is skipped here when using streaming approach
 		// This traditional approach is only used for non-streaming exports
 		if args.IncludeFileData {
-			if err := s.loadFileDataStreaming(ctx, xmlFile); err != nil {
+			if err := s.loadFileDataStreamingWithStats(ctx, xmlFile, stats); err != nil {
 				// Don't fail the entire export if one file can't be read
 				continue
 			}
 		}
 
 		xmlCommodity.Invoices = append(xmlCommodity.Invoices, xmlFile)
+		stats.InvoiceCount++
 	}
 
 	return nil
 }
 
-// addManuals adds manuals to the XML commodity
-func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs) error {
+// addManualsWithStats adds manuals to the XML commodity and tracks statistics
+func (s *ExportService) addManualsWithStats(ctx context.Context, commodityID string, xmlCommodity *Commodity, args ExportArgs, stats *ExportStats) error {
 	manualIDs, err := s.registrySet.CommodityRegistry.GetManuals(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get manuals")
@@ -694,21 +747,21 @@ func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlC
 		// Note: File data loading is skipped here when using streaming approach
 		// This traditional approach is only used for non-streaming exports
 		if args.IncludeFileData {
-			if err := s.loadFileDataStreaming(ctx, xmlFile); err != nil {
+			if err := s.loadFileDataStreamingWithStats(ctx, xmlFile, stats); err != nil {
 				// Don't fail the entire export if one file can't be read
 				continue
 			}
 		}
 
 		xmlCommodity.Manuals = append(xmlCommodity.Manuals, xmlFile)
+		stats.ManualCount++
 	}
 
 	return nil
 }
 
-// loadFileDataStreaming loads file data using a memory-efficient streaming approach
-// This is only used for small files or when backward compatibility is needed
-func (s *ExportService) loadFileDataStreaming(ctx context.Context, xmlFile *File) error {
+// loadFileDataStreamingWithStats loads file data using a memory-efficient streaming approach and tracks base64 size
+func (s *ExportService) loadFileDataStreamingWithStats(ctx context.Context, xmlFile *File, stats *ExportStats) error {
 	// Open blob bucket
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
@@ -730,7 +783,13 @@ func (s *ExportService) loadFileDataStreaming(ctx context.Context, xmlFile *File
 		return errkit.Wrap(err, "failed to read file data")
 	}
 
-	xmlFile.Data = base64.StdEncoding.EncodeToString(fileData)
+	// Encode to base64 and track the encoded size
+	encodedData := base64.StdEncoding.EncodeToString(fileData)
+	xmlFile.Data = encodedData
+
+	// Add the base64 encoded size to statistics
+	stats.BinaryDataSize += int64(len(encodedData))
+
 	return nil
 }
 
@@ -1289,4 +1348,320 @@ func (s *ExportService) encodeURLs(encoder *xml.Encoder, urls []*models.URL) err
 	// End urls element
 	urlsEnd := xml.EndElement{Name: xml.Name{Local: "urls"}}
 	return encoder.EncodeToken(urlsEnd)
+}
+
+// streamCommodityDirectlyWithStats streams a commodity with file attachments directly to XML encoder and tracks statistics
+func (s *ExportService) streamCommodityDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity, args ExportArgs, stats *ExportStats) error {
+	// Start commodity element
+	commodityStart := xml.StartElement{
+		Name: xml.Name{Local: "commodity"},
+		Attr: []xml.Attr{
+			{Name: xml.Name{Local: "id"}, Value: commodity.ID},
+		},
+	}
+	if err := encoder.EncodeToken(commodityStart); err != nil {
+		return errkit.Wrap(err, "failed to encode commodity start element")
+	}
+
+	// Encode commodity metadata
+	if err := s.encodeCommodityMetadata(ctx, encoder, commodity); err != nil {
+		return errkit.Wrap(err, "failed to encode commodity metadata")
+	}
+
+	// Stream file attachments if requested - this bypasses the traditional File.Data approach
+	if args.IncludeFileData {
+		if err := s.streamFileAttachmentsDirectlyWithStats(ctx, encoder, commodity, args, stats); err != nil {
+			return errkit.Wrap(err, "failed to stream file attachments")
+		}
+	}
+
+	// End commodity element
+	commodityEnd := xml.EndElement{Name: xml.Name{Local: "commodity"}}
+	if err := encoder.EncodeToken(commodityEnd); err != nil {
+		return errkit.Wrap(err, "failed to encode commodity end element")
+	}
+
+	return nil
+}
+
+// streamFileAttachmentsDirectlyWithStats streams file attachments directly to XML encoder for large files and tracks statistics
+func (s *ExportService) streamFileAttachmentsDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity, args ExportArgs, stats *ExportStats) error {
+	if !args.IncludeFileData {
+		return nil // No file data to stream
+	}
+
+	// Stream images
+	if err := s.streamImagesDirectlyWithStats(ctx, encoder, commodity.ID, stats); err != nil {
+		return errkit.Wrap(err, "failed to stream images")
+	}
+
+	// Stream invoices
+	if err := s.streamInvoicesDirectlyWithStats(ctx, encoder, commodity.ID, stats); err != nil {
+		return errkit.Wrap(err, "failed to stream invoices")
+	}
+
+	// Stream manuals
+	if err := s.streamManualsDirectlyWithStats(ctx, encoder, commodity.ID, stats); err != nil {
+		return errkit.Wrap(err, "failed to stream manuals")
+	}
+
+	return nil
+}
+
+// streamImagesDirectlyWithStats streams images directly to XML encoder and tracks statistics
+func (s *ExportService) streamImagesDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *ExportStats) error {
+	imageIDs, err := s.registrySet.CommodityRegistry.GetImages(ctx, commodityID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get images")
+	}
+
+	if len(imageIDs) == 0 {
+		return nil
+	}
+
+	// Start images element
+	imagesStart := xml.StartElement{Name: xml.Name{Local: "images"}}
+	if err := encoder.EncodeToken(imagesStart); err != nil {
+		return errkit.Wrap(err, "failed to encode images start element")
+	}
+
+	for _, imageID := range imageIDs {
+		image, err := s.registrySet.ImageRegistry.Get(ctx, imageID)
+		if err != nil {
+			continue // Skip images that can't be found
+		}
+
+		xmlFile := &File{
+			ID:           image.ID,
+			Path:         image.Path,
+			OriginalPath: image.OriginalPath,
+			Extension:    image.Ext,
+			MimeType:     image.MIMEType,
+		}
+
+		// Stream file data directly and track base64 size
+		if err := s.streamFileDataDirectlyWithStats(ctx, encoder, xmlFile, stats); err != nil {
+			// Don't fail the entire export if one file can't be read
+			continue
+		}
+		stats.ImageCount++
+	}
+
+	// End images element
+	imagesEnd := xml.EndElement{Name: xml.Name{Local: "images"}}
+	if err := encoder.EncodeToken(imagesEnd); err != nil {
+		return errkit.Wrap(err, "failed to encode images end element")
+	}
+
+	return nil
+}
+
+// streamFileDataDirectlyWithStats streams file data directly to XML encoder without loading into memory and tracks base64 size
+func (s *ExportService) streamFileDataDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, xmlFile *File, stats *ExportStats) error {
+	// Open blob bucket
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return errkit.Wrap(err, "failed to open blob bucket")
+	}
+	defer b.Close()
+
+	// Open file reader
+	reader, err := b.NewReader(ctx, xmlFile.OriginalPath, nil)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create file reader")
+	}
+	defer reader.Close()
+
+	// Start the file element without the data attribute
+	fileStart := xml.StartElement{
+		Name: xml.Name{Local: "file"},
+		Attr: []xml.Attr{
+			{Name: xml.Name{Local: "id"}, Value: xmlFile.ID},
+		},
+	}
+	if err := encoder.EncodeToken(fileStart); err != nil {
+		return errkit.Wrap(err, "failed to encode file start element")
+	}
+
+	// Encode file metadata elements
+	if err := s.encodeFileMetadata(encoder, xmlFile); err != nil {
+		return errkit.Wrap(err, "failed to encode file metadata")
+	}
+
+	// Start data element
+	dataStart := xml.StartElement{Name: xml.Name{Local: "data"}}
+	if err := encoder.EncodeToken(dataStart); err != nil {
+		return errkit.Wrap(err, "failed to encode data start element")
+	}
+
+	// Stream file content as base64 encoded chunks and track size
+	base64Size, err := s.streamBase64ContentWithStats(encoder, reader)
+	if err != nil {
+		return errkit.Wrap(err, "failed to stream file content")
+	}
+
+	// Add the base64 encoded size to statistics
+	stats.BinaryDataSize += base64Size
+
+	// End data element
+	dataEnd := xml.EndElement{Name: xml.Name{Local: "data"}}
+	if err := encoder.EncodeToken(dataEnd); err != nil {
+		return errkit.Wrap(err, "failed to encode data end element")
+	}
+
+	// End file element
+	fileEnd := xml.EndElement{Name: xml.Name{Local: "file"}}
+	if err := encoder.EncodeToken(fileEnd); err != nil {
+		return errkit.Wrap(err, "failed to encode file end element")
+	}
+
+	return nil
+}
+
+// streamBase64ContentWithStats streams file content as base64 encoded data in chunks directly to XML and tracks size
+func (s *ExportService) streamBase64ContentWithStats(encoder *xml.Encoder, reader *blob.Reader) (int64, error) {
+	// Create a custom writer that writes base64 chunks directly to XML encoder and tracks size
+	xmlWriter := &xmlBase64WriterWithStats{encoder: encoder}
+
+	// Create base64 encoder that writes directly to XML
+	base64Encoder := base64.NewEncoder(base64.StdEncoding, xmlWriter)
+
+	// Copy data from reader to base64 encoder in chunks
+	const chunkSize = 32768 // 32KB chunks for efficient memory usage
+	buf := make([]byte, chunkSize)
+
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			if _, writeErr := base64Encoder.Write(buf[:n]); writeErr != nil {
+				err = errors.Join(writeErr, base64Encoder.Close())
+				return 0, errkit.Wrap(writeErr, "failed to write chunk to base64 encoder")
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			err = errors.Join(err, base64Encoder.Close())
+			return 0, errkit.Wrap(err, "failed to read chunk")
+		}
+	}
+
+	// Close the base64 encoder to flush any remaining data
+	if err := base64Encoder.Close(); err != nil {
+		return 0, errkit.Wrap(err, "failed to close base64 encoder")
+	}
+
+	return xmlWriter.totalSize, nil
+}
+
+// xmlBase64WriterWithStats is a custom writer that writes base64 data directly to XML encoder and tracks size
+type xmlBase64WriterWithStats struct {
+	encoder   *xml.Encoder
+	totalSize int64
+}
+
+// Write implements io.Writer interface to write base64 chunks directly to XML and track size
+func (w *xmlBase64WriterWithStats) Write(p []byte) (n int, err error) {
+	if err := w.encoder.EncodeToken(xml.CharData(p)); err != nil {
+		return 0, err
+	}
+	w.totalSize += int64(len(p))
+	return len(p), nil
+}
+
+// streamInvoicesDirectlyWithStats streams invoices directly to XML encoder and tracks statistics
+func (s *ExportService) streamInvoicesDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *ExportStats) error {
+	invoiceIDs, err := s.registrySet.CommodityRegistry.GetInvoices(ctx, commodityID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get invoices")
+	}
+
+	if len(invoiceIDs) == 0 {
+		return nil
+	}
+
+	// Start invoices element
+	invoicesStart := xml.StartElement{Name: xml.Name{Local: "invoices"}}
+	if err := encoder.EncodeToken(invoicesStart); err != nil {
+		return errkit.Wrap(err, "failed to encode invoices start element")
+	}
+
+	for _, invoiceID := range invoiceIDs {
+		invoice, err := s.registrySet.InvoiceRegistry.Get(ctx, invoiceID)
+		if err != nil {
+			continue // Skip invoices that can't be found
+		}
+
+		xmlFile := &File{
+			ID:           invoice.ID,
+			Path:         invoice.Path,
+			OriginalPath: invoice.OriginalPath,
+			Extension:    invoice.Ext,
+			MimeType:     invoice.MIMEType,
+		}
+
+		// Stream file data directly and track base64 size
+		if err := s.streamFileDataDirectlyWithStats(ctx, encoder, xmlFile, stats); err != nil {
+			// Don't fail the entire export if one file can't be read
+			continue
+		}
+		stats.InvoiceCount++
+	}
+
+	// End invoices element
+	invoicesEnd := xml.EndElement{Name: xml.Name{Local: "invoices"}}
+	if err := encoder.EncodeToken(invoicesEnd); err != nil {
+		return errkit.Wrap(err, "failed to encode invoices end element")
+	}
+
+	return nil
+}
+
+// streamManualsDirectlyWithStats streams manuals directly to XML encoder and tracks statistics
+func (s *ExportService) streamManualsDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *ExportStats) error {
+	manualIDs, err := s.registrySet.CommodityRegistry.GetManuals(ctx, commodityID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get manuals")
+	}
+
+	if len(manualIDs) == 0 {
+		return nil
+	}
+
+	// Start manuals element
+	manualsStart := xml.StartElement{Name: xml.Name{Local: "manuals"}}
+	if err := encoder.EncodeToken(manualsStart); err != nil {
+		return errkit.Wrap(err, "failed to encode manuals start element")
+	}
+
+	for _, manualID := range manualIDs {
+		manual, err := s.registrySet.ManualRegistry.Get(ctx, manualID)
+		if err != nil {
+			continue // Skip manuals that can't be found
+		}
+
+		xmlFile := &File{
+			ID:           manual.ID,
+			Path:         manual.Path,
+			OriginalPath: manual.OriginalPath,
+			Extension:    manual.Ext,
+			MimeType:     manual.MIMEType,
+		}
+
+		// Stream file data directly and track base64 size
+		if err := s.streamFileDataDirectlyWithStats(ctx, encoder, xmlFile, stats); err != nil {
+			// Don't fail the entire export if one file can't be read
+			continue
+		}
+		stats.ManualCount++
+	}
+
+	// End manuals element
+	manualsEnd := xml.EndElement{Name: xml.Name{Local: "manuals"}}
+	if err := encoder.EncodeToken(manualsEnd); err != nil {
+		return errkit.Wrap(err, "failed to encode manuals end element")
+	}
+
+	return nil
 }

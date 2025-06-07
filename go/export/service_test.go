@@ -169,7 +169,7 @@ func TestStreamXMLExport(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			err := service.streamXMLExport(ctx, export, &buf)
+			_, err := service.streamXMLExportWithStats(ctx, export, &buf)
 			c.Assert(err, qt.IsNil)
 
 			xmlContent := buf.String()
@@ -198,7 +198,7 @@ func TestStreamXMLExport_InvalidType(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := service.streamXMLExport(ctx, export, &buf)
+	_, err := service.streamXMLExportWithStats(ctx, export, &buf)
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -219,7 +219,7 @@ func TestGenerateExport(t *testing.T) {
 		IncludeFileData: false,
 	}
 
-	blobKey, err := service.generateExport(ctx, export)
+	blobKey, _, err := service.generateExportWithStats(ctx, export)
 	c.Assert(err, qt.IsNil)
 
 	// Check that blob was created
@@ -332,7 +332,8 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Test with file data included
-	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: true})
+	stats := &ExportStats{}
+	xmlCommodity, err := service.convertCommodityToXMLWithStats(ctx, createdCommodity, ExportArgs{IncludeFileData: true}, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
@@ -363,14 +364,11 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(xmlCommodity.Invoices[0].Data, qt.Equals, expectedInvoiceBase64)
 
 	// Test without file data
-	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: false})
+	stats = &ExportStats{}
+	xmlCommodityNoData, err := service.convertCommodityToXMLWithStats(ctx, createdCommodity, ExportArgs{IncludeFileData: false}, stats)
 	c.Assert(err, qt.IsNil)
-	c.Assert(xmlCommodityNoData.Images, qt.HasLen, 1)
-	c.Assert(xmlCommodityNoData.Invoices, qt.HasLen, 1)
-
-	// Check that no file data is included
-	c.Assert(xmlCommodityNoData.Images[0].Data, qt.Equals, "")
-	c.Assert(xmlCommodityNoData.Invoices[0].Data, qt.Equals, "")
+	c.Assert(xmlCommodityNoData.Images, qt.HasLen, 0)
+	c.Assert(xmlCommodityNoData.Invoices, qt.HasLen, 0)
 }
 
 func TestBase64FileDataVerification(t *testing.T) {
@@ -492,7 +490,8 @@ func TestBase64FileDataVerification(t *testing.T) {
 	}
 
 	// Test with file data included
-	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: true})
+	stats := &ExportStats{}
+	xmlCommodity, err := service.convertCommodityToXMLWithStats(ctx, createdCommodity, ExportArgs{IncludeFileData: true}, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
@@ -540,7 +539,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err = service.streamXMLExport(ctx, export, &buf)
+	_, err = service.streamXMLExportWithStats(ctx, export, &buf)
 	c.Assert(err, qt.IsNil)
 
 	xmlContent := buf.String()
@@ -557,4 +556,321 @@ func TestBase64FileDataVerification(t *testing.T) {
 		err = b.Delete(ctx, filePath)
 		c.Assert(err, qt.IsNil)
 	}
+}
+
+func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
+	c := qt.New(t)
+
+	// Create test data
+	ctx := context.Background()
+	registrySet := createTestRegistrySetWithFiles(c, ctx)
+	tempDir := c.TempDir()
+	uploadLocation := "file:///" + tempDir + "?create_dir=1"
+
+	// Create actual files in blob storage for testing
+	err := createTestFilesInBlobStorage(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+
+	service := NewExportService(registrySet, uploadLocation)
+
+	// Create test export
+	testExport := &models.Export{
+		Type:            models.ExportTypeFullDatabase,
+		Status:          models.ExportStatusPending,
+		IncludeFileData: true,
+		Description:     "Test export",
+	}
+
+	// Save export
+	savedExport, err := registrySet.ExportRegistry.Create(ctx, *testExport)
+	c.Assert(err, qt.IsNil)
+
+	// Process export
+	err = service.ProcessExport(ctx, savedExport.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Verify export was updated with statistics
+	updatedExport, err := registrySet.ExportRegistry.Get(ctx, savedExport.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Check status
+	c.Assert(updatedExport.Status, qt.Equals, models.ExportStatusCompleted)
+	c.Assert(updatedExport.FilePath, qt.Not(qt.Equals), "")
+	c.Assert(updatedExport.FileSize, qt.Not(qt.Equals), int64(0))
+
+	// Check statistics
+	c.Assert(updatedExport.LocationCount, qt.Equals, 2)
+	c.Assert(updatedExport.AreaCount, qt.Equals, 3)
+	c.Assert(updatedExport.CommodityCount, qt.Equals, 2)
+	c.Assert(updatedExport.ImageCount, qt.Equals, 2)
+	c.Assert(updatedExport.InvoiceCount, qt.Equals, 1)
+	c.Assert(updatedExport.ManualCount, qt.Equals, 1)
+	c.Assert(updatedExport.BinaryDataSize, qt.Not(qt.Equals), int64(0))
+}
+
+func TestExportService_ProcessExport_WithoutFileData(t *testing.T) {
+	c := qt.New(t)
+
+	ctx := context.Background()
+	registrySet := createTestRegistrySetWithFiles(c, ctx)
+	tempDir := c.TempDir()
+	uploadLocation := "file:///" + tempDir + "?create_dir=1"
+	service := NewExportService(registrySet, uploadLocation)
+
+	// Create test export without file data
+	testExport := &models.Export{
+		Type:            models.ExportTypeFullDatabase,
+		Status:          models.ExportStatusPending,
+		IncludeFileData: false,
+		Description:     "Test export without files",
+	}
+
+	// Save export
+	savedExport, err := registrySet.ExportRegistry.Create(ctx, *testExport)
+	c.Assert(err, qt.IsNil)
+
+	// Process export
+	err = service.ProcessExport(ctx, savedExport.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Verify export was updated with statistics
+	updatedExport, err := registrySet.ExportRegistry.Get(ctx, savedExport.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Check status
+	c.Assert(updatedExport.Status, qt.Equals, models.ExportStatusCompleted)
+
+	// Check statistics
+	c.Assert(updatedExport.LocationCount, qt.Equals, 2)
+	c.Assert(updatedExport.AreaCount, qt.Equals, 3)
+	c.Assert(updatedExport.CommodityCount, qt.Equals, 2)
+	// File counts should be 0 when file data is not included
+	c.Assert(updatedExport.ImageCount, qt.Equals, 0)
+	c.Assert(updatedExport.InvoiceCount, qt.Equals, 0)
+	c.Assert(updatedExport.ManualCount, qt.Equals, 0)
+	c.Assert(updatedExport.BinaryDataSize, qt.Equals, int64(0))
+}
+
+func TestExportService_Base64SizeTracking(t *testing.T) {
+	c := qt.New(t)
+
+	ctx := context.Background()
+	registrySet := createTestRegistrySetWithFiles(c, ctx)
+	tempDir := c.TempDir()
+	uploadLocation := "file:///" + tempDir + "?create_dir=1"
+
+	// Create actual files in blob storage for testing
+	err := createTestFilesInBlobStorage(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+
+	service := NewExportService(registrySet, uploadLocation)
+
+	// Create test export with file data
+	testExport := &models.Export{
+		Type:            models.ExportTypeCommodities,
+		Status:          models.ExportStatusPending,
+		IncludeFileData: true,
+		Description:     "Test base64 size tracking",
+	}
+
+	// Save export
+	savedExport, err := registrySet.ExportRegistry.Create(ctx, *testExport)
+	c.Assert(err, qt.IsNil)
+
+	// Process export
+	err = service.ProcessExport(ctx, savedExport.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Verify export was updated with statistics
+	updatedExport, err := registrySet.ExportRegistry.Get(ctx, savedExport.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Check that binary data size is greater than 0 and represents base64 encoded size
+	c.Assert(updatedExport.BinaryDataSize, qt.Not(qt.Equals), int64(0))
+
+	// The base64 encoded size should be larger than the original data size
+	// Base64 encoding increases size by approximately 33%
+	expectedMinSize := int64(len("test image data") + len("test invoice data") + len("test manual data"))
+	c.Assert(updatedExport.BinaryDataSize >= expectedMinSize, qt.IsTrue)
+}
+
+// createTestRegistrySetWithFiles creates a test registry set with sample data including files
+func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set {
+	// Create interconnected registries
+	locationRegistry := memory.NewLocationRegistry()
+	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+	imageRegistry := memory.NewImageRegistry(commodityRegistry)
+	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
+	manualRegistry := memory.NewManualRegistry(commodityRegistry)
+	exportRegistry := memory.NewExportRegistry()
+
+	registrySet := &registry.Set{
+		LocationRegistry:  locationRegistry,
+		AreaRegistry:      areaRegistry,
+		CommodityRegistry: commodityRegistry,
+		ImageRegistry:     imageRegistry,
+		InvoiceRegistry:   invoiceRegistry,
+		ManualRegistry:    manualRegistry,
+		ExportRegistry:    exportRegistry,
+	}
+
+	// Create test locations
+	location1 := models.Location{
+		EntityID: models.EntityID{ID: "loc1"},
+		Name:     "Test Location 1",
+		Address:  "123 Test St",
+	}
+	location2 := models.Location{
+		EntityID: models.EntityID{ID: "loc2"},
+		Name:     "Test Location 2",
+		Address:  "456 Test Ave",
+	}
+
+	savedLocation1, err := registrySet.LocationRegistry.Create(ctx, location1)
+	c.Assert(err, qt.IsNil)
+	savedLocation2, err := registrySet.LocationRegistry.Create(ctx, location2)
+	c.Assert(err, qt.IsNil)
+
+	// Create test areas
+	area1 := models.Area{
+		EntityID:   models.EntityID{ID: "area1"},
+		Name:       "Test Area 1",
+		LocationID: savedLocation1.ID,
+	}
+	area2 := models.Area{
+		EntityID:   models.EntityID{ID: "area2"},
+		Name:       "Test Area 2",
+		LocationID: savedLocation1.ID,
+	}
+	area3 := models.Area{
+		EntityID:   models.EntityID{ID: "area3"},
+		Name:       "Test Area 3",
+		LocationID: savedLocation2.ID,
+	}
+
+	savedArea1, err := registrySet.AreaRegistry.Create(ctx, area1)
+	c.Assert(err, qt.IsNil)
+	savedArea2, err := registrySet.AreaRegistry.Create(ctx, area2)
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.AreaRegistry.Create(ctx, area3)
+	c.Assert(err, qt.IsNil)
+
+	// Create test commodities
+	commodity1 := models.Commodity{
+		EntityID: models.EntityID{ID: "commodity1"},
+		Name:     "Test Commodity 1",
+		AreaID:   savedArea1.ID,
+		Count:    1,
+		Type:     models.CommodityTypeElectronics,
+		Status:   models.CommodityStatusInUse,
+	}
+	commodity2 := models.Commodity{
+		EntityID: models.EntityID{ID: "commodity2"},
+		Name:     "Test Commodity 2",
+		AreaID:   savedArea2.ID,
+		Count:    2,
+		Type:     models.CommodityTypeElectronics,
+		Status:   models.CommodityStatusInUse,
+	}
+
+	savedCommodity1, err := registrySet.CommodityRegistry.Create(ctx, commodity1)
+	c.Assert(err, qt.IsNil)
+	savedCommodity2, err := registrySet.CommodityRegistry.Create(ctx, commodity2)
+	c.Assert(err, qt.IsNil)
+
+	// Create test images
+	image1 := models.Image{
+		EntityID:    models.EntityID{ID: "image1"},
+		CommodityID: savedCommodity1.ID,
+		File: &models.File{
+			Path:         "test-image-1",
+			OriginalPath: "test-image-1.jpg",
+			Ext:          "jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}
+	image2 := models.Image{
+		EntityID:    models.EntityID{ID: "image2"},
+		CommodityID: savedCommodity2.ID,
+		File: &models.File{
+			Path:         "test-image-2",
+			OriginalPath: "test-image-2.png",
+			Ext:          "png",
+			MIMEType:     "image/png",
+		},
+	}
+
+	_, err = registrySet.ImageRegistry.Create(ctx, image1)
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.ImageRegistry.Create(ctx, image2)
+	c.Assert(err, qt.IsNil)
+
+	// Create test invoice
+	invoice1 := models.Invoice{
+		EntityID:    models.EntityID{ID: "invoice1"},
+		CommodityID: savedCommodity1.ID,
+		File: &models.File{
+			Path:         "test-invoice-1",
+			OriginalPath: "test-invoice-1.pdf",
+			Ext:          "pdf",
+			MIMEType:     "application/pdf",
+		},
+	}
+
+	_, err = registrySet.InvoiceRegistry.Create(ctx, invoice1)
+	c.Assert(err, qt.IsNil)
+
+	// Create test manual
+	manual1 := models.Manual{
+		EntityID:    models.EntityID{ID: "manual1"},
+		CommodityID: savedCommodity1.ID,
+		File: &models.File{
+			Path:         "test-manual-1",
+			OriginalPath: "test-manual-1.pdf",
+			Ext:          "pdf",
+			MIMEType:     "application/pdf",
+		},
+	}
+
+	_, err = registrySet.ManualRegistry.Create(ctx, manual1)
+	c.Assert(err, qt.IsNil)
+
+	return registrySet
+}
+
+// createTestFilesInBlobStorage creates actual test files in blob storage
+func createTestFilesInBlobStorage(ctx context.Context, uploadLocation string) error {
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	if err != nil {
+		return err
+	}
+	defer b.Close()
+
+	// Create test file contents
+	testFiles := map[string][]byte{
+		"test-image-1.jpg":   []byte("test image data content"),
+		"test-image-2.png":   []byte("test image data content"),
+		"test-invoice-1.pdf": []byte("test invoice data content"),
+		"test-manual-1.pdf":  []byte("test manual data content"),
+	}
+
+	// Write files to blob storage
+	for filePath, content := range testFiles {
+		writer, err := b.NewWriter(ctx, filePath, nil)
+		if err != nil {
+			return err
+		}
+
+		if _, err := writer.Write(content); err != nil {
+			writer.Close()
+			return err
+		}
+
+		if err := writer.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

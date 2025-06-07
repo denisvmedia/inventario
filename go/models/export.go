@@ -146,6 +146,15 @@ type Export struct {
 	CompletedDate   PDate                           `json:"completed_date" db:"completed_date"`
 	ErrorMessage    string                          `json:"error_message" db:"error_message"`
 	Description     string                          `json:"description" db:"description"`
+	// Export statistics
+	FileSize       int64 `json:"file_size" db:"file_size"`
+	LocationCount  int   `json:"location_count" db:"location_count"`
+	AreaCount      int   `json:"area_count" db:"area_count"`
+	CommodityCount int   `json:"commodity_count" db:"commodity_count"`
+	ImageCount     int   `json:"image_count" db:"image_count"`
+	InvoiceCount   int   `json:"invoice_count" db:"invoice_count"`
+	ManualCount    int   `json:"manual_count" db:"manual_count"`
+	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size"`
 }
 
 func (*Export) Validate() error {

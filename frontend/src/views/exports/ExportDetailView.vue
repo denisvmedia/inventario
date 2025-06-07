@@ -78,17 +78,67 @@
 
             <div class="info-item">
               <label>Created</label>
-              <div class="value">{{ formatDate(exportData.created_date) }}</div>
+              <div class="value">{{ formatDateTime(exportData.created_date) }}</div>
             </div>
 
             <div v-if="exportData.completed_date" class="info-item">
               <label>Completed</label>
-              <div class="value">{{ formatDate(exportData.completed_date) }}</div>
+              <div class="value">{{ formatDateTime(exportData.completed_date) }}</div>
             </div>
 
             <div v-if="exportData.file_path" class="info-item">
               <label>File Location</label>
               <div class="value file-path">{{ exportData.file_path }}</div>
+            </div>
+
+            <div v-if="exportData.file_size" class="info-item">
+              <label>File Size</label>
+              <div class="value">{{ formatFileSize(exportData.file_size) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Statistics -->
+      <div v-if="exportData.status === 'completed' && hasStatistics" class="export-card">
+        <div class="card-header">
+          <h2>Export Statistics</h2>
+        </div>
+        <div class="card-body">
+          <div class="info-grid">
+            <div v-if="exportData.location_count !== undefined" class="info-item">
+              <label>Locations</label>
+              <div class="value">{{ exportData.location_count.toLocaleString() }}</div>
+            </div>
+
+            <div v-if="exportData.area_count !== undefined" class="info-item">
+              <label>Areas</label>
+              <div class="value">{{ exportData.area_count.toLocaleString() }}</div>
+            </div>
+
+            <div v-if="exportData.commodity_count !== undefined" class="info-item">
+              <label>Commodities</label>
+              <div class="value">{{ exportData.commodity_count.toLocaleString() }}</div>
+            </div>
+
+            <div v-if="exportData.image_count !== undefined" class="info-item">
+              <label>Images</label>
+              <div class="value">{{ exportData.image_count.toLocaleString() }}</div>
+            </div>
+
+            <div v-if="exportData.invoice_count !== undefined" class="info-item">
+              <label>Invoices</label>
+              <div class="value">{{ exportData.invoice_count.toLocaleString() }}</div>
+            </div>
+
+            <div v-if="exportData.manual_count !== undefined" class="info-item">
+              <label>Manuals</label>
+              <div class="value">{{ exportData.manual_count.toLocaleString() }}</div>
+            </div>
+
+            <div v-if="exportData.binary_data_size !== undefined && exportData.binary_data_size > 0" class="info-item">
+              <label>Binary Data Size</label>
+              <div class="value">{{ formatFileSize(exportData.binary_data_size) }}</div>
             </div>
           </div>
         </div>
@@ -240,7 +290,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import exportService from '@/services/exportService'
@@ -282,6 +332,18 @@ const hierarchicalItems = ref<{
   locations: [],
   standaloneAreas: [],
   standaloneCommodities: []
+})
+
+// Computed property to check if export has statistics
+const hasStatistics = computed(() => {
+  if (!exportData.value) return false
+  return exportData.value.location_count !== undefined ||
+         exportData.value.area_count !== undefined ||
+         exportData.value.commodity_count !== undefined ||
+         exportData.value.image_count !== undefined ||
+         exportData.value.invoice_count !== undefined ||
+         exportData.value.manual_count !== undefined ||
+         exportData.value.binary_data_size !== undefined
 })
 
 const loadExport = async () => {
@@ -474,13 +536,23 @@ const formatExportStatus = (status: string) => {
   return statusMap[status as keyof typeof statusMap] || status
 }
 
-const formatDate = (dateString: string) => {
+const formatDateTime = (dateString: string) => {
   if (!dateString) return '-'
   try {
     return new Date(dateString).toLocaleString()
   } catch {
     return dateString
   }
+}
+
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes'
+
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 const retryExport = async () => {
