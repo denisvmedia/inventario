@@ -1238,57 +1238,6 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "patch": {
-                "description": "update an export",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "exports"
-                ],
-                "summary": "Update an export",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Export ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Export",
-                        "name": "export",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.ExportResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable Entity",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
             }
         },
         "/exports/{id}/download": {
@@ -1909,29 +1858,6 @@ const docTemplate = `{
                 }
             }
         },
-        "jsonapi.ExportUpdateRequest": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/jsonapi.ExportUpdateRequestData"
-                }
-            }
-        },
-        "jsonapi.ExportUpdateRequestData": {
-            "type": "object",
-            "properties": {
-                "attributes": {
-                    "$ref": "#/definitions/models.Export"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "exports"
-                    ],
-                    "example": "exports"
-                }
-            }
-        },
         "jsonapi.ExportsMeta": {
             "type": "object",
             "properties": {
@@ -2422,7 +2348,21 @@ const docTemplate = `{
         "models.ExportSelectedItem": {
             "type": "object",
             "properties": {
+                "area_id": {
+                    "description": "For commodities: which area they belong to",
+                    "type": "string"
+                },
                 "id": {
+                    "type": "string"
+                },
+                "include_all": {
+                    "type": "boolean"
+                },
+                "location_id": {
+                    "description": "Relationship fields for preserving hierarchy snapshot",
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 },
                 "type": {
