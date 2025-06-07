@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
 
+	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/internal/errkit"
-	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -172,6 +172,13 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get file attributes to set Content-Length and other headers
+	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, export.FilePath)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	file, err := api.getDownloadFile(r.Context(), export.FilePath)
 	if err != nil {
 		internalServerError(w, r, err)
@@ -179,16 +186,17 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	w.Header().Set("Content-Type", "application/xml")
 	// Generate filename based on export description and type
 	filename := path.Base(export.FilePath)
 	if filename == "" {
 		filename = "export.xml"
 	}
-	attachmentHeader := mimekit.FormatContentDisposition(filename)
-	w.Header().Set("Content-Disposition", attachmentHeader)
 
-	if _, err := io.Copy(w, file); err != nil {
+	// Set headers to optimize streaming and prevent browser preloading
+	downloadutils.SetStreamingHeaders(w, "application/xml", attrs.Size, filename)
+
+	// Use chunked copying to prevent browser buffering
+	if err := downloadutils.CopyFileInChunks(w, file); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
