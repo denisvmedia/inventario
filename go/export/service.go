@@ -2,6 +2,7 @@ package export
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -543,8 +544,167 @@ func (s *ExportService) convertCommodityToXML(ctx context.Context, commodity *mo
 		}
 	}
 
-	// TODO: Add file handling when file data is needed
-	// This would require implementing file retrieval from the upload location
+	// Handle file attachments (images, invoices, manuals)
+	if err := s.addFileAttachments(ctx, commodity.ID, xmlCommodity, includeFileData); err != nil {
+		return nil, errkit.Wrap(err, "failed to add file attachments")
+	}
 
 	return xmlCommodity, nil
+}
+
+// addFileAttachments adds file attachments (images, invoices, manuals) to the XML commodity
+func (s *ExportService) addFileAttachments(ctx context.Context, commodityID string, xmlCommodity *Commodity, includeFileData bool) error {
+	// Add images
+	if err := s.addImages(ctx, commodityID, xmlCommodity, includeFileData); err != nil {
+		return errkit.Wrap(err, "failed to add images")
+	}
+
+	// Add invoices
+	if err := s.addInvoices(ctx, commodityID, xmlCommodity, includeFileData); err != nil {
+		return errkit.Wrap(err, "failed to add invoices")
+	}
+
+	// Add manuals
+	if err := s.addManuals(ctx, commodityID, xmlCommodity, includeFileData); err != nil {
+		return errkit.Wrap(err, "failed to add manuals")
+	}
+
+	return nil
+}
+
+// addImages adds images to the XML commodity
+func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCommodity *Commodity, includeFileData bool) error {
+	imageIDs, err := s.registrySet.CommodityRegistry.GetImages(ctx, commodityID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get images")
+	}
+
+	for _, imageID := range imageIDs {
+		image, err := s.registrySet.ImageRegistry.Get(ctx, imageID)
+		if err != nil {
+			continue // Skip images that can't be found
+		}
+
+		xmlFile := &File{
+			ID:           image.ID,
+			Path:         image.Path,
+			OriginalPath: image.OriginalPath,
+			Extension:    image.Ext,
+			MimeType:     image.MIMEType,
+		}
+
+		// Include file data if requested
+		if includeFileData {
+			data, err := s.getFileData(ctx, image.OriginalPath)
+			if err != nil {
+				// Don't fail the entire export if one file can't be read
+				continue
+			}
+			xmlFile.Data = data
+		}
+
+		xmlCommodity.Images = append(xmlCommodity.Images, xmlFile)
+	}
+
+	return nil
+}
+
+// addInvoices adds invoices to the XML commodity
+func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xmlCommodity *Commodity, includeFileData bool) error {
+	invoiceIDs, err := s.registrySet.CommodityRegistry.GetInvoices(ctx, commodityID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get invoices")
+	}
+
+	for _, invoiceID := range invoiceIDs {
+		invoice, err := s.registrySet.InvoiceRegistry.Get(ctx, invoiceID)
+		if err != nil {
+			continue // Skip invoices that can't be found
+		}
+
+		xmlFile := &File{
+			ID:           invoice.ID,
+			Path:         invoice.Path,
+			OriginalPath: invoice.OriginalPath,
+			Extension:    invoice.Ext,
+			MimeType:     invoice.MIMEType,
+		}
+
+		// Include file data if requested
+		if includeFileData {
+			data, err := s.getFileData(ctx, invoice.OriginalPath)
+			if err != nil {
+				// Don't fail the entire export if one file can't be read
+				continue
+			}
+			xmlFile.Data = data
+		}
+
+		xmlCommodity.Invoices = append(xmlCommodity.Invoices, xmlFile)
+	}
+
+	return nil
+}
+
+// addManuals adds manuals to the XML commodity
+func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlCommodity *Commodity, includeFileData bool) error {
+	manualIDs, err := s.registrySet.CommodityRegistry.GetManuals(ctx, commodityID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get manuals")
+	}
+
+	for _, manualID := range manualIDs {
+		manual, err := s.registrySet.ManualRegistry.Get(ctx, manualID)
+		if err != nil {
+			continue // Skip manuals that can't be found
+		}
+
+		xmlFile := &File{
+			ID:           manual.ID,
+			Path:         manual.Path,
+			OriginalPath: manual.OriginalPath,
+			Extension:    manual.Ext,
+			MimeType:     manual.MIMEType,
+		}
+
+		// Include file data if requested
+		if includeFileData {
+			data, err := s.getFileData(ctx, manual.OriginalPath)
+			if err != nil {
+				// Don't fail the entire export if one file can't be read
+				continue
+			}
+			xmlFile.Data = data
+		}
+
+		xmlCommodity.Manuals = append(xmlCommodity.Manuals, xmlFile)
+	}
+
+	return nil
+}
+
+// getFileData retrieves file data from blob storage and returns it as base64-encoded string
+func (s *ExportService) getFileData(ctx context.Context, originalPath string) (string, error) {
+	// Open blob bucket
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return "", errkit.Wrap(err, "failed to open blob bucket")
+	}
+	defer b.Close()
+
+	// Open file reader
+	reader, err := b.NewReader(ctx, originalPath, nil)
+	if err != nil {
+		return "", errkit.Wrap(err, "failed to create file reader")
+	}
+	defer reader.Close()
+
+	// Read all file data
+	fileData, err := io.ReadAll(reader)
+	if err != nil {
+		return "", errkit.Wrap(err, "failed to read file data")
+	}
+
+	// Encode as base64
+	return base64.StdEncoding.EncodeToString(fileData), nil
 }
