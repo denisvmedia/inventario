@@ -225,11 +225,12 @@ func TestExportRegistry_Create_DefaultValues(t *testing.T) {
 	reg := boltdb.NewExportRegistry(db)
 	ctx := context.Background()
 
-	// Test default date and status setting
+	// Test that registry doesn't set timestamps (this is now done at API level)
 	export := models.Export{
 		Type:        models.ExportTypeSelectedItems,
 		Description: "Test export",
-		// CreatedDate and Status are not set
+		Status:      models.ExportStatusPending,
+		CreatedDate: models.PNow(), // Must be set explicitly now
 	}
 
 	created, err := reg.Create(ctx, export)

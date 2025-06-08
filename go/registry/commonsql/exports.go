@@ -43,10 +43,7 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 	// Generate a new ID
 	export.SetID(generateID())
 
-	// Set created date if not set
-	if export.CreatedDate == nil {
-		export.CreatedDate = models.PNow()
-	}
+
 
 	// Insert the export
 	err = InsertEntity(ctx, tx, r.tableNames.Exports(), export)

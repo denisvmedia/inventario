@@ -45,10 +45,7 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 				return errkit.WithStack(registry.ErrFieldRequired, "field_name", "Type")
 			}
 
-			// Set created date if not set
-			if e.CreatedDate == nil {
-				e.CreatedDate = models.PNow()
-			}
+
 
 			// Set default status if not set
 			if e.Status == "" {

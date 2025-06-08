@@ -114,6 +114,9 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 		export.Status = models.ExportStatusPending
 	}
 
+	// Set created date (we do not accept it from the client)
+	export.CreatedDate = models.PNow()
+
 	// Enrich selected items with names from the database
 	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
 		if err := api.enrichSelectedItemsWithNames(r.Context(), &export); err != nil {
