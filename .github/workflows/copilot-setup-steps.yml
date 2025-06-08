@@ -18,12 +18,12 @@ jobs:
       - id: vars
         uses: ./.github/actions/vars
 
-      # Install system dependencies
-      - name: Update package lists
-        run: sudo apt-get update
-
-      - name: Install essential build tools
-        run: sudo apt-get install -y build-essential git curl wget ca-certificates gnupg lsb-release
+#      # Install system dependencies
+#      - name: Update package lists
+#        run: sudo apt-get update
+#
+#      - name: Install essential build tools
+#        run: sudo apt-get install -y build-essential git curl wget ca-certificates gnupg lsb-release
 
       # Install Go
       - uses: actions/setup-go@v5
@@ -39,30 +39,30 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      # Install Docker and Docker Compose
-      - name: Install Docker
-        run: |
-          # Add Docker's official GPG key
-          sudo install -m 0755 -d /etc/apt/keyrings
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-          sudo chmod a+r /etc/apt/keyrings/docker.gpg
-          
-          # Add Docker repository
-          echo \
-            "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-            "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-            sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-          
-          # Install Docker Engine
-          sudo apt-get update
-          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-          
-          # Add user to docker group (requires re-login to take effect)
-          sudo usermod -aG docker $USER
+#      # Install Docker and Docker Compose
+#      - name: Install Docker
+#        run: |
+#          # Add Docker's official GPG key
+#          sudo install -m 0755 -d /etc/apt/keyrings
+#          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+#          sudo chmod a+r /etc/apt/keyrings/docker.gpg
+#
+#          # Add Docker repository
+#          echo \
+#            "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+#            "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+#            sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+#
+#          # Install Docker Engine
+#          sudo apt-get update
+#          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+#
+#          # Add user to docker group (requires re-login to take effect)
+#          sudo usermod -aG docker $USER
 
-      # Install PostgreSQL client tools for testing
-      - name: Install PostgreSQL client
-        run: sudo apt-get install -y postgresql-client
+#      # Install PostgreSQL client tools for testing
+#      - name: Install PostgreSQL client
+#        run: sudo apt-get install -y postgresql-client
 
       # Install project Go dependencies and tools
       - name: Install Go dependencies and tools
@@ -84,9 +84,9 @@ jobs:
         run: npm ci
         working-directory: frontend
 
-      # Install e2e test dependencies and Playwright browsers
-      - name: Install e2e dependencies and Playwright browsers
-        run: |
-          npm ci
-          npx playwright install --with-deps
-        working-directory: e2e
+#      # Install e2e test dependencies and Playwright browsers
+#      - name: Install e2e dependencies and Playwright browsers
+#        run: |
+#          npm ci
+#          npx playwright install --with-deps
+#        working-directory: e2e
