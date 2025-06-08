@@ -126,7 +126,7 @@
 }
 
 // Responsive adjustments
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .toggle-label {
     font-size: 0.8rem;
   }

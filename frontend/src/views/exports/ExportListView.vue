@@ -165,15 +165,7 @@ const formatExportType = (type: string) => {
   return typeMap[type as keyof typeof typeMap] || type
 }
 
-const formatExportStatus = (status: string) => {
-  const statusMap = {
-    'pending': 'Pending',
-    'in_progress': 'In Progress',
-    'completed': 'Completed',
-    'failed': 'Failed'
-  }
-  return statusMap[status as keyof typeof statusMap] || status
-}
+
 
 const formatDate = (dateString: string) => {
   if (!dateString) return '-'

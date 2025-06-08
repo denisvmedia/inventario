@@ -45,8 +45,6 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 				return errkit.WithStack(registry.ErrFieldRequired, "field_name", "Type")
 			}
 
-
-
 			// Set default status if not set
 			if e.Status == "" {
 				e.Status = models.ExportStatusPending

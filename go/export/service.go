@@ -944,7 +944,7 @@ func (s *ExportService) streamBase64Content(encoder *xml.Encoder, reader *blob.R
 		n, err := reader.Read(buf)
 		if n > 0 {
 			if _, writeErr := base64Encoder.Write(buf[:n]); writeErr != nil {
-				err = errors.Join(writeErr, base64Encoder.Close())
+				_ = base64Encoder.Close()
 				return errkit.Wrap(writeErr, "failed to write chunk to base64 encoder")
 			}
 		}
@@ -1007,6 +1007,94 @@ func (s *ExportService) streamFileAttachmentsDirectly(ctx context.Context, encod
 	return nil
 }
 
+// streamFileCollectionDirectly is a generic helper for streaming file collections
+func (s *ExportService) streamFileCollectionDirectly(ctx context.Context, encoder *xml.Encoder, elementName string, fileIDs []string, reg any, stats *ExportStats, counter *int) error {
+	if len(fileIDs) == 0 {
+		return nil
+	}
+
+	// Start element
+	startElement := xml.StartElement{Name: xml.Name{Local: elementName}}
+	if err := encoder.EncodeToken(startElement); err != nil {
+		return errkit.Wrap(err, "failed to encode "+elementName+" start element")
+	}
+
+	for _, fileID := range fileIDs {
+		var file any
+		var err error
+
+		// Get file based on registry type
+		switch r := reg.(type) {
+		case registry.ImageRegistry:
+			file, err = r.Get(ctx, fileID)
+		case registry.InvoiceRegistry:
+			file, err = r.Get(ctx, fileID)
+		case registry.ManualRegistry:
+			file, err = r.Get(ctx, fileID)
+		default:
+			continue
+		}
+
+		if err != nil {
+			continue // Skip files that can't be found
+		}
+
+		// Convert to XML File struct based on type
+		var xmlFile *File
+		switch f := file.(type) {
+		case *models.Image:
+			xmlFile = &File{
+				ID:           f.ID,
+				Path:         f.Path,
+				OriginalPath: f.OriginalPath,
+				Extension:    f.Ext,
+				MimeType:     f.MIMEType,
+			}
+		case *models.Invoice:
+			xmlFile = &File{
+				ID:           f.ID,
+				Path:         f.Path,
+				OriginalPath: f.OriginalPath,
+				Extension:    f.Ext,
+				MimeType:     f.MIMEType,
+			}
+		case *models.Manual:
+			xmlFile = &File{
+				ID:           f.ID,
+				Path:         f.Path,
+				OriginalPath: f.OriginalPath,
+				Extension:    f.Ext,
+				MimeType:     f.MIMEType,
+			}
+		default:
+			continue
+		}
+
+		// Stream file data directly
+		if stats != nil {
+			if err := s.streamFileDataDirectlyWithStats(ctx, encoder, xmlFile, stats); err != nil {
+				continue // Don't fail the entire export if one file can't be read
+			}
+		} else {
+			if err := s.streamFileDataDirectly(ctx, encoder, xmlFile); err != nil {
+				continue // Don't fail the entire export if one file can't be read
+			}
+		}
+
+		if counter != nil {
+			(*counter)++
+		}
+	}
+
+	// End element
+	endElement := xml.EndElement{Name: xml.Name{Local: elementName}}
+	if err := encoder.EncodeToken(endElement); err != nil {
+		return errkit.Wrap(err, "failed to encode "+elementName+" end element")
+	}
+
+	return nil
+}
+
 // streamImagesDirectly streams images directly to XML encoder
 func (s *ExportService) streamImagesDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string) error {
 	imageIDs, err := s.registrySet.CommodityRegistry.GetImages(ctx, commodityID)
@@ -1014,44 +1102,7 @@ func (s *ExportService) streamImagesDirectly(ctx context.Context, encoder *xml.E
 		return errkit.Wrap(err, "failed to get images")
 	}
 
-	if len(imageIDs) == 0 {
-		return nil
-	}
-
-	// Start images element
-	imagesStart := xml.StartElement{Name: xml.Name{Local: "images"}}
-	if err := encoder.EncodeToken(imagesStart); err != nil {
-		return errkit.Wrap(err, "failed to encode images start element")
-	}
-
-	for _, imageID := range imageIDs {
-		image, err := s.registrySet.ImageRegistry.Get(ctx, imageID)
-		if err != nil {
-			continue // Skip images that can't be found
-		}
-
-		xmlFile := &File{
-			ID:           image.ID,
-			Path:         image.Path,
-			OriginalPath: image.OriginalPath,
-			Extension:    image.Ext,
-			MimeType:     image.MIMEType,
-		}
-
-		// Stream file data directly
-		if err := s.streamFileDataDirectly(ctx, encoder, xmlFile); err != nil {
-			// Don't fail the entire export if one file can't be read
-			continue
-		}
-	}
-
-	// End images element
-	imagesEnd := xml.EndElement{Name: xml.Name{Local: "images"}}
-	if err := encoder.EncodeToken(imagesEnd); err != nil {
-		return errkit.Wrap(err, "failed to encode images end element")
-	}
-
-	return nil
+	return s.streamFileCollectionDirectly(ctx, encoder, "images", imageIDs, s.registrySet.ImageRegistry, nil, nil)
 }
 
 // streamInvoicesDirectly streams invoices directly to XML encoder
@@ -1061,44 +1112,7 @@ func (s *ExportService) streamInvoicesDirectly(ctx context.Context, encoder *xml
 		return errkit.Wrap(err, "failed to get invoices")
 	}
 
-	if len(invoiceIDs) == 0 {
-		return nil
-	}
-
-	// Start invoices element
-	invoicesStart := xml.StartElement{Name: xml.Name{Local: "invoices"}}
-	if err := encoder.EncodeToken(invoicesStart); err != nil {
-		return errkit.Wrap(err, "failed to encode invoices start element")
-	}
-
-	for _, invoiceID := range invoiceIDs {
-		invoice, err := s.registrySet.InvoiceRegistry.Get(ctx, invoiceID)
-		if err != nil {
-			continue // Skip invoices that can't be found
-		}
-
-		xmlFile := &File{
-			ID:           invoice.ID,
-			Path:         invoice.Path,
-			OriginalPath: invoice.OriginalPath,
-			Extension:    invoice.Ext,
-			MimeType:     invoice.MIMEType,
-		}
-
-		// Stream file data directly
-		if err := s.streamFileDataDirectly(ctx, encoder, xmlFile); err != nil {
-			// Don't fail the entire export if one file can't be read
-			continue
-		}
-	}
-
-	// End invoices element
-	invoicesEnd := xml.EndElement{Name: xml.Name{Local: "invoices"}}
-	if err := encoder.EncodeToken(invoicesEnd); err != nil {
-		return errkit.Wrap(err, "failed to encode invoices end element")
-	}
-
-	return nil
+	return s.streamFileCollectionDirectly(ctx, encoder, "invoices", invoiceIDs, s.registrySet.InvoiceRegistry, nil, nil)
 }
 
 // streamManualsDirectly streams manuals directly to XML encoder
@@ -1108,44 +1122,7 @@ func (s *ExportService) streamManualsDirectly(ctx context.Context, encoder *xml.
 		return errkit.Wrap(err, "failed to get manuals")
 	}
 
-	if len(manualIDs) == 0 {
-		return nil
-	}
-
-	// Start manuals element
-	manualsStart := xml.StartElement{Name: xml.Name{Local: "manuals"}}
-	if err := encoder.EncodeToken(manualsStart); err != nil {
-		return errkit.Wrap(err, "failed to encode manuals start element")
-	}
-
-	for _, manualID := range manualIDs {
-		manual, err := s.registrySet.ManualRegistry.Get(ctx, manualID)
-		if err != nil {
-			continue // Skip manuals that can't be found
-		}
-
-		xmlFile := &File{
-			ID:           manual.ID,
-			Path:         manual.Path,
-			OriginalPath: manual.OriginalPath,
-			Extension:    manual.Ext,
-			MimeType:     manual.MIMEType,
-		}
-
-		// Stream file data directly
-		if err := s.streamFileDataDirectly(ctx, encoder, xmlFile); err != nil {
-			// Don't fail the entire export if one file can't be read
-			continue
-		}
-	}
-
-	// End manuals element
-	manualsEnd := xml.EndElement{Name: xml.Name{Local: "manuals"}}
-	if err := encoder.EncodeToken(manualsEnd); err != nil {
-		return errkit.Wrap(err, "failed to encode manuals end element")
-	}
-
-	return nil
+	return s.streamFileCollectionDirectly(ctx, encoder, "manuals", manualIDs, s.registrySet.ManualRegistry, nil, nil)
 }
 
 // streamCommodityDirectly streams a commodity with file attachments directly to XML encoder
@@ -1184,22 +1161,33 @@ func (s *ExportService) streamCommodityDirectly(ctx context.Context, encoder *xm
 
 // encodeCommodityMetadata encodes commodity metadata elements
 func (s *ExportService) encodeCommodityMetadata(ctx context.Context, encoder *xml.Encoder, commodity *models.Commodity) error {
-	// Helper function to encode simple text elements
-	encodeTextElement := func(name, value string) error {
-		if value == "" {
-			return nil // Skip empty values
-		}
-		start := xml.StartElement{Name: xml.Name{Local: name}}
-		if err := encoder.EncodeToken(start); err != nil {
-			return err
-		}
-		if err := encoder.EncodeToken(xml.CharData(value)); err != nil {
-			return err
-		}
-		return encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: name}})
+	if err := s.encodeBasicCommodityFields(encoder, commodity); err != nil {
+		return err
 	}
 
-	// Encode basic fields
+	if err := s.encodeCommodityPricing(encoder, commodity); err != nil {
+		return err
+	}
+
+	if err := s.encodeCommodityStatus(encoder, commodity); err != nil {
+		return err
+	}
+
+	if err := s.encodeCommodityDates(encoder, commodity); err != nil {
+		return err
+	}
+
+	if err := s.encodeCommodityArrays(encoder, commodity); err != nil {
+		return err
+	}
+
+	return s.encodeURLs(encoder, commodity.URLs)
+}
+
+// encodeBasicCommodityFields encodes basic commodity fields
+func (s *ExportService) encodeBasicCommodityFields(encoder *xml.Encoder, commodity *models.Commodity) error {
+	encodeTextElement := s.createTextElementEncoder(encoder)
+
 	if err := encodeTextElement("commodityName", commodity.Name); err != nil {
 		return err
 	}
@@ -1221,11 +1209,13 @@ func (s *ExportService) encodeCommodityMetadata(ctx context.Context, encoder *xm
 	if err := encoder.EncodeToken(xml.CharData(fmt.Sprintf("%d", commodity.Count))); err != nil {
 		return err
 	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "count"}}); err != nil {
-		return err
-	}
+	return encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "count"}})
+}
 
-	// Encode price fields
+// encodeCommodityPricing encodes commodity pricing fields
+func (s *ExportService) encodeCommodityPricing(encoder *xml.Encoder, commodity *models.Commodity) error {
+	encodeTextElement := s.createTextElementEncoder(encoder)
+
 	if err := encodeTextElement("originalPrice", commodity.OriginalPrice.String()); err != nil {
 		return err
 	}
@@ -1235,11 +1225,13 @@ func (s *ExportService) encodeCommodityMetadata(ctx context.Context, encoder *xm
 	if err := encodeTextElement("convertedOriginalPrice", commodity.ConvertedOriginalPrice.String()); err != nil {
 		return err
 	}
-	if err := encodeTextElement("currentPrice", commodity.CurrentPrice.String()); err != nil {
-		return err
-	}
+	return encodeTextElement("currentPrice", commodity.CurrentPrice.String())
+}
 
-	// Encode other fields
+// encodeCommodityStatus encodes commodity status and other simple fields
+func (s *ExportService) encodeCommodityStatus(encoder *xml.Encoder, commodity *models.Commodity) error {
+	encodeTextElement := s.createTextElementEncoder(encoder)
+
 	if err := encodeTextElement("serialNumber", commodity.SerialNumber); err != nil {
 		return err
 	}
@@ -1262,11 +1254,13 @@ func (s *ExportService) encodeCommodityMetadata(ctx context.Context, encoder *xm
 	if err := encoder.EncodeToken(xml.CharData(draftValue)); err != nil {
 		return err
 	}
-	if err := encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "draft"}}); err != nil {
-		return err
-	}
+	return encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: "draft"}})
+}
 
-	// Encode dates
+// encodeCommodityDates encodes commodity date fields
+func (s *ExportService) encodeCommodityDates(encoder *xml.Encoder, commodity *models.Commodity) error {
+	encodeTextElement := s.createTextElementEncoder(encoder)
+
 	if commodity.PurchaseDate != nil {
 		if err := encodeTextElement("purchaseDate", string(*commodity.PurchaseDate)); err != nil {
 			return err
@@ -1282,24 +1276,35 @@ func (s *ExportService) encodeCommodityMetadata(ctx context.Context, encoder *xm
 			return err
 		}
 	}
+	return nil
+}
 
-	// Encode arrays
+// encodeCommodityArrays encodes commodity array fields
+func (s *ExportService) encodeCommodityArrays(encoder *xml.Encoder, commodity *models.Commodity) error {
 	if err := s.encodeStringArray(encoder, "extraSerialNumbers", "serialNumber", commodity.ExtraSerialNumbers); err != nil {
 		return err
 	}
 	if err := s.encodeStringArray(encoder, "partNumbers", "partNumber", commodity.PartNumbers); err != nil {
 		return err
 	}
-	if err := s.encodeStringArray(encoder, "tags", "tag", commodity.Tags); err != nil {
-		return err
-	}
+	return s.encodeStringArray(encoder, "tags", "tag", commodity.Tags)
+}
 
-	// Encode URLs
-	if err := s.encodeURLs(encoder, commodity.URLs); err != nil {
-		return err
+// createTextElementEncoder creates a reusable function for encoding text elements
+func (s *ExportService) createTextElementEncoder(encoder *xml.Encoder) func(name, value string) error {
+	return func(name, value string) error {
+		if value == "" {
+			return nil // Skip empty values
+		}
+		start := xml.StartElement{Name: xml.Name{Local: name}}
+		if err := encoder.EncodeToken(start); err != nil {
+			return err
+		}
+		if err := encoder.EncodeToken(xml.CharData(value)); err != nil {
+			return err
+		}
+		return encoder.EncodeToken(xml.EndElement{Name: xml.Name{Local: name}})
 	}
-
-	return nil
 }
 
 // encodeStringArray encodes a string array as XML elements
@@ -1436,45 +1441,27 @@ func (s *ExportService) streamImagesDirectlyWithStats(ctx context.Context, encod
 		return errkit.Wrap(err, "failed to get images")
 	}
 
-	if len(imageIDs) == 0 {
-		return nil
+	return s.streamFileCollectionDirectly(ctx, encoder, "images", imageIDs, s.registrySet.ImageRegistry, stats, &stats.ImageCount)
+}
+
+// streamInvoicesDirectlyWithStats streams invoices directly to XML encoder and tracks statistics
+func (s *ExportService) streamInvoicesDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *ExportStats) error {
+	invoiceIDs, err := s.registrySet.CommodityRegistry.GetInvoices(ctx, commodityID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get invoices")
 	}
 
-	// Start images element
-	imagesStart := xml.StartElement{Name: xml.Name{Local: "images"}}
-	if err := encoder.EncodeToken(imagesStart); err != nil {
-		return errkit.Wrap(err, "failed to encode images start element")
+	return s.streamFileCollectionDirectly(ctx, encoder, "invoices", invoiceIDs, s.registrySet.InvoiceRegistry, stats, &stats.InvoiceCount)
+}
+
+// streamManualsDirectlyWithStats streams manuals directly to XML encoder and tracks statistics
+func (s *ExportService) streamManualsDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *ExportStats) error {
+	manualIDs, err := s.registrySet.CommodityRegistry.GetManuals(ctx, commodityID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get manuals")
 	}
 
-	for _, imageID := range imageIDs {
-		image, err := s.registrySet.ImageRegistry.Get(ctx, imageID)
-		if err != nil {
-			continue // Skip images that can't be found
-		}
-
-		xmlFile := &File{
-			ID:           image.ID,
-			Path:         image.Path,
-			OriginalPath: image.OriginalPath,
-			Extension:    image.Ext,
-			MimeType:     image.MIMEType,
-		}
-
-		// Stream file data directly and track base64 size
-		if err := s.streamFileDataDirectlyWithStats(ctx, encoder, xmlFile, stats); err != nil {
-			// Don't fail the entire export if one file can't be read
-			continue
-		}
-		stats.ImageCount++
-	}
-
-	// End images element
-	imagesEnd := xml.EndElement{Name: xml.Name{Local: "images"}}
-	if err := encoder.EncodeToken(imagesEnd); err != nil {
-		return errkit.Wrap(err, "failed to encode images end element")
-	}
-
-	return nil
+	return s.streamFileCollectionDirectly(ctx, encoder, "manuals", manualIDs, s.registrySet.ManualRegistry, stats, &stats.ManualCount)
 }
 
 // streamFileDataDirectlyWithStats streams file data directly to XML encoder without loading into memory and tracks base64 size
@@ -1555,7 +1542,7 @@ func (s *ExportService) streamBase64ContentWithStats(encoder *xml.Encoder, reade
 		n, err := reader.Read(buf)
 		if n > 0 {
 			if _, writeErr := base64Encoder.Write(buf[:n]); writeErr != nil {
-				err = errors.Join(writeErr, base64Encoder.Close())
+				_ = base64Encoder.Close()
 				return 0, errkit.Wrap(writeErr, "failed to write chunk to base64 encoder")
 			}
 		}
@@ -1589,100 +1576,4 @@ func (w *xmlBase64WriterWithStats) Write(p []byte) (n int, err error) {
 	}
 	w.totalSize += int64(len(p))
 	return len(p), nil
-}
-
-// streamInvoicesDirectlyWithStats streams invoices directly to XML encoder and tracks statistics
-func (s *ExportService) streamInvoicesDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *ExportStats) error {
-	invoiceIDs, err := s.registrySet.CommodityRegistry.GetInvoices(ctx, commodityID)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get invoices")
-	}
-
-	if len(invoiceIDs) == 0 {
-		return nil
-	}
-
-	// Start invoices element
-	invoicesStart := xml.StartElement{Name: xml.Name{Local: "invoices"}}
-	if err := encoder.EncodeToken(invoicesStart); err != nil {
-		return errkit.Wrap(err, "failed to encode invoices start element")
-	}
-
-	for _, invoiceID := range invoiceIDs {
-		invoice, err := s.registrySet.InvoiceRegistry.Get(ctx, invoiceID)
-		if err != nil {
-			continue // Skip invoices that can't be found
-		}
-
-		xmlFile := &File{
-			ID:           invoice.ID,
-			Path:         invoice.Path,
-			OriginalPath: invoice.OriginalPath,
-			Extension:    invoice.Ext,
-			MimeType:     invoice.MIMEType,
-		}
-
-		// Stream file data directly and track base64 size
-		if err := s.streamFileDataDirectlyWithStats(ctx, encoder, xmlFile, stats); err != nil {
-			// Don't fail the entire export if one file can't be read
-			continue
-		}
-		stats.InvoiceCount++
-	}
-
-	// End invoices element
-	invoicesEnd := xml.EndElement{Name: xml.Name{Local: "invoices"}}
-	if err := encoder.EncodeToken(invoicesEnd); err != nil {
-		return errkit.Wrap(err, "failed to encode invoices end element")
-	}
-
-	return nil
-}
-
-// streamManualsDirectlyWithStats streams manuals directly to XML encoder and tracks statistics
-func (s *ExportService) streamManualsDirectlyWithStats(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *ExportStats) error {
-	manualIDs, err := s.registrySet.CommodityRegistry.GetManuals(ctx, commodityID)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get manuals")
-	}
-
-	if len(manualIDs) == 0 {
-		return nil
-	}
-
-	// Start manuals element
-	manualsStart := xml.StartElement{Name: xml.Name{Local: "manuals"}}
-	if err := encoder.EncodeToken(manualsStart); err != nil {
-		return errkit.Wrap(err, "failed to encode manuals start element")
-	}
-
-	for _, manualID := range manualIDs {
-		manual, err := s.registrySet.ManualRegistry.Get(ctx, manualID)
-		if err != nil {
-			continue // Skip manuals that can't be found
-		}
-
-		xmlFile := &File{
-			ID:           manual.ID,
-			Path:         manual.Path,
-			OriginalPath: manual.OriginalPath,
-			Extension:    manual.Ext,
-			MimeType:     manual.MIMEType,
-		}
-
-		// Stream file data directly and track base64 size
-		if err := s.streamFileDataDirectlyWithStats(ctx, encoder, xmlFile, stats); err != nil {
-			// Don't fail the entire export if one file can't be read
-			continue
-		}
-		stats.ManualCount++
-	}
-
-	// End manuals element
-	manualsEnd := xml.EndElement{Name: xml.Name{Local: "manuals"}}
-	if err := encoder.EncodeToken(manualsEnd); err != nil {
-		return errkit.Wrap(err, "failed to encode manuals end element")
-	}
-
-	return nil
 }

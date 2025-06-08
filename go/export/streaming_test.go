@@ -152,18 +152,18 @@ func TestEncodeCommodityMetadata(t *testing.T) {
 	ctx := context.Background()
 
 	commodity := &models.Commodity{
-		EntityID:    models.EntityID{ID: "test-commodity-1"},
-		Name:        "Test Commodity",
-		ShortName:   "TC1",
-		Type:        models.CommodityTypeElectronics,
-		AreaID:      "test-area-1",
-		Count:       5,
-		SerialNumber: "SN123456",
-		Status:      models.CommodityStatusInUse,
-		Comments:    "Test comments",
-		Draft:       true,
-		Tags:        []string{"tag1", "tag2"},
-		PartNumbers: []string{"PN001", "PN002"},
+		EntityID:           models.EntityID{ID: "test-commodity-1"},
+		Name:               "Test Commodity",
+		ShortName:          "TC1",
+		Type:               models.CommodityTypeElectronics,
+		AreaID:             "test-area-1",
+		Count:              5,
+		SerialNumber:       "SN123456",
+		Status:             models.CommodityStatusInUse,
+		Comments:           "Test comments",
+		Draft:              true,
+		Tags:               []string{"tag1", "tag2"},
+		PartNumbers:        []string{"PN001", "PN002"},
 		ExtraSerialNumbers: []string{"ESN001", "ESN002"},
 	}
 
