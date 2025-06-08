@@ -310,7 +310,7 @@ func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer
 }
 
 // streamLocations streams locations to the writer and tracks statistics
-func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, stats *ExportStats) error {
+func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, stats *ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
 	locations, err := s.registrySet.LocationRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get locations")
@@ -351,7 +351,7 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, s
 }
 
 // streamAreas streams areas to the writer and tracks statistics
-func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, stats *ExportStats) error {
+func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, stats *ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
 	areas, err := s.registrySet.AreaRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get areas")
@@ -1329,7 +1329,7 @@ func (s *ExportService) streamBase64Content(encoder *xml.Encoder, reader *blob.R
 		n, err := reader.Read(buf)
 		if n > 0 {
 			if _, writeErr := base64Encoder.Write(buf[:n]); writeErr != nil {
-				_ = base64Encoder.Close()
+				writeErr = errors.Join(writeErr, base64Encoder.Close())
 				return 0, errkit.Wrap(writeErr, "failed to write chunk to base64 encoder")
 			}
 		}
