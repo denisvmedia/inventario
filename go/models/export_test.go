@@ -3,6 +3,7 @@ package models_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -59,12 +60,12 @@ func TestExport_ValidateWithContext(t *testing.T) {
 	ctx := context.Background()
 
 	// Valid export
-	createdDate := models.Date("2023-01-01")
+	createdDate := models.NewPTimestamp(time.Now())
 	validExport := &models.Export{
 		Type:            models.ExportTypeFullDatabase,
 		Status:          models.ExportStatusPending,
 		IncludeFileData: true,
-		CreatedDate:     &createdDate,
+		CreatedDate:     createdDate,
 		Description:     "Test export",
 	}
 
@@ -76,7 +77,7 @@ func TestExport_ValidateWithContext(t *testing.T) {
 		Type:        "",
 		Status:      models.ExportStatusPending,
 		Description: "Test export",
-		CreatedDate: &createdDate,
+		CreatedDate: createdDate,
 	}
 
 	err = invalidExport.ValidateWithContext(ctx)
@@ -87,7 +88,7 @@ func TestExport_ValidateWithContext(t *testing.T) {
 		Type:          models.ExportTypeSelectedItems,
 		Status:        models.ExportStatusPending,
 		Description:   "Test export",
-		CreatedDate:   &createdDate,
+		CreatedDate:   createdDate,
 		SelectedItems: models.ValuerSlice[models.ExportSelectedItem]{},
 	}
 
@@ -99,7 +100,7 @@ func TestExport_ValidateWithContext(t *testing.T) {
 		Type:        models.ExportTypeSelectedItems,
 		Status:      models.ExportStatusPending,
 		Description: "Test export description",
-		CreatedDate: &createdDate,
+		CreatedDate: createdDate,
 		SelectedItems: models.ValuerSlice[models.ExportSelectedItem]{
 			{ID: "id1", Type: models.ExportSelectedItemTypeCommodity, Name: "Test Commodity"},
 			{ID: "id2", Type: models.ExportSelectedItemTypeLocation, Name: "Test Location"},

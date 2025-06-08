@@ -157,8 +157,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	// Update status to completed
 	export.Status = models.ExportStatusCompleted
 	export.FilePath = filePath
-	completedDate := models.Date(time.Now().Format("2006-01-02"))
-	export.CompletedDate = &completedDate
+	export.CompletedDate = models.PNow()
 	export.ErrorMessage = ""
 
 	_, err = s.registrySet.ExportRegistry.Update(ctx, *export)

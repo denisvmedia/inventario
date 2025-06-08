@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -46,8 +45,7 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 
 	// Set created date if not set
 	if export.CreatedDate == nil {
-		now := models.Date(time.Now().Format("2006-01-02"))
-		export.CreatedDate = &now
+		export.CreatedDate = models.PNow()
 	}
 
 	// Insert the export
@@ -125,7 +123,7 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	}()
 
 	// Soft delete the export by setting deleted_at timestamp
-	deletedAt := time.Now().Format("2006-01-02")
+	deletedAt := string(models.Now())
 	query := fmt.Sprintf("UPDATE %s SET deleted_at = $1 WHERE id = $2 AND deleted_at IS NULL", r.tableNames.Exports())
 	result, err := tx.ExecContext(ctx, query, deletedAt, id)
 	if err != nil {

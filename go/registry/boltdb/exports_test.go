@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"testing"
-	"time"
 
 	qt "github.com/frankban/quicktest"
 	bolt "go.etcd.io/bbolt"
@@ -29,7 +28,7 @@ func TestExportRegistry_Create(t *testing.T) {
 	reg := boltdb.NewExportRegistry(db)
 
 	// Test data
-	now := models.Date(time.Now().Format("2006-01-02"))
+	now := models.PNow()
 	selectedItems := models.ValuerSlice[models.ExportSelectedItem]{
 		{
 			ID:   "location1",
@@ -44,7 +43,7 @@ func TestExportRegistry_Create(t *testing.T) {
 		IncludeFileData: true,
 		SelectedItems:   selectedItems,
 		Description:     "Test export",
-		CreatedDate:     &now,
+		CreatedDate:     now,
 	}
 
 	ctx := context.Background()
@@ -84,13 +83,13 @@ func TestExportRegistry_Update(t *testing.T) {
 	reg := boltdb.NewExportRegistry(db)
 
 	// Test data
-	now := models.Date(time.Now().Format("2006-01-02"))
+	now := models.PNow()
 	export := models.Export{
 		Type:            models.ExportTypeSelectedItems,
 		Status:          models.ExportStatusPending,
 		IncludeFileData: true,
 		Description:     "Test export",
-		CreatedDate:     &now,
+		CreatedDate:     now,
 	}
 
 	ctx := context.Background()
@@ -102,8 +101,7 @@ func TestExportRegistry_Update(t *testing.T) {
 	// Update export
 	created.Status = models.ExportStatusCompleted
 	created.FilePath = "/path/to/export.xml"
-	completedDate := models.Date(time.Now().Format("2006-01-02"))
-	created.CompletedDate = &completedDate
+	created.CompletedDate = models.PNow()
 
 	updated, err := reg.Update(ctx, *created)
 	c.Assert(err, qt.IsNil)
@@ -128,13 +126,13 @@ func TestExportRegistry_Delete(t *testing.T) {
 	reg := boltdb.NewExportRegistry(db)
 
 	// Test data
-	now := models.Date(time.Now().Format("2006-01-02"))
+	now := models.PNow()
 	export := models.Export{
 		Type:            models.ExportTypeSelectedItems,
 		Status:          models.ExportStatusPending,
 		IncludeFileData: true,
 		Description:     "Test export",
-		CreatedDate:     &now,
+		CreatedDate:     now,
 	}
 
 	ctx := context.Background()

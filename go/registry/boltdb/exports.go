@@ -2,7 +2,6 @@ package boltdb
 
 import (
 	"context"
-	"time"
 
 	bolt "go.etcd.io/bbolt"
 
@@ -48,8 +47,7 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 
 			// Set created date if not set
 			if e.CreatedDate == nil {
-				now := models.Date(time.Now().Format("2006-01-02"))
-				e.CreatedDate = &now
+				e.CreatedDate = models.PNow()
 			}
 
 			// Set default status if not set
@@ -110,8 +108,7 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 			}
 
 			// Set deleted_at timestamp
-			now := models.Date(time.Now().Format("2006-01-02"))
-			e.DeletedAt = &now
+			e.DeletedAt = models.PNow()
 			return nil
 		},
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil },

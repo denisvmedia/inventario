@@ -142,9 +142,9 @@ type Export struct {
 	IncludeFileData bool                            `json:"include_file_data" db:"include_file_data"`
 	SelectedItems   ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
 	FilePath        string                          `json:"file_path" db:"file_path"`
-	CreatedDate     PDate                           `json:"created_date" db:"created_date"`
-	CompletedDate   PDate                           `json:"completed_date" db:"completed_date"`
-	DeletedAt       PDate                           `json:"deleted_at" db:"deleted_at"`
+	CreatedDate     PTimestamp                      `json:"created_date" db:"created_date"`
+	CompletedDate   PTimestamp                      `json:"completed_date" db:"completed_date"`
+	DeletedAt       PTimestamp                      `json:"deleted_at" db:"deleted_at"`
 	ErrorMessage    string                          `json:"error_message" db:"error_message"`
 	Description     string                          `json:"description" db:"description"`
 	// Export statistics

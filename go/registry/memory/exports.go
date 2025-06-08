@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"time"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -49,8 +48,7 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	}
 
 	// Set deleted_at timestamp
-	now := models.Date(time.Now().Format("2006-01-02"))
-	export.DeletedAt = &now
+	export.DeletedAt = models.PNow()
 
 	_, err = r.Registry.Update(ctx, *export)
 	return err
