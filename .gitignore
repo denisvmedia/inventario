@@ -34,3 +34,6 @@ coverage
 /.docker/
 .env
 docker-compose.override.yaml
+
+# GoReleaser build artifacts
+dist/
