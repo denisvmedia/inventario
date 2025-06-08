@@ -9,6 +9,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/migrate"
 	"github.com/denisvmedia/inventario/cmd/inventario/run"
 	"github.com/denisvmedia/inventario/cmd/inventario/seed"
+	"github.com/denisvmedia/inventario/internal/version"
 )
 
 const (
@@ -67,8 +68,21 @@ func Execute(args ...string) {
 	rootCmd.AddCommand(run.NewRunCommand())
 	rootCmd.AddCommand(seed.NewSeedCommand())
 	rootCmd.AddCommand(migrate.NewMigrateCommand())
+	rootCmd.AddCommand(newVersionCommand())
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1) //revive:disable-line:deep-exit
+	}
+}
+
+// newVersionCommand creates a version command
+func newVersionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Show version information",
+		Long:  "Display the current version, build information, and platform details.",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Println(version.String())
+		},
 	}
 }
