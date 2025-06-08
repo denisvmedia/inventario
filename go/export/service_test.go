@@ -169,7 +169,7 @@ func TestStreamXMLExport(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			_, err := service.streamXMLExportWithStats(ctx, export, &buf)
+			_, err := service.streamXMLExport(ctx, export, &buf)
 			c.Assert(err, qt.IsNil)
 
 			xmlContent := buf.String()
@@ -198,7 +198,7 @@ func TestStreamXMLExport_InvalidType(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	_, err := service.streamXMLExportWithStats(ctx, export, &buf)
+	_, err := service.streamXMLExport(ctx, export, &buf)
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -219,7 +219,7 @@ func TestGenerateExport(t *testing.T) {
 		IncludeFileData: false,
 	}
 
-	blobKey, _, err := service.generateExportWithStats(ctx, export)
+	blobKey, _, err := service.generateExport(ctx, export)
 	c.Assert(err, qt.IsNil)
 
 	// Check that blob was created
@@ -333,7 +333,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 
 	// Test with file data included
 	stats := &ExportStats{}
-	xmlCommodity, err := service.convertCommodityToXMLWithStats(ctx, createdCommodity, ExportArgs{IncludeFileData: true}, stats)
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: true}, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
@@ -365,7 +365,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 
 	// Test without file data
 	stats = &ExportStats{}
-	xmlCommodityNoData, err := service.convertCommodityToXMLWithStats(ctx, createdCommodity, ExportArgs{IncludeFileData: false}, stats)
+	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: false}, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodityNoData.Images, qt.HasLen, 0)
 	c.Assert(xmlCommodityNoData.Invoices, qt.HasLen, 0)
@@ -491,7 +491,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 
 	// Test with file data included
 	stats := &ExportStats{}
-	xmlCommodity, err := service.convertCommodityToXMLWithStats(ctx, createdCommodity, ExportArgs{IncludeFileData: true}, stats)
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: true}, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
@@ -539,7 +539,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	_, err = service.streamXMLExportWithStats(ctx, export, &buf)
+	_, err = service.streamXMLExport(ctx, export, &buf)
 	c.Assert(err, qt.IsNil)
 
 	xmlContent := buf.String()

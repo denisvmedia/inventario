@@ -34,7 +34,8 @@ func TestStreamCommodityDirectly(t *testing.T) {
 	encoder.Indent("", "  ")
 
 	args := ExportArgs{IncludeFileData: false}
-	err := service.streamCommodityDirectly(ctx, encoder, commodity, args)
+	stats := &ExportStats{}
+	err := service.streamCommodityDirectly(ctx, encoder, commodity, args, stats)
 	c.Assert(err, qt.IsNil)
 
 	err = encoder.Flush()
