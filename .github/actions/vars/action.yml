@@ -21,6 +21,7 @@ runs:
       run: |
         echo "NODE_VERSION=$(jq -r .volta.node package.json)" >> $GITHUB_OUTPUT
       working-directory: frontend
+      shell: bash
 
     - name: Extract swag version from go.mod
       id: swag_version
@@ -31,3 +32,4 @@ runs:
           exit 1
         fi
         printf "SWAG_VERSION=%s\n" "$SWAG_VERSION" | tee -a "$GITHUB_OUTPUT"
+      shell: bash
