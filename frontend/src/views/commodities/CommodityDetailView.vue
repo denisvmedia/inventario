@@ -688,14 +688,6 @@ const formatDate = (date: string): string => {
   margin-right: 0.5rem;
 }
 
-.btn {
-  padding: 0.5rem 1rem;
-  border-radius: $default-radius;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-}
-
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;

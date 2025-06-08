@@ -38,7 +38,9 @@ import {
   faUpload,
   faExclamationTriangle,
   faExclamationCircle,
-  faCheckCircle
+  faCheckCircle,
+  faSpinner,
+  faRedo
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -83,7 +85,9 @@ library.add(
   faUpload,
   faExclamationTriangle,
   faExclamationCircle,
-  faCheckCircle
+  faCheckCircle,
+  faSpinner,
+  faRedo
 )
 
 export { FontAwesomeIcon }

@@ -1,6 +1,7 @@
 package run
 
 import (
+	"context"
 	"net/url"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/debug"
+	"github.com/denisvmedia/inventario/export"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
@@ -79,9 +81,10 @@ The server runs until interrupted (Ctrl+C) and gracefully shuts down active conn
 }
 
 const (
-	addrFlag           = "addr"
-	uploadLocationFlag = "upload-location"
-	dbDSNFlag          = "db-dsn"
+	addrFlag                 = "addr"
+	uploadLocationFlag       = "upload-location"
+	dbDSNFlag                = "db-dsn"
+	maxConcurrentExportsFlag = "max-concurrent-exports"
 )
 
 func getFileURL(path string) string {
@@ -107,6 +110,11 @@ var runFlags = map[string]cobraflags.Flag{
 		Name:  dbDSNFlag,
 		Value: "memory://",
 		Usage: "Database DSN",
+	},
+	maxConcurrentExportsFlag: &cobraflags.IntFlag{
+		Name:  maxConcurrentExportsFlag,
+		Value: 3,
+		Usage: "Maximum number of concurrent export processes",
 	},
 }
 
@@ -153,6 +161,18 @@ func runCommand(_ *cobra.Command, _ []string) error {
 		log.WithError(err).Error("Invalid server parameters")
 		return err
 	}
+
+	// Start export worker
+	maxConcurrentExports := runFlags[maxConcurrentExportsFlag].GetInt()
+	exportService := export.NewExportService(registrySet, params.UploadLocation)
+	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	exportWorker.Start(ctx)
+	defer exportWorker.Stop()
+
 	errCh := srv.Run(bindAddr, apiserver.APIServer(params))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)
@@ -162,8 +182,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	case <-c:
 	case err := <-errCh:
 		log.WithError(err).Error("Failure during server startup")
-		os.Exit(1) //revive:disable-line:deep-exit
-		return nil
+		return err
 	}
 
 	log.Info("Shutting down server")

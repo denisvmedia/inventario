@@ -37,6 +37,8 @@ jobs:
         with:
           go-version: '1.24.3'
           cache: true
+          cache-dependency-path: go/go.sum
+
       - name: Install dependencies
         run: go mod download
         working-directory: go

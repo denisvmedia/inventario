@@ -88,6 +88,19 @@ type SettingsRegistry interface {
 	Patch(ctx context.Context, configfield string, value any) error
 }
 
+type ExportRegistry interface {
+	Registry[models.Export]
+
+	// ListWithDeleted returns all exports including soft deleted ones
+	ListWithDeleted(ctx context.Context) ([]*models.Export, error)
+
+	// ListDeleted returns only soft deleted exports
+	ListDeleted(ctx context.Context) ([]*models.Export, error)
+
+	// HardDelete permanently deletes an export from the database
+	HardDelete(ctx context.Context, id string) error
+}
+
 type Set struct {
 	LocationRegistry  LocationRegistry
 	AreaRegistry      AreaRegistry
@@ -96,6 +109,7 @@ type Set struct {
 	InvoiceRegistry   InvoiceRegistry
 	ManualRegistry    ManualRegistry
 	SettingsRegistry  SettingsRegistry
+	ExportRegistry    ExportRegistry
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {
@@ -109,6 +123,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.ManualRegistry, validation.Required),
 		validation.Field(&s.InvoiceRegistry, validation.Required),
 		validation.Field(&s.SettingsRegistry, validation.Required),
+		validation.Field(&s.ExportRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

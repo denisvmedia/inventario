@@ -170,3 +170,196 @@ func TestToPDate(t *testing.T) {
 	pDate = models.ToPDate(emptyDate)
 	c.Assert(pDate, qt.IsNil)
 }
+
+func TestTimestamp_Validate(t *testing.T) {
+	c := qt.New(t)
+
+	timestamp := models.Timestamp("2023-01-01T12:00:00Z")
+	err := timestamp.Validate()
+	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err.Error(), qt.Equals, "must use validate with context")
+}
+
+func TestTimestamp_ValidateWithContext_HappyPath(t *testing.T) {
+	t.Run("valid timestamp", func(t *testing.T) {
+		c := qt.New(t)
+
+		timestamp := models.Timestamp("2023-01-01T12:00:00Z")
+		ctx := context.Background()
+		err := timestamp.ValidateWithContext(ctx)
+		c.Assert(err, qt.IsNil)
+	})
+
+	t.Run("nil timestamp", func(t *testing.T) {
+		c := qt.New(t)
+
+		var timestamp *models.Timestamp
+		ctx := context.Background()
+		err := timestamp.ValidateWithContext(ctx)
+		c.Assert(err, qt.IsNil)
+	})
+}
+
+func TestTimestamp_ValidateWithContext_UnhappyPaths(t *testing.T) {
+	testCases := []struct {
+		name      string
+		timestamp models.Timestamp
+	}{
+		{
+			name:      "invalid format",
+			timestamp: models.Timestamp("01/01/2023 12:00:00"),
+		},
+		{
+			name:      "invalid timestamp",
+			timestamp: models.Timestamp("2023-13-01T12:00:00Z"),
+		},
+		{
+			name:      "empty timestamp",
+			timestamp: models.Timestamp(""),
+		},
+		{
+			name:      "date only",
+			timestamp: models.Timestamp("2023-01-01"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			ctx := context.Background()
+			err := tc.timestamp.ValidateWithContext(ctx)
+			c.Assert(err, qt.Not(qt.IsNil))
+		})
+	}
+}
+
+func TestTimestamp_JSONMarshaling(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a timestamp
+	timestamp := models.Timestamp("2023-01-01T12:00:00Z")
+
+	// Marshal the timestamp to JSON
+	jsonData, err := json.Marshal(&timestamp)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(jsonData), qt.Equals, `"2023-01-01T12:00:00Z"`)
+
+	// Unmarshal the JSON back to a timestamp
+	var unmarshaledTimestamp models.Timestamp
+	err = json.Unmarshal(jsonData, &unmarshaledTimestamp)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(unmarshaledTimestamp), qt.Equals, string(timestamp))
+
+	// Test nil timestamp marshaling
+	var nilTimestamp *models.Timestamp
+	jsonData, err = json.Marshal(nilTimestamp)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(jsonData), qt.Equals, "null")
+}
+
+func TestTimestamp_ToTime(t *testing.T) {
+	c := qt.New(t)
+
+	// Test valid timestamp conversion
+	timestamp := models.Timestamp("2023-01-01T12:30:45Z")
+	timeValue := timestamp.ToTime()
+
+	expectedTime := time.Date(2023, 1, 1, 12, 30, 45, 0, time.UTC)
+	c.Assert(timeValue.Equal(expectedTime), qt.IsTrue)
+
+	// Test nil timestamp conversion
+	var nilTimestamp *models.Timestamp
+	timeValue = nilTimestamp.ToTime()
+	c.Assert(timeValue.IsZero(), qt.IsTrue)
+}
+
+func TestTimestamp_Comparison(t *testing.T) {
+	c := qt.New(t)
+
+	timestamp1 := models.Timestamp("2023-01-01T12:00:00Z")
+	timestamp2 := models.Timestamp("2023-01-01T13:00:00Z")
+	timestamp3 := models.Timestamp("2023-01-01T12:00:00Z")
+	var nilTimestamp *models.Timestamp
+
+	// Test After
+	c.Assert(timestamp2.After(&timestamp1), qt.IsTrue)
+	c.Assert(timestamp1.After(&timestamp2), qt.IsFalse)
+	c.Assert(timestamp1.After(nilTimestamp), qt.IsFalse)
+	c.Assert(nilTimestamp.After(&timestamp1), qt.IsFalse)
+
+	// Test Before
+	c.Assert(timestamp1.Before(&timestamp2), qt.IsTrue)
+	c.Assert(timestamp2.Before(&timestamp1), qt.IsFalse)
+	c.Assert(timestamp1.Before(nilTimestamp), qt.IsFalse)
+	c.Assert(nilTimestamp.Before(&timestamp1), qt.IsFalse)
+
+	// Test Equal
+	c.Assert(timestamp1.Equal(&timestamp3), qt.IsTrue)
+	c.Assert(timestamp1.Equal(&timestamp2), qt.IsFalse)
+	c.Assert(timestamp1.Equal(nilTimestamp), qt.IsFalse)
+	c.Assert(nilTimestamp.Equal(&timestamp1), qt.IsFalse)
+
+	// Test nil == nil case
+	var nilTimestamp2 *models.Timestamp
+	c.Assert(nilTimestamp.Equal(nilTimestamp2), qt.IsTrue)
+}
+
+func TestToPTimestamp(t *testing.T) {
+	c := qt.New(t)
+
+	// Test with non-empty timestamp
+	timestamp := models.Timestamp("2023-01-01T12:00:00Z")
+	pTimestamp := models.ToPTimestamp(timestamp)
+	c.Assert(pTimestamp, qt.IsNotNil)
+	c.Assert(string(*pTimestamp), qt.Equals, string(timestamp))
+
+	// Test with empty timestamp
+	emptyTimestamp := models.Timestamp("")
+	pTimestamp = models.ToPTimestamp(emptyTimestamp)
+	c.Assert(pTimestamp, qt.IsNil)
+}
+
+func TestNewTimestamp(t *testing.T) {
+	c := qt.New(t)
+
+	testTime := time.Date(2023, 1, 1, 12, 30, 45, 0, time.UTC)
+	timestamp := models.NewTimestamp(testTime)
+
+	c.Assert(string(timestamp), qt.Equals, "2023-01-01T12:30:45Z")
+}
+
+func TestNewPTimestamp(t *testing.T) {
+	c := qt.New(t)
+
+	testTime := time.Date(2023, 1, 1, 12, 30, 45, 0, time.UTC)
+	pTimestamp := models.NewPTimestamp(testTime)
+
+	c.Assert(pTimestamp, qt.IsNotNil)
+	c.Assert(string(*pTimestamp), qt.Equals, "2023-01-01T12:30:45Z")
+}
+
+func TestNow(t *testing.T) {
+	c := qt.New(t)
+
+	before := time.Now()
+	timestamp := models.Now()
+	after := time.Now()
+
+	timestampTime := timestamp.ToTime()
+	c.Assert(timestampTime.After(before.Add(-time.Second)), qt.IsTrue)
+	c.Assert(timestampTime.Before(after.Add(time.Second)), qt.IsTrue)
+}
+
+func TestPNow(t *testing.T) {
+	c := qt.New(t)
+
+	before := time.Now()
+	pTimestamp := models.PNow()
+	after := time.Now()
+
+	c.Assert(pTimestamp, qt.IsNotNil)
+	timestampTime := pTimestamp.ToTime()
+	c.Assert(timestampTime.After(before.Add(-time.Second)), qt.IsTrue)
+	c.Assert(timestampTime.Before(after.Add(time.Second)), qt.IsTrue)
+}

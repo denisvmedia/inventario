@@ -20,6 +20,7 @@ jobs:
         with:
           go-version: '1.24.3'
           cache: true
+          cache-dependency-path: go/go.sum
 
       - name: Read Node.js version from package.json
         id: node

@@ -11,8 +11,8 @@ import (
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
 
+	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/internal/errkit"
-	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -514,6 +514,13 @@ func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Get file attributes to set Content-Length and other headers
+	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, image.OriginalPath)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	file, err := api.getDownloadFile(r.Context(), image.OriginalPath)
 	if err != nil {
 		internalServerError(w, r, err)
@@ -521,13 +528,15 @@ func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request)
 	}
 	defer file.Close()
 
-	w.Header().Set("Content-Type", mime.TypeByExtension(image.Ext))
 	// Use Path + Ext for the downloaded filename
 	filename := image.Path + image.Ext
-	attachmentHeader := mimekit.FormatContentDisposition(filename)
-	w.Header().Set("Content-Disposition", attachmentHeader)
+	contentType := mime.TypeByExtension(image.Ext)
 
-	if _, err := io.Copy(w, file); err != nil {
+	// Set headers to optimize streaming and prevent browser preloading
+	downloadutils.SetStreamingHeaders(w, contentType, attrs.Size, filename)
+
+	// Use chunked copying to prevent browser buffering
+	if err := downloadutils.CopyFileInChunks(w, file); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -559,6 +568,13 @@ func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Get file attributes to set Content-Length and other headers
+	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, invoice.OriginalPath)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	file, err := api.getDownloadFile(r.Context(), invoice.OriginalPath)
 	if err != nil {
 		internalServerError(w, r, err)
@@ -566,13 +582,15 @@ func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Reques
 	}
 	defer file.Close()
 
-	w.Header().Set("Content-Type", mime.TypeByExtension(invoice.Ext))
 	// Use Path + Ext for the downloaded filename
 	filename := invoice.Path + invoice.Ext
-	attachmentHeader := mimekit.FormatContentDisposition(filename)
-	w.Header().Set("Content-Disposition", attachmentHeader)
+	contentType := mime.TypeByExtension(invoice.Ext)
 
-	if _, err := io.Copy(w, file); err != nil {
+	// Set headers to optimize streaming and prevent browser preloading
+	downloadutils.SetStreamingHeaders(w, contentType, attrs.Size, filename)
+
+	// Use chunked copying to prevent browser buffering
+	if err := downloadutils.CopyFileInChunks(w, file); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -604,6 +622,13 @@ func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Get file attributes to set Content-Length and other headers
+	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, manual.OriginalPath)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	file, err := api.getDownloadFile(r.Context(), manual.OriginalPath)
 	if err != nil {
 		internalServerError(w, r, err)
@@ -611,13 +636,15 @@ func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request
 	}
 	defer file.Close()
 
-	w.Header().Set("Content-Type", mime.TypeByExtension(manual.Ext))
 	// Use Path + Ext for the downloaded filename
 	filename := manual.Path + manual.Ext
-	attachmentHeader := mimekit.FormatContentDisposition(filename)
-	w.Header().Set("Content-Disposition", attachmentHeader)
+	contentType := mime.TypeByExtension(manual.Ext)
 
-	if _, err := io.Copy(w, file); err != nil {
+	// Set headers to optimize streaming and prevent browser preloading
+	downloadutils.SetStreamingHeaders(w, contentType, attrs.Size, filename)
+
+	// Use chunked copying to prevent browser buffering
+	if err := downloadutils.CopyFileInChunks(w, file); err != nil {
 		internalServerError(w, r, err)
 		return
 	}

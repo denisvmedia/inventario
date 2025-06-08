@@ -24,9 +24,9 @@ type Error struct {
 func (e *Error) Error() string {
 	switch {
 	case e.msg != "" && len(e.fields) > 0:
-		return fmt.Sprintf("%s: %s (fields: %+v)", e.msg, e.error.Error(), e.fields)
+		return fmt.Sprintf("%s: %s (%+v)", e.msg, e.error.Error(), mapToString(e.fields))
 	case e.msg == "" && len(e.fields) > 0:
-		return fmt.Sprintf("%s (fields: %+v)", e.error.Error(), e.fields)
+		return fmt.Sprintf("%s (%+v)", e.error.Error(), mapToString(e.fields))
 	case e.msg != "" && len(e.fields) == 0:
 		return fmt.Sprintf("%s: %s", e.msg, e.error.Error())
 	default:
@@ -146,6 +146,15 @@ func (e *Error) Unwrap() error {
 }
 
 func NewEquivalent(msg string, errs ...error) error {
+	// remove nil errors from the list
+	newErrs := make([]error, 0, len(errs))
+	for _, err := range errs {
+		if err != nil {
+			newErrs = append(newErrs, err)
+		}
+	}
+	errs = newErrs
+
 	return WithEquivalents(errors.New(msg), errs...)
 }
 

@@ -76,7 +76,7 @@ func GetMigrator(dsn string) (MigratorFunc, bool) {
 func RunMigrations(ctx context.Context, dsn string) error {
 	migratorFn, ok := GetMigrator(dsn)
 	if !ok {
-		return errkit.Wrap(errkit.NewEquivalent("unknown database type", nil), "failed to get migrator")
+		return errkit.Wrap(ErrUnknownDatabaseType, "failed to get migrator")
 	}
 
 	migrator, err := migratorFn(dsn)
@@ -91,7 +91,7 @@ func RunMigrations(ctx context.Context, dsn string) error {
 func CheckMigrationsApplied(ctx context.Context, dsn string) (bool, error) {
 	migratorFn, ok := GetMigrator(dsn)
 	if !ok {
-		return false, errkit.Wrap(errkit.NewEquivalent("unknown database type", nil), "failed to get migrator")
+		return false, errkit.Wrap(ErrUnknownDatabaseType, "failed to get migrator")
 	}
 
 	migrator, err := migratorFn(dsn)
