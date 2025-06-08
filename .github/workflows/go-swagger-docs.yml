@@ -32,7 +32,7 @@ jobs:
             echo "github.com/swaggo/swag is not in go.mod" >&2
             exit 1
           fi
-          echo "SWAG_VERSION=$SWAG_VERSION" >> $GITHUB_OUTPUT
+          printf "SWAG_VERSION=%s\n" "$SWAG_VERSION" | tee -a "$GITHUB_OUTPUT"
         working-directory: go
       - name: Install swag CLI
         run: |
