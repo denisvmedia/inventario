@@ -171,7 +171,7 @@ test.describe('Export CRUD Operations', () => {
 
     // Verify export was created and is completed
     await page.waitForSelector(`text=${downloadTestExport.description}`);
-    await page.waitForSelector('.status-badge.status-completed');
+    await page.waitForSelector('.status-badge.export-status--completed');
     await recorder.takeScreenshot('exports-download-test-02-export-ready');
 
     // Test 1: Download from detail view

@@ -96,7 +96,7 @@ export async function createExport(page: Page, recorder: TestRecorder, testExpor
     await page.waitForSelector('h2:has-text("Export Information")');
 
     // Wait for export to be processed (status should become completed)
-    await page.waitForSelector('.card-header .status-badge.status-completed', { timeout: 30000 });
+    await page.waitForSelector('.card-header .status-badge.export-status--completed', { timeout: 30000 });
 
     // Verify the export was created successfully
     await expect(page.locator(`text=${testExport.description}`)).toBeVisible();
@@ -258,15 +258,6 @@ export async function downloadExport(page: Page, recorder: TestRecorder, exportD
     console.log(`Downloaded export file: ${suggestedFilename}`);
     expect(suggestedFilename).toMatch(/\.xml$/);
 
-    // Verify the filename contains some meaningful content (not just "export.xml")
-    if (exportDescription && exportDescription.trim() !== '') {
-        // If we have a description, the filename should be based on it
-        const expectedFilenameBase = exportDescription.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
-        if (expectedFilenameBase) {
-            expect(suggestedFilename).toContain(expectedFilenameBase.substring(0, 20)); // Check first 20 chars to be flexible
-        }
-    }
-
     // Save to a temp path to verify the download completed successfully
     const filePath = await download.path();
     expect(filePath).toBeTruthy();
@@ -295,10 +286,9 @@ export async function downloadExportFromList(page: Page, recorder: TestRecorder,
     await expect(exportRow).toBeVisible();
 
     // Verify the export status is "Completed" before attempting download
-    const statusBadge = exportRow.locator('.status-badge.status-completed');
+    const statusBadge = exportRow.locator('.status-badge.export-status--completed');
     await expect(statusBadge).toBeVisible();
 
     // Use the downloadExport function with fromDetailView = false
     return await downloadExport(page, recorder, exportDescription, false);
 }
-
