@@ -1,0 +1,35 @@
+name: "Vars"
+description: "Exposes versions for common tools used in workflows"
+outputs:
+  node_version:
+    description: "Node.js version"
+    value: ${{ steps.node.outputs.NODE_VERSION }}
+  go_version:
+    description: "Go version"
+    value: '1.24.3'
+  golangci_lint_version:
+    description: "golangci-lint version"
+    value: 'v2.1.6'
+  swag_version:
+    description: "swag version"
+    value: ${{ steps.swag_version.outputs.SWAG_VERSION }}
+runs:
+  using: "composite"
+  steps:
+    - name: Read Node.js version from package.json
+      id: node
+      run: |
+        echo "NODE_VERSION=$(jq -r .volta.node package.json)" >> $GITHUB_OUTPUT
+      working-directory: frontend
+      shell: bash
+
+    - name: Extract swag version from go.mod
+      id: swag_version
+      run: |
+        SWAG_VERSION=$(awk '/require \(/,/\)/ { if ($1 == "github.com/swaggo/swag") print $2 } /^github.com\/swaggo\/swag / { print $2 }' go/go.mod | head -n1)
+        if [ -z "$SWAG_VERSION" ]; then
+          echo "github.com/swaggo/swag is not in go.mod" >&2
+          exit 1
+        fi
+        printf "SWAG_VERSION=%s\n" "$SWAG_VERSION" | tee -a "$GITHUB_OUTPUT"
+      shell: bash
