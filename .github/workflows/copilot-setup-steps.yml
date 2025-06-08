@@ -11,6 +11,13 @@ jobs:
   copilot-setup-steps:
     runs-on: ubuntu-latest
     steps:
+      # Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: vars
+        uses: ./.github/actions/vars
+
       # Install system dependencies
       - name: Update package lists
         run: sudo apt-get update
@@ -18,28 +25,17 @@ jobs:
       - name: Install essential build tools
         run: sudo apt-get install -y build-essential git curl wget ca-certificates gnupg lsb-release
 
-      # Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       # Install Go
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24.3'
+          go-version: ${{ steps.vars.outputs.go_version }}
           cache: true
           cache-dependency-path: go/go.sum
-
-      # Install Node.js
-      - name: Read Node.js version from package.json
-        id: node
-        run: |
-          echo "version=$(jq -r .volta.node package.json)" >> $GITHUB_OUTPUT
-        working-directory: frontend
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ steps.node.outputs.version }}
+          node-version: ${{ steps.vars.outputs.node_version }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -75,24 +71,13 @@ jobs:
           go mod download
           
           # Install golangci-lint (version from workflow)
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
-        working-directory: go
-
-      - name: Check swag version in go.mod
-        id: swag_version
-        run: |
-          SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)
-          if [ -z "$SWAG_VERSION" ]; then
-            echo "github.com/swaggo/swag is not in go.mod" >&2
-            exit 1
-          fi
-          printf "SWAG_VERSION=%s\n" "$SWAG_VERSION" | tee -a "$GITHUB_OUTPUT"
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin ${{ steps.vars.outputs.golangci_lint_version }}
         working-directory: go
 
       - name: Install swag for Swagger documentation
         run: |
           # Install swag for Swagger documentation (version from go.mod)
-          go install github.com/swaggo/swag/cmd/swag@${{ steps.swag_version.outputs.SWAG_VERSION }}
+          go install github.com/swaggo/swag/cmd/swag@${{ steps.vars.outputs.swag_version }}
 
       # Install frontend dependencies
       - name: Install frontend dependencies
