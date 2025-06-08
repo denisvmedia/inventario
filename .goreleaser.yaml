@@ -1,5 +1,6 @@
-# GoReleaser configuration for Inventario
-version: 1
+version: 2
+
+project_name: inventario
 
 before:
   hooks:
@@ -7,10 +8,18 @@ before:
     - make build-frontend
 
 builds:
-  - id: inventario
+  - binary: inventario
     main: .
-    binary: inventario
     dir: go
+    flags:
+      # Use build tags to include frontend assets
+      - -tags=with_frontend
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/denisvmedia/inventario/internal/version.Version={{.Version}}
+      - -X github.com/denisvmedia/inventario/internal/version.Commit={{.Commit}}
+      - -X github.com/denisvmedia/inventario/internal/version.Date={{.Date}}
     env:
       - CGO_ENABLED=0
     goos:
@@ -20,33 +29,24 @@ builds:
     goarch:
       - amd64
       - arm64
-    # Use build tags to include frontend assets
-    flags:
-      - -tags=with_frontend
-    ldflags:
-      - -s -w
-      - -X github.com/denisvmedia/inventario/internal/version.Version={{.Version}}
-      - -X github.com/denisvmedia/inventario/internal/version.Commit={{.Commit}}
-      - -X github.com/denisvmedia/inventario/internal/version.Date={{.Date}}
-    ignore:
-      - goos: windows
-        goarch: arm64
 
 archives:
-  - id: inventario
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
+  - formats: [ 'tar.gz' ]
+    wrap_in_directory: true
+    format_overrides:
+      - goos: windows
+        formats: [ 'zip' ]
+    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
     files:
-      - README.md
       - LICENSE
+      - README.md
+
+snapshot:
+  version_template: SNAPSHOT-{{ .Commit }}
 
 checksum:
-  name_template: 'checksums.txt'
+  disable: false
+  name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
 
 changelog:
   sort: asc
@@ -61,10 +61,10 @@ changelog:
       - go mod tidy
 
 release:
+  skip_upload: false
   github:
     owner: denisvmedia
     name: inventario
-  prerelease: auto
   name_template: "Inventario v{{ .Version }}"
   header: |
     ## Inventario v{{ .Version }}
@@ -83,3 +83,7 @@ release:
     ```bash
     go install github.com/denisvmedia/inventario@v{{ .Version }}
     ```
+
+source:
+  enabled: true
+  name_template: '{{ .ProjectName }}-{{ .Version }}-source'
