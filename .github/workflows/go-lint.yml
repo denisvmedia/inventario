@@ -20,6 +20,8 @@ jobs:
         with:
           go-version: '1.24.3'
           cache: true
+          cache-dependency-path: go/go.sum
+
       - name: Create dist directory
         run: mkdir -p frontend/dist && echo "" > frontend/dist/inventario.txt
       - name: golangci-lint

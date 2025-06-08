@@ -1097,5 +1097,3 @@ The `package-migrator` tool provides a comprehensive solution for database schem
 - ✅ **Advanced database features**
 
 You can maintain consistent database schemas across different environments and database platforms while keeping your Go entity definitions as the single source of truth.
-
-For more information and examples, see the [WORKFLOW.md](../ptah/executor/WORKFLOW.md) file in the project repository.

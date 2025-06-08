@@ -2,7 +2,7 @@
 
 ## Overview
 
-Inventario is a comprehensive personal inventory management system designed to help users organize, track, and manage their belongings. The system consists of a Go-based backend API, a Vue.js frontend, and an innovative schema management tool called Ptah that handles database operations and migrations.
+Inventario is a comprehensive personal inventory management system designed to help users organize, track, and manage their belongings. The system consists of a Go-based backend API, a Vue.js frontend.
 
 ## System Architecture
 
@@ -12,7 +12,6 @@ The Inventario system is composed of three main components:
 
 1. **Frontend Application** - Vue.js-based web interface
 2. **Backend API Server** - Go-based REST API with multiple database support
-3. **Ptah Schema Management Tool** - Advanced database schema management and migration system
 
 ### Technology Stack
 
@@ -20,7 +19,6 @@ The Inventario system is composed of three main components:
 - **Frontend**: Vue.js 3, TypeScript, PrimeVue UI components, Pinia state management
 - **Databases**: PostgreSQL (recommended), MySQL/MariaDB, BoltDB (embedded), In-memory
 - **File Storage**: Go Cloud Development Kit (supports local, S3, Azure, GCS)
-- **Schema Management**: Custom Ptah tool with AST-based SQL generation
 
 ## Core Domain Concepts
 

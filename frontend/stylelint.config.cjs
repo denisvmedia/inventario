@@ -5,6 +5,12 @@ module.exports = {
     'at-rule-no-unknown': null,
     'no-descending-specificity': true,
     'selector-class-pattern': null,
+    'selector-pseudo-class-no-unknown': [
+      true,
+      {
+        ignorePseudoClasses: ['deep']
+      }
+    ],
     'scss/at-rule-no-unknown': true
   },
   overrides: [

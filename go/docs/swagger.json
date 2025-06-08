@@ -1101,6 +1101,184 @@
                 }
             }
         },
+        "/exports": {
+            "get": {
+                "description": "get exports",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "List exports",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Include deleted exports",
+                        "name": "include_deleted",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Create an export",
+                "parameters": [
+                    {
+                        "description": "Export",
+                        "name": "export",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/{id}": {
+            "get": {
+                "description": "get export by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Get an export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Delete an export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/{id}/download": {
+            "get": {
+                "description": "Download an export XML file",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Download an export file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/locations": {
             "get": {
                 "description": "get locations",
@@ -1632,6 +1810,79 @@
                 }
             }
         },
+        "jsonapi.ExportCreateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ExportCreateRequestData"
+                }
+            }
+        },
+        "jsonapi.ExportCreateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Export"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "exports"
+                    ],
+                    "example": "exports"
+                }
+            }
+        },
+        "jsonapi.ExportResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ExportResponseData"
+                }
+            }
+        },
+        "jsonapi.ExportResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Export"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "exports"
+                    ],
+                    "example": "exports"
+                }
+            }
+        },
+        "jsonapi.ExportsMeta": {
+            "type": "object",
+            "properties": {
+                "exports": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.ExportsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.ExportResponseData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ExportsMeta"
+                }
+            }
+        },
         "jsonapi.FileUpdateParams": {
             "type": "object",
             "properties": {
@@ -2055,6 +2306,142 @@
                 "CommodityTypeFurniture",
                 "CommodityTypeClothes",
                 "CommodityTypeOther"
+            ]
+        },
+        "models.Export": {
+            "type": "object",
+            "properties": {
+                "area_count": {
+                    "type": "integer"
+                },
+                "binary_data_size": {
+                    "type": "integer"
+                },
+                "commodity_count": {
+                    "type": "integer"
+                },
+                "completed_date": {
+                    "type": "string"
+                },
+                "created_date": {
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "file_path": {
+                    "type": "string"
+                },
+                "file_size": {
+                    "description": "Export statistics",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_count": {
+                    "type": "integer"
+                },
+                "include_file_data": {
+                    "type": "boolean"
+                },
+                "invoice_count": {
+                    "type": "integer"
+                },
+                "location_count": {
+                    "type": "integer"
+                },
+                "manual_count": {
+                    "type": "integer"
+                },
+                "selected_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ExportSelectedItem"
+                    }
+                },
+                "status": {
+                    "$ref": "#/definitions/models.ExportStatus"
+                },
+                "type": {
+                    "$ref": "#/definitions/models.ExportType"
+                }
+            }
+        },
+        "models.ExportSelectedItem": {
+            "type": "object",
+            "properties": {
+                "area_id": {
+                    "description": "For commodities: which area they belong to",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "include_all": {
+                    "type": "boolean"
+                },
+                "location_id": {
+                    "description": "Relationship fields for preserving hierarchy snapshot",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/models.ExportSelectedItemType"
+                }
+            }
+        },
+        "models.ExportSelectedItemType": {
+            "type": "string",
+            "enum": [
+                "location",
+                "area",
+                "commodity"
+            ],
+            "x-enum-varnames": [
+                "ExportSelectedItemTypeLocation",
+                "ExportSelectedItemTypeArea",
+                "ExportSelectedItemTypeCommodity"
+            ]
+        },
+        "models.ExportStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "in_progress",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "ExportStatusPending",
+                "ExportStatusInProgress",
+                "ExportStatusCompleted",
+                "ExportStatusFailed"
+            ]
+        },
+        "models.ExportType": {
+            "type": "string",
+            "enum": [
+                "full_database",
+                "selected_items",
+                "locations",
+                "areas",
+                "commodities"
+            ],
+            "x-enum-varnames": [
+                "ExportTypeFullDatabase",
+                "ExportTypeSelectedItems",
+                "ExportTypeLocations",
+                "ExportTypeAreas",
+                "ExportTypeCommodities"
             ]
         },
         "models.Image": {

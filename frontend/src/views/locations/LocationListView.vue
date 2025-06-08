@@ -468,12 +468,7 @@ const deleteArea = async (id: string) => {
   padding: 20px;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
+// Header styles are now in shared _header.scss
 
 .loading, .error, .empty {
   text-align: center;
