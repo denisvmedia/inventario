@@ -1,0 +1,88 @@
+version: 2
+
+project_name: inventario
+
+before:
+  hooks:
+    # Build frontend assets first
+    - make build-frontend
+
+builds:
+  - binary: inventario
+    main: .
+    dir: go
+    flags:
+      # Use build tags to include frontend assets
+      - -tags=with_frontend
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/denisvmedia/inventario/internal/version.Version={{.Version}}
+      - -X github.com/denisvmedia/inventario/internal/version.Commit={{.Commit}}
+      - -X github.com/denisvmedia/inventario/internal/version.Date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats: [ 'tar.gz' ]
+    wrap_in_directory: true
+    format_overrides:
+      - goos: windows
+        formats: [ 'zip' ]
+    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    files:
+      - LICENSE
+      - README.md
+
+snapshot:
+  version_template: SNAPSHOT-{{ .Commit }}
+
+checksum:
+  disable: false
+  name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^build:'
+      - Merge pull request
+      - Merge branch
+      - go mod tidy
+
+release:
+  skip_upload: false
+  github:
+    owner: denisvmedia
+    name: inventario
+  header: |
+    ## Inventario v{{ .Version }}
+    
+    This release includes the following changes:
+  footer: |
+    
+    ## Installation
+    
+    ### Using pre-built binaries
+    
+    Download the appropriate binary for your platform from the assets below.
+    
+    ### Using Go
+    
+    ```bash
+    go install github.com/denisvmedia/inventario@v{{ .Version }}
+    ```
+
+source:
+  enabled: true
+  name_template: '{{ .ProjectName }}-{{ .Version }}-source'

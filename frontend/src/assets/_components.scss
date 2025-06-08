@@ -13,7 +13,7 @@
 
 .btn {
   display: inline-block;
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 1rem;
   border-radius: $default-radius;
   cursor: pointer;
   font-weight: 500;
@@ -162,16 +162,15 @@ label {
   margin: 0 auto;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
+// Header styles moved to shared _header.scss
 
 .actions {
   display: flex;
   gap: 0.5rem;
+
+  &.right-aligned {
+    justify-content: flex-end;
+  }
 }
 
 .loading,
