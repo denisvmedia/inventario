@@ -248,15 +248,15 @@ class="price-calculation-hint" :class="{
 
       <div class="form-group">
         <label for="purchaseDate">Purchase Date <span class="required-field">*</span></label>
-        <input
+        <DatePicker
           id="purchaseDate"
           v-model="formData.purchaseDate"
-          type="date"
+          dateFormat="yy-mm-dd"
           required
-          class="form-control"
+          class="w-100"
           :class="{ 'is-invalid': formErrors.purchaseDate }"
           placeholder="Select the date of purchase"
-        >
+        />
         <div v-if="formErrors.purchaseDate" class="error-message">{{ formErrors.purchaseDate }}</div>
       </div>
     </div>

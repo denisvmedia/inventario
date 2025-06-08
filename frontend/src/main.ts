@@ -3,6 +3,7 @@ import PrimeVue from 'primevue/config';
 import Select from 'primevue/select'
 import InputSwitch from 'primevue/inputswitch'
 import Dialog from 'primevue/dialog'
+import DatePicker from 'primevue/datepicker'
 // import Aura from '@primeuix/themes/aura';
 // import Nora from '@primeuix/themes/nora';
 // import Lara from '@primeuix/themes/lara';
@@ -14,6 +15,7 @@ import './assets/main.scss'
 import './assets/primevue-dropdown.scss'
 import './assets/primevue-toggleswitch.scss'
 import './assets/primevue-dialog.scss'
+import './assets/primevue-datepicker.scss'
 import { FontAwesomeIcon } from './fontawesome'
 
 // Add some debug logging
@@ -48,6 +50,7 @@ app.use(PrimeVue, {
 app.component('Select', Select)
 app.component('InputSwitch', InputSwitch)
 app.component('Dialog', Dialog)
+app.component('DatePicker', DatePicker)
 
 // Register Font Awesome component globally
 app.component('FontAwesomeIcon', FontAwesomeIcon)
