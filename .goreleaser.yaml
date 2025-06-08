@@ -1,5 +1,5 @@
 # GoReleaser configuration for Inventario
-version: 2
+version: 1
 
 before:
   hooks:
