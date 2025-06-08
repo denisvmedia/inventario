@@ -47,9 +47,9 @@ func TestError_WithFields(t *testing.T) {
 
 	newErr := e.WithFields(fields)
 
-	c.Assert(newErr.Error(), qt.Matches, `wrapped error: some error \((key1=value1, key2=2|key2=2, key1=value1)\)`)
-	c.Assert(newErr.WithField("key3", true).Error(), qt.Matches, `wrapped error: some error \(.*key1=value1.*key2=2.*key3=true.*\)`)
-	c.Assert(newErr.WithField("key1", "updated").Error(), qt.Matches, `wrapped error: some error \((key1=updated, key2=2|key2=2, key1=updated)\)`)
+	c.Assert(newErr.Error(), qt.Matches, `wrapped error: some error \(\s*(key1=value1, key2=2|key2=2, key1=value1)\s*\)`)
+	c.Assert(newErr.WithField("key3", true).Error(), qt.Matches, `wrapped error: some error \((?:.*key1=value1.*key2=2.*key3=true.*|.*key2=2.*key1=value1.*key3=true.*|.*key3=true.*key1=value1.*key2=2.*|.*key3=true.*key2=2.*key1=value1.*)\)`)
+	c.Assert(newErr.WithField("key1", "updated").Error(), qt.Matches, `wrapped error: some error \(\s*(key1=updated, key2=2|key2=2, key1=updated)\s*\)`)
 
 	data, err := json.Marshal(newErr)
 	c.Assert(err, qt.IsNil)

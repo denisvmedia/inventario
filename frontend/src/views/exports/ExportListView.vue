@@ -165,8 +165,6 @@ const formatExportType = (type: string) => {
   return typeMap[type as keyof typeof typeMap] || type
 }
 
-
-
 const formatDate = (dateString: string) => {
   if (!dateString) return '-'
   try {
