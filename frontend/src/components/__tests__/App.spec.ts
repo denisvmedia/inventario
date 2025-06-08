@@ -14,7 +14,7 @@ vi.mock('@/stores/settingsStore', () => ({
 }))
 
 describe('App.vue Navigation', () => {
-  const createRouterForTest = (initialPath = '/') => {
+  const createRouterForTest = () => {
     return createRouter({
       history: createWebHistory(),
       routes: [
@@ -34,7 +34,7 @@ describe('App.vue Navigation', () => {
   }
 
   it('highlights Home menu when on home page', async () => {
-    const router = createRouterForTest('/')
+    const router = createRouterForTest()
     await router.push('/')
     
     const wrapper = mount(App, {
@@ -50,7 +50,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('highlights Locations menu when on locations list page', async () => {
-    const router = createRouterForTest('/locations')
+    const router = createRouterForTest()
     await router.push('/locations')
     
     const wrapper = mount(App, {
@@ -66,7 +66,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('highlights Locations menu when on location detail page', async () => {
-    const router = createRouterForTest('/locations/123')
+    const router = createRouterForTest()
     await router.push('/locations/123')
     
     const wrapper = mount(App, {
@@ -82,7 +82,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('highlights Locations menu when on area detail page', async () => {
-    const router = createRouterForTest('/areas/456')
+    const router = createRouterForTest()
     await router.push('/areas/456')
     
     const wrapper = mount(App, {
@@ -98,7 +98,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('highlights Commodities menu when on commodities list page', async () => {
-    const router = createRouterForTest('/commodities')
+    const router = createRouterForTest()
     await router.push('/commodities')
     
     const wrapper = mount(App, {
@@ -114,7 +114,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('highlights Commodities menu when on commodity create page', async () => {
-    const router = createRouterForTest('/commodities/new')
+    const router = createRouterForTest()
     await router.push('/commodities/new')
     
     const wrapper = mount(App, {
@@ -130,7 +130,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('highlights Commodities menu when on commodity detail page', async () => {
-    const router = createRouterForTest('/commodities/789')
+    const router = createRouterForTest()
     await router.push('/commodities/789')
     
     const wrapper = mount(App, {
@@ -146,7 +146,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('highlights Exports menu when on exports detail page', async () => {
-    const router = createRouterForTest('/exports/123')
+    const router = createRouterForTest()
     await router.push('/exports/123')
     
     const wrapper = mount(App, {
@@ -162,7 +162,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('highlights Settings menu when on setting detail page', async () => {
-    const router = createRouterForTest('/settings/456')
+    const router = createRouterForTest()
     await router.push('/settings/456')
     
     const wrapper = mount(App, {
@@ -178,7 +178,7 @@ describe('App.vue Navigation', () => {
   })
 
   it('does not highlight other menus when on commodities page', async () => {
-    const router = createRouterForTest('/commodities')
+    const router = createRouterForTest()
     await router.push('/commodities')
     
     const wrapper = mount(App, {
