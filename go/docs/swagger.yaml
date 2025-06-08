@@ -486,9 +486,17 @@ definitions:
     - CommodityTypeOther
   models.Export:
     properties:
+      area_count:
+        type: integer
+      binary_data_size:
+        type: integer
+      commodity_count:
+        type: integer
       completed_date:
         type: string
       created_date:
+        type: string
+      deleted_at:
         type: string
       description:
         type: string
@@ -496,10 +504,21 @@ definitions:
         type: string
       file_path:
         type: string
+      file_size:
+        description: Export statistics
+        type: integer
       id:
         type: string
+      image_count:
+        type: integer
       include_file_data:
         type: boolean
+      invoice_count:
+        type: integer
+      location_count:
+        type: integer
+      manual_count:
+        type: integer
       selected_items:
         items:
           $ref: '#/definitions/models.ExportSelectedItem'
@@ -1404,6 +1423,11 @@ paths:
       consumes:
       - application/vnd.api+json
       description: get exports
+      parameters:
+      - description: Include deleted exports
+        in: query
+        name: include_deleted
+        type: boolean
       produces:
       - application/vnd.api+json
       responses:

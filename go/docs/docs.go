@@ -1121,6 +1121,14 @@ const docTemplate = `{
                     "exports"
                 ],
                 "summary": "List exports",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Include deleted exports",
+                        "name": "include_deleted",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -2310,10 +2318,22 @@ const docTemplate = `{
         "models.Export": {
             "type": "object",
             "properties": {
+                "area_count": {
+                    "type": "integer"
+                },
+                "binary_data_size": {
+                    "type": "integer"
+                },
+                "commodity_count": {
+                    "type": "integer"
+                },
                 "completed_date": {
                     "type": "string"
                 },
                 "created_date": {
+                    "type": "string"
+                },
+                "deleted_at": {
                     "type": "string"
                 },
                 "description": {
@@ -2325,11 +2345,27 @@ const docTemplate = `{
                 "file_path": {
                     "type": "string"
                 },
+                "file_size": {
+                    "description": "Export statistics",
+                    "type": "integer"
+                },
                 "id": {
                     "type": "string"
                 },
+                "image_count": {
+                    "type": "integer"
+                },
                 "include_file_data": {
                     "type": "boolean"
+                },
+                "invoice_count": {
+                    "type": "integer"
+                },
+                "location_count": {
+                    "type": "integer"
+                },
+                "manual_count": {
+                    "type": "integer"
                 },
                 "selected_items": {
                     "type": "array",
