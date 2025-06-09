@@ -1,3 +1,5 @@
+/* stylelint-disable no-descending-specificity */
+
 @use 'variables' as *;
 @use 'sass:color';
 
@@ -44,6 +46,7 @@
   --p-datepicker-panel-border-radius: #{$default-radius};
   --p-datepicker-panel-color: #{$text-color};
   --p-datepicker-panel-shadow: #{$box-shadow};
+
   // --p-datepicker-panel-padding: 0.75rem;
   --p-datepicker-panel-width: auto;
 
@@ -81,7 +84,6 @@
   --p-datepicker-select-month-focus-color: #{$text-color};
   --p-datepicker-select-month-padding: 0.5rem;
   --p-datepicker-select-month-border-radius: #{$default-radius};
-
   --p-datepicker-select-year-background: transparent;
   --p-datepicker-select-year-border-color: transparent;
   --p-datepicker-select-year-color: #{$text-color};
@@ -106,7 +108,7 @@
   --p-datepicker-group-gap: 1rem;
 
   /* Calendar container */
-  //--p-datepicker-day-view-margin: 0.5rem 0;
+  // --p-datepicker-day-view-margin: 0.5rem 0;
 
   /* Week day headers */
   --p-datepicker-week-day-padding: 0.5rem;
@@ -228,23 +230,15 @@
   width: 100%;
   position: relative;
   display: inline-flex;
+}
 
-  /* Size variants */
-  &.p-datepicker-sm {
-    font-size: var(--p-datepicker-sm-font-size);
+/* Size variants */
+.p-datepicker.p-datepicker-sm {
+  font-size: var(--p-datepicker-sm-font-size);
+}
 
-    .p-datepicker-input {
-      padding: var(--p-datepicker-sm-padding-y) var(--p-datepicker-sm-padding-x);
-    }
-  }
-
-  &.p-datepicker-lg {
-    font-size: var(--p-datepicker-lg-font-size);
-
-    .p-datepicker-input {
-      padding: var(--p-datepicker-lg-padding-y) var(--p-datepicker-lg-padding-x);
-    }
-  }
+.p-datepicker.p-datepicker-lg {
+  font-size: var(--p-datepicker-lg-font-size);
 }
 
 /* Form integration */
@@ -270,22 +264,36 @@
   &::placeholder {
     color: var(--p-datepicker-placeholder-color);
   }
+
+  &:focus {
+    outline: none;
+    border-color: var(--p-datepicker-focus-border-color);
+    box-shadow: var(--p-datepicker-focus-ring-shadow);
+  }
+
+  &:hover:not(:focus, :disabled) {
+    border-color: var(--p-datepicker-hover-border-color);
+  }
+
+  &:disabled {
+    background: var(--p-datepicker-disabled-background);
+    color: var(--p-datepicker-disabled-color);
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 }
 
-/* Input states */
-.p-datepicker .p-datepicker-input:hover:not(:focus, :disabled) {
-  border-color: var(--p-datepicker-hover-border-color);
+/* Size variants */
+.p-datepicker.p-datepicker-sm .p-datepicker-input {
+  padding: var(--p-datepicker-sm-padding-y) var(--p-datepicker-sm-padding-x);
 }
 
-.p-datepicker .p-datepicker-input:focus {
-  outline: none;
-  border-color: var(--p-datepicker-focus-border-color);
-  box-shadow: var(--p-datepicker-focus-ring-shadow);
+.p-datepicker.p-datepicker-lg .p-datepicker-input {
+  padding: var(--p-datepicker-lg-padding-y) var(--p-datepicker-lg-padding-x);
 }
 
 /* Disabled state */
-.p-datepicker.p-disabled .p-datepicker-input,
-.p-datepicker .p-datepicker-input:disabled {
+.p-datepicker.p-disabled .p-datepicker-input {
   background: var(--p-datepicker-disabled-background);
   color: var(--p-datepicker-disabled-color);
   opacity: 0.6;
@@ -301,10 +309,16 @@
 /* Filled variant */
 .p-datepicker.p-variant-filled .p-datepicker-input {
   background: var(--p-datepicker-filled-background);
+}
 
-  &:focus {
-    background: var(--p-datepicker-filled-focus-background);
-  }
+.p-datepicker.p-variant-filled .p-datepicker-input:focus {
+  background: var(--p-datepicker-filled-focus-background);
+}
+
+/* Accessibility improvements */
+.p-datepicker[aria-expanded="true"] .p-datepicker-input {
+  border-color: var(--p-datepicker-focus-border-color);
+  box-shadow: var(--p-datepicker-focus-ring-shadow);
 }
 
 /* Input icon */
@@ -463,45 +477,7 @@
   border: none;
 }
 
-/* Other month cells - selectable but visually distinct */
-.p-datepicker-calendar td.p-datepicker-other-month,
-.p-datepicker-calendar .p-datepicker-day-cell.p-datepicker-other-month {
-  opacity: 0.6;
-
-  .p-datepicker-day {
-    background: var(--p-datepicker-date-background);
-    border-color: var(--p-datepicker-date-border-color);
-    color: var(--p-datepicker-date-disabled-color);
-    cursor: pointer;
-
-    &:hover {
-      background: var(--p-datepicker-date-hover-background);
-      border-color: var(--p-datepicker-date-hover-border-color);
-      color: var(--p-datepicker-date-hover-color);
-      opacity: 0.8;
-    }
-
-    &:focus {
-      outline: none;
-      box-shadow: var(--p-datepicker-date-focus-ring-shadow);
-    }
-
-    &.p-datepicker-day-selected {
-      background: var(--p-datepicker-date-selected-background);
-      border-color: var(--p-datepicker-date-selected-border-color);
-      color: var(--p-datepicker-date-selected-color);
-      opacity: 1;
-
-      &:hover {
-        background: var(--p-datepicker-date-selected-hover-background);
-        border-color: var(--p-datepicker-date-selected-hover-border-color);
-        color: var(--p-datepicker-date-selected-hover-color);
-      }
-    }
-  }
-}
-
-/* Date buttons */
+/* Date buttons - Base selector first */
 .p-datepicker-calendar .p-datepicker-day {
   width: var(--p-datepicker-date-width);
   height: var(--p-datepicker-date-height);
@@ -554,6 +530,14 @@
     }
   }
 
+  &.p-datepicker-day-disabled {
+    background: var(--p-datepicker-date-disabled-background);
+    border-color: var(--p-datepicker-date-disabled-border-color);
+    color: var(--p-datepicker-date-disabled-color);
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
   &.p-datepicker-other-month {
     background: var(--p-datepicker-date-background);
     border-color: var(--p-datepicker-date-border-color);
@@ -561,16 +545,16 @@
     opacity: 0.6;
     cursor: pointer;
 
+    &:focus {
+      outline: none;
+      box-shadow: var(--p-datepicker-date-focus-ring-shadow);
+      opacity: 0.8;
+    }
+
     &:hover {
       background: var(--p-datepicker-date-hover-background);
       border-color: var(--p-datepicker-date-hover-border-color);
       color: var(--p-datepicker-date-hover-color);
-      opacity: 0.8;
-    }
-
-    &:focus {
-      outline: none;
-      box-shadow: var(--p-datepicker-date-focus-ring-shadow);
       opacity: 0.8;
     }
 
@@ -587,13 +571,44 @@
       }
     }
   }
+}
 
-  &.p-datepicker-day-disabled {
-    background: var(--p-datepicker-date-disabled-background);
-    border-color: var(--p-datepicker-date-disabled-border-color);
-    color: var(--p-datepicker-date-disabled-color);
-    cursor: not-allowed;
-    opacity: 0.6;
+/* Other month cells - containers */
+.p-datepicker-calendar td.p-datepicker-other-month,
+.p-datepicker-calendar .p-datepicker-day-cell.p-datepicker-other-month {
+  opacity: 0.6;
+}
+
+.p-datepicker-calendar td.p-datepicker-other-month .p-datepicker-day,
+.p-datepicker-calendar .p-datepicker-day-cell.p-datepicker-other-month .p-datepicker-day {
+  background: var(--p-datepicker-date-background);
+  border-color: var(--p-datepicker-date-border-color);
+  color: var(--p-datepicker-date-disabled-color);
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    box-shadow: var(--p-datepicker-date-focus-ring-shadow);
+  }
+
+  &:hover {
+    background: var(--p-datepicker-date-hover-background);
+    border-color: var(--p-datepicker-date-hover-border-color);
+    color: var(--p-datepicker-date-hover-color);
+    opacity: 0.8;
+  }
+
+  &.p-datepicker-day-selected {
+    background: var(--p-datepicker-date-selected-background);
+    border-color: var(--p-datepicker-date-selected-border-color);
+    color: var(--p-datepicker-date-selected-color);
+    opacity: 1;
+
+    &:hover {
+      background: var(--p-datepicker-date-selected-hover-background);
+      border-color: var(--p-datepicker-date-selected-hover-border-color);
+      color: var(--p-datepicker-date-selected-hover-color);
+    }
   }
 }
 
@@ -755,12 +770,6 @@
   }
 }
 
-/* Accessibility improvements */
-.p-datepicker[aria-expanded="true"] .p-datepicker-input {
-  border-color: var(--p-datepicker-focus-border-color);
-  box-shadow: var(--p-datepicker-focus-ring-shadow);
-}
-
 /* Screen reader only content */
 .p-datepicker .p-sr-only {
   position: absolute;
@@ -775,7 +784,7 @@
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .p-datepicker-panel {
     max-width: 90vw;
   }
@@ -818,7 +827,7 @@
   }
 }
 
-@media (max-width: 480px) {
+@media (width <= 480px) {
   .p-datepicker-panel {
     max-width: 95vw;
   }
