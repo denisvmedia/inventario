@@ -368,4 +368,46 @@ describe('CommodityListItem.vue', () => {
       expect(vm.getLocationName('area-1')).toBe('Unknown Location')
     })
   })
+
+  // Purchase Date Tests
+  describe('Purchase Date Display', () => {
+    it('displays purchase date when available', () => {
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          purchase_date: '2023-01-15'
+        }
+      }
+      const wrapper = createWrapper({ commodity })
+
+      const purchaseDateElement = wrapper.find('.commodity-purchase-date')
+      expect(purchaseDateElement.exists()).toBe(true)
+      expect(purchaseDateElement.text()).toContain('Jan 15, 2023')
+    })
+
+    it('does not display purchase date when not available', () => {
+      const commodity = {
+        ...mockCommodity,
+        attributes: {
+          ...mockCommodity.attributes,
+          purchase_date: undefined
+        }
+      }
+      const wrapper = createWrapper({ commodity })
+
+      const purchaseDateElement = wrapper.find('.commodity-purchase-date')
+      expect(purchaseDateElement.exists()).toBe(false)
+    })
+
+    it('formats purchase date correctly', () => {
+      const wrapper = createWrapper()
+      const vm = wrapper.vm as any
+
+      // Test different date formats
+      expect(vm.formatPurchaseDate('2023-01-01')).toBe('Jan 1, 2023')
+      expect(vm.formatPurchaseDate('2023-12-25')).toBe('Dec 25, 2023')
+      expect(vm.formatPurchaseDate('2024-06-15')).toBe('Jun 15, 2024')
+    })
+  })
 })
