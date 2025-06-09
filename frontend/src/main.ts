@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import PrimeVue from 'primevue/config';
 import Select from 'primevue/select'
-import InputSwitch from 'primevue/inputswitch'
+import ToggleSwitch from 'primevue/toggleswitch'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 // import Aura from '@primeuix/themes/aura';
@@ -51,7 +51,7 @@ app.use(PrimeVue, {
   },
 })
 app.component('Select', Select)
-app.component('InputSwitch', InputSwitch)
+app.component('ToggleSwitch', ToggleSwitch)
 app.component('Dialog', Dialog)
 app.component('DatePicker', DatePicker)
 
