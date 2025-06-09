@@ -10,7 +10,8 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
-
+    #container:
+    #  image: mcr.microsoft.com/playwright:v1.50.0-noble
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

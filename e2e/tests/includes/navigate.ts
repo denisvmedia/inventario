@@ -1,5 +1,5 @@
 import {Page} from "@playwright/test";
-import {createCommodity} from "./commodities.js";
+import {checkSettingsRequired, navigateAndCheckSettings} from "./settings-check.js";
 
 export const TO_HOME = 'home';
 export const TO_LOCATIONS = 'locations';
@@ -21,24 +21,26 @@ export type TypeFrom = typeof FROM_HOME | typeof FROM_LOCATIONS | typeof FROM_LO
 export async function navigateTo(page: Page, recorder: any, to : TypeTo, from?: TypeFrom, source?: string) {
     switch (to) {
         case TO_HOME:
-            await page.goto('/');
+            await navigateAndCheckSettings(page, '/')
             break;
         case TO_LOCATIONS:
             switch (from) {
                 case FROM_COMMODITIES:
+                    await checkSettingsRequired(page);
                     // Navigate back to the location detail page
                     await page.click(`.breadcrumb-link:has-text("Back to Locations")`);
                     break;
                 default:
-                    await page.goto('/locations');
+                    await navigateAndCheckSettings(page, '/locations')
             }
             break;
         case TO_COMMODITIES:
-            await page.goto('/commodities');
+            await navigateAndCheckSettings(page, '/commodities')
             break;
         case TO_AREA_COMMODITIES:
             switch (from) {
                 case FROM_LOCATIONS_AREA:
+                    await checkSettingsRequired(page);
                     // source is the area name
                     await page.click(`.area-card:has-text("${source}")`);
                     break;
@@ -47,10 +49,10 @@ export async function navigateTo(page: Page, recorder: any, to : TypeTo, from?: 
             }
             break;
         case TO_SETTINGS:
-            await page.goto('/settings');
+            await navigateAndCheckSettings(page, '/settings')
             break;
         case TO_EXPORTS:
-            await page.goto('/exports');
+            await navigateAndCheckSettings(page, '/exports')
             break;
     }
 }

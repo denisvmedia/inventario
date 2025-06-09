@@ -29,7 +29,7 @@
           <div class="section-title">
             <h2>Commodities</h2>
             <div class="filter-toggle">
-              <InputSwitch v-model="showInactiveItems" />
+              <ToggleSwitch v-model="showInactiveItems" />
               <label class="toggle-label">Show drafts & inactive items</label>
             </div>
           </div>

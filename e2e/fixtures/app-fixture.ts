@@ -1,4 +1,4 @@
-import { test as base } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
 import { TestRecorder } from '../utils/test-recorder.js';
 import waitOn from 'wait-on';
 
@@ -6,6 +6,18 @@ import waitOn from 'wait-on';
 type AppFixtures = {
   recorder: TestRecorder;
 };
+
+/**
+ * Check if the page shows "Settings Required" message and fail fast if found
+ */
+async function checkSettingsRequired(page: any) {
+  const settingsRequiredElement = page.locator('h2:has-text("Settings Required")');
+  const isVisible = await settingsRequiredElement.isVisible();
+
+  if (isVisible) {
+    throw new Error('Test failed: "Settings Required" message found. The system database is not properly seeded/set up.');
+  }
+}
 
 /**
  * Custom fixture that ensures the application stack is running
@@ -24,6 +36,9 @@ export const test = base.extend<AppFixtures>({
     // The stack should already be running via the e2e:stack command
     // We just need to navigate to the base URL
     await page.goto('/');
+
+    // Check for "Settings Required" message and fail fast if found
+    await checkSettingsRequired(page);
 
     // Use the page with the application loaded
     await use(page);

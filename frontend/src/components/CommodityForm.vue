@@ -248,15 +248,18 @@ class="price-calculation-hint" :class="{
 
       <div class="form-group">
         <label for="purchaseDate">Purchase Date <span class="required-field">*</span></label>
-        <input
+        <DatePicker
           id="purchaseDate"
           v-model="formData.purchaseDate"
-          type="date"
+          dateFormat="yy-mm-dd"
           required
-          class="form-control"
+          showIcon
+          selectOtherMonths
+          iconDisplay="input"
+          class="w-100"
           :class="{ 'is-invalid': formErrors.purchaseDate }"
           placeholder="Select the date of purchase"
-        >
+        />
         <div v-if="formErrors.purchaseDate" class="error-message">{{ formErrors.purchaseDate }}</div>
       </div>
     </div>
@@ -538,6 +541,7 @@ const onSubmit = () => {
     return
   }
   console.log('CommodityForm: Form validation passed, emitting submit event with data:', formData)
+  formData.purchaseDate = new Date(formData.purchaseDate).toISOString().split('T')[0]
   emit('submit', formData)
 }
 

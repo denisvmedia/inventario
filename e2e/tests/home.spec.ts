@@ -1,11 +1,14 @@
-import { expect } from '@playwright/test';
-import { test } from '../fixtures/app-fixture.js';
+import {expect} from '@playwright/test';
+import {test} from '../fixtures/app-fixture.js';
+import {navigateTo, TO_HOME} from "./includes/navigate.js";
 
 test.describe('Home Page', () => {
+  test.beforeEach(async ({ page, recorder }) => {
+    await navigateTo(page, recorder, TO_HOME);
+  });
+
+
   test('should display total inventory value', async ({ page }) => {
-    // Navigate to home page
-    await page.goto('/');
-    
     // Wait for the value to load (it's fetched asynchronously)
     await page.waitForSelector('.value-summary', { state: 'visible' });
     
@@ -22,9 +25,6 @@ test.describe('Home Page', () => {
   });
 
   test('should navigate to locations when clicking the locations card', async ({ page }) => {
-    // Navigate to home page
-    await page.goto('/');
-    
     // Click on the Locations card
     await page.locator('.navigation-cards .card', { hasText: 'Locations' }).click();
     
@@ -34,9 +34,6 @@ test.describe('Home Page', () => {
   });
 
   test('should navigate to commodities when clicking the commodities card', async ({ page }) => {
-    // Navigate to home page
-    await page.goto('/');
-    
     // Click on the Commodities card
     await page.locator('.navigation-cards .card', { hasText: 'Commodities' }).click();
     
@@ -46,9 +43,6 @@ test.describe('Home Page', () => {
   });
 
   test('should navigate to settings when clicking the settings card', async ({ page }) => {
-    // Navigate to home page
-    await page.goto('/');
-    
     // Click on the Settings card
     await page.locator('.navigation-cards .card', { hasText: 'Settings' }).click();
     

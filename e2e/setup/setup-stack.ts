@@ -218,7 +218,7 @@ export async function startFrontend(): Promise<void> {
 /**
  * Wait for the frontend to be available
  */
-async function waitForFrontend(maxRetries = 60, retryInterval = 1000): Promise<void> {
+async function waitForFrontend(maxRetries = 120, retryInterval = 1000): Promise<void> {
   let retries = 0;
 
   console.log('Waiting for frontend to be available at http://localhost:5173');
