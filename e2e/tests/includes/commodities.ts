@@ -25,8 +25,8 @@ export async function createCommodity(page: Page, recorder: TestRecorder,testCom
     await page.click(`.p-select-option-label:has-text("${testCommodity.originalPriceCurrency}")`);
 
     // Set purchase date using DatePicker component
-    // PrimeVue DatePicker renders with an input field inside the container
-    await page.fill('#purchaseDate input[type="text"]', testCommodity.purchaseDate);
+    // PrimeVue DatePicker v4 typically uses this pattern
+    await page.locator('#purchaseDate input').fill(testCommodity.purchaseDate);
 
     // Add serial number if provided
     if (testCommodity.serialNumber) {
