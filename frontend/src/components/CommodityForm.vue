@@ -257,7 +257,6 @@ class="price-calculation-hint" :class="{
           selectOtherMonths
           iconDisplay="input"
           class="w-100"
-          :firstDayOfWeek="1"
           :class="{ 'is-invalid': formErrors.purchaseDate }"
           placeholder="Select the date of purchase"
         />
