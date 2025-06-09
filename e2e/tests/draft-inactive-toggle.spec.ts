@@ -1,10 +1,11 @@
-import { expect } from '@playwright/test';
-import { test } from '../fixtures/app-fixture.js';
+import {expect} from '@playwright/test';
+import {test} from '../fixtures/app-fixture.js';
+import {navigateTo, TO_COMMODITIES, TO_LOCATIONS} from "./includes/navigate.js";
 
 test.describe('Draft and Inactive Items Toggle Functionality', () => {
   test('should toggle visibility of draft and inactive items in Commodity List view', async ({ page, recorder }) => {
     // Navigate to the commodities page
-    await page.goto('/commodities');
+    await navigateTo(page, recorder, TO_COMMODITIES);
     await recorder.takeScreenshot('01-commodities-page-initial');
 
     await page.waitForSelector(`.commodity-card`);
@@ -47,7 +48,7 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
 
   test('should toggle visibility of draft and inactive items in Area Detail view', async ({ page, recorder }) => {
     // Navigate to locations page
-    await page.goto('/locations');
+    await navigateTo(page, recorder, TO_LOCATIONS);
     await recorder.takeScreenshot('01-locations-page');
 
     // Click on the first location to open it
@@ -89,7 +90,7 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
       console.log('No hidden items found in this area, trying another area if available');
 
       // If no change, try another area that might have inactive items
-      await page.goto('/locations');
+      await navigateTo(page, recorder, TO_LOCATIONS);
       await page.locator('.location-card').first().click();
 
       // Try the second area if it exists

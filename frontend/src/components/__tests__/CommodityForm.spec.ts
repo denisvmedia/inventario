@@ -88,7 +88,7 @@ describe('CommodityForm.vue', () => {
       expect(wrapper.find('input[id="originalPrice"]').exists()).toBe(true)
       expect(wrapper.find('input[id="currentPrice"]').exists()).toBe(true)
       expect(wrapper.find('input[id="serialNumber"]').exists()).toBe(true)
-      expect(wrapper.find('input[id="purchaseDate"]').exists()).toBe(true)
+      expect(wrapper.find('[id="purchaseDate"]').exists()).toBe(true) // DatePicker component
       expect(wrapper.find('textarea[id="comments"]').exists()).toBe(true)
 
       // Check for section headings

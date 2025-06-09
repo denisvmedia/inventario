@@ -9,7 +9,7 @@
       </div>
       <div class="header-actions">
         <div class="filter-toggle">
-          <InputSwitch v-model="showInactiveItems" />
+          <ToggleSwitch v-model="showInactiveItems" />
           <label class="toggle-label">Show drafts & inactive items</label>
         </div>
         <router-link v-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>

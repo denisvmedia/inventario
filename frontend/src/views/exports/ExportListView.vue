@@ -9,7 +9,7 @@
       </div>
       <div class="header-actions">
         <div class="filter-toggle">
-          <InputSwitch v-model="showDeleted" @change="loadExports" />
+          <ToggleSwitch v-model="showDeleted" @change="loadExports" />
           <label class="toggle-label">Show deleted exports</label>
         </div>
         <router-link to="/exports/new" class="btn btn-primary">
