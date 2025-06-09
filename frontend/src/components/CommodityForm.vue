@@ -541,6 +541,7 @@ const onSubmit = () => {
     return
   }
   console.log('CommodityForm: Form validation passed, emitting submit event with data:', formData)
+  formData.purchaseDate = new Date(formData.purchaseDate).toISOString().split('T')[0]
   emit('submit', formData)
 }
 
