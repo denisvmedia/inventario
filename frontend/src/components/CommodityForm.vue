@@ -253,7 +253,11 @@ class="price-calculation-hint" :class="{
           v-model="formData.purchaseDate"
           dateFormat="yy-mm-dd"
           required
+          showIcon
+          selectOtherMonths
+          iconDisplay="input"
           class="w-100"
+          :firstDayOfWeek="1"
           :class="{ 'is-invalid': formErrors.purchaseDate }"
           placeholder="Select the date of purchase"
         />

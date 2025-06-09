@@ -46,6 +46,9 @@ app.use(PrimeVue, {
   // theme: {
   //   preset: Aura
   // }
+  locale: {
+    firstDayOfWeek: 1,
+  },
 })
 app.component('Select', Select)
 app.component('InputSwitch', InputSwitch)
