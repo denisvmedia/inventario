@@ -22,6 +22,10 @@
         </span>
         <span v-if="(commodity.attributes.count || 1) > 1" class="count">×{{ commodity.attributes.count }}</span>
       </div>
+      <div v-if="commodity.attributes.purchase_date" class="commodity-purchase-date">
+        <font-awesome-icon icon="calendar" />
+        {{ formatPurchaseDate(commodity.attributes.purchase_date) }}
+      </div>
       <div class="commodity-price">
         <span class="price">{{ formatPrice(getDisplayPrice(commodity)) }}</span>
         <span v-if="(commodity.attributes.count || 1) > 1" class="price-per-unit">
@@ -115,6 +119,11 @@ const getLocationName = (areaId: string) => {
   const locationId = props.areaMap[areaId]?.locationId
   return props.locationMap[locationId]?.name || 'Unknown Location'
 }
+
+const formatPurchaseDate = (date: string): string => {
+  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
+  return new Date(date).toLocaleDateString('en-US', options)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -131,6 +140,15 @@ const getLocationName = (areaId: string) => {
   justify-content: space-between;
   margin-top: 0.5rem;
   font-size: 0.9rem;
+  color: $text-color;
+}
+
+.commodity-purchase-date {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
   color: $text-color;
 }
 
