@@ -101,6 +101,10 @@ type ExportRegistry interface {
 	HardDelete(ctx context.Context, id string) error
 }
 
+type ImportRegistry interface {
+	Registry[models.Import]
+}
+
 type Set struct {
 	LocationRegistry  LocationRegistry
 	AreaRegistry      AreaRegistry
@@ -110,6 +114,7 @@ type Set struct {
 	ManualRegistry    ManualRegistry
 	SettingsRegistry  SettingsRegistry
 	ExportRegistry    ExportRegistry
+	ImportRegistry    ImportRegistry
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {
@@ -124,6 +129,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.InvoiceRegistry, validation.Required),
 		validation.Field(&s.SettingsRegistry, validation.Required),
 		validation.Field(&s.ExportRegistry, validation.Required),
+		validation.Field(&s.ImportRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

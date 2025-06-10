@@ -1,5 +1,8 @@
 <template>
   <div class="app">
+    <!-- Global Toast component -->
+    <Toast />
+
     <!-- Global confirmation dialog component -->
     <header v-if="!isPrintRoute">
       <div class="header-content">
@@ -13,6 +16,7 @@
           <router-link to="/locations" :class="{ 'custom-active': isLocationsActive }">Locations</router-link> |
           <router-link to="/commodities" :class="{ 'custom-active': isCommoditiesActive }">Commodities</router-link> |
           <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
+          <router-link to="/restores" :class="{ 'custom-active': isRestoresActive }">Restores</router-link> |
           <router-link to="/settings" :class="{ 'custom-active': isSettingsActive }">Settings</router-link>
         </nav>
       </div>
@@ -37,6 +41,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
+import Toast from 'primevue/toast'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()
@@ -61,6 +66,10 @@ const isCommoditiesActive = computed(() => {
 
 const isExportsActive = computed(() => {
   return route.path.startsWith('/exports')
+})
+
+const isRestoresActive = computed(() => {
+  return route.path.startsWith('/restores')
 })
 
 const isSettingsActive = computed(() => {

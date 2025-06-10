@@ -78,6 +78,17 @@ const routes = [
     name: 'export-detail',
     component: () => import('../views/exports/ExportDetailView.vue')
   },
+  // Restores
+  {
+    path: '/restores',
+    name: 'restores',
+    component: () => import('../views/restores/RestoreListView.vue')
+  },
+  {
+    path: '/restores/:id',
+    name: 'restore-detail',
+    component: () => import('../views/restores/RestoreDetailView.vue')
+  },
   // Settings
   {
     path: '/settings',

@@ -100,3 +100,43 @@ export interface Export {
   manual_count?: number;
   binary_data_size?: number;
 }
+
+export type ImportType = 'xml_backup';
+
+export type ImportStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface Import {
+  id: string;
+  type: ImportType;
+  status: ImportStatus;
+  description: string;
+  source_file_path: string;
+  created_date: string;
+  started_date?: string;
+  completed_date?: string;
+  error_message?: string;
+  location_count: number;
+  area_count: number;
+  commodity_count: number;
+  image_count: number;
+  invoice_count: number;
+  manual_count: number;
+  binary_data_size: number;
+  error_count: number;
+  errors: string[];
+}
+
+export type RestoreStrategy = 'full_replace' | 'merge_add' | 'merge_update';
+
+export interface RestoreOptions {
+  strategy: RestoreStrategy;
+  include_file_data: boolean;
+  dry_run: boolean;
+  backup_existing: boolean;
+}
+
+export interface RestoreRequest {
+  description: string;
+  source_file_path: string;
+  options: RestoreOptions;
+}
