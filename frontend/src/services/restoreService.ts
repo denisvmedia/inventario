@@ -76,9 +76,9 @@ export class RestoreService {
    */
   static async uploadFile(file: File): Promise<UploadResponse> {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('files', file);
 
-    const response = await fetch(`${API_BASE}/restores/upload`, {
+    const response = await fetch(`${API_BASE}/uploads/restores`, {
       method: 'POST',
       body: formData,
     });
@@ -88,7 +88,12 @@ export class RestoreService {
       throw new Error(errorData.errors?.[0]?.detail || `Failed to upload file: ${response.statusText}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    // Transform the response to match the expected format
+    return {
+      filename: result.attributes.fileNames[0],
+      message: 'File uploaded successfully'
+    };
   }
 
   /**

@@ -56,29 +56,38 @@ type XMLCommodities struct {
 
 // XMLCommodity represents a single commodity in XML
 type XMLCommodity struct {
-	XMLName            xml.Name         `xml:"commodity"`
-	ID                 string           `xml:"id,attr"`
-	CommodityName      string           `xml:"commodityName"`
-	ShortName          string           `xml:"shortName,omitempty"`
-	AreaID             string           `xml:"areaId"`
-	Count              int              `xml:"count,omitempty"`
-	Status             string           `xml:"status,omitempty"`
-	Type               string           `xml:"type,omitempty"`
-	OriginalPrice      string           `xml:"originalPrice,omitempty"`
-	OriginalCurrency   string           `xml:"originalCurrency,omitempty"`
-	CurrentPrice       string           `xml:"currentPrice,omitempty"`
-	CurrentCurrency    string           `xml:"currentCurrency,omitempty"`
-	Comments           string           `xml:"comments,omitempty"`
-	Draft              bool             `xml:"draft,omitempty"`
-	PurchaseDate       string           `xml:"purchaseDate,omitempty"`
-	RegisteredDate     string           `xml:"registeredDate,omitempty"`
-	LastModifiedDate   string           `xml:"lastModifiedDate,omitempty"`
-	PartNumbers        *XMLPartNumbers  `xml:"partNumbers,omitempty"`
-	Tags               *XMLTags         `xml:"tags,omitempty"`
-	URLs               *XMLURLs         `xml:"urls,omitempty"`
-	Images             *XMLImages       `xml:"images,omitempty"`
-	Invoices           *XMLInvoices     `xml:"invoices,omitempty"`
-	Manuals            *XMLManuals      `xml:"manuals,omitempty"`
+	XMLName                xml.Name         `xml:"commodity"`
+	ID                     string           `xml:"id,attr"`
+	CommodityName          string           `xml:"commodityName"`
+	ShortName              string           `xml:"shortName,omitempty"`
+	AreaID                 string           `xml:"areaId"`
+	Count                  int              `xml:"count,omitempty"`
+	Status                 string           `xml:"status,omitempty"`
+	Type                   string           `xml:"type,omitempty"`
+	OriginalPrice          string           `xml:"originalPrice,omitempty"`
+	OriginalCurrency       string           `xml:"originalPriceCurrency,omitempty"`
+	ConvertedOriginalPrice string           `xml:"convertedOriginalPrice,omitempty"`
+	CurrentPrice           string           `xml:"currentPrice,omitempty"`
+	CurrentCurrency        string           `xml:"currentCurrency,omitempty"`
+	SerialNumber           string           `xml:"serialNumber,omitempty"`
+	ExtraSerialNumbers     *XMLSerialNumbers `xml:"extraSerialNumbers,omitempty"`
+	Comments               string           `xml:"comments,omitempty"`
+	Draft                  bool             `xml:"draft,omitempty"`
+	PurchaseDate           string           `xml:"purchaseDate,omitempty"`
+	RegisteredDate         string           `xml:"registeredDate,omitempty"`
+	LastModifiedDate       string           `xml:"lastModifiedDate,omitempty"`
+	PartNumbers            *XMLPartNumbers  `xml:"partNumbers,omitempty"`
+	Tags                   *XMLTags         `xml:"tags,omitempty"`
+	URLs                   *XMLURLs         `xml:"urls,omitempty"`
+	Images                 *XMLImages       `xml:"images,omitempty"`
+	Invoices               *XMLInvoices     `xml:"invoices,omitempty"`
+	Manuals                *XMLManuals      `xml:"manuals,omitempty"`
+}
+
+// XMLSerialNumbers represents extra serial numbers
+type XMLSerialNumbers struct {
+	XMLName       xml.Name `xml:"extraSerialNumbers"`
+	SerialNumbers []string `xml:"serialNumber"`
 }
 
 // XMLPartNumbers represents part numbers
@@ -201,6 +210,11 @@ func (xc *XMLCommodity) ConvertToCommodity() (*models.Commodity, error) {
 			commodity.OriginalPrice = price
 		}
 	}
+	if xc.ConvertedOriginalPrice != "" {
+		if price, err := decimal.NewFromString(xc.ConvertedOriginalPrice); err == nil {
+			commodity.ConvertedOriginalPrice = price
+		}
+	}
 	if xc.CurrentPrice != "" {
 		if price, err := decimal.NewFromString(xc.CurrentPrice); err == nil {
 			commodity.CurrentPrice = price
@@ -210,6 +224,12 @@ func (xc *XMLCommodity) ConvertToCommodity() (*models.Commodity, error) {
 	// Convert currencies
 	if xc.OriginalCurrency != "" {
 		commodity.OriginalPriceCurrency = models.Currency(xc.OriginalCurrency)
+	}
+
+	// Convert serial numbers
+	commodity.SerialNumber = xc.SerialNumber
+	if xc.ExtraSerialNumbers != nil {
+		commodity.ExtraSerialNumbers = models.ValuerSlice[string](xc.ExtraSerialNumbers.SerialNumbers)
 	}
 
 	// Convert part numbers

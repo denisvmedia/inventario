@@ -9,7 +9,7 @@
       </div>
       <div class="header-actions">
         <router-link to="/restores/new" class="btn btn-primary">
-          <i class="pi pi-plus"></i> New
+          <font-awesome-icon icon="plus" /> New
         </router-link>
       </div>
     </div>
@@ -32,7 +32,7 @@
           <h3>No Restore Operations</h3>
           <p>Create your first restore operation to import data from XML backups.</p>
           <router-link to="/restores/new" class="btn btn-primary">
-            <i class="pi pi-plus"></i> Create Restore
+            <font-awesome-icon icon="plus" /> Create Restore
           </router-link>
         </div>
       </div>
@@ -164,6 +164,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Badge from 'primevue/badge';
@@ -410,30 +411,5 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.btn {
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: $default-radius;
-  font-weight: 500;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s;
 
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-
-  &:hover:not(:disabled) {
-    background-color: darken($primary-color, 10%);
-  }
-}
 </style>

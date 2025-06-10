@@ -11,6 +11,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -69,10 +70,20 @@ type RestoreStats struct {
 // RestoreFromXML restores data from an XML file using the specified strategy
 func (s *RestoreService) RestoreFromXML(ctx context.Context, xmlReader io.Reader, options RestoreOptions) (*RestoreStats, error) {
 	stats := &RestoreStats{}
-	
+
 	// Validate options
 	if err := s.validateOptions(options); err != nil {
 		return stats, errkit.Wrap(err, "invalid restore options")
+	}
+
+	// Get main currency from settings and add it to context for commodity validation
+	settings, err := s.registrySet.SettingsRegistry.Get(ctx)
+	if err != nil {
+		return stats, errkit.Wrap(err, "failed to get settings")
+	}
+
+	if settings.MainCurrency != nil && *settings.MainCurrency != "" {
+		ctx = validationctx.WithMainCurrency(ctx, *settings.MainCurrency)
 	}
 
 	// If full replace strategy, backup existing data first if requested
@@ -572,9 +583,13 @@ func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Deco
 				if err := decoder.DecodeElement(&xmlCommodity.OriginalPrice, &t); err != nil {
 					return errkit.Wrap(err, "failed to decode original price")
 				}
-			case "originalCurrency":
+			case "originalPriceCurrency":
 				if err := decoder.DecodeElement(&xmlCommodity.OriginalCurrency, &t); err != nil {
 					return errkit.Wrap(err, "failed to decode original currency")
+				}
+			case "convertedOriginalPrice":
+				if err := decoder.DecodeElement(&xmlCommodity.ConvertedOriginalPrice, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode converted original price")
 				}
 			case "currentPrice":
 				if err := decoder.DecodeElement(&xmlCommodity.CurrentPrice, &t); err != nil {
@@ -583,6 +598,14 @@ func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Deco
 			case "currentCurrency":
 				if err := decoder.DecodeElement(&xmlCommodity.CurrentCurrency, &t); err != nil {
 					return errkit.Wrap(err, "failed to decode current currency")
+				}
+			case "serialNumber":
+				if err := decoder.DecodeElement(&xmlCommodity.SerialNumber, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode serial number")
+				}
+			case "extraSerialNumbers":
+				if err := decoder.DecodeElement(&xmlCommodity.ExtraSerialNumbers, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode extra serial numbers")
 				}
 			case "comments":
 				if err := decoder.DecodeElement(&xmlCommodity.Comments, &t); err != nil {
@@ -603,6 +626,18 @@ func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Deco
 			case "lastModifiedDate":
 				if err := decoder.DecodeElement(&xmlCommodity.LastModifiedDate, &t); err != nil {
 					return errkit.Wrap(err, "failed to decode last modified date")
+				}
+			case "partNumbers":
+				if err := decoder.DecodeElement(&xmlCommodity.PartNumbers, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode part numbers")
+				}
+			case "tags":
+				if err := decoder.DecodeElement(&xmlCommodity.Tags, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode tags")
+				}
+			case "urls":
+				if err := decoder.DecodeElement(&xmlCommodity.URLs, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode URLs")
 				}
 			case "images":
 				if options.IncludeFileData {

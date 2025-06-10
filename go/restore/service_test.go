@@ -3,6 +3,7 @@ package restore_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -58,7 +59,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			<status>in_use</status>
 			<type>electronics</type>
 			<originalPrice>100.00</originalPrice>
-			<originalCurrency>USD</originalCurrency>
+			<originalPriceCurrency>USD</originalPriceCurrency>
+			<convertedOriginalPrice>0</convertedOriginalPrice>
 			<currentPrice>90.00</currentPrice>
 			<purchaseDate>2023-01-01</purchaseDate>
 		</commodity>
@@ -285,4 +287,323 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		_, err := service.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.ErrorMatches, ".*invalid restore strategy.*")
 	})
+}
+
+func TestRestoreService_MainCurrencyValidation(t *testing.T) {
+	c := qt.New(t)
+
+	// Create test registries
+	registrySet, err := memory.NewRegistrySet("")
+	c.Assert(err, qt.IsNil)
+
+	// Set up main currency in settings
+	ctx := c.Context()
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	c.Assert(err, qt.IsNil)
+
+	service := restore.NewRestoreService(registrySet, "")
+
+	// Create XML with a commodity that has pricing information
+	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
+<inventory xmlns="http://inventario.example.com/schema" exportDate="2023-01-01T00:00:00Z" exportType="full">
+  <locations>
+    <location id="loc1">
+      <locationName>Test Location</locationName>
+      <address>123 Test St</address>
+    </location>
+  </locations>
+  <areas>
+    <area id="area1">
+      <areaName>Test Area</areaName>
+      <locationId>loc1</locationId>
+    </area>
+  </areas>
+  <commodities>
+    <commodity id="comm1">
+      <commodityName>Test Commodity</commodityName>
+      <shortName>TC</shortName>
+      <areaId>area1</areaId>
+      <count>1</count>
+      <status>in_use</status>
+      <type>electronics</type>
+      <originalPrice>100.00</originalPrice>
+      <originalPriceCurrency>USD</originalPriceCurrency>
+      <convertedOriginalPrice>0</convertedOriginalPrice>
+      <currentPrice>95.00</currentPrice>
+      <draft>false</draft>
+      <purchaseDate>2023-01-01</purchaseDate>
+    </commodity>
+  </commodities>
+</inventory>`
+
+	reader := strings.NewReader(xmlContent)
+	options := restore.RestoreOptions{
+		Strategy:        restore.RestoreStrategyFullReplace,
+		IncludeFileData: false,
+		DryRun:          false,
+		BackupExisting:  false,
+	}
+
+	stats, err := service.RestoreFromXML(ctx, reader, options)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("Expected no errors, but got: %v", stats.Errors))
+	c.Assert(stats.CommodityCount, qt.Equals, 1)
+	c.Assert(stats.CreatedCount, qt.Equals, 3) // 1 location + 1 area + 1 commodity
+
+	// Verify the commodity was created successfully
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(commodities, qt.HasLen, 1)
+
+	commodity := commodities[0]
+	c.Assert(commodity.Name, qt.Equals, "Test Commodity")
+	c.Assert(commodity.OriginalPrice.String(), qt.Equals, "100")
+	c.Assert(string(commodity.OriginalPriceCurrency), qt.Equals, "USD")
+}
+
+func TestRestoreService_NoMainCurrencySet(t *testing.T) {
+	c := qt.New(t)
+
+	// Create test registries without setting main currency
+	registrySet, err := memory.NewRegistrySet("")
+	c.Assert(err, qt.IsNil)
+
+	service := restore.NewRestoreService(registrySet, "")
+
+	// Create XML with a commodity that has pricing information
+	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
+<inventory xmlns="http://inventario.example.com/schema" exportDate="2023-01-01T00:00:00Z" exportType="full">
+  <locations>
+    <location id="loc1">
+      <locationName>Test Location</locationName>
+      <address>123 Test St</address>
+    </location>
+  </locations>
+  <areas>
+    <area id="area1">
+      <areaName>Test Area</areaName>
+      <locationId>loc1</locationId>
+    </area>
+  </areas>
+  <commodities>
+    <commodity id="comm1">
+      <commodityName>Test Commodity</commodityName>
+      <shortName>TC</shortName>
+      <areaId>area1</areaId>
+      <count>1</count>
+      <status>in_use</status>
+      <type>electronics</type>
+      <originalPrice>100.00</originalPrice>
+      <originalPriceCurrency>USD</originalPriceCurrency>
+      <convertedOriginalPrice>0</convertedOriginalPrice>
+      <currentPrice>95.00</currentPrice>
+      <draft>false</draft>
+      <purchaseDate>2023-01-01</purchaseDate>
+    </commodity>
+  </commodities>
+</inventory>`
+
+	reader := strings.NewReader(xmlContent)
+	options := restore.RestoreOptions{
+		Strategy:        restore.RestoreStrategyFullReplace,
+		IncludeFileData: false,
+		DryRun:          false,
+		BackupExisting:  false,
+	}
+
+	ctx := c.Context()
+	stats, err := service.RestoreFromXML(ctx, reader, options)
+	c.Assert(err, qt.IsNil)
+
+	// Should have errors because main currency is not set
+	c.Assert(stats.ErrorCount, qt.Equals, 1)
+	c.Assert(stats.Errors, qt.HasLen, 1)
+	c.Assert(stats.Errors[0], qt.Matches, ".*main currency not set.*")
+
+	// Location and area should be created successfully
+	c.Assert(stats.LocationCount, qt.Equals, 1)
+	c.Assert(stats.AreaCount, qt.Equals, 1)
+	c.Assert(stats.CommodityCount, qt.Equals, 0) // Commodity should fail
+	c.Assert(stats.CreatedCount, qt.Equals, 2) // Only location + area
+
+	// Verify no commodity was created
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(commodities, qt.HasLen, 0)
+}
+
+func TestRestoreService_SampleXMLStructure(t *testing.T) {
+	c := qt.New(t)
+
+	// Create test registries
+	registrySet, err := memory.NewRegistrySet("")
+	c.Assert(err, qt.IsNil)
+
+	// Set up main currency in settings
+	ctx := c.Context()
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
+	c.Assert(err, qt.IsNil)
+
+	service := restore.NewRestoreService(registrySet, "")
+
+	// Create XML with the same structure as sample_export.xml
+	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
+<inventory exportDate="2025-06-10T21:56:40Z" exportType="full_database">
+  <locations>
+    <location id="c1a42b71-f06e-4b93-b246-1e99c5d732a1">
+      <locationName>Home</locationName>
+      <address>123 Main St, Anytown, USA</address>
+    </location>
+  </locations>
+  <areas>
+    <area id="bbbb2ece-f73c-4de0-adf1-d151d872aae6">
+      <areaName>Living Room</areaName>
+      <locationId>c1a42b71-f06e-4b93-b246-1e99c5d732a1</locationId>
+    </area>
+  </areas>
+  <commodities>
+    <commodity id="67b0dee7-e5c0-4c1f-a216-a350072ea031">
+      <commodityName>Smart TV</commodityName>
+      <shortName>TV</shortName>
+      <type>electronics</type>
+      <areaId>bbbb2ece-f73c-4de0-adf1-d151d872aae6</areaId>
+      <count>1</count>
+      <originalPrice>1299.99</originalPrice>
+      <originalPriceCurrency>USD</originalPriceCurrency>
+      <convertedOriginalPrice>29899.77</convertedOriginalPrice>
+      <currentPrice>899.99</currentPrice>
+      <serialNumber>TV123456789</serialNumber>
+      <extraSerialNumbers></extraSerialNumbers>
+      <partNumbers></partNumbers>
+      <tags>
+        <tag>electronics</tag>
+        <tag>entertainment</tag>
+      </tags>
+      <status>in_use</status>
+      <purchaseDate>2022-01-15</purchaseDate>
+      <registeredDate>2022-01-16</registeredDate>
+      <urls></urls>
+      <comments>65-inch 4K Smart TV</comments>
+      <draft>false</draft>
+    </commodity>
+    <commodity id="1350bb48-d608-425f-bd02-d9695836d3c5">
+      <commodityName>Winter Clothes</commodityName>
+      <shortName>Winter</shortName>
+      <type>clothes</type>
+      <areaId>bbbb2ece-f73c-4de0-adf1-d151d872aae6</areaId>
+      <count>10</count>
+      <originalPrice>1200</originalPrice>
+      <originalPriceCurrency>CZK</originalPriceCurrency>
+      <convertedOriginalPrice>0</convertedOriginalPrice>
+      <currentPrice>600</currentPrice>
+      <extraSerialNumbers></extraSerialNumbers>
+      <partNumbers></partNumbers>
+      <tags>
+        <tag>clothes</tag>
+        <tag>seasonal</tag>
+      </tags>
+      <status>in_use</status>
+      <purchaseDate>2021-09-15</purchaseDate>
+      <registeredDate>2021-09-20</registeredDate>
+      <urls></urls>
+      <comments>Winter clothes in storage</comments>
+      <draft>false</draft>
+    </commodity>
+  </commodities>
+</inventory>`
+
+	reader := strings.NewReader(xmlContent)
+	options := restore.RestoreOptions{
+		Strategy:        restore.RestoreStrategyFullReplace,
+		IncludeFileData: false,
+		DryRun:          false,
+		BackupExisting:  false,
+	}
+
+	stats, err := service.RestoreFromXML(ctx, reader, options)
+	c.Assert(err, qt.IsNil)
+
+	// Debug: print errors if any
+	if stats.ErrorCount > 0 {
+		for _, errMsg := range stats.Errors {
+			c.Logf("Error: %s", errMsg)
+		}
+	}
+
+	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("Expected no errors, but got: %v", stats.Errors))
+	c.Assert(stats.CommodityCount, qt.Equals, 2)
+	c.Assert(stats.CreatedCount, qt.Equals, 4) // 1 location + 1 area + 2 commodities
+
+	// Verify the commodities were created successfully
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(commodities, qt.HasLen, 2)
+
+	// Check the first commodity (Smart TV)
+	var smartTV *models.Commodity
+	for _, commodity := range commodities {
+		if commodity.Name == "Smart TV" {
+			smartTV = commodity
+			break
+		}
+	}
+	c.Assert(smartTV, qt.IsNotNil)
+	c.Assert(smartTV.OriginalPrice.String(), qt.Equals, "1299.99")
+	c.Assert(string(smartTV.OriginalPriceCurrency), qt.Equals, "USD")
+	c.Assert(smartTV.ConvertedOriginalPrice.String(), qt.Equals, "29899.77")
+	c.Assert(smartTV.SerialNumber, qt.Equals, "TV123456789")
+
+	// Check the second commodity (Winter Clothes)
+	var winterClothes *models.Commodity
+	for _, commodity := range commodities {
+		if commodity.Name == "Winter Clothes" {
+			winterClothes = commodity
+			break
+		}
+	}
+	c.Assert(winterClothes, qt.IsNotNil)
+	c.Assert(winterClothes.OriginalPrice.String(), qt.Equals, "1200")
+	c.Assert(string(winterClothes.OriginalPriceCurrency), qt.Equals, "CZK")
+	c.Assert(winterClothes.ConvertedOriginalPrice.String(), qt.Equals, "0")
+}
+
+func TestRestoreService_ActualSampleXML(t *testing.T) {
+	c := qt.New(t)
+
+	// Create test registries
+	registrySet, err := memory.NewRegistrySet("")
+	c.Assert(err, qt.IsNil)
+
+	// Set up main currency in settings
+	ctx := c.Context()
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
+	c.Assert(err, qt.IsNil)
+
+	service := restore.NewRestoreService(registrySet, "")
+
+	// Read the actual sample XML file
+	xmlContent, err := os.ReadFile("sample_export.xml")
+	c.Assert(err, qt.IsNil)
+
+	reader := strings.NewReader(string(xmlContent))
+	options := restore.RestoreOptions{
+		Strategy:        restore.RestoreStrategyFullReplace,
+		IncludeFileData: false,
+		DryRun:          false,
+		BackupExisting:  false,
+	}
+
+	stats, err := service.RestoreFromXML(ctx, reader, options)
+	c.Assert(err, qt.IsNil)
+
+	// Debug: print errors if any
+	if stats.ErrorCount > 0 {
+		c.Logf("Total errors: %d", stats.ErrorCount)
+		for i, errMsg := range stats.Errors {
+			c.Logf("Error %d: %s", i+1, errMsg)
+		}
+	}
+
+	c.Logf("Stats: LocationCount=%d, AreaCount=%d, CommodityCount=%d, CreatedCount=%d, ErrorCount=%d",
+		stats.LocationCount, stats.AreaCount, stats.CommodityCount, stats.CreatedCount, stats.ErrorCount)
 }

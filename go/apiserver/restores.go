@@ -3,16 +3,13 @@ package apiserver
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
-	"path/filepath"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
-	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -117,67 +114,7 @@ func (api *restoresAPI) createRestore(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// uploadRestoreFile uploads an XML file for restore.
-// @Summary Upload restore file
-// @Description upload XML file for restore
-// @Tags restores
-// @Accept multipart/form-data
-// @Produce json-api
-// @Param file formData file true "XML file to restore"
-// @Success 200 {object} jsonapi.UploadResponse "OK"
-// @Failure 400 {object} jsonapi.ErrorResponse "Bad Request"
-// @Router /restores/upload [post].
-func (api *restoresAPI) uploadRestoreFile(w http.ResponseWriter, r *http.Request) {
-	// Get uploaded file
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		badRequest(w, r, errkit.Wrap(err, "failed to get uploaded file"))
-		return
-	}
-	defer file.Close()
 
-	// Validate file type
-	if filepath.Ext(header.Filename) != ".xml" {
-		badRequest(w, r, errkit.WithMessage(nil, "only XML files are allowed"))
-		return
-	}
-
-	// Generate unique filename
-	filename := filekit.UploadFileName(header.Filename)
-
-	// Save file to blob storage
-	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
-	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to open blob bucket"))
-		return
-	}
-	defer b.Close()
-
-	writer, err := b.NewWriter(r.Context(), filename, nil)
-	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to create blob writer"))
-		return
-	}
-	defer writer.Close()
-
-	// Copy file content
-	if _, err := io.Copy(writer, file); err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to save file"))
-		return
-	}
-
-	uploadData := jsonapi.UploadData{
-		Type:      "restores",
-		FileNames: []string{filename},
-	}
-
-	response := jsonapi.NewUploadResponse("", uploadData).WithStatusCode(http.StatusOK)
-
-	if err := render.Render(w, r, response); err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-}
 
 // deleteRestore deletes a restore operation.
 // @Summary Delete restore
@@ -331,7 +268,6 @@ func Restores(params Params) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Get("/", api.listRestores)
 		r.Post("/", api.createRestore)
-		r.Post("/upload", api.uploadRestoreFile)
 
 		r.Route("/{id}", func(r chi.Router) {
 			r.Use(restoreCtx(params.RegistrySet.ImportRegistry))

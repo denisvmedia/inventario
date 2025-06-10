@@ -2,7 +2,7 @@
   <div class="restore-create">
     <div class="breadcrumb-nav">
       <router-link to="/restores" class="breadcrumb-link">
-        <i class="pi pi-arrow-left"></i> Back to Restores
+        <font-awesome-icon icon="arrow-left" /> Back to Restores
       </router-link>
     </div>
     <h1>Create New Restore</h1>
@@ -13,27 +13,24 @@
       <!-- Step 1: File Upload -->
       <div class="form-section">
         <h2>1. Upload XML Backup File</h2>
-        
+
         <div class="form-group">
           <label for="file-upload">XML Backup File</label>
-          <div class="upload-area">
-            <FileUpload
-              ref="fileUpload"
-              mode="basic"
-              accept=".xml"
-              :maxFileSize="100000000"
-              :auto="false"
-              chooseLabel="Choose XML File"
-              @select="onFileSelect"
-              @clear="onFileClear"
-              class="file-upload"
-            />
-            <div v-if="selectedFile" class="file-info">
-              <i class="pi pi-file"></i>
-              <span>{{ selectedFile.name }}</span>
-              <span class="file-size">({{ formatFileSize(selectedFile.size) }})</span>
-            </div>
+          <FileUploader
+            :multiple="false"
+            accept=".xml,application/xml,text/xml"
+            upload-prompt="Drag and drop XML backup file here"
+            @upload="onFileUpload"
+          />
+
+          <!-- Show selected file info -->
+          <div v-if="selectedFile" class="file-info">
+            <font-awesome-icon icon="file" />
+            <span class="file-name">{{ selectedFile.name }}</span>
+            <span class="file-size">({{ formatFileSize(selectedFile.size) }})</span>
+            <button type="button" class="remove-file" @click="clearFile">×</button>
           </div>
+
           <div v-if="formErrors.source_file_path" class="error-message">{{ formErrors.source_file_path }}</div>
           <div class="form-help">Select an XML backup file to restore from</div>
         </div>
@@ -42,7 +39,7 @@
       <!-- Step 2: Description -->
       <div class="form-section">
         <h2>2. Restore Details</h2>
-        
+
         <div class="form-group">
           <label for="description">Description</label>
           <textarea
@@ -62,9 +59,9 @@
       <!-- Step 3: Restore Strategy -->
       <div class="form-section">
         <h2>3. Restore Strategy</h2>
-        
+
         <div class="strategy-options">
-          <div class="strategy-option">
+          <div class="strategy-option" :class="{ selected: form.options.strategy === 'merge_add' }">
             <RadioButton
               v-model="form.options.strategy"
               inputId="strategy-merge-add"
@@ -77,8 +74,8 @@
               </span>
             </label>
           </div>
-          
-          <div class="strategy-option">
+
+          <div class="strategy-option" :class="{ selected: form.options.strategy === 'merge_update' }">
             <RadioButton
               v-model="form.options.strategy"
               inputId="strategy-merge-update"
@@ -91,8 +88,8 @@
               </span>
             </label>
           </div>
-          
-          <div class="strategy-option">
+
+          <div class="strategy-option" :class="{ selected: form.options.strategy === 'full_replace' }">
             <RadioButton
               v-model="form.options.strategy"
               inputId="strategy-full-replace"
@@ -112,7 +109,7 @@
       <!-- Step 4: Options -->
       <div class="form-section">
         <h2>4. Options</h2>
-        
+
         <div class="option-group">
           <div class="option-item">
             <Checkbox
@@ -127,7 +124,7 @@
               </span>
             </label>
           </div>
-          
+
           <div class="option-item">
             <Checkbox
               v-model="form.options.backup_existing"
@@ -142,7 +139,7 @@
               </span>
             </label>
           </div>
-          
+
           <div class="option-item">
             <Checkbox
               v-model="form.options.dry_run"
@@ -172,8 +169,8 @@
           class="btn btn-primary"
           :disabled="!canSubmit || creating"
         >
-          <i v-if="creating" class="pi pi-spinner pi-spin"></i>
-          <i v-else class="pi pi-upload"></i>
+          <font-awesome-icon v-if="creating" icon="spinner" spin />
+          <font-awesome-icon v-else icon="upload" />
           {{ creating ? 'Creating...' : (form.options.dry_run ? 'Preview Restore' : 'Start Restore') }}
         </button>
       </div>
@@ -187,7 +184,8 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
-import FileUpload from 'primevue/fileupload';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
+import FileUploader from '@/components/FileUploader.vue';
 import RadioButton from 'primevue/radiobutton';
 import Checkbox from 'primevue/checkbox';
 import Message from 'primevue/message';
@@ -217,8 +215,8 @@ const form = ref<RestoreRequest>({
 const formErrors = ref<Record<string, string>>({});
 
 const canSubmit = computed(() => {
-  return selectedFile.value && 
-         form.value.description.trim() && 
+  return selectedFile.value &&
+         form.value.description.trim() &&
          uploadedFilename.value &&
          !creating.value;
 });
@@ -231,51 +229,63 @@ const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-const onFileSelect = async (event: any) => {
-  const files = event.files;
-  if (files && files.length > 0) {
-    selectedFile.value = files[0];
+const onFileUpload = async (files: File[]) => {
+  if (files.length === 0) return;
 
-    try {
-      const response = await RestoreService.uploadFile(files[0]);
-      uploadedFilename.value = response.filename;
-      form.value.source_file_path = response.filename;
-      
-      // Clear any previous file-related errors
-      if (formErrors.value.source_file_path) {
-        delete formErrors.value.source_file_path;
-      }
-    } catch (err) {
-      toast.add({
-        severity: 'error',
-        summary: 'Upload Error',
-        detail: err instanceof Error ? err.message : 'Failed to upload file',
-        life: 5000,
-      });
-      selectedFile.value = null;
-      uploadedFilename.value = '';
-      form.value.source_file_path = '';
+  const file = files[0];
+  selectedFile.value = file;
+
+  try {
+    const response = await RestoreService.uploadFile(file);
+    uploadedFilename.value = response.filename;
+    form.value.source_file_path = response.filename;
+
+    // Clear any previous file-related errors
+    if (formErrors.value.source_file_path) {
+      delete formErrors.value.source_file_path;
     }
+
+    toast.add({
+      severity: 'success',
+      summary: 'Upload Success',
+      detail: 'XML backup file uploaded successfully',
+      life: 3000,
+    });
+  } catch (err) {
+    toast.add({
+      severity: 'error',
+      summary: 'Upload Error',
+      detail: err instanceof Error ? err.message : 'Failed to upload file',
+      life: 5000,
+    });
+    selectedFile.value = null;
+    uploadedFilename.value = '';
+    form.value.source_file_path = '';
   }
 };
 
-const onFileClear = () => {
+const clearFile = () => {
   selectedFile.value = null;
   uploadedFilename.value = '';
   form.value.source_file_path = '';
+
+  // Clear any file-related errors
+  if (formErrors.value.source_file_path) {
+    delete formErrors.value.source_file_path;
+  }
 };
 
 const validateForm = (): boolean => {
   const errors: Record<string, string> = {};
-  
+
   if (!form.value.description.trim()) {
     errors.description = 'Description is required';
   }
-  
+
   if (!uploadedFilename.value) {
     errors.source_file_path = 'XML backup file is required';
   }
-  
+
   formErrors.value = errors;
   return Object.keys(errors).length === 0;
 };
@@ -355,31 +365,14 @@ const createRestore = async () => {
 @use '@/assets/main' as *;
 
 .restore-create {
-  max-width: $container-max-width;
+  max-width: 800px;
   margin: 0 auto;
   padding: 20px;
 }
 
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
-
-.breadcrumb-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: $primary-color;
-  text-decoration: none;
-  font-weight: 500;
-
-  &:hover {
-    text-decoration: underline;
-  }
-}
-
 h1 {
-  margin-bottom: 2rem;
-  color: $text-color;
+  margin: 0 0 30px;
+  font-size: 2rem;
 }
 
 .error-message {
@@ -395,70 +388,68 @@ h1 {
   background: white;
   border-radius: $default-radius;
   box-shadow: $box-shadow;
-  padding: 2rem;
+  padding: 30px;
 }
 
 .form-section {
-  margin-bottom: 2rem;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
+  margin-bottom: 30px;
 }
 
 .form-section h2 {
-  margin: 0 0 1rem 0;
+  margin: 0 0 20px;
+  font-size: 1.5rem;
   color: $text-color;
-  font-size: 1.25rem;
-  font-weight: 600;
+  border-bottom: 2px solid $primary-color;
+  padding-bottom: 10px;
 }
 
 .form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 20px;
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
+  margin-bottom: 8px;
+  font-weight: 600;
   color: $text-color;
 }
 
+.form-group input,
+.form-group select,
 .form-group textarea {
   width: 100%;
-  padding: 0.75rem;
+  padding: 10px;
   border: 1px solid $border-color;
   border-radius: $default-radius;
-  font-family: inherit;
   font-size: 1rem;
+}
+
+.form-group textarea {
   resize: vertical;
-
-  &:focus {
-    outline: none;
-    border-color: $primary-color;
-    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-  }
-
-  &.is-invalid {
-    border-color: $danger-color;
-  }
+  min-height: 80px;
 }
 
 .form-help {
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   color: $text-secondary-color;
-  margin-top: 0.25rem;
+  margin-top: 5px;
 }
 
 .upload-area {
   border: 2px dashed $border-color;
   border-radius: $default-radius;
-  padding: 1rem;
+  padding: 2rem;
   text-align: center;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background-color 0.2s;
+  background-color: #fafafa;
 
   &:hover {
     border-color: $primary-color;
+    background-color: rgba($primary-color, 0.02);
+  }
+
+  .file-upload {
+    display: inline-block;
   }
 }
 
@@ -471,10 +462,37 @@ h1 {
   background-color: $light-bg-color;
   border-radius: $default-radius;
   font-size: 0.875rem;
+  border: 1px solid $border-color;
+}
+
+.file-name {
+  flex: 1;
+  font-weight: 500;
 }
 
 .file-size {
   color: $text-secondary-color;
+}
+
+.remove-file {
+  background: none;
+  border: none;
+  color: $text-secondary-color;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0.25rem;
+  border-radius: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
+
+  &:hover {
+    background-color: rgba($danger-color, 0.1);
+    color: $danger-color;
+  }
 }
 
 .strategy-options {
@@ -496,6 +514,11 @@ h1 {
   &:hover {
     border-color: $primary-color;
     background-color: rgba($primary-color, 0.05);
+  }
+
+  &.selected {
+    border-color: $primary-color;
+    background-color: rgba($primary-color, 0.1);
   }
 }
 
@@ -541,10 +564,11 @@ h1 {
 
 .info-section {
   margin-top: 1rem;
-  padding: 1rem;
-  background-color: #d1ecf1;
-  border-radius: $default-radius;
-  border: 1px solid #bee5eb;
+
+  :deep(.p-message) {
+    border: none;
+    box-shadow: none;
+  }
 }
 
 .form-actions {
@@ -556,42 +580,7 @@ h1 {
   border-top: 1px solid $border-color;
 }
 
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: $default-radius;
-  font-weight: 500;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s;
 
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-}
-
-.btn-primary {
-  background-color: $primary-color;
-  color: white;
-
-  &:hover:not(:disabled) {
-    background-color: darken($primary-color, 10%);
-  }
-}
-
-.btn-secondary {
-  background-color: $light-bg-color;
-  color: $text-color;
-  border: 1px solid $border-color;
-
-  &:hover {
-    background-color: darken($light-bg-color, 5%);
-  }
-}
 
 .form-error {
   background-color: #f8d7da;
