@@ -19,6 +19,10 @@ import './assets/primevue-toggleswitch.scss'
 import './assets/primevue-dialog.scss'
 import './assets/primevue-datepicker.scss'
 import './assets/primevue-toast.scss'
+import './assets/primevue-fileupload.scss'
+import './assets/primevue-progressbar.scss'
+import './assets/primevue-progressspinner.scss'
+import './assets/primevue-badge.scss'
 import { FontAwesomeIcon } from './fontawesome'
 
 // Add some debug logging

@@ -1,16 +1,16 @@
 <template>
   <div class="restore-list">
-    <div class="control-plane">
-      <div class="control-plane-left">
-        <h2>Restore Operations</h2>
+    <div class="header">
+      <div class="header-title">
+        <h1>Restore Operations</h1>
+        <div v-if="restores.length > 0" class="item-count">
+          {{ restores.length }} restore operation{{ restores.length !== 1 ? 's' : '' }}
+        </div>
       </div>
-      <div class="control-plane-right">
-        <Button
-          label="+ New Restore"
-          icon="pi pi-plus"
-          @click="showCreateDialog = true"
-          class="p-button-primary"
-        />
+      <div class="header-actions">
+        <router-link to="/restores/new" class="btn btn-primary">
+          <i class="pi pi-plus"></i> New
+        </router-link>
       </div>
     </div>
 
@@ -31,12 +31,9 @@
           <i class="pi pi-upload" style="font-size: 3rem; color: var(--text-color-secondary);"></i>
           <h3>No Restore Operations</h3>
           <p>Create your first restore operation to import data from XML backups.</p>
-          <Button
-            label="Create Restore"
-            icon="pi pi-plus"
-            @click="showCreateDialog = true"
-            class="p-button-primary"
-          />
+          <router-link to="/restores/new" class="btn btn-primary">
+            <i class="pi pi-plus"></i> Create Restore
+          </router-link>
         </div>
       </div>
 
@@ -125,11 +122,7 @@
       </div>
     </div>
 
-    <!-- Create Restore Dialog -->
-    <RestoreCreateDialog
-      v-model:visible="showCreateDialog"
-      @created="onRestoreCreated"
-    />
+
 
     <!-- Delete Confirmation Dialog -->
     <Dialog
@@ -179,7 +172,6 @@ import Message from 'primevue/message';
 import ProgressSpinner from 'primevue/progressspinner';
 import ProgressBar from 'primevue/progressbar';
 import { RestoreService } from '@/services/restoreService';
-import RestoreCreateDialog from '@/components/RestoreCreateDialog.vue';
 import type { Import } from '@/types';
 
 const router = useRouter();
@@ -188,7 +180,6 @@ const toast = useToast();
 const restores = ref<Import[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
-const showCreateDialog = ref(false);
 const showDeleteDialog = ref(false);
 const restoreToDelete = ref<Import | null>(null);
 const deleting = ref(false);
@@ -240,43 +231,23 @@ const deleteRestore = async () => {
   }
 };
 
-const onRestoreCreated = (newRestore: Import) => {
-  restores.value.unshift(newRestore);
-  showCreateDialog.value = false;
-  
-  toast.add({
-    severity: 'success',
-    summary: 'Success',
-    detail: 'Restore operation created successfully',
-    life: 3000,
-  });
-};
+
 
 onMounted(() => {
   loadRestores();
 });
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/main' as *;
+
 .restore-list {
-  padding: 1rem;
+  max-width: $container-max-width;
+  margin: 0 auto;
+  padding: 20px;
 }
 
-.control-plane {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: var(--surface-card);
-  border-radius: var(--border-radius);
-  border: 1px solid var(--surface-border);
-}
-
-.control-plane-left h2 {
-  margin: 0;
-  color: var(--text-color);
-}
+// Header styles are now in shared _header.scss
 
 .content-area {
   min-height: 400px;
@@ -291,6 +262,14 @@ onMounted(() => {
   justify-content: center;
   min-height: 400px;
   text-align: center;
+  padding: 2rem;
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+}
+
+.error-state {
+  color: $danger-color;
 }
 
 .empty-content {
@@ -299,12 +278,12 @@ onMounted(() => {
 
 .empty-content h3 {
   margin: 1rem 0 0.5rem 0;
-  color: var(--text-color);
+  color: $text-color;
 }
 
 .empty-content p {
   margin-bottom: 1.5rem;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
 }
 
 .restore-grid {
@@ -316,6 +295,9 @@ onMounted(() => {
 .restore-card {
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .restore-card:hover {
@@ -328,7 +310,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  border-bottom: 1px solid var(--surface-border);
+  border-bottom: 1px solid $border-color;
 }
 
 .status-info {
@@ -339,7 +321,7 @@ onMounted(() => {
 
 .restore-type {
   font-size: 0.875rem;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
   text-transform: uppercase;
 }
 
@@ -360,11 +342,11 @@ onMounted(() => {
 
 .detail-row .label {
   font-weight: 500;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
 }
 
 .detail-row .value {
-  color: var(--text-color);
+  color: $text-color;
 }
 
 .stats-summary {
@@ -372,7 +354,7 @@ onMounted(() => {
   gap: 1rem;
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--surface-border);
+  border-top: 1px solid $border-color;
 }
 
 .stat-item {
@@ -385,12 +367,12 @@ onMounted(() => {
 .stat-value {
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--primary-color);
+  color: $primary-color;
 }
 
 .stat-label {
   font-size: 0.75rem;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
   text-transform: uppercase;
 }
 
@@ -405,7 +387,7 @@ onMounted(() => {
 .progress-text {
   margin-top: 0.5rem;
   text-align: center;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
   font-size: 0.875rem;
 }
 
@@ -424,7 +406,34 @@ onMounted(() => {
 }
 
 .warning-text {
-  color: var(--orange-500);
+  color: #fd7e14; // Orange color for warnings
   font-weight: 500;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: $default-radius;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.btn-primary {
+  background-color: $primary-color;
+  color: white;
+
+  &:hover:not(:disabled) {
+    background-color: darken($primary-color, 10%);
+  }
 }
 </style>

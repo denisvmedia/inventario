@@ -1,7 +1,7 @@
 <template>
   <div class="restore-detail">
-    <div class="control-plane">
-      <div class="control-plane-left">
+    <div class="header">
+      <div class="header-title">
         <Button
           icon="pi pi-arrow-left"
           label="Back to Restores"
@@ -9,7 +9,7 @@
           @click="$router.push('/restores')"
         />
       </div>
-      <div class="control-plane-right">
+      <div class="header-actions">
         <Button
           icon="pi pi-trash"
           label="Delete"
@@ -322,21 +322,16 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/main' as *;
+
 .restore-detail {
-  padding: 1rem;
+  max-width: $container-max-width;
+  margin: 0 auto;
+  padding: 20px;
 }
 
-.control-plane {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: var(--surface-card);
-  border-radius: var(--border-radius);
-  border: 1px solid var(--surface-border);
-}
+// Header styles are now in shared _header.scss
 
 .content-area {
   min-height: 400px;
@@ -350,6 +345,14 @@ onMounted(() => {
   justify-content: center;
   min-height: 400px;
   text-align: center;
+  padding: 2rem;
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+}
+
+.error-state {
+  color: $danger-color;
 }
 
 .restore-content {
@@ -360,6 +363,9 @@ onMounted(() => {
 
 .header-card {
   margin-bottom: 0;
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
 }
 
 .restore-header {
@@ -376,7 +382,7 @@ onMounted(() => {
 
 .title-section h2 {
   margin: 0;
-  color: var(--text-color);
+  color: $text-color;
 }
 
 .status-badge {
@@ -385,7 +391,7 @@ onMounted(() => {
 
 .restore-type {
   font-size: 0.875rem;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
   text-transform: uppercase;
   font-weight: 500;
 }
@@ -406,30 +412,30 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   padding: 0.75rem;
-  background: var(--surface-100);
-  border-radius: var(--border-radius);
+  background: $light-bg-color;
+  border-radius: $default-radius;
 }
 
 .info-item .label {
   font-weight: 500;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
 }
 
 .info-item .value {
-  color: var(--text-color);
+  color: $text-color;
   text-align: right;
 }
 
 .progress-section h4,
 .error-section h4 {
   margin: 0 0 1rem 0;
-  color: var(--text-color);
+  color: $text-color;
 }
 
 .progress-text {
   margin-top: 0.5rem;
   text-align: center;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
   font-size: 0.875rem;
 }
 
@@ -444,14 +450,14 @@ onMounted(() => {
   align-items: center;
   gap: 1rem;
   padding: 1.5rem;
-  background: var(--surface-100);
-  border-radius: var(--border-radius);
-  border: 1px solid var(--surface-border);
+  background: $light-bg-color;
+  border-radius: $default-radius;
+  border: 1px solid $border-color;
 }
 
 .stat-card.error-stat {
-  background: var(--red-50);
-  border-color: var(--red-200);
+  background: #ffeaea; // Light red background
+  border-color: #f5c6cb; // Light red border
 }
 
 .stat-icon {
@@ -460,14 +466,14 @@ onMounted(() => {
   justify-content: center;
   width: 3rem;
   height: 3rem;
-  background: var(--primary-color);
+  background: $primary-color;
   color: white;
   border-radius: 50%;
   font-size: 1.25rem;
 }
 
 .error-stat .stat-icon {
-  background: var(--red-500);
+  background: $danger-color;
 }
 
 .stat-content {
@@ -478,13 +484,13 @@ onMounted(() => {
 .stat-value {
   font-size: 1.5rem;
   font-weight: 600;
-  color: var(--text-color);
+  color: $text-color;
   line-height: 1;
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: var(--text-color-secondary);
+  color: $text-secondary-color;
   text-transform: uppercase;
   margin-top: 0.25rem;
 }
@@ -514,7 +520,7 @@ onMounted(() => {
 }
 
 .warning-text {
-  color: var(--orange-500);
+  color: #fd7e14; // Orange color for warnings
   font-weight: 500;
 }
 </style>

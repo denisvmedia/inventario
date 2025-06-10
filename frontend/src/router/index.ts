@@ -85,6 +85,11 @@ const routes = [
     component: () => import('../views/restores/RestoreListView.vue')
   },
   {
+    path: '/restores/new',
+    name: 'restore-create',
+    component: () => import('../views/restores/RestoreCreateView.vue')
+  },
+  {
     path: '/restores/:id',
     name: 'restore-detail',
     component: () => import('../views/restores/RestoreDetailView.vue')
