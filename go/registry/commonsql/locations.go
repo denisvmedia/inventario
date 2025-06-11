@@ -3,6 +3,7 @@ package commonsql
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
@@ -14,8 +15,9 @@ import (
 var _ registry.LocationRegistry = (*LocationRegistry)(nil)
 
 type LocationRegistry struct {
-	dbx        *sqlx.DB
-	tableNames TableNames
+	dbx          *sqlx.DB
+	tableNames   TableNames
+	areaRegistry registry.AreaRegistry
 }
 
 func NewLocationRegistry(dbx *sqlx.DB) *LocationRegistry {
@@ -27,6 +29,11 @@ func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *Loc
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+// SetAreaRegistry sets the area registry for recursive deletion
+func (r *LocationRegistry) SetAreaRegistry(areaRegistry registry.AreaRegistry) {
+	r.areaRegistry = areaRegistry
 }
 
 func (r *LocationRegistry) Create(ctx context.Context, location models.Location) (*models.Location, error) {
@@ -241,6 +248,50 @@ func (r *LocationRegistry) DeleteArea(ctx context.Context, locationID, areaID st
 	err = DeleteEntityByField(ctx, tx, r.tableNames.Areas(), "id", areaID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete area")
+	}
+
+	return nil
+}
+
+// DeleteRecursive deletes a location and all its areas and commodities recursively
+func (r *LocationRegistry) DeleteRecursive(ctx context.Context, id string) error {
+	// Begin a transaction (atomic operation)
+	tx, err := r.dbx.Beginx()
+	if err != nil {
+		return errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer func() {
+		err = errors.Join(err, RollbackOrCommit(tx, err))
+	}()
+
+	// Check if the location exists
+	_, err = r.get(ctx, tx, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get location")
+	}
+
+	// Get all areas in this location
+	areas, err := r.getAreas(ctx, tx, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get areas")
+	}
+
+	// Delete all areas recursively (this will also delete their commodities)
+	for _, areaID := range areas {
+		if r.areaRegistry != nil {
+			if err := r.areaRegistry.DeleteRecursive(ctx, areaID); err != nil {
+				// If the area is already deleted, that's fine - continue with others
+				if !errors.Is(err, registry.ErrNotFound) {
+					return errkit.Wrap(err, fmt.Sprintf("failed to delete area %s recursively", areaID))
+				}
+			}
+		}
+	}
+
+	// Finally, delete the location
+	err = DeleteEntityByField(ctx, tx, r.tableNames.Locations(), "id", id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete location")
 	}
 
 	return nil

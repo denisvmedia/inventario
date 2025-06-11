@@ -238,36 +238,14 @@ func (s *RestoreService) backupExistingData(ctx context.Context) error {
 
 // clearExistingData removes all existing data for full replace strategy
 func (s *RestoreService) clearExistingData(ctx context.Context) error {
-	// Delete all commodities first (due to foreign key constraints)
-	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
-	if err != nil {
-		return errkit.Wrap(err, "failed to list commodities for deletion")
-	}
-	for _, commodity := range commodities {
-		if err := s.registrySet.CommodityRegistry.Delete(ctx, commodity.ID); err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to delete commodity %s", commodity.ID))
-		}
-	}
-
-	// Delete all areas
-	areas, err := s.registrySet.AreaRegistry.List(ctx)
-	if err != nil {
-		return errkit.Wrap(err, "failed to list areas for deletion")
-	}
-	for _, area := range areas {
-		if err := s.registrySet.AreaRegistry.Delete(ctx, area.ID); err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to delete area %s", area.ID))
-		}
-	}
-
-	// Delete all locations
+	// Delete all locations recursively (this will also delete areas and commodities)
 	locations, err := s.registrySet.LocationRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to list locations for deletion")
 	}
 	for _, location := range locations {
-		if err := s.registrySet.LocationRegistry.Delete(ctx, location.ID); err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to delete location %s", location.ID))
+		if err := s.registrySet.LocationRegistry.DeleteRecursive(ctx, location.ID); err != nil {
+			return errkit.Wrap(err, fmt.Sprintf("failed to delete location %s recursively", location.ID))
 		}
 	}
 

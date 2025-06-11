@@ -44,6 +44,9 @@ type AreaRegistry interface {
 	AddCommodity(ctx context.Context, areaID, commodityID string) error
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
 	DeleteCommodity(ctx context.Context, areaID, commodityID string) error
+
+	// DeleteRecursive deletes an area and all its commodities
+	DeleteRecursive(ctx context.Context, id string) error
 }
 
 type CommodityRegistry interface {
@@ -68,6 +71,9 @@ type LocationRegistry interface {
 	AddArea(ctx context.Context, locationID, areaID string) error
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
 	DeleteArea(ctx context.Context, locationID, areaID string) error
+
+	// DeleteRecursive deletes a location and all its areas and commodities
+	DeleteRecursive(ctx context.Context, id string) error
 }
 
 type ImageRegistry interface {

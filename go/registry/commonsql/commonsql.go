@@ -42,5 +42,9 @@ func NewRegistrySet(dbx *sqlx.DB) *registry.Set {
 	s.ExportRegistry = NewExportRegistry(dbx)
 	s.ImportRegistry = NewImportRegistry(dbx)
 
+	// Set up dependencies for recursive deletion
+	s.LocationRegistry.(*LocationRegistry).SetAreaRegistry(s.AreaRegistry)
+	s.AreaRegistry.(*AreaRegistry).SetCommodityRegistry(s.CommodityRegistry)
+
 	return s
 }
