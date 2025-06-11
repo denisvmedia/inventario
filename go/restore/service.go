@@ -9,8 +9,10 @@ import (
 	"io"
 
 	"gocloud.dev/blob"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -189,6 +191,12 @@ type IDMapping struct {
 	Locations  map[string]string // XML ID -> Database ID
 	Areas      map[string]string // XML ID -> Database ID
 	Commodities map[string]string // XML ID -> Database ID
+}
+
+// PendingFileData holds file data that needs to be processed after commodity creation
+type PendingFileData struct {
+	FileType string   // "image", "invoice", "manual"
+	XMLFiles []XMLFile // File data collected during parsing
 }
 
 // loadExistingEntities loads all existing entities from the database
@@ -514,6 +522,7 @@ func (s *RestoreService) processCommodities(ctx context.Context, decoder *xml.De
 // processCommodity processes a single commodity with streaming file handling
 func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions) error {
 	var xmlCommodity XMLCommodity
+	var pendingFiles []PendingFileData // Collect file data to process after commodity creation
 
 	// Get commodity ID from attributes
 	for _, attr := range startElement.Attr {
@@ -619,8 +628,15 @@ func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Deco
 				}
 			case "images":
 				if options.IncludeFileData {
-					if err := s.processFiles(ctx, decoder, &t, xmlCommodity.ID, "image", stats); err != nil {
-						return errkit.Wrap(err, "failed to process images")
+					files, err := s.collectFiles(ctx, decoder, &t, stats)
+					if err != nil {
+						return errkit.Wrap(err, "failed to collect images")
+					}
+					if len(files) > 0 {
+						pendingFiles = append(pendingFiles, PendingFileData{
+							FileType: "image",
+							XMLFiles: files,
+						})
 					}
 				} else {
 					// Skip images section
@@ -630,8 +646,15 @@ func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Deco
 				}
 			case "invoices":
 				if options.IncludeFileData {
-					if err := s.processFiles(ctx, decoder, &t, xmlCommodity.ID, "invoice", stats); err != nil {
-						return errkit.Wrap(err, "failed to process invoices")
+					files, err := s.collectFiles(ctx, decoder, &t, stats)
+					if err != nil {
+						return errkit.Wrap(err, "failed to collect invoices")
+					}
+					if len(files) > 0 {
+						pendingFiles = append(pendingFiles, PendingFileData{
+							FileType: "invoice",
+							XMLFiles: files,
+						})
 					}
 				} else {
 					// Skip invoices section
@@ -641,8 +664,15 @@ func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Deco
 				}
 			case "manuals":
 				if options.IncludeFileData {
-					if err := s.processFiles(ctx, decoder, &t, xmlCommodity.ID, "manual", stats); err != nil {
-						return errkit.Wrap(err, "failed to process manuals")
+					files, err := s.collectFiles(ctx, decoder, &t, stats)
+					if err != nil {
+						return errkit.Wrap(err, "failed to collect manuals")
+					}
+					if len(files) > 0 {
+						pendingFiles = append(pendingFiles, PendingFileData{
+							FileType: "manual",
+							XMLFiles: files,
+						})
 					}
 				} else {
 					// Skip manuals section
@@ -653,8 +683,29 @@ func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Deco
 			}
 		case xml.EndElement:
 			if t.Name.Local == "commodity" {
-				// Process the commodity
-				return s.createOrUpdateCommodity(ctx, &xmlCommodity, stats, existing, idMapping, options)
+				// Process the commodity first
+				if err := s.createOrUpdateCommodity(ctx, &xmlCommodity, stats, existing, idMapping, options); err != nil {
+					return err
+				}
+
+				// Now process any collected files after the commodity is created
+				if options.IncludeFileData && len(pendingFiles) > 0 {
+					// Get the actual commodity ID from the mapping
+					actualCommodityID := idMapping.Commodities[xmlCommodity.ID]
+					if actualCommodityID != "" {
+						for _, pendingFile := range pendingFiles {
+							for _, xmlFile := range pendingFile.XMLFiles {
+								if err := s.createFileRecord(ctx, &xmlFile, actualCommodityID, pendingFile.FileType, stats); err != nil {
+									stats.ErrorCount++
+									stats.Errors = append(stats.Errors, fmt.Sprintf("failed to create %s file record: %v", pendingFile.FileType, err))
+									continue
+								}
+							}
+						}
+					}
+				}
+
+				return nil
 			}
 		}
 	}
@@ -684,6 +735,13 @@ func (s *RestoreService) createOrUpdateCommodity(ctx context.Context, xmlCommodi
 
 	// Set the correct area ID from the mapping
 	commodity.AreaID = actualAreaID
+
+	// Fix price validation issue: if original currency matches main currency,
+	// converted original price must be zero
+	mainCurrency, err := validationctx.MainCurrencyFromContext(ctx)
+	if err == nil && string(commodity.OriginalPriceCurrency) == mainCurrency {
+		commodity.ConvertedOriginalPrice = decimal.Zero
+	}
 
 	if err := commodity.ValidateWithContext(ctx); err != nil {
 		return errkit.Wrap(err, fmt.Sprintf("invalid commodity %s", originalXMLID))
@@ -754,6 +812,35 @@ func (s *RestoreService) createOrUpdateCommodity(ctx context.Context, xmlCommodi
 	return nil
 }
 
+// collectFiles collects file data from XML without processing it immediately
+func (s *RestoreService) collectFiles(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, stats *RestoreStats) ([]XMLFile, error) {
+	var files []XMLFile
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to read file token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "file" {
+				xmlFile, err := s.collectFile(ctx, decoder, &t, stats)
+				if err != nil {
+					stats.ErrorCount++
+					stats.Errors = append(stats.Errors, fmt.Sprintf("failed to collect file: %v", err))
+					continue
+				}
+				files = append(files, *xmlFile)
+			}
+		case xml.EndElement:
+			if t.Name.Local == startElement.Name.Local {
+				return files, nil
+			}
+		}
+	}
+}
+
 // processFiles processes file sections (images, invoices, manuals) with streaming base64 decoding
 func (s *RestoreService) processFiles(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, commodityID, fileType string, stats *RestoreStats) error {
 	for {
@@ -764,7 +851,7 @@ func (s *RestoreService) processFiles(ctx context.Context, decoder *xml.Decoder,
 
 		switch t := tok.(type) {
 		case xml.StartElement:
-			if t.Name.Local == fileType {
+			if t.Name.Local == "file" {
 				if err := s.processFile(ctx, decoder, &t, commodityID, fileType, stats); err != nil {
 					stats.ErrorCount++
 					stats.Errors = append(stats.Errors, fmt.Sprintf("failed to process %s file: %v", fileType, err))
@@ -774,6 +861,58 @@ func (s *RestoreService) processFiles(ctx context.Context, decoder *xml.Decoder,
 		case xml.EndElement:
 			if t.Name.Local == startElement.Name.Local {
 				return nil
+			}
+		}
+	}
+}
+
+// collectFile collects a single file's data without processing it immediately
+func (s *RestoreService) collectFile(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, stats *RestoreStats) (*XMLFile, error) {
+	var xmlFile XMLFile
+
+	// Get file ID from attributes
+	for _, attr := range startElement.Attr {
+		if attr.Name.Local == "id" {
+			xmlFile.ID = attr.Value
+			break
+		}
+	}
+
+	// Process file elements
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to read file element token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "path":
+				if err := decoder.DecodeElement(&xmlFile.Path, &t); err != nil {
+					return nil, errkit.Wrap(err, "failed to decode path")
+				}
+			case "originalPath":
+				if err := decoder.DecodeElement(&xmlFile.OriginalPath, &t); err != nil {
+					return nil, errkit.Wrap(err, "failed to decode original path")
+				}
+			case "extension":
+				if err := decoder.DecodeElement(&xmlFile.Extension, &t); err != nil {
+					return nil, errkit.Wrap(err, "failed to decode extension")
+				}
+			case "mimeType":
+				if err := decoder.DecodeElement(&xmlFile.MimeType, &t); err != nil {
+					return nil, errkit.Wrap(err, "failed to decode mime type")
+				}
+			case "data":
+				// Stream and decode base64 data
+				if err := s.decodeBase64ToFile(ctx, decoder, &xmlFile, stats); err != nil {
+					return nil, errkit.Wrap(err, "failed to decode base64 data")
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "file" {
+				return &xmlFile, nil
 			}
 		}
 	}
@@ -824,7 +963,7 @@ func (s *RestoreService) processFile(ctx context.Context, decoder *xml.Decoder, 
 				}
 			}
 		case xml.EndElement:
-			if t.Name.Local == fileType {
+			if t.Name.Local == "file" {
 				// Create file record
 				if err := s.createFileRecord(ctx, &xmlFile, commodityID, fileType, stats); err != nil {
 					return errkit.Wrap(err, "failed to create file record")
@@ -866,8 +1005,8 @@ func (s *RestoreService) decodeBase64ToFile(ctx context.Context, decoder *xml.De
 	}
 	defer b.Close()
 
-	// Generate unique filename
-	filename := fmt.Sprintf("%s-%s%s", xmlFile.Path, xmlFile.ID, xmlFile.Extension)
+	// Generate unique filename using the same strategy as import service
+	filename := filekit.UploadFileName(xmlFile.OriginalPath)
 
 	// Create blob writer
 	writer, err := b.NewWriter(ctx, filename, nil)
@@ -905,8 +1044,10 @@ func (s *RestoreService) decodeBase64ToFile(ctx context.Context, decoder *xml.De
 		case xml.EndElement:
 			if t.Name.Local == "data" {
 				stats.BinaryDataSize += totalSize
-				// Update the file path to the stored filename
+				// Update both Path and OriginalPath to the stored filename
+				// Path is used for display/editing, OriginalPath is used for blob retrieval
 				xmlFile.Path = filename
+				xmlFile.OriginalPath = filename
 				return nil
 			}
 		}
@@ -920,51 +1061,45 @@ func (s *RestoreService) createFileRecord(ctx context.Context, xmlFile *XMLFile,
 	switch fileType {
 	case "image":
 		image := &models.Image{
-			EntityID:    models.EntityID{ID: xmlFile.ID},
 			CommodityID: commodityID,
 			File:        file,
 		}
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid image")
 		}
-		if _, err := s.registrySet.ImageRegistry.Create(ctx, *image); err != nil {
+		_, err := s.registrySet.ImageRegistry.Create(ctx, *image)
+		if err != nil {
 			return errkit.Wrap(err, "failed to create image")
 		}
-		if err := s.registrySet.CommodityRegistry.AddImage(ctx, commodityID, image.ID); err != nil {
-			return errkit.Wrap(err, "failed to add image to commodity")
-		}
+		// Note: AddImage is called automatically by the ImageRegistry.Create method
 		stats.ImageCount++
 	case "invoice":
 		invoice := &models.Invoice{
-			EntityID:    models.EntityID{ID: xmlFile.ID},
 			CommodityID: commodityID,
 			File:        file,
 		}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid invoice")
 		}
-		if _, err := s.registrySet.InvoiceRegistry.Create(ctx, *invoice); err != nil {
+		_, err := s.registrySet.InvoiceRegistry.Create(ctx, *invoice)
+		if err != nil {
 			return errkit.Wrap(err, "failed to create invoice")
 		}
-		if err := s.registrySet.CommodityRegistry.AddInvoice(ctx, commodityID, invoice.ID); err != nil {
-			return errkit.Wrap(err, "failed to add invoice to commodity")
-		}
+		// Note: AddInvoice is called automatically by the InvoiceRegistry.Create method
 		stats.InvoiceCount++
 	case "manual":
 		manual := &models.Manual{
-			EntityID:    models.EntityID{ID: xmlFile.ID},
 			CommodityID: commodityID,
 			File:        file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")
 		}
-		if _, err := s.registrySet.ManualRegistry.Create(ctx, *manual); err != nil {
+		_, err := s.registrySet.ManualRegistry.Create(ctx, *manual)
+		if err != nil {
 			return errkit.Wrap(err, "failed to create manual")
 		}
-		if err := s.registrySet.CommodityRegistry.AddManual(ctx, commodityID, manual.ID); err != nil {
-			return errkit.Wrap(err, "failed to add manual to commodity")
-		}
+		// Note: AddManual is called automatically by the ManualRegistry.Create method
 		stats.ManualCount++
 	default:
 		return errors.New(fmt.Sprintf("unknown file type: %s", fileType))
