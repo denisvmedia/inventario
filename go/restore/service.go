@@ -103,6 +103,9 @@ func (s *RestoreService) RestoreFromXML(ctx context.Context, xmlReader io.Reader
 		Locations:   make(map[string]string),
 		Areas:       make(map[string]string),
 		Commodities: make(map[string]string),
+		Images:      make(map[string]string),
+		Invoices:    make(map[string]string),
+		Manuals:     make(map[string]string),
 	}
 
 	if options.Strategy != RestoreStrategyFullReplace {
@@ -119,11 +122,23 @@ func (s *RestoreService) RestoreFromXML(ctx context.Context, xmlReader io.Reader
 		for xmlID, entity := range existingEntities.Commodities {
 			idMapping.Commodities[xmlID] = entity.ID
 		}
+		for xmlID, entity := range existingEntities.Images {
+			idMapping.Images[xmlID] = entity.ID
+		}
+		for xmlID, entity := range existingEntities.Invoices {
+			idMapping.Invoices[xmlID] = entity.ID
+		}
+		for xmlID, entity := range existingEntities.Manuals {
+			idMapping.Manuals[xmlID] = entity.ID
+		}
 	} else {
 		// For full replace, initialize empty maps to track newly created entities
 		existingEntities.Locations = make(map[string]*models.Location)
 		existingEntities.Areas = make(map[string]*models.Area)
 		existingEntities.Commodities = make(map[string]*models.Commodity)
+		existingEntities.Images = make(map[string]*models.Image)
+		existingEntities.Invoices = make(map[string]*models.Invoice)
+		existingEntities.Manuals = make(map[string]*models.Manual)
 	}
 
 	// If full replace, clear existing data first
@@ -184,6 +199,9 @@ type ExistingEntities struct {
 	Locations  map[string]*models.Location
 	Areas      map[string]*models.Area
 	Commodities map[string]*models.Commodity
+	Images     map[string]*models.Image   // XML ID -> Image
+	Invoices   map[string]*models.Invoice // XML ID -> Invoice
+	Manuals    map[string]*models.Manual  // XML ID -> Manual
 }
 
 // IDMapping tracks the mapping from XML IDs to actual database IDs
@@ -191,6 +209,9 @@ type IDMapping struct {
 	Locations  map[string]string // XML ID -> Database ID
 	Areas      map[string]string // XML ID -> Database ID
 	Commodities map[string]string // XML ID -> Database ID
+	Images     map[string]string // XML ID -> Database ID
+	Invoices   map[string]string // XML ID -> Database ID
+	Manuals    map[string]string // XML ID -> Database ID
 }
 
 // PendingFileData holds file data that needs to be processed after commodity creation
@@ -204,8 +225,11 @@ func (s *RestoreService) loadExistingEntities(ctx context.Context, entities *Exi
 	entities.Locations = make(map[string]*models.Location)
 	entities.Areas = make(map[string]*models.Area)
 	entities.Commodities = make(map[string]*models.Commodity)
+	entities.Images = make(map[string]*models.Image)
+	entities.Invoices = make(map[string]*models.Invoice)
+	entities.Manuals = make(map[string]*models.Manual)
 
-	// Load locations
+	// Load locations - index by ID (which should be the same as XML ID for imported entities)
 	locations, err := s.registrySet.LocationRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing locations")
@@ -214,7 +238,7 @@ func (s *RestoreService) loadExistingEntities(ctx context.Context, entities *Exi
 		entities.Locations[location.ID] = location
 	}
 
-	// Load areas
+	// Load areas - index by ID (which should be the same as XML ID for imported entities)
 	areas, err := s.registrySet.AreaRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing areas")
@@ -223,13 +247,40 @@ func (s *RestoreService) loadExistingEntities(ctx context.Context, entities *Exi
 		entities.Areas[area.ID] = area
 	}
 
-	// Load commodities
+	// Load commodities - index by ID (which should be the same as XML ID for imported entities)
 	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing commodities")
 	}
 	for _, commodity := range commodities {
 		entities.Commodities[commodity.ID] = commodity
+	}
+
+	// Load images - index by ID (which should be the same as XML ID for imported entities)
+	images, err := s.registrySet.ImageRegistry.List(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to load existing images")
+	}
+	for _, image := range images {
+		entities.Images[image.ID] = image
+	}
+
+	// Load invoices - index by ID (which should be the same as XML ID for imported entities)
+	invoices, err := s.registrySet.InvoiceRegistry.List(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to load existing invoices")
+	}
+	for _, invoice := range invoices {
+		entities.Invoices[invoice.ID] = invoice
+	}
+
+	// Load manuals - index by ID (which should be the same as XML ID for imported entities)
+	manuals, err := s.registrySet.ManualRegistry.List(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to load existing manuals")
+	}
+	for _, manual := range manuals {
+		entities.Manuals[manual.ID] = manual
 	}
 
 	return nil
@@ -687,7 +738,7 @@ func (s *RestoreService) processCommodity(ctx context.Context, decoder *xml.Deco
 					if actualCommodityID != "" {
 						for _, pendingFile := range pendingFiles {
 							for _, xmlFile := range pendingFile.XMLFiles {
-								if err := s.createFileRecord(ctx, &xmlFile, actualCommodityID, pendingFile.FileType, stats); err != nil {
+								if err := s.createFileRecord(ctx, &xmlFile, actualCommodityID, pendingFile.FileType, stats, existing, idMapping, options); err != nil {
 									stats.ErrorCount++
 									stats.Errors = append(stats.Errors, fmt.Sprintf("failed to create %s file record: %v", pendingFile.FileType, err))
 									continue
@@ -724,6 +775,8 @@ func (s *RestoreService) createOrUpdateCommodity(ctx context.Context, xmlCommodi
 	if err != nil {
 		return errkit.Wrap(err, fmt.Sprintf("failed to convert commodity %s", originalXMLID))
 	}
+
+
 
 	// Set the correct area ID from the mapping
 	commodity.AreaID = actualAreaID
@@ -836,7 +889,8 @@ func (s *RestoreService) collectFiles(ctx context.Context, decoder *xml.Decoder,
 }
 
 // processFiles processes file sections (images, invoices, manuals) with streaming base64 decoding
-func (s *RestoreService) processFiles(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, commodityID, fileType string, stats *RestoreStats) error {
+// NOTE: This function is currently unused in favor of collectFiles approach
+func (s *RestoreService) processFiles(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, commodityID, fileType string, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions) error {
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
@@ -846,7 +900,7 @@ func (s *RestoreService) processFiles(ctx context.Context, decoder *xml.Decoder,
 		switch t := tok.(type) {
 		case xml.StartElement:
 			if t.Name.Local == "file" {
-				if err := s.processFile(ctx, decoder, &t, commodityID, fileType, stats); err != nil {
+				if err := s.processFile(ctx, decoder, &t, commodityID, fileType, stats, existing, idMapping, options); err != nil {
 					stats.ErrorCount++
 					stats.Errors = append(stats.Errors, fmt.Sprintf("failed to process %s file: %v", fileType, err))
 					continue
@@ -913,7 +967,8 @@ func (s *RestoreService) collectFile(ctx context.Context, decoder *xml.Decoder, 
 }
 
 // processFile processes a single file with streaming base64 decoding
-func (s *RestoreService) processFile(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, commodityID, fileType string, stats *RestoreStats) error {
+// NOTE: This function is currently unused in favor of collectFiles approach
+func (s *RestoreService) processFile(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, commodityID, fileType string, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions) error {
 	var xmlFile XMLFile
 
 	// Get file ID from attributes
@@ -959,7 +1014,7 @@ func (s *RestoreService) processFile(ctx context.Context, decoder *xml.Decoder, 
 		case xml.EndElement:
 			if t.Name.Local == "file" {
 				// Create file record
-				if err := s.createFileRecord(ctx, &xmlFile, commodityID, fileType, stats); err != nil {
+				if err := s.createFileRecord(ctx, &xmlFile, commodityID, fileType, stats, existing, idMapping, options); err != nil {
 					return errkit.Wrap(err, "failed to create file record")
 				}
 				return nil
@@ -1048,53 +1103,282 @@ func (s *RestoreService) decodeBase64ToFile(ctx context.Context, decoder *xml.De
 	}
 }
 
-// createFileRecord creates a file record in the appropriate registry
-func (s *RestoreService) createFileRecord(ctx context.Context, xmlFile *XMLFile, commodityID, fileType string, stats *RestoreStats) error {
+// createFileRecord creates a file record in the appropriate registry with strategy support
+func (s *RestoreService) createFileRecord(ctx context.Context, xmlFile *XMLFile, commodityID, fileType string, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions) error {
 	file := xmlFile.ConvertToFile()
+	originalXMLID := xmlFile.ID
 
 	switch fileType {
 	case "image":
-		image := &models.Image{
-			CommodityID: commodityID,
-			File:        file,
+		// Apply strategy for images
+		existingImage := existing.Images[originalXMLID]
+		switch options.Strategy {
+		case RestoreStrategyFullReplace:
+			// Always create (database was cleared)
+			if !options.DryRun {
+				image := &models.Image{
+					EntityID:    models.EntityID{ID: originalXMLID},
+					CommodityID: commodityID,
+					File:        file,
+				}
+				if err := image.ValidateWithContext(ctx); err != nil {
+					return errkit.Wrap(err, "invalid image")
+				}
+				createdImage, err := s.registrySet.ImageRegistry.Create(ctx, *image)
+				if err != nil {
+					return errkit.Wrap(err, "failed to create image")
+				}
+				// Track the newly created image and store ID mapping
+				existing.Images[originalXMLID] = createdImage
+				idMapping.Images[originalXMLID] = createdImage.ID
+			}
+			stats.ImageCount++
+		case RestoreStrategyMergeAdd:
+			// Only create if doesn't exist
+			if existingImage == nil {
+				if !options.DryRun {
+					image := &models.Image{
+						EntityID:    models.EntityID{ID: originalXMLID},
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := image.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid image")
+					}
+					createdImage, err := s.registrySet.ImageRegistry.Create(ctx, *image)
+					if err != nil {
+						return errkit.Wrap(err, "failed to create image")
+					}
+					// Track the newly created image and store ID mapping
+					existing.Images[originalXMLID] = createdImage
+					idMapping.Images[originalXMLID] = createdImage.ID
+				}
+				stats.ImageCount++
+			} else {
+				stats.SkippedCount++
+			}
+		case RestoreStrategyMergeUpdate:
+			// Create if missing, update if exists
+			if existingImage == nil {
+				if !options.DryRun {
+					image := &models.Image{
+						EntityID:    models.EntityID{ID: originalXMLID},
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := image.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid image")
+					}
+					createdImage, err := s.registrySet.ImageRegistry.Create(ctx, *image)
+					if err != nil {
+						return errkit.Wrap(err, "failed to create image")
+					}
+					// Track the newly created image and store ID mapping
+					existing.Images[originalXMLID] = createdImage
+					idMapping.Images[originalXMLID] = createdImage.ID
+				}
+				stats.ImageCount++
+			} else {
+				if !options.DryRun {
+					// Update existing image
+					image := &models.Image{
+						EntityID:    existingImage.EntityID, // Keep the existing ID
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := image.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid image")
+					}
+					updatedImage, err := s.registrySet.ImageRegistry.Update(ctx, *image)
+					if err != nil {
+						return errkit.Wrap(err, "failed to update image")
+					}
+					// Update the tracked image
+					existing.Images[originalXMLID] = updatedImage
+				}
+				stats.UpdatedCount++
+			}
 		}
-		if err := image.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid image")
-		}
-		_, err := s.registrySet.ImageRegistry.Create(ctx, *image)
-		if err != nil {
-			return errkit.Wrap(err, "failed to create image")
-		}
-		// Note: AddImage is called automatically by the ImageRegistry.Create method
-		stats.ImageCount++
 	case "invoice":
-		invoice := &models.Invoice{
-			CommodityID: commodityID,
-			File:        file,
+		// Apply strategy for invoices
+		existingInvoice := existing.Invoices[originalXMLID]
+		switch options.Strategy {
+		case RestoreStrategyFullReplace:
+			// Always create (database was cleared)
+			if !options.DryRun {
+				invoice := &models.Invoice{
+					EntityID:    models.EntityID{ID: originalXMLID},
+					CommodityID: commodityID,
+					File:        file,
+				}
+				if err := invoice.ValidateWithContext(ctx); err != nil {
+					return errkit.Wrap(err, "invalid invoice")
+				}
+				createdInvoice, err := s.registrySet.InvoiceRegistry.Create(ctx, *invoice)
+				if err != nil {
+					return errkit.Wrap(err, "failed to create invoice")
+				}
+				// Track the newly created invoice and store ID mapping
+				existing.Invoices[originalXMLID] = createdInvoice
+				idMapping.Invoices[originalXMLID] = createdInvoice.ID
+			}
+			stats.InvoiceCount++
+		case RestoreStrategyMergeAdd:
+			// Only create if doesn't exist
+			if existingInvoice == nil {
+				if !options.DryRun {
+					invoice := &models.Invoice{
+						EntityID:    models.EntityID{ID: originalXMLID},
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := invoice.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid invoice")
+					}
+					createdInvoice, err := s.registrySet.InvoiceRegistry.Create(ctx, *invoice)
+					if err != nil {
+						return errkit.Wrap(err, "failed to create invoice")
+					}
+					// Track the newly created invoice and store ID mapping
+					existing.Invoices[originalXMLID] = createdInvoice
+					idMapping.Invoices[originalXMLID] = createdInvoice.ID
+				}
+				stats.InvoiceCount++
+			} else {
+				stats.SkippedCount++
+			}
+		case RestoreStrategyMergeUpdate:
+			// Create if missing, update if exists
+			if existingInvoice == nil {
+				if !options.DryRun {
+					invoice := &models.Invoice{
+						EntityID:    models.EntityID{ID: originalXMLID},
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := invoice.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid invoice")
+					}
+					createdInvoice, err := s.registrySet.InvoiceRegistry.Create(ctx, *invoice)
+					if err != nil {
+						return errkit.Wrap(err, "failed to create invoice")
+					}
+					// Track the newly created invoice and store ID mapping
+					existing.Invoices[originalXMLID] = createdInvoice
+					idMapping.Invoices[originalXMLID] = createdInvoice.ID
+				}
+				stats.InvoiceCount++
+			} else {
+				if !options.DryRun {
+					// Update existing invoice
+					invoice := &models.Invoice{
+						EntityID:    existingInvoice.EntityID, // Keep the existing ID
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := invoice.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid invoice")
+					}
+					updatedInvoice, err := s.registrySet.InvoiceRegistry.Update(ctx, *invoice)
+					if err != nil {
+						return errkit.Wrap(err, "failed to update invoice")
+					}
+					// Update the tracked invoice
+					existing.Invoices[originalXMLID] = updatedInvoice
+				}
+				stats.UpdatedCount++
+			}
 		}
-		if err := invoice.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid invoice")
-		}
-		_, err := s.registrySet.InvoiceRegistry.Create(ctx, *invoice)
-		if err != nil {
-			return errkit.Wrap(err, "failed to create invoice")
-		}
-		// Note: AddInvoice is called automatically by the InvoiceRegistry.Create method
-		stats.InvoiceCount++
 	case "manual":
-		manual := &models.Manual{
-			CommodityID: commodityID,
-			File:        file,
+		// Apply strategy for manuals
+		existingManual := existing.Manuals[originalXMLID]
+		switch options.Strategy {
+		case RestoreStrategyFullReplace:
+			// Always create (database was cleared)
+			if !options.DryRun {
+				manual := &models.Manual{
+					EntityID:    models.EntityID{ID: originalXMLID},
+					CommodityID: commodityID,
+					File:        file,
+				}
+				if err := manual.ValidateWithContext(ctx); err != nil {
+					return errkit.Wrap(err, "invalid manual")
+				}
+				createdManual, err := s.registrySet.ManualRegistry.Create(ctx, *manual)
+				if err != nil {
+					return errkit.Wrap(err, "failed to create manual")
+				}
+				// Track the newly created manual and store ID mapping
+				existing.Manuals[originalXMLID] = createdManual
+				idMapping.Manuals[originalXMLID] = createdManual.ID
+			}
+			stats.ManualCount++
+		case RestoreStrategyMergeAdd:
+			// Only create if doesn't exist
+			if existingManual == nil {
+				if !options.DryRun {
+					manual := &models.Manual{
+						EntityID:    models.EntityID{ID: originalXMLID},
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := manual.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid manual")
+					}
+					createdManual, err := s.registrySet.ManualRegistry.Create(ctx, *manual)
+					if err != nil {
+						return errkit.Wrap(err, "failed to create manual")
+					}
+					// Track the newly created manual and store ID mapping
+					existing.Manuals[originalXMLID] = createdManual
+					idMapping.Manuals[originalXMLID] = createdManual.ID
+				}
+				stats.ManualCount++
+			} else {
+				stats.SkippedCount++
+			}
+		case RestoreStrategyMergeUpdate:
+			// Create if missing, update if exists
+			if existingManual == nil {
+				if !options.DryRun {
+					manual := &models.Manual{
+						EntityID:    models.EntityID{ID: originalXMLID},
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := manual.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid manual")
+					}
+					createdManual, err := s.registrySet.ManualRegistry.Create(ctx, *manual)
+					if err != nil {
+						return errkit.Wrap(err, "failed to create manual")
+					}
+					// Track the newly created manual and store ID mapping
+					existing.Manuals[originalXMLID] = createdManual
+					idMapping.Manuals[originalXMLID] = createdManual.ID
+				}
+				stats.ManualCount++
+			} else {
+				if !options.DryRun {
+					// Update existing manual
+					manual := &models.Manual{
+						EntityID:    existingManual.EntityID, // Keep the existing ID
+						CommodityID: commodityID,
+						File:        file,
+					}
+					if err := manual.ValidateWithContext(ctx); err != nil {
+						return errkit.Wrap(err, "invalid manual")
+					}
+					updatedManual, err := s.registrySet.ManualRegistry.Update(ctx, *manual)
+					if err != nil {
+						return errkit.Wrap(err, "failed to update manual")
+					}
+					// Update the tracked manual
+					existing.Manuals[originalXMLID] = updatedManual
+				}
+				stats.UpdatedCount++
+			}
 		}
-		if err := manual.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid manual")
-		}
-		_, err := s.registrySet.ManualRegistry.Create(ctx, *manual)
-		if err != nil {
-			return errkit.Wrap(err, "failed to create manual")
-		}
-		// Note: AddManual is called automatically by the ManualRegistry.Create method
-		stats.ManualCount++
 	default:
 		return errors.New(fmt.Sprintf("unknown file type: %s", fileType))
 	}

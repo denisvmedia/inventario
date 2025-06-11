@@ -23,7 +23,10 @@ func NewRegistry[T any, P registry.PIDable[T]]() *Registry[T, P] {
 
 func (r *Registry[T, P]) Create(_ context.Context, item T) (P, error) {
 	iitem := P(&item)
-	iitem.SetID(uuid.New().String())
+	// Generate a new ID if one is not already provided
+	if iitem.GetID() == "" {
+		iitem.SetID(uuid.New().String())
+	}
 
 	r.lock.Lock()
 	r.items.Set(iitem.GetID(), iitem)

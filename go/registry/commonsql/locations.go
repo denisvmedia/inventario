@@ -43,8 +43,10 @@ func (r *LocationRegistry) Create(ctx context.Context, location models.Location)
 		)
 	}
 
-	// Generate a new ID
-	location.SetID(generateID())
+	// Generate a new ID if one is not already provided
+	if location.GetID() == "" {
+		location.SetID(generateID())
+	}
 
 	// Insert the location into the database (atomic operation)
 	err := InsertEntity(ctx, r.dbx, r.tableNames.Locations(), location)
