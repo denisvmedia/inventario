@@ -301,7 +301,7 @@ func (s *RestoreService) processLocation(ctx context.Context, decoder *xml.Decod
 	originalXMLID := xmlLocation.ID
 
 	// Apply strategy
-	existingLocation := existing.Locations[location.ID]
+	existingLocation := existing.Locations[originalXMLID]
 	switch options.Strategy {
 	case RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -420,7 +420,7 @@ func (s *RestoreService) processArea(ctx context.Context, decoder *xml.Decoder, 
 	}
 
 	// Apply strategy
-	existingArea := existing.Areas[area.ID]
+	existingArea := existing.Areas[originalXMLID]
 	switch options.Strategy {
 	case RestoreStrategyFullReplace:
 		// Always create (database was cleared)
@@ -429,10 +429,7 @@ func (s *RestoreService) processArea(ctx context.Context, decoder *xml.Decoder, 
 			if err != nil {
 				return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
 			}
-			// Add area to location using the actual location ID
-			if err := s.registrySet.LocationRegistry.AddArea(ctx, actualLocationID, createdArea.ID); err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to add area %s to location %s", createdArea.ID, actualLocationID))
-			}
+				// Note: Area is automatically added to location by the AreaRegistry.Create method
 			// Track the newly created area and store ID mapping
 			existing.Areas[originalXMLID] = createdArea
 			idMapping.Areas[originalXMLID] = createdArea.ID
@@ -447,10 +444,7 @@ func (s *RestoreService) processArea(ctx context.Context, decoder *xml.Decoder, 
 				if err != nil {
 					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
 				}
-				// Add area to location using the actual location ID
-				if err := s.registrySet.LocationRegistry.AddArea(ctx, actualLocationID, createdArea.ID); err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to add area %s to location %s", createdArea.ID, actualLocationID))
-				}
+				// Note: Area is automatically added to location by the AreaRegistry.Create method
 				// Track the newly created area and store ID mapping
 				existing.Areas[originalXMLID] = createdArea
 				idMapping.Areas[originalXMLID] = createdArea.ID
@@ -466,14 +460,12 @@ func (s *RestoreService) processArea(ctx context.Context, decoder *xml.Decoder, 
 			if !options.DryRun {
 				createdArea, err := s.registrySet.AreaRegistry.Create(ctx, *area)
 				if err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", area.ID))
+					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
 				}
-				// Add area to location
-				if err := s.registrySet.LocationRegistry.AddArea(ctx, xmlArea.LocationID, area.ID); err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to add area %s to location %s", area.ID, xmlArea.LocationID))
-				}
-				// Track the newly created area
-				existing.Areas[area.ID] = createdArea
+				// Note: Area is automatically added to location by the AreaRegistry.Create method
+				// Track the newly created area and store ID mapping
+				existing.Areas[originalXMLID] = createdArea
+				idMapping.Areas[originalXMLID] = createdArea.ID
 			}
 			stats.CreatedCount++
 			stats.AreaCount++
@@ -481,10 +473,10 @@ func (s *RestoreService) processArea(ctx context.Context, decoder *xml.Decoder, 
 			if !options.DryRun {
 				updatedArea, err := s.registrySet.AreaRegistry.Update(ctx, *area)
 				if err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to update area %s", area.ID))
+					return errkit.Wrap(err, fmt.Sprintf("failed to update area %s", originalXMLID))
 				}
 				// Update the tracked area
-				existing.Areas[area.ID] = updatedArea
+				existing.Areas[originalXMLID] = updatedArea
 			}
 			stats.UpdatedCount++
 			stats.AreaCount++
@@ -757,10 +749,7 @@ func (s *RestoreService) createOrUpdateCommodity(ctx context.Context, xmlCommodi
 			if err != nil {
 				return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
 			}
-			// Add commodity to area using the actual area ID
-			if err := s.registrySet.AreaRegistry.AddCommodity(ctx, actualAreaID, createdCommodity.ID); err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to add commodity %s to area %s", createdCommodity.ID, actualAreaID))
-			}
+				// Note: Commodity is automatically added to area by the CommodityRegistry.Create method
 			// Track the newly created commodity and store ID mapping
 			existing.Commodities[originalXMLID] = createdCommodity
 			idMapping.Commodities[originalXMLID] = createdCommodity.ID
@@ -771,13 +760,14 @@ func (s *RestoreService) createOrUpdateCommodity(ctx context.Context, xmlCommodi
 		// Only create if doesn't exist
 		if existingCommodity == nil {
 			if !options.DryRun {
-				if _, err := s.registrySet.CommodityRegistry.Create(ctx, *commodity); err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", commodity.ID))
+				createdCommodity, err := s.registrySet.CommodityRegistry.Create(ctx, *commodity)
+				if err != nil {
+					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
 				}
-				// Add commodity to area
-				if err := s.registrySet.AreaRegistry.AddCommodity(ctx, xmlCommodity.AreaID, commodity.ID); err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to add commodity %s to area %s", commodity.ID, xmlCommodity.AreaID))
-				}
+				// Note: Commodity is automatically added to area by the CommodityRegistry.Create method
+				// Track the newly created commodity and store ID mapping
+				existing.Commodities[originalXMLID] = createdCommodity
+				idMapping.Commodities[originalXMLID] = createdCommodity.ID
 			}
 			stats.CreatedCount++
 			stats.CommodityCount++
@@ -788,21 +778,25 @@ func (s *RestoreService) createOrUpdateCommodity(ctx context.Context, xmlCommodi
 		// Create if missing, update if exists
 		if existingCommodity == nil {
 			if !options.DryRun {
-				if _, err := s.registrySet.CommodityRegistry.Create(ctx, *commodity); err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", commodity.ID))
+				createdCommodity, err := s.registrySet.CommodityRegistry.Create(ctx, *commodity)
+				if err != nil {
+					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
 				}
-				// Add commodity to area
-				if err := s.registrySet.AreaRegistry.AddCommodity(ctx, xmlCommodity.AreaID, commodity.ID); err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to add commodity %s to area %s", commodity.ID, xmlCommodity.AreaID))
-				}
+				// Note: Commodity is automatically added to area by the CommodityRegistry.Create method
+				// Track the newly created commodity and store ID mapping
+				existing.Commodities[originalXMLID] = createdCommodity
+				idMapping.Commodities[originalXMLID] = createdCommodity.ID
 			}
 			stats.CreatedCount++
 			stats.CommodityCount++
 		} else {
 			if !options.DryRun {
-				if _, err := s.registrySet.CommodityRegistry.Update(ctx, *commodity); err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to update commodity %s", commodity.ID))
+				updatedCommodity, err := s.registrySet.CommodityRegistry.Update(ctx, *commodity)
+				if err != nil {
+					return errkit.Wrap(err, fmt.Sprintf("failed to update commodity %s", originalXMLID))
 				}
+				// Update the tracked commodity
+				existing.Commodities[originalXMLID] = updatedCommodity
 			}
 			stats.UpdatedCount++
 			stats.CommodityCount++

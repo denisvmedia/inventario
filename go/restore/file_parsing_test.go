@@ -314,6 +314,114 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 		qt.Commentf("ConvertedOriginalPrice should be auto-corrected to zero when original currency matches main currency"))
 }
 
+func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Create registry set with proper dependencies
+	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
+	c.Assert(err, qt.IsNil)
+
+	// Set up main currency in settings (required for commodity validation)
+	mainCurrency := "USD"
+	settings := models.SettingsObject{
+		MainCurrency: &mainCurrency,
+	}
+	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	c.Assert(err, qt.IsNil)
+
+	// Create XML with multiple entities to test for duplication
+	xmlData := `<?xml version="1.0" encoding="UTF-8"?>
+<inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
+  <locations>
+    <location id="test-location-1">
+      <locationName>Test Location 1</locationName>
+      <address>123 Test Street</address>
+    </location>
+    <location id="test-location-2">
+      <locationName>Test Location 2</locationName>
+      <address>456 Test Avenue</address>
+    </location>
+  </locations>
+  <areas>
+    <area id="test-area-1">
+      <areaName>Test Area 1</areaName>
+      <locationId>test-location-1</locationId>
+    </area>
+    <area id="test-area-2">
+      <areaName>Test Area 2</areaName>
+      <locationId>test-location-2</locationId>
+    </area>
+  </areas>
+  <commodities>
+    <commodity id="test-commodity-1">
+      <commodityName>Test Commodity 1</commodityName>
+      <shortName>TestComm1</shortName>
+      <type>equipment</type>
+      <areaId>test-area-1</areaId>
+      <count>1</count>
+      <originalPrice>100.00</originalPrice>
+      <originalPriceCurrency>USD</originalPriceCurrency>
+      <currentPrice>120.00</currentPrice>
+      <status>in_use</status>
+      <purchaseDate>2024-01-01</purchaseDate>
+      <registeredDate>2024-01-01</registeredDate>
+      <lastModifiedDate>2024-01-01</lastModifiedDate>
+      <draft>false</draft>
+    </commodity>
+    <commodity id="test-commodity-2">
+      <commodityName>Test Commodity 2</commodityName>
+      <shortName>TestComm2</shortName>
+      <type>equipment</type>
+      <areaId>test-area-2</areaId>
+      <count>1</count>
+      <originalPrice>200.00</originalPrice>
+      <originalPriceCurrency>USD</originalPriceCurrency>
+      <currentPrice>220.00</currentPrice>
+      <status>in_use</status>
+      <purchaseDate>2024-01-01</purchaseDate>
+      <registeredDate>2024-01-01</registeredDate>
+      <lastModifiedDate>2024-01-01</lastModifiedDate>
+      <draft>false</draft>
+    </commodity>
+  </commodities>
+</inventory>`
+
+	// Create restore service
+	restoreService := restore.NewRestoreService(registrySet, "file://./test_uploads?create_dir=true")
+
+	// Test restore with full replace strategy
+	options := restore.RestoreOptions{
+		Strategy:        restore.RestoreStrategyFullReplace,
+		BackupExisting:  false,
+		DryRun:          false,
+		IncludeFileData: false,
+	}
+
+	reader := strings.NewReader(xmlData)
+	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	c.Assert(err, qt.IsNil)
+
+	// Verify no duplication occurred - exact counts should match XML
+	c.Assert(stats.LocationCount, qt.Equals, 2, qt.Commentf("Should create exactly 2 locations"))
+	c.Assert(stats.AreaCount, qt.Equals, 2, qt.Commentf("Should create exactly 2 areas"))
+	c.Assert(stats.CommodityCount, qt.Equals, 2, qt.Commentf("Should create exactly 2 commodities"))
+	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("No errors should occur"))
+
+	// Verify actual database counts match stats
+	locations, err := registrySet.LocationRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(locations, qt.HasLen, 2, qt.Commentf("Database should contain exactly 2 locations"))
+
+	areas, err := registrySet.AreaRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(areas, qt.HasLen, 2, qt.Commentf("Database should contain exactly 2 areas"))
+
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(commodities, qt.HasLen, 2, qt.Commentf("Database should contain exactly 2 commodities"))
+}
+
 func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
