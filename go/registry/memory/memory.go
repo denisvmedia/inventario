@@ -21,6 +21,8 @@ func NewRegistrySet(_ registry.Config) (*registry.Set, error) {
 	s.ManualRegistry = NewManualRegistry(s.CommodityRegistry)
 	s.ExportRegistry = NewExportRegistry()
 	s.ImportRegistry = NewImportRegistry()
+	s.RestoreStepRegistry = NewRestoreStepRegistry()
+	s.RestoreOperationRegistry = NewRestoreOperationRegistry(s.RestoreStepRegistry)
 
 	// Set up dependencies for recursive deletion
 	s.LocationRegistry.(*LocationRegistry).SetAreaRegistry(s.AreaRegistry)

@@ -322,6 +322,7 @@ func Exports(params Params) func(r chi.Router) {
 			r.Get("/", api.getExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
+			r.Route("/restores", ExportRestores(params))
 		})
 	}
 }

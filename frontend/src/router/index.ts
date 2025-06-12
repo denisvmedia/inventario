@@ -78,21 +78,10 @@ const routes = [
     name: 'export-detail',
     component: () => import('../views/exports/ExportDetailView.vue')
   },
-  // Restores
   {
-    path: '/restores',
-    name: 'restores',
-    component: () => import('../views/restores/RestoreListView.vue')
-  },
-  {
-    path: '/restores/new',
-    name: 'restore-create',
-    component: () => import('../views/restores/RestoreCreateView.vue')
-  },
-  {
-    path: '/restores/:id',
-    name: 'restore-detail',
-    component: () => import('../views/restores/RestoreDetailView.vue')
+    path: '/exports/:id/restore',
+    name: 'export-restore',
+    component: () => import('../views/exports/restore/RestoreCreateView.vue')
   },
   // Settings
   {

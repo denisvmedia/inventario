@@ -111,16 +111,35 @@ type ImportRegistry interface {
 	Registry[models.Import]
 }
 
+type RestoreOperationRegistry interface {
+	Registry[models.RestoreOperation]
+
+	// ListByExport returns all restore operations for an export
+	ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error)
+}
+
+type RestoreStepRegistry interface {
+	Registry[models.RestoreStep]
+
+	// ListByRestoreOperation returns all restore steps for a restore operation
+	ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error)
+
+	// DeleteByRestoreOperation deletes all restore steps for a restore operation
+	DeleteByRestoreOperation(ctx context.Context, restoreOperationID string) error
+}
+
 type Set struct {
-	LocationRegistry  LocationRegistry
-	AreaRegistry      AreaRegistry
-	CommodityRegistry CommodityRegistry
-	ImageRegistry     ImageRegistry
-	InvoiceRegistry   InvoiceRegistry
-	ManualRegistry    ManualRegistry
-	SettingsRegistry  SettingsRegistry
-	ExportRegistry    ExportRegistry
-	ImportRegistry    ImportRegistry
+	LocationRegistry         LocationRegistry
+	AreaRegistry             AreaRegistry
+	CommodityRegistry        CommodityRegistry
+	ImageRegistry            ImageRegistry
+	InvoiceRegistry          InvoiceRegistry
+	ManualRegistry           ManualRegistry
+	SettingsRegistry         SettingsRegistry
+	ExportRegistry           ExportRegistry
+	ImportRegistry           ImportRegistry
+	RestoreOperationRegistry RestoreOperationRegistry
+	RestoreStepRegistry      RestoreStepRegistry
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {

@@ -140,3 +140,28 @@ export interface RestoreRequest {
   source_file_path: string;
   options: RestoreOptions;
 }
+
+export type RestoreStepResult = 'todo' | 'in_progress' | 'success' | 'error' | 'skipped';
+
+export interface RestoreStep {
+  id: string;
+  name: string;
+  result: RestoreStepResult;
+  duration?: number;
+  reason?: string;
+  created_date: string;
+  updated_date: string;
+}
+
+export interface RestoreOperation {
+  id: string;
+  export_id: string;
+  description: string;
+  status: ImportStatus;
+  options: RestoreOptions;
+  steps: RestoreStep[];
+  created_date: string;
+  started_date?: string;
+  completed_date?: string;
+  error_message?: string;
+}

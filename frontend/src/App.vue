@@ -16,7 +16,6 @@
           <router-link to="/locations" :class="{ 'custom-active': isLocationsActive }">Locations</router-link> |
           <router-link to="/commodities" :class="{ 'custom-active': isCommoditiesActive }">Commodities</router-link> |
           <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
-          <router-link to="/restores" :class="{ 'custom-active': isRestoresActive }">Restores</router-link> |
           <router-link to="/settings" :class="{ 'custom-active': isSettingsActive }">Settings</router-link>
         </nav>
       </div>
@@ -66,10 +65,6 @@ const isCommoditiesActive = computed(() => {
 
 const isExportsActive = computed(() => {
   return route.path.startsWith('/exports')
-})
-
-const isRestoresActive = computed(() => {
-  return route.path.startsWith('/restores')
 })
 
 const isSettingsActive = computed(() => {
