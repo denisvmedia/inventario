@@ -1,16 +1,37 @@
 <template>
   <div class="restore-create">
     <div class="breadcrumb-nav">
-      <router-link :to="`/exports/${exportId}`" class="breadcrumb-link">
-        <font-awesome-icon icon="arrow-left" /> Back to Export Details
-      </router-link>
+      <a href="#" class="breadcrumb-link" @click.prevent="navigateBack">
+        <font-awesome-icon icon="arrow-left" />
+        <span>Back to Export Details</span>
+      </a>
     </div>
 
-    <div class="header">
-      <h1>Restore from Export</h1>
-      <div v-if="exportData" class="export-info">
-        <span class="export-description">{{ exportData.description }}</span>
-        <span class="export-type">{{ formatExportType(exportData.type) }}</span>
+    <h1>Restore from Export</h1>
+
+    <div v-if="exportData" class="export-info-card">
+      <div class="card-header">
+        <h2>Export Information</h2>
+      </div>
+      <div class="card-body">
+        <div class="export-summary">
+          <div class="summary-item">
+            <label>Description:</label>
+            <span>{{ exportData.description }}</span>
+          </div>
+          <div class="summary-item">
+            <label>Type:</label>
+            <span>{{ formatExportType(exportData.type) }}</span>
+          </div>
+          <div class="summary-item">
+            <label>Created:</label>
+            <span>{{ formatDate(exportData.created_date) }}</span>
+          </div>
+          <div class="summary-item">
+            <label>File Size:</label>
+            <span>{{ formatFileSize(exportData.file_size || 0) }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -26,120 +47,114 @@
     </div>
 
     <form v-else @submit.prevent="createRestore" class="restore-form">
-      <!-- Step 1: Export Information -->
+      <!-- Restore Description -->
       <div class="form-section">
-        <h2>1. Export Information</h2>
-        <div class="export-details">
-          <div class="detail-item">
-            <label>Export File:</label>
-            <span>{{ exportData?.file_path || 'Not available' }}</span>
-          </div>
-          <div class="detail-item">
-            <label>Created:</label>
-            <span>{{ formatDate(exportData?.created_date) }}</span>
-          </div>
-          <div class="detail-item">
-            <label>File Size:</label>
-            <span>{{ formatFileSize(exportData?.file_size || 0) }}</span>
+        <div class="card-header">
+          <h2>Restore Description</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="description">Description</label>
+            <textarea
+              id="description"
+              v-model="form.description"
+              placeholder="Enter a description for this restore operation..."
+              rows="3"
+              maxlength="500"
+              required
+              :class="{ 'is-invalid': formErrors.description }"
+            ></textarea>
+            <div v-if="formErrors.description" class="error-message">{{ formErrors.description }}</div>
+            <div class="form-help">Describe what this restore operation will accomplish</div>
           </div>
         </div>
       </div>
 
-      <!-- Step 2: Restore Description -->
+      <!-- Restore Strategy -->
       <div class="form-section">
-        <h2>2. Restore Description</h2>
-        <div class="form-group">
-          <label for="description">Description</label>
-          <input
-            id="description"
-            v-model="form.description"
-            type="text"
-            placeholder="Enter a description for this restore operation"
-            required
-          />
-          <div v-if="formErrors.description" class="error-message">{{ formErrors.description }}</div>
-          <div class="form-help">Describe what this restore operation will accomplish</div>
+        <div class="card-header">
+          <h2>Restore Strategy</h2>
+        </div>
+        <div class="card-body">
+          <div class="strategy-options">
+            <div class="strategy-option" :class="{ selected: form.options.strategy === 'merge_add' }">
+              <RadioButton
+                v-model="form.options.strategy"
+                inputId="strategy-merge-add"
+                value="merge_add"
+              />
+              <label for="strategy-merge-add" class="strategy-label">
+                <strong>Merge Add</strong>
+                <span class="strategy-description">
+                  Only add data from backup that is missing in current database
+                </span>
+              </label>
+            </div>
+
+            <div class="strategy-option" :class="{ selected: form.options.strategy === 'merge_update' }">
+              <RadioButton
+                v-model="form.options.strategy"
+                inputId="strategy-merge-update"
+                value="merge_update"
+              />
+              <label for="strategy-merge-update" class="strategy-label">
+                <strong>Merge Update</strong>
+                <span class="strategy-description">
+                  Create if missing, update if exists, leave other records untouched
+                </span>
+              </label>
+            </div>
+
+            <div class="strategy-option" :class="{ selected: form.options.strategy === 'full_replace' }">
+              <RadioButton
+                v-model="form.options.strategy"
+                inputId="strategy-full-replace"
+                value="full_replace"
+              />
+              <label for="strategy-full-replace" class="strategy-label">
+                <strong>Full Replace</strong>
+                <span class="strategy-description">
+                  Clear all existing data and restore everything from backup
+                </span>
+              </label>
+            </div>
+          </div>
+          <div v-if="formErrors.strategy" class="error-message">{{ formErrors.strategy }}</div>
         </div>
       </div>
 
-      <!-- Step 3: Restore Strategy -->
+      <!-- Options -->
       <div class="form-section">
-        <h2>3. Restore Strategy</h2>
-        <div class="strategy-options">
-          <div class="strategy-option" :class="{ selected: form.options.strategy === 'merge_add' }">
-            <RadioButton
-              v-model="form.options.strategy"
-              inputId="strategy-merge-add"
-              value="merge_add"
-            />
-            <label for="strategy-merge-add" class="strategy-label">
-              <strong>Merge Add</strong>
-              <span class="strategy-description">
-                Only add data from backup that is missing in current database
-              </span>
-            </label>
-          </div>
-
-          <div class="strategy-option" :class="{ selected: form.options.strategy === 'merge_update' }">
-            <RadioButton
-              v-model="form.options.strategy"
-              inputId="strategy-merge-update"
-              value="merge_update"
-            />
-            <label for="strategy-merge-update" class="strategy-label">
-              <strong>Merge Update</strong>
-              <span class="strategy-description">
-                Create if missing, update if exists, leave other records untouched
-              </span>
-            </label>
-          </div>
-
-          <div class="strategy-option" :class="{ selected: form.options.strategy === 'full_replace' }">
-            <RadioButton
-              v-model="form.options.strategy"
-              inputId="strategy-full-replace"
-              value="full_replace"
-            />
-            <label for="strategy-full-replace" class="strategy-label">
-              <strong>Full Replace</strong>
-              <span class="strategy-description">
-                Clear all existing data and restore everything from backup
-              </span>
-            </label>
-          </div>
+        <div class="card-header">
+          <h2>Options</h2>
         </div>
-        <div v-if="formErrors.strategy" class="error-message">{{ formErrors.strategy }}</div>
-      </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="checkbox-label">
+              <Checkbox
+                v-model="form.options.include_file_data"
+                inputId="include-file-data"
+                :binary="true"
+              />
+              <span>Include file data (images, invoices, manuals)</span>
+            </label>
+            <div class="form-help">
+              When enabled, restores binary file data along with database records
+            </div>
+          </div>
 
-      <!-- Step 4: Options -->
-      <div class="form-section">
-        <h2>4. Options</h2>
-        
-        <div class="form-group">
-          <div class="checkbox-group">
-            <Checkbox
-              v-model="form.options.include_file_data"
-              inputId="include-file-data"
-              :binary="true"
-            />
-            <label for="include-file-data">Include file data (images, invoices, manuals)</label>
-          </div>
-          <div class="form-help">
-            When enabled, restores binary file data along with database records
-          </div>
-        </div>
-
-        <div class="form-group">
-          <div class="checkbox-group">
-            <Checkbox
-              v-model="form.options.dry_run"
-              inputId="dry-run"
-              :binary="true"
-            />
-            <label for="dry-run">Dry run (preview changes without applying them)</label>
-          </div>
-          <div class="form-help">
-            When enabled, shows what would be restored without making actual changes
+          <div class="form-group">
+            <label class="checkbox-label">
+              <Checkbox
+                v-model="form.options.dry_run"
+                inputId="dry-run"
+                :binary="true"
+              />
+              <span>Dry run (preview changes without applying them)</span>
+            </label>
+            <div class="form-help">
+              When enabled, shows what would be restored without making actual changes
+            </div>
           </div>
         </div>
       </div>
@@ -151,7 +166,7 @@
         </router-link>
         <button
           type="submit"
-          class="btn btn-primary"
+          class="btn btn-restore"
           :disabled="!canSubmit || creating"
         >
           <font-awesome-icon :icon="creating ? 'spinner' : 'upload'" :spin="creating" />
@@ -283,6 +298,10 @@ const validateForm = (): boolean => {
   return Object.keys(formErrors.value).length === 0
 }
 
+const navigateBack = () => {
+  router.push(`/exports/${exportId}`)
+}
+
 const scrollToFirstError = () => {
   const firstErrorElement = document.querySelector('.error-message')
   if (firstErrorElement) {
@@ -362,6 +381,7 @@ onMounted(() => {
 .restore-create {
   max-width: 800px;
   margin: 0 auto;
+  padding: 1rem;
 }
 
 .breadcrumb-nav {
@@ -372,54 +392,120 @@ onMounted(() => {
   color: $primary-color;
   text-decoration: none;
   font-size: 0.9rem;
-  
+
   &:hover {
     text-decoration: underline;
   }
 }
 
-.export-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  margin-top: 0.5rem;
-  
-  .export-description {
-    font-size: 1rem;
+h1 {
+  margin-bottom: 1.5rem;
+  color: $text-color;
+}
+
+.export-info-card {
+  background: white;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
+  margin-bottom: 1.5rem;
+  box-shadow: $box-shadow;
+}
+
+.card-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid $border-color;
+  background: $light-bg-color;
+  border-radius: $default-radius $default-radius 0 0;
+
+  h2 {
+    margin: 0;
+    font-size: 1.25rem;
     color: $text-color;
   }
-  
-  .export-type {
-    font-size: 0.875rem;
-    color: $text-secondary-color;
-    text-transform: uppercase;
-  }
 }
 
-.export-details {
+.card-body {
+  padding: 1.5rem;
+}
+
+.export-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
-  padding: 1rem;
-  background: $light-bg-color;
-  border-radius: $default-radius;
-  border: 1px solid $border-color;
 }
 
-.detail-item {
+.summary-item {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  
+
   label {
     font-weight: 600;
     color: $text-secondary-color;
     font-size: 0.875rem;
   }
-  
+
   span {
     color: $text-color;
+    font-size: 0.95rem;
   }
+}
+
+.form-section {
+  background: white;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
+  margin-bottom: 1.5rem;
+  box-shadow: $box-shadow;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: $text-color;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+
+  &:focus {
+    outline: none;
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
+
+  &.is-invalid {
+    border-color: $error-color;
+  }
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+.form-help {
+  font-size: 0.85rem;
+  color: $text-secondary-color;
+  margin-top: 0.5rem;
+  line-height: 1.4;
 }
 
 .strategy-options {
@@ -468,16 +554,7 @@ onMounted(() => {
   line-height: 1.4;
 }
 
-.checkbox-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  
-  label {
-    cursor: pointer;
-    color: $text-color;
-  }
-}
+// Checkbox styles are now imported globally from assets/primevue-checkbox.scss
 
 .form-actions {
   display: flex;
@@ -509,11 +586,58 @@ onMounted(() => {
   ul {
     margin: 0;
     padding-left: 1.5rem;
-    
+
     li {
       color: $error-color;
       margin-bottom: 0.25rem;
     }
   }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: $default-radius;
+  font-size: 1rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.btn-secondary {
+  background-color: $secondary-color;
+  color: white;
+  border: 1px solid $secondary-color;
+
+  &:hover:not(:disabled) {
+    background-color: $secondary-hover-color;
+    border-color: $secondary-hover-color;
+  }
+}
+
+.btn-restore {
+  background-color: #1976d2;
+  color: white;
+  border: 1px solid #1976d2;
+
+  &:hover:not(:disabled) {
+    background-color: #1565c0;
+    border-color: #1565c0;
+  }
+}
+
+.error-message {
+  color: $error-color;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
 }
 </style>

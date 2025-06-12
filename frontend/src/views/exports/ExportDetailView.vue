@@ -244,20 +244,77 @@
         </div>
       </div>
 
+      <!-- Restore Operations -->
+      <div v-if="restoreOperations.length > 0" class="export-card">
+        <div class="card-header">
+          <h2>Restore Operations</h2>
+          <span class="count-badge">{{ restoreOperations.length }} operation{{ restoreOperations.length !== 1 ? 's' : '' }}</span>
+        </div>
+        <div class="card-body">
+          <div class="restore-operations">
+            <div v-for="(restore, index) in restoreOperations" :key="restore.id" class="restore-operation">
+              <div class="restore-header" @click="toggleRestoreOperation(index)">
+                <div class="restore-info">
+                  <div class="restore-description">{{ restore.description }}</div>
+                  <div class="restore-meta">
+                    <span class="restore-date">{{ formatDateTime(restore.created_date) }}</span>
+                    <span class="restore-strategy">{{ formatRestoreStrategy(restore.options?.strategy) }}</span>
+                  </div>
+                </div>
+                <div class="restore-status">
+                  <span class="status-badge" :class="getRestoreStatusClasses(restore)">
+                    {{ getRestoreDisplayStatus(restore) }}
+                  </span>
+                  <button class="collapse-toggle" :class="{ 'expanded': expandedRestoreOperations[index] }">
+                    <font-awesome-icon :icon="expandedRestoreOperations[index] ? 'chevron-up' : 'chevron-down'" />
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="expandedRestoreOperations[index] && restore.steps && restore.steps.length > 0" class="restore-steps">
+                <div class="steps-header">
+                  <h4>Restore Steps</h4>
+                  <span class="steps-count">{{ restore.steps.length }} steps</span>
+                </div>
+                <div class="steps-list">
+                  <div v-for="step in restore.steps" :key="step.id" class="restore-step">
+                    <div class="step-icon">
+                      <span class="step-emoji">{{ getStepEmoji(step.result) }}</span>
+                    </div>
+                    <div class="step-content">
+                      <div class="step-name">{{ step.name }}</div>
+                      <div class="step-details">
+                        <span class="step-duration" v-if="step.duration">{{ formatDuration(step.duration) }}</span>
+                        <span class="step-result" :class="`result-${step.result}`">{{ formatStepResult(step.result) }}</span>
+                      </div>
+                      <div v-if="step.reason" class="step-reason">{{ step.reason }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="expandedRestoreOperations[index] && restore.error_message" class="restore-error">
+                <div class="error-message">{{ restore.error_message }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="export-card">
         <div class="card-header">
           <h2>Actions</h2>
         </div>
         <div class="card-body">
           <div class="actions right-aligned">
-            <router-link
+            <button
               v-if="exportData.status === 'completed' && canPerformOperations(exportData)"
-              :to="`/exports/${exportData.id}/restore`"
-              class="btn btn-success"
+              class="btn btn-restore"
+              @click="navigateToRestore"
             >
               <font-awesome-icon icon="upload" />
               Restore from Export
-            </router-link>
+            </button>
 
             <button
               v-if="exportData.status === 'completed'"
@@ -287,60 +344,6 @@
               <font-awesome-icon :icon="deleting ? 'spinner' : 'trash'" :spin="deleting" />
               {{ deleting ? 'Deleting...' : 'Delete Export' }}
             </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Restore Operations -->
-      <div v-if="restoreOperations.length > 0" class="export-card">
-        <div class="card-header">
-          <h2>Restore Operations</h2>
-          <span class="count-badge">{{ restoreOperations.length }} operation{{ restoreOperations.length !== 1 ? 's' : '' }}</span>
-        </div>
-        <div class="card-body">
-          <div class="restore-operations">
-            <div v-for="restore in restoreOperations" :key="restore.id" class="restore-operation">
-              <div class="restore-header">
-                <div class="restore-info">
-                  <div class="restore-description">{{ restore.description }}</div>
-                  <div class="restore-meta">
-                    <span class="restore-date">{{ formatDateTime(restore.created_date) }}</span>
-                    <span class="restore-strategy">{{ formatRestoreStrategy(restore.options?.strategy) }}</span>
-                  </div>
-                </div>
-                <div class="restore-status">
-                  <span class="status-badge" :class="getRestoreStatusClasses(restore)">
-                    {{ getRestoreDisplayStatus(restore) }}
-                  </span>
-                </div>
-              </div>
-
-              <div v-if="restore.steps && restore.steps.length > 0" class="restore-steps">
-                <div class="steps-header">
-                  <h4>Restore Steps</h4>
-                  <span class="steps-count">{{ restore.steps.length }} steps</span>
-                </div>
-                <div class="steps-list">
-                  <div v-for="step in restore.steps" :key="step.id" class="restore-step">
-                    <div class="step-icon">
-                      <span class="step-emoji">{{ getStepEmoji(step.result) }}</span>
-                    </div>
-                    <div class="step-content">
-                      <div class="step-name">{{ step.name }}</div>
-                      <div class="step-details">
-                        <span class="step-duration" v-if="step.duration">{{ formatDuration(step.duration) }}</span>
-                        <span class="step-result" :class="`result-${step.result}`">{{ formatStepResult(step.result) }}</span>
-                      </div>
-                      <div v-if="step.reason" class="step-reason">{{ step.reason }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="restore.error_message" class="restore-error">
-                <div class="error-message">{{ restore.error_message }}</div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -383,6 +386,7 @@ const showDeleteDialog = ref(false)
 const loadingItems = ref(false)
 const selectedItemsDetails = ref<Array<{id: string, name: string, type: string}>>([])
 const restoreOperations = ref<Array<any>>([])
+const expandedRestoreOperations = ref<Record<number, boolean>>({})
 const hierarchicalItems = ref<{
   locations: Array<{
     id: string
@@ -695,6 +699,16 @@ const formatDuration = (duration: number) => {
     return `${(duration / 1000).toFixed(1)}s`
   } else {
     return `${(duration / 60000).toFixed(1)}m`
+  }
+}
+
+const toggleRestoreOperation = (index: number) => {
+  expandedRestoreOperations.value[index] = !expandedRestoreOperations.value[index]
+}
+
+const navigateToRestore = () => {
+  if (exportData.value?.id) {
+    router.push(`/exports/${exportData.value.id}/restore`)
   }
 }
 
@@ -1121,10 +1135,43 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: $default-radius;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgba($primary-color, 0.05);
+  }
 }
 
 .restore-info {
   flex: 1;
+}
+
+.restore-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.collapse-toggle {
+  background: none;
+  border: none;
+  color: $text-secondary-color;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: $default-radius;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: rgba($primary-color, 0.1);
+    color: $primary-color;
+  }
+
+  &.expanded {
+    transform: rotate(180deg);
+  }
 }
 
 .restore-description {
@@ -1277,6 +1324,17 @@ onMounted(() => {
   &:hover:not(:disabled) {
     background-color: #218838;
     border-color: #1e7e34;
+  }
+}
+
+.btn-restore {
+  background-color: #1976d2;
+  color: white;
+  border: 1px solid #1976d2;
+
+  &:hover:not(:disabled) {
+    background-color: #1565c0;
+    border-color: #1565c0;
   }
 }
 </style>
