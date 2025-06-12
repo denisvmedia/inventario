@@ -1,34 +1,50 @@
 <template>
-  <div class="restore-create">
+  <div class="export-detail-page">
     <div class="breadcrumb-nav">
       <router-link :to="`/exports/${exportId}`" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Export Details
       </router-link>
     </div>
-
-    <h1>Restore from Export</h1>
-
-    <div v-if="exportData" class="export-info-card">
+    <div class="header">
+      <h1>Restore from Export</h1>
+    </div>
+    <div v-if="exportData" class="export-card">
       <div class="card-header">
         <h2>Export Information</h2>
       </div>
       <div class="card-body">
-        <div class="export-summary">
-          <div class="summary-item">
-            <label>Description:</label>
-            <span>{{ exportData.description }}</span>
+        <div class="info-grid">
+          <div class="info-item">
+            <label>Description</label>
+            <div class="value">{{ exportData.description || 'No description' }}</div>
           </div>
-          <div class="summary-item">
-            <label>Type:</label>
-            <span>{{ formatExportType(exportData.type) }}</span>
+          <div class="info-item">
+            <label>Type</label>
+            <div class="value">
+              <span class="type-badge" :class="`type-${exportData.type}`">
+                {{ formatExportType(exportData.type) }}
+              </span>
+            </div>
           </div>
-          <div class="summary-item">
-            <label>Created:</label>
-            <span>{{ formatDate(exportData.created_date) }}</span>
+          <div class="info-item">
+            <label>Include File Data</label>
+            <div class="value">
+              <span class="bool-badge" :class="exportData.include_file_data ? 'yes' : 'no'">
+                {{ exportData.include_file_data ? 'Yes' : 'No' }}
+              </span>
+            </div>
           </div>
-          <div class="summary-item">
-            <label>File Size:</label>
-            <span>{{ formatFileSize(exportData.file_size || 0) }}</span>
+          <div class="info-item">
+            <label>Created</label>
+            <div class="value">{{ formatDate(exportData.created_date) }}</div>
+          </div>
+          <div v-if="exportData.file_size" class="info-item">
+            <label>File Size</label>
+            <div class="value">{{ formatFileSize(exportData.file_size) }}</div>
+          </div>
+          <div v-if="exportData.file_path" class="info-item">
+            <label>File Location</label>
+            <div class="value file-path">{{ exportData.file_path }}</div>
           </div>
         </div>
       </div>
@@ -269,7 +285,7 @@ const loadExport = async () => {
 
       // Set the source file path from export data
       form.value.source_file_path = exportData.value.file_path || ''
-      
+
       // Set default description
       if (!form.value.description) {
         form.value.description = `Restore from "${exportData.value.description}"`
@@ -339,26 +355,26 @@ const createRestore = async () => {
     router.push(`/exports/${exportId}`)
   } catch (err: any) {
     console.error('Error creating restore:', err)
-    
+
     if (err.response?.data?.errors) {
       // Handle validation errors from API
       const apiErrors = err.response.data.errors
       const errorObj: Record<string, string> = {}
-      
+
       apiErrors.forEach((error: any) => {
         if (error.source?.pointer) {
           const field = error.source.pointer.replace('/data/attributes/', '')
           errorObj[field] = error.detail
         }
       })
-      
+
       if (Object.keys(errorObj).length > 0) {
         formError.value = errorObj
         scrollToFirstError()
         return
       }
     }
-    
+
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to create restore operation'
   } finally {
     creating.value = false
@@ -372,67 +388,17 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 @use '@/assets/main' as *;
+@use '@/assets/export-detail-styles' as *;
 
-.restore-create {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
-
+// Removed .restore-create container style, now using .export-detail-page for unified layout
 
 h1 {
   margin-bottom: 1.5rem;
   color: $text-color;
 }
 
-.export-info-card {
-  background: white;
-  border: 1px solid $border-color;
-  border-radius: $default-radius;
-  margin-bottom: 1.5rem;
-  box-shadow: $box-shadow;
-}
-
-.card-header {
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid $border-color;
-  background: $light-bg-color;
-  border-radius: $default-radius $default-radius 0 0;
-
-  h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    color: $text-color;
-  }
-}
-
-.card-body {
-  padding: 1.5rem;
-}
-
-.export-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.summary-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-
-  label {
-    font-weight: 600;
-    color: $text-secondary-color;
-    font-size: 0.875rem;
-  }
-
-  span {
-    color: $text-color;
-    font-size: 0.95rem;
-  }
-}
+// Removed .export-info-card, .export-summary, .summary-item styles as they are now unified
+// in export-detail-styles.scss
 
 .form-section {
   background: white;
@@ -506,12 +472,12 @@ h1 {
   border-radius: $default-radius;
   cursor: pointer;
   transition: all 0.2s ease;
-  
+
   &:hover {
     border-color: $primary-color;
     background-color: rgba($primary-color, 0.05);
   }
-  
+
   &.selected {
     border-color: $primary-color;
     background-color: rgba($primary-color, 0.1);
@@ -524,7 +490,7 @@ h1 {
   gap: 0.5rem;
   cursor: pointer;
   flex: 1;
-  
+
   strong {
     color: $text-color;
     font-size: 1rem;
@@ -560,12 +526,12 @@ h1 {
   background-color: rgba($error-color, 0.1);
   border: 1px solid $error-color;
   border-radius: $default-radius;
-  
+
   h3 {
     margin: 0 0 0.5rem;
     color: $error-color;
   }
-  
+
   ul {
     margin: 0;
     padding-left: 1.5rem;

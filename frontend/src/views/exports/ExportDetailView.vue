@@ -1,5 +1,5 @@
 <template>
-  <div class="export-detail" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
+  <div class="export-detail-page" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
     <div class="breadcrumb-nav">
       <router-link to="/exports" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Exports
@@ -825,7 +825,7 @@ onMounted(() => {
 <style lang="scss" scoped>
 @use '@/assets/main' as *;
 
-.export-detail {
+.export-detail-page {
   max-width: 1000px;
   margin: 0 auto;
   padding: 20px;
