@@ -379,19 +379,7 @@ onMounted(() => {
   padding: 1rem;
 }
 
-.breadcrumb-nav {
-  margin-bottom: 1rem;
-}
 
-.breadcrumb-link {
-  color: $primary-color;
-  text-decoration: none;
-  font-size: 0.9rem;
-
-  &:hover {
-    text-decoration: underline;
-  }
-}
 
 h1 {
   margin-bottom: 1.5rem;
