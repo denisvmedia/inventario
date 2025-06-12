@@ -1,10 +1,9 @@
 <template>
   <div class="restore-create">
     <div class="breadcrumb-nav">
-      <a href="#" class="breadcrumb-link" @click.prevent="navigateBack">
-        <font-awesome-icon icon="arrow-left" />
-        <span>Back to Export Details</span>
-      </a>
+      <router-link :to="`/exports/${exportId}`" class="breadcrumb-link">
+        <font-awesome-icon icon="arrow-left" /> Back to Export Details
+      </router-link>
     </div>
 
     <h1>Restore from Export</h1>
@@ -296,10 +295,6 @@ const validateForm = (): boolean => {
   }
 
   return Object.keys(formErrors.value).length === 0
-}
-
-const navigateBack = () => {
-  router.push(`/exports/${exportId}`)
 }
 
 const scrollToFirstError = () => {
