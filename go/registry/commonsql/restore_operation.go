@@ -41,7 +41,7 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 
 	// Set default status if not set
 	if operation.Status == "" {
-		operation.Status = models.ImportStatusPending
+		operation.Status = models.RestoreStatusPending
 	}
 
 	// Serialize options to JSON

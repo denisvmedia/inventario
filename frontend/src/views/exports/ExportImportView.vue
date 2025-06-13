@@ -97,7 +97,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useToast } from 'primevue/usetoast'
 import FileUploader from '@/components/FileUploader.vue'
 import exportService from '@/services/exportService'
-import { RestoreService } from '@/services/restoreService'
+
 
 const router = useRouter()
 const toast = useToast()
@@ -122,7 +122,7 @@ const handleFileUpload = async (files: File[]) => {
   if (files.length === 0) return
 
   const file = files[0]
-  
+
   // Validate file type
   if (!file.name.toLowerCase().endsWith('.xml')) {
     error.value = 'Please select a valid XML file'
@@ -131,11 +131,24 @@ const handleFileUpload = async (files: File[]) => {
 
   try {
     error.value = ''
-    
-    // Upload the file
-    const uploadResponse = await RestoreService.uploadFile(file)
-    uploadedFilePath.value = uploadResponse.filename
-    form.value.source_file_path = uploadResponse.filename
+
+    // Upload the file using the uploads/restores endpoint
+    const formData = new FormData()
+    formData.append('files', file)
+
+    const response = await fetch('/api/v1/uploads/restores', {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.errors?.[0]?.detail || `Failed to upload file: ${response.statusText}`)
+    }
+
+    const result = await response.json()
+    uploadedFilePath.value = result.attributes.fileNames[0]
+    form.value.source_file_path = result.attributes.fileNames[0]
 
     // Set default description if not provided
     if (!form.value.description) {
@@ -151,7 +164,7 @@ const handleFileUpload = async (files: File[]) => {
     })
   } catch (err: any) {
     console.error('Error uploading file:', err)
-    error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to upload file'
+    error.value = err.message || 'Failed to upload file'
   }
 }
 

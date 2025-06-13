@@ -231,7 +231,7 @@ func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http
 	}
 
 	// Don't allow deletion of running restore operations
-	if restoreOperation.Status == models.ImportStatusRunning {
+	if restoreOperation.Status == models.RestoreStatusRunning {
 		badRequest(w, r, ErrInvalidContentType)
 		return
 	}
@@ -255,7 +255,7 @@ func (api *exportRestoresAPI) processRestore(ctx context.Context, restoreOperati
 	}
 
 	// Update status to running
-	restoreOperation.Status = models.ImportStatusRunning
+	restoreOperation.Status = models.RestoreStatusRunning
 	restoreOperation.StartedDate = models.PNow()
 	_, err = api.registrySet.RestoreOperationRegistry.Update(ctx, *restoreOperation)
 	if err != nil {
@@ -310,7 +310,7 @@ func (api *exportRestoresAPI) processRestore(ctx context.Context, restoreOperati
 	api.createRestoreStep(ctx, restoreOperationID, "Finalizing restore", models.RestoreStepResultSuccess, "")
 
 	// Update restore operation with final statistics and status
-	restoreOperation.Status = models.ImportStatusCompleted
+	restoreOperation.Status = models.RestoreStatusCompleted
 	restoreOperation.CompletedDate = models.PNow()
 	restoreOperation.LocationCount = stats.LocationCount
 	restoreOperation.AreaCount = stats.AreaCount
@@ -336,7 +336,7 @@ func (api *exportRestoresAPI) markRestoreFailed(ctx context.Context, restoreOper
 		return
 	}
 
-	restoreOperation.Status = models.ImportStatusFailed
+	restoreOperation.Status = models.RestoreStatusFailed
 	restoreOperation.CompletedDate = models.PNow()
 	restoreOperation.ErrorMessage = errorMessage
 

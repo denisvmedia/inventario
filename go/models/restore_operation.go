@@ -7,6 +7,16 @@ import (
 	"github.com/jellydator/validation"
 )
 
+// RestoreStatus represents the status of a restore operation
+type RestoreStatus string
+
+const (
+	RestoreStatusPending   RestoreStatus = "pending"
+	RestoreStatusRunning   RestoreStatus = "running"
+	RestoreStatusCompleted RestoreStatus = "completed"
+	RestoreStatusFailed    RestoreStatus = "failed"
+)
+
 var (
 	_ validation.Validatable            = (*RestoreOperation)(nil)
 	_ validation.ValidatableWithContext = (*RestoreOperation)(nil)
@@ -46,7 +56,7 @@ type RestoreOperation struct {
 	EntityID
 	ExportID      string         `json:"export_id" db:"export_id"`
 	Description   string         `json:"description" db:"description"`
-	Status        ImportStatus   `json:"status" db:"status"`
+	Status        RestoreStatus  `json:"status" db:"status"`
 	Options       RestoreOptions `json:"options" db:"options"`
 	CreatedDate   PTimestamp     `json:"created_date" db:"created_date"`
 	StartedDate   PTimestamp     `json:"started_date" db:"started_date"`
