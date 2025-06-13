@@ -12,9 +12,14 @@
           <ToggleSwitch v-model="showDeleted" @change="loadExports" />
           <label class="toggle-label">Show deleted exports</label>
         </div>
-        <router-link to="/exports/new" class="btn btn-primary">
-          <font-awesome-icon icon="plus" /> New
-        </router-link>
+        <div class="action-buttons">
+          <router-link to="/exports/import" class="btn btn-secondary">
+            <font-awesome-icon icon="upload" /> Import
+          </router-link>
+          <router-link to="/exports/new" class="btn btn-primary">
+            <font-awesome-icon icon="plus" /> New
+          </router-link>
+        </div>
       </div>
     </div>
 
@@ -160,7 +165,8 @@ const formatExportType = (type: string) => {
     'selected_items': 'Selected Items',
     'locations': 'Locations',
     'areas': 'Areas',
-    'commodities': 'Commodities'
+    'commodities': 'Commodities',
+    'imported': 'Imported'
   }
   return typeMap[type as keyof typeof typeMap] || type
 }
@@ -256,6 +262,11 @@ onMounted(() => {
 
 // Header styles are now in shared _header.scss
 
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .empty-message p {
   color: $text-secondary-color;
   margin-bottom: 20px;
@@ -337,6 +348,11 @@ onMounted(() => {
 .type-commodities {
   background-color: #fce4ec;
   color: #c2185b;
+}
+
+.type-imported {
+  background-color: #f0f4f8;
+  color: #4a5568;
 }
 
 .status-pending {

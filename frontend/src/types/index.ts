@@ -65,7 +65,7 @@ export interface Invoice {
 
 export type ExportStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 
-export type ExportType = 'full_database' | 'selected_items' | 'locations' | 'areas' | 'commodities';
+export type ExportType = 'full_database' | 'selected_items' | 'locations' | 'areas' | 'commodities' | 'imported';
 
 export type ExportSelectedItemType = 'location' | 'area' | 'commodity';
 

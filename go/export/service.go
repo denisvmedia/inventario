@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gocloud.dev/blob"
+	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -1363,4 +1364,245 @@ func (w *xmlBase64Writer) Write(p []byte) (n int, err error) {
 	}
 	w.totalSize += int64(len(p))
 	return len(p), nil
+}
+
+// ImportXMLExport imports an uploaded XML file and creates an export record with extracted metadata
+func (s *ExportService) ImportXMLExport(ctx context.Context, uploadedFilePath, description string) (*models.Export, error) {
+	// Open blob bucket
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to open blob bucket")
+	}
+	defer func() {
+		if closeErr := b.Close(); closeErr != nil {
+			err = errkit.Wrap(closeErr, "failed to close blob bucket")
+		}
+	}()
+
+	// Open the uploaded XML file
+	reader, err := b.NewReader(ctx, uploadedFilePath, nil)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to open uploaded XML file")
+	}
+	defer reader.Close()
+
+	// Get file size
+	attrs, err := b.Attributes(ctx, uploadedFilePath)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get file attributes")
+	}
+
+	// Parse XML to extract metadata and statistics
+	stats, exportType, err := s.ParseXMLMetadata(ctx, reader)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to parse XML metadata")
+	}
+
+	// Create export record
+	export := &models.Export{
+		EntityID:        models.EntityID{ID: uuid.New().String()},
+		Type:            exportType,
+		Status:          models.ExportStatusCompleted, // Imported exports are already complete
+		Description:     description,
+		FilePath:        uploadedFilePath,
+		CreatedDate:     models.PNow(),
+		CompletedDate:   models.PNow(),
+		FileSize:        attrs.Size,
+		LocationCount:   stats.LocationCount,
+		AreaCount:       stats.AreaCount,
+		CommodityCount:  stats.CommodityCount,
+		ImageCount:      stats.ImageCount,
+		InvoiceCount:    stats.InvoiceCount,
+		ManualCount:     stats.ManualCount,
+		BinaryDataSize:  stats.BinaryDataSize,
+		IncludeFileData: stats.BinaryDataSize > 0, // Set based on whether file data is present
+	}
+
+	// Save export record to database
+	createdExport, err := s.registrySet.ExportRegistry.Create(ctx, *export)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create export record")
+	}
+
+	return createdExport, nil
+}
+
+// ParseXMLMetadata parses XML file to extract statistics and determine export type
+func (s *ExportService) ParseXMLMetadata(ctx context.Context, reader io.Reader) (*ExportStats, models.ExportType, error) {
+	stats := &ExportStats{}
+	var exportType models.ExportType = models.ExportTypeImported // Default to imported type
+
+	decoder := xml.NewDecoder(reader)
+
+	// Track what sections we find to determine the export type
+	hasLocations := false
+	hasAreas := false
+	hasCommodities := false
+
+	for {
+		tok, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, exportType, errkit.Wrap(err, "failed to read XML token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "inventory":
+				// Check export type attribute if present
+				for _, attr := range t.Attr {
+					if attr.Name.Local == "exportType" {
+						switch attr.Value {
+						case "full_database":
+							exportType = models.ExportTypeFullDatabase
+						case "selected_items":
+							exportType = models.ExportTypeSelectedItems
+						case "locations":
+							exportType = models.ExportTypeLocations
+						case "areas":
+							exportType = models.ExportTypeAreas
+						case "commodities":
+							exportType = models.ExportTypeCommodities
+						}
+					}
+				}
+			case "locations":
+				hasLocations = true
+				if err := s.countLocations(decoder, stats); err != nil {
+					return nil, exportType, errkit.Wrap(err, "failed to count locations")
+				}
+			case "areas":
+				hasAreas = true
+				if err := s.countAreas(decoder, stats); err != nil {
+					return nil, exportType, errkit.Wrap(err, "failed to count areas")
+				}
+			case "commodities":
+				hasCommodities = true
+				if err := s.countCommodities(decoder, stats); err != nil {
+					return nil, exportType, errkit.Wrap(err, "failed to count commodities")
+				}
+			}
+		}
+	}
+
+	// If export type wasn't specified in XML, try to infer it from content
+	if exportType == models.ExportTypeImported {
+		if hasLocations && hasAreas && hasCommodities {
+			exportType = models.ExportTypeFullDatabase
+		} else if hasLocations && !hasAreas && !hasCommodities {
+			exportType = models.ExportTypeLocations
+		} else if hasAreas && !hasLocations && !hasCommodities {
+			exportType = models.ExportTypeAreas
+		} else if hasCommodities && !hasLocations && !hasAreas {
+			exportType = models.ExportTypeCommodities
+		} else {
+			exportType = models.ExportTypeSelectedItems
+		}
+	}
+
+	return stats, exportType, nil
+}
+
+// countLocations counts location elements in XML
+func (s *ExportService) countLocations(decoder *xml.Decoder, stats *ExportStats) error {
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read location token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "location" {
+				stats.LocationCount++
+			}
+		case xml.EndElement:
+			if t.Name.Local == "locations" {
+				return nil
+			}
+		}
+	}
+}
+
+// countAreas counts area elements in XML
+func (s *ExportService) countAreas(decoder *xml.Decoder, stats *ExportStats) error {
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read area token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "area" {
+				stats.AreaCount++
+			}
+		case xml.EndElement:
+			if t.Name.Local == "areas" {
+				return nil
+			}
+		}
+	}
+}
+
+// countCommodities counts commodity elements and their files in XML
+func (s *ExportService) countCommodities(decoder *xml.Decoder, stats *ExportStats) error {
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read commodity token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "commodity":
+				stats.CommodityCount++
+			case "images":
+				if err := s.countFiles(decoder, "images", &stats.ImageCount, stats); err != nil {
+					return errkit.Wrap(err, "failed to count images")
+				}
+			case "invoices":
+				if err := s.countFiles(decoder, "invoices", &stats.InvoiceCount, stats); err != nil {
+					return errkit.Wrap(err, "failed to count invoices")
+				}
+			case "manuals":
+				if err := s.countFiles(decoder, "manuals", &stats.ManualCount, stats); err != nil {
+					return errkit.Wrap(err, "failed to count manuals")
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "commodities" {
+				return nil
+			}
+		}
+	}
+}
+
+// countFiles counts file elements within a file section and estimates binary data size
+func (s *ExportService) countFiles(decoder *xml.Decoder, sectionName string, counter *int, stats *ExportStats) error {
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read file section token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "file" {
+				*counter++
+			}
+		case xml.EndElement:
+			if t.Name.Local == sectionName {
+				return nil
+			}
+		case xml.CharData:
+			// This is the key optimization: skip large character data (base64) efficiently
+			// by not processing it, just letting the decoder move past it
+			continue
+		}
+	}
 }

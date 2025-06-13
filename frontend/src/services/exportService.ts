@@ -70,6 +70,22 @@ const exportService = {
     })
   },
 
+  importExport(data: any) {
+    console.log('exportService: importExport called with data:', JSON.stringify(data, null, 2))
+    return axios.post(`${API_URL}/import`, data, {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json'
+      }
+    }).then(response => {
+      console.log('exportService: importExport success response:', response)
+      return response
+    }).catch(error => {
+      console.error('exportService: importExport error:', error)
+      throw error
+    })
+  },
+
   // Restore operations for exports
   getRestoreOperations(exportId: string) {
     return axios.get(`${API_URL}/${exportId}/restores`, {

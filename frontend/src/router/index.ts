@@ -74,6 +74,11 @@ const routes = [
     component: () => import('../views/exports/ExportCreateView.vue')
   },
   {
+    path: '/exports/import',
+    name: 'export-import',
+    component: () => import('../views/exports/ExportImportView.vue')
+  },
+  {
     path: '/exports/:id',
     name: 'export-detail',
     component: () => import('../views/exports/ExportDetailView.vue')

@@ -11,6 +11,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	"github.com/denisvmedia/inventario/export"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -234,6 +235,41 @@ func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io
 	return b.NewReader(context.Background(), filePath, nil)
 }
 
+// importExport imports an XML export file and creates an export record
+// @Summary Import XML export
+// @Description Import an uploaded XML export file and create an export record
+// @Tags exports
+// @Accept json-api
+// @Produce json-api
+// @Param data body jsonapi.ImportExportRequest true "Import request data"
+// @Success 201 {object} jsonapi.ExportResponse "Created"
+// @Failure 400 {object} jsonapi.ErrorResponse "Bad Request"
+// @Failure 422 {object} jsonapi.ErrorResponse "Unprocessable Entity"
+// @Router /exports/import [post].
+func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
+	var data jsonapi.ImportExportRequest
+	if err := render.Bind(r, &data); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	// Create export service
+	exportService := export.NewExportService(api.registrySet, api.uploadLocation)
+
+	// Import the XML file and create export record
+	createdExport, err := exportService.ImportXMLExport(r.Context(), data.Data.Attributes.SourceFilePath, data.Data.Attributes.Description)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	if err := render.Render(w, r, jsonapi.NewExportResponse(createdExport)); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 // enrichSelectedItemsWithNames fetches the names and relationships for selected items and adds them to the export
 func (api *exportsAPI) enrichSelectedItemsWithNames(ctx context.Context, export *models.Export) error {
 	for i, item := range export.SelectedItems {
@@ -316,6 +352,7 @@ func Exports(params Params) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Get("/", api.listExports)
 		r.Post("/", api.createExport)
+		r.Post("/import", api.importExport)
 
 		r.Route("/{id}", func(r chi.Router) {
 			r.Use(exportCtx(params.RegistrySet))

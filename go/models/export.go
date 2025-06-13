@@ -59,6 +59,7 @@ const (
 	ExportTypeLocations     ExportType = "locations"
 	ExportTypeAreas         ExportType = "areas"
 	ExportTypeCommodities   ExportType = "commodities"
+	ExportTypeImported      ExportType = "imported"
 )
 
 func (e ExportType) IsValid() bool {
@@ -67,7 +68,8 @@ func (e ExportType) IsValid() bool {
 		ExportTypeSelectedItems,
 		ExportTypeLocations,
 		ExportTypeAreas,
-		ExportTypeCommodities:
+		ExportTypeCommodities,
+		ExportTypeImported:
 		return true
 	}
 	return false
