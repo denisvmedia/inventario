@@ -160,8 +160,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c.Assert(stats, qt.IsNotNil)
 		c.Assert(stats.LocationCount, qt.Equals, 1) // Only new location counted
 		c.Assert(stats.ErrorCount, qt.Equals, 0)
-		c.Assert(stats.CreatedCount, qt.Equals, 1)  // Only new location created
-		c.Assert(stats.SkippedCount, qt.Equals, 1)  // Existing location skipped
+		c.Assert(stats.CreatedCount, qt.Equals, 1) // Only new location created
+		c.Assert(stats.SkippedCount, qt.Equals, 1) // Existing location skipped
 
 		// Verify data - should have 2 locations total
 		locations, err := testRegistrySet.LocationRegistry.List(ctx)
@@ -217,8 +217,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c.Assert(stats, qt.IsNotNil)
 		c.Assert(stats.LocationCount, qt.Equals, 2) // Both locations processed
 		c.Assert(stats.ErrorCount, qt.Equals, 0)
-		c.Assert(stats.CreatedCount, qt.Equals, 1)  // New location created
-		c.Assert(stats.UpdatedCount, qt.Equals, 1)  // Existing location updated
+		c.Assert(stats.CreatedCount, qt.Equals, 1) // New location created
+		c.Assert(stats.UpdatedCount, qt.Equals, 1) // Existing location updated
 
 		// Verify data - should have 2 locations total
 		locations, err := testRegistrySet.LocationRegistry.List(ctx)
@@ -424,7 +424,7 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	c.Assert(stats.LocationCount, qt.Equals, 1)
 	c.Assert(stats.AreaCount, qt.Equals, 1)
 	c.Assert(stats.CommodityCount, qt.Equals, 0) // Commodity should fail
-	c.Assert(stats.CreatedCount, qt.Equals, 2) // Only location + area
+	c.Assert(stats.CreatedCount, qt.Equals, 2)   // Only location + area
 
 	// Verify no commodity was created
 	commodities, err := registrySet.CommodityRegistry.List(ctx)

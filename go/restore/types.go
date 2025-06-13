@@ -11,12 +11,12 @@ import (
 
 // XMLInventory represents the root element of the XML export
 type XMLInventory struct {
-	XMLName    xml.Name       `xml:"inventory"`
-	Namespace  string         `xml:"xmlns,attr"`
-	ExportDate time.Time      `xml:"exportDate,attr"`
-	ExportType string         `xml:"exportType,attr"`
-	Locations  *XMLLocations  `xml:"locations,omitempty"`
-	Areas      *XMLAreas      `xml:"areas,omitempty"`
+	XMLName     xml.Name        `xml:"inventory"`
+	Namespace   string          `xml:"xmlns,attr"`
+	ExportDate  time.Time       `xml:"exportDate,attr"`
+	ExportType  string          `xml:"exportType,attr"`
+	Locations   *XMLLocations   `xml:"locations,omitempty"`
+	Areas       *XMLAreas       `xml:"areas,omitempty"`
 	Commodities *XMLCommodities `xml:"commodities,omitempty"`
 }
 
@@ -56,32 +56,32 @@ type XMLCommodities struct {
 
 // XMLCommodity represents a single commodity in XML
 type XMLCommodity struct {
-	XMLName                xml.Name         `xml:"commodity"`
-	ID                     string           `xml:"id,attr"`
-	CommodityName          string           `xml:"commodityName"`
-	ShortName              string           `xml:"shortName,omitempty"`
-	AreaID                 string           `xml:"areaId"`
-	Count                  int              `xml:"count,omitempty"`
-	Status                 string           `xml:"status,omitempty"`
-	Type                   string           `xml:"type,omitempty"`
-	OriginalPrice          string           `xml:"originalPrice,omitempty"`
-	OriginalCurrency       string           `xml:"originalPriceCurrency,omitempty"`
-	ConvertedOriginalPrice string           `xml:"convertedOriginalPrice,omitempty"`
-	CurrentPrice           string           `xml:"currentPrice,omitempty"`
-	CurrentCurrency        string           `xml:"currentCurrency,omitempty"`
-	SerialNumber           string           `xml:"serialNumber,omitempty"`
+	XMLName                xml.Name          `xml:"commodity"`
+	ID                     string            `xml:"id,attr"`
+	CommodityName          string            `xml:"commodityName"`
+	ShortName              string            `xml:"shortName,omitempty"`
+	AreaID                 string            `xml:"areaId"`
+	Count                  int               `xml:"count,omitempty"`
+	Status                 string            `xml:"status,omitempty"`
+	Type                   string            `xml:"type,omitempty"`
+	OriginalPrice          string            `xml:"originalPrice,omitempty"`
+	OriginalCurrency       string            `xml:"originalPriceCurrency,omitempty"`
+	ConvertedOriginalPrice string            `xml:"convertedOriginalPrice,omitempty"`
+	CurrentPrice           string            `xml:"currentPrice,omitempty"`
+	CurrentCurrency        string            `xml:"currentCurrency,omitempty"`
+	SerialNumber           string            `xml:"serialNumber,omitempty"`
 	ExtraSerialNumbers     *XMLSerialNumbers `xml:"extraSerialNumbers,omitempty"`
-	Comments               string           `xml:"comments,omitempty"`
-	Draft                  bool             `xml:"draft,omitempty"`
-	PurchaseDate           string           `xml:"purchaseDate,omitempty"`
-	RegisteredDate         string           `xml:"registeredDate,omitempty"`
-	LastModifiedDate       string           `xml:"lastModifiedDate,omitempty"`
-	PartNumbers            *XMLPartNumbers  `xml:"partNumbers,omitempty"`
-	Tags                   *XMLTags         `xml:"tags,omitempty"`
-	URLs                   *XMLURLs         `xml:"urls,omitempty"`
-	Images                 *XMLImages       `xml:"images,omitempty"`
-	Invoices               *XMLInvoices     `xml:"invoices,omitempty"`
-	Manuals                *XMLManuals      `xml:"manuals,omitempty"`
+	Comments               string            `xml:"comments,omitempty"`
+	Draft                  bool              `xml:"draft,omitempty"`
+	PurchaseDate           string            `xml:"purchaseDate,omitempty"`
+	RegisteredDate         string            `xml:"registeredDate,omitempty"`
+	LastModifiedDate       string            `xml:"lastModifiedDate,omitempty"`
+	PartNumbers            *XMLPartNumbers   `xml:"partNumbers,omitempty"`
+	Tags                   *XMLTags          `xml:"tags,omitempty"`
+	URLs                   *XMLURLs          `xml:"urls,omitempty"`
+	Images                 *XMLImages        `xml:"images,omitempty"`
+	Invoices               *XMLInvoices      `xml:"invoices,omitempty"`
+	Manuals                *XMLManuals       `xml:"manuals,omitempty"`
 }
 
 // XMLSerialNumbers represents extra serial numbers

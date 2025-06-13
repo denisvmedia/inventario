@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	entityNameRestoreStep = "restore_step"
-	bucketNameRestoreSteps = "restore-steps"
+	entityNameRestoreStep      = "restore_step"
+	bucketNameRestoreSteps     = "restore-steps"
 	idxRestoreStepsByOperation = "restore-steps-by-operation"
 )
 

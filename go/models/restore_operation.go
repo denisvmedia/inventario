@@ -27,8 +27,8 @@ var (
 
 // RestoreOptions contains options for the restore operation
 type RestoreOptions struct {
-	Strategy         string `json:"strategy"`
-	IncludeFileData  bool   `json:"include_file_data"`
+	Strategy        string `json:"strategy"`
+	IncludeFileData bool   `json:"include_file_data"`
 	DryRun          bool   `json:"dry_run"`
 	BackupExisting  bool   `json:"backup_existing"`
 }
@@ -43,7 +43,7 @@ func (r RestoreOptions) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&r.Strategy, validation.Required, validation.In(
 			"full_replace",
-			"merge_add", 
+			"merge_add",
 			"merge_update",
 		)),
 	)
@@ -62,7 +62,7 @@ type RestoreOperation struct {
 	StartedDate   PTimestamp     `json:"started_date" db:"started_date"`
 	CompletedDate PTimestamp     `json:"completed_date" db:"completed_date"`
 	ErrorMessage  string         `json:"error_message" db:"error_message"`
-	
+
 	// Statistics
 	LocationCount  int   `json:"location_count" db:"location_count"`
 	AreaCount      int   `json:"area_count" db:"area_count"`
@@ -72,7 +72,7 @@ type RestoreOperation struct {
 	ManualCount    int   `json:"manual_count" db:"manual_count"`
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size"`
 	ErrorCount     int   `json:"error_count" db:"error_count"`
-	
+
 	// Related steps (not stored in DB, loaded separately)
 	Steps []RestoreStep `json:"steps,omitempty" db:"-"`
 }

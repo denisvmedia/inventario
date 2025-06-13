@@ -105,7 +105,7 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 	// 2. The base64 data is successfully decoded
 	// 3. The blob storage is working
 	// 4. The file record is created after the commodity exists
-	
+
 	// Check that the commodity was created successfully
 	commodities, err := registrySet.CommodityRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)

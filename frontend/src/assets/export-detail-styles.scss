@@ -181,13 +181,37 @@
   font-style: italic;
 }
 
+/* Block-level error messages with action buttons */
+.error-message-block {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: $default-radius;
+  border: 1px solid #f5c6cb;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+
+  .btn {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+}
+
+/* Legacy error-message for backward compatibility - simple styling */
 .error-message {
   background-color: #f8d7da;
   color: #721c24;
-  padding: 15px;
+  padding: 1rem;
   border-radius: $default-radius;
-  font-family: monospace;
-  white-space: pre-wrap;
+  border: 1px solid #f5c6cb;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
 }
 
 /* Header Styles */

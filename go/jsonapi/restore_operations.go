@@ -17,13 +17,13 @@ type RestoreOperationResponse struct {
 
 // RestoreOperationResponseData is an object that holds restore operation information.
 type RestoreOperationResponseData struct {
-	ID         string                   `json:"id"`
-	Type       string                   `json:"type" example:"restores" enums:"restores"`
-	Attributes models.RestoreOperation  `json:"attributes"`
+	ID         string                  `json:"id"`
+	Type       string                  `json:"type" example:"restores" enums:"restores"`
+	Attributes models.RestoreOperation `json:"attributes"`
 }
 
 type RestoreOperationsResponse struct {
-	HTTPStatusCode int                            `json:"-"` // http response status code
+	HTTPStatusCode int                             `json:"-"` // http response status code
 	Data           []*RestoreOperationResponseData `json:"data"`
 }
 

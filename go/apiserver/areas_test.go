@@ -18,6 +18,15 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
+// mockRestoreWorker is a mock implementation of RestoreWorkerInterface for testing
+type mockRestoreWorker struct {
+	hasRunningRestores bool
+}
+
+func (m *mockRestoreWorker) HasRunningRestores(ctx context.Context) (bool, error) {
+	return m.hasRunningRestores, nil
+}
+
 func TestAreasList(t *testing.T) {
 	c := qt.New(t)
 
@@ -29,7 +38,8 @@ func TestAreasList(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -56,7 +66,8 @@ func TestAreasGet(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -92,7 +103,8 @@ func TestAreaCreate(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockWorker)
 	handler.ServeHTTP(rr, req)
 
 	body := rr.Body.Bytes()

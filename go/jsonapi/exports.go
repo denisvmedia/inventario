@@ -139,7 +139,7 @@ func (a *ImportExportAttributes) ValidateWithContext(ctx context.Context) error 
 
 // ImportExportRequestData is request data for importing an export.
 type ImportExportRequestData struct {
-	Type       string                   `json:"type" example:"exports" enums:"exports"`
+	Type       string                  `json:"type" example:"exports" enums:"exports"`
 	Attributes *ImportExportAttributes `json:"attributes"`
 }
 

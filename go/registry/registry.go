@@ -107,8 +107,6 @@ type ExportRegistry interface {
 	HardDelete(ctx context.Context, id string) error
 }
 
-
-
 type RestoreOperationRegistry interface {
 	Registry[models.RestoreOperation]
 

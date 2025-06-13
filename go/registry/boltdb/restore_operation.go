@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	entityNameRestoreOperation = "restore_operation"
-	bucketNameRestoreOperations = "restore-operations"
+	entityNameRestoreOperation   = "restore_operation"
+	bucketNameRestoreOperations  = "restore-operations"
 	idxRestoreOperationsByExport = "restore-operations-by-export"
 )
 
@@ -47,12 +47,12 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 	result, err := r.registry.Create(operation, func(tx dbx.TransactionOrBucket, operation *models.RestoreOperation) error {
 		// Set timestamps
 		operation.CreatedDate = models.PNow()
-		
+
 		// Set default status if not set
 		if operation.Status == "" {
 			operation.Status = models.RestoreStatusPending
 		}
-		
+
 		return nil
 	}, func(tx dbx.TransactionOrBucket, operation *models.RestoreOperation) error {
 		// Index by export ID

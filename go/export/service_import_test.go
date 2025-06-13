@@ -23,12 +23,12 @@ func TestExportService_ImportXMLExport(t *testing.T) {
 
 	// Test cases for happy path
 	happyPathTests := []struct {
-		name        string
-		xmlContent  string
-		description string
-		expectedType models.ExportType
-		expectedLocationCount int
-		expectedAreaCount     int
+		name                   string
+		xmlContent             string
+		description            string
+		expectedType           models.ExportType
+		expectedLocationCount  int
+		expectedAreaCount      int
 		expectedCommodityCount int
 	}{
 		{
@@ -56,10 +56,10 @@ func TestExportService_ImportXMLExport(t *testing.T) {
 		</commodity>
 	</commodities>
 </inventory>`,
-			description: "Test full database import",
-			expectedType: models.ExportTypeFullDatabase,
-			expectedLocationCount: 2,
-			expectedAreaCount: 1,
+			description:            "Test full database import",
+			expectedType:           models.ExportTypeFullDatabase,
+			expectedLocationCount:  2,
+			expectedAreaCount:      1,
 			expectedCommodityCount: 1,
 		},
 		{
@@ -72,10 +72,10 @@ func TestExportService_ImportXMLExport(t *testing.T) {
 		</location>
 	</locations>
 </inventory>`,
-			description: "Test locations import",
-			expectedType: models.ExportTypeLocations,
-			expectedLocationCount: 1,
-			expectedAreaCount: 0,
+			description:            "Test locations import",
+			expectedType:           models.ExportTypeLocations,
+			expectedLocationCount:  1,
+			expectedAreaCount:      0,
 			expectedCommodityCount: 0,
 		},
 		{
@@ -91,10 +91,10 @@ func TestExportService_ImportXMLExport(t *testing.T) {
 		</commodity>
 	</commodities>
 </inventory>`,
-			description: "Test inferred type",
-			expectedType: models.ExportTypeCommodities,
-			expectedLocationCount: 0,
-			expectedAreaCount: 0,
+			description:            "Test inferred type",
+			expectedType:           models.ExportTypeCommodities,
+			expectedLocationCount:  0,
+			expectedAreaCount:      0,
 			expectedCommodityCount: 2,
 		},
 	}
@@ -106,7 +106,7 @@ func TestExportService_ImportXMLExport(t *testing.T) {
 			// Create a mock XML file in memory
 			// Note: In a real test, you would upload the file to the blob storage first
 			// For this test, we'll need to mock the blob storage or create a test file
-			
+
 			// This test would need actual blob storage setup to work properly
 			// For now, we'll test the parsing logic separately
 			c.Skip("Requires blob storage setup for full integration test")
@@ -126,11 +126,11 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 
 	// Test cases for happy path
 	happyPathTests := []struct {
-		name        string
-		xmlContent  string
-		expectedType models.ExportType
-		expectedLocationCount int
-		expectedAreaCount     int
+		name                   string
+		xmlContent             string
+		expectedType           models.ExportType
+		expectedLocationCount  int
+		expectedAreaCount      int
 		expectedCommodityCount int
 	}{
 		{
@@ -148,9 +148,9 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 		<commodity id="comm1"><name>Commodity 1</name></commodity>
 	</commodities>
 </inventory>`,
-			expectedType: models.ExportTypeFullDatabase,
-			expectedLocationCount: 2,
-			expectedAreaCount: 1,
+			expectedType:           models.ExportTypeFullDatabase,
+			expectedLocationCount:  2,
+			expectedAreaCount:      1,
 			expectedCommodityCount: 1,
 		},
 		{
@@ -161,9 +161,9 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 		<location id="loc1"><name>Location 1</name></location>
 	</locations>
 </inventory>`,
-			expectedType: models.ExportTypeLocations,
-			expectedLocationCount: 1,
-			expectedAreaCount: 0,
+			expectedType:           models.ExportTypeLocations,
+			expectedLocationCount:  1,
+			expectedAreaCount:      0,
 			expectedCommodityCount: 0,
 		},
 		{
@@ -175,9 +175,9 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 		<commodity id="comm2"><name>Commodity 2</name></commodity>
 	</commodities>
 </inventory>`,
-			expectedType: models.ExportTypeCommodities,
-			expectedLocationCount: 0,
-			expectedAreaCount: 0,
+			expectedType:           models.ExportTypeCommodities,
+			expectedLocationCount:  0,
+			expectedAreaCount:      0,
 			expectedCommodityCount: 2,
 		},
 		{
@@ -191,9 +191,9 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 		<commodity id="comm1"><name>Commodity 1</name></commodity>
 	</commodities>
 </inventory>`,
-			expectedType: models.ExportTypeSelectedItems,
-			expectedLocationCount: 1,
-			expectedAreaCount: 0,
+			expectedType:           models.ExportTypeSelectedItems,
+			expectedLocationCount:  1,
+			expectedAreaCount:      0,
 			expectedCommodityCount: 1,
 		},
 	}
@@ -226,18 +226,18 @@ func TestExportService_parseXMLMetadata_Errors(t *testing.T) {
 	ctx := context.Background()
 
 	unhappyPathTests := []struct {
-		name       string
-		xmlContent string
+		name        string
+		xmlContent  string
 		expectError bool
 	}{
 		{
-			name:       "invalid XML",
-			xmlContent: `<?xml version="1.0" encoding="UTF-8"?><invalid><unclosed>`,
+			name:        "invalid XML",
+			xmlContent:  `<?xml version="1.0" encoding="UTF-8"?><invalid><unclosed>`,
 			expectError: true,
 		},
 		{
-			name:       "empty content",
-			xmlContent: "",
+			name:        "empty content",
+			xmlContent:  "",
 			expectError: false, // Empty content just returns empty stats
 		},
 	}

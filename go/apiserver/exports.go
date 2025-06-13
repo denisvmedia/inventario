@@ -445,7 +445,7 @@ func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
 }
 
 // Exports sets up the exports API routes.
-func Exports(params Params) func(r chi.Router) {
+func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Router) {
 	api := &exportsAPI{
 		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
@@ -461,7 +461,7 @@ func Exports(params Params) func(r chi.Router) {
 			r.Get("/", api.getExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
-			r.Route("/restores", ExportRestores(params))
+			r.Route("/restores", ExportRestores(params, restoreWorker))
 		})
 	}
 }

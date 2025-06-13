@@ -19,6 +19,15 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
+// mockRestoreWorker is a mock implementation of RestoreWorkerInterface for testing
+type mockRestoreWorker struct {
+	hasRunningRestores bool
+}
+
+func (m *mockRestoreWorker) HasRunningRestores(ctx context.Context) (bool, error) {
+	return m.hasRunningRestores, nil
+}
+
 func TestExportSoftDelete(t *testing.T) {
 	c := qt.New(t)
 
@@ -46,7 +55,8 @@ func TestExportSoftDelete(t *testing.T) {
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
-	r.Route("/exports", Exports(params))
+	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", Exports(params, mockWorker))
 
 	// Test soft delete
 	req := httptest.NewRequest("DELETE", "/exports/"+created.ID, nil)
@@ -107,7 +117,8 @@ func TestExportListExcludesDeleted(t *testing.T) {
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
-	r.Route("/exports", Exports(params))
+	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", Exports(params, mockWorker))
 
 	// Test list endpoint
 	req := httptest.NewRequest("GET", "/exports", nil)
@@ -164,7 +175,8 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
-	r.Route("/exports", Exports(params))
+	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", Exports(params, mockWorker))
 
 	// Test list endpoint with include_deleted=true
 	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
@@ -205,7 +217,8 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
-	r.Route("/exports", Exports(params))
+	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", Exports(params, mockWorker))
 
 	// Create export request payload
 	requestPayload := jsonapi.ExportCreateRequest{

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"gocloud.dev/blob"
 	"github.com/google/uuid"
+	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"

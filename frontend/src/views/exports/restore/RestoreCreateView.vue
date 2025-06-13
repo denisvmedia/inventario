@@ -54,7 +54,7 @@
       <font-awesome-icon icon="spinner" spin /> Loading export details...
     </div>
 
-    <div v-else-if="error" class="error-message">
+    <div v-else-if="error" class="error-message-block">
       {{ error }}
       <button @click="loadExport" class="btn btn-secondary">
         <font-awesome-icon icon="refresh" /> Retry
@@ -411,7 +411,18 @@ const createRestore = async () => {
       }
     }
 
-    error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to create restore operation'
+    // Extract user-friendly error message
+    const apiError = err.response?.data?.errors?.[0]
+    if (apiError?.error?.msg) {
+      // Use the detailed error message from the API
+      error.value = apiError.error.msg
+    } else if (apiError?.detail) {
+      // Use the detail field if available
+      error.value = apiError.detail
+    } else {
+      // Fallback to generic message
+      error.value = 'Failed to create restore operation'
+    }
   } finally {
     creating.value = false
   }

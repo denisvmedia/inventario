@@ -20,10 +20,10 @@ type baseAreaRegistry = Registry[models.Area, *models.Area]
 type AreaRegistry struct {
 	*baseAreaRegistry
 
-	locationRegistry   registry.LocationRegistry
-	commodityRegistry  registry.CommodityRegistry
-	commoditiesLock    sync.RWMutex
-	commodities        models.AreaCommodities
+	locationRegistry  registry.LocationRegistry
+	commodityRegistry registry.CommodityRegistry
+	commoditiesLock   sync.RWMutex
+	commodities       models.AreaCommodities
 }
 
 func NewAreaRegistry(locationRegistry registry.LocationRegistry) *AreaRegistry {

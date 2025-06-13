@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
-	"gocloud.dev/blob"
 	"github.com/shopspring/decimal"
+	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/filekit"
@@ -46,27 +47,27 @@ const (
 
 // RestoreOptions contains options for the restore operation
 type RestoreOptions struct {
-	Strategy         RestoreStrategy `json:"strategy"`
-	IncludeFileData  bool           `json:"include_file_data"`
-	DryRun          bool           `json:"dry_run"`
-	BackupExisting  bool           `json:"backup_existing"`
+	Strategy        RestoreStrategy `json:"strategy"`
+	IncludeFileData bool            `json:"include_file_data"`
+	DryRun          bool            `json:"dry_run"`
+	BackupExisting  bool            `json:"backup_existing"`
 }
 
 // RestoreStats tracks statistics during restore operation
 type RestoreStats struct {
-	LocationCount     int      `json:"location_count"`
-	AreaCount         int      `json:"area_count"`
-	CommodityCount    int      `json:"commodity_count"`
-	ImageCount        int      `json:"image_count"`
-	InvoiceCount      int      `json:"invoice_count"`
-	ManualCount       int      `json:"manual_count"`
-	BinaryDataSize    int64    `json:"binary_data_size"`
-	ErrorCount        int      `json:"error_count"`
-	Errors            []string `json:"errors"`
-	SkippedCount      int      `json:"skipped_count"`
-	UpdatedCount      int      `json:"updated_count"`
-	CreatedCount      int      `json:"created_count"`
-	DeletedCount      int      `json:"deleted_count"`
+	LocationCount  int      `json:"location_count"`
+	AreaCount      int      `json:"area_count"`
+	CommodityCount int      `json:"commodity_count"`
+	ImageCount     int      `json:"image_count"`
+	InvoiceCount   int      `json:"invoice_count"`
+	ManualCount    int      `json:"manual_count"`
+	BinaryDataSize int64    `json:"binary_data_size"`
+	ErrorCount     int      `json:"error_count"`
+	Errors         []string `json:"errors"`
+	SkippedCount   int      `json:"skipped_count"`
+	UpdatedCount   int      `json:"updated_count"`
+	CreatedCount   int      `json:"created_count"`
+	DeletedCount   int      `json:"deleted_count"`
 }
 
 // RestoreFromXML restores data from an XML file using the specified strategy
@@ -96,7 +97,7 @@ func (s *RestoreService) RestoreFromXML(ctx context.Context, xmlReader io.Reader
 	}
 
 	decoder := xml.NewDecoder(xmlReader)
-	
+
 	// Track existing entities for validation and strategy decisions
 	existingEntities := &ExistingEntities{}
 	idMapping := &IDMapping{
@@ -183,6 +184,89 @@ func (s *RestoreService) RestoreFromXML(ctx context.Context, xmlReader io.Reader
 	return stats, nil
 }
 
+// ProcessRestoreOperation processes a restore operation in the background with detailed logging
+func (s *RestoreService) ProcessRestoreOperation(ctx context.Context, restoreOperationID, uploadLocation string) error {
+	// Get the restore operation
+	restoreOperation, err := s.registrySet.RestoreOperationRegistry.Get(ctx, restoreOperationID)
+	if err != nil {
+		return s.markRestoreFailed(ctx, restoreOperationID, fmt.Sprintf("failed to get restore operation: %v", err))
+	}
+
+	// Get the export to find the file path
+	export, err := s.registrySet.ExportRegistry.Get(ctx, restoreOperation.ExportID)
+	if err != nil {
+		return s.markRestoreFailed(ctx, restoreOperationID, fmt.Sprintf("failed to get export: %v", err))
+	}
+
+	// Update status to running
+	restoreOperation.Status = models.RestoreStatusRunning
+	restoreOperation.StartedDate = models.PNow()
+	_, err = s.registrySet.RestoreOperationRegistry.Update(ctx, *restoreOperation)
+	if err != nil {
+		return s.markRestoreFailed(ctx, restoreOperationID, fmt.Sprintf("failed to update restore status: %v", err))
+	}
+
+	// Create initial restore steps
+	s.createRestoreStep(ctx, restoreOperationID, "Initializing restore", models.RestoreStepResultInProgress, "")
+
+	// Open the export file
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	if err != nil {
+		return s.markRestoreFailed(ctx, restoreOperationID, fmt.Sprintf("failed to open blob bucket: %v", err))
+	}
+	defer b.Close()
+
+	reader, err := b.NewReader(ctx, export.FilePath, nil)
+	if err != nil {
+		return s.markRestoreFailed(ctx, restoreOperationID, fmt.Sprintf("failed to open export file: %v", err))
+	}
+	defer reader.Close()
+
+	// Update step to processing
+	s.updateRestoreStep(ctx, restoreOperationID, "Initializing restore", models.RestoreStepResultSuccess, "")
+	s.createRestoreStep(ctx, restoreOperationID, "Reading XML file", models.RestoreStepResultInProgress, "")
+
+	// Convert options to restore service format
+	restoreOptions := RestoreOptions{
+		Strategy:        RestoreStrategy(restoreOperation.Options.Strategy),
+		IncludeFileData: restoreOperation.Options.IncludeFileData,
+		DryRun:          restoreOperation.Options.DryRun,
+		BackupExisting:  restoreOperation.Options.BackupExisting,
+	}
+
+	// Update step to processing
+	s.updateRestoreStep(ctx, restoreOperationID, "Reading XML file", models.RestoreStepResultSuccess, "")
+
+	// Process with detailed logging
+	stats, err := s.processRestoreWithDetailedLogging(ctx, restoreOperationID, reader, restoreOptions)
+	if err != nil {
+		return s.markRestoreFailed(ctx, restoreOperationID, fmt.Sprintf("restore failed: %v", err))
+	}
+
+	// Mark restore as completed
+	restoreOperation.Status = models.RestoreStatusCompleted
+	restoreOperation.CompletedDate = models.PNow()
+	restoreOperation.LocationCount = stats.LocationCount
+	restoreOperation.AreaCount = stats.AreaCount
+	restoreOperation.CommodityCount = stats.CommodityCount
+	restoreOperation.ImageCount = stats.ImageCount
+	restoreOperation.InvoiceCount = stats.InvoiceCount
+	restoreOperation.ManualCount = stats.ManualCount
+	restoreOperation.BinaryDataSize = stats.BinaryDataSize
+	restoreOperation.ErrorCount = stats.ErrorCount
+
+	_, err = s.registrySet.RestoreOperationRegistry.Update(ctx, *restoreOperation)
+	if err != nil {
+		return s.markRestoreFailed(ctx, restoreOperationID, fmt.Sprintf("failed to update restore completion status: %v", err))
+	}
+
+	s.createRestoreStep(ctx, restoreOperationID, "Restore completed successfully", models.RestoreStepResultSuccess,
+		fmt.Sprintf("Processed %d locations, %d areas, %d commodities with %d errors",
+			stats.LocationCount, stats.AreaCount, stats.CommodityCount, stats.ErrorCount))
+
+	return nil
+}
+
 // validateOptions validates the restore options
 func (s *RestoreService) validateOptions(options RestoreOptions) error {
 	switch options.Strategy {
@@ -196,27 +280,27 @@ func (s *RestoreService) validateOptions(options RestoreOptions) error {
 
 // ExistingEntities tracks existing entities in the database
 type ExistingEntities struct {
-	Locations  map[string]*models.Location
-	Areas      map[string]*models.Area
+	Locations   map[string]*models.Location
+	Areas       map[string]*models.Area
 	Commodities map[string]*models.Commodity
-	Images     map[string]*models.Image   // XML ID -> Image
-	Invoices   map[string]*models.Invoice // XML ID -> Invoice
-	Manuals    map[string]*models.Manual  // XML ID -> Manual
+	Images      map[string]*models.Image   // XML ID -> Image
+	Invoices    map[string]*models.Invoice // XML ID -> Invoice
+	Manuals     map[string]*models.Manual  // XML ID -> Manual
 }
 
 // IDMapping tracks the mapping from XML IDs to actual database IDs
 type IDMapping struct {
-	Locations  map[string]string // XML ID -> Database ID
-	Areas      map[string]string // XML ID -> Database ID
+	Locations   map[string]string // XML ID -> Database ID
+	Areas       map[string]string // XML ID -> Database ID
 	Commodities map[string]string // XML ID -> Database ID
-	Images     map[string]string // XML ID -> Database ID
-	Invoices   map[string]string // XML ID -> Database ID
-	Manuals    map[string]string // XML ID -> Database ID
+	Images      map[string]string // XML ID -> Database ID
+	Invoices    map[string]string // XML ID -> Database ID
+	Manuals     map[string]string // XML ID -> Database ID
 }
 
 // PendingFileData holds file data that needs to be processed after commodity creation
 type PendingFileData struct {
-	FileType string   // "image", "invoice", "manual"
+	FileType string    // "image", "invoice", "manual"
 	XMLFiles []XMLFile // File data collected during parsing
 }
 
@@ -480,7 +564,7 @@ func (s *RestoreService) processArea(ctx context.Context, decoder *xml.Decoder, 
 			if err != nil {
 				return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
 			}
-				// Note: Area is automatically added to location by the AreaRegistry.Create method
+			// Note: Area is automatically added to location by the AreaRegistry.Create method
 			// Track the newly created area and store ID mapping
 			existing.Areas[originalXMLID] = createdArea
 			idMapping.Areas[originalXMLID] = createdArea.ID
@@ -776,8 +860,6 @@ func (s *RestoreService) createOrUpdateCommodity(ctx context.Context, xmlCommodi
 		return errkit.Wrap(err, fmt.Sprintf("failed to convert commodity %s", originalXMLID))
 	}
 
-
-
 	// Set the correct area ID from the mapping
 	commodity.AreaID = actualAreaID
 
@@ -802,7 +884,7 @@ func (s *RestoreService) createOrUpdateCommodity(ctx context.Context, xmlCommodi
 			if err != nil {
 				return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
 			}
-				// Note: Commodity is automatically added to area by the CommodityRegistry.Create method
+			// Note: Commodity is automatically added to area by the CommodityRegistry.Create method
 			// Track the newly created commodity and store ID mapping
 			existing.Commodities[originalXMLID] = createdCommodity
 			idMapping.Commodities[originalXMLID] = createdCommodity.ID
@@ -1384,4 +1466,321 @@ func (s *RestoreService) createFileRecord(ctx context.Context, xmlFile *XMLFile,
 	}
 
 	return nil
+}
+
+// markRestoreFailed marks a restore operation as failed with an error message
+func (s *RestoreService) markRestoreFailed(ctx context.Context, restoreOperationID, errorMessage string) error {
+	restoreOperation, err := s.registrySet.RestoreOperationRegistry.Get(ctx, restoreOperationID)
+	if err != nil {
+		return err
+	}
+
+	restoreOperation.Status = models.RestoreStatusFailed
+	restoreOperation.CompletedDate = models.PNow()
+	restoreOperation.ErrorMessage = errorMessage
+
+	_, err = s.registrySet.RestoreOperationRegistry.Update(ctx, *restoreOperation)
+	if err != nil {
+		return err
+	}
+
+	s.createRestoreStep(ctx, restoreOperationID, "Restore failed", models.RestoreStepResultError, errorMessage)
+	return fmt.Errorf("%s", errorMessage)
+}
+
+// createRestoreStep creates a new restore step
+func (s *RestoreService) createRestoreStep(ctx context.Context, restoreOperationID, name string, result models.RestoreStepResult, reason string) {
+	step := models.RestoreStep{
+		RestoreOperationID: restoreOperationID,
+		Name:               name,
+		Result:             result,
+		Reason:             reason,
+		CreatedDate:        models.PNow(),
+	}
+
+	_, err := s.registrySet.RestoreStepRegistry.Create(ctx, step)
+	if err != nil {
+		// Log error but don't fail the restore operation
+		fmt.Printf("Failed to create restore step: %v\n", err)
+	}
+}
+
+// updateRestoreStep updates an existing restore step
+func (s *RestoreService) updateRestoreStep(ctx context.Context, restoreOperationID, name string, result models.RestoreStepResult, reason string) {
+	// Get all steps for this restore operation
+	steps, err := s.registrySet.RestoreStepRegistry.ListByRestoreOperation(ctx, restoreOperationID)
+	if err != nil {
+		// If we can't get steps, create a new one
+		s.createRestoreStep(ctx, restoreOperationID, name, result, reason)
+		return
+	}
+
+	// Find the step with the matching name
+	for _, step := range steps {
+		if step.Name == name {
+			step.Result = result
+			step.Reason = reason
+			_, err := s.registrySet.RestoreStepRegistry.Update(ctx, *step)
+			if err != nil {
+				// Log error but don't fail the restore operation
+				fmt.Printf("Failed to update restore step: %v\n", err)
+			}
+			return
+		}
+	}
+
+	// If step not found, create it
+	s.createRestoreStep(ctx, restoreOperationID, name, result, reason)
+}
+
+// processRestoreWithDetailedLogging processes the restore with detailed step-by-step logging
+func (s *RestoreService) processRestoreWithDetailedLogging(ctx context.Context, restoreOperationID string, reader io.Reader, options RestoreOptions) (*RestoreStats, error) {
+	// Create a custom restore processor that logs each item
+	processor := &DetailedRestoreProcessor{
+		service:            s,
+		restoreOperationID: restoreOperationID,
+		options:            options,
+	}
+
+	return processor.ProcessWithLogging(ctx, reader)
+}
+
+// DetailedRestoreProcessor handles detailed logging during restore operations
+type DetailedRestoreProcessor struct {
+	service            *RestoreService
+	restoreOperationID string
+	options            RestoreOptions
+}
+
+// ProcessWithLogging processes the restore with detailed step logging
+func (p *DetailedRestoreProcessor) ProcessWithLogging(ctx context.Context, reader io.Reader) (*RestoreStats, error) {
+	// Create step for loading existing data
+	p.service.createRestoreStep(ctx, p.restoreOperationID, "Loading existing data", models.RestoreStepResultInProgress, "")
+
+	// Create a custom restore service with logging callbacks
+	loggedService := &LoggedRestoreService{
+		service:   p.service,
+		processor: p,
+		ctx:       ctx,
+	}
+
+	stats, err := loggedService.RestoreFromXMLWithLogging(ctx, reader, p.options)
+	if err != nil {
+		p.service.updateRestoreStep(ctx, p.restoreOperationID, "Loading existing data", models.RestoreStepResultError, err.Error())
+		return stats, err
+	}
+
+	p.service.updateRestoreStep(ctx, p.restoreOperationID, "Loading existing data", models.RestoreStepResultSuccess, "")
+
+	return stats, nil
+}
+
+// LoggedRestoreService wraps the restore service to provide detailed logging
+type LoggedRestoreService struct {
+	service   *RestoreService
+	processor *DetailedRestoreProcessor
+	ctx       context.Context
+}
+
+// RestoreFromXMLWithLogging processes the restore with detailed logging
+func (l *LoggedRestoreService) RestoreFromXMLWithLogging(ctx context.Context, reader io.Reader, options RestoreOptions) (*RestoreStats, error) {
+	// Read all XML content first for analysis
+	xmlContent, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to read XML content")
+	}
+
+	// Parse XML to analyze items for logging purposes
+	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Analyzing XML content", models.RestoreStepResultInProgress, "")
+
+	// Parse the XML structure to extract individual items for logging
+	exportData, err := l.parseExportXML(xmlContent)
+	if err != nil {
+		l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Analyzing XML content", models.RestoreStepResultError, err.Error())
+		return nil, err
+	}
+
+	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Analyzing XML content", models.RestoreStepResultSuccess,
+		fmt.Sprintf("Found %d locations, %d areas, %d commodities", len(exportData.Locations), len(exportData.Areas), len(exportData.Commodities)))
+
+	// Create detailed logging steps for what will be processed
+	l.createDetailedLoggingSteps(ctx, exportData, options)
+
+	// Now use the original restore service to do the actual data processing
+	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Processing data with full restore service", models.RestoreStepResultInProgress, "")
+
+	reader = strings.NewReader(string(xmlContent))
+	stats, err := l.service.RestoreFromXML(ctx, reader, options)
+	if err != nil {
+		l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing data with full restore service", models.RestoreStepResultError, err.Error())
+		return stats, err
+	}
+
+	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing data with full restore service", models.RestoreStepResultSuccess,
+		fmt.Sprintf("Completed processing with %d errors", stats.ErrorCount))
+
+	return stats, nil
+}
+
+// ExportData holds the parsed XML export data
+type ExportData struct {
+	XMLName     xml.Name        `xml:"inventory"`
+	Locations   []LocationData  `xml:"locations>location"`
+	Areas       []AreaData      `xml:"areas>area"`
+	Commodities []CommodityData `xml:"commodities>commodity"`
+}
+
+// LocationData represents a location in the XML
+type LocationData struct {
+	ID      string `xml:"id,attr"`
+	Name    string `xml:"locationName"`
+	Address string `xml:"address"`
+}
+
+// AreaData represents an area in the XML
+type AreaData struct {
+	ID         string `xml:"id,attr"`
+	Name       string `xml:"areaName"`
+	LocationID string `xml:"locationId"`
+}
+
+// CommodityData represents a commodity in the XML
+type CommodityData struct {
+	ID     string `xml:"id,attr"`
+	Name   string `xml:"commodityName"`
+	AreaID string `xml:"areaId"`
+}
+
+// parseExportXML parses the XML content into structured data
+func (l *LoggedRestoreService) parseExportXML(xmlContent []byte) (*ExportData, error) {
+	var exportData ExportData
+	err := xml.Unmarshal(xmlContent, &exportData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse XML: %v", err)
+	}
+	return &exportData, nil
+}
+
+// createDetailedLoggingSteps creates detailed steps for what will be processed
+func (l *LoggedRestoreService) createDetailedLoggingSteps(ctx context.Context, exportData *ExportData, options RestoreOptions) {
+	// Create detailed steps for locations
+	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Will process locations", models.RestoreStepResultInProgress, "")
+
+	for _, location := range exportData.Locations {
+		action := l.predictAction(ctx, "location", location.ID, options)
+		emoji := l.getEmojiForAction(action)
+		actionDesc := l.getActionDescription(action, options.DryRun)
+
+		l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID,
+			fmt.Sprintf("%s Location: %s", emoji, location.Name), models.RestoreStepResultSuccess, actionDesc)
+	}
+
+	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Will process locations", models.RestoreStepResultSuccess,
+		fmt.Sprintf("Will process %d locations", len(exportData.Locations)))
+
+	// Create detailed steps for areas
+	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Will process areas", models.RestoreStepResultInProgress, "")
+
+	for _, area := range exportData.Areas {
+		action := l.predictAction(ctx, "area", area.ID, options)
+		emoji := l.getEmojiForAction(action)
+		actionDesc := l.getActionDescription(action, options.DryRun)
+
+		l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID,
+			fmt.Sprintf("%s Area: %s", emoji, area.Name), models.RestoreStepResultSuccess, actionDesc)
+	}
+
+	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Will process areas", models.RestoreStepResultSuccess,
+		fmt.Sprintf("Will process %d areas", len(exportData.Areas)))
+
+	// Create detailed steps for commodities
+	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Will process commodities", models.RestoreStepResultInProgress, "")
+
+	for _, commodity := range exportData.Commodities {
+		action := l.predictAction(ctx, "commodity", commodity.ID, options)
+		emoji := l.getEmojiForAction(action)
+		actionDesc := l.getActionDescription(action, options.DryRun)
+
+		l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID,
+			fmt.Sprintf("%s Commodity: %s", emoji, commodity.Name), models.RestoreStepResultSuccess, actionDesc)
+	}
+
+	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Will process commodities", models.RestoreStepResultSuccess,
+		fmt.Sprintf("Will process %d commodities", len(exportData.Commodities)))
+}
+
+// predictAction predicts what action will be taken for an entity based on strategy
+func (l *LoggedRestoreService) predictAction(ctx context.Context, entityType, entityID string, options RestoreOptions) string {
+	switch options.Strategy {
+	case RestoreStrategyFullReplace:
+		return "create"
+	case RestoreStrategyMergeAdd:
+		// Check if entity exists
+		exists := l.entityExists(ctx, entityType, entityID)
+		if exists {
+			return "skip"
+		}
+		return "create"
+	case RestoreStrategyMergeUpdate:
+		// Check if entity exists
+		exists := l.entityExists(ctx, entityType, entityID)
+		if exists {
+			return "update"
+		}
+		return "create"
+	default:
+		return "unknown"
+	}
+}
+
+// entityExists checks if an entity exists in the database
+func (l *LoggedRestoreService) entityExists(ctx context.Context, entityType, entityID string) bool {
+	switch entityType {
+	case "location":
+		_, err := l.service.registrySet.LocationRegistry.Get(ctx, entityID)
+		return err == nil
+	case "area":
+		_, err := l.service.registrySet.AreaRegistry.Get(ctx, entityID)
+		return err == nil
+	case "commodity":
+		_, err := l.service.registrySet.CommodityRegistry.Get(ctx, entityID)
+		return err == nil
+	default:
+		return false
+	}
+}
+
+// getEmojiForAction returns an emoji for the action
+func (l *LoggedRestoreService) getEmojiForAction(action string) string {
+	switch action {
+	case "create":
+		return "📝"
+	case "update":
+		return "🔄"
+	case "skip":
+		return "⏭️"
+	default:
+		return "❓"
+	}
+}
+
+// getActionDescription returns a description for the action
+func (l *LoggedRestoreService) getActionDescription(action string, dryRun bool) string {
+	prefix := ""
+	if dryRun {
+		prefix = "[DRY RUN] Would "
+	} else {
+		prefix = "Will "
+	}
+
+	switch action {
+	case "create":
+		return prefix + "create new entity"
+	case "update":
+		return prefix + "update existing entity"
+	case "skip":
+		return prefix + "skip (already exists)"
+	default:
+		return prefix + "perform unknown action"
+	}
 }
