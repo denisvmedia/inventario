@@ -164,6 +164,66 @@ const scrollToFirstError = () => {
   }, 100)
 }
 
+const pollImportStatus = (exportId: string) => {
+  let attempts = 0
+  const maxAttempts = 300 // 10 minutes with 2s intervals
+  const intervalMs = 2000
+
+  const poll = async () => {
+    try {
+      attempts++
+      const response = await exportService.getExport(exportId)
+      const exportData = response.data.data.attributes
+
+      // Check if import is complete
+      if (exportData.status === 'completed') {
+        toast.add({
+          severity: 'success',
+          summary: 'Import Completed',
+          detail: `Import operation "${form.value.description}" completed successfully`,
+          life: 8000
+        })
+        return
+      } else if (exportData.status === 'failed') {
+        toast.add({
+          severity: 'error',
+          summary: 'Import Failed',
+          detail: exportData.error_message || 'Import operation failed',
+          life: 10000
+        })
+        return
+      }
+
+      // Check if we've exceeded max attempts
+      if (attempts >= maxAttempts) {
+        toast.add({
+          severity: 'warn',
+          summary: 'Import Monitoring Timeout',
+          detail: 'Lost connection to import status updates. Check the export details page for current status.',
+          life: 8000
+        })
+        return
+      }
+
+      // Schedule next poll if still in progress
+      if (exportData.status === 'pending' || exportData.status === 'in_progress') {
+        setTimeout(poll, intervalMs)
+      }
+    } catch (error) {
+      console.error('Error polling import status:', error)
+      toast.add({
+        severity: 'warn',
+        summary: 'Import Monitoring Lost',
+        detail: 'Lost connection to import status updates. Check the export details page for current status.',
+        life: 8000
+      })
+    }
+  }
+
+  // Start polling
+  setTimeout(poll, intervalMs)
+}
+
 const handleSubmit = async () => {
   if (!canSubmit.value) return
 
@@ -183,16 +243,19 @@ const handleSubmit = async () => {
     }
 
     const response = await exportService.importExport(requestData)
+    const exportId = response.data.data.id
 
     toast.add({
       severity: 'success',
-      summary: 'Export Imported',
-      detail: `Export "${form.value.description}" has been imported successfully`,
+      summary: 'Import Started',
+      detail: `Import operation "${form.value.description}" has been started and is running in the background`,
       life: 5000
     })
 
-    // Navigate to the imported export detail view
-    const exportId = response.data.data.id
+    // Start polling for import status updates
+    pollImportStatus(exportId)
+
+    // Navigate to the imported export detail view immediately
     router.push(`/exports/${exportId}`)
   } catch (err: any) {
     console.error('Error importing export:', err)

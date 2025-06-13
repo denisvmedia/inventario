@@ -102,6 +102,19 @@ func (api *exportRestoresAPI) getExportRestore(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Load steps for this restore operation
+	steps, err := api.registrySet.RestoreStepRegistry.ListByRestoreOperation(r.Context(), restoreID)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	// Convert steps to the format expected by the model
+	restoreOperation.Steps = make([]models.RestoreStep, len(steps))
+	for i, step := range steps {
+		restoreOperation.Steps[i] = *step
+	}
+
 	if err := render.Render(w, r, jsonapi.NewRestoreOperationResponse(restoreOperation)); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -157,9 +170,15 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Start restore processing in background
-	go api.processRestore(context.Background(), createdRestoreOperation.ID, export.FilePath, restoreOperation.Options)
+	// Start restore processing in background with proper context
+	// Use a background context to ensure the restore continues even if the request is cancelled
+	go func() {
+		// Create a new context for the background operation
+		bgCtx := context.Background()
+		api.processRestore(bgCtx, createdRestoreOperation.ID, export.FilePath, restoreOperation.Options)
+	}()
 
+	// Return immediately with the created restore operation
 	w.WriteHeader(http.StatusCreated)
 	if err := render.Render(w, r, jsonapi.NewRestoreOperationResponse(createdRestoreOperation)); err != nil {
 		internalServerError(w, r, err)

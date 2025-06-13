@@ -342,16 +342,52 @@ const createRestore = async () => {
       }
     }
 
-    const restore = await exportService.createRestore(exportId, requestData)
+    const response = await exportService.createRestore(exportId, requestData)
+    const restore = response.data.data.attributes
 
     toast.add({
       severity: 'success',
       summary: 'Restore Started',
-      detail: `Restore operation "${form.value.description}" has been started`,
+      detail: `Restore operation "${form.value.description}" has been started and is running in the background`,
       life: 5000
     })
 
-    // Navigate back to export detail view
+    // Start polling for restore status updates
+    exportService.pollRestoreStatus(
+      exportId,
+      restore.id,
+      (updatedRestore) => {
+        console.log('Restore status update:', updatedRestore.status)
+        // You could show progress updates here if needed
+      }
+    ).then((finalRestore) => {
+      // Show completion notification
+      if (finalRestore.status === 'completed') {
+        toast.add({
+          severity: 'success',
+          summary: 'Restore Completed',
+          detail: `Restore operation "${form.value.description}" completed successfully`,
+          life: 8000
+        })
+      } else if (finalRestore.status === 'failed') {
+        toast.add({
+          severity: 'error',
+          summary: 'Restore Failed',
+          detail: finalRestore.error_message || 'Restore operation failed',
+          life: 10000
+        })
+      }
+    }).catch((error) => {
+      console.error('Error polling restore status:', error)
+      toast.add({
+        severity: 'warn',
+        summary: 'Restore Monitoring Lost',
+        detail: 'Lost connection to restore status updates. Check the export details page for current status.',
+        life: 8000
+      })
+    })
+
+    // Navigate back to export detail view immediately
     router.push(`/exports/${exportId}`)
   } catch (err: any) {
     console.error('Error creating restore:', err)

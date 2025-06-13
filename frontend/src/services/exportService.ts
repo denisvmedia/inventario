@@ -117,6 +117,52 @@ const exportService = {
         'Accept': 'application/vnd.api+json'
       }
     })
+  },
+
+  // Poll restore status until completion or failure
+  async pollRestoreStatus(
+    exportId: string,
+    restoreId: string,
+    onUpdate?: (restore: any) => void,
+    intervalMs: number = 2000,
+    maxAttempts: number = 300 // 10 minutes with 2s intervals
+  ): Promise<any> {
+    let attempts = 0;
+
+    return new Promise((resolve, reject) => {
+      const poll = async () => {
+        try {
+          attempts++;
+          const response = await this.getRestoreOperation(exportId, restoreId);
+          const restore = response.data.data.attributes;
+
+          // Call update callback if provided
+          if (onUpdate) {
+            onUpdate(restore);
+          }
+
+          // Check if restore is complete
+          if (restore.status === 'completed' || restore.status === 'failed') {
+            resolve(restore);
+            return;
+          }
+
+          // Check if we've exceeded max attempts
+          if (attempts >= maxAttempts) {
+            reject(new Error('Restore polling timeout'));
+            return;
+          }
+
+          // Schedule next poll
+          setTimeout(poll, intervalMs);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      // Start polling
+      poll();
+    });
   }
 }
 

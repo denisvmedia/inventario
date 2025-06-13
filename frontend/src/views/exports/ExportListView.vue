@@ -248,6 +248,25 @@ const downloadExport = async (exportId: string) => {
 
 onMounted(() => {
   loadExports()
+
+  // Auto-refresh exports that are in progress
+  const interval = setInterval(() => {
+    if (exports.value) {
+      const inProgressExports = exports.value.filter(
+        exp => exp.status === 'pending' || exp.status === 'in_progress'
+      )
+
+      if (inProgressExports.length > 0) {
+        // Refresh the export list to get updated statuses
+        loadExports().catch(err => {
+          console.error('Error refreshing exports:', err)
+        })
+      }
+    }
+  }, 3000) // Check every 3 seconds
+
+  // Cleanup interval on component unmount
+  return () => clearInterval(interval)
 })
 </script>
 

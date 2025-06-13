@@ -263,6 +263,12 @@
                 </div>
                 <div class="restore-status">
                   <span class="status-badge" :class="getRestoreStatusClasses(restore)">
+                    <font-awesome-icon
+                      v-if="restore.status === 'running' || restore.status === 'pending'"
+                      icon="spinner"
+                      spin
+                      class="status-icon"
+                    />
                     {{ getRestoreDisplayStatus(restore) }}
                   </span>
                   <button class="collapse-toggle" :class="{ 'expanded': expandedRestoreOperations[index] }">
@@ -806,19 +812,38 @@ onMounted(() => {
   loadExport()
 
   // Auto-refresh if export is in progress
-  const interval = setInterval(() => {
+  const exportInterval = setInterval(() => {
     if (exportData.value?.status === 'pending' || exportData.value?.status === 'in_progress') {
       loadExport().catch(err => {
         console.error('Error refreshing export:', err)
-        clearInterval(interval)
+        clearInterval(exportInterval)
       })
     } else {
-      clearInterval(interval)
+      clearInterval(exportInterval)
     }
   }, 5000)
 
-  // Cleanup interval on component unmount
-  return () => clearInterval(interval)
+  // Auto-refresh restore operations that are in progress
+  const restoreInterval = setInterval(() => {
+    if (exportData.value?.restore_operations) {
+      const runningRestores = exportData.value.restore_operations.filter(
+        restore => restore.status === 'pending' || restore.status === 'running'
+      )
+
+      if (runningRestores.length > 0) {
+        // Refresh the entire export to get updated restore operations
+        loadExport().catch(err => {
+          console.error('Error refreshing restore operations:', err)
+        })
+      }
+    }
+  }, 3000) // Check restore operations more frequently
+
+  // Cleanup intervals on component unmount
+  return () => {
+    clearInterval(exportInterval)
+    clearInterval(restoreInterval)
+  }
 })
 </script>
 
@@ -911,6 +936,10 @@ onMounted(() => {
 .count-badge {
   padding: 4px 8px;
   border-radius: $default-radius;
+
+  .status-icon {
+    margin-right: 4px;
+  }
   font-size: 0.8rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -965,6 +994,11 @@ onMounted(() => {
 .type-commodities {
   background-color: #fce4ec;
   color: #c2185b;
+}
+
+.type-imported {
+  background-color: #f0f4f8;
+  color: #4a5568;
 }
 
 .bool-badge.yes {
