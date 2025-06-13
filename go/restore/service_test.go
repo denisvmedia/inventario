@@ -71,7 +71,6 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			Strategy:        restore.RestoreStrategyFullReplace,
 			IncludeFileData: false,
 			DryRun:          false,
-			BackupExisting:  false,
 		}
 
 		stats, err := testService.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
@@ -152,7 +151,6 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			Strategy:        restore.RestoreStrategyMergeAdd,
 			IncludeFileData: false,
 			DryRun:          false,
-			BackupExisting:  false,
 		}
 
 		stats, err := testService.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
@@ -209,7 +207,6 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			Strategy:        restore.RestoreStrategyMergeUpdate,
 			IncludeFileData: false,
 			DryRun:          false,
-			BackupExisting:  false,
 		}
 
 		stats, err := testService.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
@@ -254,7 +251,6 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			Strategy:        restore.RestoreStrategyFullReplace,
 			IncludeFileData: false,
 			DryRun:          true, // Dry run mode
-			BackupExisting:  false,
 		}
 
 		stats, err := testService.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
@@ -281,7 +277,6 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			Strategy:        "invalid_strategy",
 			IncludeFileData: false,
 			DryRun:          false,
-			BackupExisting:  false,
 		}
 
 		_, err := service.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
@@ -341,7 +336,6 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 		Strategy:        restore.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
-		BackupExisting:  false,
 	}
 
 	stats, err := service.RestoreFromXML(ctx, reader, options)
@@ -408,7 +402,6 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 		Strategy:        restore.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
-		BackupExisting:  false,
 	}
 
 	ctx := c.Context()
@@ -517,7 +510,6 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 		Strategy:        restore.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
-		BackupExisting:  false,
 	}
 
 	stats, err := service.RestoreFromXML(ctx, reader, options)
@@ -582,7 +574,7 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	service := restore.NewRestoreService(registrySet, "")
 
 	// Read the actual sample XML file
-	xmlContent, err := os.ReadFile("sample_export.xml")
+	xmlContent, err := os.ReadFile("testdata/sample_export.xml")
 	c.Assert(err, qt.IsNil)
 
 	reader := strings.NewReader(string(xmlContent))
@@ -590,7 +582,6 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 		Strategy:        restore.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
-		BackupExisting:  false,
 	}
 
 	stats, err := service.RestoreFromXML(ctx, reader, options)

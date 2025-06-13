@@ -99,7 +99,6 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	// First restore with full replace to create initial data
 	options := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyFullReplace,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
@@ -138,7 +137,6 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	// This should NOT create duplicates
 	mergeAddOptions := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyMergeAdd,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
@@ -236,7 +234,6 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	// First restore with full replace to create initial data
 	options := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyFullReplace,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
@@ -315,7 +312,6 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	// Restore with Merge & Add strategy
 	mergeAddOptions := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyMergeAdd,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: true,
 	}

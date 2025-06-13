@@ -65,9 +65,8 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 
 	// Test restore with full replace strategy (this should now work with recursive delete)
 	options := restore.RestoreOptions{
-		Strategy:       restore.RestoreStrategyFullReplace,
-		BackupExisting: false,
-		DryRun:         false,
+		Strategy: restore.RestoreStrategyFullReplace,
+		DryRun:   false,
 	}
 
 	reader := strings.NewReader(xmlData)
@@ -139,9 +138,8 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
-		Strategy:       restore.RestoreStrategyFullReplace,
-		BackupExisting: false,
-		DryRun:         false,
+		Strategy: restore.RestoreStrategyFullReplace,
+		DryRun:   false,
 	}
 
 	xmlData := `<?xml version="1.0" encoding="UTF-8"?>

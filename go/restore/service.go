@@ -14,6 +14,7 @@ import (
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/filekit"
+	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -50,7 +51,6 @@ type RestoreOptions struct {
 	Strategy        RestoreStrategy `json:"strategy"`
 	IncludeFileData bool            `json:"include_file_data"`
 	DryRun          bool            `json:"dry_run"`
-	BackupExisting  bool            `json:"backup_existing"`
 }
 
 // RestoreStats tracks statistics during restore operation
@@ -87,13 +87,6 @@ func (s *RestoreService) RestoreFromXML(ctx context.Context, xmlReader io.Reader
 
 	if settings.MainCurrency != nil && *settings.MainCurrency != "" {
 		ctx = validationctx.WithMainCurrency(ctx, *settings.MainCurrency)
-	}
-
-	// If full replace strategy, backup existing data first if requested
-	if options.Strategy == RestoreStrategyFullReplace && options.BackupExisting {
-		if err := s.backupExistingData(ctx); err != nil {
-			return stats, errkit.Wrap(err, "failed to backup existing data")
-		}
 	}
 
 	decoder := xml.NewDecoder(xmlReader)
@@ -178,6 +171,8 @@ func (s *RestoreService) RestoreFromXML(ctx context.Context, xmlReader io.Reader
 					return stats, errkit.Wrap(err, "failed to process commodities")
 				}
 			}
+		default:
+			return stats, errkit.WithFields(errors.New("unexpected token type"), "token_type", fmt.Sprintf("%T", t))
 		}
 	}
 
@@ -231,7 +226,6 @@ func (s *RestoreService) ProcessRestoreOperation(ctx context.Context, restoreOpe
 		Strategy:        RestoreStrategy(restoreOperation.Options.Strategy),
 		IncludeFileData: restoreOperation.Options.IncludeFileData,
 		DryRun:          restoreOperation.Options.DryRun,
-		BackupExisting:  restoreOperation.Options.BackupExisting,
 	}
 
 	// Update step to processing
@@ -367,15 +361,6 @@ func (s *RestoreService) loadExistingEntities(ctx context.Context, entities *Exi
 		entities.Manuals[manual.ID] = manual
 	}
 
-	return nil
-}
-
-// backupExistingData creates a backup of existing data before full replace
-func (s *RestoreService) backupExistingData(ctx context.Context) error {
-	// This would create an export of current data
-	// Implementation would depend on export service integration
-	// For now, we'll just log that backup would be created
-	fmt.Println("Creating backup of existing data before full replace...")
 	return nil
 }
 
@@ -1501,7 +1486,7 @@ func (s *RestoreService) createRestoreStep(ctx context.Context, restoreOperation
 	_, err := s.registrySet.RestoreStepRegistry.Create(ctx, step)
 	if err != nil {
 		// Log error but don't fail the restore operation
-		fmt.Printf("Failed to create restore step: %v\n", err)
+		log.WithError(err).Error("Failed to create restore step")
 	}
 }
 
@@ -1523,7 +1508,7 @@ func (s *RestoreService) updateRestoreStep(ctx context.Context, restoreOperation
 			_, err := s.registrySet.RestoreStepRegistry.Update(ctx, *step)
 			if err != nil {
 				// Log error but don't fail the restore operation
-				fmt.Printf("Failed to update restore step: %v\n", err)
+				log.WithError(err).Error("Failed to update restore step")
 			}
 			return
 		}

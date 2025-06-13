@@ -81,7 +81,6 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 	// Test restore with file data processing enabled
 	options := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyFullReplace,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
@@ -201,7 +200,6 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 	// Test restore with file data processing DISABLED
 	options := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyFullReplace,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: false, // Disable file processing
 	}
@@ -284,7 +282,6 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyFullReplace,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: false,
 	}
@@ -393,7 +390,6 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyFullReplace,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: false,
 	}
@@ -512,7 +508,6 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	// Test restore with file data processing enabled
 	options := restore.RestoreOptions{
 		Strategy:        restore.RestoreStrategyFullReplace,
-		BackupExisting:  false,
 		DryRun:          false,
 		IncludeFileData: true,
 	}

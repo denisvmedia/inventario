@@ -124,9 +124,9 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 			continue
 		}
 
-		// Block until we can acquire a semaphore slot to limit concurrent goroutines
-		if err := w.semaphore.Acquire(ctx, 1); err != nil {
-			log.WithError(err).Error("Failed to acquire semaphore")
+		// Attempt to acquire a semaphore slot to limit concurrent goroutines
+		if !w.semaphore.TryAcquire(1) {
+			log.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
 			return
 		}
 
