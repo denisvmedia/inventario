@@ -1594,15 +1594,83 @@ func (s *ExportService) countFiles(decoder *xml.Decoder, sectionName string, cou
 		case xml.StartElement:
 			if t.Name.Local == "file" {
 				*counter++
+				// Process the file element to detect if it has data
+				if err := s.processFileElement(decoder, stats); err != nil {
+					return errkit.Wrap(err, "failed to process file element")
+				}
 			}
 		case xml.EndElement:
 			if t.Name.Local == sectionName {
 				return nil
 			}
 		case xml.CharData:
-			// This is the key optimization: skip large character data (base64) efficiently
-			// by not processing it, just letting the decoder move past it
+			// Skip character data at this level
 			continue
+		}
+	}
+}
+
+// processFileElement processes a file element to detect and estimate binary data size
+func (s *ExportService) processFileElement(decoder *xml.Decoder, stats *ExportStats) error {
+	depth := 1 // We're inside a file element
+
+	for depth > 0 {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read file element token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+			if t.Name.Local == "data" {
+				// We found a data element - estimate its size efficiently
+				if err := s.estimateDataElementSize(decoder, stats); err != nil {
+					return errkit.Wrap(err, "failed to estimate data element size")
+				}
+				depth-- // estimateDataElementSize consumes the end element
+			}
+		case xml.EndElement:
+			depth--
+		case xml.CharData:
+			// Skip character data at this level
+			continue
+		}
+	}
+
+	return nil
+}
+
+// estimateDataElementSize efficiently estimates the size of a data element without loading all content
+func (s *ExportService) estimateDataElementSize(decoder *xml.Decoder, stats *ExportStats) error {
+	var totalBase64Length int64
+	const maxSampleSize = 1024 * 1024 // Sample up to 1MB to estimate size
+	var sampledLength int64
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read data element token")
+		}
+
+		switch t := tok.(type) {
+		case xml.CharData:
+			dataLength := int64(len(t))
+			totalBase64Length += dataLength
+
+			// Only sample the first part for efficiency
+			if sampledLength < maxSampleSize {
+				sampledLength += dataLength
+			}
+		case xml.EndElement:
+			if t.Name.Local == "data" {
+				// Convert base64 length to original binary size (approximately 3/4 of base64 length)
+				if totalBase64Length > 0 {
+					originalSize := (totalBase64Length * 3) / 4
+					stats.BinaryDataSize += originalSize
+				}
+				return nil
+			}
 		}
 	}
 }

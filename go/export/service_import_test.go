@@ -311,4 +311,53 @@ func TestExportService_parseXMLMetadata_LargeFile(t *testing.T) {
 	c.Assert(stats.ManualCount, quicktest.Equals, 1)
 	c.Assert(stats.LocationCount, quicktest.Equals, 0)
 	c.Assert(stats.AreaCount, quicktest.Equals, 0)
+
+	// Verify that binary data size was detected
+	c.Assert(stats.BinaryDataSize > 0, quicktest.Equals, true, quicktest.Commentf("Expected binary data size to be detected, got %d", stats.BinaryDataSize))
+}
+
+func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {
+	c := quicktest.New(t)
+
+	// Create test registry
+	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
+	c.Assert(err, quicktest.IsNil)
+	service := export.NewExportService(registrySet, "mem://test-bucket")
+
+	ctx := context.Background()
+
+	// Test with XML that includes files but no data elements
+	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
+<inventory exportType="commodities">
+	<commodities>
+		<commodity id="comm1">
+			<name>Commodity 1</name>
+			<images>
+				<file id="img1">
+					<name>image.jpg</name>
+					<path>images/image.jpg</path>
+				</file>
+			</images>
+			<invoices>
+				<file id="inv1">
+					<name>invoice.pdf</name>
+					<path>invoices/invoice.pdf</path>
+				</file>
+			</invoices>
+		</commodity>
+	</commodities>
+</inventory>`
+
+	reader := strings.NewReader(xmlContent)
+	stats, exportType, err := service.ParseXMLMetadata(ctx, reader)
+
+	c.Assert(err, quicktest.IsNil)
+	c.Assert(exportType, quicktest.Equals, models.ExportTypeCommodities)
+	c.Assert(stats.CommodityCount, quicktest.Equals, 1)
+	c.Assert(stats.ImageCount, quicktest.Equals, 1)
+	c.Assert(stats.InvoiceCount, quicktest.Equals, 1)
+	c.Assert(stats.ManualCount, quicktest.Equals, 0)
+
+	// Verify that no binary data size was detected (files without data elements)
+	c.Assert(stats.BinaryDataSize, quicktest.Equals, int64(0), quicktest.Commentf("Expected no binary data size for files without data, got %d", stats.BinaryDataSize))
 }
