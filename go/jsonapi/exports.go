@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
 
+	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -114,6 +115,72 @@ func (cr *ExportCreateRequest) Bind(r *http.Request) error {
 }
 
 func (cr *ExportCreateRequest) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&cr.Data, validation.Required),
+	)
+	return validation.ValidateStructWithContext(ctx, cr, fields...)
+}
+
+// ImportExportAttributes holds the attributes for importing an export.
+type ImportExportAttributes struct {
+	Description    string `json:"description"`
+	SourceFilePath string `json:"source_file_path"`
+}
+
+func (a *ImportExportAttributes) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&a.Description, validation.Required, validation.Length(1, 500)),
+		validation.Field(&a.SourceFilePath, validation.Required, validation.Length(1, 1000)),
+	)
+	return validation.ValidateStructWithContext(ctx, a, fields...)
+}
+
+// ImportExportRequestData is request data for importing an export.
+type ImportExportRequestData struct {
+	Type       string                  `json:"type" example:"exports" enums:"exports"`
+	Attributes *ImportExportAttributes `json:"attributes"`
+}
+
+func (cd *ImportExportRequestData) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&cd.Type, validation.Required, validation.In("exports")),
+		validation.Field(&cd.Attributes, validation.Required),
+	)
+	return validation.ValidateStructWithContext(ctx, cd, fields...)
+}
+
+type ImportExportRequest struct {
+	Data *ImportExportRequestData `json:"data"`
+}
+
+var _ render.Binder = (*ImportExportRequest)(nil)
+
+func (cr *ImportExportRequest) Bind(r *http.Request) error {
+	if cr.Data == nil {
+		return errkit.WithMessage(nil, "missing required data field")
+	}
+
+	if cr.Data.Type != "exports" {
+		return errkit.WithMessage(nil, "invalid type, expected 'exports'")
+	}
+
+	if cr.Data.Attributes == nil {
+		return errkit.WithMessage(nil, "missing required attributes field")
+	}
+
+	// Validate the data structure
+	if err := cr.Data.ValidateWithContext(r.Context()); err != nil {
+		return err
+	}
+
+	// Validate the attributes
+	return cr.Data.Attributes.ValidateWithContext(r.Context())
+}
+
+func (cr *ImportExportRequest) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&cr.Data, validation.Required),

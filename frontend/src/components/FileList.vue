@@ -15,7 +15,7 @@
         <div class="file-info">
           <div class="file-name-container">
             <div v-if="editingFile !== file.id" class="file-name" @click="startEditing(file)">
-              {{ getFileName(file) }}
+              <span class="file-name-text" :title="getFileName(file)">{{ getFileName(file) }}</span>
               <font-awesome-icon icon="pencil-alt" class="edit-icon" />
             </div>
             <div v-else class="file-name-edit">
@@ -221,6 +221,7 @@ const isPdfFile = (file: any) => {
   margin-left: 0.5rem;
   color: $secondary-color;
   opacity: 0;
+  width: 0;
   transition: opacity 0.2s ease;
 }
 
@@ -301,6 +302,18 @@ const isPdfFile = (file: any) => {
 
   &:hover .edit-icon {
     opacity: 1;
+    width: auto;
+    visibility: visible;
+  }
+
+  .file-name-text {
+    display: inline-block;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+    cursor: pointer;
   }
 }
 
@@ -326,6 +339,7 @@ const isPdfFile = (file: any) => {
 .file-actions {
   display: flex;
   gap: 0.5rem;
+  justify-content: center;
 }
 
 .btn-sm {

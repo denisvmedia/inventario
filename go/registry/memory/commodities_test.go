@@ -222,7 +222,7 @@ func getCommodityRegistry(c *qt.C) (registry.CommodityRegistry, *models.Commodit
 	}))
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdCommodity, qt.Not(qt.IsNil))
-	c.Assert(createdCommodity.ID, qt.Not(qt.Equals), "commodity1")
+	c.Assert(createdCommodity.ID, qt.Equals, "commodity1")
 	c.Assert(createdCommodity.Name, qt.Equals, "commodity1")
 	c.Assert(createdCommodity.AreaID, qt.Equals, area1.ID)
 

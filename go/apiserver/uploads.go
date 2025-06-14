@@ -183,6 +183,28 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+func (api *uploadsAPI) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
+	uploadedFiles := uploadedFilesFromContext(r.Context())
+	if len(uploadedFiles) == 0 {
+		unprocessableEntityError(w, r, ErrNoFilesUploaded)
+		return
+	}
+
+	uploadData := jsonapi.UploadData{
+		Type: "restores",
+	}
+
+	for _, f := range uploadedFiles {
+		uploadData.FileNames = append(uploadData.FileNames, f.FilePath)
+	}
+
+	resp := jsonapi.NewUploadResponse("", uploadData).WithStatusCode(http.StatusOK)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -275,5 +297,8 @@ func Uploads(params Params) func(r chi.Router) {
 				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)
 				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/invoices", api.handleInvoicesUpload)
 			})
+
+		// Restore uploads - only allow XML files
+		r.With(api.uploadFiles(mimekit.XMLContentTypes()...)).Post("/restores", api.handleRestoreUpload)
 	}
 }

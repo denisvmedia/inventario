@@ -46,8 +46,10 @@ func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models
 		return nil, errkit.Wrap(err, "failed to get commodity")
 	}
 
-	// Generate a new ID
-	image.SetID(generateID())
+	// Generate a new ID if one is not already provided
+	if image.GetID() == "" {
+		image.SetID(generateID())
+	}
 
 	err = InsertEntity(ctx, tx, r.tableNames.Images(), image)
 	if err != nil {

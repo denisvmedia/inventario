@@ -20,6 +20,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/restore"
 )
 
 var runCmd = &cobra.Command{
@@ -167,13 +168,20 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	exportService := export.NewExportService(registrySet, params.UploadLocation)
 	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
 
+	// Start restore worker
+	restoreService := restore.NewRestoreService(registrySet, params.UploadLocation)
+	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, params.UploadLocation)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	exportWorker.Start(ctx)
 	defer exportWorker.Stop()
 
-	errCh := srv.Run(bindAddr, apiserver.APIServer(params))
+	restoreWorker.Start(ctx)
+	defer restoreWorker.Stop()
+
+	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)
 	c := make(chan os.Signal, 1)

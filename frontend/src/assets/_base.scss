@@ -126,6 +126,15 @@ textarea.form-control {
   color: white;
 }
 
+.btn-info {
+  background-color: $info-bg-color;
+  color: black;
+
+  &:hover {
+    background-color: $info-hover-bg-color;
+  }
+}
+
 /* Breadcrumb styles */
 .breadcrumb-nav {
   margin-bottom: 1rem;
