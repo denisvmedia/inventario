@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
@@ -171,6 +170,9 @@ func (s *RestoreService) RestoreFromXML(ctx context.Context, xmlReader io.Reader
 					return stats, errkit.Wrap(err, "failed to process commodities")
 				}
 			}
+		case xml.ProcInst, xml.Directive, xml.Comment, xml.CharData, xml.EndElement:
+			// Skip processing instructions, directives, comments, character data, and end elements at root level
+			continue
 		default:
 			return stats, errkit.WithFields(errors.New("unexpected token type"), "token_type", fmt.Sprintf("%T", t))
 		}
@@ -1567,131 +1569,745 @@ type LoggedRestoreService struct {
 	ctx       context.Context
 }
 
-// RestoreFromXMLWithLogging processes the restore with detailed logging
+// RestoreFromXMLWithLogging processes the restore with detailed logging using streaming approach
 func (l *LoggedRestoreService) RestoreFromXMLWithLogging(ctx context.Context, reader io.Reader, options RestoreOptions) (*RestoreStats, error) {
-	// Read all XML content first for analysis
-	xmlContent, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to read XML content")
+	// Create a custom restore service that includes logging callbacks
+	loggingService := &RestoreService{
+		registrySet:    l.service.registrySet,
+		uploadLocation: l.service.uploadLocation,
 	}
 
-	// Parse XML to analyze items for logging purposes
-	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Analyzing XML content", models.RestoreStepResultInProgress, "")
+	// Override the processing methods to include logging
+	return l.restoreFromXMLWithStreamingLogging(ctx, reader, options, loggingService)
+}
 
-	// Parse the XML structure to extract individual items for logging
-	exportData, err := l.parseExportXML(xmlContent)
-	if err != nil {
-		l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Analyzing XML content", models.RestoreStepResultError, err.Error())
-		return nil, err
+// restoreFromXMLWithStreamingLogging processes the restore with detailed logging using streaming approach
+func (l *LoggedRestoreService) restoreFromXMLWithStreamingLogging(ctx context.Context, xmlReader io.Reader, options RestoreOptions, service *RestoreService) (*RestoreStats, error) {
+	stats := &RestoreStats{}
+
+	// Validate options
+	if err := service.validateOptions(options); err != nil {
+		return stats, errkit.Wrap(err, "invalid restore options")
 	}
 
-	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Analyzing XML content", models.RestoreStepResultSuccess,
-		fmt.Sprintf("Found %d locations, %d areas, %d commodities", len(exportData.Locations), len(exportData.Areas), len(exportData.Commodities)))
-
-	// Create detailed logging steps for what will be processed
-	l.createDetailedLoggingSteps(ctx, exportData, options)
-
-	// Now use the original restore service to do the actual data processing
-	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Processing data with full restore service", models.RestoreStepResultInProgress, "")
-
-	reader = strings.NewReader(string(xmlContent))
-	stats, err := l.service.RestoreFromXML(ctx, reader, options)
+	// Get main currency from settings and add it to context for commodity validation
+	settings, err := service.registrySet.SettingsRegistry.Get(ctx)
 	if err != nil {
-		l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing data with full restore service", models.RestoreStepResultError, err.Error())
-		return stats, err
+		return stats, errkit.Wrap(err, "failed to get settings")
 	}
 
-	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing data with full restore service", models.RestoreStepResultSuccess,
-		fmt.Sprintf("Completed processing with %d errors", stats.ErrorCount))
+	if settings.MainCurrency != nil && *settings.MainCurrency != "" {
+		ctx = validationctx.WithMainCurrency(ctx, *settings.MainCurrency)
+	}
+
+	decoder := xml.NewDecoder(xmlReader)
+
+	// Track existing entities for validation and strategy decisions
+	existingEntities := &ExistingEntities{}
+	idMapping := &IDMapping{
+		Locations:   make(map[string]string),
+		Areas:       make(map[string]string),
+		Commodities: make(map[string]string),
+		Images:      make(map[string]string),
+		Invoices:    make(map[string]string),
+		Manuals:     make(map[string]string),
+	}
+
+	if options.Strategy != RestoreStrategyFullReplace {
+		if err := service.loadExistingEntities(ctx, existingEntities); err != nil {
+			return stats, errkit.Wrap(err, "failed to load existing entities")
+		}
+		// For non-full replace, populate ID mapping with existing entities
+		for xmlID, entity := range existingEntities.Locations {
+			idMapping.Locations[xmlID] = entity.ID
+		}
+		for xmlID, entity := range existingEntities.Areas {
+			idMapping.Areas[xmlID] = entity.ID
+		}
+		for xmlID, entity := range existingEntities.Commodities {
+			idMapping.Commodities[xmlID] = entity.ID
+		}
+		for xmlID, entity := range existingEntities.Images {
+			idMapping.Images[xmlID] = entity.ID
+		}
+		for xmlID, entity := range existingEntities.Invoices {
+			idMapping.Invoices[xmlID] = entity.ID
+		}
+		for xmlID, entity := range existingEntities.Manuals {
+			idMapping.Manuals[xmlID] = entity.ID
+		}
+	} else {
+		// For full replace, initialize empty maps to track newly created entities
+		existingEntities.Locations = make(map[string]*models.Location)
+		existingEntities.Areas = make(map[string]*models.Area)
+		existingEntities.Commodities = make(map[string]*models.Commodity)
+		existingEntities.Images = make(map[string]*models.Image)
+		existingEntities.Invoices = make(map[string]*models.Invoice)
+		existingEntities.Manuals = make(map[string]*models.Manual)
+	}
+
+	// If full replace, clear existing data first
+	if options.Strategy == RestoreStrategyFullReplace && !options.DryRun {
+		if err := service.clearExistingData(ctx); err != nil {
+			return stats, errkit.Wrap(err, "failed to clear existing data")
+		}
+	}
+
+	// Process XML stream with logging
+	for {
+		tok, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return stats, errkit.Wrap(err, "failed to read XML token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "inventory":
+				// Skip the root element, continue processing
+				continue
+			case "locations":
+				l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Processing locations", models.RestoreStepResultInProgress, "")
+				if err := l.processLocationsWithLogging(ctx, decoder, stats, existingEntities, idMapping, options, service); err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing locations", models.RestoreStepResultError, err.Error())
+					return stats, errkit.Wrap(err, "failed to process locations")
+				}
+				l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing locations", models.RestoreStepResultSuccess,
+					fmt.Sprintf("Processed %d locations", stats.LocationCount))
+			case "areas":
+				l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Processing areas", models.RestoreStepResultInProgress, "")
+				if err := l.processAreasWithLogging(ctx, decoder, stats, existingEntities, idMapping, options, service); err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing areas", models.RestoreStepResultError, err.Error())
+					return stats, errkit.Wrap(err, "failed to process areas")
+				}
+				l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing areas", models.RestoreStepResultSuccess,
+					fmt.Sprintf("Processed %d areas", stats.AreaCount))
+			case "commodities":
+				l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Processing commodities", models.RestoreStepResultInProgress, "")
+				if err := l.processCommoditiesWithLogging(ctx, decoder, stats, existingEntities, idMapping, options, service); err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing commodities", models.RestoreStepResultError, err.Error())
+					return stats, errkit.Wrap(err, "failed to process commodities")
+				}
+				l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Processing commodities", models.RestoreStepResultSuccess,
+					fmt.Sprintf("Processed %d commodities", stats.CommodityCount))
+			}
+		case xml.ProcInst, xml.Directive, xml.Comment, xml.CharData, xml.EndElement:
+			// Skip processing instructions, directives, comments, character data, and end elements at root level
+			continue
+		default:
+			return stats, errkit.WithFields(errors.New("unexpected token type"), "token_type", fmt.Sprintf("%T", t))
+		}
+	}
 
 	return stats, nil
 }
 
-// ExportData holds the parsed XML export data
-type ExportData struct {
-	XMLName     xml.Name        `xml:"inventory"`
-	Locations   []LocationData  `xml:"locations>location"`
-	Areas       []AreaData      `xml:"areas>area"`
-	Commodities []CommodityData `xml:"commodities>commodity"`
+// processLocationsWithLogging processes the locations section with detailed logging
+func (l *LoggedRestoreService) processLocationsWithLogging(ctx context.Context, decoder *xml.Decoder, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions, service *RestoreService) error {
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read locations token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "location" {
+				if err := l.processLocationWithLogging(ctx, decoder, &t, stats, existing, idMapping, options, service); err != nil {
+					stats.ErrorCount++
+					stats.Errors = append(stats.Errors, fmt.Sprintf("failed to process location: %v", err))
+					continue
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "locations" {
+				return nil
+			}
+		}
+	}
 }
 
-// LocationData represents a location in the XML
-type LocationData struct {
-	ID      string `xml:"id,attr"`
-	Name    string `xml:"locationName"`
-	Address string `xml:"address"`
+// processLocationWithLogging processes a single location with detailed logging
+func (l *LoggedRestoreService) processLocationWithLogging(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions, service *RestoreService) error {
+	var xmlLocation XMLLocation
+	if err := decoder.DecodeElement(&xmlLocation, startElement); err != nil {
+		return errkit.Wrap(err, "failed to decode location")
+	}
+
+	// Predict action and log it
+	action := l.predictAction(ctx, "location", xmlLocation.ID, options)
+	emoji := l.getEmojiForAction(action)
+	actionDesc := l.getActionDescription(action, options.DryRun)
+
+	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID,
+		fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultInProgress, actionDesc)
+
+	// Process the location using the original service logic
+	location := xmlLocation.ConvertToLocation()
+	if err := location.ValidateWithContext(ctx); err != nil {
+		l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+			fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+		return errkit.Wrap(err, fmt.Sprintf("invalid location %s", location.ID))
+	}
+
+	// Store the original XML ID for mapping
+	originalXMLID := xmlLocation.ID
+
+	// Apply strategy
+	existingLocation := existing.Locations[originalXMLID]
+	switch options.Strategy {
+	case RestoreStrategyFullReplace:
+		// Always create (database was cleared)
+		if !options.DryRun {
+			createdLocation, err := service.registrySet.LocationRegistry.Create(ctx, *location)
+			if err != nil {
+				l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+					fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+				return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+			}
+			// Track the newly created location and store ID mapping
+			existing.Locations[originalXMLID] = createdLocation
+			idMapping.Locations[originalXMLID] = createdLocation.ID
+		}
+		stats.CreatedCount++
+		stats.LocationCount++
+	case RestoreStrategyMergeAdd:
+		// Only create if doesn't exist
+		if existingLocation == nil {
+			if !options.DryRun {
+				createdLocation, err := service.registrySet.LocationRegistry.Create(ctx, *location)
+				if err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+						fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+					return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+				}
+				// Track the newly created location and store ID mapping
+				existing.Locations[originalXMLID] = createdLocation
+				idMapping.Locations[originalXMLID] = createdLocation.ID
+			}
+			stats.CreatedCount++
+			stats.LocationCount++
+		} else {
+			stats.SkippedCount++
+		}
+	case RestoreStrategyMergeUpdate:
+		// Create if missing, update if exists
+		if existingLocation == nil {
+			if !options.DryRun {
+				createdLocation, err := service.registrySet.LocationRegistry.Create(ctx, *location)
+				if err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+						fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+					return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+				}
+				// Track the newly created location and store ID mapping
+				existing.Locations[originalXMLID] = createdLocation
+				idMapping.Locations[originalXMLID] = createdLocation.ID
+			}
+			stats.CreatedCount++
+			stats.LocationCount++
+		} else {
+			if !options.DryRun {
+				updatedLocation, err := service.registrySet.LocationRegistry.Update(ctx, *location)
+				if err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+						fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+					return errkit.Wrap(err, fmt.Sprintf("failed to update location %s", originalXMLID))
+				}
+				// Update the tracked location
+				existing.Locations[originalXMLID] = updatedLocation
+			}
+			stats.UpdatedCount++
+			stats.LocationCount++
+		}
+	}
+
+	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+		fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultSuccess, "Completed")
+
+	return nil
 }
 
-// AreaData represents an area in the XML
-type AreaData struct {
-	ID         string `xml:"id,attr"`
-	Name       string `xml:"areaName"`
-	LocationID string `xml:"locationId"`
+// processAreasWithLogging processes the areas section with detailed logging
+func (l *LoggedRestoreService) processAreasWithLogging(ctx context.Context, decoder *xml.Decoder, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions, service *RestoreService) error {
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read areas token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "area" {
+				if err := l.processAreaWithLogging(ctx, decoder, &t, stats, existing, idMapping, options, service); err != nil {
+					stats.ErrorCount++
+					stats.Errors = append(stats.Errors, fmt.Sprintf("failed to process area: %v", err))
+					continue
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "areas" {
+				return nil
+			}
+		}
+	}
 }
 
-// CommodityData represents a commodity in the XML
-type CommodityData struct {
-	ID     string `xml:"id,attr"`
-	Name   string `xml:"commodityName"`
-	AreaID string `xml:"areaId"`
+// processAreaWithLogging processes a single area with detailed logging
+func (l *LoggedRestoreService) processAreaWithLogging(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions, service *RestoreService) error {
+	var xmlArea XMLArea
+	if err := decoder.DecodeElement(&xmlArea, startElement); err != nil {
+		return errkit.Wrap(err, "failed to decode area")
+	}
+
+	// Predict action and log it
+	action := l.predictAction(ctx, "area", xmlArea.ID, options)
+	emoji := l.getEmojiForAction(action)
+	actionDesc := l.getActionDescription(action, options.DryRun)
+
+	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID,
+		fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultInProgress, actionDesc)
+
+	// Store the original XML IDs for mapping
+	originalXMLID := xmlArea.ID
+	originalLocationXMLID := xmlArea.LocationID
+
+	// Validate that the location exists (either in existing data or was just created)
+	if existing.Locations[originalLocationXMLID] == nil {
+		err := errors.New(fmt.Sprintf("area %s references non-existent location %s", originalXMLID, originalLocationXMLID))
+		l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+			fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
+		return err
+	}
+
+	// Get the actual database location ID
+	actualLocationID := idMapping.Locations[originalLocationXMLID]
+	if actualLocationID == "" {
+		err := errors.New(fmt.Sprintf("no ID mapping found for location %s", originalLocationXMLID))
+		l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+			fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
+		return err
+	}
+
+	area := xmlArea.ConvertToArea()
+	// Set the correct location ID from the mapping
+	area.LocationID = actualLocationID
+
+	if err := area.ValidateWithContext(ctx); err != nil {
+		l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+			fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
+		return errkit.Wrap(err, fmt.Sprintf("invalid area %s", originalXMLID))
+	}
+
+	// Apply strategy
+	existingArea := existing.Areas[originalXMLID]
+	switch options.Strategy {
+	case RestoreStrategyFullReplace:
+		// Always create (database was cleared)
+		if !options.DryRun {
+			createdArea, err := service.registrySet.AreaRegistry.Create(ctx, *area)
+			if err != nil {
+				l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+					fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
+				return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
+			}
+			// Track the newly created area and store ID mapping
+			existing.Areas[originalXMLID] = createdArea
+			idMapping.Areas[originalXMLID] = createdArea.ID
+		}
+		stats.CreatedCount++
+		stats.AreaCount++
+	case RestoreStrategyMergeAdd:
+		// Only create if doesn't exist
+		if existingArea == nil {
+			if !options.DryRun {
+				createdArea, err := service.registrySet.AreaRegistry.Create(ctx, *area)
+				if err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+						fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
+					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
+				}
+				// Track the newly created area and store ID mapping
+				existing.Areas[originalXMLID] = createdArea
+				idMapping.Areas[originalXMLID] = createdArea.ID
+			}
+			stats.CreatedCount++
+			stats.AreaCount++
+		} else {
+			stats.SkippedCount++
+		}
+	case RestoreStrategyMergeUpdate:
+		// Create if missing, update if exists
+		if existingArea == nil {
+			if !options.DryRun {
+				createdArea, err := service.registrySet.AreaRegistry.Create(ctx, *area)
+				if err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+						fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
+					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
+				}
+				// Track the newly created area and store ID mapping
+				existing.Areas[originalXMLID] = createdArea
+				idMapping.Areas[originalXMLID] = createdArea.ID
+			}
+			stats.CreatedCount++
+			stats.AreaCount++
+		} else {
+			if !options.DryRun {
+				updatedArea, err := service.registrySet.AreaRegistry.Update(ctx, *area)
+				if err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+						fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
+					return errkit.Wrap(err, fmt.Sprintf("failed to update area %s", originalXMLID))
+				}
+				// Update the tracked area
+				existing.Areas[originalXMLID] = updatedArea
+			}
+			stats.UpdatedCount++
+			stats.AreaCount++
+		}
+	}
+
+	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID,
+		fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultSuccess, "Completed")
+
+	return nil
 }
 
-// parseExportXML parses the XML content into structured data
-func (l *LoggedRestoreService) parseExportXML(xmlContent []byte) (*ExportData, error) {
-	var exportData ExportData
-	err := xml.Unmarshal(xmlContent, &exportData)
+// processCommoditiesWithLogging processes the commodities section with detailed logging
+func (l *LoggedRestoreService) processCommoditiesWithLogging(ctx context.Context, decoder *xml.Decoder, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions, service *RestoreService) error {
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return errkit.Wrap(err, "failed to read commodities token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "commodity" {
+				if err := l.processCommodityWithLogging(ctx, decoder, &t, stats, existing, idMapping, options, service); err != nil {
+					stats.ErrorCount++
+					stats.Errors = append(stats.Errors, fmt.Sprintf("failed to process commodity: %v", err))
+					continue
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "commodities" {
+				return nil
+			}
+		}
+	}
+}
+
+// processCommodityWithLogging processes a single commodity with detailed logging
+func (l *LoggedRestoreService) processCommodityWithLogging(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions, service *RestoreService) error {
+	var xmlCommodity XMLCommodity
+	var pendingFiles []PendingFileData // Collect file data to process after commodity creation
+
+	// Get commodity ID from attributes
+	for _, attr := range startElement.Attr {
+		if attr.Name.Local == "id" {
+			xmlCommodity.ID = attr.Value
+			break
+		}
+	}
+
+	// Predict action and log it early (we'll update it later)
+	action := l.predictAction(ctx, "commodity", xmlCommodity.ID, options)
+	emoji := l.getEmojiForAction(action)
+	actionDesc := l.getActionDescription(action, options.DryRun)
+
+	// We'll use a consistent step name throughout - start with ID and update description when we get the name
+	stepName := fmt.Sprintf("%s Commodity: %s", emoji, xmlCommodity.ID)
+	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, stepName, models.RestoreStepResultInProgress, actionDesc)
+
+	// Process commodity elements
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, stepName, models.RestoreStepResultError, err.Error())
+			return errkit.Wrap(err, "failed to read commodity element token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "commodityName":
+				if err := decoder.DecodeElement(&xmlCommodity.CommodityName, &t); err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, stepName, models.RestoreStepResultError, err.Error())
+					return errkit.Wrap(err, "failed to decode commodity name")
+				}
+				// Update step description with actual commodity name
+				l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, stepName, models.RestoreStepResultInProgress,
+					fmt.Sprintf("Processing %s", xmlCommodity.CommodityName))
+			case "shortName":
+				if err := decoder.DecodeElement(&xmlCommodity.ShortName, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode short name")
+				}
+			case "areaId":
+				if err := decoder.DecodeElement(&xmlCommodity.AreaID, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode area ID")
+				}
+			case "type":
+				if err := decoder.DecodeElement(&xmlCommodity.Type, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode type")
+				}
+			case "count":
+				if err := decoder.DecodeElement(&xmlCommodity.Count, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode count")
+				}
+			case "status":
+				if err := decoder.DecodeElement(&xmlCommodity.Status, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode status")
+				}
+			case "originalPrice":
+				if err := decoder.DecodeElement(&xmlCommodity.OriginalPrice, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode original price")
+				}
+			case "originalPriceCurrency":
+				if err := decoder.DecodeElement(&xmlCommodity.OriginalCurrency, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode original price currency")
+				}
+			case "convertedOriginalPrice":
+				if err := decoder.DecodeElement(&xmlCommodity.ConvertedOriginalPrice, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode converted original price")
+				}
+			case "currentPrice":
+				if err := decoder.DecodeElement(&xmlCommodity.CurrentPrice, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode current price")
+				}
+			case "currentCurrency":
+				if err := decoder.DecodeElement(&xmlCommodity.CurrentCurrency, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode current currency")
+				}
+			case "serialNumber":
+				if err := decoder.DecodeElement(&xmlCommodity.SerialNumber, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode serial number")
+				}
+			case "extraSerialNumbers":
+				if err := decoder.DecodeElement(&xmlCommodity.ExtraSerialNumbers, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode extra serial numbers")
+				}
+			case "comments":
+				if err := decoder.DecodeElement(&xmlCommodity.Comments, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode comments")
+				}
+			case "draft":
+				if err := decoder.DecodeElement(&xmlCommodity.Draft, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode draft")
+				}
+			case "purchaseDate":
+				if err := decoder.DecodeElement(&xmlCommodity.PurchaseDate, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode purchase date")
+				}
+			case "registeredDate":
+				if err := decoder.DecodeElement(&xmlCommodity.RegisteredDate, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode registered date")
+				}
+			case "lastModifiedDate":
+				if err := decoder.DecodeElement(&xmlCommodity.LastModifiedDate, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode last modified date")
+				}
+			case "partNumbers":
+				if err := decoder.DecodeElement(&xmlCommodity.PartNumbers, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode part numbers")
+				}
+			case "tags":
+				if err := decoder.DecodeElement(&xmlCommodity.Tags, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode tags")
+				}
+			case "urls":
+				if err := decoder.DecodeElement(&xmlCommodity.URLs, &t); err != nil {
+					return errkit.Wrap(err, "failed to decode URLs")
+				}
+			case "images":
+				if options.IncludeFileData {
+					files, err := service.collectFiles(ctx, decoder, &t, stats)
+					if err != nil {
+						return errkit.Wrap(err, "failed to collect images")
+					}
+					if len(files) > 0 {
+						pendingFiles = append(pendingFiles, PendingFileData{
+							FileType: "image",
+							XMLFiles: files,
+						})
+					}
+				} else {
+					// Skip images section
+					if err := service.skipSection(decoder, &t); err != nil {
+						return errkit.Wrap(err, "failed to skip images section")
+					}
+				}
+			case "invoices":
+				if options.IncludeFileData {
+					files, err := service.collectFiles(ctx, decoder, &t, stats)
+					if err != nil {
+						return errkit.Wrap(err, "failed to collect invoices")
+					}
+					if len(files) > 0 {
+						pendingFiles = append(pendingFiles, PendingFileData{
+							FileType: "invoice",
+							XMLFiles: files,
+						})
+					}
+				} else {
+					// Skip invoices section
+					if err := service.skipSection(decoder, &t); err != nil {
+						return errkit.Wrap(err, "failed to skip invoices section")
+					}
+				}
+			case "manuals":
+				if options.IncludeFileData {
+					files, err := service.collectFiles(ctx, decoder, &t, stats)
+					if err != nil {
+						return errkit.Wrap(err, "failed to collect manuals")
+					}
+					if len(files) > 0 {
+						pendingFiles = append(pendingFiles, PendingFileData{
+							FileType: "manual",
+							XMLFiles: files,
+						})
+					}
+				} else {
+					// Skip manuals section
+					if err := service.skipSection(decoder, &t); err != nil {
+						return errkit.Wrap(err, "failed to skip manuals section")
+					}
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "commodity" {
+				// Process the commodity first
+				if err := l.createOrUpdateCommodityWithLogging(ctx, &xmlCommodity, stats, existing, idMapping, options, service, stepName, emoji); err != nil {
+					l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, stepName, models.RestoreStepResultError, err.Error())
+					return err
+				}
+
+				// Process pending files after commodity creation
+				if len(pendingFiles) > 0 {
+					commodityID := idMapping.Commodities[xmlCommodity.ID]
+					if commodityID == "" {
+						commodityID = xmlCommodity.ID // Fallback to XML ID
+					}
+					for _, fileData := range pendingFiles {
+						for _, xmlFile := range fileData.XMLFiles {
+							if err := service.createFileRecord(ctx, &xmlFile, commodityID, fileData.FileType, stats, existing, idMapping, options); err != nil {
+								// Log file processing errors but don't fail the entire commodity
+								stats.ErrorCount++
+								stats.Errors = append(stats.Errors, fmt.Sprintf("failed to process %s file for commodity %s: %v", fileData.FileType, xmlCommodity.ID, err))
+							}
+						}
+					}
+				}
+
+				l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, stepName, models.RestoreStepResultSuccess, "Completed")
+				return nil
+			}
+		}
+	}
+}
+
+// createOrUpdateCommodityWithLogging creates or updates a commodity with detailed logging
+func (l *LoggedRestoreService) createOrUpdateCommodityWithLogging(ctx context.Context, xmlCommodity *XMLCommodity, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions, service *RestoreService, stepName, emoji string) error {
+	// Store the original XML IDs for mapping
+	originalXMLID := xmlCommodity.ID
+	originalAreaXMLID := xmlCommodity.AreaID
+
+	// Validate that the area exists (either in existing data or was just created)
+	if existing.Areas[originalAreaXMLID] == nil {
+		return errors.New(fmt.Sprintf("commodity %s references non-existent area %s", originalXMLID, originalAreaXMLID))
+	}
+
+	// Get the actual database area ID
+	actualAreaID := idMapping.Areas[originalAreaXMLID]
+	if actualAreaID == "" {
+		return errors.New(fmt.Sprintf("no ID mapping found for area %s", originalAreaXMLID))
+	}
+
+	commodity, err := xmlCommodity.ConvertToCommodity()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse XML: %v", err)
-	}
-	return &exportData, nil
-}
-
-// createDetailedLoggingSteps creates detailed steps for what will be processed
-func (l *LoggedRestoreService) createDetailedLoggingSteps(ctx context.Context, exportData *ExportData, options RestoreOptions) {
-	// Create detailed steps for locations
-	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Will process locations", models.RestoreStepResultInProgress, "")
-
-	for _, location := range exportData.Locations {
-		action := l.predictAction(ctx, "location", location.ID, options)
-		emoji := l.getEmojiForAction(action)
-		actionDesc := l.getActionDescription(action, options.DryRun)
-
-		l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID,
-			fmt.Sprintf("%s Location: %s", emoji, location.Name), models.RestoreStepResultSuccess, actionDesc)
+		return errkit.Wrap(err, fmt.Sprintf("failed to convert commodity %s", originalXMLID))
 	}
 
-	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Will process locations", models.RestoreStepResultSuccess,
-		fmt.Sprintf("Will process %d locations", len(exportData.Locations)))
+	// Set the correct area ID from the mapping
+	commodity.AreaID = actualAreaID
 
-	// Create detailed steps for areas
-	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Will process areas", models.RestoreStepResultInProgress, "")
-
-	for _, area := range exportData.Areas {
-		action := l.predictAction(ctx, "area", area.ID, options)
-		emoji := l.getEmojiForAction(action)
-		actionDesc := l.getActionDescription(action, options.DryRun)
-
-		l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID,
-			fmt.Sprintf("%s Area: %s", emoji, area.Name), models.RestoreStepResultSuccess, actionDesc)
+	// Fix price validation issue: if original currency matches main currency,
+	// converted original price must be zero
+	mainCurrency, err := validationctx.MainCurrencyFromContext(ctx)
+	if err == nil && string(commodity.OriginalPriceCurrency) == mainCurrency {
+		commodity.ConvertedOriginalPrice = decimal.Zero
 	}
 
-	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Will process areas", models.RestoreStepResultSuccess,
-		fmt.Sprintf("Will process %d areas", len(exportData.Areas)))
-
-	// Create detailed steps for commodities
-	l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID, "Will process commodities", models.RestoreStepResultInProgress, "")
-
-	for _, commodity := range exportData.Commodities {
-		action := l.predictAction(ctx, "commodity", commodity.ID, options)
-		emoji := l.getEmojiForAction(action)
-		actionDesc := l.getActionDescription(action, options.DryRun)
-
-		l.processor.service.createRestoreStep(ctx, l.processor.restoreOperationID,
-			fmt.Sprintf("%s Commodity: %s", emoji, commodity.Name), models.RestoreStepResultSuccess, actionDesc)
+	if err := commodity.ValidateWithContext(ctx); err != nil {
+		return errkit.Wrap(err, fmt.Sprintf("invalid commodity %s", originalXMLID))
 	}
 
-	l.processor.service.updateRestoreStep(ctx, l.processor.restoreOperationID, "Will process commodities", models.RestoreStepResultSuccess,
-		fmt.Sprintf("Will process %d commodities", len(exportData.Commodities)))
+	// Apply strategy
+	existingCommodity := existing.Commodities[originalXMLID]
+	switch options.Strategy {
+	case RestoreStrategyFullReplace:
+		// Always create (database was cleared)
+		if !options.DryRun {
+			createdCommodity, err := service.registrySet.CommodityRegistry.Create(ctx, *commodity)
+			if err != nil {
+				return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
+			}
+			// Track the newly created commodity and store ID mapping
+			existing.Commodities[originalXMLID] = createdCommodity
+			idMapping.Commodities[originalXMLID] = createdCommodity.ID
+		}
+		stats.CreatedCount++
+		stats.CommodityCount++
+	case RestoreStrategyMergeAdd:
+		// Only create if doesn't exist
+		if existingCommodity == nil {
+			if !options.DryRun {
+				createdCommodity, err := service.registrySet.CommodityRegistry.Create(ctx, *commodity)
+				if err != nil {
+					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
+				}
+				// Track the newly created commodity and store ID mapping
+				existing.Commodities[originalXMLID] = createdCommodity
+				idMapping.Commodities[originalXMLID] = createdCommodity.ID
+			}
+			stats.CreatedCount++
+			stats.CommodityCount++
+		} else {
+			stats.SkippedCount++
+		}
+	case RestoreStrategyMergeUpdate:
+		// Create if missing, update if exists
+		if existingCommodity == nil {
+			if !options.DryRun {
+				createdCommodity, err := service.registrySet.CommodityRegistry.Create(ctx, *commodity)
+				if err != nil {
+					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
+				}
+				// Track the newly created commodity and store ID mapping
+				existing.Commodities[originalXMLID] = createdCommodity
+				idMapping.Commodities[originalXMLID] = createdCommodity.ID
+			}
+			stats.CreatedCount++
+			stats.CommodityCount++
+		} else {
+			if !options.DryRun {
+				updatedCommodity, err := service.registrySet.CommodityRegistry.Update(ctx, *commodity)
+				if err != nil {
+					return errkit.Wrap(err, fmt.Sprintf("failed to update commodity %s", originalXMLID))
+				}
+				// Update the tracked commodity
+				existing.Commodities[originalXMLID] = updatedCommodity
+			}
+			stats.UpdatedCount++
+			stats.CommodityCount++
+		}
+	}
+
+	return nil
 }
 
 // predictAction predicts what action will be taken for an entity based on strategy
