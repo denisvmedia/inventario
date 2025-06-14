@@ -19,15 +19,6 @@ import (
 	"github.com/denisvmedia/inventario/restore"
 )
 
-// mockRestoreWorker is a mock implementation of RestoreWorkerInterface for testing
-type mockRestoreWorker struct {
-	hasRunningRestores bool
-}
-
-func (m *mockRestoreWorker) HasRunningRestores(ctx context.Context) (bool, error) {
-	return m.hasRunningRestores, nil
-}
-
 func newTestRegistrySet() *registry.Set {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
@@ -71,8 +62,9 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	}
 
 	// Mock worker with no running restores
-	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.Route("/api/v1/exports", apiserver.Exports(params, mockWorker))
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker, mockImportWorker))
 
 	// Create restore request
 	restoreRequest := &jsonapi.RestoreOperationCreateRequest{
@@ -127,8 +119,9 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	}
 
 	// Mock worker with running restore
-	mockWorker := &mockRestoreWorker{hasRunningRestores: true}
-	r.Route("/api/v1/exports", apiserver.Exports(params, mockWorker))
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: true}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker, mockImportWorker))
 
 	// Create restore request
 	restoreRequest := &jsonapi.RestoreOperationCreateRequest{
@@ -224,7 +217,8 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	// Use real restore worker (not mock) to test actual logic
 	restoreService := restore.NewRestoreService(registrySet, "memory://")
 	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, "memory://")
-	r.Route("/api/v1/exports", apiserver.Exports(params, restoreWorker))
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	r.Route("/api/v1/exports", apiserver.Exports(params, restoreWorker, mockImportWorker))
 
 	// Try to create another restore request
 	restoreRequest := &jsonapi.RestoreOperationCreateRequest{
@@ -302,8 +296,9 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	}
 
 	// Mock worker with no running restores
-	mockWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.Route("/api/v1/exports", apiserver.Exports(params, mockWorker))
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker, mockImportWorker))
 
 	// Create restore request
 	restoreRequest := &jsonapi.RestoreOperationCreateRequest{

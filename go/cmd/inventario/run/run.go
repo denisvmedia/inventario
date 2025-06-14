@@ -17,6 +17,7 @@ import (
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/export"
+	importpkg "github.com/denisvmedia/inventario/import"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
@@ -172,6 +173,10 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	restoreService := restore.NewRestoreService(registrySet, params.UploadLocation)
 	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, params.UploadLocation)
 
+	// Start import worker
+	importService := importpkg.NewImportService(registrySet, params.UploadLocation)
+	importWorker := importpkg.NewImportWorker(importService, registrySet)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -181,7 +186,10 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	restoreWorker.Start(ctx)
 	defer restoreWorker.Stop()
 
-	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker))
+	importWorker.Start(ctx)
+	defer importWorker.Stop()
+
+	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker, importWorker))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)
 	c := make(chan os.Signal, 1)

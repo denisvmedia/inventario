@@ -45,7 +45,9 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	rr := httptest.NewRecorder()
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	// Verify the response

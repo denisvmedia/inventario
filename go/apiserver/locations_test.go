@@ -34,7 +34,9 @@ func TestLocationsDelete(t *testing.T) {
 
 	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count(c.Context())) - 1
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
@@ -70,7 +72,9 @@ func TestLocationsCreate(t *testing.T) {
 	}
 	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count(c.Context())) + 1
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
@@ -101,7 +105,9 @@ func TestLocationsGet(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -134,7 +140,9 @@ func TestLocationsList(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -178,7 +186,9 @@ func TestLocationsUpdate(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -203,7 +213,9 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -228,7 +240,9 @@ func TestLocationsGet_InvalidID(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -263,7 +277,9 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	body := rr.Body.Bytes()
@@ -301,7 +317,9 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
@@ -335,7 +353,9 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -357,7 +377,9 @@ func TestLocationsDelete_MissingLocation(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -381,7 +403,9 @@ func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
@@ -426,7 +450,9 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	// This should fail with a 422 Unprocessable Entity
@@ -463,7 +489,9 @@ func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	mockImportWorker := &mockImportWorker{isRunning: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)

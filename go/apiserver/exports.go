@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"path"
@@ -12,7 +11,6 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
-	"github.com/denisvmedia/inventario/export"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -254,12 +252,13 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create export record with pending status first
+	// Create export record with pending status and source file path
 	export := models.Export{
 		Description: data.Data.Attributes.Description,
 		Type:        models.ExportTypeImported,
 		Status:      models.ExportStatusPending,
 		CreatedDate: models.PNow(),
+		FilePath:    data.Data.Attributes.SourceFilePath, // Store source file path for worker to process
 	}
 
 	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), export)
@@ -268,107 +267,12 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Start import processing in background
-	go func() {
-		// Create a new context for the background operation
-		bgCtx := context.Background()
-		api.processImportInBackground(bgCtx, createdExport.ID, data.Data.Attributes.SourceFilePath)
-	}()
-
+	// Import worker will pick up this pending import and process it in background
 	// Return immediately with the created export
 	w.WriteHeader(http.StatusCreated)
 	if err := render.Render(w, r, jsonapi.NewExportResponse(createdExport)); err != nil {
 		internalServerError(w, r, err)
 		return
-	}
-}
-
-// processImportInBackground processes an XML import in the background
-func (api *exportsAPI) processImportInBackground(ctx context.Context, exportID, sourceFilePath string) {
-	// Get the export record
-	exportRecord, err := api.registrySet.ExportRegistry.Get(ctx, exportID)
-	if err != nil {
-		api.markImportFailed(ctx, exportID, fmt.Sprintf("failed to get export record: %v", err))
-		return
-	}
-
-	// Update status to in progress
-	exportRecord.Status = models.ExportStatusInProgress
-	_, err = api.registrySet.ExportRegistry.Update(ctx, *exportRecord)
-	if err != nil {
-		api.markImportFailed(ctx, exportID, fmt.Sprintf("failed to update export status: %v", err))
-		return
-	}
-
-	// Create export service
-	exportService := export.NewExportService(api.registrySet, api.uploadLocation)
-
-	// Open blob bucket to read the XML file
-	b, err := blob.OpenBucket(ctx, api.uploadLocation)
-	if err != nil {
-		api.markImportFailed(ctx, exportID, fmt.Sprintf("failed to open blob bucket: %v", err))
-		return
-	}
-	defer b.Close()
-
-	// Open the uploaded XML file
-	reader, err := b.NewReader(ctx, sourceFilePath, nil)
-	if err != nil {
-		api.markImportFailed(ctx, exportID, fmt.Sprintf("failed to open uploaded XML file: %v", err))
-		return
-	}
-	defer reader.Close()
-
-	// Get file size
-	attrs, err := b.Attributes(ctx, sourceFilePath)
-	if err != nil {
-		api.markImportFailed(ctx, exportID, fmt.Sprintf("failed to get file attributes: %v", err))
-		return
-	}
-
-	// Parse XML to extract metadata and statistics (without creating a new record)
-	stats, _, err := exportService.ParseXMLMetadata(ctx, reader)
-	if err != nil {
-		api.markImportFailed(ctx, exportID, fmt.Sprintf("failed to parse XML metadata: %v", err))
-		return
-	}
-
-	// Update the original export record with the parsed data
-	exportRecord.Status = models.ExportStatusCompleted
-	exportRecord.CompletedDate = models.PNow()
-	exportRecord.FilePath = sourceFilePath
-	exportRecord.FileSize = attrs.Size
-	exportRecord.LocationCount = stats.LocationCount
-	exportRecord.AreaCount = stats.AreaCount
-	exportRecord.CommodityCount = stats.CommodityCount
-	exportRecord.ImageCount = stats.ImageCount
-	exportRecord.InvoiceCount = stats.InvoiceCount
-	exportRecord.ManualCount = stats.ManualCount
-	exportRecord.BinaryDataSize = stats.BinaryDataSize
-	exportRecord.IncludeFileData = stats.BinaryDataSize > 0
-
-	_, err = api.registrySet.ExportRegistry.Update(ctx, *exportRecord)
-	if err != nil {
-		// Log error but don't fail the import since it actually succeeded
-		fmt.Printf("Failed to update export with final stats: %v\n", err)
-	}
-}
-
-// markImportFailed marks an import operation as failed with an error message
-func (api *exportsAPI) markImportFailed(ctx context.Context, exportID, errorMessage string) {
-	exportRecord, err := api.registrySet.ExportRegistry.Get(ctx, exportID)
-	if err != nil {
-		fmt.Printf("Failed to get export for error marking: %v\n", err)
-		return
-	}
-
-	exportRecord.Status = models.ExportStatusFailed
-	exportRecord.CompletedDate = models.PNow()
-	exportRecord.ErrorMessage = errorMessage
-
-	_, err = api.registrySet.ExportRegistry.Update(ctx, *exportRecord)
-	if err != nil {
-		fmt.Printf("Failed to update export with error: %v\n", err)
 	}
 }
 
@@ -445,7 +349,7 @@ func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
 }
 
 // Exports sets up the exports API routes.
-func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Router) {
+func Exports(params Params, restoreWorker RestoreWorkerInterface, importWorker ImportWorkerInterface) func(r chi.Router) {
 	api := &exportsAPI{
 		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
