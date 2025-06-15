@@ -50,7 +50,7 @@
                 <FontAwesomeIcon v-else icon="upload" />
                 {{ uploading ? 'Uploading...' : 'Upload File' }}
               </button>
-              <button type="button" class="btn btn-secondary" @click="goBack" :disabled="uploading">
+              <button type="button" class="btn btn-secondary" :disabled="uploading" @click="goBack">
                 Cancel
               </button>
             </div>
@@ -81,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import FileUploader from '@/components/FileUploader.vue'

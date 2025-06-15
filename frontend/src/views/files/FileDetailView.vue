@@ -42,7 +42,7 @@
           <div class="file-meta">
             <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
             <span class="file-ext">{{ file.ext }}</span>
-            <span class="file-size" v-if="fileSize">{{ fileSize }}</span>
+            <span v-if="fileSize" class="file-size">{{ fileSize }}</span>
           </div>
         </div>
 
@@ -125,11 +125,11 @@
                 <span class="label">MIME Type:</span>
                 <span class="value">{{ file.mime_type }}</span>
               </div>
-              <div class="detail-row" v-if="file.created_at">
+              <div v-if="file.created_at" class="detail-row">
                 <span class="label">Uploaded:</span>
                 <span class="value">{{ formatDate(file.created_at) }}</span>
               </div>
-              <div class="detail-row" v-if="file.updated_at && file.updated_at !== file.created_at">
+              <div v-if="file.updated_at && file.updated_at !== file.created_at" class="detail-row">
                 <span class="label">Modified:</span>
                 <span class="value">{{ formatDate(file.updated_at) }}</span>
               </div>
@@ -152,7 +152,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="cancelDelete">Cancel</button>
-          <button class="btn btn-danger" @click="deleteFile" :disabled="deleting">
+          <button class="btn btn-danger" :disabled="deleting" @click="deleteFile">
             <span v-if="deleting">Deleting...</span>
             <span v-else>Delete</span>
           </button>

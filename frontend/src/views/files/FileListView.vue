@@ -215,7 +215,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="cancelDelete">Cancel</button>
-          <button class="btn btn-danger" @click="deleteFile" :disabled="deleting">
+          <button class="btn btn-danger" :disabled="deleting" @click="deleteFile">
             <span v-if="deleting">Deleting...</span>
             <span v-else>Delete</span>
           </button>
@@ -302,7 +302,7 @@ const loadFiles = async () => {
 }
 
 // Debounced search
-let searchTimeout: NodeJS.Timeout
+let searchTimeout: number
 const debouncedSearch = () => {
   clearTimeout(searchTimeout)
   searchTimeout = setTimeout(() => {

@@ -45,7 +45,7 @@
               <h3>{{ file.name }}</h3>
               <p>{{ formatFileSize(file.size) }} • {{ file.type || 'Unknown type' }}</p>
             </div>
-            <button class="btn-remove" @click.stop="removeFile(index)" title="Remove file">
+            <button class="btn-remove" title="Remove file" @click.stop="removeFile(index)">
               <font-awesome-icon icon="times" />
             </button>
           </div>

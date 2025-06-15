@@ -109,7 +109,7 @@
           <div v-if="form.tags.length > 0" class="tags-preview">
             <span v-for="tag in form.tags" :key="tag" class="tag">
               {{ tag }}
-              <button type="button" @click="removeTag(tag)" class="tag-remove">×</button>
+              <button type="button" class="tag-remove" @click="removeTag(tag)">×</button>
             </span>
           </div>
         </div>
@@ -136,7 +136,7 @@
         </div>
 
         <div class="form-actions">
-          <button type="button" class="btn btn-secondary" @click="goBack" :disabled="saving">
+          <button type="button" class="btn btn-secondary" :disabled="saving" @click="goBack">
             Cancel
           </button>
           <button type="submit" class="btn btn-primary" :disabled="saving || !isFormValid">
@@ -238,23 +238,7 @@ const getFileIcon = (file: FileEntity) => {
   return fileService.getFileIcon(file)
 }
 
-const formatDate = (dateString: string | undefined): string => {
-  if (!dateString) return 'N/A'
 
-  try {
-    const date = new Date(dateString)
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
-  } catch (error) {
-    return 'Invalid Date'
-  }
-}
 
 
 
@@ -310,9 +294,7 @@ const updateFile = async () => {
   }
 }
 
-const clearSaveError = () => {
-  saveError.value = null
-}
+
 
 const goBack = () => {
   router.push(`/files/${fileId.value}`)
