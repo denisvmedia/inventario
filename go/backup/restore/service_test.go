@@ -12,7 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/restore"
+	"github.com/denisvmedia/inventario/backup/restore"
 )
 
 func TestRestoreService_RestoreFromXML(t *testing.T) {

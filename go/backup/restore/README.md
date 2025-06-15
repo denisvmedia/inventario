@@ -131,7 +131,7 @@ RestoreStrategyMergeUpdate
 
 ### Creating a Restore Service
 ```go
-import "github.com/denisvmedia/inventario/restore"
+import "github.com/denisvmedia/inventario/backup/restore"
 
 // Create restore service
 service := restore.NewRestoreService(registrySet, uploadLocation)

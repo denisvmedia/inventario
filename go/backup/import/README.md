@@ -68,7 +68,7 @@ Defines the structure for parsing XML inventory exports:
 
 ### Creating an Import Service
 ```go
-import "github.com/denisvmedia/inventario/import"
+import "github.com/denisvmedia/inventario/backup/import"
 
 // Create import service
 service := importpkg.NewImportService(registrySet, uploadLocation)

@@ -10,7 +10,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/restore"
+	"github.com/denisvmedia/inventario/backup/restore"
 )
 
 func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {

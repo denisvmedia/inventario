@@ -11,7 +11,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/restore"
+	"github.com/denisvmedia/inventario/backup/restore"
 )
 
 func newTestRegistrySet() *registry.Set {

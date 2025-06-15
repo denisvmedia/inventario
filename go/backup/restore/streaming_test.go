@@ -7,7 +7,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/restore"
+	"github.com/denisvmedia/inventario/backup/restore"
 )
 
 func TestRestoreService_StreamingXMLParsing(t *testing.T) {

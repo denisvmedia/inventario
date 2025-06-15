@@ -9,7 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	_ "gocloud.dev/blob/memblob"
 
-	importpkg "github.com/denisvmedia/inventario/import"
+	importpkg "github.com/denisvmedia/inventario/backup/import"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
 )

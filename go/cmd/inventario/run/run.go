@@ -16,12 +16,12 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/export"
-	importpkg "github.com/denisvmedia/inventario/import"
+	"github.com/denisvmedia/inventario/backup/export"
+	importpkg "github.com/denisvmedia/inventario/backup/import"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/restore"
+	"github.com/denisvmedia/inventario/backup/restore"
 )
 
 var runCmd = &cobra.Command{

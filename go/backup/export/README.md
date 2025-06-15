@@ -106,7 +106,7 @@ Pending → In Progress → Completed
 
 ### Creating an Export Service
 ```go
-import "github.com/denisvmedia/inventario/export"
+import "github.com/denisvmedia/inventario/backup/export"
 
 // Create export service
 service := export.NewExportService(registrySet, uploadLocation)
