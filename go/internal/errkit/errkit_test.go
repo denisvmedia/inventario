@@ -48,7 +48,15 @@ func TestError_WithFields(t *testing.T) {
 	newErr := e.WithFields(fields)
 
 	c.Assert(newErr.Error(), qt.Matches, `wrapped error: some error \(\s*(key1=value1, key2=2|key2=2, key1=value1)\s*\)`)
-	c.Assert(newErr.WithField("key3", true).Error(), qt.Matches, `wrapped error: some error \((?:.*key1=value1.*key2=2.*key3=true.*|.*key2=2.*key1=value1.*key3=true.*|.*key3=true.*key1=value1.*key2=2.*|.*key3=true.*key2=2.*key1=value1.*)\)`)
+
+	// Test with three fields - use a more robust pattern that matches any order
+	threeFieldErr := newErr.WithField("key3", true)
+	threeFieldStr := threeFieldErr.Error()
+	c.Assert(threeFieldStr, qt.Matches, `wrapped error: some error \(.*\)`)
+	c.Assert(threeFieldStr, qt.Contains, "key1=value1")
+	c.Assert(threeFieldStr, qt.Contains, "key2=2")
+	c.Assert(threeFieldStr, qt.Contains, "key3=true")
+
 	c.Assert(newErr.WithField("key1", "updated").Error(), qt.Matches, `wrapped error: some error \(\s*(key1=updated, key2=2|key2=2, key1=updated)\s*\)`)
 
 	data, err := json.Marshal(newErr)
