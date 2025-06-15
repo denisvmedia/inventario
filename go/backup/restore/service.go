@@ -404,6 +404,7 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 		// Track the newly created image and store ID mapping
 		existing.Images[originalXMLID] = createdImage
 		idMapping.Images[originalXMLID] = createdImage.ID
+		stats.ImageCount++
 	case RestoreStrategyMergeAdd:
 		// Only create if doesn't exist
 		if existingImage != nil {
@@ -429,7 +430,7 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 		// Track the newly created image and store ID mapping
 		existing.Images[originalXMLID] = createdImage
 		idMapping.Images[originalXMLID] = createdImage.ID
-		stats.InvoiceCount++
+		stats.ImageCount++
 	case RestoreStrategyMergeUpdate:
 		// Create if missing, update if exists
 		if existingImage == nil {
@@ -450,7 +451,7 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 				existing.Images[originalXMLID] = createdImage
 				idMapping.Images[originalXMLID] = createdImage.ID
 			}
-			stats.InvoiceCount++
+			stats.ImageCount++
 			break
 		}
 
@@ -505,6 +506,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 		// Track the newly created invoice and store ID mapping
 		existing.Invoices[originalXMLID] = createdInvoice
 		idMapping.Invoices[originalXMLID] = createdInvoice.ID
+		stats.InvoiceCount++
 	case RestoreStrategyMergeAdd:
 		// Only create if doesn't exist
 		if existingInvoice != nil {
@@ -586,7 +588,59 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 	switch options.Strategy {
 	case RestoreStrategyFullReplace:
 		// Always create (database was cleared)
-		if !options.DryRun {
+		if options.DryRun {
+			stats.ManualCount++
+			break
+		}
+		manual := &models.Manual{
+			EntityID:    models.EntityID{ID: originalXMLID},
+			CommodityID: commodityID,
+			File:        file,
+		}
+		if err := manual.ValidateWithContext(ctx); err != nil {
+			return errkit.Wrap(err, "invalid manual")
+		}
+		createdManual, err := l.registrySet.ManualRegistry.Create(ctx, *manual)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create manual")
+		}
+		// Track the newly created manual and store ID mapping
+		existing.Manuals[originalXMLID] = createdManual
+		idMapping.Manuals[originalXMLID] = createdManual.ID
+		stats.ManualCount++
+	case RestoreStrategyMergeAdd:
+		// Only create if doesn't exist
+		if existingManual != nil {
+			stats.SkippedCount++
+			break
+		}
+		if options.DryRun {
+			stats.ManualCount++
+			break
+		}
+		manual := &models.Manual{
+			EntityID:    models.EntityID{ID: originalXMLID},
+			CommodityID: commodityID,
+			File:        file,
+		}
+		if err := manual.ValidateWithContext(ctx); err != nil {
+			return errkit.Wrap(err, "invalid manual")
+		}
+		createdManual, err := l.registrySet.ManualRegistry.Create(ctx, *manual)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create manual")
+		}
+		// Track the newly created manual and store ID mapping
+		existing.Manuals[originalXMLID] = createdManual
+		idMapping.Manuals[originalXMLID] = createdManual.ID
+		stats.ManualCount++
+	case RestoreStrategyMergeUpdate:
+		// Create if missing, update if exists
+		if existingManual == nil {
+			if options.DryRun {
+				stats.ManualCount++
+				break
+			}
 			manual := &models.Manual{
 				EntityID:    models.EntityID{ID: originalXMLID},
 				CommodityID: commodityID,
@@ -602,52 +656,6 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 			// Track the newly created manual and store ID mapping
 			existing.Manuals[originalXMLID] = createdManual
 			idMapping.Manuals[originalXMLID] = createdManual.ID
-		}
-		stats.ManualCount++
-	case RestoreStrategyMergeAdd:
-		// Only create if doesn't exist
-		if existingManual == nil {
-			if !options.DryRun {
-				manual := &models.Manual{
-					EntityID:    models.EntityID{ID: originalXMLID},
-					CommodityID: commodityID,
-					File:        file,
-				}
-				if err := manual.ValidateWithContext(ctx); err != nil {
-					return errkit.Wrap(err, "invalid manual")
-				}
-				createdManual, err := l.registrySet.ManualRegistry.Create(ctx, *manual)
-				if err != nil {
-					return errkit.Wrap(err, "failed to create manual")
-				}
-				// Track the newly created manual and store ID mapping
-				existing.Manuals[originalXMLID] = createdManual
-				idMapping.Manuals[originalXMLID] = createdManual.ID
-			}
-			stats.ManualCount++
-			break
-		}
-		stats.SkippedCount++
-	case RestoreStrategyMergeUpdate:
-		// Create if missing, update if exists
-		if existingManual == nil {
-			if !options.DryRun {
-				manual := &models.Manual{
-					EntityID:    models.EntityID{ID: originalXMLID},
-					CommodityID: commodityID,
-					File:        file,
-				}
-				if err := manual.ValidateWithContext(ctx); err != nil {
-					return errkit.Wrap(err, "invalid manual")
-				}
-				createdManual, err := l.registrySet.ManualRegistry.Create(ctx, *manual)
-				if err != nil {
-					return errkit.Wrap(err, "failed to create manual")
-				}
-				// Track the newly created manual and store ID mapping
-				existing.Manuals[originalXMLID] = createdManual
-				idMapping.Manuals[originalXMLID] = createdManual.ID
-			}
 			stats.ManualCount++
 			break
 		}
@@ -1474,7 +1482,7 @@ func (l *RestoreOperationProcessor) collectCommodityData(
 	return nil
 }
 
-func (l *RestoreOperationProcessor) processCommodityFiles(
+func (l *RestoreOperationProcessor) processCommodityData(
 	ctx context.Context,
 	xmlCommodity *XMLCommodity,
 	stats *RestoreStats,
@@ -1552,14 +1560,8 @@ func (l *RestoreOperationProcessor) processCommodity(ctx context.Context, decode
 				continue
 			}
 
-			err = l.processCommodityFiles(ctx, &xmlCommodity, stats, existing, idMapping, options, pendingFiles)
+			err = l.processCommodityData(ctx, &xmlCommodity, stats, existing, idMapping, options, pendingFiles)
 			if err != nil {
-				l.updateRestoreStep(ctx, stepName, models.RestoreStepResultError, err.Error())
-				return err
-			}
-
-			// Process the commodity first
-			if err := l.createOrUpdateCommodity(ctx, &xmlCommodity, stats, existing, idMapping, options); err != nil {
 				l.updateRestoreStep(ctx, stepName, models.RestoreStepResultError, err.Error())
 				return err
 			}
