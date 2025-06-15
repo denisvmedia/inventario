@@ -193,20 +193,20 @@ const fileService = {
   getFileIcon(file: FileEntity): string {
     switch (file.type) {
       case 'image':
-        return 'bx-image'
+        return 'image'
       case 'document':
         if (file.mime_type === 'application/pdf') {
-          return 'bx-file-pdf'
+          return 'file-pdf'
         }
-        return 'bx-file-doc'
+        return 'file-alt'
       case 'video':
-        return 'bx-video'
+        return 'video'
       case 'audio':
-        return 'bx-music'
+        return 'music'
       case 'archive':
-        return 'bx-archive'
+        return 'archive'
       default:
-        return 'bx-file'
+        return 'file'
     }
   },
 
@@ -228,6 +228,19 @@ const fileService = {
     const i = Math.floor(Math.log(bytes) / Math.log(k))
 
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  },
+
+  /**
+   * Get display title for a file (title or filename fallback)
+   */
+  getDisplayTitle(file: FileEntity): string {
+    if (file.title && file.title.trim()) {
+      return file.title
+    }
+    if (file.path && file.path.trim()) {
+      return file.path
+    }
+    return 'Untitled'
   }
 }
 

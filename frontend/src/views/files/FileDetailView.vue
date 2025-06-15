@@ -9,17 +9,17 @@
     <!-- Error State -->
     <div v-else-if="error" class="error-state">
       <div class="error-icon">
-        <i class="bx bx-error"></i>
+        <font-awesome-icon icon="exclamation-triangle" />
       </div>
       <h3>Error Loading File</h3>
       <p>{{ error }}</p>
       <div class="error-actions">
         <button class="btn btn-secondary" @click="goBack">
-          <i class="bx bx-arrow-back"></i>
+          <font-awesome-icon icon="arrow-left" />
           Go Back
         </button>
         <button class="btn btn-primary" @click="loadFile">
-          <i class="bx bx-refresh"></i>
+          <font-awesome-icon icon="redo" />
           Try Again
         </button>
       </div>
@@ -31,13 +31,13 @@
       <div class="file-header">
         <div class="header-nav">
           <button class="btn btn-secondary" @click="goBack">
-            <i class="bx bx-arrow-back"></i>
+            <font-awesome-icon icon="arrow-left" />
             Back to Files
           </button>
         </div>
         
         <div class="header-info">
-          <h1>{{ file.title }}</h1>
+          <h1>{{ getDisplayTitle(file) }}</h1>
           <div class="file-meta">
             <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
             <span class="file-ext">{{ file.ext }}</span>
@@ -47,15 +47,15 @@
         
         <div class="header-actions">
           <button class="btn btn-secondary" @click="downloadFile">
-            <i class="bx bx-download"></i>
+            <font-awesome-icon icon="download" />
             Download
           </button>
           <button class="btn btn-primary" @click="editFile">
-            <i class="bx bx-edit"></i>
+            <font-awesome-icon icon="edit" />
             Edit
           </button>
           <button class="btn btn-danger" @click="confirmDelete">
-            <i class="bx bx-trash"></i>
+            <font-awesome-icon icon="trash" />
             Delete
           </button>
         </div>
@@ -67,7 +67,7 @@
         <div v-if="file.type === 'image'" class="image-preview">
           <img
             :src="getFileUrl(file)"
-            :alt="file.title"
+            :alt="getDisplayTitle(file)"
             class="preview-image"
             @error="handleImageError"
           />
@@ -84,11 +84,11 @@
         <!-- Other File Types -->
         <div v-else class="file-placeholder">
           <div class="file-icon">
-            <i :class="getFileIcon(file)"></i>
+            <font-awesome-icon :icon="getFileIcon(file)" size="4x" />
           </div>
           <p>Preview not available for this file type</p>
           <button class="btn btn-primary" @click="downloadFile">
-            <i class="bx bx-download"></i>
+            <font-awesome-icon icon="download" />
             Download to View
           </button>
         </div>
@@ -146,7 +146,7 @@
           <button class="btn-close" @click="cancelDelete">&times;</button>
         </div>
         <div class="modal-body">
-          <p>Are you sure you want to delete <strong>{{ file?.title }}</strong>?</p>
+          <p>Are you sure you want to delete <strong>{{ file ? getDisplayTitle(file) : '' }}</strong>?</p>
           <p class="warning-text">This action cannot be undone. The file will be permanently deleted.</p>
         </div>
         <div class="modal-footer">
@@ -218,6 +218,10 @@ const getFileTypeLabel = (type: string) => {
   return option?.label || type
 }
 
+const getDisplayTitle = (file: FileEntity) => {
+  return fileService.getDisplayTitle(file)
+}
+
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString()
 }
@@ -230,7 +234,7 @@ const handleImageError = (event: Event) => {
     parent.innerHTML = `
       <div class="file-placeholder">
         <div class="file-icon">
-          <i class="bx bx-image"></i>
+          <i class="fas fa-image" style="font-size: 4rem; color: var(--text-secondary-color); margin-bottom: 1rem;"></i>
         </div>
         <p>Image could not be loaded</p>
       </div>
@@ -374,11 +378,9 @@ onMounted(() => {
     padding: 3rem 1rem;
 
     .file-icon {
-      i {
-        font-size: 4rem;
-        color: $text-secondary-color;
-        margin-bottom: 1rem;
-      }
+      font-size: 4rem;
+      color: $text-secondary-color;
+      margin-bottom: 1rem;
     }
 
     p {
@@ -472,11 +474,9 @@ onMounted(() => {
   }
 
   .error-icon {
-    i {
-      font-size: 4rem;
-      color: $error-color;
-      margin-bottom: 1rem;
-    }
+    font-size: 4rem;
+    color: $error-color;
+    margin-bottom: 1rem;
   }
 
   h3 {

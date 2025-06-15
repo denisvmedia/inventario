@@ -134,7 +134,7 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&fe.Title, validation.Required, validation.Length(1, 255)),
+		validation.Field(&fe.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&fe.Description, validation.Length(0, 1000)),
 		validation.Field(&fe.Type, validation.Required, validation.In(
 			FileTypeImage, FileTypeDocument, FileTypeVideo,
@@ -144,6 +144,17 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 	)
 
 	return validation.ValidateStructWithContext(ctx, fe, fields...)
+}
+
+// GetDisplayTitle returns the title if set, otherwise returns the filename (path without extension)
+func (fe *FileEntity) GetDisplayTitle() string {
+	if fe.Title != "" {
+		return fe.Title
+	}
+	if fe.File != nil && fe.File.Path != "" {
+		return fe.File.Path
+	}
+	return "Untitled"
 }
 
 var (

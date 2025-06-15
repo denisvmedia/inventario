@@ -7,7 +7,7 @@
       </div>
       <div class="header-actions">
         <router-link to="/files/create" class="btn btn-primary">
-          <i class="bx bx-plus"></i>
+          <FontAwesomeIcon icon="plus" />
           Upload File
         </router-link>
       </div>
@@ -52,7 +52,7 @@
 
         <div class="filter-group">
           <button class="btn btn-secondary" @click="clearFilters">
-            <i class="bx bx-x"></i>
+            <FontAwesomeIcon icon="times" />
             Clear
           </button>
         </div>
@@ -68,12 +68,12 @@
     <!-- Error State -->
     <div v-else-if="error" class="error-state">
       <div class="error-icon">
-        <i class="bx bx-error"></i>
+        <FontAwesomeIcon icon="exclamation-circle" />
       </div>
       <h3>Error Loading Files</h3>
       <p>{{ error }}</p>
       <button class="btn btn-primary" @click="loadFiles">
-        <i class="bx bx-refresh"></i>
+        <FontAwesomeIcon icon="redo" />
         Try Again
       </button>
     </div>
@@ -91,17 +91,17 @@
             <img
               v-if="file.type === 'image'"
               :src="getFileUrl(file)"
-              :alt="file.title"
+              :alt="getDisplayTitle(file)"
               class="file-thumbnail"
               @error="handleImageError"
             />
             <div v-else class="file-icon">
-              <i :class="getFileIcon(file)"></i>
+              <FontAwesomeIcon :icon="getFileIcon(file)" />
             </div>
           </div>
           
           <div class="file-info">
-            <h3 class="file-title" :title="file.title">{{ file.title }}</h3>
+            <h3 class="file-title" :title="getDisplayTitle(file)">{{ getDisplayTitle(file) }}</h3>
             <p class="file-description" :title="file.description">{{ file.description || 'No description' }}</p>
             
             <div class="file-meta">
@@ -125,21 +125,21 @@
               title="Download"
               @click="downloadFile(file)"
             >
-              <i class="bx bx-download"></i>
+              <FontAwesomeIcon icon="download" />
             </button>
             <button
               class="btn-icon"
               title="Edit"
               @click="editFile(file)"
             >
-              <i class="bx bx-edit"></i>
+              <FontAwesomeIcon icon="edit" />
             </button>
             <button
               class="btn-icon btn-danger"
               title="Delete"
               @click="confirmDelete(file)"
             >
-              <i class="bx bx-trash"></i>
+              <FontAwesomeIcon icon="trash" />
             </button>
           </div>
         </div>
@@ -156,7 +156,7 @@
             :disabled="currentPage <= 1"
             @click="goToPage(currentPage - 1)"
           >
-            <i class="bx bx-chevron-left"></i>
+            <font-awesome-icon icon="chevron-left" />
             Previous
           </button>
           
@@ -178,7 +178,7 @@
             @click="goToPage(currentPage + 1)"
           >
             Next
-            <i class="bx bx-chevron-right"></i>
+            <font-awesome-icon icon="chevron-right" />
           </button>
         </div>
       </div>
@@ -187,13 +187,13 @@
     <!-- Empty State -->
     <div v-else class="empty-state">
       <div class="empty-icon">
-        <i class="bx bx-file"></i>
+        <font-awesome-icon icon="file" size="4x" />
       </div>
       <h3>No Files Found</h3>
       <p v-if="hasActiveFilters">No files match your current filters. Try adjusting your search criteria.</p>
       <p v-else>You haven't uploaded any files yet. Upload your first file to get started.</p>
       <router-link to="/files/create" class="btn btn-primary">
-        <i class="bx bx-plus"></i>
+        <font-awesome-icon icon="plus" />
         Upload File
       </router-link>
     </div>
@@ -206,7 +206,7 @@
           <button class="btn-close" @click="cancelDelete">&times;</button>
         </div>
         <div class="modal-body">
-          <p>Are you sure you want to delete <strong>{{ fileToDelete?.title }}</strong>?</p>
+          <p>Are you sure you want to delete <strong>{{ fileToDelete ? getDisplayTitle(fileToDelete) : '' }}</strong>?</p>
           <p class="warning-text">This action cannot be undone. The file will be permanently deleted.</p>
         </div>
         <div class="modal-footer">
@@ -335,12 +335,16 @@ const getFileTypeLabel = (type: string) => {
   return option?.label || type
 }
 
+const getDisplayTitle = (file: FileEntity) => {
+  return fileService.getDisplayTitle(file)
+}
+
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
   img.style.display = 'none'
   const parent = img.parentElement
   if (parent) {
-    parent.innerHTML = '<div class="file-icon"><i class="bx bx-image"></i></div>'
+    parent.innerHTML = '<div class="file-icon"><i class="fas fa-image" style="font-size: 3rem; color: var(--text-secondary-color);"></i></div>'
   }
 }
 
@@ -479,10 +483,8 @@ onMounted(() => {
     }
 
     .file-icon {
-      i {
-        font-size: 3rem;
-        color: $text-secondary-color;
-      }
+      font-size: 3rem;
+      color: $text-secondary-color;
     }
   }
   
@@ -622,11 +624,9 @@ onMounted(() => {
 
   .error-icon,
   .empty-icon {
-    i {
-      font-size: 4rem;
-      color: $text-secondary-color;
-      margin-bottom: 1rem;
-    }
+    font-size: 4rem;
+    color: $text-secondary-color;
+    margin-bottom: 1rem;
   }
 
   h3 {

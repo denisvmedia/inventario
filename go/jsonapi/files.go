@@ -90,8 +90,7 @@ func (fr *FileRequest) ValidateWithContext(ctx context.Context) error {
 
 	fields = append(fields,
 		validation.Field(&fr.Data.Type, validation.Required, validation.In("files")),
-		validation.Field(&fr.Data.Attributes.Title, validation.Required, validation.Length(1, 255)),
-		validation.Field(&fr.Data.Attributes.Description, validation.Length(0, 1000)),
+		validation.Field(&fr.Data.Attributes, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, fr, fields...)
@@ -105,8 +104,25 @@ type FileRequestData struct {
 	Path        string   `json:"path,omitempty"` // Only for updates
 }
 
+func (frd *FileRequestData) Validate() error {
+	return models.ErrMustUseValidateWithContext
+}
+
+func (frd *FileRequestData) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+
+	fields = append(fields,
+		validation.Field(&frd.Title, validation.Length(0, 255)), // Title is now optional
+		validation.Field(&frd.Description, validation.Length(0, 1000)),
+		validation.Field(&frd.Tags),
+	)
+
+	return validation.ValidateStructWithContext(ctx, frd, fields...)
+}
+
 var _ render.Binder = (*FileUpdateRequest)(nil)
 var _ validation.ValidatableWithContext = (*FileUpdateRequest)(nil)
+var _ validation.ValidatableWithContext = (*FileRequestData)(nil)
 
 // FileUpdateRequest represents a request to update a file's metadata.
 type FileUpdateRequest struct {
@@ -168,9 +184,10 @@ func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) e
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&fur.Title, validation.Required, validation.Length(1, 255)),
+		validation.Field(&fur.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&fur.Description, validation.Length(0, 1000)),
 		validation.Field(&fur.Path, validation.Required),
+		validation.Field(&fur.Tags),
 	)
 
 	return validation.ValidateStructWithContext(ctx, fur, fields...)

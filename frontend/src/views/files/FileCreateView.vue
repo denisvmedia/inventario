@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="header-nav">
         <button class="btn btn-secondary" @click="goBack">
-          <i class="bx bx-arrow-back"></i>
+          <FontAwesomeIcon icon="arrow-left" />
           Back to Files
         </button>
       </div>
@@ -37,7 +37,7 @@
             
             <div v-if="!selectedFile" class="upload-content">
               <div class="upload-icon">
-                <i class="bx bx-cloud-upload"></i>
+                <FontAwesomeIcon icon="cloud-upload-alt" />
               </div>
               <p class="upload-text">
                 <span class="upload-prompt">Drag and drop a file here</span>
@@ -56,7 +56,7 @@
                   class="file-thumbnail"
                 />
                 <div v-else class="file-icon">
-                  <i :class="getFileIcon(selectedFile)"></i>
+                  <FontAwesomeIcon :icon="getFileIcon(selectedFile)" />
                 </div>
               </div>
 
@@ -66,7 +66,7 @@
               </div>
               
               <button class="btn-remove" @click.stop="removeFile" title="Remove file">
-                <i class="bx bx-x"></i>
+                <FontAwesomeIcon icon="times" />
               </button>
             </div>
           </div>
@@ -85,8 +85,8 @@
             :disabled="uploading"
             @click="uploadFile"
           >
-            <i v-if="uploading" class="bx bx-loader-alt bx-spin"></i>
-            <i v-else class="bx bx-upload"></i>
+            <FontAwesomeIcon v-if="uploading" icon="spinner" spin />
+            <FontAwesomeIcon v-else icon="upload" />
             {{ uploading ? 'Uploading...' : 'Upload File' }}
           </button>
           <button type="button" class="btn btn-secondary" @click="goBack" :disabled="uploading">
@@ -100,14 +100,14 @@
     <div v-if="error" class="error-section">
       <div class="error-card">
         <div class="error-icon">
-          <i class="bx bx-error"></i>
+          <FontAwesomeIcon icon="exclamation-circle" />
         </div>
         <div class="error-content">
           <h3>Upload Failed</h3>
           <p>{{ error }}</p>
         </div>
         <button class="btn btn-secondary" @click="clearError">
-          <i class="bx bx-x"></i>
+          <FontAwesomeIcon icon="times" />
           Dismiss
         </button>
       </div>
@@ -189,12 +189,12 @@ const removeFile = () => {
 
 const getFileIcon = (file: File): string => {
   const type = file.type
-  if (type.startsWith('image/')) return 'bx-image'
-  if (type.startsWith('video/')) return 'bx-video'
-  if (type.startsWith('audio/')) return 'bx-music'
-  if (type === 'application/zip' || type === 'application/x-zip-compressed') return 'bx-archive'
-  if (type === 'application/pdf' || type.includes('document')) return 'bx-file-doc'
-  return 'bx-file'
+  if (type.startsWith('image/')) return 'image'
+  if (type.startsWith('video/')) return 'video'
+  if (type.startsWith('audio/')) return 'music'
+  if (type === 'application/zip' || type === 'application/x-zip-compressed') return 'archive'
+  if (type === 'application/pdf' || type.includes('document')) return 'file-alt'
+  return 'file'
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -567,9 +567,7 @@ const goBack = () => {
   }
 }
 
-.bx-spin {
-  animation: spin 1s linear infinite;
-}
+// Font Awesome spin animation is handled by the spin prop
 
 @keyframes spin {
   0% { transform: rotate(0deg); }

@@ -9,17 +9,17 @@
     <!-- Error State -->
     <div v-else-if="error" class="error-state">
       <div class="error-icon">
-        <i class="bx bx-error"></i>
+        <FontAwesomeIcon icon="exclamation-circle" />
       </div>
       <h3>Error Loading File</h3>
       <p>{{ error }}</p>
       <div class="error-actions">
         <button class="btn btn-secondary" @click="goBack">
-          <i class="bx bx-arrow-back"></i>
+          <FontAwesomeIcon icon="arrow-left" />
           Go Back
         </button>
         <button class="btn btn-primary" @click="loadFile">
-          <i class="bx bx-refresh"></i>
+          <FontAwesomeIcon icon="redo" />
           Try Again
         </button>
       </div>
@@ -30,7 +30,7 @@
       <div class="page-header">
         <div class="header-nav">
           <button class="btn btn-secondary" @click="goBack">
-            <i class="bx bx-arrow-back"></i>
+            <FontAwesomeIcon icon="arrow-left" />
             Back to File
           </button>
         </div>
@@ -52,10 +52,10 @@
             @error="handleImageError"
           />
           <div v-else class="file-icon">
-            <i :class="getFileIcon(file)"></i>
+            <font-awesome-icon :icon="getFileIcon(file)" size="2x" />
           </div>
         </div>
-        
+
         <div class="file-info">
           <h3>{{ file.original_path }}</h3>
           <div class="file-meta">
@@ -65,36 +65,42 @@
         </div>
       </div>
 
+
+
       <!-- Edit Form -->
       <div class="edit-form-section">
         <form @submit.prevent="updateFile" class="edit-form">
+          <!-- 1. Filename and Extension (editable) -->
           <div class="form-group">
-            <label for="title" class="required">Title</label>
+            <label for="path" class="required">Filename</label>
+            <div class="filename-input-group" :class="{ 'error': errors.path }">
+              <input
+                id="path"
+                v-model="form.path"
+                type="text"
+                class="form-control filename-input"
+                placeholder="Enter filename (without extension)"
+                required
+              />
+              <span class="file-extension">{{ file.ext }}</span>
+            </div>
+            <div v-if="errors.path" class="error-message">{{ errors.path }}</div>
+            <div class="form-help">This will be the filename when downloaded (extension will be added automatically)</div>
+          </div>
+
+          <!-- 2. All Editable Fields -->
+          <div class="form-group">
+            <label for="title">Title</label>
             <input
               id="title"
               v-model="form.title"
               type="text"
               class="form-control"
               :class="{ 'error': errors.title }"
-              placeholder="Enter a title for this file"
-              required
+              placeholder="Enter a title for this file (optional)"
             />
             <div v-if="errors.title" class="error-message">{{ errors.title }}</div>
-          </div>
-
-          <div class="form-group">
-            <label for="path" class="required">Filename</label>
-            <input
-              id="path"
-              v-model="form.path"
-              type="text"
-              class="form-control"
-              :class="{ 'error': errors.path }"
-              placeholder="Enter filename (without extension)"
-              required
-            />
-            <div v-if="errors.path" class="error-message">{{ errors.path }}</div>
-            <div class="form-help">This will be the filename when downloaded (extension will be added automatically)</div>
+            <div class="form-help">If left empty, the filename will be used as the title</div>
           </div>
 
           <div class="form-group">
@@ -111,14 +117,6 @@
           </div>
 
           <div class="form-group">
-            <label>File Type</label>
-            <div class="form-control-static">
-              <span class="file-type-display">{{ getFileTypeLabel(file?.type || 'other') }}</span>
-              <small class="form-help">File type is automatically detected and cannot be changed</small>
-            </div>
-          </div>
-
-          <div class="form-group">
             <label for="tags">Tags</label>
             <input
               id="tags"
@@ -129,7 +127,7 @@
               @input="updateTags"
             />
             <div class="form-help">Separate multiple tags with commas</div>
-            
+
             <div v-if="form.tags.length > 0" class="tags-preview">
               <span v-for="tag in form.tags" :key="tag" class="tag">
                 {{ tag }}
@@ -138,17 +136,38 @@
             </div>
           </div>
 
+          <!-- 3. Read-only File Information Fields -->
+          <div class="form-group">
+            <label>File Type</label>
+            <div class="form-control-readonly">
+              <span class="type-badge" :class="`type-${file.type}`">
+                <font-awesome-icon :icon="getFileIcon(file)" />
+                {{ getFileTypeLabel(file.type) }}
+              </span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>MIME Type</label>
+            <div class="form-control-readonly">{{ file.mime_type }}</div>
+          </div>
+
+          <div class="form-group">
+            <label>Original Filename</label>
+            <div class="form-control-readonly file-path">{{ file.original_path }}</div>
+          </div>
+
           <div class="form-actions">
             <button type="button" class="btn btn-secondary" @click="goBack" :disabled="saving">
               Cancel
             </button>
             <button type="button" class="btn btn-primary" :disabled="saving || !isFormValid" @click="updateFile">
               <span v-if="saving">
-                <i class="bx bx-loader-alt bx-spin"></i>
+                <FontAwesomeIcon icon="spinner" spin />
                 Saving...
               </span>
               <span v-else>
-                <i class="bx bx-save"></i>
+                <FontAwesomeIcon icon="save" />
                 Save Changes
               </span>
             </button>
@@ -161,14 +180,14 @@
     <div v-if="saveError" class="error-section">
       <div class="error-card">
         <div class="error-icon">
-          <i class="bx bx-error"></i>
+          <FontAwesomeIcon icon="exclamation-circle" />
         </div>
         <div class="error-content">
           <h3>Save Failed</h3>
           <p>{{ saveError }}</p>
         </div>
         <button class="btn btn-secondary" @click="clearSaveError">
-          <i class="bx bx-x"></i>
+          <FontAwesomeIcon icon="times" />
           Dismiss
         </button>
       </div>
@@ -219,7 +238,7 @@ const getFileTypeLabel = (type: string): string => {
 const fileId = computed(() => route.params.id as string)
 
 const isFormValid = computed(() => {
-  return form.value.title.trim() && form.value.path.trim()
+  return form.value.path.trim() // Only path is required, title is optional
 })
 
 // Methods
@@ -256,6 +275,24 @@ const getFileIcon = (file: FileEntity) => {
   return fileService.getFileIcon(file)
 }
 
+const formatDate = (dateString: string | undefined): string => {
+  if (!dateString) return 'N/A'
+
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  } catch (error) {
+    return 'Invalid Date'
+  }
+}
+
 
 
 const handleImageError = (event: Event) => {
@@ -263,7 +300,7 @@ const handleImageError = (event: Event) => {
   img.style.display = 'none'
   const parent = img.parentElement
   if (parent) {
-    parent.innerHTML = '<div class="file-icon"><i class="bx bx-image"></i></div>'
+    parent.innerHTML = '<div class="file-icon"><i class="fas fa-image" style="font-size: 2.5rem; color: var(--text-secondary-color);"></i></div>'
   }
 }
 
@@ -284,9 +321,7 @@ const removeTag = (tagToRemove: string) => {
 const validateForm = (): boolean => {
   errors.value = {}
 
-  if (!form.value.title.trim()) {
-    errors.value.title = 'Title is required'
-  }
+  // Title is now optional, no validation needed
 
   if (!form.value.path.trim()) {
     errors.value.path = 'Filename is required'
@@ -383,10 +418,8 @@ onMounted(() => {
     }
 
     .file-icon {
-      i {
-        font-size: 2.5rem;
-        color: $text-secondary-color;
-      }
+      font-size: 2.5rem;
+      color: $text-secondary-color;
     }
   }
 
@@ -412,6 +445,58 @@ onMounted(() => {
         border: 1px solid $border-color;
       }
     }
+  }
+}
+
+
+
+.file-path {
+  word-break: break-all;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: $default-radius;
+  font-size: 0.875rem;
+  font-weight: 500;
+
+  &.type-image {
+    background-color: #e8f5e8;
+    color: #2e7d32;
+  }
+
+  &.type-document {
+    background-color: #e3f2fd;
+    color: #1565c0;
+  }
+
+  &.type-video {
+    background-color: #fce4ec;
+    color: #c2185b;
+  }
+
+  &.type-audio {
+    background-color: #fff3e0;
+    color: #ef6c00;
+  }
+
+  &.type-archive {
+    background-color: #f3e5f5;
+    color: #7b1fa2;
+  }
+
+  &.type-other {
+    background-color: #f5f5f5;
+    color: #616161;
+  }
+
+  svg {
+    font-size: 1rem;
   }
 }
 
@@ -455,29 +540,71 @@ onMounted(() => {
         }
       }
 
+      .form-control-readonly {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid $border-color;
+        border-radius: 4px;
+        background-color: #f8f9fa;
+        color: $text-color;
+        font-size: 1rem;
+        word-break: break-word;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+      }
+
+      .filename-input-group {
+        display: flex;
+        align-items: center;
+        border: 1px solid $border-color;
+        border-radius: 4px;
+        background: white;
+        overflow: hidden;
+
+        .filename-input {
+          flex: 1;
+          border: none;
+          border-radius: 0;
+          margin: 0;
+
+          &:focus {
+            border: none;
+            box-shadow: none;
+          }
+
+          &.error {
+            border: none;
+          }
+        }
+
+        .file-extension {
+          padding: 0.75rem;
+          background-color: #f8f9fa;
+          color: $text-secondary-color;
+          font-size: 1rem;
+          font-weight: 500;
+          border-left: 1px solid $border-color;
+          white-space: nowrap;
+        }
+
+        &:focus-within {
+          border-color: $primary-color;
+          box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+        }
+
+        &.error {
+          border-color: $error-color;
+        }
+      }
+
       .form-help {
         margin-top: 0.25rem;
         font-size: 0.875rem;
         color: $text-secondary-color;
       }
 
-      .form-control-static {
-        padding: 0.75rem;
-        background-color: $light-bg-color;
-        border: 1px solid $border-color;
-        border-radius: 0.375rem;
 
-        .file-type-display {
-          font-weight: 500;
-          color: $text-color;
-        }
-
-        .form-help {
-          margin-top: 0.25rem;
-          color: $text-secondary-color;
-          font-size: 0.875rem;
-        }
-      }
 
       .error-message {
         margin-top: 0.25rem;
@@ -604,9 +731,7 @@ onMounted(() => {
   }
 }
 
-.bx-spin {
-  animation: spin 1s linear infinite;
-}
+// Font Awesome spin animation is handled by the spin prop
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
