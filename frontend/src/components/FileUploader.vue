@@ -56,7 +56,13 @@
     <!-- Upload actions outside the file block -->
     <transition name="upload-actions" mode="out-in">
       <div v-if="selectedFiles.length > 0 && !uploadCompleted" class="upload-actions">
-        <button type="button" class="btn btn-primary" :disabled="isUploading" @click="uploadFiles">
+        <button
+          ref="uploadButton"
+          type="button"
+          class="btn btn-primary"
+          :disabled="isUploading"
+          @click="uploadFiles"
+        >
           <font-awesome-icon v-if="isUploading" icon="spinner" spin />
           <font-awesome-icon v-else icon="upload" />
           {{ isUploading ? 'Uploading...' : 'Upload Files' }}
@@ -85,9 +91,10 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['upload', 'filesCleared'])
+const emit = defineEmits(['upload', 'filesCleared', 'filesSelected'])
 
 const fileInput = ref<HTMLInputElement | null>(null)
+const uploadButton = ref<HTMLButtonElement | null>(null)
 const selectedFiles = ref<File[]>([])
 const filePreviews = ref<{ [key: string]: string }>({}) // Store file previews by file name + size
 const isDragOver = ref(false)
@@ -143,6 +150,9 @@ const addFiles = (files: File[]) => {
 
   // Reset upload completed state when new files are added
   uploadCompleted.value = false
+
+  // Emit filesSelected event when files are added
+  emit('filesSelected', selectedFiles.value)
 }
 
 const removeFile = (index: number) => {
@@ -185,7 +195,8 @@ const markUploadFailed = () => {
 defineExpose({
   clearFiles,
   markUploadCompleted,
-  markUploadFailed
+  markUploadFailed,
+  getUploadButton: () => uploadButton.value
 })
 
 const uploadFiles = async () => {
