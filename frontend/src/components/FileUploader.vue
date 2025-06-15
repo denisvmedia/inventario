@@ -24,7 +24,7 @@
           <span class="upload-or">or</span>
           <span class="browse-button">click to browse</span>
         </p>
-        <p class="upload-hint">Supports XML files and other document formats</p>
+        <p class="upload-hint">{{ uploadHint }}</p>
       </div>
 
       <div v-else class="selected-files-content">
@@ -55,7 +55,7 @@
 
     <!-- Upload actions outside the file block -->
     <transition name="upload-actions" mode="out-in">
-      <div v-if="selectedFiles.length > 0 && !uploadCompleted" class="upload-actions">
+      <div v-if="selectedFiles.length > 0 && !uploadCompleted && !hideUploadButton" class="upload-actions">
         <button
           ref="uploadButton"
           type="button"
@@ -88,6 +88,14 @@ const props = defineProps({
   uploadPrompt: {
     type: String,
     default: 'Drag and drop files here'
+  },
+  uploadHint: {
+    type: String,
+    default: 'Supports XML files and other document formats'
+  },
+  hideUploadButton: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -196,7 +204,8 @@ defineExpose({
   clearFiles,
   markUploadCompleted,
   markUploadFailed,
-  getUploadButton: () => uploadButton.value
+  getUploadButton: () => uploadButton.value,
+  selectedFiles
 })
 
 const uploadFiles = async () => {

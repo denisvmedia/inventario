@@ -33,6 +33,7 @@
               :multiple="false"
               accept=".xml,application/xml,text/xml"
               upload-prompt="Drag and drop XML export file here"
+              upload-hint="Supports XML export files created by Inventario"
               @upload="handleFileUpload"
               @files-cleared="handleFilesCleared"
             />
