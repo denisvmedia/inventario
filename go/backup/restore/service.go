@@ -581,7 +581,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 	return nil
 }
 
-//nolint:dupl,gocognit // Similar but not the same as other create*Record functions (and is readable enough)
+//nolint:gocognit // readable enough
 func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file *models.File, commodityID, originalXMLID string, stats *RestoreStats, existing *ExistingEntities, idMapping *IDMapping, options RestoreOptions) error {
 	// Apply strategy for manuals
 	existingManual := existing.Manuals[originalXMLID]
