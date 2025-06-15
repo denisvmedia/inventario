@@ -15,15 +15,16 @@
         @change="onFileSelected"
       />
 
-      <div v-if="selectedFiles.length === 0" class="upload-content">
+      <div v-if="selectedFiles.length === 0" class="upload-content-inner">
         <div class="upload-icon">
-          <font-awesome-icon icon="upload" size="2x" />
+          <FontAwesomeIcon icon="cloud-upload-alt" />
         </div>
         <p class="upload-text">
           <span class="upload-prompt">{{ uploadPrompt }}</span>
           <span class="upload-or">or</span>
           <span class="browse-button">click to browse</span>
         </p>
+        <p class="upload-hint">Supports XML files and other document formats</p>
       </div>
 
       <div v-else class="selected-files-content">
@@ -204,14 +205,13 @@ const formatFileSize = (bytes: number): string => {
 }
 
 .upload-area {
-  position: relative;
   border: 2px dashed $border-color;
   border-radius: 8px;
   padding: 3rem 2rem;
   text-align: center;
+  cursor: pointer;
   transition: all 0.2s;
   background-color: $light-bg-color;
-  cursor: pointer;
 
   &:hover,
   &.drag-over {
@@ -222,53 +222,46 @@ const formatFileSize = (bytes: number): string => {
   &.has-file {
     border-style: solid;
     padding: 1.5rem;
-    cursor: pointer;
   }
-}
 
-/* Drag over styles are now handled in the hover section above */
+  .file-input {
+    display: none;
+  }
 
-.file-input {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
+  .upload-content-inner {
+    .upload-icon {
+      font-size: 3rem;
+      color: $text-secondary-color;
+      margin-bottom: 1rem;
+    }
 
-.upload-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
+    .upload-text {
+      margin: 0 0 0.5rem 0;
+      color: $text-color;
 
-.upload-icon {
-  font-size: 2rem;
-  color: $secondary-color;
-  margin-bottom: 1rem;
-}
+      .upload-prompt {
+        display: block;
+        font-weight: 500;
+      }
 
-.upload-text {
-  margin: 0;
-  color: $text-color;
-}
+      .upload-or {
+        display: block;
+        margin: 0.5rem 0;
+        color: $text-secondary-color;
+      }
 
-.upload-prompt {
-  display: block;
-  margin-bottom: 0.5rem;
-}
+      .browse-button {
+        color: $primary-color;
+        font-weight: 500;
+      }
+    }
 
-.upload-or {
-  display: block;
-  margin: 0.5rem 0;
-  color: color.adjust($text-color, $lightness: 30%);
-}
-
-.browse-button {
-  color: $primary-color;
-  font-weight: 500;
+    .upload-hint {
+      margin: 0;
+      font-size: 0.875rem;
+      color: $text-secondary-color;
+    }
+  }
 }
 
 .selected-files-content {
@@ -283,6 +276,7 @@ const formatFileSize = (bytes: number): string => {
   display: flex;
   align-items: center;
   gap: 1rem;
+  text-align: left;
 
   .file-preview {
     width: 60px;
@@ -295,13 +289,15 @@ const formatFileSize = (bytes: number): string => {
     justify-content: center;
     border: 1px solid $border-color;
 
+    .file-thumbnail {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
     .file-icon {
       font-size: 2rem;
-      color: $secondary-color;
-      line-height: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      color: $text-secondary-color;
     }
   }
 
@@ -316,7 +312,7 @@ const formatFileSize = (bytes: number): string => {
 
     p {
       margin: 0;
-      color: color.adjust($text-color, $lightness: 30%);
+      color: $text-secondary-color;
       font-size: 0.875rem;
     }
   }
