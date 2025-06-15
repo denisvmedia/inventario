@@ -76,7 +76,7 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 </inventory>`
 
 	// Create restore service with file:// blob storage for testing
-	restoreService := restore.NewRestoreService(registrySet, "file://./test_uploads?create_dir=true")
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
 	options := restore.RestoreOptions{
@@ -86,7 +86,7 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the basic data was restored correctly
@@ -195,7 +195,7 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	restoreService := restore.NewRestoreService(registrySet, "file://./test_uploads?create_dir=true")
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing DISABLED
 	options := restore.RestoreOptions{
@@ -205,7 +205,7 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the basic data was restored correctly
@@ -277,7 +277,7 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	restoreService := restore.NewRestoreService(registrySet, "file://./test_uploads?create_dir=true")
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
@@ -287,7 +287,7 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify no validation errors occurred
@@ -385,7 +385,7 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	restoreService := restore.NewRestoreService(registrySet, "file://./test_uploads?create_dir=true")
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
@@ -395,7 +395,7 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify no duplication occurred - exact counts should match XML
@@ -503,7 +503,7 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 </inventory>`
 
 	// Create restore service with file:// blob storage for testing
-	restoreService := restore.NewRestoreService(registrySet, "file://./test_uploads?create_dir=true")
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
 	options := restore.RestoreOptions{
@@ -513,7 +513,7 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify all data was restored correctly

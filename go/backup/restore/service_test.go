@@ -16,16 +16,6 @@ import (
 )
 
 func TestRestoreService_RestoreFromXML(t *testing.T) {
-	c := qt.New(t)
-
-	// Create test registry set
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
-
-	// Create restore service
-	service := restore.NewRestoreService(registrySet, "/tmp/test-uploads")
-	c.Assert(service, qt.IsNotNil)
-
 	ctx := validationctx.WithMainCurrency(context.Background(), "USD")
 
 	t.Run("restore XML with full replace strategy", func(t *testing.T) {
@@ -34,7 +24,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		testService := restore.NewRestoreService(testRegistrySet, "/tmp/test-uploads")
+		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, "/tmp/test-uploads")
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
@@ -73,7 +63,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			DryRun:          false,
 		}
 
-		stats, err := testService.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		stats, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.IsNil)
 		c.Assert(stats, qt.IsNotNil)
 
@@ -121,7 +111,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		testService := restore.NewRestoreService(testRegistrySet, "/tmp/test-uploads")
+		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, "/tmp/test-uploads")
 
 		// First, create some existing data
 		existingLocation := models.Location{
@@ -153,7 +143,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			DryRun:          false,
 		}
 
-		stats, err := testService.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		stats, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.IsNil)
 		c.Assert(stats, qt.IsNotNil)
 		c.Assert(stats.LocationCount, qt.Equals, 1) // Only new location counted
@@ -178,7 +168,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		testService := restore.NewRestoreService(testRegistrySet, "/tmp/test-uploads")
+		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, "/tmp/test-uploads")
 
 		// First, create some existing data
 		existingLocation := models.Location{
@@ -209,7 +199,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			DryRun:          false,
 		}
 
-		stats, err := testService.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		stats, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.IsNil)
 		c.Assert(stats, qt.IsNotNil)
 		c.Assert(stats.LocationCount, qt.Equals, 2) // Both locations processed
@@ -235,7 +225,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		testService := restore.NewRestoreService(testRegistrySet, "/tmp/test-uploads")
+		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, "/tmp/test-uploads")
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
@@ -253,7 +243,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			DryRun:          true, // Dry run mode
 		}
 
-		stats, err := testService.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		stats, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.IsNil)
 		c.Assert(stats, qt.IsNotNil)
 		c.Assert(stats.LocationCount, qt.Equals, 1)
@@ -269,6 +259,14 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 	t.Run("invalid strategy", func(t *testing.T) {
 		c := qt.New(t)
 
+		// Create test registry set
+		registrySet, err := memory.NewRegistrySet("")
+		c.Assert(err, qt.IsNil)
+
+		// Create restore processor
+		processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "/tmp/test-uploads")
+		c.Assert(processor, qt.IsNotNil)
+
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
 </inventory>`
@@ -279,7 +277,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			DryRun:          false,
 		}
 
-		_, err := service.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		_, err = processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.ErrorMatches, ".*invalid restore strategy.*")
 	})
 }
@@ -296,7 +294,7 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	service := restore.NewRestoreService(registrySet, "")
+	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "")
 
 	// Create XML with a commodity that has pricing information
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -338,7 +336,7 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 		DryRun:          false,
 	}
 
-	stats, err := service.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("Expected no errors, but got: %v", stats.Errors))
 	c.Assert(stats.CommodityCount, qt.Equals, 1)
@@ -362,7 +360,7 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	registrySet, err := memory.NewRegistrySet("")
 	c.Assert(err, qt.IsNil)
 
-	service := restore.NewRestoreService(registrySet, "")
+	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "")
 
 	// Create XML with a commodity that has pricing information
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -405,7 +403,7 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	}
 
 	ctx := c.Context()
-	stats, err := service.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Should have errors because main currency is not set
@@ -437,7 +435,7 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
-	service := restore.NewRestoreService(registrySet, "")
+	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "")
 
 	// Create XML with the same structure as sample_export.xml
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -512,7 +510,7 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 		DryRun:          false,
 	}
 
-	stats, err := service.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Debug: print errors if any
@@ -571,7 +569,7 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
-	service := restore.NewRestoreService(registrySet, "")
+	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "")
 
 	// Read the actual sample XML file
 	xmlContent, err := os.ReadFile("testdata/sample_export.xml")
@@ -584,7 +582,7 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 		DryRun:          false,
 	}
 
-	stats, err := service.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Debug: print errors if any

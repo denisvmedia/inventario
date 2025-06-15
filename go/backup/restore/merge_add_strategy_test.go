@@ -33,7 +33,7 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
-	restoreService := restore.NewRestoreService(registrySet, "file://./test_uploads?create_dir=true")
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "file://./test_uploads?create_dir=true")
 
 	// First, create some initial data with files
 	initialXML := `<?xml version="1.0" encoding="UTF-8"?>
@@ -104,7 +104,7 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	}
 
 	reader := strings.NewReader(initialXML)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0)
 
@@ -142,7 +142,7 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	}
 
 	reader2 := strings.NewReader(initialXML)
-	stats2, err := restoreService.RestoreFromXML(ctx, reader2, mergeAddOptions)
+	stats2, err := processor.RestoreFromXML(ctx, reader2, mergeAddOptions)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats2.ErrorCount, qt.Equals, 0)
 
@@ -186,7 +186,7 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
-	restoreService := restore.NewRestoreService(registrySet, "file://./test_uploads?create_dir=true")
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "file://./test_uploads?create_dir=true")
 
 	// First, create initial data with one file
 	initialXML := `<?xml version="1.0" encoding="UTF-8"?>
@@ -239,7 +239,7 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	}
 
 	reader := strings.NewReader(initialXML)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0)
 	c.Assert(stats.ImageCount, qt.Equals, 1)
@@ -317,7 +317,7 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	}
 
 	reader2 := strings.NewReader(xmlWithNewFiles)
-	stats2, err := restoreService.RestoreFromXML(ctx, reader2, mergeAddOptions)
+	stats2, err := processor.RestoreFromXML(ctx, reader2, mergeAddOptions)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats2.ErrorCount, qt.Equals, 0)
 

@@ -22,7 +22,7 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	service := restore.NewRestoreService(registrySet, "")
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "")
 
 	// Create XML with processing instructions and various token types that should be handled properly
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -68,7 +68,7 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	}
 
 	// This should work without any "unexpected token type" errors
-	stats, err := service.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("Expected no errors, but got: %v", stats.Errors))
 	c.Assert(stats.CommodityCount, qt.Equals, 1)
@@ -99,7 +99,7 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	service := restore.NewRestoreService(registrySet, "")
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "")
 
 	// This test demonstrates that the streaming XML parsing works correctly
 	// without loading everything into memory
@@ -146,7 +146,7 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 
 	// Test the detailed logging restore process - we'll just test the regular restore for now
 	// since the detailed logging is tested through the background worker
-	stats, err := service.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("Expected no errors, but got: %v", stats.Errors))
 	c.Assert(stats.CommodityCount, qt.Equals, 1)
@@ -165,5 +165,4 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	// Note: We can't easily test the detailed logging here since it requires
 	// the background worker infrastructure. The main fix was to avoid loading
 	// everything into memory, which is tested by the streaming XML parsing above.
-
 }

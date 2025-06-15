@@ -61,7 +61,7 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 </backup>`
 
 	// Create restore service
-	restoreService := restore.NewRestoreService(registrySet, "mem://")
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "mem://")
 
 	// Test restore with full replace strategy (this should now work with recursive delete)
 	options := restore.RestoreOptions{
@@ -70,7 +70,7 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats, qt.IsNotNil)
 
@@ -134,7 +134,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 	c.Assert(commodities, qt.HasLen, 6)
 
 	// Create restore service
-	restoreService := restore.NewRestoreService(registrySet, "mem://")
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "mem://")
 
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
@@ -153,7 +153,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 </backup>`
 
 	reader := strings.NewReader(xmlData)
-	stats, err := restoreService.RestoreFromXML(ctx, reader, options)
+	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats, qt.IsNotNil)
 
