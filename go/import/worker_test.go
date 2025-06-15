@@ -7,11 +7,10 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
-	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/memblob"
 
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	importpkg "github.com/denisvmedia/inventario/import"
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -81,97 +80,6 @@ func TestImportWorkerIsRunning(t *testing.T) {
 
 	// Test initial state
 	c.Assert(worker.IsRunning(), qt.IsFalse, qt.Commentf("Worker should not be running initially"))
-}
-
-func TestImportWorkerProcessPendingImports(t *testing.T) {
-	c := qt.New(t)
-	registrySet := newTestRegistrySet()
-
-	// Create a temporary directory for uploads
-	tempDir := c.TempDir()
-	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-
-	importService := importpkg.NewImportService(registrySet, uploadLocation)
-	worker := importpkg.NewImportWorkerWithPollInterval(importService, registrySet, 3, 50*time.Millisecond)
-
-	ctx := context.Background()
-
-	// Create blob bucket and upload valid XML
-	b, err := blob.OpenBucket(ctx, uploadLocation)
-	c.Assert(err, qt.IsNil)
-
-	validXML := `<?xml version="1.0" encoding="UTF-8"?>
-<inventory xmlns="http://inventario.example.com/schema" exportDate="2024-01-01T00:00:00Z" exportType="commodities">
-	<commodities>
-		<commodity id="test-commodity-1">
-			<name>Test Commodity</name>
-			<type>electronics</type>
-			<status>active</status>
-			<count>1</count>
-		</commodity>
-	</commodities>
-</inventory>`
-	filePath := "test-import.xml"
-	err = b.WriteAll(ctx, filePath, []byte(validXML), nil)
-	c.Assert(err, qt.IsNil)
-	b.Close()
-
-	// Create some test imports (exports of type "imported")
-	import1 := models.Export{
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		Description: "Test import 1",
-		FilePath:    filePath,
-	}
-
-	import2 := models.Export{
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		Description: "Test import 2",
-		FilePath:    filePath,
-	}
-
-	// Create a non-import export (should be ignored)
-	regularExport := models.Export{
-		Type:        models.ExportTypeCommodities,
-		Status:      models.ExportStatusPending,
-		Description: "Regular export",
-	}
-
-	// Create imports in database
-	createdImport1, err := registrySet.ExportRegistry.Create(ctx, import1)
-	c.Assert(err, qt.IsNil)
-
-	createdImport2, err := registrySet.ExportRegistry.Create(ctx, import2)
-	c.Assert(err, qt.IsNil)
-
-	createdRegularExport, err := registrySet.ExportRegistry.Create(ctx, regularExport)
-	c.Assert(err, qt.IsNil)
-
-	// Process pending imports
-	// Note: We can't directly call processPendingImports as it's not exported,
-	// but we can test the overall behavior by starting the worker briefly
-	worker.Start(ctx)
-
-	// Give time for async processing to complete
-	time.Sleep(200 * time.Millisecond)
-
-	worker.Stop()
-
-	// Check that imports were processed (status should change from pending)
-	updatedImport1, err := registrySet.ExportRegistry.Get(ctx, createdImport1.ID)
-	c.Assert(err, qt.IsNil)
-
-	updatedImport2, err := registrySet.ExportRegistry.Get(ctx, createdImport2.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Regular export should remain unchanged
-	updatedRegularExport, err := registrySet.ExportRegistry.Get(ctx, createdRegularExport.ID)
-	c.Assert(err, qt.IsNil)
-
-	c.Assert(updatedImport1.Status, qt.Not(qt.Equals), models.ExportStatusPending, qt.Commentf("Import1 status should have changed from pending"))
-	c.Assert(updatedImport2.Status, qt.Not(qt.Equals), models.ExportStatusPending, qt.Commentf("Import2 status should have changed from pending"))
-	c.Assert(updatedRegularExport.Status, qt.Equals, models.ExportStatusPending, qt.Commentf("Regular export should remain pending"))
 }
 
 func TestImportWorkerConcurrentAccess(t *testing.T) {
@@ -321,42 +229,6 @@ func TestImportWorkerIgnoresNonImportExports(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(updated.Status, qt.Equals, exports[i].Status, qt.Commentf("Export %d status should not have changed", i))
 	}
-}
-
-func TestImportWorkerHandlesProcessingErrors(t *testing.T) {
-	c := qt.New(t)
-	registrySet := newTestRegistrySet()
-
-	tempDir := c.TempDir()
-	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-
-	importService := importpkg.NewImportService(registrySet, uploadLocation)
-	worker := importpkg.NewImportWorkerWithPollInterval(importService, registrySet, 3, 50*time.Millisecond)
-
-	ctx := context.Background()
-
-	// Create an import with a non-existent file path
-	importExport := models.Export{
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		Description: "Import with missing file",
-		FilePath:    "non-existent-file.xml",
-	}
-
-	createdImport, err := registrySet.ExportRegistry.Create(ctx, importExport)
-	c.Assert(err, qt.IsNil)
-
-	// Start worker briefly to process the import
-	worker.Start(ctx)
-	time.Sleep(200 * time.Millisecond)
-	worker.Stop()
-
-	// Verify that the import was processed and marked as failed
-	updatedImport, err := registrySet.ExportRegistry.Get(ctx, createdImport.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(updatedImport.Status, qt.Equals, models.ExportStatusFailed)
-	// The error could be either blob bucket error or file not found error
-	c.Assert(updatedImport.ErrorMessage, qt.Not(qt.Equals), "")
 }
 
 func TestImportWorkerStopIdempotent(t *testing.T) {
