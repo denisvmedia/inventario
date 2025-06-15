@@ -4,9 +4,9 @@
 :root {
   /* ProgressSpinner variables */
   --p-progressspinner-color-1: #{$primary-color};
-  --p-progressspinner-color-2: #{lighten($primary-color, 20%)};
-  --p-progressspinner-color-3: #{lighten($primary-color, 40%)};
-  --p-progressspinner-color-4: #{lighten($primary-color, 60%)};
+  --p-progressspinner-color-2: #{color.adjust($primary-color, $lightness: 20%)};
+  --p-progressspinner-color-3: #{color.adjust($primary-color, $lightness: 40%)};
+  --p-progressspinner-color-4: #{color.adjust($primary-color, $lightness: 60%)};
   --p-progressspinner-size: 2rem;
   --p-progressspinner-animation-duration: 2s;
 }
@@ -38,6 +38,7 @@
   0% {
     transform: rotate(0deg);
   }
+
   100% {
     transform: rotate(360deg);
   }
@@ -114,11 +115,8 @@
 /* Overlay spinner */
 .overlay-spinner {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.8);
+  inset: 0;
+  background: rgb(255 255 255 / 80%);
   display: flex;
   align-items: center;
   justify-content: center;

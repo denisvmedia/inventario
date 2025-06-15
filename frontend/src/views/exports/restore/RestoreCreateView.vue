@@ -469,6 +469,12 @@ h1 {
   color: $text-color;
 }
 
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
 .form-group input,
 .form-group select,
 .form-group textarea {
@@ -488,12 +494,6 @@ h1 {
   &.is-invalid {
     border-color: $error-color;
   }
-}
-
-.form-group textarea {
-  resize: vertical;
-  min-height: 80px;
-  font-family: inherit;
 }
 
 .form-help {

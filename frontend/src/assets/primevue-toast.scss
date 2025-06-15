@@ -10,7 +10,7 @@
 }
 
 .p-toast .p-toast-message {
-  margin: 0 0 1rem 0;
+  margin: 0 0 1rem;
   border-radius: $default-radius;
   box-shadow: $box-shadow;
   background: white;
@@ -36,7 +36,7 @@
 
 .p-toast .p-toast-message .p-toast-summary {
   font-weight: 600;
-  margin: 0 0 0.25rem 0;
+  margin: 0 0 0.25rem;
 }
 
 .p-toast .p-toast-message .p-toast-detail {
@@ -70,9 +70,9 @@
 
 /* Success Toast */
 .p-toast .p-toast-message.p-toast-message-success {
-  background: lighten($primary-color, 45%);
+  background: color.adjust($primary-color, $lightness: 45%);
   border-color: $primary-color;
-  color: darken($primary-color, 30%);
+  color: color.adjust($primary-color, $lightness: -30%);
 }
 
 .p-toast .p-toast-message.p-toast-message-success .p-toast-message-icon {
@@ -80,7 +80,7 @@
 }
 
 .p-toast .p-toast-message.p-toast-message-success .p-toast-close-button {
-  color: darken($primary-color, 30%);
+  color: color.adjust($primary-color, $lightness: -30%);
 }
 
 /* Info Toast */
@@ -115,9 +115,9 @@
 
 /* Error Toast */
 .p-toast .p-toast-message.p-toast-message-error {
-  background: lighten($danger-color, 40%);
+  background: color.adjust($danger-color, $lightness: 40%);
   border-color: $danger-color;
-  color: darken($danger-color, 20%);
+  color: color.adjust($danger-color, $lightness: -20%);
 }
 
 .p-toast .p-toast-message.p-toast-message-error .p-toast-message-icon {
@@ -125,7 +125,7 @@
 }
 
 .p-toast .p-toast-message.p-toast-message-error .p-toast-close-button {
-  color: darken($danger-color, 20%);
+  color: color.adjust($danger-color, $lightness: -20%);
 }
 
 /* Animation */
@@ -148,7 +148,7 @@
 }
 
 /* Mobile responsiveness */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .p-toast {
     width: calc(100vw - 2rem);
     left: 1rem;

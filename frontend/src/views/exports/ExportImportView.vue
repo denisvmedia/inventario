@@ -331,7 +331,7 @@ const handleSubmit = async () => {
   margin-bottom: 2rem;
   
   h1 {
-    margin: 0 0 0.5rem 0;
+    margin: 0 0 0.5rem;
     color: $text-color;
   }
 
@@ -378,7 +378,7 @@ const handleSubmit = async () => {
   border: 1px solid $error-color;
   
   h3 {
-    margin: 0 0 1rem 0;
+    margin: 0 0 1rem;
     font-size: 1.1rem;
   }
   
