@@ -1,13 +1,13 @@
 <template>
-  <div class="file-detail-view">
+  <div class="file-detail">
     <!-- Loading State -->
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading" class="loading">
       <div class="spinner"></div>
       <p>Loading file...</p>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error" class="error">
       <div class="error-icon">
         <font-awesome-icon icon="exclamation-triangle" />
       </div>
@@ -26,17 +26,18 @@
     </div>
 
     <!-- File Content -->
-    <div v-else-if="file" class="file-content">
+    <div v-else-if="file">
+      <!-- Breadcrumb Navigation -->
+      <div class="breadcrumb-nav">
+        <button class="breadcrumb-link" @click="goBack">
+          <font-awesome-icon icon="arrow-left" />
+          Back to Files
+        </button>
+      </div>
+
       <!-- Header -->
-      <div class="file-header">
-        <div class="header-nav">
-          <button class="btn btn-secondary" @click="goBack">
-            <font-awesome-icon icon="arrow-left" />
-            Back to Files
-          </button>
-        </div>
-        
-        <div class="header-info">
+      <div class="header">
+        <div class="header-title">
           <h1>{{ getDisplayTitle(file) }}</h1>
           <div class="file-meta">
             <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
@@ -44,7 +45,7 @@
             <span class="file-size" v-if="fileSize">{{ fileSize }}</span>
           </div>
         </div>
-        
+
         <div class="header-actions">
           <button class="btn btn-secondary" @click="downloadFile">
             <font-awesome-icon icon="download" />
@@ -62,7 +63,7 @@
       </div>
 
       <!-- File Preview -->
-      <div class="file-preview-section">
+      <div class="file-preview-card">
         <!-- Image Preview -->
         <div v-if="file.type === 'image'" class="image-preview">
           <img
@@ -95,16 +96,16 @@
       </div>
 
       <!-- File Information -->
-      <div class="file-info-section">
+      <div class="file-info">
         <div class="info-grid">
           <div class="info-card">
-            <h3>Description</h3>
+            <h2>Description</h2>
             <p v-if="file.description">{{ file.description }}</p>
             <p v-else class="no-description">No description provided</p>
           </div>
 
           <div class="info-card">
-            <h3>Tags</h3>
+            <h2>Tags</h2>
             <div v-if="file.tags && file.tags.length > 0" class="tags-list">
               <span v-for="tag in file.tags" :key="tag" class="tag">
                 {{ tag }}
@@ -114,7 +115,7 @@
           </div>
 
           <div class="info-card">
-            <h3>File Details</h3>
+            <h2>File Details</h2>
             <div class="file-details">
               <div class="detail-row">
                 <span class="label">Original Name:</span>
@@ -292,71 +293,64 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/variables' as *;
+@use '@/assets/main' as *;
 
-.file-detail-view {
-  padding: 2rem;
-  max-width: 1200px;
+.file-detail {
+  max-width: $container-max-width;
   margin: 0 auto;
+  padding: 20px;
 }
 
-.file-header {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 2rem;
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: $secondary-color;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid $border-color;
+  gap: 0.5rem;
+  transition: color 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
+}
+
+// Header styles are now in shared _header.scss
+
+.file-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
 
   @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-    text-align: center;
+    justify-content: center;
   }
 
-  .header-info {
-    h1 {
-      margin: 0 0 0.5rem 0;
-      color: $text-color;
-    }
-    
-    .file-meta {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-
-      @media (max-width: 768px) {
-        justify-content: center;
-      }
-
-      span {
-        font-size: 0.875rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        background: $light-bg-color;
-        color: $text-secondary-color;
-        border: 1px solid $border-color;
-      }
-    }
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 0.5rem;
-
-    @media (max-width: 768px) {
-      justify-content: center;
-    }
+  span {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background: $light-bg-color;
+    color: $text-secondary-color;
+    border: 1px solid $border-color;
   }
 }
 
-.file-preview-section {
-  background: $light-bg-color;
-  border-radius: 8px;
+.file-preview-card {
+  background: white;
+  border-radius: $default-radius;
   padding: 2rem;
   margin-bottom: 2rem;
-  border: 1px solid $border-color;
+  box-shadow: $box-shadow;
 
   .image-preview {
     text-align: center;
@@ -364,7 +358,7 @@ onMounted(() => {
     .preview-image {
       max-width: 100%;
       max-height: 600px;
-      border-radius: 8px;
+      border-radius: $default-radius;
       box-shadow: $box-shadow;
     }
   }
@@ -390,21 +384,27 @@ onMounted(() => {
   }
 }
 
-.file-info-section {
+.file-info {
   .info-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: 1fr;
     gap: 1.5rem;
-  }
-  
-  .info-card {
-    background: $light-bg-color;
-    border-radius: 8px;
-    padding: 1.5rem;
-    border: 1px solid $border-color;
 
-    h3 {
+    @media (width >= 768px) {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .info-card {
+    background: white;
+    border-radius: $default-radius;
+    padding: 1.5rem;
+    box-shadow: $box-shadow;
+
+    h2 {
       margin: 0 0 1rem 0;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #eee;
       color: $text-color;
       font-size: 1.125rem;
     }
@@ -458,11 +458,9 @@ onMounted(() => {
   }
 }
 
-.loading-state,
-.error-state {
-  text-align: center;
-  padding: 3rem 1rem;
-
+// Loading and error states use shared styles from _components.scss
+.loading,
+.error {
   .spinner {
     width: 40px;
     height: 40px;
@@ -477,16 +475,6 @@ onMounted(() => {
     font-size: 4rem;
     color: $error-color;
     margin-bottom: 1rem;
-  }
-
-  h3 {
-    margin: 0 0 1rem 0;
-    color: $text-color;
-  }
-
-  p {
-    margin: 0 0 1.5rem 0;
-    color: $text-secondary-color;
   }
 
   .error-actions {
@@ -510,7 +498,7 @@ onMounted(() => {
 
   .modal-content {
     background: white;
-    border-radius: 8px;
+    border-radius: $default-radius;
     width: 90%;
     max-width: 500px;
     box-shadow: $box-shadow;

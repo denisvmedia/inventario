@@ -1,9 +1,11 @@
 <template>
-  <div class="file-list-view">
-    <div class="page-header">
-      <div class="header-content">
+  <div class="file-list">
+    <div class="header">
+      <div class="header-title">
         <h1>Files</h1>
-        <p class="page-description">Manage your standalone files</p>
+        <div v-if="!loading && files.length > 0" class="item-count">
+          {{ totalFiles }} file{{ totalFiles !== 1 ? 's' : '' }}
+        </div>
       </div>
       <div class="header-actions">
         <router-link to="/files/create" class="btn btn-primary">
@@ -14,7 +16,7 @@
     </div>
 
     <!-- Filters -->
-    <div class="filters-section">
+    <div class="filters-card">
       <div class="filters-row">
         <div class="filter-group">
           <label for="search">Search</label>
@@ -27,7 +29,7 @@
             @input="debouncedSearch"
           />
         </div>
-        
+
         <div class="filter-group">
           <label for="type">Type</label>
           <select id="type" v-model="filters.type" class="form-control" @change="loadFiles">
@@ -60,13 +62,13 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading" class="loading">
       <div class="spinner"></div>
       <p>Loading files...</p>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error" class="error">
       <div class="error-icon">
         <FontAwesomeIcon icon="exclamation-circle" />
       </div>
@@ -79,14 +81,13 @@
     </div>
 
     <!-- Files Grid -->
-    <div v-else-if="files.length > 0" class="files-section">
-      <div class="files-grid">
-        <div
-          v-for="file in files"
-          :key="file.id"
-          class="file-card"
-          @click="viewFile(file)"
-        >
+    <div v-else-if="files.length > 0" class="files-grid">
+      <div
+        v-for="file in files"
+        :key="file.id"
+        class="file-card"
+        @click="viewFile(file)"
+      >
           <div class="file-preview">
             <img
               v-if="file.type === 'image'"
@@ -159,7 +160,7 @@
             <font-awesome-icon icon="chevron-left" />
             Previous
           </button>
-          
+
           <div class="page-numbers">
             <button
               v-for="page in visiblePages"
@@ -171,7 +172,7 @@
               {{ page }}
             </button>
           </div>
-          
+
           <button
             class="btn btn-secondary"
             :disabled="currentPage >= totalPages"
@@ -185,17 +186,21 @@
     </div>
 
     <!-- Empty State -->
-    <div v-else class="empty-state">
-      <div class="empty-icon">
-        <font-awesome-icon icon="file" size="4x" />
+    <div v-else class="empty">
+      <div class="empty-message">
+        <div class="empty-icon">
+          <font-awesome-icon icon="file" size="4x" />
+        </div>
+        <h3>No Files Found</h3>
+        <p v-if="hasActiveFilters">No files match your current filters. Try adjusting your search criteria.</p>
+        <p v-else>You haven't uploaded any files yet. Upload your first file to get started.</p>
+        <div class="action-button">
+          <router-link to="/files/create" class="btn btn-primary">
+            <font-awesome-icon icon="plus" />
+            Upload File
+          </router-link>
+        </div>
       </div>
-      <h3>No Files Found</h3>
-      <p v-if="hasActiveFilters">No files match your current filters. Try adjusting your search criteria.</p>
-      <p v-else>You haven't uploaded any files yet. Upload your first file to get started.</p>
-      <router-link to="/files/create" class="btn btn-primary">
-        <font-awesome-icon icon="plus" />
-        Upload File
-      </router-link>
     </div>
 
     <!-- Delete Confirmation Modal -->
@@ -394,38 +399,22 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/variables' as *;
+@use '@/assets/main' as *;
 
-.file-list-view {
-  padding: 2rem;
-  max-width: 1200px;
+.file-list {
+  max-width: $container-max-width;
   margin: 0 auto;
+  padding: 20px;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
+// Header styles are now in shared _header.scss
 
-  .header-content {
-    h1 {
-      margin: 0 0 0.5rem 0;
-      color: $text-color;
-    }
-
-    .page-description {
-      margin: 0;
-      color: $text-secondary-color;
-    }
-  }
-}
-
-.filters-section {
-  background: $light-bg-color;
-  border-radius: 8px;
+.filters-card {
+  background: white;
+  border-radius: $default-radius;
   padding: 1.5rem;
   margin-bottom: 2rem;
+  box-shadow: $box-shadow;
 
   .filters-row {
     display: grid;
@@ -452,26 +441,26 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.5rem;
-  margin-bottom: 2rem;
 }
 
 .file-card {
-  background: $light-bg-color;
-  border-radius: 8px;
+  background: white;
+  border-radius: $default-radius;
   overflow: hidden;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   position: relative;
   border: 1px solid $border-color;
+  box-shadow: $box-shadow;
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: $box-shadow;
+    box-shadow: 0 4px 8px rgb(0 0 0 / 10%);
   }
 
   .file-preview {
     height: 160px;
-    background: white;
+    background: $light-bg-color;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -487,7 +476,7 @@ onMounted(() => {
       color: $text-secondary-color;
     }
   }
-  
+
   .file-info {
     padding: 1rem;
 
@@ -520,12 +509,12 @@ onMounted(() => {
         font-size: 0.75rem;
         padding: 0.25rem 0.5rem;
         border-radius: 4px;
-        background: white;
+        background: $light-bg-color;
         color: $text-secondary-color;
         border: 1px solid $border-color;
       }
     }
-    
+
     .file-tags {
       display: flex;
       flex-wrap: wrap;
@@ -606,12 +595,10 @@ onMounted(() => {
   }
 }
 
-.loading-state,
-.error-state,
-.empty-state {
-  text-align: center;
-  padding: 3rem 1rem;
-
+// Loading, error, and empty states use shared styles from _components.scss
+.loading,
+.error,
+.empty {
   .spinner {
     width: 40px;
     height: 40px;
@@ -629,19 +616,25 @@ onMounted(() => {
     margin-bottom: 1rem;
   }
 
-  h3 {
-    margin: 0 0 1rem 0;
-    color: $text-color;
-  }
-
-  p {
-    margin: 0 0 1.5rem 0;
-    color: $text-secondary-color;
-  }
-
   .warning-text {
     color: $error-color;
   }
+}
+
+.empty-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+
+  p {
+    margin-bottom: 0;
+    font-size: 1.1rem;
+  }
+}
+
+.action-button {
+  margin-top: 0.5rem;
 }
 
 .modal-overlay {
@@ -658,7 +651,7 @@ onMounted(() => {
 
   .modal-content {
     background: white;
-    border-radius: 8px;
+    border-radius: $default-radius;
     width: 90%;
     max-width: 500px;
     box-shadow: $box-shadow;
