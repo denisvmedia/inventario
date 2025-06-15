@@ -13,6 +13,11 @@ var imageContentTypes = []string{
 	"image/webp",
 }
 
+var xmlContentTypes = []string{
+	"application/xml",
+	"text/xml",
+}
+
 var docContentTypes = append(append(
 	[]string(nil),
 	imageContentTypes...,
@@ -45,6 +50,12 @@ func ImageContentTypes() []string {
 func DocContentTypes() []string {
 	result := make([]string, len(docContentTypes))
 	copy(result, docContentTypes)
+	return result
+}
+
+func XMLContentTypes() []string {
+	result := make([]string, len(xmlContentTypes))
+	copy(result, xmlContentTypes)
 	return result
 }
 

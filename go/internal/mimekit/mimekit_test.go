@@ -50,6 +50,13 @@ func TestDocContentTypes(t *testing.T) {
 	c.Assert(mimekit.DocContentTypes(), qt.DeepEquals, expected)
 }
 
+func TestXMLContentTypes(t *testing.T) {
+	c := qt.New(t)
+
+	expected := []string{"application/xml", "text/xml"}
+	c.Assert(mimekit.XMLContentTypes(), qt.DeepEquals, expected)
+}
+
 func TestFormatContentDisposition(t *testing.T) {
 	testCases := []struct {
 		name     string

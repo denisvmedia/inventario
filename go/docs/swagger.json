@@ -1170,6 +1170,52 @@
                 }
             }
         },
+        "/exports/import": {
+            "post": {
+                "description": "Import an uploaded XML export file and create an export record",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Import XML export",
+                "parameters": [
+                    {
+                        "description": "Import request data",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ImportExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/exports/{id}": {
             "get": {
                 "description": "get export by ID",
@@ -1272,6 +1318,174 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/{id}/restores": {
+            "get": {
+                "description": "get restore operations for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "List export restore operations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new restore operation for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Create export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Restore operation data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/{id}/restores/{restoreId}": {
+            "get": {
+                "description": "get restore operation by ID for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Get export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restore Operation ID",
+                        "name": "restoreId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete a restore operation for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Delete export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restore Operation ID",
+                        "name": "restoreId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not found",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -1959,6 +2173,40 @@
                 }
             }
         },
+        "jsonapi.ImportExportAttributes": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "source_file_path": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.ImportExportRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ImportExportRequestData"
+                }
+            }
+        },
+        "jsonapi.ImportExportRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ImportExportAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "exports"
+                    ],
+                    "example": "exports"
+                }
+            }
+        },
         "jsonapi.InvoiceResponse": {
             "type": "object",
             "properties": {
@@ -2136,6 +2384,66 @@
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.ManualsMeta"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationCreateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.RestoreOperationCreateRequestData"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationCreateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.RestoreOperation"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "restores"
+                    ],
+                    "example": "restores"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.RestoreOperationResponseData"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.RestoreOperation"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "restores"
+                    ],
+                    "example": "restores"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.RestoreOperationResponseData"
+                    }
                 }
             }
         },
@@ -2348,6 +2656,9 @@
                 "image_count": {
                     "type": "integer"
                 },
+                "imported": {
+                    "type": "boolean"
+                },
                 "include_file_data": {
                     "type": "boolean"
                 },
@@ -2434,14 +2745,16 @@
                 "selected_items",
                 "locations",
                 "areas",
-                "commodities"
+                "commodities",
+                "imported"
             ],
             "x-enum-varnames": [
                 "ExportTypeFullDatabase",
                 "ExportTypeSelectedItems",
                 "ExportTypeLocations",
                 "ExportTypeAreas",
-                "ExportTypeCommodities"
+                "ExportTypeCommodities",
+                "ExportTypeImported"
             ]
         },
         "models.Image": {
@@ -2538,6 +2851,147 @@
                     "type": "string"
                 }
             }
+        },
+        "models.RestoreOperation": {
+            "type": "object",
+            "properties": {
+                "area_count": {
+                    "type": "integer"
+                },
+                "binary_data_size": {
+                    "type": "integer"
+                },
+                "commodity_count": {
+                    "type": "integer"
+                },
+                "completed_date": {
+                    "type": "string"
+                },
+                "created_date": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "error_count": {
+                    "type": "integer"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "export_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_count": {
+                    "type": "integer"
+                },
+                "invoice_count": {
+                    "type": "integer"
+                },
+                "location_count": {
+                    "description": "Statistics",
+                    "type": "integer"
+                },
+                "manual_count": {
+                    "type": "integer"
+                },
+                "options": {
+                    "$ref": "#/definitions/models.RestoreOptions"
+                },
+                "started_date": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.RestoreStatus"
+                },
+                "steps": {
+                    "description": "Related steps (not stored in DB, loaded separately)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.RestoreStep"
+                    }
+                }
+            }
+        },
+        "models.RestoreOptions": {
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "include_file_data": {
+                    "type": "boolean"
+                },
+                "strategy": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.RestoreStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "running",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "RestoreStatusPending",
+                "RestoreStatusRunning",
+                "RestoreStatusCompleted",
+                "RestoreStatusFailed"
+            ]
+        },
+        "models.RestoreStep": {
+            "type": "object",
+            "properties": {
+                "created_date": {
+                    "type": "string"
+                },
+                "duration": {
+                    "description": "Duration in milliseconds",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason for error or skip",
+                    "type": "string"
+                },
+                "restore_operation_id": {
+                    "type": "string"
+                },
+                "result": {
+                    "$ref": "#/definitions/models.RestoreStepResult"
+                },
+                "updated_date": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.RestoreStepResult": {
+            "type": "string",
+            "enum": [
+                "todo",
+                "in_progress",
+                "success",
+                "error",
+                "skipped"
+            ],
+            "x-enum-varnames": [
+                "RestoreStepResultTodo",
+                "RestoreStepResultInProgress",
+                "RestoreStepResultSuccess",
+                "RestoreStepResultError",
+                "RestoreStepResultSkipped"
+            ]
         },
         "models.SettingsObject": {
             "type": "object",

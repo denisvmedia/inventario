@@ -11,6 +11,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	"github.com/denisvmedia/inventario/backup/export"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -20,11 +21,11 @@ import (
 const exportCtxKey ctxValueKey = "export"
 
 func exportFromContext(ctx context.Context) *models.Export {
-	export, ok := ctx.Value(exportCtxKey).(*models.Export)
+	exp, ok := ctx.Value(exportCtxKey).(*models.Export)
 	if !ok {
 		return nil
 	}
-	return export
+	return exp
 }
 
 type exportsAPI struct {
@@ -65,7 +66,7 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// getExport gets an export by ID.
+// apiGetExport gets an export by ID.
 // @Summary Get an export
 // @Description get export by ID
 // @Tags exports
@@ -75,16 +76,14 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.ExportResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [get].
-//
-//nolint:revive // getExport is an HTTP handler, not a getter function
-func (api *exportsAPI) getExport(w http.ResponseWriter, r *http.Request) {
-	export := exportFromContext(r.Context())
-	if export == nil {
+func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
+	exp := exportFromContext(r.Context())
+	if exp == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	if err := render.Render(w, r, jsonapi.NewExportResponse(export)); err != nil {
+	if err := render.Render(w, r, jsonapi.NewExportResponse(exp)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -107,32 +106,16 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	export := *request.Data.Attributes
-
-	// Set status to pending if not set
-	if export.Status == "" {
-		export.Status = models.ExportStatusPending
-	}
-
-	// Set created date (we do not accept it from the client)
-	export.CreatedDate = models.PNow()
-
-	// Enrich selected items with names from the database
-	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
-		if err := api.enrichSelectedItemsWithNames(r.Context(), &export); err != nil {
-			internalServerError(w, r, err)
-			return
-		}
-	}
-
-	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), export)
+	svc := export.NewExportService(api.registrySet, api.uploadLocation)
+	// Create an export to be later processed by the export worker
+	createdExport, err := svc.CreateExportFromUserInput(r.Context(), request.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	if err := render.Render(w, r, jsonapi.NewExportResponse(createdExport)); err != nil {
+	if err := render.Render(w, r, jsonapi.NewExportResponse(&createdExport)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -149,13 +132,13 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [delete].
 func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
-	export := exportFromContext(r.Context())
-	if export == nil {
+	exp := exportFromContext(r.Context())
+	if exp == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	err := api.registrySet.ExportRegistry.Delete(r.Context(), export.ID)
+	err := api.registrySet.ExportRegistry.Delete(r.Context(), exp.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -175,32 +158,32 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id}/download [get].
 func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
-	export := exportFromContext(r.Context())
-	if export == nil {
+	exp := exportFromContext(r.Context())
+	if exp == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
 	// Check if export is deleted
-	if export.IsDeleted() {
+	if exp.IsDeleted() {
 		http.NotFound(w, r)
 		return
 	}
 
 	// Check if export is completed and has a file path
-	if export.Status != models.ExportStatusCompleted || export.FilePath == "" {
+	if exp.Status != models.ExportStatusCompleted || exp.FilePath == "" {
 		http.NotFound(w, r)
 		return
 	}
 
 	// Get file attributes to set Content-Length and other headers
-	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, export.FilePath)
+	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, exp.FilePath)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
-	file, err := api.getDownloadFile(r.Context(), export.FilePath)
+	file, err := api.getDownloadFile(r.Context(), exp.FilePath)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -208,9 +191,9 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// Generate filename based on export description and type
-	filename := path.Base(export.FilePath)
+	filename := path.Base(exp.FilePath)
 	if filename == "" {
-		filename = "export.xml"
+		filename = "exp.xml"
 	}
 
 	// Set headers to optimize streaming and prevent browser preloading
@@ -224,6 +207,42 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// importExport imports an XML export file and creates an export record
+// @Summary Import XML export
+// @Description Import an uploaded XML export file and create an export record
+// @Tags exports
+// @Accept json-api
+// @Produce json-api
+// @Param data body jsonapi.ImportExportRequest true "Import request data"
+// @Success 201 {object} jsonapi.ExportResponse "Created"
+// @Failure 400 {object} jsonapi.Errors "Bad Request"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Router /exports/import [post].
+func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
+	var data jsonapi.ImportExportRequest
+	if err := render.Bind(r, &data); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	// Create export record with pending status and source file path
+	importedExport := models.NewImportedExport(data.Data.Attributes.Description, data.Data.Attributes.SourceFilePath)
+
+	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), importedExport)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	// Import worker will pick up this pending import and process it in background
+	// Return immediately with the created export
+	w.WriteHeader(http.StatusCreated)
+	if err := render.Render(w, r, jsonapi.NewExportResponse(createdExport)); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
@@ -232,57 +251,6 @@ func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io
 	defer b.Close()
 
 	return b.NewReader(context.Background(), filePath, nil)
-}
-
-// enrichSelectedItemsWithNames fetches the names and relationships for selected items and adds them to the export
-func (api *exportsAPI) enrichSelectedItemsWithNames(ctx context.Context, export *models.Export) error {
-	for i, item := range export.SelectedItems {
-		var name string
-		var locationID, areaID string
-		var err error
-
-		switch item.Type {
-		case models.ExportSelectedItemTypeLocation:
-			location, getErr := api.registrySet.LocationRegistry.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Location " + item.ID + "]"
-			} else {
-				name = location.Name
-			}
-		case models.ExportSelectedItemTypeArea:
-			area, getErr := api.registrySet.AreaRegistry.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Area " + item.ID + "]"
-			} else {
-				name = area.Name
-				locationID = area.LocationID // Store the relationship
-			}
-		case models.ExportSelectedItemTypeCommodity:
-			commodity, getErr := api.registrySet.CommodityRegistry.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Commodity " + item.ID + "]"
-			} else {
-				name = commodity.Name
-				areaID = commodity.AreaID // Store the relationship
-			}
-		default:
-			name = "[Unknown Item " + item.ID + "]"
-		}
-
-		if err != nil {
-			return errkit.Wrap(err, "failed to fetch item name")
-		}
-
-		// Update the item with the name and relationships
-		export.SelectedItems[i].Name = name
-		export.SelectedItems[i].LocationID = locationID
-		export.SelectedItems[i].AreaID = areaID
-	}
-
-	return nil
 }
 
 func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
@@ -307,7 +275,7 @@ func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
 }
 
 // Exports sets up the exports API routes.
-func Exports(params Params) func(r chi.Router) {
+func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Router) {
 	api := &exportsAPI{
 		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
@@ -316,12 +284,14 @@ func Exports(params Params) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Get("/", api.listExports)
 		r.Post("/", api.createExport)
+		r.Post("/import", api.importExport)
 
 		r.Route("/{id}", func(r chi.Router) {
 			r.Use(exportCtx(params.RegistrySet))
-			r.Get("/", api.getExport)
+			r.Get("/", api.apiGetExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
+			r.Route("/restores", ExportRestores(params, restoreWorker))
 		})
 	}
 }

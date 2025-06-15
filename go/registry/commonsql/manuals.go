@@ -46,8 +46,10 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 		return nil, errkit.Wrap(err, "failed to get commodity")
 	}
 
-	// Generate a new ID
-	manual.SetID(generateID())
+	// Generate a new ID if one is not already provided
+	if manual.GetID() == "" {
+		manual.SetID(generateID())
+	}
 
 	err = InsertEntity(ctx, tx, r.tableNames.Manuals(), manual)
 	if err != nil {

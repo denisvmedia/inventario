@@ -15,8 +15,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/backup/export"
+	importpkg "github.com/denisvmedia/inventario/backup/import"
+	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/export"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
@@ -85,6 +87,7 @@ const (
 	uploadLocationFlag       = "upload-location"
 	dbDSNFlag                = "db-dsn"
 	maxConcurrentExportsFlag = "max-concurrent-exports"
+	maxConcurrentImportsFlag = "max-concurrent-imports"
 )
 
 func getFileURL(path string) string {
@@ -115,6 +118,11 @@ var runFlags = map[string]cobraflags.Flag{
 		Name:  maxConcurrentExportsFlag,
 		Value: 3,
 		Usage: "Maximum number of concurrent export processes",
+	},
+	maxConcurrentImportsFlag: &cobraflags.IntFlag{
+		Name:  maxConcurrentImportsFlag,
+		Value: 3,
+		Usage: "Maximum number of concurrent import processes",
 	},
 }
 
@@ -162,18 +170,30 @@ func runCommand(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Start export worker
 	maxConcurrentExports := runFlags[maxConcurrentExportsFlag].GetInt()
 	exportService := export.NewExportService(registrySet, params.UploadLocation)
 	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	exportWorker.Start(ctx)
 	defer exportWorker.Stop()
 
-	errCh := srv.Run(bindAddr, apiserver.APIServer(params))
+	// Start restore worker
+	restoreService := restore.NewRestoreService(registrySet, params.UploadLocation)
+	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, params.UploadLocation)
+	restoreWorker.Start(ctx)
+	defer restoreWorker.Stop()
+
+	// Start import worker
+	maxConcurrentImports := runFlags[maxConcurrentImportsFlag].GetInt()
+	importService := importpkg.NewImportService(registrySet, params.UploadLocation)
+	importWorker := importpkg.NewImportWorker(importService, registrySet, maxConcurrentImports)
+	importWorker.Start(ctx)
+	defer importWorker.Stop()
+
+	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)
 	c := make(chan os.Signal, 1)
