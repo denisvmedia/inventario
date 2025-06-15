@@ -1,115 +1,125 @@
 <template>
   <div class="file-create-view">
-    <div class="page-header">
-      <div class="header-nav">
-        <button class="btn btn-secondary" @click="goBack">
-          <FontAwesomeIcon icon="arrow-left" />
-          Back to Files
-        </button>
-      </div>
-      
-      <div class="header-content">
+    <!-- Breadcrumb Navigation -->
+    <div class="breadcrumb-nav">
+      <button class="breadcrumb-link" @click="goBack">
+        <FontAwesomeIcon icon="arrow-left" />
+        Back to Files
+      </button>
+    </div>
+
+    <!-- Page Header -->
+    <div class="header">
+      <div class="header-title">
         <h1>Upload Files</h1>
         <p class="page-description">Upload files - you can edit metadata after upload</p>
       </div>
     </div>
 
-    <div class="upload-form">
-      <!-- File Upload Section -->
-      <div class="upload-section">
-        <h2>Select File</h2>
-        
-        <div class="file-uploader">
-          <div
-            class="upload-area"
-            :class="{ 'drag-over': isDragOver, 'has-file': selectedFile }"
-            @dragover.prevent="onDragOver"
-            @dragleave.prevent="onDragLeave"
-            @drop.prevent="onDrop"
-            @click="triggerFileInput"
-          >
-            <input
-              ref="fileInput"
-              type="file"
-              class="file-input"
-              @change="onFileSelected"
-            />
-            
-            <div v-if="!selectedFile" class="upload-content">
-              <div class="upload-icon">
-                <FontAwesomeIcon icon="cloud-upload-alt" />
-              </div>
-              <p class="upload-text">
-                <span class="upload-prompt">Drag and drop a file here</span>
-                <span class="upload-or">or</span>
-                <span class="browse-button">click to browse</span>
-              </p>
-              <p class="upload-hint">Supports images, documents, videos, audio files, and archives</p>
-            </div>
-            
-            <div v-else class="selected-file">
-              <div class="file-preview">
-                <img
-                  v-if="filePreview && detectedType === 'image'"
-                  :src="filePreview"
-                  :alt="selectedFile.name"
-                  class="file-thumbnail"
-                />
-                <div v-else class="file-icon">
-                  <FontAwesomeIcon :icon="getFileIcon(selectedFile)" />
+    <!-- Upload Content -->
+    <div class="upload-content">
+      <!-- File Upload Card -->
+      <div class="upload-card">
+        <div class="card-header">
+          <h2>Select File</h2>
+        </div>
+        <div class="card-body">
+          <div class="file-uploader">
+            <div
+              class="upload-area"
+              :class="{ 'drag-over': isDragOver, 'has-file': selectedFile }"
+              @dragover.prevent="onDragOver"
+              @dragleave.prevent="onDragLeave"
+              @drop.prevent="onDrop"
+              @click="triggerFileInput"
+            >
+              <input
+                ref="fileInput"
+                type="file"
+                class="file-input"
+                @change="onFileSelected"
+              />
+
+              <div v-if="!selectedFile" class="upload-content-inner">
+                <div class="upload-icon">
+                  <FontAwesomeIcon icon="cloud-upload-alt" />
                 </div>
+                <p class="upload-text">
+                  <span class="upload-prompt">Drag and drop a file here</span>
+                  <span class="upload-or">or</span>
+                  <span class="browse-button">click to browse</span>
+                </p>
+                <p class="upload-hint">Supports images, documents, videos, audio files, and archives</p>
               </div>
 
-              <div class="file-info">
-                <h3>{{ selectedFile.name }}</h3>
-                <p>{{ formatFileSize(selectedFile.size) }} • {{ selectedFile.type || 'Unknown type' }}</p>
+              <div v-else class="selected-file">
+                <div class="file-preview">
+                  <img
+                    v-if="filePreview && detectedType === 'image'"
+                    :src="filePreview"
+                    :alt="selectedFile.name"
+                    class="file-thumbnail"
+                  />
+                  <div v-else class="file-icon">
+                    <FontAwesomeIcon :icon="getFileIcon(selectedFile)" />
+                  </div>
+                </div>
+
+                <div class="file-info">
+                  <h3>{{ selectedFile.name }}</h3>
+                  <p>{{ formatFileSize(selectedFile.size) }} • {{ selectedFile.type || 'Unknown type' }}</p>
+                </div>
+
+                <button class="btn-remove" @click.stop="removeFile" title="Remove file">
+                  <FontAwesomeIcon icon="times" />
+                </button>
               </div>
-              
-              <button class="btn-remove" @click.stop="removeFile" title="Remove file">
-                <FontAwesomeIcon icon="times" />
-              </button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Upload Actions -->
-      <div v-if="selectedFile" class="upload-actions">
-        <p class="upload-info">
-          File will be uploaded with auto-detected metadata. You can edit the details after upload.
-        </p>
-        <div class="action-buttons">
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="uploading"
-            @click="uploadFile"
-          >
-            <FontAwesomeIcon v-if="uploading" icon="spinner" spin />
-            <FontAwesomeIcon v-else icon="upload" />
-            {{ uploading ? 'Uploading...' : 'Upload File' }}
-          </button>
-          <button type="button" class="btn btn-secondary" @click="goBack" :disabled="uploading">
-            Cancel
-          </button>
+      <!-- Upload Actions Card -->
+      <div v-if="selectedFile" class="upload-actions-card">
+        <div class="card-body">
+          <p class="upload-info">
+            File will be uploaded with auto-detected metadata. You can edit the details after upload.
+          </p>
+          <div class="action-buttons">
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="uploading"
+              @click="uploadFile"
+            >
+              <FontAwesomeIcon v-if="uploading" icon="spinner" spin />
+              <FontAwesomeIcon v-else icon="upload" />
+              {{ uploading ? 'Uploading...' : 'Upload File' }}
+            </button>
+            <button type="button" class="btn btn-secondary" @click="goBack" :disabled="uploading">
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Error Display -->
-    <div v-if="error" class="error-section">
-      <div class="error-card">
-        <div class="error-icon">
-          <FontAwesomeIcon icon="exclamation-circle" />
+      <!-- Error Display Card -->
+      <div v-if="error" class="error-card">
+        <div class="card-body">
+          <div class="error-content">
+            <div class="error-icon">
+              <FontAwesomeIcon icon="exclamation-circle" />
+            </div>
+            <div class="error-text">
+              <h3>Upload Failed</h3>
+              <p>{{ error }}</p>
+            </div>
+            <button class="btn btn-secondary" @click="clearError">
+              <FontAwesomeIcon icon="times" />
+              Dismiss
+            </button>
+          </div>
         </div>
-        <div class="error-content">
-          <h3>Upload Failed</h3>
-          <p>{{ error }}</p>
-        </div>
-        <button class="btn btn-secondary" @click="clearError">
-          <FontAwesomeIcon icon="times" />
-          Dismiss
-        </button>
       </div>
     </div>
   </div>
@@ -134,6 +144,19 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 // File type options (for display purposes)
 const fileTypeOptions = fileService.getFileTypeOptions()
+
+// Computed
+const detectedType = computed(() => {
+  if (!selectedFile.value) return null
+  const type = selectedFile.value.type
+  if (type.startsWith('image/')) return 'image'
+  if (type.startsWith('video/')) return 'video'
+  if (type.startsWith('audio/')) return 'audio'
+  if (type === 'application/pdf') return 'pdf'
+  if (type.includes('document') || type.includes('text')) return 'document'
+  if (type.includes('zip') || type.includes('archive')) return 'archive'
+  return 'file'
+})
 
 // Methods
 const triggerFileInput = () => {
@@ -252,25 +275,50 @@ const goBack = () => {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/variables' as *;
+@use '@/assets/main' as *;
 
 .file-create-view {
-  padding: 2rem;
   max-width: 800px;
   margin: 0 auto;
+  padding: 20px;
 }
 
-.page-header {
-  margin-bottom: 2rem;
-  
-  .header-nav {
-    margin-bottom: 1rem;
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: $secondary-color;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
   }
-  
-  .header-content {
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+
+  .header-title {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+
     h1 {
-      margin: 0 0 0.5rem 0;
-      color: $text-color;
+      margin: 0 0 5px;
+      font-size: 2rem;
     }
 
     .page-description {
@@ -280,41 +328,41 @@ const goBack = () => {
   }
 }
 
-.upload-form {
-  .upload-section {
-    background: $light-bg-color;
-    border-radius: 8px;
-    padding: 2rem;
-    margin-bottom: 2rem;
-    border: 1px solid $border-color;
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
 
-    h2 {
-      margin: 0 0 1.5rem 0;
-      color: $text-color;
-      font-size: 1.25rem;
-    }
+.upload-card,
+.upload-actions-card,
+.error-card {
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+  overflow: hidden;
+}
+
+.error-card {
+  border-left: 4px solid $error-color;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background-color: $light-bg-color;
+  border-bottom: 1px solid $border-color;
+
+  h2 {
+    margin: 0;
+    font-size: 1.25rem;
   }
+}
 
-  .upload-actions {
-    background: $light-bg-color;
-    border-radius: 8px;
-    padding: 2rem;
-    margin-bottom: 2rem;
-    border: 1px solid $border-color;
-    text-align: center;
-
-    .upload-info {
-      margin: 0 0 1.5rem 0;
-      color: $text-secondary-color;
-      font-size: 0.875rem;
-    }
-
-    .action-buttons {
-      display: flex;
-      gap: 1rem;
-      justify-content: center;
-    }
-  }
+.card-body {
+  padding: 20px;
 }
 
 .file-uploader {
@@ -325,7 +373,8 @@ const goBack = () => {
     text-align: center;
     cursor: pointer;
     transition: all 0.2s;
-    
+    background-color: $light-bg-color;
+
     &:hover,
     &.drag-over {
       border-color: $primary-color;
@@ -335,19 +384,22 @@ const goBack = () => {
     &.has-file {
       border-style: solid;
       padding: 1.5rem;
+      cursor: pointer;
     }
 
     .file-input {
       display: none;
     }
 
-    .upload-content {
+    .upload-content-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+
       .upload-icon {
-        i {
-          font-size: 3rem;
-          color: $text-secondary-color;
-          margin-bottom: 1rem;
-        }
+        font-size: 3rem;
+        color: $text-secondary-color;
+        margin-bottom: 1rem;
       }
 
       .upload-text {
@@ -377,13 +429,13 @@ const goBack = () => {
         color: $text-secondary-color;
       }
     }
-    
+
     .selected-file {
       display: flex;
       align-items: center;
       gap: 1rem;
       text-align: left;
-      
+
       .file-preview {
         width: 60px;
         height: 60px;
@@ -402,10 +454,12 @@ const goBack = () => {
         }
 
         .file-icon {
-          i {
-            font-size: 2rem;
-            color: $text-secondary-color;
-          }
+          font-size: 2rem;
+          color: $text-secondary-color;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
       }
 
@@ -445,129 +499,73 @@ const goBack = () => {
   }
 }
 
-.metadata-form {
-  .form-group {
-    margin-bottom: 1.5rem;
-    
-    label {
-      display: block;
-      margin-bottom: 0.5rem;
-      font-weight: 500;
-      color: $text-color;
+.upload-actions-card {
+  text-align: center;
 
-      &.required::after {
-        content: ' *';
-        color: $error-color;
-      }
-    }
+  .upload-info {
+    margin: 0 0 1.5rem 0;
+    color: $text-secondary-color;
+    font-size: 0.875rem;
+  }
 
-    .form-control {
-      width: 100%;
-      padding: 0.75rem;
-      border: 1px solid $border-color;
-      border-radius: 4px;
-      background: white;
-      color: $text-color;
+  .action-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+  }
+}
 
-      &:focus {
-        outline: none;
-        border-color: $primary-color;
-      }
+.error-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 
-      &.error {
-        border-color: $error-color;
-      }
-    }
+  .error-icon {
+    font-size: 1.5rem;
+    color: $error-color;
+  }
 
-    .form-help {
-      margin-top: 0.25rem;
-      font-size: 0.875rem;
-      color: $text-secondary-color;
-    }
+  .error-text {
+    flex: 1;
 
-    .error-message {
-      margin-top: 0.25rem;
-      font-size: 0.875rem;
+    h3 {
+      margin: 0 0 0.25rem 0;
       color: $error-color;
-    }
-    
-    .tags-preview {
-      margin-top: 0.75rem;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      
-      .tag {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-        font-size: 0.875rem;
-        padding: 0.25rem 0.75rem;
-        border-radius: 12px;
-        background: $primary-color;
-        color: white;
-        
-        .tag-remove {
-          background: none;
-          border: none;
-          color: white;
-          cursor: pointer;
-          font-size: 1rem;
-          line-height: 1;
-          
-          &:hover {
-            opacity: 0.7;
-          }
-        }
-      }
-    }
-  }
-  
-  .form-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-end;
-    margin-top: 2rem;
-    padding-top: 1rem;
-    border-top: 1px solid $border-color;
-  }
-}
-
-.error-section {
-  .error-card {
-    background: $light-bg-color;
-    border: 1px solid $error-color;
-    border-radius: 8px;
-    padding: 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-
-    .error-icon {
-      i {
-        font-size: 1.5rem;
-        color: $error-color;
-      }
+      font-size: 1rem;
     }
 
-    .error-content {
-      flex: 1;
-
-      h3 {
-        margin: 0 0 0.25rem 0;
-        color: $error-color;
-        font-size: 1rem;
-      }
-
-      p {
-        margin: 0;
-        color: $text-color;
-      }
+    p {
+      margin: 0;
+      color: $text-color;
     }
   }
 }
 
-// Font Awesome spin animation is handled by the spin prop
+// Loading and error states use shared styles from _components.scss
+.loading,
+.error {
+  text-align: center;
+  padding: 2rem;
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid $light-bg-color;
+    border-top: 4px solid $primary-color;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+  }
+
+  .error-icon {
+    font-size: 4rem;
+    color: $error-color;
+    margin-bottom: 1rem;
+  }
+}
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
