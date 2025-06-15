@@ -61,7 +61,7 @@ func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.
 // @Param id path string true "Export ID"
 // @Param restoreId path string true "Restore Operation ID"
 // @Success 200 {object} jsonapi.RestoreOperationResponse "OK"
-// @Failure 404 {object} jsonapi.ErrorResponse "Not Found"
+// @Failure 404 {object} jsonapi.Errors "Not found"
 // @Router /exports/{id}/restores/{restoreId} [get].
 func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http.Request) {
 	exportID := chi.URLParam(r, "id")
@@ -124,8 +124,8 @@ func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http
 // @Param id path string true "Export ID"
 // @Param request body jsonapi.RestoreOperationCreateRequest true "Restore operation data"
 // @Success 201 {object} jsonapi.RestoreOperationResponse "Created"
-// @Failure 400 {object} jsonapi.ErrorResponse "Bad Request"
-// @Failure 404 {object} jsonapi.ErrorResponse "Not Found"
+// @Failure 400 {object} jsonapi.Errors "Bad request"
+// @Failure 404 {object} jsonapi.Errors "Not found"
 // @Router /exports/{id}/restores [post].
 func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http.Request) {
 	exportID := chi.URLParam(r, "id")
@@ -192,7 +192,7 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 // @Param id path string true "Export ID"
 // @Param restoreId path string true "Restore Operation ID"
 // @Success 204 "No Content"
-// @Failure 404 {object} jsonapi.ErrorResponse "Not Found"
+// @Failure 404 {object} jsonapi.Errors "Not found"
 // @Router /exports/{id}/restores/{restoreId} [delete].
 func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http.Request) {
 	exportID := chi.URLParam(r, "id")

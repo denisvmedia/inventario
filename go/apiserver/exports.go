@@ -215,8 +215,8 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 // @Produce json-api
 // @Param data body jsonapi.ImportExportRequest true "Import request data"
 // @Success 201 {object} jsonapi.ExportResponse "Created"
-// @Failure 400 {object} jsonapi.ErrorResponse "Bad Request"
-// @Failure 422 {object} jsonapi.ErrorResponse "Unprocessable Entity"
+// @Failure 400 {object} jsonapi.Errors "Bad Request"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Router /exports/import [post].
 func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	var data jsonapi.ImportExportRequest
