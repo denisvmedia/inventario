@@ -12,7 +12,6 @@
     <div class="header">
       <div class="header-title">
         <h1>Upload Files</h1>
-        <p class="page-description">Upload files - you can edit metadata after upload</p>
       </div>
     </div>
 
@@ -24,6 +23,9 @@
           <h2>Select File</h2>
         </div>
         <div class="card-body">
+          <p class="form-description">
+            File will be uploaded with auto-detected metadata. You can edit the details after upload.
+          </p>
           <div class="file-uploader">
             <div
               class="upload-area"
@@ -82,9 +84,6 @@
       <!-- Upload Actions Card -->
       <div v-if="selectedFile" class="upload-actions-card">
         <div class="card-body">
-          <p class="upload-info">
-            File will be uploaded with auto-detected metadata. You can edit the details after upload.
-          </p>
           <div class="action-buttons">
             <button
               type="button"
@@ -222,11 +221,11 @@ const getFileIcon = (file: File): string => {
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes'
-  
+
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
@@ -320,11 +319,6 @@ const goBack = () => {
       margin: 0 0 5px;
       font-size: 2rem;
     }
-
-    .page-description {
-      margin: 0;
-      color: $text-secondary-color;
-    }
   }
 }
 
@@ -363,6 +357,17 @@ const goBack = () => {
 
 .card-body {
   padding: 20px;
+}
+
+.form-description {
+  margin: 0 0 1.5rem;
+  color: $text-secondary-color;
+  font-size: 1rem;
+  line-height: 1.5;
+  padding: 1rem;
+  background-color: rgba($primary-color, 0.05);
+  border-left: 4px solid $primary-color;
+  border-radius: $default-radius;
 }
 
 .file-uploader {

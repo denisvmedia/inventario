@@ -144,7 +144,6 @@
             </button>
           </div>
         </div>
-      </div>
 
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="pagination-section">
