@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"path"
@@ -255,7 +256,7 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if hasRunningImports {
-		conflictError(w, r, errkit.WithMessage(nil, "An import operation is already in progress. Please wait for it to complete before starting a new import."))
+		conflictError(w, r, errors.New("An import operation is already in progress. Please wait for it to complete before starting a new import."))
 		return
 	}
 
@@ -266,13 +267,7 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create export record with pending status and source file path
-	export := models.Export{
-		Description: data.Data.Attributes.Description,
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		CreatedDate: models.PNow(),
-		FilePath:    data.Data.Attributes.SourceFilePath, // Store source file path for worker to process
-	}
+	export := models.NewImportedExport(data.Data.Attributes.Description, data.Data.Attributes.SourceFilePath)
 
 	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), export)
 	if err != nil {

@@ -160,6 +160,16 @@ type Export struct {
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size"`
 }
 
+func NewImportedExport(description, sourceFilePath string) Export {
+	return Export{
+		Description: description,
+		Type:        ExportTypeImported,
+		Status:      ExportStatusPending,
+		CreatedDate: PNow(),
+		FilePath:    sourceFilePath,
+	}
+}
+
 func (*Export) Validate() error {
 	return ErrMustUseValidateWithContext
 }
