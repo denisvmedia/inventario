@@ -222,8 +222,7 @@ func (s *ExportService) DeleteExportFile(ctx context.Context, filePath string) e
 	return nil
 }
 
-func (s *ExportService) parseTopLevelToken(t xml.StartElement, decoder *xml.Decoder, stats *ExportStats) (models.ExportType, error) {
-	var exportType models.ExportType
+func (s *ExportService) parseTopLevelToken(t xml.StartElement, exportType *models.ExportType, decoder *xml.Decoder, stats *ExportStats) error {
 	switch t.Name.Local {
 	case "inventory":
 		// Check export type attribute if present
@@ -233,32 +232,34 @@ func (s *ExportService) parseTopLevelToken(t xml.StartElement, decoder *xml.Deco
 			}
 			switch attr.Value {
 			case "full_database":
-				exportType = models.ExportTypeFullDatabase
+				*exportType = models.ExportTypeFullDatabase
 			case "selected_items":
-				exportType = models.ExportTypeSelectedItems
+				*exportType = models.ExportTypeSelectedItems
 			case "locations":
-				exportType = models.ExportTypeLocations
+				*exportType = models.ExportTypeLocations
 			case "areas":
-				exportType = models.ExportTypeAreas
+				*exportType = models.ExportTypeAreas
 			case "commodities":
-				exportType = models.ExportTypeCommodities
+				*exportType = models.ExportTypeCommodities
 			}
 		}
 	case "locations":
 		if err := s.countLocations(decoder, stats); err != nil {
-			return exportType, errkit.Wrap(err, "failed to count locations")
+			return errkit.Wrap(err, "failed to count locations")
 		}
 	case "areas":
 		if err := s.countAreas(decoder, stats); err != nil {
-			return exportType, errkit.Wrap(err, "failed to count areas")
+			return errkit.Wrap(err, "failed to count areas")
 		}
 	case "commodities":
 		if err := s.countCommodities(decoder, stats); err != nil {
-			return exportType, errkit.Wrap(err, "failed to count commodities")
+			return errkit.Wrap(err, "failed to count commodities")
 		}
+	default:
+		return errkit.Wrap(ErrUnsupportedExportType, "unsupported top-level element", "element", t.Name.Local)
 	}
 
-	return exportType, nil
+	return nil
 }
 
 // ParseXMLMetadata parses XML file to extract statistics and determine export type
@@ -274,14 +275,14 @@ func (s *ExportService) ParseXMLMetadata(_ctx context.Context, reader io.Reader)
 			break
 		}
 		if err != nil {
-			return nil, exportType, errkit.Wrap(err, "failed to read XML token")
+			return stats, exportType, errkit.Wrap(err, "failed to read XML token")
 		}
 
 		switch t := tok.(type) {
 		case xml.StartElement:
-			exportType, err = s.parseTopLevelToken(t, decoder, stats)
+			err = s.parseTopLevelToken(t, &exportType, decoder, stats)
 			if err != nil {
-				return nil, exportType, err
+				return stats, exportType, err
 			}
 		default:
 			// Skip other token types
