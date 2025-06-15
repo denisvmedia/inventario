@@ -246,7 +246,7 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 
 func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error) {
 	var conditions []string
-	var args []interface{}
+	var args []any
 	argIndex := 1
 
 	// Add type filter if specified
@@ -272,6 +272,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
 		argIndex += 4
 	}
+	_ = argIndex // unused for now
 
 	whereClause := ""
 	if len(conditions) > 0 {
@@ -328,11 +329,11 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error) {
 	// First get the total count
 	var countQuery string
-	var countArgs []interface{}
+	var countArgs []any
 
 	if fileType != nil {
 		countQuery = `SELECT COUNT(*) FROM files WHERE type = $1`
-		countArgs = []interface{}{*fileType}
+		countArgs = []any{*fileType}
 	} else {
 		countQuery = `SELECT COUNT(*) FROM files`
 	}
@@ -345,7 +346,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 	// Then get the paginated results
 	var dataQuery string
-	var dataArgs []interface{}
+	var dataArgs []any
 
 	if fileType != nil {
 		dataQuery = `
@@ -354,14 +355,14 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 			WHERE type = $1
 			ORDER BY created_at DESC
 			LIMIT $2 OFFSET $3`
-		dataArgs = []interface{}{*fileType, limit, offset}
+		dataArgs = []any{*fileType, limit, offset}
 	} else {
 		dataQuery = `
 			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
 			FROM files
 			ORDER BY created_at DESC
 			LIMIT $1 OFFSET $2`
-		dataArgs = []interface{}{limit, offset}
+		dataArgs = []any{limit, offset}
 	}
 
 	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)

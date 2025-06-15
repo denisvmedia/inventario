@@ -158,7 +158,7 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// getFile gets a file by ID.
+// apiGetFile gets a file by ID.
 // @Summary Get a file
 // @Description get file by ID
 // @Tags files
@@ -168,7 +168,7 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.FileResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id} [get].
-func (api *filesAPI) getFile(w http.ResponseWriter, r *http.Request) {
+func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
 
 	file, err := api.registrySet.FileRegistry.Get(r.Context(), fileID)
@@ -270,8 +270,8 @@ func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 	// Delete the physical file
 	if file.File != nil && file.OriginalPath != "" {
 		if err := api.deletePhysicalFile(r.Context(), file.OriginalPath); err != nil {
-			// Log the error but don't fail the request since the database record is already deleted
-			// TODO: Add proper logging
+			renderEntityError(w, r, err)
+			return
 		}
 	}
 
@@ -337,8 +337,8 @@ func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 	// Stream the file in chunks
 	if err := downloadutils.CopyFileInChunks(w, reader); err != nil {
-		// Log error but don't send response as headers are already sent
-		// TODO: Add proper logging
+		internalServerError(w, r, err)
+		return
 	}
 }
 
@@ -369,7 +369,7 @@ func Files(params Params) func(r chi.Router) {
 		r.Get("/", api.listFiles)   // GET /files
 		r.Post("/", api.createFile) // POST /files
 		r.Route("/{fileID}", func(r chi.Router) {
-			r.Get("/", api.getFile)       // GET /files/123
+			r.Get("/", api.apiGetFile)    // GET /files/123
 			r.Put("/", api.updateFile)    // PUT /files/123
 			r.Delete("/", api.deleteFile) // DELETE /files/123
 		})

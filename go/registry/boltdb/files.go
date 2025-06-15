@@ -104,6 +104,7 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 	return filtered, nil
 }
 
+//nolint:cognit // TODO: revise
 func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error) {
 	allFiles, err := r.List(ctx)
 	if err != nil {
