@@ -31,7 +31,13 @@
         <div class="selected-files-list">
           <div v-for="(file, index) in selectedFiles" :key="index" class="selected-file">
             <div class="file-preview">
-              <div class="file-icon">
+              <img
+                v-if="getFilePreview(file) && file.type.startsWith('image/')"
+                :src="getFilePreview(file)"
+                :alt="file.name"
+                class="file-thumbnail"
+              />
+              <div v-else class="file-icon">
                 <font-awesome-icon :icon="getFileIcon(file)" />
               </div>
             </div>
@@ -83,6 +89,7 @@ const emit = defineEmits(['upload', 'filesCleared'])
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFiles = ref<File[]>([])
+const filePreviews = ref<{ [key: string]: string }>({}) // Store file previews by file name + size
 const isDragOver = ref(false)
 const isUploading = ref(false)
 const uploadCompleted = ref(false)
@@ -121,11 +128,31 @@ const addFiles = (files: File[]) => {
   } else {
     selectedFiles.value = [files[0]]
   }
+
+  // Generate previews for image files
+  files.forEach(file => {
+    if (file.type.startsWith('image/')) {
+      const fileKey = `${file.name}_${file.size}`
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        filePreviews.value[fileKey] = e.target?.result as string
+      }
+      reader.readAsDataURL(file)
+    }
+  })
+
   // Reset upload completed state when new files are added
   uploadCompleted.value = false
 }
 
 const removeFile = (index: number) => {
+  const file = selectedFiles.value[index]
+  if (file) {
+    // Remove preview for this file
+    const fileKey = `${file.name}_${file.size}`
+    delete filePreviews.value[fileKey]
+  }
+
   selectedFiles.value.splice(index, 1)
   // Reset upload completed state when files are removed
   uploadCompleted.value = false
@@ -138,6 +165,7 @@ const removeFile = (index: number) => {
 
 const clearFiles = () => {
   selectedFiles.value = []
+  filePreviews.value = {} // Clear all previews
   uploadCompleted.value = false
   isUploading.value = false
   emit('filesCleared')
@@ -171,6 +199,11 @@ const uploadFiles = async () => {
     console.error('Upload failed:', error)
     isUploading.value = false
   }
+}
+
+const getFilePreview = (file: File): string | null => {
+  const fileKey = `${file.name}_${file.size}`
+  return filePreviews.value[fileKey] || null
 }
 
 const getFileIcon = (file: File): string => {
