@@ -107,6 +107,7 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	svc := export.NewExportService(api.registrySet, api.uploadLocation)
+	// Create an export to be later processed by the export worker
 	createdExport, err := svc.CreateExportFromUserInput(r.Context(), request.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)

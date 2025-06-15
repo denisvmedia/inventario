@@ -12,11 +12,11 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/backup/restore"
 )
 
 func newTestRegistrySet() *registry.Set {
@@ -75,7 +75,6 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 					Strategy:        "merge_update",
 					IncludeFileData: false,
 					DryRun:          false,
-					BackupExisting:  false,
 				},
 			},
 		},
@@ -131,7 +130,6 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 					Strategy:        "merge_update",
 					IncludeFileData: false,
 					DryRun:          false,
-					BackupExisting:  false,
 				},
 			},
 		},
@@ -198,7 +196,6 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 			Strategy:        "merge_update",
 			IncludeFileData: false,
 			DryRun:          false,
-			BackupExisting:  false,
 		},
 		CreatedDate: models.PNow(),
 	}
@@ -227,7 +224,6 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 					Strategy:        "merge_update",
 					IncludeFileData: false,
 					DryRun:          false,
-					BackupExisting:  false,
 				},
 			},
 		},
@@ -306,7 +302,6 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 					Strategy:        "merge_update",
 					IncludeFileData: false,
 					DryRun:          false,
-					BackupExisting:  false,
 				},
 			},
 		},

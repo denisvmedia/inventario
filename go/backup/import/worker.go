@@ -129,7 +129,8 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 
 	for _, export := range exports {
 		// Only process imported exports that are pending
-		if !export.Imported || export.Status != models.ExportStatusPending {
+		pendingImport := export.Imported && export.Status == models.ExportStatusPending
+		if !pendingImport {
 			continue
 		}
 

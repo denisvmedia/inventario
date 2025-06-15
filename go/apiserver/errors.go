@@ -101,3 +101,13 @@ func conflictError(w http.ResponseWriter, r *http.Request, err error) error {
 	}
 	return render.Render(w, r, jsonapi.NewErrors(conflictErr))
 }
+
+func conflictErrorWithUserError(w http.ResponseWriter, r *http.Request, err, userErr error) error {
+	conflictErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errkit.ForceMarshalError(userErr),
+		HTTPStatusCode: http.StatusConflict,
+		StatusText:     "Conflict",
+	}
+	return render.Render(w, r, jsonapi.NewErrors(conflictErr))
+}

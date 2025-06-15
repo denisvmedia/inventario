@@ -8,10 +8,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/backup/restore"
 )
 
 func newTestRegistrySet() *registry.Set {
@@ -199,7 +199,6 @@ func TestHasRunningRestores(t *testing.T) {
 			Strategy:        "merge_update",
 			IncludeFileData: false,
 			DryRun:          false,
-			BackupExisting:  false,
 		},
 		CreatedDate: models.PNow(),
 	}
@@ -239,7 +238,6 @@ func TestHasRunningRestores_PendingAlsoBlocks(t *testing.T) {
 			Strategy:        "merge_update",
 			IncludeFileData: false,
 			DryRun:          false,
-			BackupExisting:  false,
 		},
 		CreatedDate: models.PNow(),
 	}

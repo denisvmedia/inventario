@@ -115,6 +115,9 @@ func NewExportService(registrySet *registry.Set, uploadLocation string) *ExportS
 	}
 }
 
+// CreateExportFromUserInput creates a new export record from user input.
+// The export record is created with status "pending" and is ready for processing.
+// It will be processed by the ExportWorker in the background.
 func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *models.Export) (models.Export, error) {
 	// Validate the export
 	if err := input.ValidateWithContext(ctx); err != nil {

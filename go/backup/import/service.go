@@ -25,7 +25,10 @@ func NewImportService(registrySet *registry.Set, uploadLocation string) *ImportS
 	}
 }
 
-// ProcessImport processes an XML import file and updates the export record with metadata
+// ProcessImport processes an XML import file and updates the export record with metadata.
+// It does not restore the data to the database, only extracts and sets metadata for the export record,
+// and then saves it in the database.
+// The export record can be later used for restore operations.
 func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFilePath string) error {
 	// Get the export record
 	exportRecord, err := s.registrySet.ExportRegistry.Get(ctx, exportID)
@@ -39,9 +42,6 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 	if err != nil {
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to update export status: %v", err))
 	}
-
-	// Create export service for XML parsing
-	exportService := export.NewExportService(s.registrySet, s.uploadLocation)
 
 	// Open blob bucket to read the XML file
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
@@ -62,6 +62,9 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 	if err != nil {
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to get file attributes: %v", err))
 	}
+
+	// Create export service for XML parsing
+	exportService := export.NewExportService(s.registrySet, s.uploadLocation)
 
 	// Parse XML to extract metadata and statistics (without creating a new record)
 	stats, _, err := exportService.ParseXMLMetadata(ctx, reader)

@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -162,25 +161,13 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 
 	if hasRunning {
 		// Return HTTP 409 Conflict if a restore is already in progress or pending
-		conflictError := jsonapi.Error{
-			Err:            errors.New("restore operation already in progress or pending"),
-			UserError:      errkit.ForceMarshalError(errors.New("A restore operation is already in progress or pending. Please wait for it to complete before starting a new one.")),
-			HTTPStatusCode: http.StatusConflict,
-			StatusText:     "Conflict",
-		}
-		if err := render.Render(w, r, jsonapi.NewErrors(conflictError)); err != nil {
-			internalServerError(w, r, err)
-		}
+		err := errors.New("restore operation already in progress or pending")
+		userErr := errors.New("A restore operation is already in progress or pending. Please wait for it to complete before starting a new one.")
+		conflictErrorWithUserError(w, r, err, userErr)
 		return
 	}
 
-	restoreOperation := *data.Data.Attributes
-	restoreOperation.ExportID = exportID
-	restoreOperation.Status = models.RestoreStatusPending // Set status to pending for worker to pick up
-
-	// Set created date (we do not accept it from the client)
-	restoreOperation.CreatedDate = models.PNow()
-
+	restoreOperation := models.NewRestoreOperationFromUserInput(data.Data.Attributes)
 	createdRestoreOperation, err := api.registrySet.RestoreOperationRegistry.Create(r.Context(), restoreOperation)
 	if err != nil {
 		renderEntityError(w, r, err)

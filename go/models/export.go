@@ -140,25 +140,25 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 type Export struct {
 	EntityID
 	Type            ExportType                      `json:"type" db:"type"`
-	Status          ExportStatus                    `json:"status" db:"status"`
+	Status          ExportStatus                    `json:"status" db:"status" userinput:"false"`
 	IncludeFileData bool                            `json:"include_file_data" db:"include_file_data"`
 	SelectedItems   ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
-	FilePath        string                          `json:"file_path" db:"file_path"`
-	CreatedDate     PTimestamp                      `json:"created_date" db:"created_date"`
-	CompletedDate   PTimestamp                      `json:"completed_date" db:"completed_date"`
-	DeletedAt       PTimestamp                      `json:"deleted_at" db:"deleted_at"`
-	ErrorMessage    string                          `json:"error_message" db:"error_message"`
+	FilePath        string                          `json:"file_path" db:"file_path" userinput:"false"`
+	CreatedDate     PTimestamp                      `json:"created_date" db:"created_date" userinput:"false"`
+	CompletedDate   PTimestamp                      `json:"completed_date" db:"completed_date" userinput:"false"`
+	DeletedAt       PTimestamp                      `json:"deleted_at" db:"deleted_at" userinput:"false"`
+	ErrorMessage    string                          `json:"error_message" db:"error_message" userinput:"false"`
 	Description     string                          `json:"description" db:"description"`
-	Imported        bool                            `json:"imported" db:"imported"`
+	Imported        bool                            `json:"imported" db:"imported" userinput:"false"`
 	// Export statistics
-	FileSize       int64 `json:"file_size" db:"file_size"`
-	LocationCount  int   `json:"location_count" db:"location_count"`
-	AreaCount      int   `json:"area_count" db:"area_count"`
-	CommodityCount int   `json:"commodity_count" db:"commodity_count"`
-	ImageCount     int   `json:"image_count" db:"image_count"`
-	InvoiceCount   int   `json:"invoice_count" db:"invoice_count"`
-	ManualCount    int   `json:"manual_count" db:"manual_count"`
-	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size"`
+	FileSize       int64 `json:"file_size" db:"file_size" userinput:"false"`
+	LocationCount  int   `json:"location_count" db:"location_count" userinput:"false"`
+	AreaCount      int   `json:"area_count" db:"area_count" userinput:"false"`
+	CommodityCount int   `json:"commodity_count" db:"commodity_count" userinput:"false"`
+	ImageCount     int   `json:"image_count" db:"image_count" userinput:"false"`
+	InvoiceCount   int   `json:"invoice_count" db:"invoice_count" userinput:"false"`
+	ManualCount    int   `json:"manual_count" db:"manual_count" userinput:"false"`
+	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
 }
 
 func NewImportedExport(description, sourceFilePath string) Export {
@@ -174,7 +174,11 @@ func NewImportedExport(description, sourceFilePath string) Export {
 
 func NewExportFromUserInput(export *Export) Export {
 	result := *export
-	// Set created date (we do not accept it from the client)
+
+	// Clean up any fields that should not be set by the client using the generic function
+	SanitizeUserInput(&result)
+
+	// Set specific values that are not zero but should be set by the system
 	result.CreatedDate = PNow()
 	result.Status = ExportStatusPending
 	result.Imported = false

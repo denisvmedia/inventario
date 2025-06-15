@@ -30,7 +30,6 @@ type RestoreOptions struct {
 	Strategy        string `json:"strategy"`
 	IncludeFileData bool   `json:"include_file_data"`
 	DryRun          bool   `json:"dry_run"`
-	BackupExisting  bool   `json:"backup_existing"`
 }
 
 func (r RestoreOptions) Validate() error {
@@ -56,25 +55,38 @@ type RestoreOperation struct {
 	EntityID
 	ExportID      string         `json:"export_id" db:"export_id"`
 	Description   string         `json:"description" db:"description"`
-	Status        RestoreStatus  `json:"status" db:"status"`
+	Status        RestoreStatus  `json:"status" db:"status" userinput:"false"`
 	Options       RestoreOptions `json:"options" db:"options"`
-	CreatedDate   PTimestamp     `json:"created_date" db:"created_date"`
-	StartedDate   PTimestamp     `json:"started_date" db:"started_date"`
-	CompletedDate PTimestamp     `json:"completed_date" db:"completed_date"`
-	ErrorMessage  string         `json:"error_message" db:"error_message"`
+	CreatedDate   PTimestamp     `json:"created_date" db:"created_date" userinput:"false"`
+	StartedDate   PTimestamp     `json:"started_date" db:"started_date" userinput:"false"`
+	CompletedDate PTimestamp     `json:"completed_date" db:"completed_date" userinput:"false"`
+	ErrorMessage  string         `json:"error_message" db:"error_message" userinput:"false"`
 
 	// Statistics
-	LocationCount  int   `json:"location_count" db:"location_count"`
-	AreaCount      int   `json:"area_count" db:"area_count"`
-	CommodityCount int   `json:"commodity_count" db:"commodity_count"`
-	ImageCount     int   `json:"image_count" db:"image_count"`
-	InvoiceCount   int   `json:"invoice_count" db:"invoice_count"`
-	ManualCount    int   `json:"manual_count" db:"manual_count"`
-	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size"`
-	ErrorCount     int   `json:"error_count" db:"error_count"`
+	LocationCount  int   `json:"location_count" db:"location_count" userinput:"false"`
+	AreaCount      int   `json:"area_count" db:"area_count" userinput:"false"`
+	CommodityCount int   `json:"commodity_count" db:"commodity_count" userinput:"false"`
+	ImageCount     int   `json:"image_count" db:"image_count" userinput:"false"`
+	InvoiceCount   int   `json:"invoice_count" db:"invoice_count" userinput:"false"`
+	ManualCount    int   `json:"manual_count" db:"manual_count" userinput:"false"`
+	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
+	ErrorCount     int   `json:"error_count" db:"error_count" json:"error_count" userinput:"false"`
 
 	// Related steps (not stored in DB, loaded separately)
 	Steps []RestoreStep `json:"steps,omitempty" db:"-"`
+}
+
+func NewRestoreOperationFromUserInput(restoreOperation *RestoreOperation) RestoreOperation {
+	result := *restoreOperation
+
+	// Clean up any fields that should not be set by the client using the generic function
+	SanitizeUserInput(&result)
+
+	// Set specific values that are not zero but should be set by the system
+	result.CreatedDate = PNow()
+	result.Status = RestoreStatusPending
+
+	return result
 }
 
 func (*RestoreOperation) Validate() error {
