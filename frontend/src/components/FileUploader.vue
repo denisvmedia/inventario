@@ -348,20 +348,18 @@ const formatFileSize = (bytes: number): string => {
   text-align: center;
 }
 
-// Upload actions transition
-.upload-actions-enter-active,
+// Upload actions transition - only animate when hiding
+.upload-actions-enter-active {
+  transition: none; // No transition when showing
+}
+
 .upload-actions-leave-active {
   transition: all 0.4s ease;
   transform-origin: top;
 }
 
 .upload-actions-enter-from {
-  opacity: 0;
-  transform: translateY(-10px) scaleY(0.8);
-  max-height: 0;
-  margin-top: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+  // No styles needed since we're not animating the enter
 }
 
 .upload-actions-leave-to {
