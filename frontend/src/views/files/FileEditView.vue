@@ -1,48 +1,27 @@
 <template>
-  <div class="file-edit-view">
+  <div class="file-edit">
     <!-- Loading State -->
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading file...</p>
-    </div>
+    <div v-if="loading" class="loading">Loading...</div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="error-state">
-      <div class="error-icon">
-        <FontAwesomeIcon icon="exclamation-circle" />
-      </div>
-      <h3>Error Loading File</h3>
-      <p>{{ error }}</p>
-      <div class="error-actions">
-        <button class="btn btn-secondary" @click="goBack">
-          <FontAwesomeIcon icon="arrow-left" />
-          Go Back
-        </button>
-        <button class="btn btn-primary" @click="loadFile">
-          <FontAwesomeIcon icon="redo" />
-          Try Again
-        </button>
-      </div>
-    </div>
+    <div v-else-if="error" class="error">{{ error }}</div>
 
     <!-- Edit Form -->
-    <div v-else-if="file" class="edit-content">
-      <div class="page-header">
-        <div class="header-nav">
-          <button class="btn btn-secondary" @click="goBack">
-            <FontAwesomeIcon icon="arrow-left" />
-            Back to File
-          </button>
-        </div>
-        
-        <div class="header-content">
-          <h1>Edit File</h1>
-          <p class="page-description">Update file information and metadata</p>
-        </div>
+    <div v-else-if="file">
+      <!-- Header with Back Link -->
+      <div class="breadcrumb-nav">
+        <a href="#" class="breadcrumb-link" @click.prevent="goBack">
+          <FontAwesomeIcon icon="arrow-left" />
+          Back to File
+        </a>
       </div>
 
-      <!-- File Preview -->
-      <div class="file-preview-section">
+      <div class="header">
+        <h1>Edit File</h1>
+      </div>
+
+      <!-- File Preview Card -->
+      <div class="info-card file-preview-card">
         <div class="file-preview">
           <img
             v-if="file.type === 'image'"
@@ -67,131 +46,115 @@
 
 
 
-      <!-- Edit Form -->
-      <div class="edit-form-section">
-        <form @submit.prevent="updateFile" class="edit-form">
-          <!-- 1. Filename and Extension (editable) -->
-          <div class="form-group">
-            <label for="path" class="required">Filename</label>
-            <div class="filename-input-group" :class="{ 'error': errors.path }">
-              <input
-                id="path"
-                v-model="form.path"
-                type="text"
-                class="form-control filename-input"
-                placeholder="Enter filename (without extension)"
-                required
-              />
-              <span class="file-extension">{{ file.ext }}</span>
-            </div>
-            <div v-if="errors.path" class="error-message">{{ errors.path }}</div>
-            <div class="form-help">This will be the filename when downloaded (extension will be added automatically)</div>
-          </div>
-
-          <!-- 2. All Editable Fields -->
-          <div class="form-group">
-            <label for="title">Title</label>
+      <!-- Edit Form Card -->
+      <form class="form" @submit.prevent="updateFile">
+        <!-- 1. Filename and Extension (editable) -->
+        <div class="form-group">
+          <label for="path" class="required">Filename</label>
+          <div class="filename-input-group" :class="{ 'is-invalid': errors.path }">
             <input
-              id="title"
-              v-model="form.title"
+              id="path"
+              v-model="form.path"
               type="text"
-              class="form-control"
-              :class="{ 'error': errors.title }"
-              placeholder="Enter a title for this file (optional)"
+              class="form-control filename-input"
+              placeholder="Enter filename (without extension)"
+              required
             />
-            <div v-if="errors.title" class="error-message">{{ errors.title }}</div>
-            <div class="form-help">If left empty, the filename will be used as the title</div>
+            <span class="file-extension">{{ file.ext }}</span>
           </div>
+          <div v-if="errors.path" class="error-message">{{ errors.path }}</div>
+          <div class="form-help">This will be the filename when downloaded (extension will be added automatically)</div>
+        </div>
 
-          <div class="form-group">
-            <label for="description">Description</label>
-            <textarea
-              id="description"
-              v-model="form.description"
-              class="form-control"
-              :class="{ 'error': errors.description }"
-              placeholder="Optional description"
-              rows="3"
-            ></textarea>
-            <div v-if="errors.description" class="error-message">{{ errors.description }}</div>
+        <!-- 2. All Editable Fields -->
+        <div class="form-group">
+          <label for="title">Title</label>
+          <input
+            id="title"
+            v-model="form.title"
+            type="text"
+            class="form-control"
+            :class="{ 'is-invalid': errors.title }"
+            placeholder="Enter a title for this file (optional)"
+          />
+          <div v-if="errors.title" class="error-message">{{ errors.title }}</div>
+          <div class="form-help">If left empty, the filename will be used as the title</div>
+        </div>
+
+        <div class="form-group">
+          <label for="description">Description</label>
+          <textarea
+            id="description"
+            v-model="form.description"
+            class="form-control"
+            :class="{ 'is-invalid': errors.description }"
+            placeholder="Optional description"
+            rows="3"
+          ></textarea>
+          <div v-if="errors.description" class="error-message">{{ errors.description }}</div>
+        </div>
+
+        <div class="form-group">
+          <label for="tags">Tags</label>
+          <input
+            id="tags"
+            v-model="tagsInput"
+            type="text"
+            class="form-control"
+            placeholder="Enter tags separated by commas"
+            @input="updateTags"
+          />
+          <div class="form-help">Separate multiple tags with commas</div>
+
+          <div v-if="form.tags.length > 0" class="tags-preview">
+            <span v-for="tag in form.tags" :key="tag" class="tag">
+              {{ tag }}
+              <button type="button" @click="removeTag(tag)" class="tag-remove">×</button>
+            </span>
           </div>
+        </div>
 
-          <div class="form-group">
-            <label for="tags">Tags</label>
-            <input
-              id="tags"
-              v-model="tagsInput"
-              type="text"
-              class="form-control"
-              placeholder="Enter tags separated by commas"
-              @input="updateTags"
-            />
-            <div class="form-help">Separate multiple tags with commas</div>
-
-            <div v-if="form.tags.length > 0" class="tags-preview">
-              <span v-for="tag in form.tags" :key="tag" class="tag">
-                {{ tag }}
-                <button type="button" @click="removeTag(tag)" class="tag-remove">×</button>
-              </span>
-            </div>
+        <!-- 3. Read-only File Information Fields -->
+        <div class="form-group">
+          <label>File Type</label>
+          <div class="form-control-readonly">
+            <span class="type-badge" :class="`type-${file.type}`">
+              <font-awesome-icon :icon="getFileIcon(file)" />
+              {{ getFileTypeLabel(file.type) }}
+            </span>
           </div>
+        </div>
 
-          <!-- 3. Read-only File Information Fields -->
-          <div class="form-group">
-            <label>File Type</label>
-            <div class="form-control-readonly">
-              <span class="type-badge" :class="`type-${file.type}`">
-                <font-awesome-icon :icon="getFileIcon(file)" />
-                {{ getFileTypeLabel(file.type) }}
-              </span>
-            </div>
-          </div>
+        <div class="form-group">
+          <label>MIME Type</label>
+          <div class="form-control-readonly">{{ file.mime_type }}</div>
+        </div>
 
-          <div class="form-group">
-            <label>MIME Type</label>
-            <div class="form-control-readonly">{{ file.mime_type }}</div>
-          </div>
+        <div class="form-group">
+          <label>Original Filename</label>
+          <div class="form-control-readonly file-path">{{ file.original_path }}</div>
+        </div>
 
-          <div class="form-group">
-            <label>Original Filename</label>
-            <div class="form-control-readonly file-path">{{ file.original_path }}</div>
-          </div>
-
-          <div class="form-actions">
-            <button type="button" class="btn btn-secondary" @click="goBack" :disabled="saving">
-              Cancel
-            </button>
-            <button type="button" class="btn btn-primary" :disabled="saving || !isFormValid" @click="updateFile">
-              <span v-if="saving">
-                <FontAwesomeIcon icon="spinner" spin />
-                Saving...
-              </span>
-              <span v-else>
-                <FontAwesomeIcon icon="save" />
-                Save Changes
-              </span>
-            </button>
-          </div>
-        </form>
-      </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" @click="goBack" :disabled="saving">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" :disabled="saving || !isFormValid">
+            <span v-if="saving">
+              <FontAwesomeIcon icon="spinner" spin />
+              Saving...
+            </span>
+            <span v-else>
+              <FontAwesomeIcon icon="save" />
+              Save Changes
+            </span>
+          </button>
+        </div>
+      </form>
     </div>
 
     <!-- Error Display -->
-    <div v-if="saveError" class="error-section">
-      <div class="error-card">
-        <div class="error-icon">
-          <FontAwesomeIcon icon="exclamation-circle" />
-        </div>
-        <div class="error-content">
-          <h3>Save Failed</h3>
-          <p>{{ saveError }}</p>
-        </div>
-        <button class="btn btn-secondary" @click="clearSaveError">
-          <FontAwesomeIcon icon="times" />
-          Dismiss
-        </button>
-      </div>
-    </div>
+    <div v-if="saveError" class="form-error">{{ saveError }}</div>
   </div>
 </template>
 
@@ -362,50 +325,35 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/variables' as *;
+@use '@/assets/main' as *;
 
-.file-edit-view {
-  padding: 2rem;
+.file-edit {
   max-width: 800px;
   margin: 0 auto;
+  padding: 20px;
 }
 
-.page-header {
+.header {
   margin-bottom: 2rem;
-  
-  .header-nav {
-    margin-bottom: 1rem;
-  }
-  
-  .header-content {
-    h1 {
-      margin: 0 0 0.5rem 0;
-      color: $text-color;
-    }
 
-    .page-description {
-      margin: 0;
-      color: $text-secondary-color;
-    }
+  h1 {
+    margin: 0;
+    font-size: 2rem;
   }
 }
 
-.file-preview-section {
-  background: $light-bg-color;
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
+.file-preview-card {
   display: flex;
   align-items: center;
   gap: 1rem;
-  border: 1px solid $border-color;
+  margin-bottom: 2rem;
 
   .file-preview {
     width: 80px;
     height: 80px;
-    border-radius: 8px;
+    border-radius: $default-radius;
     overflow: hidden;
-    background: white;
+    background: $light-bg-color;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -440,14 +388,13 @@ onMounted(() => {
         font-size: 0.875rem;
         padding: 0.25rem 0.5rem;
         border-radius: 4px;
-        background: white;
+        background: $light-bg-color;
         color: $text-secondary-color;
         border: 1px solid $border-color;
       }
     }
   }
 }
-
 
 
 .file-path {
@@ -500,241 +447,131 @@ onMounted(() => {
   }
 }
 
-.edit-form-section {
-  background: $light-bg-color;
-  border-radius: 8px;
-  padding: 2rem;
+// Custom form styles for file edit
+.form-control-readonly {
+  width: 100%;
+  padding: 0.75rem;
   border: 1px solid $border-color;
-
-  .edit-form {
-    .form-group {
-      margin-bottom: 1.5rem;
-
-      label {
-        display: block;
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-        color: $text-color;
-
-        &.required::after {
-          content: ' *';
-          color: $error-color;
-        }
-      }
-
-      .form-control {
-        width: 100%;
-        padding: 0.75rem;
-        border: 1px solid $border-color;
-        border-radius: 4px;
-        background: white;
-        color: $text-color;
-
-        &:focus {
-          outline: none;
-          border-color: $primary-color;
-        }
-
-        &.error {
-          border-color: $error-color;
-        }
-      }
-
-      .form-control-readonly {
-        width: 100%;
-        padding: 0.75rem;
-        border: 1px solid $border-color;
-        border-radius: 4px;
-        background-color: #f8f9fa;
-        color: $text-color;
-        font-size: 1rem;
-        word-break: break-word;
-        min-height: 48px;
-        display: flex;
-        align-items: center;
-      }
-
-      .filename-input-group {
-        display: flex;
-        align-items: center;
-        border: 1px solid $border-color;
-        border-radius: 4px;
-        background: white;
-        overflow: hidden;
-
-        .filename-input {
-          flex: 1;
-          border: none;
-          border-radius: 0;
-          margin: 0;
-
-          &:focus {
-            border: none;
-            box-shadow: none;
-          }
-
-          &.error {
-            border: none;
-          }
-        }
-
-        .file-extension {
-          padding: 0.75rem;
-          background-color: #f8f9fa;
-          color: $text-secondary-color;
-          font-size: 1rem;
-          font-weight: 500;
-          border-left: 1px solid $border-color;
-          white-space: nowrap;
-        }
-
-        &:focus-within {
-          border-color: $primary-color;
-          box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
-        }
-
-        &.error {
-          border-color: $error-color;
-        }
-      }
-
-      .form-help {
-        margin-top: 0.25rem;
-        font-size: 0.875rem;
-        color: $text-secondary-color;
-      }
-
-
-
-      .error-message {
-        margin-top: 0.25rem;
-        font-size: 0.875rem;
-        color: $error-color;
-      }
-      
-      .tags-preview {
-        margin-top: 0.75rem;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        
-        .tag {
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          font-size: 0.875rem;
-          padding: 0.25rem 0.75rem;
-          border-radius: 12px;
-          background: $primary-color;
-          color: white;
-          
-          .tag-remove {
-            background: none;
-            border: none;
-            color: white;
-            cursor: pointer;
-            font-size: 1rem;
-            line-height: 1;
-            
-            &:hover {
-              opacity: 0.7;
-            }
-          }
-        }
-      }
-    }
-    
-    .form-actions {
-      display: flex;
-      gap: 1rem;
-      justify-content: flex-end;
-      margin-top: 2rem;
-      padding-top: 1rem;
-      border-top: 1px solid $border-color;
-    }
-  }
+  border-radius: $default-radius;
+  background-color: #f8f9fa;
+  color: $text-color;
+  font-size: 1rem;
+  word-break: break-word;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
 }
 
-.loading-state,
-.error-state {
-  text-align: center;
-  padding: 3rem 1rem;
+.filename-input-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
+  background: white;
+  overflow: hidden;
 
-  .spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid $light-bg-color;
-    border-top: 4px solid $primary-color;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 1rem;
-  }
+  .filename-input {
+    flex: 1;
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    padding: 0.75rem;
 
-  .error-icon {
-    i {
-      font-size: 4rem;
-      color: $error-color;
-      margin-bottom: 1rem;
+    &:focus {
+      outline: none;
+      border: none;
+      box-shadow: none;
     }
   }
 
-  h3 {
-    margin: 0 0 1rem 0;
-    color: $text-color;
-  }
-
-  p {
-    margin: 0 0 1.5rem 0;
+  .file-extension {
+    padding: 0.75rem;
+    background-color: #f8f9fa;
     color: $text-secondary-color;
+    font-size: 1rem;
+    font-weight: 500;
+    border-left: 1px solid $border-color;
+    white-space: nowrap;
   }
 
-  .error-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
+  &:focus-within {
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
+
+  &.is-invalid {
+    border-color: $danger-color;
   }
 }
 
-.error-section {
-  margin-top: 2rem;
+.form-help {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: $text-secondary-color;
+}
 
-  .error-card {
-    background: $light-bg-color;
-    border: 1px solid $error-color;
-    border-radius: 8px;
-    padding: 1.5rem;
+.error-message {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: $danger-color;
+}
+
+.tags-preview {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  .tag {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    background: $primary-color;
+    color: white;
 
-    .error-icon {
-      i {
-        font-size: 1.5rem;
-        color: $error-color;
-      }
-    }
+    .tag-remove {
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
 
-    .error-content {
-      flex: 1;
-
-      h3 {
-        margin: 0 0 0.25rem 0;
-        color: $error-color;
-        font-size: 1rem;
-      }
-
-      p {
-        margin: 0;
-        color: $text-color;
+      &:hover {
+        opacity: 0.7;
       }
     }
   }
 }
 
-// Font Awesome spin animation is handled by the spin prop
+.required::after {
+  content: ' *';
+  color: $danger-color;
+}
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+// Breadcrumb navigation styling
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: $text-secondary-color;
+  text-decoration: none;
+  font-size: 0.875rem;
+
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
+
+  svg {
+    font-size: 0.75rem;
+  }
 }
 </style>
