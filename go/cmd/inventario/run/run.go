@@ -87,6 +87,7 @@ const (
 	uploadLocationFlag       = "upload-location"
 	dbDSNFlag                = "db-dsn"
 	maxConcurrentExportsFlag = "max-concurrent-exports"
+	maxConcurrentImportsFlag = "max-concurrent-imports"
 )
 
 func getFileURL(path string) string {
@@ -117,6 +118,11 @@ var runFlags = map[string]cobraflags.Flag{
 		Name:  maxConcurrentExportsFlag,
 		Value: 3,
 		Usage: "Maximum number of concurrent export processes",
+	},
+	maxConcurrentImportsFlag: &cobraflags.IntFlag{
+		Name:  maxConcurrentImportsFlag,
+		Value: 3,
+		Usage: "Maximum number of concurrent import processes",
 	},
 }
 
@@ -164,28 +170,26 @@ func runCommand(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Start export worker
 	maxConcurrentExports := runFlags[maxConcurrentExportsFlag].GetInt()
 	exportService := export.NewExportService(registrySet, params.UploadLocation)
 	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
+	exportWorker.Start(ctx)
+	defer exportWorker.Stop()
 
 	// Start restore worker
 	restoreService := restore.NewRestoreService(registrySet, params.UploadLocation)
 	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, params.UploadLocation)
-
-	// Start import worker
-	importService := importpkg.NewImportService(registrySet, params.UploadLocation)
-	importWorker := importpkg.NewImportWorker(importService, registrySet)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	exportWorker.Start(ctx)
-	defer exportWorker.Stop()
-
 	restoreWorker.Start(ctx)
 	defer restoreWorker.Stop()
 
+	// Start import worker
+	maxConcurrentImports := runFlags[maxConcurrentImportsFlag].GetInt()
+	importService := importpkg.NewImportService(registrySet, params.UploadLocation)
+	importWorker := importpkg.NewImportWorker(importService, registrySet, maxConcurrentImports)
 	importWorker.Start(ctx)
 	defer importWorker.Stop()
 

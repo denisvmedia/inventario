@@ -66,8 +66,7 @@ func TestDebugAPI(t *testing.T) {
 
 			// Mock workers for testing
 			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-			mockImportWorker := &mockImportWorker{isRunning: false}
-			server := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+			server := apiserver.APIServer(params, mockRestoreWorker)
 
 			// Create test request
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)
@@ -112,8 +111,7 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 
 	// Mock workers for testing
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	server := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	server := apiserver.APIServer(params, mockRestoreWorker)
 
 	// Create test request
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)

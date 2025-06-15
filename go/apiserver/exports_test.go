@@ -1,4 +1,4 @@
-package apiserver
+package apiserver_test
 
 import (
 	"bytes"
@@ -17,38 +17,9 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+
+	"github.com/denisvmedia/inventario/apiserver"
 )
-
-// mockRestoreWorker is a mock implementation of RestoreWorkerInterface for testing
-type mockRestoreWorker struct {
-	hasRunningRestores bool
-}
-
-func (m *mockRestoreWorker) HasRunningRestores(ctx context.Context) (bool, error) {
-	return m.hasRunningRestores, nil
-}
-
-// mockImportWorker is a mock implementation of ImportWorkerInterface for testing
-type mockImportWorker struct {
-	isRunning         bool
-	hasRunningImports bool
-}
-
-func (m *mockImportWorker) Start(ctx context.Context) {
-	m.isRunning = true
-}
-
-func (m *mockImportWorker) Stop() {
-	m.isRunning = false
-}
-
-func (m *mockImportWorker) IsRunning() bool {
-	return m.isRunning
-}
-
-func (m *mockImportWorker) HasRunningImports(ctx context.Context) (bool, error) {
-	return m.hasRunningImports, nil
-}
 
 func TestExportSoftDelete(t *testing.T) {
 	c := qt.New(t)
@@ -73,13 +44,12 @@ func TestExportSoftDelete(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	params := Params{
+	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	r.Route("/exports", Exports(params, mockRestoreWorker, mockImportWorker))
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test soft delete
 	req := httptest.NewRequest("DELETE", "/exports/"+created.ID, nil)
@@ -136,13 +106,12 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	params := Params{
+	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	r.Route("/exports", Exports(params, mockRestoreWorker, mockImportWorker))
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint
 	req := httptest.NewRequest("GET", "/exports", nil)
@@ -195,13 +164,12 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	params := Params{
+	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	r.Route("/exports", Exports(params, mockRestoreWorker, mockImportWorker))
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint with include_deleted=true
 	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
@@ -238,13 +206,12 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	params := Params{
+	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	r.Route("/exports", Exports(params, mockRestoreWorker, mockImportWorker))
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Create export request payload
 	requestPayload := jsonapi.ExportCreateRequest{

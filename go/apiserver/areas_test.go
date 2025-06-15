@@ -23,30 +23,8 @@ type mockRestoreWorker struct {
 	hasRunningRestores bool
 }
 
-func (m *mockRestoreWorker) HasRunningRestores(ctx context.Context) (bool, error) {
+func (m *mockRestoreWorker) HasRunningRestores(_ctx context.Context) (bool, error) {
 	return m.hasRunningRestores, nil
-}
-
-// mockImportWorker is a mock implementation of ImportWorkerInterface for testing
-type mockImportWorker struct {
-	isRunning         bool
-	hasRunningImports bool
-}
-
-func (m *mockImportWorker) Start(ctx context.Context) {
-	m.isRunning = true
-}
-
-func (m *mockImportWorker) Stop() {
-	m.isRunning = false
-}
-
-func (m *mockImportWorker) IsRunning() bool {
-	return m.isRunning
-}
-
-func (m *mockImportWorker) HasRunningImports(ctx context.Context) (bool, error) {
-	return m.hasRunningImports, nil
 }
 
 func TestAreasList(t *testing.T) {
@@ -61,8 +39,7 @@ func TestAreasList(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -90,8 +67,7 @@ func TestAreasGet(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -128,8 +104,7 @@ func TestAreaCreate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	body := rr.Body.Bytes()
@@ -152,7 +127,7 @@ func TestAreaCreate(t *testing.T) {
 
 	rr = httptest.NewRecorder()
 
-	handler = apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler = apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -176,8 +151,7 @@ func TestAreaDelete(t *testing.T) {
 	expectedCount := must.Must(params.RegistrySet.AreaRegistry.Count(context.Background())) - 1
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
@@ -202,8 +176,7 @@ func TestAreaDelete_AreaHasCommodities(t *testing.T) {
 	expectedCount := must.Must(params.RegistrySet.AreaRegistry.Count(context.Background()))
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
@@ -240,8 +213,7 @@ func TestAreaUpdate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -266,8 +238,7 @@ func TestAreaGet_InvalidID(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -294,8 +265,7 @@ func TestAreaCreate_InvalidData(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
@@ -314,8 +284,7 @@ func TestAreaDelete_MissingArea(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -350,8 +319,7 @@ func TestAreaUpdate_WrongIDInRequestBody(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)

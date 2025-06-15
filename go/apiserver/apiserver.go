@@ -29,14 +29,6 @@ type RestoreWorkerInterface interface {
 	HasRunningRestores(ctx context.Context) (bool, error) // Returns true if any restore is running or pending
 }
 
-// ImportWorkerInterface defines the interface for the import worker
-type ImportWorkerInterface interface {
-	Start(ctx context.Context)
-	Stop()
-	IsRunning() bool
-	HasRunningImports(ctx context.Context) (bool, error) // Returns true if any import is running or pending
-}
-
 type ctxValueKey string
 
 var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
@@ -93,7 +85,7 @@ func (p *Params) Validate() error {
 	return validation.ValidateStruct(p, fields...)
 }
 
-func APIServer(params Params, restoreWorker RestoreWorkerInterface, importWorker ImportWorkerInterface) http.Handler {
+func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler {
 	render.Decode = JSONAPIAwareDecoder
 
 	r := chi.NewRouter()
@@ -130,7 +122,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface, importWorker
 		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
 		r.With(defaultAPIMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
-		r.With(defaultAPIMiddlewares...).Route("/exports", Exports(params, restoreWorker, importWorker))
+		r.With(defaultAPIMiddlewares...).Route("/exports", Exports(params, restoreWorker))
 		r.Route("/currencies", Currencies())
 		r.Route("/uploads", Uploads(params))
 		r.Route("/seed", Seed(params.RegistrySet))

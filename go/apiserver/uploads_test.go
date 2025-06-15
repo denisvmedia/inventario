@@ -126,8 +126,7 @@ func TestUploads(t *testing.T) {
 			rr := httptest.NewRecorder()
 
 			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-			mockImportWorker := &mockImportWorker{isRunning: false}
-			handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+			handler := apiserver.APIServer(params, mockRestoreWorker)
 			handler.ServeHTTP(rr, req)
 
 			// Verify the response
@@ -198,8 +197,7 @@ func TestUploads_invalid_upload(t *testing.T) {
 			rr := httptest.NewRecorder()
 
 			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-			mockImportWorker := &mockImportWorker{isRunning: false}
-			handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+			handler := apiserver.APIServer(params, mockRestoreWorker)
 			handler.ServeHTTP(rr, req)
 
 			// Verify the response
@@ -246,8 +244,7 @@ func TestUploads_restores(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	// Verify the response
@@ -301,8 +298,7 @@ func TestUploads_restores_invalid(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	// Verify the response - should be rejected due to invalid content type

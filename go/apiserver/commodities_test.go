@@ -30,8 +30,7 @@ func TestCommoditiesList(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -73,8 +72,7 @@ func TestCommodityGet(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -159,8 +157,7 @@ func TestCommodityCreate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	body := rr.Body.Bytes()
@@ -232,8 +229,7 @@ func TestCommodityUpdate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	body := rr.Body.Bytes()
@@ -283,8 +279,7 @@ func TestCommodityDelete(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Check(rr.Code, qt.Equals, http.StatusNoContent)
@@ -304,8 +299,7 @@ func TestCommodityDelete_MissingCommodity(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -356,8 +350,7 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
@@ -383,8 +376,7 @@ func TestCommodityListImages(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -417,8 +409,7 @@ func TestCommodityListInvoices(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -451,8 +442,7 @@ func TestCommodityListManuals(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -479,8 +469,7 @@ func TestCommodityDeleteImage(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -500,8 +489,7 @@ func TestCommodityDeleteInvoice(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -521,8 +509,7 @@ func TestCommodityDeleteManual(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -544,8 +531,7 @@ func TestDownloadImage(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -566,8 +552,7 @@ func TestDownloadImage_CommodityNotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -589,8 +574,7 @@ func TestDownloadInvoice(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -611,8 +595,7 @@ func TestDownloadInvoice_CommodityNotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -634,8 +617,7 @@ func TestDownloadManual(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -656,8 +638,7 @@ func TestDownloadManual_CommodityNotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -678,8 +659,7 @@ func TestGetImageData(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -708,8 +688,7 @@ func TestGetImageData_ImageNotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -730,8 +709,7 @@ func TestGetInvoiceData(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -760,8 +738,7 @@ func TestGetInvoiceData_InvoiceNotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -782,8 +759,7 @@ func TestGetManualsData(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -812,8 +788,7 @@ func TestGetManualsData_ManualNotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	handler := apiserver.APIServer(params, mockRestoreWorker, mockImportWorker)
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)

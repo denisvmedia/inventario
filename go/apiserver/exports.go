@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"path"
@@ -31,7 +30,6 @@ func exportFromContext(ctx context.Context) *models.Export {
 type exportsAPI struct {
 	registrySet    *registry.Set
 	uploadLocation string
-	importWorker   ImportWorkerInterface
 }
 
 // listExports lists all exports.
@@ -77,8 +75,6 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.ExportResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [get].
-//
-//nolint:revive // getExport is an HTTP handler, not a getter function
 func (api *exportsAPI) getExport(w http.ResponseWriter, r *http.Request) {
 	export := exportFromContext(r.Context())
 	if export == nil {
@@ -248,18 +244,6 @@ func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io
 // @Failure 422 {object} jsonapi.ErrorResponse "Unprocessable Entity"
 // @Router /exports/import [post].
 func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
-	// Check if there are any running imports (prevent concurrent imports)
-	hasRunningImports, err := api.importWorker.HasRunningImports(r.Context())
-	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to check for running imports"))
-		return
-	}
-
-	if hasRunningImports {
-		conflictError(w, r, errors.New("An import operation is already in progress. Please wait for it to complete before starting a new import."))
-		return
-	}
-
 	var data jsonapi.ImportExportRequest
 	if err := render.Bind(r, &data); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -357,11 +341,10 @@ func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
 }
 
 // Exports sets up the exports API routes.
-func Exports(params Params, restoreWorker RestoreWorkerInterface, importWorker ImportWorkerInterface) func(r chi.Router) {
+func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Router) {
 	api := &exportsAPI{
 		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
-		importWorker:   importWorker,
 	}
 
 	return func(r chi.Router) {

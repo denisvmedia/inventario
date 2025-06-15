@@ -63,8 +63,7 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 
 	// Mock worker with no running restores
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker, mockImportWorker))
+	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Create restore request
 	restoreRequest := &jsonapi.RestoreOperationCreateRequest{
@@ -120,8 +119,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 
 	// Mock worker with running restore
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: true}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker, mockImportWorker))
+	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Create restore request
 	restoreRequest := &jsonapi.RestoreOperationCreateRequest{
@@ -217,8 +215,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	// Use real restore worker (not mock) to test actual logic
 	restoreService := restore.NewRestoreService(registrySet, "memory://")
 	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, "memory://")
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	r.Route("/api/v1/exports", apiserver.Exports(params, restoreWorker, mockImportWorker))
+	r.Route("/api/v1/exports", apiserver.Exports(params, restoreWorker))
 
 	// Try to create another restore request
 	restoreRequest := &jsonapi.RestoreOperationCreateRequest{
@@ -297,8 +294,7 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 
 	// Mock worker with no running restores
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	mockImportWorker := &mockImportWorker{isRunning: false}
-	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker, mockImportWorker))
+	r.Route("/api/v1/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Create restore request
 	restoreRequest := &jsonapi.RestoreOperationCreateRequest{
