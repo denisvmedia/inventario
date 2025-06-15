@@ -17,6 +17,7 @@ type ImportWorkerInterface interface {
 	Start(ctx context.Context)
 	Stop()
 	IsRunning() bool
+	HasRunningImports(ctx context.Context) (bool, error) // Returns true if any import is running or pending
 }
 
 const (
@@ -97,6 +98,24 @@ func (w *ImportWorker) IsRunning() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.isRunning
+}
+
+// HasRunningImports returns true if any import is running or pending
+func (w *ImportWorker) HasRunningImports(ctx context.Context) (bool, error) {
+	exports, err := w.registrySet.ExportRegistry.List(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	for _, export := range exports {
+		// Check for imports (type "imported") that are pending or in progress
+		if export.Type == models.ExportTypeImported &&
+		   (export.Status == models.ExportStatusPending || export.Status == models.ExportStatusInProgress) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // run is the main worker loop

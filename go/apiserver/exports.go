@@ -30,6 +30,7 @@ func exportFromContext(ctx context.Context) *models.Export {
 type exportsAPI struct {
 	registrySet    *registry.Set
 	uploadLocation string
+	importWorker   ImportWorkerInterface
 }
 
 // listExports lists all exports.
@@ -246,6 +247,18 @@ func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io
 // @Failure 422 {object} jsonapi.ErrorResponse "Unprocessable Entity"
 // @Router /exports/import [post].
 func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
+	// Check if there are any running imports (prevent concurrent imports)
+	hasRunningImports, err := api.importWorker.HasRunningImports(r.Context())
+	if err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to check for running imports"))
+		return
+	}
+
+	if hasRunningImports {
+		conflictError(w, r, errkit.WithMessage(nil, "An import operation is already in progress. Please wait for it to complete before starting a new import."))
+		return
+	}
+
 	var data jsonapi.ImportExportRequest
 	if err := render.Bind(r, &data); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -353,6 +366,7 @@ func Exports(params Params, restoreWorker RestoreWorkerInterface, importWorker I
 	api := &exportsAPI{
 		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
+		importWorker:   importWorker,
 	}
 
 	return func(r chi.Router) {

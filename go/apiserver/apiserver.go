@@ -34,6 +34,7 @@ type ImportWorkerInterface interface {
 	Start(ctx context.Context)
 	Stop()
 	IsRunning() bool
+	HasRunningImports(ctx context.Context) (bool, error) // Returns true if any import is running or pending
 }
 
 type ctxValueKey string

@@ -91,3 +91,13 @@ func notFound(w http.ResponseWriter, r *http.Request) error {
 	}
 	return render.Render(w, r, jsonapi.NewErrors(notFoundError))
 }
+
+func conflictError(w http.ResponseWriter, r *http.Request, err error) error {
+	conflictErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errkit.ForceMarshalError(err),
+		HTTPStatusCode: http.StatusConflict,
+		StatusText:     "Conflict",
+	}
+	return render.Render(w, r, jsonapi.NewErrors(conflictErr))
+}

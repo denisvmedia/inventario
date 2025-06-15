@@ -124,6 +124,11 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return errkit.Wrap(err, "failed to get export")
 	}
 
+	// Skip processing for imported exports - they are already completed
+	if export.Type == models.ExportTypeImported {
+		return nil
+	}
+
 	// Update status to in_progress
 	export.Status = models.ExportStatusInProgress
 	_, err = s.registrySet.ExportRegistry.Update(ctx, *export)
@@ -284,6 +289,10 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 		if err := s.streamSelectedItems(ctx, writer, export.SelectedItems, args, stats); err != nil {
 			return nil, errkit.Wrap(err, "failed to stream selected items")
 		}
+	case models.ExportTypeImported:
+		// Imported exports should not be processed through this function
+		// They already have their XML file and should be marked as completed
+		return nil, errkit.WithFields(ErrUnsupportedExportType, "type", export.Type, "reason", "imported exports should not be processed")
 	default:
 		return nil, errkit.WithFields(ErrUnsupportedExportType, "type", export.Type)
 	}

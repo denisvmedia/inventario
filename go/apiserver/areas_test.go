@@ -29,7 +29,8 @@ func (m *mockRestoreWorker) HasRunningRestores(ctx context.Context) (bool, error
 
 // mockImportWorker is a mock implementation of ImportWorkerInterface for testing
 type mockImportWorker struct {
-	isRunning bool
+	isRunning         bool
+	hasRunningImports bool
 }
 
 func (m *mockImportWorker) Start(ctx context.Context) {
@@ -42,6 +43,10 @@ func (m *mockImportWorker) Stop() {
 
 func (m *mockImportWorker) IsRunning() bool {
 	return m.isRunning
+}
+
+func (m *mockImportWorker) HasRunningImports(ctx context.Context) (bool, error) {
+	return m.hasRunningImports, nil
 }
 
 func TestAreasList(t *testing.T) {
