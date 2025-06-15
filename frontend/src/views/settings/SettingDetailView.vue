@@ -195,9 +195,14 @@ const dateFormatOptions = ref([
 // Track if we've loaded settings
 const settingsLoaded = ref(false)
 
-// Check if settings are required based on query parameter
+// Check if settings are required based on actual state, not just URL parameter
 const isSettingsRequired = computed(() => {
-  return route.query.required === 'true'
+  // Only check URL parameter if settings haven't been loaded yet
+  if (!settingsLoaded.value) {
+    return route.query.required === 'true'
+  }
+  // After settings are loaded, check actual state: settings are required only if MainCurrency is not set
+  return settingId.value === 'system_config' && !isMainCurrencySet.value
 })
 
 // Removed Currency Config and TLS Config as requested
@@ -359,6 +364,8 @@ async function loadSetting() {
     }
   } finally {
     loading.value = false
+    // Mark settings as loaded to properly handle the banner visibility
+    settingsLoaded.value = true
   }
 }
 

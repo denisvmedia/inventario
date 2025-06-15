@@ -107,13 +107,14 @@ const showSuccessMessage = ref<boolean>(false)
 // Track if we've loaded settings
 const settingsLoaded = ref(false)
 
-// Check if settings are required based on query parameter
+// Check if settings are required based on actual state, not just URL parameter
 const settingsRequired = computed(() => {
   // Only check MainCurrency after settings have been loaded
   if (!settingsLoaded.value) {
     return route.query.required === 'true'
   }
-  return route.query.required === 'true' || !settings.value.MainCurrency
+  // Check actual state: settings are required only if MainCurrency is not set
+  return !settings.value.MainCurrency
 })
 
 // Watch for success query parameter
