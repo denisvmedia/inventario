@@ -40,6 +40,17 @@ func NewImportWorker(importService *ImportService, registrySet *registry.Set, ma
 	}
 }
 
+// NewImportWorkerWithPollInterval creates a new import worker with custom poll interval
+func NewImportWorkerWithPollInterval(importService *ImportService, registrySet *registry.Set, maxConcurrentImports int, pollInterval time.Duration) *ImportWorker {
+	return &ImportWorker{
+		importService: importService,
+		registrySet:   registrySet,
+		pollInterval:  pollInterval,
+		stopCh:        make(chan struct{}),
+		semaphore:     semaphore.NewWeighted(int64(maxConcurrentImports)),
+	}
+}
+
 // Start begins processing imports in the background
 func (w *ImportWorker) Start(ctx context.Context) {
 	w.mu.Lock()
@@ -117,8 +128,8 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 	}
 
 	for _, export := range exports {
-		// Only process imports of type "imported" that are pending
-		if export.Type != models.ExportTypeImported || export.Status != models.ExportStatusPending {
+		// Only process imported exports that are pending
+		if !export.Imported || export.Status != models.ExportStatusPending {
 			continue
 		}
 

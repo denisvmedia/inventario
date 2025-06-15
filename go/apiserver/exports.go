@@ -11,6 +11,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	"github.com/denisvmedia/inventario/export"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -20,11 +21,11 @@ import (
 const exportCtxKey ctxValueKey = "export"
 
 func exportFromContext(ctx context.Context) *models.Export {
-	export, ok := ctx.Value(exportCtxKey).(*models.Export)
+	exp, ok := ctx.Value(exportCtxKey).(*models.Export)
 	if !ok {
 		return nil
 	}
-	return export
+	return exp
 }
 
 type exportsAPI struct {
@@ -105,32 +106,15 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	export := *request.Data.Attributes
-
-	// Set status to pending if not set
-	if export.Status == "" {
-		export.Status = models.ExportStatusPending
-	}
-
-	// Set created date (we do not accept it from the client)
-	export.CreatedDate = models.PNow()
-
-	// Enrich selected items with names from the database
-	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
-		if err := api.enrichSelectedItemsWithNames(r.Context(), &export); err != nil {
-			internalServerError(w, r, err)
-			return
-		}
-	}
-
-	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), export)
+	svc := export.NewExportService(api.registrySet, api.uploadLocation)
+	createdExport, err := svc.CreateExportFromUserInput(r.Context(), request.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	if err := render.Render(w, r, jsonapi.NewExportResponse(createdExport)); err != nil {
+	if err := render.Render(w, r, jsonapi.NewExportResponse(&createdExport)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -222,16 +206,6 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
-	b, err := blob.OpenBucket(ctx, api.uploadLocation)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to open bucket")
-	}
-	defer b.Close()
-
-	return b.NewReader(context.Background(), filePath, nil)
-}
-
 // importExport imports an XML export file and creates an export record
 // @Summary Import XML export
 // @Description Import an uploaded XML export file and create an export record
@@ -251,9 +225,9 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create export record with pending status and source file path
-	export := models.NewImportedExport(data.Data.Attributes.Description, data.Data.Attributes.SourceFilePath)
+	importedExport := models.NewImportedExport(data.Data.Attributes.Description, data.Data.Attributes.SourceFilePath)
 
-	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), export)
+	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), importedExport)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -268,55 +242,14 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// enrichSelectedItemsWithNames fetches the names and relationships for selected items and adds them to the export
-func (api *exportsAPI) enrichSelectedItemsWithNames(ctx context.Context, export *models.Export) error {
-	for i, item := range export.SelectedItems {
-		var name string
-		var locationID, areaID string
-		var err error
-
-		switch item.Type {
-		case models.ExportSelectedItemTypeLocation:
-			location, getErr := api.registrySet.LocationRegistry.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Location " + item.ID + "]"
-			} else {
-				name = location.Name
-			}
-		case models.ExportSelectedItemTypeArea:
-			area, getErr := api.registrySet.AreaRegistry.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Area " + item.ID + "]"
-			} else {
-				name = area.Name
-				locationID = area.LocationID // Store the relationship
-			}
-		case models.ExportSelectedItemTypeCommodity:
-			commodity, getErr := api.registrySet.CommodityRegistry.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Commodity " + item.ID + "]"
-			} else {
-				name = commodity.Name
-				areaID = commodity.AreaID // Store the relationship
-			}
-		default:
-			name = "[Unknown Item " + item.ID + "]"
-		}
-
-		if err != nil {
-			return errkit.Wrap(err, "failed to fetch item name")
-		}
-
-		// Update the item with the name and relationships
-		export.SelectedItems[i].Name = name
-		export.SelectedItems[i].LocationID = locationID
-		export.SelectedItems[i].AreaID = areaID
+func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
+	b, err := blob.OpenBucket(ctx, api.uploadLocation)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to open bucket")
 	}
+	defer b.Close()
 
-	return nil
+	return b.NewReader(context.Background(), filePath, nil)
 }
 
 func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {

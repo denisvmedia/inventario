@@ -193,7 +193,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	importWorker.Start(ctx)
 	defer importWorker.Stop()
 
-	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker, importWorker))
+	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)
 	c := make(chan os.Signal, 1)

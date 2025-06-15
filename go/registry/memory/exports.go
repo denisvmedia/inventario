@@ -36,6 +36,20 @@ func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
 	return activeExports, nil
 }
 
+// Get returns an export by ID, excluding soft deleted exports
+func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, error) {
+	export, err := r.Registry.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if export.IsDeleted() {
+		return nil, errkit.WithStack(registry.ErrNotFound, "export is deleted")
+	}
+
+	return export, nil
+}
+
 // Delete performs soft delete by setting deleted_at timestamp
 func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	export, err := r.Registry.Get(ctx, id)

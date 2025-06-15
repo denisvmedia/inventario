@@ -149,6 +149,7 @@ type Export struct {
 	DeletedAt       PTimestamp                      `json:"deleted_at" db:"deleted_at"`
 	ErrorMessage    string                          `json:"error_message" db:"error_message"`
 	Description     string                          `json:"description" db:"description"`
+	Imported        bool                            `json:"imported" db:"imported"`
 	// Export statistics
 	FileSize       int64 `json:"file_size" db:"file_size"`
 	LocationCount  int   `json:"location_count" db:"location_count"`
@@ -167,7 +168,18 @@ func NewImportedExport(description, sourceFilePath string) Export {
 		Status:      ExportStatusPending,
 		CreatedDate: PNow(),
 		FilePath:    sourceFilePath,
+		Imported:    true,
 	}
+}
+
+func NewExportFromUserInput(export *Export) Export {
+	result := *export
+	// Set created date (we do not accept it from the client)
+	export.CreatedDate = PNow()
+	export.Status = ExportStatusPending
+	export.Imported = false
+
+	return result
 }
 
 func (*Export) Validate() error {

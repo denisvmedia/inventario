@@ -10,19 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
-
-// ExportService handles the background processing of export requests
-type ExportService struct {
-	registrySet    *registry.Set
-	uploadLocation string
-}
 
 // ExportArgs contains arguments for export operations
 type ExportArgs struct {
@@ -38,14 +31,6 @@ type ExportStats struct {
 	InvoiceCount   int
 	ManualCount    int
 	BinaryDataSize int64
-}
-
-// NewExportService creates a new export service
-func NewExportService(registrySet *registry.Set, uploadLocation string) *ExportService {
-	return &ExportService{
-		registrySet:    registrySet,
-		uploadLocation: uploadLocation,
-	}
 }
 
 // InventoryData represents the root XML structure for exports
@@ -116,6 +101,44 @@ type File struct {
 	Data         string   `xml:"data,omitempty"` // Base64 encoded file data if include_file_data is true
 }
 
+// ExportService handles the background processing of export requests
+type ExportService struct {
+	registrySet    *registry.Set
+	uploadLocation string
+}
+
+// NewExportService creates a new export service
+func NewExportService(registrySet *registry.Set, uploadLocation string) *ExportService {
+	return &ExportService{
+		registrySet:    registrySet,
+		uploadLocation: uploadLocation,
+	}
+}
+
+func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *models.Export) (models.Export, error) {
+	// Validate the export
+	if err := input.ValidateWithContext(ctx); err != nil {
+		return models.Export{}, errkit.Wrap(err, "failed to validate export")
+	}
+
+	export := models.NewExportFromUserInput(input)
+
+	// Enrich selected items with names from the database
+	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
+		if err := s.enrichSelectedItemsWithNames(ctx, &export); err != nil {
+			return models.Export{}, errkit.Wrap(err, "failed to enrich selected items with names")
+		}
+	}
+
+	// Create the export
+	created, err := s.registrySet.ExportRegistry.Create(ctx, export)
+	if err != nil {
+		return models.Export{}, errkit.Wrap(err, "failed to create export")
+	}
+
+	return *created, nil
+}
+
 // ProcessExport processes an export request in the background
 func (s *ExportService) ProcessExport(ctx context.Context, exportID string) error {
 	// Get the export request
@@ -174,6 +197,104 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	return nil
 }
 
+// DeleteExportFile deletes an export file from blob storage
+func (s *ExportService) DeleteExportFile(ctx context.Context, filePath string) error {
+	// Open blob bucket
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return errkit.Wrap(err, "failed to open blob bucket")
+	}
+	defer func() {
+		if closeErr := b.Close(); closeErr != nil {
+			err = errkit.Wrap(closeErr, "failed to close blob bucket")
+		}
+	}()
+
+	// Delete the file
+	err = b.Delete(ctx, filePath)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete export file")
+	}
+
+	return nil
+}
+
+// ParseXMLMetadata parses XML file to extract statistics and determine export type
+func (s *ExportService) ParseXMLMetadata(_ctx context.Context, reader io.Reader) (*ExportStats, models.ExportType, error) {
+	stats := &ExportStats{}
+	exportType := models.ExportTypeImported // Default to imported type
+
+	decoder := xml.NewDecoder(reader)
+
+	for {
+		tok, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, exportType, errkit.Wrap(err, "failed to read XML token")
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "inventory":
+				// Check export type attribute if present
+				for _, attr := range t.Attr {
+					if attr.Name.Local != "exportType" {
+						continue
+					}
+					switch attr.Value {
+					case "full_database":
+						exportType = models.ExportTypeFullDatabase
+					case "selected_items":
+						exportType = models.ExportTypeSelectedItems
+					case "locations":
+						exportType = models.ExportTypeLocations
+					case "areas":
+						exportType = models.ExportTypeAreas
+					case "commodities":
+						exportType = models.ExportTypeCommodities
+					}
+				}
+			case "locations":
+				if err := s.countLocations(decoder, stats); err != nil {
+					return nil, exportType, errkit.Wrap(err, "failed to count locations")
+				}
+			case "areas":
+				if err := s.countAreas(decoder, stats); err != nil {
+					return nil, exportType, errkit.Wrap(err, "failed to count areas")
+				}
+			case "commodities":
+				if err := s.countCommodities(decoder, stats); err != nil {
+					return nil, exportType, errkit.Wrap(err, "failed to count commodities")
+				}
+			}
+		}
+	}
+
+	// The following was commented out because detecting the export type from the content is not
+	// reliable. It's better to just set it to "imported" and let the user decide.
+	//
+	//// If export type wasn't specified in XML, try to infer it from content
+	//
+	// if exportType == models.ExportTypeImported {
+	//	if hasLocations && hasAreas && hasCommodities {
+	//		exportType = models.ExportTypeFullDatabase
+	//	} else if hasLocations && !hasAreas && !hasCommodities {
+	//		exportType = models.ExportTypeLocations
+	//	} else if hasAreas && !hasLocations && !hasCommodities {
+	//		exportType = models.ExportTypeAreas
+	//	} else if hasCommodities && !hasLocations && !hasAreas {
+	//		exportType = models.ExportTypeCommodities
+	//	} else {
+	//		exportType = models.ExportTypeSelectedItems
+	//	}
+	// }
+
+	return stats, exportType, nil
+}
+
 // generateExport generates the XML export file using blob storage and returns statistics
 func (s *ExportService) generateExport(ctx context.Context, export models.Export) (string, *ExportStats, error) {
 	// Open blob bucket
@@ -209,28 +330,6 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 	}
 
 	return blobKey, stats, nil
-}
-
-// DeleteExportFile deletes an export file from blob storage
-func (s *ExportService) DeleteExportFile(ctx context.Context, filePath string) error {
-	// Open blob bucket
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return errkit.Wrap(err, "failed to open blob bucket")
-	}
-	defer func() {
-		if closeErr := b.Close(); closeErr != nil {
-			err = errkit.Wrap(closeErr, "failed to close blob bucket")
-		}
-	}()
-
-	// Delete the file
-	err = b.Delete(ctx, filePath)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete export file")
-	}
-
-	return nil
 }
 
 // getFileSize gets the size of a file in blob storage
@@ -1360,159 +1459,54 @@ func (s *ExportService) streamBase64Content(encoder *xml.Encoder, reader *blob.R
 	return xmlWriter.totalSize, nil
 }
 
-// xmlBase64Writer is a custom writer that writes base64 data directly to XML encoder and tracks size
-type xmlBase64Writer struct {
-	encoder   *xml.Encoder
-	totalSize int64
-}
+func (s *ExportService) enrichSelectedItemsWithNames(ctx context.Context, export *models.Export) error {
+	for i, item := range export.SelectedItems {
+		var name string
+		var locationID, areaID string
+		var err error
 
-// Write implements io.Writer interface to write base64 chunks directly to XML and track size
-func (w *xmlBase64Writer) Write(p []byte) (n int, err error) {
-	if err := w.encoder.EncodeToken(xml.CharData(p)); err != nil {
-		return 0, err
-	}
-	w.totalSize += int64(len(p))
-	return len(p), nil
-}
-
-// ImportXMLExport imports an uploaded XML file and creates an export record with extracted metadata
-func (s *ExportService) ImportXMLExport(ctx context.Context, uploadedFilePath, description string) (*models.Export, error) {
-	// Open blob bucket
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to open blob bucket")
-	}
-	defer func() {
-		if closeErr := b.Close(); closeErr != nil {
-			err = errkit.Wrap(closeErr, "failed to close blob bucket")
-		}
-	}()
-
-	// Open the uploaded XML file
-	reader, err := b.NewReader(ctx, uploadedFilePath, nil)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to open uploaded XML file")
-	}
-	defer reader.Close()
-
-	// Get file size
-	attrs, err := b.Attributes(ctx, uploadedFilePath)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get file attributes")
-	}
-
-	// Parse XML to extract metadata and statistics
-	stats, exportType, err := s.ParseXMLMetadata(ctx, reader)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to parse XML metadata")
-	}
-
-	// Create export record
-	export := &models.Export{
-		EntityID:        models.EntityID{ID: uuid.New().String()},
-		Type:            exportType,
-		Status:          models.ExportStatusCompleted, // Imported exports are already complete
-		Description:     description,
-		FilePath:        uploadedFilePath,
-		CreatedDate:     models.PNow(),
-		CompletedDate:   models.PNow(),
-		FileSize:        attrs.Size,
-		LocationCount:   stats.LocationCount,
-		AreaCount:       stats.AreaCount,
-		CommodityCount:  stats.CommodityCount,
-		ImageCount:      stats.ImageCount,
-		InvoiceCount:    stats.InvoiceCount,
-		ManualCount:     stats.ManualCount,
-		BinaryDataSize:  stats.BinaryDataSize,
-		IncludeFileData: stats.BinaryDataSize > 0, // Set based on whether file data is present
-	}
-
-	// Save export record to database
-	createdExport, err := s.registrySet.ExportRegistry.Create(ctx, *export)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create export record")
-	}
-
-	return createdExport, nil
-}
-
-// ParseXMLMetadata parses XML file to extract statistics and determine export type
-func (s *ExportService) ParseXMLMetadata(ctx context.Context, reader io.Reader) (*ExportStats, models.ExportType, error) {
-	stats := &ExportStats{}
-	var exportType models.ExportType = models.ExportTypeImported // Default to imported type
-
-	decoder := xml.NewDecoder(reader)
-
-	// Track what sections we find to determine the export type
-	hasLocations := false
-	hasAreas := false
-	hasCommodities := false
-
-	for {
-		tok, err := decoder.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, exportType, errkit.Wrap(err, "failed to read XML token")
-		}
-
-		switch t := tok.(type) {
-		case xml.StartElement:
-			switch t.Name.Local {
-			case "inventory":
-				// Check export type attribute if present
-				for _, attr := range t.Attr {
-					if attr.Name.Local == "exportType" {
-						switch attr.Value {
-						case "full_database":
-							exportType = models.ExportTypeFullDatabase
-						case "selected_items":
-							exportType = models.ExportTypeSelectedItems
-						case "locations":
-							exportType = models.ExportTypeLocations
-						case "areas":
-							exportType = models.ExportTypeAreas
-						case "commodities":
-							exportType = models.ExportTypeCommodities
-						}
-					}
-				}
-			case "locations":
-				hasLocations = true
-				if err := s.countLocations(decoder, stats); err != nil {
-					return nil, exportType, errkit.Wrap(err, "failed to count locations")
-				}
-			case "areas":
-				hasAreas = true
-				if err := s.countAreas(decoder, stats); err != nil {
-					return nil, exportType, errkit.Wrap(err, "failed to count areas")
-				}
-			case "commodities":
-				hasCommodities = true
-				if err := s.countCommodities(decoder, stats); err != nil {
-					return nil, exportType, errkit.Wrap(err, "failed to count commodities")
-				}
+		switch item.Type {
+		case models.ExportSelectedItemTypeLocation:
+			location, getErr := s.registrySet.LocationRegistry.Get(ctx, item.ID)
+			if getErr != nil {
+				// If item doesn't exist, use a fallback name
+				name = "[Deleted Location " + item.ID + "]"
+			} else {
+				name = location.Name
 			}
+		case models.ExportSelectedItemTypeArea:
+			area, getErr := s.registrySet.AreaRegistry.Get(ctx, item.ID)
+			if getErr != nil {
+				// If item doesn't exist, use a fallback name
+				name = "[Deleted Area " + item.ID + "]"
+			} else {
+				name = area.Name
+				locationID = area.LocationID // Store the relationship
+			}
+		case models.ExportSelectedItemTypeCommodity:
+			commodity, getErr := s.registrySet.CommodityRegistry.Get(ctx, item.ID)
+			if getErr != nil {
+				// If item doesn't exist, use a fallback name
+				name = "[Deleted Commodity " + item.ID + "]"
+			} else {
+				name = commodity.Name
+				areaID = commodity.AreaID // Store the relationship
+			}
+		default:
+			name = "[Unknown Item " + item.ID + "]"
 		}
+
+		if err != nil {
+			return errkit.Wrap(err, "failed to fetch item name")
+		}
+
+		// Update the item with the name and relationships
+		export.SelectedItems[i].Name = name
+		export.SelectedItems[i].LocationID = locationID
+		export.SelectedItems[i].AreaID = areaID
 	}
 
-	// If export type wasn't specified in XML, try to infer it from content
-	if exportType == models.ExportTypeImported {
-		if hasLocations && hasAreas && hasCommodities {
-			exportType = models.ExportTypeFullDatabase
-		} else if hasLocations && !hasAreas && !hasCommodities {
-			exportType = models.ExportTypeLocations
-		} else if hasAreas && !hasLocations && !hasCommodities {
-			exportType = models.ExportTypeAreas
-		} else if hasCommodities && !hasLocations && !hasAreas {
-			exportType = models.ExportTypeCommodities
-		} else {
-			exportType = models.ExportTypeSelectedItems
-		}
-	}
-
-	return stats, exportType, nil
+	return nil
 }
 
 // countLocations counts location elements in XML
@@ -1682,4 +1676,19 @@ func (s *ExportService) estimateDataElementSize(decoder *xml.Decoder, stats *Exp
 			}
 		}
 	}
+}
+
+// xmlBase64Writer is a custom writer that writes base64 data directly to XML encoder and tracks size
+type xmlBase64Writer struct {
+	encoder   *xml.Encoder
+	totalSize int64
+}
+
+// Write implements io.Writer interface to write base64 chunks directly to XML and track size
+func (w *xmlBase64Writer) Write(p []byte) (n int, err error) {
+	if err := w.encoder.EncodeToken(xml.CharData(p)); err != nil {
+		return 0, err
+	}
+	w.totalSize += int64(len(p))
+	return len(p), nil
 }
