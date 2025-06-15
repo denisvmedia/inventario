@@ -1,4 +1,4 @@
-package apiserver
+package apiserver_test
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -42,11 +43,12 @@ func TestExportSoftDelete(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	params := Params{
+	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
-	r.Route("/exports", Exports(params))
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test soft delete
 	req := httptest.NewRequest("DELETE", "/exports/"+created.ID, nil)
@@ -57,7 +59,9 @@ func TestExportSoftDelete(t *testing.T) {
 
 	// Verify export is soft deleted
 	retrieved, err := registrySet.ExportRegistry.Get(context.Background(), created.ID)
-	c.Assert(err, qt.IsNil)
+	c.Assert(err, qt.ErrorIs, registry.ErrDeleted)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound) // ErrNotFound is a superset of ErrDeleted
+	c.Assert(retrieved, qt.IsNotNil)                // make sure even though we got an error, we still got the record
 	c.Assert(retrieved.IsDeleted(), qt.IsTrue)
 
 	// Test that download is blocked for deleted export
@@ -103,11 +107,12 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	params := Params{
+	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
-	r.Route("/exports", Exports(params))
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint
 	req := httptest.NewRequest("GET", "/exports", nil)
@@ -160,11 +165,12 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	params := Params{
+	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
-	r.Route("/exports", Exports(params))
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint with include_deleted=true
 	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
@@ -201,11 +207,12 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	params := Params{
+	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 	}
-	r.Route("/exports", Exports(params))
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Create export request payload
 	requestPayload := jsonapi.ExportCreateRequest{

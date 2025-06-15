@@ -1,5 +1,5 @@
 <template>
-  <div class="export-detail" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
+  <div class="export-detail-page" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
     <div class="breadcrumb-nav">
       <router-link to="/exports" class="breadcrumb-link">
         <font-awesome-icon icon="arrow-left" /> Back to Exports
@@ -244,12 +244,84 @@
         </div>
       </div>
 
+      <!-- Restore Operations -->
+      <div v-if="restoreOperations.length > 0" class="export-card">
+        <div class="card-header">
+          <h2>Restore Operations</h2>
+          <span class="count-badge">{{ restoreOperations.length }} operation{{ restoreOperations.length !== 1 ? 's' : '' }}</span>
+        </div>
+        <div class="card-body">
+          <div class="restore-operations">
+            <div v-for="(restore, index) in restoreOperations" :key="restore.id" class="restore-operation">
+              <div class="restore-header" @click="toggleRestoreOperation(index)">
+                <div class="restore-info">
+                  <div class="restore-description">{{ restore.description }}</div>
+                  <div class="restore-meta">
+                    <span class="restore-date">{{ formatDateTime(restore.created_date) }}</span>
+                    <span class="restore-strategy">{{ formatRestoreStrategy(restore.options?.strategy) }}</span>
+                  </div>
+                </div>
+                <div class="restore-status">
+                  <span class="status-badge" :class="getRestoreStatusClasses(restore)">
+                    <font-awesome-icon
+                      v-if="restore.status === 'running' || restore.status === 'pending'"
+                      icon="spinner"
+                      spin
+                      class="status-icon"
+                    />
+                    {{ getRestoreDisplayStatus(restore) }}
+                  </span>
+                  <button class="collapse-toggle" :class="{ 'expanded': expandedRestoreOperations[index] }">
+                    <font-awesome-icon :icon="expandedRestoreOperations[index] ? 'chevron-up' : 'chevron-down'" />
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="expandedRestoreOperations[index] && restore.steps && restore.steps.length > 0" class="restore-steps">
+                <div class="steps-header">
+                  <h4>Restore Steps</h4>
+                  <span class="steps-count">{{ restore.steps.length }} steps</span>
+                </div>
+                <div class="steps-list">
+                  <div v-for="step in restore.steps" :key="step.id" class="restore-step">
+                    <div class="step-icon">
+                      <span class="step-emoji">{{ getStepEmoji(step.result) }}</span>
+                    </div>
+                    <div class="step-content">
+                      <div class="step-name">{{ step.name }}</div>
+                      <div class="step-details">
+                        <span class="step-duration" v-if="step.duration">{{ formatDuration(step.duration) }}</span>
+                        <span class="step-result" :class="`result-${step.result}`">{{ formatStepResult(step.result) }}</span>
+                      </div>
+                      <div v-if="step.reason" class="step-reason">{{ step.reason }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="expandedRestoreOperations[index] && restore.error_message" class="restore-error">
+                <div class="error-message">{{ restore.error_message }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="export-card">
         <div class="card-header">
           <h2>Actions</h2>
         </div>
         <div class="card-body">
           <div class="actions right-aligned">
+            <button
+              v-if="exportData.status === 'completed' && canPerformOperations(exportData)"
+              class="btn btn-restore"
+              @click="navigateToRestore"
+            >
+              <font-awesome-icon icon="upload" />
+              Restore from Export
+            </button>
+
             <button
               v-if="exportData.status === 'completed'"
               class="btn btn-primary"
@@ -319,6 +391,8 @@ const downloading = ref(false)
 const showDeleteDialog = ref(false)
 const loadingItems = ref(false)
 const selectedItemsDetails = ref<Array<{id: string, name: string, type: string}>>([])
+const restoreOperations = ref<Array<any>>([])
+const expandedRestoreOperations = ref<Record<number, boolean>>({})
 const hierarchicalItems = ref<{
   locations: Array<{
     id: string
@@ -373,6 +447,9 @@ const loadExport = async () => {
       if (exportData.value?.selected_items && exportData.value.selected_items.length > 0) {
         await loadSelectedItemsDetails(exportData.value.selected_items)
       }
+
+      // Load restore operations for this export
+      await loadRestoreOperations()
     }
   } catch (err: any) {
     error.value = err.response?.data?.errors?.[0]?.detail || 'Failed to load export'
@@ -380,6 +457,26 @@ const loadExport = async () => {
     throw err
   } finally {
     loading.value = false
+  }
+}
+
+const loadRestoreOperations = async () => {
+  try {
+    if (!exportData.value?.id) return
+
+    const response = await exportService.getRestoreOperations(exportData.value.id)
+    if (response.data && response.data.data) {
+      restoreOperations.value = response.data.data.map((item: any) => ({
+        id: item.id,
+        ...item.attributes
+      }))
+    } else {
+      restoreOperations.value = []
+    }
+  } catch (err: any) {
+    console.error('Error loading restore operations:', err)
+    // Don't fail the whole page if restore operations can't be loaded
+    restoreOperations.value = []
   }
 }
 
@@ -555,6 +652,72 @@ const formatFileSize = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+const formatRestoreStrategy = (strategy: string) => {
+  const strategyMap = {
+    'merge_add': 'Merge Add',
+    'merge_update': 'Merge Update',
+    'full_replace': 'Full Replace'
+  }
+  return strategyMap[strategy as keyof typeof strategyMap] || strategy
+}
+
+const getRestoreStatusClasses = (restore: any) => {
+  const status = restore.status || 'pending'
+  return `status-${status.replace('_', '-')}`
+}
+
+const getRestoreDisplayStatus = (restore: any) => {
+  const statusMap = {
+    'pending': 'Pending',
+    'running': 'Running',
+    'completed': 'Completed',
+    'failed': 'Failed'
+  }
+  return statusMap[restore.status as keyof typeof statusMap] || restore.status
+}
+
+const getStepEmoji = (result: string) => {
+  const emojiMap = {
+    'todo': '📝',
+    'in_progress': '🔄',
+    'success': '✅',
+    'error': '❌',
+    'skipped': '⏭️'
+  }
+  return emojiMap[result as keyof typeof emojiMap] || '📝'
+}
+
+const formatStepResult = (result: string) => {
+  const resultMap = {
+    'todo': 'To Do',
+    'in_progress': 'In Progress',
+    'success': 'Success',
+    'error': 'Error',
+    'skipped': 'Skipped'
+  }
+  return resultMap[result as keyof typeof resultMap] || result
+}
+
+const formatDuration = (duration: number) => {
+  if (duration < 1000) {
+    return `${duration}ms`
+  } else if (duration < 60000) {
+    return `${(duration / 1000).toFixed(1)}s`
+  } else {
+    return `${(duration / 60000).toFixed(1)}m`
+  }
+}
+
+const toggleRestoreOperation = (index: number) => {
+  expandedRestoreOperations.value[index] = !expandedRestoreOperations.value[index]
+}
+
+const navigateToRestore = () => {
+  if (exportData.value?.id) {
+    router.push(`/exports/${exportData.value.id}/restore`)
+  }
+}
+
 const retryExport = async () => {
   if (!exportData.value?.id) return
 
@@ -649,26 +812,45 @@ onMounted(() => {
   loadExport()
 
   // Auto-refresh if export is in progress
-  const interval = setInterval(() => {
+  const exportInterval = setInterval(() => {
     if (exportData.value?.status === 'pending' || exportData.value?.status === 'in_progress') {
       loadExport().catch(err => {
         console.error('Error refreshing export:', err)
-        clearInterval(interval)
+        clearInterval(exportInterval)
       })
     } else {
-      clearInterval(interval)
+      clearInterval(exportInterval)
     }
   }, 5000)
 
-  // Cleanup interval on component unmount
-  return () => clearInterval(interval)
+  // Auto-refresh restore operations that are in progress
+  const restoreInterval = setInterval(() => {
+    if (exportData.value?.restore_operations) {
+      const runningRestores = exportData.value.restore_operations.filter(
+        restore => restore.status === 'pending' || restore.status === 'running'
+      )
+
+      if (runningRestores.length > 0) {
+        // Refresh the entire export to get updated restore operations
+        loadExport().catch(err => {
+          console.error('Error refreshing restore operations:', err)
+        })
+      }
+    }
+  }, 3000) // Check restore operations more frequently
+
+  // Cleanup intervals on component unmount
+  return () => {
+    clearInterval(exportInterval)
+    clearInterval(restoreInterval)
+  }
 })
 </script>
 
 <style lang="scss" scoped>
 @use '@/assets/main' as *;
 
-.export-detail {
+.export-detail-page {
   max-width: 1000px;
   margin: 0 auto;
   padding: 20px;
@@ -754,6 +936,11 @@ onMounted(() => {
 .count-badge {
   padding: 4px 8px;
   border-radius: $default-radius;
+
+  .status-icon {
+    margin-right: 4px;
+  }
+
   font-size: 0.8rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -808,6 +995,11 @@ onMounted(() => {
 .type-commodities {
   background-color: #fce4ec;
   color: #c2185b;
+}
+
+.type-imported {
+  background-color: #f0f4f8;
+  color: #4a5568;
 }
 
 .bool-badge.yes {
@@ -957,5 +1149,227 @@ onMounted(() => {
 .export-detail.deleted .export-card {
   background-color: #f8f9fa;
   border-left: 4px solid #6c757d;
+}
+
+// Restore operations styles
+.restore-operations {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.restore-operation {
+  border: 1px solid $border-color;
+  border-radius: $default-radius;
+  padding: 1rem;
+  background-color: #fafafa;
+}
+
+.restore-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: $default-radius;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgba($primary-color, 0.05);
+  }
+}
+
+.restore-info {
+  flex: 1;
+}
+
+.restore-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.collapse-toggle {
+  background: none;
+  border: none;
+  color: $text-secondary-color;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: $default-radius;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: rgba($primary-color, 0.1);
+    color: $primary-color;
+  }
+
+  &.expanded {
+    transform: rotate(180deg);
+  }
+}
+
+.restore-description {
+  font-weight: 600;
+  font-size: 1rem;
+  color: $text-color;
+  margin-bottom: 0.5rem;
+}
+
+.restore-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: $text-secondary-color;
+}
+
+.restore-strategy {
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.restore-steps {
+  margin-top: 1rem;
+}
+
+.steps-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+
+  h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    color: $text-secondary-color;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+}
+
+.steps-count {
+  font-size: 0.8rem;
+  color: $text-secondary-color;
+  background-color: #e9ecef;
+  padding: 2px 6px;
+  border-radius: $default-radius;
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.restore-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  background-color: white;
+  border-radius: $default-radius;
+  border: 1px solid #e9ecef;
+}
+
+.step-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-emoji {
+  font-size: 1rem;
+}
+
+.step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-name {
+  font-weight: 500;
+  color: $text-color;
+  margin-bottom: 0.25rem;
+}
+
+.step-details {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.step-duration {
+  color: $text-secondary-color;
+}
+
+.step-result {
+  font-weight: 500;
+  text-transform: uppercase;
+
+  &.result-success {
+    color: #28a745;
+  }
+
+  &.result-error {
+    color: #dc3545;
+  }
+
+  &.result-in-progress {
+    color: #007bff;
+  }
+
+  &.result-skipped {
+    color: #6c757d;
+  }
+
+  &.result-todo {
+    color: #ffc107;
+  }
+}
+
+.step-reason {
+  font-size: 0.8rem;
+  color: $text-secondary-color;
+  font-style: italic;
+}
+
+.restore-error {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: $default-radius;
+
+  .error-message {
+    color: #721c24;
+    font-size: 0.875rem;
+    margin: 0;
+  }
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: white;
+  border: 1px solid #28a745;
+
+  &:hover:not(:disabled) {
+    background-color: #218838;
+    border-color: #1e7e34;
+  }
+}
+
+.btn-restore {
+  background-color: #1976d2;
+  color: white;
+  border: 1px solid #1976d2;
+
+  &:hover:not(:disabled) {
+    background-color: #1565c0;
+    border-color: #1565c0;
+  }
 }
 </style>

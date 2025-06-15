@@ -248,6 +248,28 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ImagesMeta'
     type: object
+  jsonapi.ImportExportAttributes:
+    properties:
+      description:
+        type: string
+      source_file_path:
+        type: string
+    type: object
+  jsonapi.ImportExportRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ImportExportRequestData'
+    type: object
+  jsonapi.ImportExportRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ImportExportAttributes'
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
   jsonapi.InvoiceResponse:
     properties:
       attributes:
@@ -366,6 +388,45 @@ definitions:
         type: array
       meta:
         $ref: '#/definitions/jsonapi.ManualsMeta'
+    type: object
+  jsonapi.RestoreOperationCreateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.RestoreOperationCreateRequestData'
+    type: object
+  jsonapi.RestoreOperationCreateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.RestoreOperation'
+      type:
+        enum:
+        - restores
+        example: restores
+        type: string
+    type: object
+  jsonapi.RestoreOperationResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.RestoreOperationResponseData'
+    type: object
+  jsonapi.RestoreOperationResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.RestoreOperation'
+      id:
+        type: string
+      type:
+        enum:
+        - restores
+        example: restores
+        type: string
+    type: object
+  jsonapi.RestoreOperationsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.RestoreOperationResponseData'
+        type: array
     type: object
   jsonapi.ValueAttrs:
     properties:
@@ -511,6 +572,8 @@ definitions:
         type: string
       image_count:
         type: integer
+      imported:
+        type: boolean
       include_file_data:
         type: boolean
       invoice_count:
@@ -574,6 +637,7 @@ definitions:
     - locations
     - areas
     - commodities
+    - imported
     type: string
     x-enum-varnames:
     - ExportTypeFullDatabase
@@ -581,6 +645,7 @@ definitions:
     - ExportTypeLocations
     - ExportTypeAreas
     - ExportTypeCommodities
+    - ExportTypeImported
   models.Image:
     properties:
       commodity_id:
@@ -671,6 +736,105 @@ definitions:
           Example: "invoice-2023"
         type: string
     type: object
+  models.RestoreOperation:
+    properties:
+      area_count:
+        type: integer
+      binary_data_size:
+        type: integer
+      commodity_count:
+        type: integer
+      completed_date:
+        type: string
+      created_date:
+        type: string
+      description:
+        type: string
+      error_count:
+        type: integer
+      error_message:
+        type: string
+      export_id:
+        type: string
+      id:
+        type: string
+      image_count:
+        type: integer
+      invoice_count:
+        type: integer
+      location_count:
+        description: Statistics
+        type: integer
+      manual_count:
+        type: integer
+      options:
+        $ref: '#/definitions/models.RestoreOptions'
+      started_date:
+        type: string
+      status:
+        $ref: '#/definitions/models.RestoreStatus'
+      steps:
+        description: Related steps (not stored in DB, loaded separately)
+        items:
+          $ref: '#/definitions/models.RestoreStep'
+        type: array
+    type: object
+  models.RestoreOptions:
+    properties:
+      dry_run:
+        type: boolean
+      include_file_data:
+        type: boolean
+      strategy:
+        type: string
+    type: object
+  models.RestoreStatus:
+    enum:
+    - pending
+    - running
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - RestoreStatusPending
+    - RestoreStatusRunning
+    - RestoreStatusCompleted
+    - RestoreStatusFailed
+  models.RestoreStep:
+    properties:
+      created_date:
+        type: string
+      duration:
+        description: Duration in milliseconds
+        type: integer
+      id:
+        type: string
+      name:
+        type: string
+      reason:
+        description: Reason for error or skip
+        type: string
+      restore_operation_id:
+        type: string
+      result:
+        $ref: '#/definitions/models.RestoreStepResult'
+      updated_date:
+        type: string
+    type: object
+  models.RestoreStepResult:
+    enum:
+    - todo
+    - in_progress
+    - success
+    - error
+    - skipped
+    type: string
+    x-enum-varnames:
+    - RestoreStepResultTodo
+    - RestoreStepResultInProgress
+    - RestoreStepResultSuccess
+    - RestoreStepResultError
+    - RestoreStepResultSkipped
   models.SettingsObject:
     properties:
       defaultDateFormat:
@@ -1533,6 +1697,148 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Download an export file
+      tags:
+      - exports
+  /exports/{id}/restores:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get restore operations for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationsResponse'
+      summary: List export restore operations
+      tags:
+      - exports
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new restore operation for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore operation data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.RestoreOperationCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create export restore operation
+      tags:
+      - exports
+  /exports/{id}/restores/{restoreId}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete a restore operation for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore Operation ID
+        in: path
+        name: restoreId
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete export restore operation
+      tags:
+      - exports
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get restore operation by ID for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore Operation ID
+        in: path
+        name: restoreId
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationResponse'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get export restore operation
+      tags:
+      - exports
+  /exports/import:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Import an uploaded XML export file and create an export record
+      parameters:
+      - description: Import request data
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ImportExportRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Import XML export
       tags:
       - exports
   /locations:

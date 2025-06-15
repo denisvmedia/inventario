@@ -40,7 +40,8 @@ import {
   faExclamationCircle,
   faCheckCircle,
   faSpinner,
-  faRedo
+  faRedo,
+  faCalendar
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -87,7 +88,8 @@ library.add(
   faExclamationCircle,
   faCheckCircle,
   faSpinner,
-  faRedo
+  faRedo,
+  faCalendar
 )
 
 export { FontAwesomeIcon }

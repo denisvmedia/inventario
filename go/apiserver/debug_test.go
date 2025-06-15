@@ -64,7 +64,9 @@ func TestDebugAPI(t *testing.T) {
 				DebugInfo:      tc.debugInfo,
 			}
 
-			server := apiserver.APIServer(params)
+			// Mock workers for testing
+			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+			server := apiserver.APIServer(params, mockRestoreWorker)
 
 			// Create test request
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)
@@ -107,7 +109,9 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 		DebugInfo:      debug.NewInfo("://invalid-dsn", "://invalid-url"),
 	}
 
-	server := apiserver.APIServer(params)
+	// Mock workers for testing
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	server := apiserver.APIServer(params, mockRestoreWorker)
 
 	// Create test request
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)

@@ -1,0 +1,156 @@
+/* PrimeVue FileUpload Styling */
+@use 'variables' as *;
+
+:root {
+  /* FileUpload variables */
+  --p-fileupload-border-color: #{$border-color};
+  --p-fileupload-border-radius: #{$default-radius};
+  --p-fileupload-background: white;
+  --p-fileupload-color: #{$text-color};
+  --p-fileupload-padding: 1rem;
+  --p-fileupload-gap: 0.5rem;
+
+  /* FileUpload button variables */
+  --p-fileupload-button-background: #{$primary-color};
+  --p-fileupload-button-color: white;
+  --p-fileupload-button-border-color: #{$primary-color};
+  --p-fileupload-button-hover-background: #{$primary-hover-color};
+  --p-fileupload-button-hover-border-color: #{$primary-hover-color};
+
+  /* FileUpload content variables */
+  --p-fileupload-content-background: #{$light-bg-color};
+  --p-fileupload-content-color: #{$text-secondary-color};
+  --p-fileupload-content-border-color: #{$border-color};
+}
+
+/* FileUpload component styling */
+.p-fileupload {
+  border: 1px solid var(--p-fileupload-border-color);
+  border-radius: var(--p-fileupload-border-radius);
+  background: var(--p-fileupload-background);
+  color: var(--p-fileupload-color);
+}
+
+.p-fileupload-buttonbar {
+  background: var(--p-fileupload-background);
+  padding: var(--p-fileupload-padding);
+  border-bottom: 1px solid var(--p-fileupload-border-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--p-fileupload-gap);
+}
+
+.p-fileupload-choose-button {
+  background: var(--p-fileupload-button-background);
+  color: var(--p-fileupload-button-color);
+  border: 1px solid var(--p-fileupload-button-border-color);
+  border-radius: var(--p-fileupload-border-radius);
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.p-fileupload-choose-button:hover {
+  background: var(--p-fileupload-button-hover-background);
+  border-color: var(--p-fileupload-button-hover-border-color);
+}
+
+.p-fileupload-choose-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+}
+
+.p-fileupload-content {
+  background: var(--p-fileupload-content-background);
+  color: var(--p-fileupload-content-color);
+  padding: var(--p-fileupload-padding);
+  border-top: 1px solid var(--p-fileupload-content-border-color);
+}
+
+.p-fileupload-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--p-fileupload-content-color);
+}
+
+.p-fileupload-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.p-fileupload-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background: white;
+  border: 1px solid var(--p-fileupload-border-color);
+  border-radius: var(--p-fileupload-border-radius);
+}
+
+.p-fileupload-file-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.p-fileupload-file-name {
+  font-weight: 500;
+  color: var(--p-fileupload-color);
+}
+
+.p-fileupload-file-size {
+  font-size: 0.875rem;
+  color: var(--p-fileupload-content-color);
+}
+
+.p-fileupload-file-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.p-fileupload-remove-button {
+  background: transparent;
+  color: $danger-color;
+  border: 1px solid transparent;
+  border-radius: var(--p-fileupload-border-radius);
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.p-fileupload-remove-button:hover {
+  background: rgba($danger-color, 0.1);
+  border-color: rgba($danger-color, 0.2);
+}
+
+/* Basic mode styling */
+.p-fileupload-basic {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.p-fileupload-basic .p-fileupload-choose-button {
+  margin: 0;
+}
+
+/* Progress styling */
+.p-fileupload-progress {
+  margin-top: 0.5rem;
+}
+
+.p-fileupload-progress .p-progressbar {
+  height: 0.5rem;
+  background: var(--p-fileupload-content-background);
+  border-radius: calc(var(--p-fileupload-border-radius) / 2);
+  overflow: hidden;
+}
+
+.p-fileupload-progress .p-progressbar-value {
+  background: var(--p-fileupload-button-background);
+  transition: width 0.3s ease;
+}

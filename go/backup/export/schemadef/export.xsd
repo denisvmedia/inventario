@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://inventario.example.com/export"
+           xmlns:tns="http://inventario.example.com/export"
+           elementFormDefault="qualified">
+
+    <!-- Root element -->
+    <xs:element name="inventory" type="tns:InventoryType"/>
+
+    <!-- Main inventory type -->
+    <xs:complexType name="InventoryType">
+        <xs:sequence>
+            <xs:element name="locations" type="tns:LocationsType" minOccurs="0"/>
+            <xs:element name="areas" type="tns:AreasType" minOccurs="0"/>
+            <xs:element name="commodities" type="tns:CommoditiesType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="exportDate" type="xs:dateTime" use="required"/>
+        <xs:attribute name="exportType" type="tns:ExportTypeEnum" use="required"/>
+    </xs:complexType>
+
+    <!-- Export type enumeration -->
+    <xs:simpleType name="ExportTypeEnum">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="full_database"/>
+            <xs:enumeration value="selected_items"/>
+            <xs:enumeration value="locations"/>
+            <xs:enumeration value="areas"/>
+            <xs:enumeration value="commodities"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Locations section -->
+    <xs:complexType name="LocationsType">
+        <xs:sequence>
+            <xs:element name="location" type="tns:LocationType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="LocationType">
+        <xs:sequence>
+            <xs:element name="locationName" type="tns:NonEmptyString"/>
+            <xs:element name="address" type="xs:string"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="tns:NonEmptyString" use="required"/>
+    </xs:complexType>
+
+    <!-- Areas section -->
+    <xs:complexType name="AreasType">
+        <xs:sequence>
+            <xs:element name="area" type="tns:AreaType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AreaType">
+        <xs:sequence>
+            <xs:element name="areaName" type="tns:NonEmptyString"/>
+            <xs:element name="locationId" type="tns:NonEmptyString"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="tns:NonEmptyString" use="required"/>
+    </xs:complexType>
+
+    <!-- Commodities section -->
+    <xs:complexType name="CommoditiesType">
+        <xs:sequence>
+            <xs:element name="commodity" type="tns:CommodityType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CommodityType">
+        <xs:sequence>
+            <xs:element name="commodityName" type="tns:NonEmptyString"/>
+            <xs:element name="shortName" type="tns:ShortNameType" minOccurs="0"/>
+            <xs:element name="type" type="tns:CommodityTypeEnum"/>
+            <xs:element name="areaId" type="tns:NonEmptyString"/>
+            <xs:element name="count" type="xs:positiveInteger"/>
+            <xs:element name="originalPrice" type="tns:DecimalString" minOccurs="0"/>
+            <xs:element name="originalPriceCurrency" type="tns:CurrencyCode" minOccurs="0"/>
+            <xs:element name="convertedOriginalPrice" type="tns:DecimalString" minOccurs="0"/>
+            <xs:element name="currentPrice" type="tns:DecimalString" minOccurs="0"/>
+            <xs:element name="serialNumber" type="xs:string" minOccurs="0"/>
+            <xs:element name="extraSerialNumbers" type="tns:ExtraSerialNumbersType" minOccurs="0"/>
+            <xs:element name="partNumbers" type="tns:PartNumbersType" minOccurs="0"/>
+            <xs:element name="tags" type="tns:TagsType" minOccurs="0"/>
+            <xs:element name="status" type="tns:CommodityStatusEnum"/>
+            <xs:element name="purchaseDate" type="xs:date" minOccurs="0"/>
+            <xs:element name="registeredDate" type="xs:date" minOccurs="0"/>
+            <xs:element name="lastModifiedDate" type="xs:date" minOccurs="0"/>
+            <xs:element name="urls" type="tns:URLsType" minOccurs="0"/>
+            <xs:element name="comments" type="xs:string" minOccurs="0"/>
+            <xs:element name="draft" type="xs:boolean"/>
+            <xs:element name="images" type="tns:FilesType" minOccurs="0"/>
+            <xs:element name="invoices" type="tns:FilesType" minOccurs="0"/>
+            <xs:element name="manuals" type="tns:FilesType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="tns:NonEmptyString" use="required"/>
+    </xs:complexType>
+
+    <!-- Commodity type enumeration -->
+    <xs:simpleType name="CommodityTypeEnum">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="white_goods"/>
+            <xs:enumeration value="electronics"/>
+            <xs:enumeration value="equipment"/>
+            <xs:enumeration value="furniture"/>
+            <xs:enumeration value="clothes"/>
+            <xs:enumeration value="other"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Commodity status enumeration -->
+    <xs:simpleType name="CommodityStatusEnum">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="in_use"/>
+            <xs:enumeration value="sold"/>
+            <xs:enumeration value="lost"/>
+            <xs:enumeration value="disposed"/>
+            <xs:enumeration value="written_off"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Extra serial numbers -->
+    <xs:complexType name="ExtraSerialNumbersType">
+        <xs:sequence>
+            <xs:element name="serialNumber" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Part numbers -->
+    <xs:complexType name="PartNumbersType">
+        <xs:sequence>
+            <xs:element name="partNumber" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Tags -->
+    <xs:complexType name="TagsType">
+        <xs:sequence>
+            <xs:element name="tag" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- URLs -->
+    <xs:complexType name="URLsType">
+        <xs:sequence>
+            <xs:element name="url" type="tns:URLType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="URLType">
+        <xs:simpleContent>
+            <xs:extension base="xs:anyURI">
+                <xs:attribute name="name" type="tns:NonEmptyString" use="required"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
+
+    <!-- Files (images, invoices, manuals) -->
+    <xs:complexType name="FilesType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="image" type="tns:FileType"/>
+            <xs:element name="invoice" type="tns:FileType"/>
+            <xs:element name="manual" type="tns:FileType"/>
+        </xs:choice>
+    </xs:complexType>
+
+    <xs:complexType name="FileType">
+        <xs:sequence>
+            <xs:element name="path" type="tns:NonEmptyString"/>
+            <xs:element name="originalPath" type="tns:NonEmptyString"/>
+            <xs:element name="extension" type="xs:string"/>
+            <xs:element name="mimeType" type="tns:MimeTypeString"/>
+            <xs:element name="data" type="xs:base64Binary" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="tns:NonEmptyString" use="required"/>
+    </xs:complexType>
+
+    <!-- Common data types -->
+    <xs:simpleType name="NonEmptyString">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ShortNameType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+            <xs:maxLength value="20"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="DecimalString">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[0-9]+(\.[0-9]+)?"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CurrencyCode">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[A-Z]{3}"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="MimeTypeString">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[a-zA-Z0-9][a-zA-Z0-9!#$&amp;\-^_]*/[a-zA-Z0-9][a-zA-Z0-9!#$&amp;\-^_]*"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+</xs:schema>

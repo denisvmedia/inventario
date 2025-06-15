@@ -44,6 +44,9 @@ type AreaRegistry interface {
 	AddCommodity(ctx context.Context, areaID, commodityID string) error
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
 	DeleteCommodity(ctx context.Context, areaID, commodityID string) error
+
+	// DeleteRecursive deletes an area and all its commodities
+	DeleteRecursive(ctx context.Context, id string) error
 }
 
 type CommodityRegistry interface {
@@ -68,6 +71,9 @@ type LocationRegistry interface {
 	AddArea(ctx context.Context, locationID, areaID string) error
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
 	DeleteArea(ctx context.Context, locationID, areaID string) error
+
+	// DeleteRecursive deletes a location and all its areas and commodities
+	DeleteRecursive(ctx context.Context, id string) error
 }
 
 type ImageRegistry interface {
@@ -101,15 +107,34 @@ type ExportRegistry interface {
 	HardDelete(ctx context.Context, id string) error
 }
 
+type RestoreOperationRegistry interface {
+	Registry[models.RestoreOperation]
+
+	// ListByExport returns all restore operations for an export
+	ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error)
+}
+
+type RestoreStepRegistry interface {
+	Registry[models.RestoreStep]
+
+	// ListByRestoreOperation returns all restore steps for a restore operation
+	ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error)
+
+	// DeleteByRestoreOperation deletes all restore steps for a restore operation
+	DeleteByRestoreOperation(ctx context.Context, restoreOperationID string) error
+}
+
 type Set struct {
-	LocationRegistry  LocationRegistry
-	AreaRegistry      AreaRegistry
-	CommodityRegistry CommodityRegistry
-	ImageRegistry     ImageRegistry
-	InvoiceRegistry   InvoiceRegistry
-	ManualRegistry    ManualRegistry
-	SettingsRegistry  SettingsRegistry
-	ExportRegistry    ExportRegistry
+	LocationRegistry         LocationRegistry
+	AreaRegistry             AreaRegistry
+	CommodityRegistry        CommodityRegistry
+	ImageRegistry            ImageRegistry
+	InvoiceRegistry          InvoiceRegistry
+	ManualRegistry           ManualRegistry
+	SettingsRegistry         SettingsRegistry
+	ExportRegistry           ExportRegistry
+	RestoreOperationRegistry RestoreOperationRegistry
+	RestoreStepRegistry      RestoreStepRegistry
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {

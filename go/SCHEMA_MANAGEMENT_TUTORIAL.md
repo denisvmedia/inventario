@@ -993,7 +993,7 @@ Age int `json:"age"`
 BillingAddress Address `json:"billing_address"`
 
 //migrator:embedded mode="json" name="metadata" type="JSONB"
-Metadata map[string]interface{} `json:"metadata"`
+Metadata map[string]any `json:"metadata"`
 
 //migrator:embedded mode="relation" field="profile_id" ref="profiles(id)"
 Profile UserProfile `json:"profile"`

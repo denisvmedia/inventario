@@ -26,6 +26,7 @@ go/inventario
 *.db
 /bin/*
 coverage
+report.html
 
 # Export files
 /exports/

@@ -1,5 +1,8 @@
 <template>
   <div class="app">
+    <!-- Global Toast component -->
+    <Toast />
+
     <!-- Global confirmation dialog component -->
     <header v-if="!isPrintRoute">
       <div class="header-content">
@@ -37,6 +40,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
+import Toast from 'primevue/toast'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()

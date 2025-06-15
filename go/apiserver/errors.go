@@ -71,3 +71,33 @@ func toJSONAPIError(err error) jsonapi.Error {
 func renderEntityError(w http.ResponseWriter, r *http.Request, err error) error {
 	return render.Render(w, r, jsonapi.NewErrors(toJSONAPIError(err)))
 }
+
+func badRequest(w http.ResponseWriter, r *http.Request, err error) error {
+	badRequestError := jsonapi.Error{
+		Err:            err,
+		UserError:      errkit.ForceMarshalError(err),
+		HTTPStatusCode: http.StatusBadRequest,
+		StatusText:     "Bad Request",
+	}
+	return render.Render(w, r, jsonapi.NewErrors(badRequestError))
+}
+
+func notFound(w http.ResponseWriter, r *http.Request) error {
+	notFoundError := jsonapi.Error{
+		Err:            ErrEntityNotFound,
+		UserError:      errkit.ForceMarshalError(ErrEntityNotFound),
+		HTTPStatusCode: http.StatusNotFound,
+		StatusText:     "Not Found",
+	}
+	return render.Render(w, r, jsonapi.NewErrors(notFoundError))
+}
+
+func conflictError(w http.ResponseWriter, r *http.Request, err, userErr error) error {
+	conflictErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errkit.ForceMarshalError(userErr),
+		HTTPStatusCode: http.StatusConflict,
+		StatusText:     "Conflict",
+	}
+	return render.Render(w, r, jsonapi.NewErrors(conflictErr))
+}

@@ -46,8 +46,10 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		return nil, errkit.Wrap(err, "failed to get area")
 	}
 
-	// Generate a new ID
-	commodity.SetID(generateID())
+	// Generate a new ID if one is not already provided
+	if commodity.GetID() == "" {
+		commodity.SetID(generateID())
+	}
 
 	//// Convert arrays to JSON
 	// extraSerialNumbers, err := json.Marshal(commodity.ExtraSerialNumbers)

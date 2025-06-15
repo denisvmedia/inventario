@@ -46,8 +46,10 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 		return nil, errkit.Wrap(err, "failed to get commodity")
 	}
 
-	// Generate a new ID
-	invoice.SetID(generateID())
+	// Generate a new ID if one is not already provided
+	if invoice.GetID() == "" {
+		invoice.SetID(generateID())
+	}
 
 	err = InsertEntity(ctx, tx, r.tableNames.Invoices(), invoice)
 	if err != nil {
