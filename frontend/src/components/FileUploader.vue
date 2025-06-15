@@ -289,7 +289,7 @@ const formatFileSize = (bytes: number): string => {
     }
 
     .upload-text {
-      margin: 0 0 0.5rem 0;
+      margin: 0 0 0.5rem;
       color: $text-color;
 
       .upload-prompt {
@@ -358,7 +358,7 @@ const formatFileSize = (bytes: number): string => {
     flex: 1;
 
     h3 {
-      margin: 0 0 0.25rem 0;
+      margin: 0 0 0.25rem;
       color: $text-color;
       font-size: 1rem;
     }

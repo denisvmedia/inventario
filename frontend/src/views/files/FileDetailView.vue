@@ -331,7 +331,7 @@ onMounted(() => {
   flex-wrap: wrap;
   margin-top: 0.5rem;
 
-  @media (max-width: 768px) {
+  @media (width <= 768px) {
     justify-content: center;
   }
 
@@ -378,7 +378,7 @@ onMounted(() => {
     }
 
     p {
-      margin: 0 0 1.5rem 0;
+      margin: 0 0 1.5rem;
       color: $text-secondary-color;
     }
   }
@@ -402,7 +402,7 @@ onMounted(() => {
     box-shadow: $box-shadow;
 
     h2 {
-      margin: 0 0 1rem 0;
+      margin: 0 0 1rem;
       padding-bottom: 0.5rem;
       border-bottom: 1px solid #eee;
       color: $text-color;
@@ -451,7 +451,7 @@ onMounted(() => {
 
         .value {
           color: $text-color;
-          word-break: break-word;
+          word-break: break-all;
         }
       }
     }
@@ -486,10 +486,7 @@ onMounted(() => {
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: $mask-background-color;
   display: flex;
   align-items: center;
@@ -532,7 +529,7 @@ onMounted(() => {
       padding: 1.5rem;
 
       p {
-        margin: 0 0 1rem 0;
+        margin: 0 0 1rem;
         color: $text-color;
 
         &:last-child {

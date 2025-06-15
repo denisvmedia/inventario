@@ -266,13 +266,13 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgb(0 0 0 / 50%);
   backdrop-filter: blur(2px);
 }
 
 .overlay-backdrop-part {
   position: absolute;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgb(0 0 0 / 50%);
   backdrop-filter: blur(2px);
 }
 
@@ -296,6 +296,7 @@ onUnmounted(() => {
       inset 0 0 20px rgba($primary-color, 0.2);
     border-color: $primary-color;
   }
+
   50% {
     box-shadow:
       0 0 30px rgba($primary-color, 0.8),
@@ -311,8 +312,8 @@ onUnmounted(() => {
   padding: 12px 16px;
   border-radius: 8px;
   font-size: 14px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  animation: fadeInUp 0.3s ease-out;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
+  animation: fade-in-up 0.3s ease-out;
   pointer-events: none;
 }
 
@@ -337,11 +338,12 @@ onUnmounted(() => {
   border-bottom: 12px solid transparent;
 }
 
-@keyframes fadeInUp {
+@keyframes fade-in-up {
   from {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

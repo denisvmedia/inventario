@@ -421,7 +421,7 @@ onMounted(() => {
     gap: 1rem;
     align-items: end;
 
-    @media (max-width: 768px) {
+    @media (width <= 768px) {
       grid-template-columns: 1fr;
     }
   }
@@ -480,7 +480,7 @@ onMounted(() => {
     padding: 1rem;
 
     .file-title {
-      margin: 0 0 0.5rem 0;
+      margin: 0 0 0.5rem;
       font-size: 1rem;
       font-weight: 600;
       color: $text-color;
@@ -490,7 +490,7 @@ onMounted(() => {
     }
 
     .file-description {
-      margin: 0 0 0.75rem 0;
+      margin: 0 0 0.75rem;
       font-size: 0.875rem;
       color: $text-secondary-color;
       overflow: hidden;
@@ -548,7 +548,7 @@ onMounted(() => {
       height: 32px;
       border-radius: 50%;
       border: none;
-      background: rgba(255, 255, 255, 0.9);
+      background: rgb(255 255 255 / 90%);
       color: $text-color;
       display: flex;
       align-items: center;
@@ -638,10 +638,7 @@ onMounted(() => {
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: $mask-background-color;
   display: flex;
   align-items: center;
@@ -684,7 +681,7 @@ onMounted(() => {
       padding: 1.5rem;
 
       p {
-        margin: 0 0 1rem 0;
+        margin: 0 0 1rem;
         color: $text-color;
 
         &:last-child {

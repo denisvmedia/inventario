@@ -357,7 +357,7 @@ onMounted(() => {
     flex: 1;
 
     h3 {
-      margin: 0 0 0.5rem 0;
+      margin: 0 0 0.5rem;
       color: $text-color;
       font-size: 1.125rem;
     }
@@ -438,7 +438,7 @@ onMounted(() => {
   background-color: #f8f9fa;
   color: $text-color;
   font-size: 1rem;
-  word-break: break-word;
+  word-break: break-all;
   min-height: 48px;
   display: flex;
   align-items: center;

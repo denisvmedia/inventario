@@ -288,7 +288,7 @@ const goBack = () => {
     flex: 1;
 
     h3 {
-      margin: 0 0 0.25rem 0;
+      margin: 0 0 0.25rem;
       color: $error-color;
       font-size: 1rem;
     }
