@@ -1,0 +1,406 @@
+package commonsql
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/jmoiron/sqlx"
+
+	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
+)
+
+var _ registry.FileRegistry = (*FileRegistry)(nil)
+
+type FileRegistry struct {
+	db *sqlx.DB
+}
+
+func NewFileRegistry(db *sqlx.DB) *FileRegistry {
+	return &FileRegistry{db: db}
+}
+
+func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
+	if file.ID == "" {
+		file.SetID(generateID())
+	}
+
+	tagsJSON, err := json.Marshal(file.Tags)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to marshal tags")
+	}
+
+	query := `
+		INSERT INTO files (id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+		RETURNING created_at, updated_at`
+
+	err = r.db.QueryRowContext(ctx, query,
+		file.ID, file.Title, file.Description, file.Type, tagsJSON,
+		file.Path, file.OriginalPath, file.Ext, file.MIMEType,
+	).Scan(&file.CreatedAt, &file.UpdatedAt)
+
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create file")
+	}
+
+	return &file, nil
+}
+
+func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
+	var file models.FileEntity
+	var tagsJSON []byte
+
+	query := `
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+		FROM files
+		WHERE id = $1`
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
+		&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+		&file.CreatedAt, &file.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, registry.ErrNotFound
+		}
+		return nil, errkit.Wrap(err, "failed to get file")
+	}
+
+	if len(tagsJSON) > 0 {
+		err = json.Unmarshal(tagsJSON, &file.Tags)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to unmarshal tags")
+		}
+	}
+
+	// Initialize File struct
+	file.File = &models.File{
+		Path:         file.Path,
+		OriginalPath: file.OriginalPath,
+		Ext:          file.Ext,
+		MIMEType:     file.MIMEType,
+	}
+
+	return &file, nil
+}
+
+func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
+	query := `
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+		FROM files
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list files")
+	}
+	defer rows.Close()
+
+	var files []*models.FileEntity
+	for rows.Next() {
+		var file models.FileEntity
+		var tagsJSON []byte
+
+		err := rows.Scan(
+			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
+			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.CreatedAt, &file.UpdatedAt,
+		)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to scan file")
+		}
+
+		if len(tagsJSON) > 0 {
+			err = json.Unmarshal(tagsJSON, &file.Tags)
+			if err != nil {
+				return nil, errkit.Wrap(err, "failed to unmarshal tags")
+			}
+		}
+
+		// Initialize File struct
+		file.File = &models.File{
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Ext:          file.Ext,
+			MIMEType:     file.MIMEType,
+		}
+
+		files = append(files, &file)
+	}
+
+	return files, nil
+}
+
+func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
+	tagsJSON, err := json.Marshal(file.Tags)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to marshal tags")
+	}
+
+	query := `
+		UPDATE files
+		SET title = $2, description = $3, type = $4, tags = $5, path = $6, updated_at = NOW()
+		WHERE id = $1
+		RETURNING updated_at`
+
+	err = r.db.QueryRowContext(ctx, query,
+		file.ID, file.Title, file.Description, file.Type, tagsJSON, file.Path,
+	).Scan(&file.UpdatedAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, registry.ErrNotFound
+		}
+		return nil, errkit.Wrap(err, "failed to update file")
+	}
+
+	return &file, nil
+}
+
+func (r *FileRegistry) Delete(ctx context.Context, id string) error {
+	query := `DELETE FROM files WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete file")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errkit.Wrap(err, "failed to get rows affected")
+	}
+
+	if rowsAffected == 0 {
+		return registry.ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *FileRegistry) Count(ctx context.Context) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM files`
+
+	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count files")
+	}
+
+	return count, nil
+}
+
+func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error) {
+	query := `
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+		FROM files
+		WHERE type = $1
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, fileType)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list files by type")
+	}
+	defer rows.Close()
+
+	var files []*models.FileEntity
+	for rows.Next() {
+		var file models.FileEntity
+		var tagsJSON []byte
+
+		err := rows.Scan(
+			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
+			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.CreatedAt, &file.UpdatedAt,
+		)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to scan file")
+		}
+
+		if len(tagsJSON) > 0 {
+			err = json.Unmarshal(tagsJSON, &file.Tags)
+			if err != nil {
+				return nil, errkit.Wrap(err, "failed to unmarshal tags")
+			}
+		}
+
+		// Initialize File struct
+		file.File = &models.File{
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Ext:          file.Ext,
+			MIMEType:     file.MIMEType,
+		}
+
+		files = append(files, &file)
+	}
+
+	return files, nil
+}
+
+func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error) {
+	var conditions []string
+	var args []interface{}
+	argIndex := 1
+
+	// Add type filter if specified
+	if fileType != nil {
+		conditions = append(conditions, fmt.Sprintf("type = $%d", argIndex))
+		args = append(args, *fileType)
+		argIndex++
+	}
+
+	// Add tags filter if specified
+	if len(tags) > 0 {
+		conditions = append(conditions, fmt.Sprintf("tags @> $%d", argIndex))
+		tagsJSON, _ := json.Marshal(tags)
+		args = append(args, tagsJSON)
+		argIndex++
+	}
+
+	// Add text search if specified
+	if query != "" {
+		searchCondition := fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d OR path ILIKE $%d OR original_path ILIKE $%d)", argIndex, argIndex+1, argIndex+2, argIndex+3)
+		conditions = append(conditions, searchCondition)
+		searchPattern := "%" + query + "%"
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
+		argIndex += 4
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	sqlQuery := fmt.Sprintf(`
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+		FROM files
+		%s
+		ORDER BY created_at DESC`, whereClause)
+
+	rows, err := r.db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to search files")
+	}
+	defer rows.Close()
+
+	var files []*models.FileEntity
+	for rows.Next() {
+		var file models.FileEntity
+		var tagsJSON []byte
+
+		err := rows.Scan(
+			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
+			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.CreatedAt, &file.UpdatedAt,
+		)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to scan file")
+		}
+
+		if len(tagsJSON) > 0 {
+			err = json.Unmarshal(tagsJSON, &file.Tags)
+			if err != nil {
+				return nil, errkit.Wrap(err, "failed to unmarshal tags")
+			}
+		}
+
+		// Initialize File struct
+		file.File = &models.File{
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Ext:          file.Ext,
+			MIMEType:     file.MIMEType,
+		}
+
+		files = append(files, &file)
+	}
+
+	return files, nil
+}
+
+func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error) {
+	// First get the total count
+	var countQuery string
+	var countArgs []interface{}
+
+	if fileType != nil {
+		countQuery = `SELECT COUNT(*) FROM files WHERE type = $1`
+		countArgs = []interface{}{*fileType}
+	} else {
+		countQuery = `SELECT COUNT(*) FROM files`
+	}
+
+	var total int
+	err := r.db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
+	if err != nil {
+		return nil, 0, errkit.Wrap(err, "failed to count files")
+	}
+
+	// Then get the paginated results
+	var dataQuery string
+	var dataArgs []interface{}
+
+	if fileType != nil {
+		dataQuery = `
+			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+			FROM files
+			WHERE type = $1
+			ORDER BY created_at DESC
+			LIMIT $2 OFFSET $3`
+		dataArgs = []interface{}{*fileType, limit, offset}
+	} else {
+		dataQuery = `
+			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+			FROM files
+			ORDER BY created_at DESC
+			LIMIT $1 OFFSET $2`
+		dataArgs = []interface{}{limit, offset}
+	}
+
+	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)
+	if err != nil {
+		return nil, 0, errkit.Wrap(err, "failed to list paginated files")
+	}
+	defer rows.Close()
+
+	var files []*models.FileEntity
+	for rows.Next() {
+		var file models.FileEntity
+		var tagsJSON []byte
+
+		err := rows.Scan(
+			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
+			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.CreatedAt, &file.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, errkit.Wrap(err, "failed to scan file")
+		}
+
+		if len(tagsJSON) > 0 {
+			err = json.Unmarshal(tagsJSON, &file.Tags)
+			if err != nil {
+				return nil, 0, errkit.Wrap(err, "failed to unmarshal tags")
+			}
+		}
+
+		// Initialize File struct
+		file.File = &models.File{
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Ext:          file.Ext,
+			MIMEType:     file.MIMEType,
+		}
+
+		files = append(files, &file)
+	}
+
+	return files, total, nil
+}

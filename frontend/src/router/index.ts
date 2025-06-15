@@ -88,6 +88,27 @@ const routes = [
     name: 'export-restore',
     component: () => import('../views/exports/restore/RestoreCreateView.vue')
   },
+  // Files
+  {
+    path: '/files',
+    name: 'files',
+    component: () => import('../views/files/FileListView.vue')
+  },
+  {
+    path: '/files/create',
+    name: 'file-create',
+    component: () => import('../views/files/FileCreateView.vue')
+  },
+  {
+    path: '/files/:id',
+    name: 'file-detail',
+    component: () => import('../views/files/FileDetailView.vue')
+  },
+  {
+    path: '/files/:id/edit',
+    name: 'file-edit',
+    component: () => import('../views/files/FileEditView.vue')
+  },
   // Settings
   {
     path: '/settings',
