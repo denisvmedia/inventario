@@ -175,9 +175,9 @@ func NewImportedExport(description, sourceFilePath string) Export {
 func NewExportFromUserInput(export *Export) Export {
 	result := *export
 	// Set created date (we do not accept it from the client)
-	export.CreatedDate = PNow()
-	export.Status = ExportStatusPending
-	export.Imported = false
+	result.CreatedDate = PNow()
+	result.Status = ExportStatusPending
+	result.Imported = false
 
 	return result
 }

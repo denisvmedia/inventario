@@ -60,7 +60,9 @@ func TestExportSoftDelete(t *testing.T) {
 
 	// Verify export is soft deleted
 	retrieved, err := registrySet.ExportRegistry.Get(context.Background(), created.ID)
-	c.Assert(err, qt.IsNil)
+	c.Assert(err, qt.ErrorIs, registry.ErrDeleted)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound) // ErrNotFound is a superset of ErrDeleted
+	c.Assert(retrieved, qt.IsNotNil)                // make sure even though we got an error, we still got the record
 	c.Assert(retrieved.IsDeleted(), qt.IsTrue)
 
 	// Test that download is blocked for deleted export

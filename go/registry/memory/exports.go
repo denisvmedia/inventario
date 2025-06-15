@@ -44,7 +44,7 @@ func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, er
 	}
 
 	if export.IsDeleted() {
-		return nil, errkit.WithStack(registry.ErrNotFound, "export is deleted")
+		return export, errkit.WithStack(registry.ErrDeleted, "reason", "export is deleted")
 	}
 
 	return export, nil

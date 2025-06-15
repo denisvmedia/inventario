@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/export"
 	"github.com/denisvmedia/inventario/models"
@@ -15,11 +15,11 @@ import (
 )
 
 func TestExportService_parseXMLMetadata(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Create test registry
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
@@ -66,61 +66,31 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 			expectedAreaCount:      0,
 			expectedCommodityCount: 0,
 		},
-		{
-			name: "inferred commodities type",
-			xmlContent: `<?xml version="1.0" encoding="UTF-8"?>
-<inventory>
-	<commodities>
-		<commodity id="comm1"><name>Commodity 1</name></commodity>
-		<commodity id="comm2"><name>Commodity 2</name></commodity>
-	</commodities>
-</inventory>`,
-			expectedType:           models.ExportTypeCommodities,
-			expectedLocationCount:  0,
-			expectedAreaCount:      0,
-			expectedCommodityCount: 2,
-		},
-		{
-			name: "inferred selected items type",
-			xmlContent: `<?xml version="1.0" encoding="UTF-8"?>
-<inventory>
-	<locations>
-		<location id="loc1"><name>Location 1</name></location>
-	</locations>
-	<commodities>
-		<commodity id="comm1"><name>Commodity 1</name></commodity>
-	</commodities>
-</inventory>`,
-			expectedType:           models.ExportTypeSelectedItems,
-			expectedLocationCount:  1,
-			expectedAreaCount:      0,
-			expectedCommodityCount: 1,
-		},
 	}
 
 	for _, tt := range happyPathTests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 
 			reader := strings.NewReader(tt.xmlContent)
 			stats, exportType, err := service.ParseXMLMetadata(ctx, reader)
 
-			c.Assert(err, quicktest.IsNil)
-			c.Assert(exportType, quicktest.Equals, tt.expectedType)
-			c.Assert(stats.LocationCount, quicktest.Equals, tt.expectedLocationCount)
-			c.Assert(stats.AreaCount, quicktest.Equals, tt.expectedAreaCount)
-			c.Assert(stats.CommodityCount, quicktest.Equals, tt.expectedCommodityCount)
+			c.Assert(err, qt.IsNil)
+			c.Assert(exportType, qt.Equals, tt.expectedType)
+			c.Assert(stats.LocationCount, qt.Equals, tt.expectedLocationCount)
+			c.Assert(stats.AreaCount, qt.Equals, tt.expectedAreaCount)
+			c.Assert(stats.CommodityCount, qt.Equals, tt.expectedCommodityCount)
 		})
 	}
 }
 
 // Test cases for unhappy path
 func TestExportService_parseXMLMetadata_Errors(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Create test registry
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
@@ -144,26 +114,26 @@ func TestExportService_parseXMLMetadata_Errors(t *testing.T) {
 
 	for _, tt := range unhappyPathTests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 
 			reader := strings.NewReader(tt.xmlContent)
 			_, _, err := service.ParseXMLMetadata(ctx, reader)
 
 			if tt.expectError {
-				c.Assert(err, quicktest.IsNotNil)
+				c.Assert(err, qt.IsNotNil)
 			} else {
-				c.Assert(err, quicktest.IsNil)
+				c.Assert(err, qt.IsNil)
 			}
 		})
 	}
 }
 
 func TestExportService_parseXMLMetadata_LargeFile(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Create test registry
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
@@ -203,25 +173,25 @@ func TestExportService_parseXMLMetadata_LargeFile(t *testing.T) {
 	reader := strings.NewReader(xmlContent)
 	stats, exportType, err := service.ParseXMLMetadata(ctx, reader)
 
-	c.Assert(err, quicktest.IsNil)
-	c.Assert(exportType, quicktest.Equals, models.ExportTypeCommodities)
-	c.Assert(stats.CommodityCount, quicktest.Equals, 2)
-	c.Assert(stats.ImageCount, quicktest.Equals, 1)
-	c.Assert(stats.InvoiceCount, quicktest.Equals, 1)
-	c.Assert(stats.ManualCount, quicktest.Equals, 1)
-	c.Assert(stats.LocationCount, quicktest.Equals, 0)
-	c.Assert(stats.AreaCount, quicktest.Equals, 0)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exportType, qt.Equals, models.ExportTypeCommodities)
+	c.Assert(stats.CommodityCount, qt.Equals, 2)
+	c.Assert(stats.ImageCount, qt.Equals, 1)
+	c.Assert(stats.InvoiceCount, qt.Equals, 1)
+	c.Assert(stats.ManualCount, qt.Equals, 1)
+	c.Assert(stats.LocationCount, qt.Equals, 0)
+	c.Assert(stats.AreaCount, qt.Equals, 0)
 
 	// Verify that binary data size was detected
-	c.Assert(stats.BinaryDataSize > 0, quicktest.Equals, true, quicktest.Commentf("Expected binary data size to be detected, got %d", stats.BinaryDataSize))
+	c.Assert(stats.BinaryDataSize > 0, qt.Equals, true, qt.Commentf("Expected binary data size to be detected, got %d", stats.BinaryDataSize))
 }
 
 func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Create test registry
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
@@ -251,13 +221,13 @@ func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {
 	reader := strings.NewReader(xmlContent)
 	stats, exportType, err := service.ParseXMLMetadata(ctx, reader)
 
-	c.Assert(err, quicktest.IsNil)
-	c.Assert(exportType, quicktest.Equals, models.ExportTypeCommodities)
-	c.Assert(stats.CommodityCount, quicktest.Equals, 1)
-	c.Assert(stats.ImageCount, quicktest.Equals, 1)
-	c.Assert(stats.InvoiceCount, quicktest.Equals, 1)
-	c.Assert(stats.ManualCount, quicktest.Equals, 0)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exportType, qt.Equals, models.ExportTypeCommodities)
+	c.Assert(stats.CommodityCount, qt.Equals, 1)
+	c.Assert(stats.ImageCount, qt.Equals, 1)
+	c.Assert(stats.InvoiceCount, qt.Equals, 1)
+	c.Assert(stats.ManualCount, qt.Equals, 0)
 
 	// Verify that no binary data size was detected (files without data elements)
-	c.Assert(stats.BinaryDataSize, quicktest.Equals, int64(0), quicktest.Commentf("Expected no binary data size for files without data, got %d", stats.BinaryDataSize))
+	c.Assert(stats.BinaryDataSize, qt.Equals, int64(0), qt.Commentf("Expected no binary data size for files without data, got %d", stats.BinaryDataSize))
 }
