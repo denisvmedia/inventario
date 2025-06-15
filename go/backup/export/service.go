@@ -222,6 +222,45 @@ func (s *ExportService) DeleteExportFile(ctx context.Context, filePath string) e
 	return nil
 }
 
+func (s *ExportService) parseTopLevelToken(t xml.StartElement, decoder *xml.Decoder, stats *ExportStats) (models.ExportType, error) {
+	var exportType models.ExportType
+	switch t.Name.Local {
+	case "inventory":
+		// Check export type attribute if present
+		for _, attr := range t.Attr {
+			if attr.Name.Local != "exportType" {
+				continue
+			}
+			switch attr.Value {
+			case "full_database":
+				exportType = models.ExportTypeFullDatabase
+			case "selected_items":
+				exportType = models.ExportTypeSelectedItems
+			case "locations":
+				exportType = models.ExportTypeLocations
+			case "areas":
+				exportType = models.ExportTypeAreas
+			case "commodities":
+				exportType = models.ExportTypeCommodities
+			}
+		}
+	case "locations":
+		if err := s.countLocations(decoder, stats); err != nil {
+			return exportType, errkit.Wrap(err, "failed to count locations")
+		}
+	case "areas":
+		if err := s.countAreas(decoder, stats); err != nil {
+			return exportType, errkit.Wrap(err, "failed to count areas")
+		}
+	case "commodities":
+		if err := s.countCommodities(decoder, stats); err != nil {
+			return exportType, errkit.Wrap(err, "failed to count commodities")
+		}
+	}
+
+	return exportType, nil
+}
+
 // ParseXMLMetadata parses XML file to extract statistics and determine export type
 func (s *ExportService) ParseXMLMetadata(_ctx context.Context, reader io.Reader) (*ExportStats, models.ExportType, error) {
 	stats := &ExportStats{}
@@ -240,39 +279,13 @@ func (s *ExportService) ParseXMLMetadata(_ctx context.Context, reader io.Reader)
 
 		switch t := tok.(type) {
 		case xml.StartElement:
-			switch t.Name.Local {
-			case "inventory":
-				// Check export type attribute if present
-				for _, attr := range t.Attr {
-					if attr.Name.Local != "exportType" {
-						continue
-					}
-					switch attr.Value {
-					case "full_database":
-						exportType = models.ExportTypeFullDatabase
-					case "selected_items":
-						exportType = models.ExportTypeSelectedItems
-					case "locations":
-						exportType = models.ExportTypeLocations
-					case "areas":
-						exportType = models.ExportTypeAreas
-					case "commodities":
-						exportType = models.ExportTypeCommodities
-					}
-				}
-			case "locations":
-				if err := s.countLocations(decoder, stats); err != nil {
-					return nil, exportType, errkit.Wrap(err, "failed to count locations")
-				}
-			case "areas":
-				if err := s.countAreas(decoder, stats); err != nil {
-					return nil, exportType, errkit.Wrap(err, "failed to count areas")
-				}
-			case "commodities":
-				if err := s.countCommodities(decoder, stats); err != nil {
-					return nil, exportType, errkit.Wrap(err, "failed to count commodities")
-				}
+			exportType, err = s.parseTopLevelToken(t, decoder, stats)
+			if err != nil {
+				return nil, exportType, err
 			}
+		default:
+			// Skip other token types
+			continue
 		}
 	}
 

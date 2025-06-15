@@ -2,6 +2,7 @@ package importpkg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"gocloud.dev/blob"
@@ -88,8 +89,7 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 
 	_, err = s.registrySet.ExportRegistry.Update(ctx, *exportRecord)
 	if err != nil {
-		// Log error but don't fail the import since it actually succeeded
-		fmt.Printf("Failed to update export with final stats: %v\n", err)
+		return errors.New("import was successful, but failed to update export record")
 	}
 
 	return nil
@@ -99,7 +99,6 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 func (s *ImportService) markImportFailed(ctx context.Context, exportID, errorMessage string) error {
 	exportRecord, err := s.registrySet.ExportRegistry.Get(ctx, exportID)
 	if err != nil {
-		fmt.Printf("Failed to get export for error marking: %v\n", err)
 		return err
 	}
 
@@ -109,7 +108,6 @@ func (s *ImportService) markImportFailed(ctx context.Context, exportID, errorMes
 
 	_, err = s.registrySet.ExportRegistry.Update(ctx, *exportRecord)
 	if err != nil {
-		fmt.Printf("Failed to update export with error: %v\n", err)
 		return err
 	}
 

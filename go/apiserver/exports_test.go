@@ -13,12 +13,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
-
-	"github.com/denisvmedia/inventario/apiserver"
 )
 
 func TestExportSoftDelete(t *testing.T) {

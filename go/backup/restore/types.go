@@ -161,13 +161,12 @@ type XMLManual struct {
 
 // XMLFile represents a single file with embedded base64 data
 type XMLFile struct {
-	XMLName      xml.Name `xml:",any"`
-	ID           string   `xml:"id,attr"`
-	Path         string   `xml:"path"`
-	OriginalPath string   `xml:"originalPath"`
-	Extension    string   `xml:"extension"`
-	MimeType     string   `xml:"mimeType"`
-	Data         []byte   `xml:"data,omitempty"`
+	ID           string `xml:"id,attr"`
+	Path         string `xml:"path"`
+	OriginalPath string `xml:"originalPath"`
+	Extension    string `xml:"extension"`
+	MimeType     string `xml:"mimeType"`
+	Data         []byte `xml:"data,omitempty"`
 }
 
 // ConvertToLocation converts XMLLocation to models.Location

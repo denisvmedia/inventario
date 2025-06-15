@@ -8,12 +8,10 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/backup/restore"
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // Import blob drivers
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
-
-	// Import blob drivers
-	_ "github.com/denisvmedia/inventario/internal/fileblob"
 )
 
 func TestRestoreService_FileElementParsing(t *testing.T) {

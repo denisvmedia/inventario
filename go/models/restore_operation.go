@@ -70,7 +70,7 @@ type RestoreOperation struct {
 	InvoiceCount   int   `json:"invoice_count" db:"invoice_count" userinput:"false"`
 	ManualCount    int   `json:"manual_count" db:"manual_count" userinput:"false"`
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
-	ErrorCount     int   `json:"error_count" db:"error_count" json:"error_count" userinput:"false"`
+	ErrorCount     int   `json:"error_count" db:"error_count" userinput:"false"`
 
 	// Related steps (not stored in DB, loaded separately)
 	Steps []RestoreStep `json:"steps,omitempty" db:"-"`

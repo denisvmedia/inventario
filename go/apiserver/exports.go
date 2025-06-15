@@ -66,7 +66,7 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// getExport gets an export by ID.
+// apiGetExport gets an export by ID.
 // @Summary Get an export
 // @Description get export by ID
 // @Tags exports
@@ -76,14 +76,14 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.ExportResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [get].
-func (api *exportsAPI) getExport(w http.ResponseWriter, r *http.Request) {
-	export := exportFromContext(r.Context())
-	if export == nil {
+func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
+	exp := exportFromContext(r.Context())
+	if exp == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	if err := render.Render(w, r, jsonapi.NewExportResponse(export)); err != nil {
+	if err := render.Render(w, r, jsonapi.NewExportResponse(exp)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -132,13 +132,13 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [delete].
 func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
-	export := exportFromContext(r.Context())
-	if export == nil {
+	exp := exportFromContext(r.Context())
+	if exp == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	err := api.registrySet.ExportRegistry.Delete(r.Context(), export.ID)
+	err := api.registrySet.ExportRegistry.Delete(r.Context(), exp.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -158,32 +158,32 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id}/download [get].
 func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
-	export := exportFromContext(r.Context())
-	if export == nil {
+	exp := exportFromContext(r.Context())
+	if exp == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
 	// Check if export is deleted
-	if export.IsDeleted() {
+	if exp.IsDeleted() {
 		http.NotFound(w, r)
 		return
 	}
 
 	// Check if export is completed and has a file path
-	if export.Status != models.ExportStatusCompleted || export.FilePath == "" {
+	if exp.Status != models.ExportStatusCompleted || exp.FilePath == "" {
 		http.NotFound(w, r)
 		return
 	}
 
 	// Get file attributes to set Content-Length and other headers
-	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, export.FilePath)
+	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, exp.FilePath)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
-	file, err := api.getDownloadFile(r.Context(), export.FilePath)
+	file, err := api.getDownloadFile(r.Context(), exp.FilePath)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -191,9 +191,9 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// Generate filename based on export description and type
-	filename := path.Base(export.FilePath)
+	filename := path.Base(exp.FilePath)
 	if filename == "" {
-		filename = "export.xml"
+		filename = "exp.xml"
 	}
 
 	// Set headers to optimize streaming and prevent browser preloading
@@ -288,7 +288,7 @@ func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Rou
 
 		r.Route("/{id}", func(r chi.Router) {
 			r.Use(exportCtx(params.RegistrySet))
-			r.Get("/", api.getExport)
+			r.Get("/", api.apiGetExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
 			r.Route("/restores", ExportRestores(params, restoreWorker))

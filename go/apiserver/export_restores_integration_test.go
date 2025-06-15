@@ -149,20 +149,20 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict)
 
 	// Check error message
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(rr.Body.Bytes(), &response)
 	c.Assert(err, qt.IsNil)
 
-	errors, ok := response["errors"].([]interface{})
+	errors, ok := response["errors"].([]any)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(len(errors), qt.Equals, 1)
 
-	errorObj, ok := errors[0].(map[string]interface{})
+	errorObj, ok := errors[0].(map[string]any)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(errorObj["status"], qt.Equals, "Conflict")
 
 	// Verify the error message contains the expected text and is user-friendly
-	errorDetails, ok := errorObj["error"].(map[string]interface{})
+	errorDetails, ok := errorObj["error"].(map[string]any)
 	c.Assert(ok, qt.IsTrue)
 	errorMsg, ok := errorDetails["msg"].(string)
 	c.Assert(ok, qt.IsTrue)
@@ -243,20 +243,20 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict)
 
 	// Check error message
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(rr.Body.Bytes(), &response)
 	c.Assert(err, qt.IsNil)
 
-	errors, ok := response["errors"].([]interface{})
+	errors, ok := response["errors"].([]any)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(len(errors), qt.Equals, 1)
 
-	errorObj, ok := errors[0].(map[string]interface{})
+	errorObj, ok := errors[0].(map[string]any)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(errorObj["status"], qt.Equals, "Conflict")
 
 	// Verify the error message mentions pending operations and is user-friendly
-	errorDetails, ok := errorObj["error"].(map[string]interface{})
+	errorDetails, ok := errorObj["error"].(map[string]any)
 	c.Assert(ok, qt.IsTrue)
 	errorMsg, ok := errorDetails["msg"].(string)
 	c.Assert(ok, qt.IsTrue)
@@ -320,14 +320,14 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 
 	// Parse response to get the restore operation ID
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(rr.Body.Bytes(), &response)
 	c.Assert(err, qt.IsNil)
 
-	data_obj, ok := response["data"].(map[string]interface{})
+	dataObj, ok := response["data"].(map[string]any)
 	c.Assert(ok, qt.IsTrue)
 
-	restoreID, ok := data_obj["id"].(string)
+	restoreID, ok := dataObj["id"].(string)
 	c.Assert(ok, qt.IsTrue)
 
 	// Verify the restore operation was created with pending status

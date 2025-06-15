@@ -123,7 +123,7 @@ linters:
         - name: error-return
           disabled: false
         - name: error-strings
-          disabled: false
+          disabled: true # until decided
         - name: filename-format
           arguments:
             - '^[_a-z][_a-z0-9]*.go$'

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/jsonapi"
 )
@@ -34,15 +34,15 @@ func TestImportExportRequest_Validation(t *testing.T) {
 
 	for _, tt := range happyPathTests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 
 			err := tt.requestData.ValidateWithContext(ctx)
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Also test that the attributes validate correctly
 			if tt.requestData.Data != nil && tt.requestData.Data.Attributes != nil {
 				err = tt.requestData.Data.Attributes.ValidateWithContext(ctx)
-				c.Assert(err, quicktest.IsNil)
+				c.Assert(err, qt.IsNil)
 			}
 		})
 	}
@@ -130,20 +130,20 @@ func TestImportExportRequest_ValidationErrors(t *testing.T) {
 
 	for _, tt := range unhappyPathTests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 
 			err := tt.requestData.ValidateWithContext(ctx)
 			if tt.expectError {
-				c.Assert(err, quicktest.IsNotNil)
+				c.Assert(err, qt.IsNotNil)
 			} else {
-				c.Assert(err, quicktest.IsNil)
+				c.Assert(err, qt.IsNil)
 			}
 		})
 	}
 }
 
 func TestImportExportRequest_JSONSerialization(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Test JSON serialization and deserialization
 	originalRequest := jsonapi.ImportExportRequest{
@@ -158,47 +158,47 @@ func TestImportExportRequest_JSONSerialization(t *testing.T) {
 
 	// Serialize to JSON
 	jsonData, err := json.Marshal(originalRequest)
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 
 	// Deserialize from JSON
 	var deserializedRequest jsonapi.ImportExportRequest
 	err = json.Unmarshal(jsonData, &deserializedRequest)
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 
 	// Verify the data is correct
-	c.Assert(deserializedRequest.Data, quicktest.IsNotNil)
-	c.Assert(deserializedRequest.Data.Type, quicktest.Equals, "exports")
-	c.Assert(deserializedRequest.Data.Attributes, quicktest.IsNotNil)
-	c.Assert(deserializedRequest.Data.Attributes.Description, quicktest.Equals, "Test import description")
-	c.Assert(deserializedRequest.Data.Attributes.SourceFilePath, quicktest.Equals, "export_full_database_20250611_185919-1749815145.xml")
+	c.Assert(deserializedRequest.Data, qt.IsNotNil)
+	c.Assert(deserializedRequest.Data.Type, qt.Equals, "exports")
+	c.Assert(deserializedRequest.Data.Attributes, qt.IsNotNil)
+	c.Assert(deserializedRequest.Data.Attributes.Description, qt.Equals, "Test import description")
+	c.Assert(deserializedRequest.Data.Attributes.SourceFilePath, qt.Equals, "export_full_database_20250611_185919-1749815145.xml")
 
 	// Verify validation passes
 	err = deserializedRequest.ValidateWithContext(context.Background())
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 }
 
 func TestImportExportRequest_ExampleJSON(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Test with the exact JSON structure from the user's request
 	jsonStr := `{"data":{"type":"exports","attributes":{"description":"Last time export","source_file_path":"export_full_database_20250611_185919-1749815145.xml"}}}`
 
 	var request jsonapi.ImportExportRequest
 	err := json.Unmarshal([]byte(jsonStr), &request)
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 
 	// Verify the structure is correct
-	c.Assert(request.Data, quicktest.IsNotNil)
-	c.Assert(request.Data.Type, quicktest.Equals, "exports")
-	c.Assert(request.Data.Attributes, quicktest.IsNotNil)
-	c.Assert(request.Data.Attributes.Description, quicktest.Equals, "Last time export")
-	c.Assert(request.Data.Attributes.SourceFilePath, quicktest.Equals, "export_full_database_20250611_185919-1749815145.xml")
+	c.Assert(request.Data, qt.IsNotNil)
+	c.Assert(request.Data.Type, qt.Equals, "exports")
+	c.Assert(request.Data.Attributes, qt.IsNotNil)
+	c.Assert(request.Data.Attributes.Description, qt.Equals, "Last time export")
+	c.Assert(request.Data.Attributes.SourceFilePath, qt.Equals, "export_full_database_20250611_185919-1749815145.xml")
 
 	// Verify validation passes
 	err = request.ValidateWithContext(context.Background())
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 
 	// Test attributes validation separately
 	err = request.Data.Attributes.ValidateWithContext(context.Background())
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 }

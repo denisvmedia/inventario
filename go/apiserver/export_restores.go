@@ -52,7 +52,7 @@ func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.
 	}
 }
 
-// getExportRestore returns a specific restore operation for an export.
+// apiGetExportRestore returns a specific restore operation for an export.
 // @Summary Get export restore operation
 // @Description get restore operation by ID for an export
 // @Tags exports
@@ -63,7 +63,7 @@ func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.
 // @Success 200 {object} jsonapi.RestoreOperationResponse "OK"
 // @Failure 404 {object} jsonapi.ErrorResponse "Not Found"
 // @Router /exports/{id}/restores/{restoreId} [get].
-func (api *exportRestoresAPI) getExportRestore(w http.ResponseWriter, r *http.Request) {
+func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http.Request) {
 	exportID := chi.URLParam(r, "id")
 	restoreID := chi.URLParam(r, "restoreId")
 
@@ -163,7 +163,7 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 		// Return HTTP 409 Conflict if a restore is already in progress or pending
 		err := errors.New("restore operation already in progress or pending")
 		userErr := errors.New("A restore operation is already in progress or pending. Please wait for it to complete before starting a new one.")
-		conflictErrorWithUserError(w, r, err, userErr)
+		conflictError(w, r, err, userErr)
 		return
 	}
 
@@ -252,7 +252,7 @@ func ExportRestores(params Params, restoreWorker RestoreWorkerInterface) func(r 
 	return func(r chi.Router) {
 		r.Get("/", api.listExportRestores)
 		r.Post("/", api.createExportRestore)
-		r.Get("/{restoreId}", api.getExportRestore)
+		r.Get("/{restoreId}", api.apiGetExportRestore)
 		r.Delete("/{restoreId}", api.deleteExportRestore)
 	}
 }
