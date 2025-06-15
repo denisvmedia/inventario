@@ -14,9 +14,9 @@ import (
 type FileResponse struct {
 	HTTPStatusCode int `json:"-"` // HTTP response status code
 
-	ID         string              `json:"id"`
-	Type       string              `json:"type" example:"files" enums:"files"`
-	Attributes models.FileEntity   `json:"attributes"`
+	ID         string            `json:"id"`
+	Type       string            `json:"type" example:"files" enums:"files"`
+	Attributes models.FileEntity `json:"attributes"`
 }
 
 // NewFileResponse creates a new FileResponse instance.
@@ -70,20 +70,14 @@ func (*FilesResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 // FileRequest represents a request to create or update a file.
 type FileRequest struct {
 	Data struct {
-		ID         string            `json:"id,omitempty"`
-		Type       string            `json:"type"`
-		Attributes FileRequestData   `json:"attributes"`
+		ID         string          `json:"id,omitempty"`
+		Type       string          `json:"type"`
+		Attributes FileRequestData `json:"attributes"`
 	} `json:"data"`
 }
 
-// FileRequestData contains the attributes for creating/updating a file.
-type FileRequestData struct {
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Type        models.FileType   `json:"type"`
-	Tags        []string          `json:"tags"`
-	Path        string            `json:"path,omitempty"` // Only for updates
-}
+var _ render.Binder = (*FileRequest)(nil)
+var _ validation.ValidatableWithContext = (*FileRequest)(nil)
 
 // Bind validates the FileRequest.
 func (fr *FileRequest) Bind(r *http.Request) error {
@@ -107,17 +101,63 @@ func (fr *FileRequest) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, fr, fields...)
 }
 
+// FileRequestData contains the attributes for creating/updating a file.
+type FileRequestData struct {
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Type        models.FileType `json:"type"`
+	Tags        []string        `json:"tags"`
+	Path        string          `json:"path,omitempty"` // Only for updates
+}
+
+var _ render.Binder = (*FileUpdateRequest)(nil)
+var _ validation.ValidatableWithContext = (*FileUpdateRequest)(nil)
+
 // FileUpdateRequest represents a request to update a file's metadata.
 type FileUpdateRequest struct {
-	Data struct {
-		ID         string                    `json:"id"`
-		Type       string                    `json:"type"`
-		Attributes FileUpdateRequestData     `json:"attributes"`
-	} `json:"data"`
+	Data *FileUpdateRequestData `json:"data"`
+}
+
+// Bind binds the commodity data from the request to the FileUpdateRequest object.
+func (fr *FileUpdateRequest) Bind(r *http.Request) error {
+	return fr.ValidateWithContext(r.Context())
+}
+
+func (fr *FileUpdateRequest) Validate() error {
+	return models.ErrMustUseValidateWithContext
+}
+
+// ValidateWithContext validates the commodity request data.
+func (fr *FileUpdateRequest) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&fr.Data, validation.Required),
+	)
+	return validation.ValidateStructWithContext(ctx, fr, fields...)
 }
 
 // FileUpdateRequestData contains the attributes for updating a file.
 type FileUpdateRequestData struct {
+	ID         string                    `json:"id"`
+	Type       string                    `json:"type" example:"files" enums:"files"`
+	Attributes FileUpdateRequestFileData `json:"attributes"`
+}
+
+func (fd *FileUpdateRequestData) Validate() error {
+	return models.ErrMustUseValidateWithContext
+}
+
+func (fd *FileUpdateRequestData) ValidateWithContext(ctx context.Context) error {
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&fd.Type, validation.Required, validation.In("files")),
+		validation.Field(&fd.Attributes, validation.Required),
+	)
+	return validation.ValidateStructWithContext(ctx, fd, fields...)
+}
+
+// FileUpdateRequestFileData contains the attributes for updating a file.
+type FileUpdateRequestFileData struct {
 	Title       string          `json:"title"`
 	Description string          `json:"description"`
 	Type        models.FileType `json:"type"`
@@ -125,63 +165,23 @@ type FileUpdateRequestData struct {
 	Path        string          `json:"path"` // User-editable filename
 }
 
-// Bind validates the FileUpdateRequest.
-func (fur *FileUpdateRequest) Bind(r *http.Request) error {
-	return fur.ValidateWithContext(r.Context())
+func (fur *FileUpdateRequestFileData) Validate() error {
+	return models.ErrMustUseValidateWithContext
 }
 
 // ValidateWithContext validates the FileUpdateRequest with context.
-func (fur *FileUpdateRequest) ValidateWithContext(ctx context.Context) error {
+func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&fur.Data.ID, validation.Required),
-		validation.Field(&fur.Data.Type, validation.Required, validation.In("files")),
-		validation.Field(&fur.Data.Attributes.Title, validation.Required, validation.Length(1, 255)),
-		validation.Field(&fur.Data.Attributes.Description, validation.Length(0, 1000)),
-		validation.Field(&fur.Data.Attributes.Type, validation.Required, validation.In(
+		validation.Field(&fur.Type, validation.Required, validation.In("files")),
+		validation.Field(&fur.Title, validation.Required, validation.Length(1, 255)),
+		validation.Field(&fur.Description, validation.Length(0, 1000)),
+		validation.Field(&fur.Type, validation.Required, validation.In(
 			models.FileTypeImage, models.FileTypeDocument, models.FileTypeVideo,
 			models.FileTypeAudio, models.FileTypeArchive, models.FileTypeOther,
 		)),
-		validation.Field(&fur.Data.Attributes.Path, validation.Required),
-	)
-
-	return validation.ValidateStructWithContext(ctx, fur, fields...)
-}
-
-// FileUploadRequest represents a request to upload a file.
-type FileUploadRequest struct {
-	Data struct {
-		Type       string                      `json:"type"`
-		Attributes FileUploadRequestData       `json:"attributes"`
-	} `json:"data"`
-}
-
-// FileUploadRequestData contains the attributes for uploading a file.
-type FileUploadRequestData struct {
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Type        models.FileType   `json:"type"`
-	Tags        []string          `json:"tags"`
-}
-
-// Bind validates the FileUploadRequest.
-func (fur *FileUploadRequest) Bind(r *http.Request) error {
-	return fur.ValidateWithContext(r.Context())
-}
-
-// ValidateWithContext validates the FileUploadRequest with context.
-func (fur *FileUploadRequest) ValidateWithContext(ctx context.Context) error {
-	fields := make([]*validation.FieldRules, 0)
-
-	fields = append(fields,
-		validation.Field(&fur.Data.Type, validation.Required, validation.In("files")),
-		validation.Field(&fur.Data.Attributes.Title, validation.Required, validation.Length(1, 255)),
-		validation.Field(&fur.Data.Attributes.Description, validation.Length(0, 1000)),
-		validation.Field(&fur.Data.Attributes.Type, validation.Required, validation.In(
-			models.FileTypeImage, models.FileTypeDocument, models.FileTypeVideo,
-			models.FileTypeAudio, models.FileTypeArchive, models.FileTypeOther,
-		)),
+		validation.Field(&fur.Path, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, fur, fields...)

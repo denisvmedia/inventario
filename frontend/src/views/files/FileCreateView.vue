@@ -9,8 +9,8 @@
       </div>
       
       <div class="header-content">
-        <h1>Upload File</h1>
-        <p class="page-description">Upload and manage a new file</p>
+        <h1>Upload Files</h1>
+        <p class="page-description">Upload files - you can edit metadata after upload</p>
       </div>
     </div>
 
@@ -56,13 +56,13 @@
                   class="file-thumbnail"
                 />
                 <div v-else class="file-icon">
-                  <i :class="getFileIconForType(detectedType)"></i>
+                  <i :class="getFileIcon(selectedFile)"></i>
                 </div>
               </div>
-              
+
               <div class="file-info">
                 <h3>{{ selectedFile.name }}</h3>
-                <p>{{ formatFileSize(selectedFile.size) }} • {{ detectedType }}</p>
+                <p>{{ formatFileSize(selectedFile.size) }} • {{ selectedFile.type || 'Unknown type' }}</p>
               </div>
               
               <button class="btn-remove" @click.stop="removeFile" title="Remove file">
@@ -73,91 +73,26 @@
         </div>
       </div>
 
-      <!-- Metadata Form -->
-      <div v-if="selectedFile" class="metadata-section">
-        <h2>File Information</h2>
-        
-        <form @submit.prevent="uploadFile" class="metadata-form">
-          <div class="form-group">
-            <label for="title" class="required">Title</label>
-            <input
-              id="title"
-              v-model="form.title"
-              type="text"
-              class="form-control"
-              :class="{ 'error': errors.title }"
-              placeholder="Enter a title for this file"
-              required
-            />
-            <div v-if="errors.title" class="error-message">{{ errors.title }}</div>
-          </div>
-
-          <div class="form-group">
-            <label for="description">Description</label>
-            <textarea
-              id="description"
-              v-model="form.description"
-              class="form-control"
-              :class="{ 'error': errors.description }"
-              placeholder="Optional description"
-              rows="3"
-            ></textarea>
-            <div v-if="errors.description" class="error-message">{{ errors.description }}</div>
-          </div>
-
-          <div class="form-group">
-            <label for="type" class="required">File Type</label>
-            <select
-              id="type"
-              v-model="form.type"
-              class="form-control"
-              :class="{ 'error': errors.type }"
-              required
-            >
-              <option v-for="option in fileTypeOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-            <div v-if="errors.type" class="error-message">{{ errors.type }}</div>
-            <div class="form-help">Auto-detected: {{ getFileTypeLabel(detectedType) }}</div>
-          </div>
-
-          <div class="form-group">
-            <label for="tags">Tags</label>
-            <input
-              id="tags"
-              v-model="tagsInput"
-              type="text"
-              class="form-control"
-              placeholder="Enter tags separated by commas"
-              @input="updateTags"
-            />
-            <div class="form-help">Separate multiple tags with commas</div>
-            
-            <div v-if="form.tags.length > 0" class="tags-preview">
-              <span v-for="tag in form.tags" :key="tag" class="tag">
-                {{ tag }}
-                <button type="button" @click="removeTag(tag)" class="tag-remove">×</button>
-              </span>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button type="button" class="btn btn-secondary" @click="goBack" :disabled="uploading">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="uploading || !isFormValid">
-              <span v-if="uploading">
-                <i class="bx bx-loader-alt bx-spin"></i>
-                Uploading...
-              </span>
-              <span v-else>
-                <i class="bx bx-upload"></i>
-                Upload File
-              </span>
-            </button>
-          </div>
-        </form>
+      <!-- Upload Actions -->
+      <div v-if="selectedFile" class="upload-actions">
+        <p class="upload-info">
+          File will be uploaded with auto-detected metadata. You can edit the details after upload.
+        </p>
+        <div class="action-buttons">
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="uploading"
+            @click="uploadFile"
+          >
+            <i v-if="uploading" class="bx bx-loader-alt bx-spin"></i>
+            <i v-else class="bx bx-upload"></i>
+            {{ uploading ? 'Uploading...' : 'Upload File' }}
+          </button>
+          <button type="button" class="btn btn-secondary" @click="goBack" :disabled="uploading">
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
 
@@ -194,45 +129,11 @@ const isDragOver = ref(false)
 const uploading = ref(false)
 const error = ref<string | null>(null)
 
-// Form data
-const form = ref<FileCreateData>({
-  title: '',
-  description: '',
-  type: 'other',
-  tags: []
-})
-
-const tagsInput = ref('')
-const errors = ref<Record<string, string>>({})
-
 // File input ref
 const fileInput = ref<HTMLInputElement | null>(null)
 
-// File type options
+// File type options (for display purposes)
 const fileTypeOptions = fileService.getFileTypeOptions()
-
-// Computed
-const detectedType = computed(() => {
-  if (!selectedFile.value) return 'other'
-  
-  const mimeType = selectedFile.value.type
-  if (mimeType.startsWith('image/')) return 'image'
-  if (mimeType.startsWith('video/')) return 'video'
-  if (mimeType.startsWith('audio/')) return 'audio'
-  if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed') return 'archive'
-  if (mimeType === 'application/pdf' || 
-      mimeType === 'text/plain' || 
-      mimeType === 'text/csv' ||
-      mimeType.includes('document') ||
-      mimeType.includes('spreadsheet') ||
-      mimeType.includes('presentation')) return 'document'
-  
-  return 'other'
-})
-
-const isFormValid = computed(() => {
-  return selectedFile.value && form.value.title.trim() && form.value.type
-})
 
 // Methods
 const triggerFileInput = () => {
@@ -263,16 +164,7 @@ const onFileSelected = (event: Event) => {
 
 const handleFileSelection = (file: File) => {
   selectedFile.value = file
-  
-  // Auto-fill title from filename
-  if (!form.value.title) {
-    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '')
-    form.value.title = nameWithoutExt
-  }
-  
-  // Auto-detect and set file type
-  form.value.type = detectedType.value as any
-  
+
   // Generate preview for images
   if (file.type.startsWith('image/')) {
     const reader = new FileReader()
@@ -283,7 +175,7 @@ const handleFileSelection = (file: File) => {
   } else {
     filePreview.value = null
   }
-  
+
   // Clear file input
   if (fileInput.value) {
     fileInput.value.value = ''
@@ -293,41 +185,16 @@ const handleFileSelection = (file: File) => {
 const removeFile = () => {
   selectedFile.value = null
   filePreview.value = null
-  form.value.title = ''
-  form.value.description = ''
-  form.value.type = 'other'
-  form.value.tags = []
-  tagsInput.value = ''
 }
 
-const updateTags = () => {
-  const tags = tagsInput.value
-    .split(',')
-    .map(tag => tag.trim())
-    .filter(tag => tag.length > 0)
-  
-  form.value.tags = [...new Set(tags)] // Remove duplicates
-}
-
-const removeTag = (tagToRemove: string) => {
-  form.value.tags = form.value.tags.filter(tag => tag !== tagToRemove)
-  tagsInput.value = form.value.tags.join(', ')
-}
-
-const getFileIconForType = (type: string): string => {
-  switch (type) {
-    case 'image': return 'bx-image'
-    case 'document': return 'bx-file-doc'
-    case 'video': return 'bx-video'
-    case 'audio': return 'bx-music'
-    case 'archive': return 'bx-archive'
-    default: return 'bx-file'
-  }
-}
-
-const getFileTypeLabel = (type: string) => {
-  const option = fileTypeOptions.find(opt => opt.value === type)
-  return option?.label || type
+const getFileIcon = (file: File): string => {
+  const type = file.type
+  if (type.startsWith('image/')) return 'bx-image'
+  if (type.startsWith('video/')) return 'bx-video'
+  if (type.startsWith('audio/')) return 'bx-music'
+  if (type === 'application/zip' || type === 'application/x-zip-compressed') return 'bx-archive'
+  if (type === 'application/pdf' || type.includes('document')) return 'bx-file-doc'
+  return 'bx-file'
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -340,30 +207,31 @@ const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-const validateForm = (): boolean => {
-  errors.value = {}
-  
-  if (!form.value.title.trim()) {
-    errors.value.title = 'Title is required'
-  }
-  
-  if (!form.value.type) {
-    errors.value.type = 'File type is required'
-  }
-  
-  return Object.keys(errors.value).length === 0
-}
+
 
 const uploadFile = async () => {
-  if (!selectedFile.value || !validateForm()) return
-  
+  if (!selectedFile.value) return
+
   uploading.value = true
   error.value = null
-  
+
   try {
-    const response = await fileService.createFile(form.value, selectedFile.value)
-    const fileId = response.data.id
-    router.push(`/files/${fileId}`)
+    const response = await fileService.uploadFile(selectedFile.value)
+
+    // The upload creates the file entity automatically
+    // Check if we got a single file or multiple files
+    const files = response.data.data
+    if (Array.isArray(files) && files.length > 0) {
+      // Redirect to the first uploaded file's detail view
+      const fileId = files[0].id
+      router.push(`/files/${fileId}`)
+    } else if (files && files.id) {
+      // Single file response
+      router.push(`/files/${files.id}`)
+    } else {
+      // Fallback to files list
+      router.push('/files')
+    }
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to upload file'
     console.error('Error uploading file:', err)
@@ -380,12 +248,7 @@ const goBack = () => {
   router.push('/files')
 }
 
-// Watch for file type changes to update form
-watch(detectedType, (newType) => {
-  if (selectedFile.value && !form.value.type) {
-    form.value.type = newType as any
-  }
-})
+
 </script>
 
 <style lang="scss" scoped>
@@ -418,8 +281,7 @@ watch(detectedType, (newType) => {
 }
 
 .upload-form {
-  .upload-section,
-  .metadata-section {
+  .upload-section {
     background: $light-bg-color;
     border-radius: 8px;
     padding: 2rem;
@@ -430,6 +292,27 @@ watch(detectedType, (newType) => {
       margin: 0 0 1.5rem 0;
       color: $text-color;
       font-size: 1.25rem;
+    }
+  }
+
+  .upload-actions {
+    background: $light-bg-color;
+    border-radius: 8px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid $border-color;
+    text-align: center;
+
+    .upload-info {
+      margin: 0 0 1.5rem 0;
+      color: $text-secondary-color;
+      font-size: 0.875rem;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
     }
   }
 }

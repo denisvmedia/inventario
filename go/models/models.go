@@ -88,12 +88,12 @@ func FileTypeFromMIME(mimeType string) FileType {
 	case mimeType == "application/zip" || mimeType == "application/x-zip-compressed":
 		return FileTypeArchive
 	case mimeType == "application/pdf" ||
-		 mimeType == "text/plain" ||
-		 mimeType == "text/csv" ||
-		 mimeType == "application/json" ||
-		 strings.HasPrefix(mimeType, "application/vnd.ms-") ||
-		 strings.HasPrefix(mimeType, "application/vnd.openxmlformats-") ||
-		 mimeType == "application/msword":
+		mimeType == "text/plain" ||
+		mimeType == "text/csv" ||
+		mimeType == "application/json" ||
+		strings.HasPrefix(mimeType, "application/vnd.ms-") ||
+		strings.HasPrefix(mimeType, "application/vnd.openxmlformats-") ||
+		mimeType == "application/msword":
 		return FileTypeDocument
 	default:
 		return FileTypeOther
@@ -147,7 +147,7 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 }
 
 var (
-	_ IDable = (*EntityID)(nil)
+	_ IDable                 = (*EntityID)(nil)
 	_ validation.Validatable = (*FileEntity)(nil)
 )
 

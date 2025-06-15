@@ -10,9 +10,9 @@ import (
 // CommodityFileUpdateRequest is the request body for updating a commodity file's path.
 type CommodityFileUpdateRequest struct {
 	Data struct {
-		ID         string                     `json:"id"`
-		Type       string                     `json:"type" example:"images" enums:"images,manuals,invoices"`
-		Attributes CommodityFileUpdateParams  `json:"attributes"`
+		ID         string                    `json:"id"`
+		Type       string                    `json:"type" example:"images" enums:"images,manuals,invoices"`
+		Attributes CommodityFileUpdateParams `json:"attributes"`
 	} `json:"data"`
 }
 

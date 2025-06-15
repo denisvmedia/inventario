@@ -150,7 +150,7 @@
             <button type="button" class="btn btn-secondary" @click="goBack" :disabled="saving">
               Cancel
             </button>
-            <button type="submit" class="btn btn-primary" :disabled="saving || !isFormValid">
+            <button type="button" class="btn btn-primary" :disabled="saving || !isFormValid" @click="updateFile">
               <span v-if="saving">
                 <i class="bx bx-loader-alt bx-spin"></i>
                 Saving...
@@ -304,10 +304,10 @@ const validateForm = (): boolean => {
 
 const updateFile = async () => {
   if (!validateForm()) return
-  
+
   saving.value = true
   saveError.value = null
-  
+
   try {
     await fileService.updateFile(fileId.value, form.value)
     router.push(`/files/${fileId.value}`)

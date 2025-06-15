@@ -71,21 +71,38 @@ const fileService = {
   },
 
   /**
-   * Create a new file with file upload
+   * Upload a file and create file entity
    */
-  createFile(metadata: FileCreateData, file: File) {
+  uploadFile(file: File) {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('metadata', JSON.stringify({
+
+    return axios.post('/api/v1/uploads/files', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }).then(response => {
+      console.log('File upload successful:', response.data)
+      return response
+    }).catch(error => {
+      console.error('Error uploading file:', error)
+      throw error
+    })
+  },
+
+  /**
+   * Create a new file entity with metadata only
+   */
+  createFile(metadata: FileCreateData) {
+    return axios.post(API_URL, {
       data: {
         type: 'files',
         attributes: metadata
       }
-    }))
-
-    return axios.post(API_URL, formData, {
+    }, {
       headers: {
-        'Content-Type': 'multipart/form-data'
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json'
       }
     }).then(response => {
       console.log('File creation successful:', response.data)
