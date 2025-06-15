@@ -10,8 +10,8 @@ The restore package is responsible for parsing XML export files and restoring in
 
 ### 1. Multiple Restore Strategies
 - **Full Replace (Destructive)**: Wipes current database and restores everything from backup
-- **Merge (Additive)**: Only adds data missing in current database (matched by primary key)
-- **Merge (Update Existing)**: Creates if missing, updates if exists, leaves other records untouched
+- **Merge Add**: Only adds data missing in current database (matched by primary key)
+- **Merge Update**: Creates if missing, updates if exists, leaves other records untouched
 
 ### 2. Streaming XML Processing
 - Memory-efficient streaming approach for large XML files
@@ -45,14 +45,24 @@ The restore package is responsible for parsing XML export files and restoring in
 
 ## Architecture
 
+The restore package follows a processor-based architecture where each restore operation is handled by a dedicated `RestoreOperationProcessor` instance. This design provides better isolation, detailed logging, and cleaner separation of concerns.
+
 ### Core Components
 
 #### RestoreService (`service.go`)
 The main service responsible for restore operations:
-- **RestoreFromXML()**: Main method that processes XML and restores data
-- **ProcessRestoreOperation()**: Orchestrates background restore with logging
+- **NewRestoreService()**: Creates a new restore service instance
+- **ProcessRestoreOperation()**: Delegates restore processing to RestoreOperationProcessor
+- Lightweight service that acts as a factory for restore processors
+
+#### RestoreOperationProcessor (`service.go`)
+Core processor that handles restore operations with detailed logging:
+- **Process()**: Main orchestration method for complete restore operations
+- **RestoreFromXML()**: Processes XML restore with streaming and detailed logging
 - **processRestoreWithDetailedLogging()**: Handles detailed step-by-step logging
 - **validateOptions()**: Validates restore configuration options
+- **clearExistingData()**: Handles full replace strategy data clearing
+- **markRestoreFailed()**: Error handling and status management
 - Supports multiple restore strategies with specialized processing methods
 
 #### RestoreWorker (`worker.go`)
@@ -72,10 +82,35 @@ Defines XML structure and conversion methods:
 - **RestoreStats**: Statistics tracking during restoration
 - **RestoreOptions**: Configuration options for restore operations
 
-#### Detailed Logging Components
-- **LoggedRestoreService**: Service wrapper that adds detailed logging
-- **DetailedRestoreProcessor**: Manages step-by-step logging and progress tracking
-- **RestoreStep**: Individual step tracking with status and results
+### Processor-Based Architecture
+
+The refactored architecture centers around the `RestoreOperationProcessor` pattern:
+
+#### Key Benefits
+- **Operation Isolation**: Each restore operation gets its own processor instance
+- **Detailed Logging**: Built-in step-by-step logging with emoji indicators
+- **Error Handling**: Comprehensive error tracking and status management
+- **Resource Management**: Proper cleanup and resource management per operation
+- **Testability**: Easier unit testing with dedicated processor instances
+
+#### Processor Lifecycle
+1. **Creation**: `NewRestoreOperationProcessor()` creates processor for specific operation
+2. **Validation**: Processor validates restore operation and export file existence
+3. **Processing**: `Process()` method orchestrates the complete restore workflow
+4. **Logging**: Detailed steps logged throughout the process with status updates
+5. **Completion**: Final status and statistics recorded in database
+
+#### Key Processor Methods
+- **`Process()`**: Main orchestration method that handles the complete restore workflow
+- **`processRestoreWithDetailedLogging()`**: Coordinates XML processing with step logging
+- **`restoreFromXMLWithStreamingLogging()`**: Core XML processing with streaming and logging
+- **`processLocationWithLogging()`**: Processes individual locations with detailed logging
+- **`processAreaWithLogging()`**: Processes individual areas with detailed logging
+- **`processCommodityWithLogging()`**: Processes individual commodities with detailed logging
+- **`createRestoreStep()`**: Creates new restore steps for progress tracking
+- **`updateRestoreStep()`**: Updates existing restore steps with results
+- **`predictAction()`**: Predicts what action will be taken based on strategy
+- **`markRestoreFailed()`**: Handles error scenarios and status updates
 
 ### Restore Strategies
 
@@ -88,9 +123,9 @@ RestoreStrategyFullReplace
 - **Risk**: All current data is lost
 - **Validation**: Requires explicit confirmation
 
-#### Merge Additive Strategy
+#### Merge Add Strategy
 ```go
-RestoreStrategyMergeAdditive
+RestoreStrategyMergeAdd
 ```
 - **Behavior**: Only adds missing data, skips existing items
 - **Use Case**: Adding new data from backup without conflicts
@@ -112,20 +147,21 @@ RestoreStrategyMergeUpdate
 1. **Request Creation**: User creates restore operation via API
 2. **Record Storage**: Restore operation created with "pending" status
 3. **Worker Detection**: RestoreWorker polls and detects pending operation
-4. **Initialization**: RestoreService begins processing with initial logging
-5. **XML Parsing**: Streaming XML parser processes file sections
-6. **Data Processing**: Entities processed according to selected strategy
-7. **File Restoration**: Binary files decoded and stored in blob storage
-8. **Statistics Collection**: Real-time tracking of processed entities
-9. **Completion**: Restore operation marked as completed with final statistics
+4. **Processor Creation**: RestoreOperationProcessor created for the specific operation
+5. **Initialization**: Processor begins processing with initial logging and validation
+6. **XML Parsing**: Streaming XML parser processes file sections
+7. **Data Processing**: Entities processed according to selected strategy with detailed logging
+8. **File Restoration**: Binary files decoded and stored in blob storage
+9. **Statistics Collection**: Real-time tracking of processed entities
+10. **Completion**: Restore operation marked as completed with final statistics
 
 ### Detailed Logging Flow
-1. **Step Creation**: Each major phase creates a restore step
-2. **Progress Updates**: Steps updated with in-progress, success, or error status
-3. **Item Logging**: Individual items logged with emoji indicators
-4. **Action Prediction**: System predicts what action will be taken for each item
-5. **Result Tracking**: Actual results compared with predictions
-6. **Error Handling**: Failed items logged with detailed error messages
+1. **Step Creation**: RestoreOperationProcessor creates restore steps for each major phase
+2. **Progress Updates**: Steps updated with in-progress, success, or error status via `createRestoreStep()` and `updateRestoreStep()`
+3. **Item Logging**: Individual items logged with emoji indicators using `processLocationWithLogging()`, `processAreaWithLogging()`, `processCommodityWithLogging()`
+4. **Action Prediction**: `predictAction()` method predicts what action will be taken for each item based on strategy
+5. **Result Tracking**: Actual results compared with predictions and logged accordingly
+6. **Error Handling**: Failed items logged with detailed error messages via `markRestoreFailed()`
 
 ## Usage
 
@@ -159,6 +195,18 @@ if err != nil {
 }
 ```
 
+### Direct Processor Usage
+```go
+// Create processor for specific restore operation
+processor := restore.NewRestoreOperationProcessor(restoreOperationID, registrySet, uploadLocation)
+
+// Process the restore operation
+err := processor.Process(ctx)
+if err != nil {
+    log.Printf("Restore failed: %v", err)
+}
+```
+
 ### Restore Options Configuration
 ```go
 options := restore.RestoreOptions{
@@ -167,7 +215,9 @@ options := restore.RestoreOptions{
     DryRun:          false,
 }
 
-stats, err := service.RestoreFromXML(ctx, xmlReader, options)
+// Using processor directly for XML restore
+processor := restore.NewRestoreOperationProcessor("operation-id", registrySet, uploadLocation)
+stats, err := processor.RestoreFromXML(ctx, xmlReader, options)
 ```
 
 ## XML Processing
@@ -229,14 +279,15 @@ for {
 
 ### Test Coverage
 - **Unit Tests**: `service_test.go`, `worker_test.go`, `types_test.go`
+- **Strategy Tests**: `merge_add_strategy_test.go` and other strategy-specific tests
 - **Integration Tests**: End-to-end restore operations with real XML files
-- **Strategy Tests**: All restore strategies tested with various scenarios
 - **Error Tests**: Error handling and recovery scenarios
 
 ### Test Framework
 - Uses frankban's quicktest framework
 - Table-driven tests for multiple restore strategies
-- Mock registries for isolated testing
+- RestoreOperationProcessor-based testing for realistic scenarios
+- Memory registries for isolated testing
 - Temporary file handling for integration tests
 
 ## Configuration
