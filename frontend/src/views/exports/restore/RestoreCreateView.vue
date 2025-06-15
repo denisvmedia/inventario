@@ -230,7 +230,6 @@ const form = ref<RestoreRequest>({
     strategy: 'merge_add',
     include_file_data: true,
     dry_run: false,
-    backup_existing: false,
   } as RestoreOptions,
 })
 

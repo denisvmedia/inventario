@@ -101,7 +101,11 @@ export interface Export {
   binary_data_size?: number;
 }
 
-
+export interface RestoreOptions {
+  strategy: string;
+  include_file_data: boolean;
+  dry_run: boolean;
+}
 
 export type RestoreStatus = 'pending' | 'running' | 'completed' | 'failed';
 

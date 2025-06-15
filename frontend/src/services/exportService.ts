@@ -123,6 +123,7 @@ const exportService = {
   async pollRestoreStatus(
     exportId: string,
     restoreId: string,
+    // eslint-disable-next-line
     onUpdate?: (restore: any) => void,
     intervalMs: number = 2000,
     maxAttempts: number = 300 // 10 minutes with 2s intervals
