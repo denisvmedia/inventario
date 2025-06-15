@@ -15,13 +15,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/backup/export"
 	importpkg "github.com/denisvmedia/inventario/backup/import"
+	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/backup/restore"
 )
 
 var runCmd = &cobra.Command{

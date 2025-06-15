@@ -56,6 +56,9 @@ linters:
       min-complexity: 20
     importas:
       no-unaliased: true
+      alias:
+        - pkg: github.com/frankban/quicktest
+          alias: qt
     lll:
       line-length: 240
     nakedret: # Discussions on why naked return can be a problem: https://github.com/golang/go/issues/21291
