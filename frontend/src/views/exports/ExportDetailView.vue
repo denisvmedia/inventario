@@ -851,7 +851,7 @@ onMounted(() => {
 @use '@/assets/main' as *;
 
 .export-detail-page {
-  max-width: 1000px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 20px;
 }
