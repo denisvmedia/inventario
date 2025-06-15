@@ -135,7 +135,7 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 	fileEntity := models.FileEntity{
 		Title:       input.Data.Attributes.Title,
 		Description: input.Data.Attributes.Description,
-		Type:        input.Data.Attributes.Type,
+		Type:        models.FileTypeOther, // Default type, should be updated when file is uploaded
 		Tags:        input.Data.Attributes.Tags,
 		File: &models.File{
 			Path:         input.Data.Attributes.Path,
@@ -216,12 +216,16 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update the editable fields
+	// Update the editable fields (file type is auto-detected from MIME type and cannot be changed manually)
 	file.Title = input.Data.Attributes.Title
 	file.Description = input.Data.Attributes.Description
-	file.Type = input.Data.Attributes.Type
 	file.Tags = input.Data.Attributes.Tags
 	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+
+	// Auto-detect file type from MIME type if available
+	if file.File != nil && file.MIMEType != "" {
+		file.Type = models.FileTypeFromMIME(file.MIMEType)
+	}
 
 	updatedFile, err := api.registrySet.FileRegistry.Update(r.Context(), *file)
 	if err != nil {

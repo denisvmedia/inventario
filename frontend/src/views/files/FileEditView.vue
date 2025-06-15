@@ -111,19 +111,11 @@
           </div>
 
           <div class="form-group">
-            <label for="type" class="required">File Type</label>
-            <select
-              id="type"
-              v-model="form.type"
-              class="form-control"
-              :class="{ 'error': errors.type }"
-              required
-            >
-              <option v-for="option in fileTypeOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-            <div v-if="errors.type" class="error-message">{{ errors.type }}</div>
+            <label>File Type</label>
+            <div class="form-control-static">
+              <span class="file-type-display">{{ getFileTypeLabel(file?.type || 'other') }}</span>
+              <small class="form-help">File type is automatically detected and cannot be changed</small>
+            </div>
           </div>
 
           <div class="form-group">
@@ -203,7 +195,6 @@ const saveError = ref<string | null>(null)
 const form = ref<FileUpdateData>({
   title: '',
   description: '',
-  type: 'other',
   tags: [],
   path: ''
 })
@@ -211,14 +202,24 @@ const form = ref<FileUpdateData>({
 const tagsInput = ref('')
 const errors = ref<Record<string, string>>({})
 
-// File type options
-const fileTypeOptions = fileService.getFileTypeOptions()
+// Helper function to get file type label
+const getFileTypeLabel = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    'image': 'Image',
+    'document': 'Document',
+    'video': 'Video',
+    'audio': 'Audio',
+    'archive': 'Archive',
+    'other': 'Other'
+  }
+  return typeMap[type] || 'Other'
+}
 
 // Computed
 const fileId = computed(() => route.params.id as string)
 
 const isFormValid = computed(() => {
-  return form.value.title.trim() && form.value.path.trim() && form.value.type
+  return form.value.title.trim() && form.value.path.trim()
 })
 
 // Methods
@@ -234,7 +235,6 @@ const loadFile = async () => {
     form.value = {
       title: file.value.title,
       description: file.value.description || '',
-      type: file.value.type,
       tags: [...file.value.tags],
       path: file.value.path
     }
@@ -256,10 +256,7 @@ const getFileIcon = (file: FileEntity) => {
   return fileService.getFileIcon(file)
 }
 
-const getFileTypeLabel = (type: string) => {
-  const option = fileTypeOptions.find(opt => opt.value === type)
-  return option?.label || type
-}
+
 
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
@@ -286,19 +283,15 @@ const removeTag = (tagToRemove: string) => {
 
 const validateForm = (): boolean => {
   errors.value = {}
-  
+
   if (!form.value.title.trim()) {
     errors.value.title = 'Title is required'
   }
-  
+
   if (!form.value.path.trim()) {
     errors.value.path = 'Filename is required'
   }
-  
-  if (!form.value.type) {
-    errors.value.type = 'File type is required'
-  }
-  
+
   return Object.keys(errors.value).length === 0
 }
 
@@ -466,6 +459,24 @@ onMounted(() => {
         margin-top: 0.25rem;
         font-size: 0.875rem;
         color: $text-secondary-color;
+      }
+
+      .form-control-static {
+        padding: 0.75rem;
+        background-color: $light-bg-color;
+        border: 1px solid $border-color;
+        border-radius: 0.375rem;
+
+        .file-type-display {
+          font-weight: 500;
+          color: $text-color;
+        }
+
+        .form-help {
+          margin-top: 0.25rem;
+          color: $text-secondary-color;
+          font-size: 0.875rem;
+        }
       }
 
       .error-message {

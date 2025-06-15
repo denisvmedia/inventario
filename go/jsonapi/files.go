@@ -92,10 +92,6 @@ func (fr *FileRequest) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&fr.Data.Type, validation.Required, validation.In("files")),
 		validation.Field(&fr.Data.Attributes.Title, validation.Required, validation.Length(1, 255)),
 		validation.Field(&fr.Data.Attributes.Description, validation.Length(0, 1000)),
-		validation.Field(&fr.Data.Attributes.Type, validation.Required, validation.In(
-			models.FileTypeImage, models.FileTypeDocument, models.FileTypeVideo,
-			models.FileTypeAudio, models.FileTypeArchive, models.FileTypeOther,
-		)),
 	)
 
 	return validation.ValidateStructWithContext(ctx, fr, fields...)
@@ -103,11 +99,10 @@ func (fr *FileRequest) ValidateWithContext(ctx context.Context) error {
 
 // FileRequestData contains the attributes for creating/updating a file.
 type FileRequestData struct {
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	Type        models.FileType `json:"type"`
-	Tags        []string        `json:"tags"`
-	Path        string          `json:"path,omitempty"` // Only for updates
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Tags        []string `json:"tags"`
+	Path        string   `json:"path,omitempty"` // Only for updates
 }
 
 var _ render.Binder = (*FileUpdateRequest)(nil)
@@ -158,11 +153,10 @@ func (fd *FileUpdateRequestData) ValidateWithContext(ctx context.Context) error 
 
 // FileUpdateRequestFileData contains the attributes for updating a file.
 type FileUpdateRequestFileData struct {
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	Type        models.FileType `json:"type"`
-	Tags        []string        `json:"tags"`
-	Path        string          `json:"path"` // User-editable filename
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Tags        []string `json:"tags"`
+	Path        string   `json:"path"` // User-editable filename
 }
 
 func (fur *FileUpdateRequestFileData) Validate() error {
@@ -174,13 +168,8 @@ func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) e
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&fur.Type, validation.Required, validation.In("files")),
 		validation.Field(&fur.Title, validation.Required, validation.Length(1, 255)),
 		validation.Field(&fur.Description, validation.Length(0, 1000)),
-		validation.Field(&fur.Type, validation.Required, validation.In(
-			models.FileTypeImage, models.FileTypeDocument, models.FileTypeVideo,
-			models.FileTypeAudio, models.FileTypeArchive, models.FileTypeOther,
-		)),
 		validation.Field(&fur.Path, validation.Required),
 	)
 

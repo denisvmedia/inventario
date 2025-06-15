@@ -27,14 +27,12 @@ export interface FileListParams {
 export interface FileCreateData {
   title: string
   description: string
-  type: 'image' | 'document' | 'video' | 'audio' | 'archive' | 'other'
   tags: string[]
 }
 
 export interface FileUpdateData {
   title: string
   description: string
-  type: 'image' | 'document' | 'video' | 'audio' | 'archive' | 'other'
   tags: string[]
   path: string
 }
