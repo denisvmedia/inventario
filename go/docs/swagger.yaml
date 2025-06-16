@@ -88,6 +88,29 @@ definitions:
         example: commodities
         type: string
     type: object
+  jsonapi.CommodityFileUpdateParams:
+    properties:
+      path:
+        description: Only the Path field can be updated
+        type: string
+    type: object
+  jsonapi.CommodityFileUpdateRequest:
+    properties:
+      data:
+        properties:
+          attributes:
+            $ref: '#/definitions/jsonapi.CommodityFileUpdateParams'
+          id:
+            type: string
+          type:
+            enum:
+            - images
+            - manuals
+            - invoices
+            example: images
+            type: string
+        type: object
+    type: object
   jsonapi.CommodityMeta:
     properties:
       images:
@@ -197,28 +220,94 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ExportsMeta'
     type: object
-  jsonapi.FileUpdateParams:
+  jsonapi.FileRequest:
     properties:
+      data:
+        properties:
+          attributes:
+            $ref: '#/definitions/jsonapi.FileRequestData'
+          id:
+            type: string
+          type:
+            type: string
+        type: object
+    type: object
+  jsonapi.FileRequestData:
+    properties:
+      description:
+        type: string
       path:
-        description: Only the Path field can be updated
+        description: Only for updates
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  jsonapi.FileResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.FileEntity'
+      id:
+        type: string
+      type:
+        enum:
+        - files
+        example: files
         type: string
     type: object
   jsonapi.FileUpdateRequest:
     properties:
       data:
-        properties:
-          attributes:
-            $ref: '#/definitions/jsonapi.FileUpdateParams'
-          id:
-            type: string
-          type:
-            enum:
-            - images
-            - manuals
-            - invoices
-            example: images
-            type: string
-        type: object
+        $ref: '#/definitions/jsonapi.FileUpdateRequestData'
+    type: object
+  jsonapi.FileUpdateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.FileUpdateRequestFileData'
+      id:
+        type: string
+      type:
+        enum:
+        - files
+        example: files
+        type: string
+    type: object
+  jsonapi.FileUpdateRequestFileData:
+    properties:
+      description:
+        type: string
+      path:
+        description: User-editable filename
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  jsonapi.FilesMeta:
+    properties:
+      files:
+        example: 10
+        format: int64
+        type: integer
+      total:
+        example: 100
+        format: int64
+        type: integer
+    type: object
+  jsonapi.FilesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.FileEntity'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.FilesMeta'
     type: object
   jsonapi.ImageResponse:
     properties:
@@ -646,6 +735,68 @@ definitions:
     - ExportTypeAreas
     - ExportTypeCommodities
     - ExportTypeImported
+  models.FileEntity:
+    properties:
+      created_at:
+        description: CreatedAt is when the file was created
+        type: string
+      description:
+        description: Description is an optional description of the file
+        type: string
+      ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
+        type: string
+      id:
+        type: string
+      mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
+        type: string
+      path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
+        type: string
+      tags:
+        description: Tags are optional tags for categorization and search
+        items:
+          type: string
+        type: array
+      title:
+        description: Title is the user-defined title for the file
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/models.FileType'
+        description: Type represents the category of the file (image, document, etc.)
+      updated_at:
+        description: UpdatedAt is when the file was last updated
+        type: string
+    type: object
+  models.FileType:
+    enum:
+    - image
+    - document
+    - video
+    - audio
+    - archive
+    - other
+    type: string
+    x-enum-varnames:
+    - FileTypeImage
+    - FileTypeDocument
+    - FileTypeVideo
+    - FileTypeAudio
+    - FileTypeArchive
+    - FileTypeOther
   models.Image:
     properties:
       commodity_id:
@@ -1116,7 +1267,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
       produces:
       - application/vnd.api+json
       responses:
@@ -1262,7 +1413,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
       produces:
       - application/vnd.api+json
       responses:
@@ -1408,7 +1559,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
       produces:
       - application/vnd.api+json
       responses:
@@ -1841,6 +1992,181 @@ paths:
       summary: Import XML export
       tags:
       - exports
+  /files:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get files with optional filtering
+      parameters:
+      - description: Filter by file type
+        enum:
+        - image
+        - document
+        - video
+        - audio
+        - archive
+        - other
+        in: query
+        name: type
+        type: string
+      - description: Search in title, description, and file paths
+        in: query
+        name: search
+        type: string
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: 1
+        description: Page number (1-based)
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FilesResponse'
+      summary: List files
+      tags:
+      - files
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new file entity with metadata (file upload handled separately)
+      parameters:
+      - description: File metadata
+        in: body
+        name: file
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a file entity
+      tags:
+      - files
+  /files/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete file and its associated file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a file
+      tags:
+      - files
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get file by ID
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a file
+      tags:
+      - files
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update file metadata
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File update data
+        in: body
+        name: file
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a file
+      tags:
+      - files
+  /files/{id}.{ext}:
+    get:
+      description: download file content
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File extension
+        in: path
+        name: ext
+        required: true
+        type: string
+      responses:
+        "200":
+          description: File content
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download a file
+      tags:
+      - files
   /locations:
     get:
       consumes:

@@ -20,7 +20,7 @@ test.describe('Application Navigation', () => {
     
     // Verify navigation cards are present
     await expect(page.locator('.navigation-cards')).toBeVisible();
-    await expect(page.locator('.navigation-cards .card')).toHaveCount(3);
+    await expect(page.locator('.navigation-cards .card')).toHaveCount(4);
   });
 
   test('should navigate to locations page', async ({ page }) => {

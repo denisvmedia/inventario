@@ -753,14 +753,14 @@ func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request
 // @Produce json-api
 // @Param commodityID path string true "Commodity ID"
 // @Param imageID path string true "Image ID"
-// @Param request body jsonapi.FileUpdateRequest true "Update request"
+// @Param request body jsonapi.CommodityFileUpdateRequest true "Update request"
 // @Success 200 {object} jsonapi.ImageResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
 // @Router /commodities/{commodityID}/images/{imageID} [put].
 func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 	imageID := chi.URLParam(r, "imageID")
 
-	var input jsonapi.FileUpdateRequest
+	var input jsonapi.CommodityFileUpdateRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
 		return
@@ -802,14 +802,14 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 // @Produce json-api
 // @Param commodityID path string true "Commodity ID"
 // @Param invoiceID path string true "Invoice ID"
-// @Param request body jsonapi.FileUpdateRequest true "Update request"
+// @Param request body jsonapi.CommodityFileUpdateRequest true "Update request"
 // @Success 200 {object} jsonapi.InvoiceResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
 // @Router /commodities/{commodityID}/invoices/{invoiceID} [put].
 func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request) {
 	invoiceID := chi.URLParam(r, "invoiceID")
 
-	var input jsonapi.FileUpdateRequest
+	var input jsonapi.CommodityFileUpdateRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
 		return
@@ -851,14 +851,14 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 // @Produce json-api
 // @Param commodityID path string true "Commodity ID"
 // @Param manualID path string true "Manual ID"
-// @Param request body jsonapi.FileUpdateRequest true "Update request"
+// @Param request body jsonapi.CommodityFileUpdateRequest true "Update request"
 // @Success 200 {object} jsonapi.ManualResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
 // @Router /commodities/{commodityID}/manuals/{manualID} [put].
 func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) {
 	manualID := chi.URLParam(r, "manualID")
 
-	var input jsonapi.FileUpdateRequest
+	var input jsonapi.CommodityFileUpdateRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
 		return

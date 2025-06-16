@@ -9,7 +9,7 @@
 
     <div v-if="error" class="error-message">{{ error }}</div>
 
-    <form @submit.prevent="createExport" class="export-form">
+    <form class="export-form" @submit.prevent="createExport">
       <div class="form-section">
         <h2>Export Details</h2>
 

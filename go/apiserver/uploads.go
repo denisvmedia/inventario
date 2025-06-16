@@ -40,6 +40,7 @@ type uploadsAPI struct {
 	imageRegistry   registry.ImageRegistry
 	manualRegistry  registry.ManualRegistry
 	invoiceRegistry registry.InvoiceRegistry
+	fileRegistry    registry.FileRegistry
 }
 
 func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request) {
@@ -183,6 +184,80 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
+	uploadedFiles := uploadedFilesFromContext(r.Context())
+	if len(uploadedFiles) == 0 {
+		unprocessableEntityError(w, r, ErrNoFilesUploaded)
+		return
+	}
+
+	var createdFiles []models.FileEntity
+
+	for _, f := range uploadedFiles {
+		// Get the extension from the MIME type
+		ext := mimekit.ExtensionByMime(f.MIMEType)
+		originalPath := f.FilePath
+		// Set Path to be the filename without extension
+		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+
+		// Auto-detect file type based on MIME type
+		var fileType models.FileType
+		switch {
+		case strings.HasPrefix(f.MIMEType, "image/"):
+			fileType = models.FileTypeImage
+		case strings.HasPrefix(f.MIMEType, "video/"):
+			fileType = models.FileTypeVideo
+		case strings.HasPrefix(f.MIMEType, "audio/"):
+			fileType = models.FileTypeAudio
+		case f.MIMEType == "application/zip" || f.MIMEType == "application/x-zip-compressed":
+			fileType = models.FileTypeArchive
+		case f.MIMEType == "application/pdf" ||
+			f.MIMEType == "text/plain" ||
+			f.MIMEType == "text/csv" ||
+			strings.Contains(f.MIMEType, "document") ||
+			strings.Contains(f.MIMEType, "spreadsheet") ||
+			strings.Contains(f.MIMEType, "presentation"):
+			fileType = models.FileTypeDocument
+		default:
+			fileType = models.FileTypeOther
+		}
+
+		// Create file entity with auto-generated title from filename
+		fileEntity := models.FileEntity{
+			Title:       pathWithoutExt, // Use filename as default title
+			Description: "",             // Empty description
+			Type:        fileType,
+			Tags:        []string{}, // Empty tags
+			File: &models.File{
+				Path:         pathWithoutExt,
+				OriginalPath: originalPath,
+				Ext:          ext,
+				MIMEType:     f.MIMEType,
+			},
+		}
+
+		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
+		if err != nil {
+			renderEntityError(w, r, err)
+			return
+		}
+		createdFiles = append(createdFiles, *createdFile)
+	}
+
+	// Return the created files
+	var filePtrs []*models.FileEntity
+	for i := range createdFiles {
+		filePtrs = append(filePtrs, &createdFiles[i])
+	}
+
+	response := jsonapi.NewFilesResponse(filePtrs, len(createdFiles))
+	render.Status(r, http.StatusCreated)
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 func (api *uploadsAPI) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
 	uploadedFiles := uploadedFilesFromContext(r.Context())
 	if len(uploadedFiles) == 0 {
@@ -288,6 +363,7 @@ func Uploads(params Params) func(r chi.Router) {
 		imageRegistry:   params.RegistrySet.ImageRegistry,
 		manualRegistry:  params.RegistrySet.ManualRegistry,
 		invoiceRegistry: params.RegistrySet.InvoiceRegistry,
+		fileRegistry:    params.RegistrySet.FileRegistry,
 	}
 
 	return func(r chi.Router) {
@@ -297,6 +373,9 @@ func Uploads(params Params) func(r chi.Router) {
 				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)
 				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/invoices", api.handleInvoicesUpload)
 			})
+
+		// File uploads - allow all content types
+		r.With(api.uploadFiles(mimekit.AllContentTypes()...)).Post("/files", api.handleFilesUpload)
 
 		// Restore uploads - only allow XML files
 		r.With(api.uploadFiles(mimekit.XMLContentTypes()...)).Post("/restores", api.handleRestoreUpload)

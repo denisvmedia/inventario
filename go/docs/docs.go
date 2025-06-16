@@ -398,7 +398,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                            "$ref": "#/definitions/jsonapi.CommodityFileUpdateRequest"
                         }
                     }
                 ],
@@ -616,7 +616,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                            "$ref": "#/definitions/jsonapi.CommodityFileUpdateRequest"
                         }
                     }
                 ],
@@ -834,7 +834,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                            "$ref": "#/definitions/jsonapi.CommodityFileUpdateRequest"
                         }
                     }
                 ],
@@ -1500,6 +1500,267 @@ const docTemplate = `{
                 }
             }
         },
+        "/files": {
+            "get": {
+                "description": "get files with optional filtering",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "List files",
+                "parameters": [
+                    {
+                        "enum": [
+                            "image",
+                            "document",
+                            "video",
+                            "audio",
+                            "archive",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Filter by file type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search in title, description, and file paths",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by tags (comma-separated)",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Items per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FilesResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new file entity with metadata (file upload handled separately)",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Create a file entity",
+                "parameters": [
+                    {
+                        "description": "File metadata",
+                        "name": "file",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}": {
+            "get": {
+                "description": "get file by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Get a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update file metadata",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Update a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "File update data",
+                        "name": "file",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete file and its associated file",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Delete a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}.{ext}": {
+            "get": {
+                "description": "download file content",
+                "tags": [
+                    "files"
+                ],
+                "summary": "Download a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File extension",
+                        "name": "ext",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File content"
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/locations": {
             "get": {
                 "description": "get locations",
@@ -1938,6 +2199,40 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityFileUpdateParams": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "description": "Only the Path field can be updated",
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityFileUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "$ref": "#/definitions/jsonapi.CommodityFileUpdateParams"
+                        },
+                        "id": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "images",
+                                "manuals",
+                                "invoices"
+                            ],
+                            "example": "images"
+                        }
+                    }
+                }
+            }
+        },
         "jsonapi.CommodityMeta": {
             "type": "object",
             "properties": {
@@ -2104,12 +2399,61 @@ const docTemplate = `{
                 }
             }
         },
-        "jsonapi.FileUpdateParams": {
+        "jsonapi.FileRequest": {
             "type": "object",
             "properties": {
-                "path": {
-                    "description": "Only the Path field can be updated",
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "$ref": "#/definitions/jsonapi.FileRequestData"
+                        },
+                        "id": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "jsonapi.FileRequestData": {
+            "type": "object",
+            "properties": {
+                "description": {
                     "type": "string"
+                },
+                "path": {
+                    "description": "Only for updates",
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.FileResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.FileEntity"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "files"
+                    ],
+                    "example": "files"
                 }
             }
         },
@@ -2117,24 +2461,75 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "data": {
-                    "type": "object",
-                    "properties": {
-                        "attributes": {
-                            "$ref": "#/definitions/jsonapi.FileUpdateParams"
-                        },
-                        "id": {
-                            "type": "string"
-                        },
-                        "type": {
-                            "type": "string",
-                            "enum": [
-                                "images",
-                                "manuals",
-                                "invoices"
-                            ],
-                            "example": "images"
-                        }
+                    "$ref": "#/definitions/jsonapi.FileUpdateRequestData"
+                }
+            }
+        },
+        "jsonapi.FileUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.FileUpdateRequestFileData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "files"
+                    ],
+                    "example": "files"
+                }
+            }
+        },
+        "jsonapi.FileUpdateRequestFileData": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "path": {
+                    "description": "User-editable filename",
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.FilesMeta": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 100
+                }
+            }
+        },
+        "jsonapi.FilesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.FileEntity"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.FilesMeta"
                 }
             }
         },
@@ -2762,6 +3157,80 @@ const docTemplate = `{
                 "ExportTypeAreas",
                 "ExportTypeCommodities",
                 "ExportTypeImported"
+            ]
+        },
+        "models.FileEntity": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "CreatedAt is when the file was created",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "Description is an optional description of the file",
+                    "type": "string"
+                },
+                "ext": {
+                    "description": "Ext is the file extension including the dot.\nExample: \".pdf\"",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mime_type": {
+                    "description": "MIMEType is the MIME type of the file.\nExample: \"application/pdf\"",
+                    "type": "string"
+                },
+                "original_path": {
+                    "description": "OriginalPath is the original filename as uploaded by the user.\nExample: \"invoice.pdf\"",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
+                    "type": "string"
+                },
+                "tags": {
+                    "description": "Tags are optional tags for categorization and search",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "description": "Title is the user-defined title for the file",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "Type represents the category of the file (image, document, etc.)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.FileType"
+                        }
+                    ]
+                },
+                "updated_at": {
+                    "description": "UpdatedAt is when the file was last updated",
+                    "type": "string"
+                }
+            }
+        },
+        "models.FileType": {
+            "type": "string",
+            "enum": [
+                "image",
+                "document",
+                "video",
+                "audio",
+                "archive",
+                "other"
+            ],
+            "x-enum-varnames": [
+                "FileTypeImage",
+                "FileTypeDocument",
+                "FileTypeVideo",
+                "FileTypeAudio",
+                "FileTypeArchive",
+                "FileTypeOther"
             ]
         },
         "models.Image": {

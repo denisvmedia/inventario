@@ -26,6 +26,14 @@ export const uploadFile = async (page: Page, recorder: TestRecorder, selectorBas
     await recorder.takeScreenshot(`${screenshotBase}-upload`);
     await page.click(`${selectorBase} .upload-actions button:has-text("Upload Files")`);
 
+    // const button = await page.locator(`${selectorBase} .upload-actions button:has-text("Upload Files")`);
+    // const box = await button.boundingBox();
+    // if (box) {
+    //     const {locationX, locationY} = {locationX: box.x + box.width / 2, locationY: box.y + box.height / 2};
+    //     await page.mouse.move(locationX, locationY);
+    //     await page.mouse.click(locationX, locationY);
+    // }
+
     // Verify image is displayed
     await expect(page.locator(`${selectorBase} .file-item`)).toBeVisible();
     await recorder.takeScreenshot(`${screenshotBase}-displayed`);

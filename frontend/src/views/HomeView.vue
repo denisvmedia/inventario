@@ -29,6 +29,10 @@
         <h2>Commodities</h2>
         <p>Manage inventory items</p>
       </div>
+      <div class="card" @click="navigateTo('/files')">
+        <h2>Files</h2>
+        <p>Upload and manage standalone files</p>
+      </div>
       <div class="card" @click="navigateTo('/settings')">
         <h2>Settings</h2>
         <p>Configure application settings</p>
