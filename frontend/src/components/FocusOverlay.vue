@@ -1,27 +1,11 @@
 <template>
   <Teleport to="body">
+    <!-- Simple overlay that makes the existing button appear above it -->
     <div v-if="show" class="focus-overlay" @click="handleOverlayClick">
-      <!-- Multi-part backdrop that creates a cutout effect -->
-      <template v-if="targetRect">
-        <!-- Top backdrop -->
-        <div class="overlay-backdrop-part" :style="topBackdropStyle"></div>
-        <!-- Bottom backdrop -->
-        <div class="overlay-backdrop-part" :style="bottomBackdropStyle"></div>
-        <!-- Left backdrop -->
-        <div class="overlay-backdrop-part" :style="leftBackdropStyle"></div>
-        <!-- Right backdrop -->
-        <div class="overlay-backdrop-part" :style="rightBackdropStyle"></div>
-      </template>
-      <div v-else class="overlay-backdrop"></div>
+      <!-- Semi-transparent backdrop -->
+      <div class="overlay-backdrop"></div>
 
-      <!-- Highlight border for the target element -->
-      <div
-        v-if="targetRect"
-        class="highlight-border"
-        :style="cutoutStyle"
-      ></div>
-
-      <!-- Hint message -->
+      <!-- Hint message positioned near the target element -->
       <div
         v-if="targetRect"
         class="hint-message"
@@ -45,12 +29,10 @@ interface Props {
   show: boolean
   targetElement?: HTMLElement | null
   message?: string
-  allowClickThrough?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  message: 'Don\'t forget to upload your files!',
-  allowClickThrough: true
+  message: 'Don\'t forget to upload your files!'
 })
 
 const emit = defineEmits(['close'])
@@ -90,100 +72,40 @@ watch([() => props.show, () => props.targetElement], async () => {
     await nextTick()
     scrollToTarget()
     updateTargetRect()
-    
+
+    // Set high z-index on target element to make it appear above overlay
+    props.targetElement.style.position = 'relative'
+    props.targetElement.style.zIndex = '10000'
+
     // Update rect on window resize
     window.addEventListener('resize', updateTargetRect)
     window.addEventListener('scroll', updateTargetRect)
   } else {
+    // Reset z-index when overlay is hidden
+    if (props.targetElement) {
+      props.targetElement.style.zIndex = ''
+      props.targetElement.style.position = ''
+    }
     window.removeEventListener('resize', updateTargetRect)
     window.removeEventListener('scroll', updateTargetRect)
   }
 }, { immediate: true })
 
-// Computed styles for the four backdrop parts that create a cutout
-const topBackdropStyle = computed(() => {
-  if (!targetRect.value) return {}
-  const padding = 8
-  const cutoutTop = targetRect.value.top - padding
 
-  return {
-    top: '0px',
-    left: '0px',
-    width: '100%',
-    height: `${Math.max(0, cutoutTop)}px`
-  }
-})
-
-const bottomBackdropStyle = computed(() => {
-  if (!targetRect.value) return {}
-  const padding = 8
-  const cutoutBottom = targetRect.value.bottom + padding
-
-  return {
-    top: `${cutoutBottom}px`,
-    left: '0px',
-    width: '100%',
-    height: `calc(100% - ${cutoutBottom}px)`
-  }
-})
-
-const leftBackdropStyle = computed(() => {
-  if (!targetRect.value) return {}
-  const padding = 8
-  const cutoutTop = targetRect.value.top - padding
-  const cutoutLeft = targetRect.value.left - padding
-  const cutoutHeight = targetRect.value.height + padding * 2
-
-  return {
-    top: `${Math.max(0, cutoutTop)}px`,
-    left: '0px',
-    width: `${Math.max(0, cutoutLeft)}px`,
-    height: `${cutoutHeight}px`
-  }
-})
-
-const rightBackdropStyle = computed(() => {
-  if (!targetRect.value) return {}
-  const padding = 8
-  const cutoutTop = targetRect.value.top - padding
-  const cutoutRight = targetRect.value.right + padding
-  const cutoutHeight = targetRect.value.height + padding * 2
-
-  return {
-    top: `${Math.max(0, cutoutTop)}px`,
-    left: `${cutoutRight}px`,
-    width: `calc(100% - ${cutoutRight}px)`,
-    height: `${cutoutHeight}px`
-  }
-})
-
-// Computed styles for the highlight border
-const cutoutStyle = computed(() => {
-  if (!targetRect.value) return {}
-
-  const padding = 8 // Extra padding around the target element
-
-  return {
-    left: `${targetRect.value.left - padding}px`,
-    top: `${targetRect.value.top - padding}px`,
-    width: `${targetRect.value.width + padding * 2}px`,
-    height: `${targetRect.value.height + padding * 2}px`,
-  }
-})
 
 // Computed styles for the hint message
 const hintStyle = computed(() => {
   if (!targetRect.value) return {}
-  
+
   const hintWidth = 280
   const hintHeight = 60
   const arrowSize = 12
   const spacing = 20
-  
+
   // Position hint above the target element
   let left = targetRect.value.left + (targetRect.value.width / 2) - (hintWidth / 2)
   let top = targetRect.value.top - hintHeight - arrowSize - spacing
-  
+
   // Ensure hint stays within viewport
   if (left < 20) left = 20
   if (left + hintWidth > window.innerWidth - 20) left = window.innerWidth - hintWidth - 20
@@ -191,7 +113,7 @@ const hintStyle = computed(() => {
     // If no space above, position below
     top = targetRect.value.bottom + arrowSize + spacing
   }
-  
+
   return {
     left: `${left}px`,
     top: `${top}px`,
@@ -222,22 +144,11 @@ const arrowStyle = computed(() => {
 })
 
 const handleOverlayClick = (event: MouseEvent) => {
-  if (props.allowClickThrough && targetRect.value) {
-    const rect = targetRect.value
-    const clickX = event.clientX
-    const clickY = event.clientY
-    
-    // Check if click is within the target element bounds
-    if (clickX >= rect.left && clickX <= rect.right && 
-        clickY >= rect.top && clickY <= rect.bottom) {
-      // Forward the click to the target element
-      props.targetElement?.click()
-      return
-    }
+  // Close overlay when clicking on backdrop (not on the target element)
+  const target = event.target as HTMLElement
+  if (target.classList.contains('overlay-backdrop') || target.classList.contains('focus-overlay')) {
+    emit('close')
   }
-  
-  // Close overlay on backdrop click
-  emit('close')
 }
 
 // Clean up event listeners on unmount
@@ -249,6 +160,7 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 @use '@/assets/variables' as *;
+@use 'sass:color';
 
 .focus-overlay {
   position: fixed;
@@ -266,43 +178,9 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgb(0 0 0 / 50%);
+  /* stylelint-disable-next-line color-function-notation, color-function-alias-notation, alpha-value-notation */
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(2px);
-}
-
-.overlay-backdrop-part {
-  position: absolute;
-  background: rgb(0 0 0 / 50%);
-  backdrop-filter: blur(2px);
-}
-
-.highlight-border {
-  position: absolute;
-  background: transparent;
-  border: 3px solid $primary-color;
-  border-radius: 8px;
-  box-shadow:
-    0 0 20px rgba($primary-color, 0.6),
-    inset 0 0 20px rgba($primary-color, 0.2);
-  animation: pulse 2s infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow:
-      0 0 20px rgba($primary-color, 0.6),
-      inset 0 0 20px rgba($primary-color, 0.2);
-    border-color: $primary-color;
-  }
-
-  50% {
-    box-shadow:
-      0 0 30px rgba($primary-color, 0.8),
-      inset 0 0 30px rgba($primary-color, 0.3);
-    border-color: rgba($primary-color, 0.8);
-  }
 }
 
 .hint-message {
@@ -312,9 +190,11 @@ onUnmounted(() => {
   padding: 12px 16px;
   border-radius: 8px;
   font-size: 14px;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
+  /* stylelint-disable-next-line color-function-notation, color-function-alias-notation, alpha-value-notation */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   animation: fade-in-up 0.3s ease-out;
   pointer-events: none;
+  z-index: 9999;
 }
 
 .hint-content {

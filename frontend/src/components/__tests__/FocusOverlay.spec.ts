@@ -101,8 +101,7 @@ describe('FocusOverlay', () => {
       props: {
         show: true,
         targetElement: targetElement,
-        message: 'Test message',
-        allowClickThrough: true
+        message: 'Test message'
       },
       attachTo: teleportTarget
     })
@@ -110,7 +109,6 @@ describe('FocusOverlay', () => {
     expect(wrapper.props('show')).toBe(true)
     expect(wrapper.props('targetElement')).toBe(targetElement)
     expect(wrapper.props('message')).toBe('Test message')
-    expect(wrapper.props('allowClickThrough')).toBe(true)
   })
 
   it('uses default message when none provided', () => {
@@ -125,7 +123,7 @@ describe('FocusOverlay', () => {
     expect(wrapper.props('message')).toBe('Don\'t forget to upload your files!')
   })
 
-  it('emits close event when handleOverlayClick is called', async () => {
+  it('emits close event when handleOverlayClick is called on backdrop', async () => {
     wrapper = mount(FocusOverlay, {
       props: {
         show: true,
@@ -134,8 +132,9 @@ describe('FocusOverlay', () => {
       attachTo: teleportTarget
     })
 
-    // Simulate overlay click by calling the method directly
-    await wrapper.vm.handleOverlayClick({ clientX: 0, clientY: 0 })
+    // Simulate overlay backdrop click
+    const mockEvent = { target: { classList: { contains: () => true } } }
+    await wrapper.vm.handleOverlayClick(mockEvent)
     expect(wrapper.emitted('close')).toBeTruthy()
   })
 })

@@ -118,22 +118,28 @@
         <div class="info-card full-width commodity-images">
           <div class="section-header">
             <h2>Images</h2>
-            <button class="btn btn-sm btn-primary" @click="showImageUploader = !showImageUploader">
+            <button
+              class="btn btn-sm"
+              :class="showImageUploader ? 'btn-secondary-alt' : 'btn-primary'"
+              @click="showImageUploader = !showImageUploader"
+            >
               {{ showImageUploader ? 'Cancel' : 'Add Images' }}
             </button>
           </div>
 
-          <FileUploader
-            v-if="showImageUploader"
-            ref="imageUploaderRef"
-            :multiple="true"
-            accept=".gif,.jpg,.jpeg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
-            upload-prompt="Drag and drop images here"
-            upload-hint="Supports GIF, JPG, JPEG, PNG, and WebP image formats"
-            @upload="uploadImages"
-            @files-selected="onFilesSelected('images')"
-            @files-cleared="onFilesCleared('images')"
-          />
+          <Transition name="file-uploader" mode="out-in">
+            <FileUploader
+              v-if="showImageUploader"
+              ref="imageUploaderRef"
+              :multiple="true"
+              accept=".gif,.jpg,.jpeg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
+              upload-prompt="Drag and drop images here"
+              upload-hint="Supports GIF, JPG, JPEG, PNG, and WebP image formats"
+              @upload="uploadImages"
+              @files-selected="onFilesSelected('images')"
+              @files-cleared="onFilesCleared('images')"
+            />
+          </Transition>
 
           <div v-if="loadingImages" class="loading">Loading images...</div>
           <FileViewer
@@ -152,22 +158,28 @@
         <div class="info-card full-width commodity-manuals">
           <div class="section-header">
             <h2>Manuals</h2>
-            <button class="btn btn-sm btn-primary" @click="showManualUploader = !showManualUploader">
+            <button
+              class="btn btn-sm"
+              :class="showManualUploader ? 'btn-secondary-alt' : 'btn-primary'"
+              @click="showManualUploader = !showManualUploader"
+            >
               {{ showManualUploader ? 'Cancel' : 'Add Manuals' }}
             </button>
           </div>
 
-          <FileUploader
-            v-if="showManualUploader"
-            ref="manualUploaderRef"
-            :multiple="true"
-            accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
-            upload-prompt="Drag and drop manuals here"
-            upload-hint="Supports PDF documents and image formats (GIF, JPG, PNG, WebP)"
-            @upload="uploadManuals"
-            @files-selected="onFilesSelected('manuals')"
-            @files-cleared="onFilesCleared('manuals')"
-          />
+          <Transition name="file-uploader" mode="out-in">
+            <FileUploader
+              v-if="showManualUploader"
+              ref="manualUploaderRef"
+              :multiple="true"
+              accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
+              upload-prompt="Drag and drop manuals here"
+              upload-hint="Supports PDF documents and image formats (GIF, JPG, PNG, WebP)"
+              @upload="uploadManuals"
+              @files-selected="onFilesSelected('manuals')"
+              @files-cleared="onFilesCleared('manuals')"
+            />
+          </Transition>
 
           <div v-if="loadingManuals" class="loading">Loading manuals...</div>
           <FileViewer
@@ -186,22 +198,28 @@
         <div class="info-card full-width commodity-invoices">
           <div class="section-header">
             <h2>Invoices</h2>
-            <button class="btn btn-sm btn-primary" @click="showInvoiceUploader = !showInvoiceUploader">
+            <button
+              class="btn btn-sm"
+              :class="showInvoiceUploader ? 'btn-secondary-alt' : 'btn-primary'"
+              @click="showInvoiceUploader = !showInvoiceUploader"
+            >
               {{ showInvoiceUploader ? 'Cancel' : 'Add Invoices' }}
             </button>
           </div>
 
-          <FileUploader
-            v-if="showInvoiceUploader"
-            ref="invoiceUploaderRef"
-            :multiple="true"
-            accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
-            upload-prompt="Drag and drop invoices here"
-            upload-hint="Supports PDF documents and image formats (GIF, JPG, PNG, WebP)"
-            @upload="uploadInvoices"
-            @files-selected="onFilesSelected('invoices')"
-            @files-cleared="onFilesCleared('invoices')"
-          />
+          <Transition name="file-uploader" mode="out-in">
+            <FileUploader
+              v-if="showInvoiceUploader"
+              ref="invoiceUploaderRef"
+              :multiple="true"
+              accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
+              upload-prompt="Drag and drop invoices here"
+              upload-hint="Supports PDF documents and image formats (GIF, JPG, PNG, WebP)"
+              @upload="uploadInvoices"
+              @files-selected="onFilesSelected('invoices')"
+              @files-cleared="onFilesCleared('invoices')"
+            />
+          </Transition>
 
           <div v-if="loadingInvoices" class="loading">Loading invoices...</div>
           <FileViewer
@@ -798,5 +816,36 @@ const formatDate = (date: string): string => {
     padding-bottom: 0;
     border-bottom: none;
   }
+}
+
+/* File uploader transition animations */
+.file-uploader-enter-active,
+.file-uploader-leave-active {
+  transition: all 0.3s ease;
+  transform-origin: top;
+}
+
+.file-uploader-enter-from {
+  opacity: 0;
+  transform: translateY(-20px) scaleY(0.8);
+  max-height: 0;
+}
+
+.file-uploader-enter-to {
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  max-height: 500px; /* Adjust based on your content */
+}
+
+.file-uploader-leave-from {
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  max-height: 500px;
+}
+
+.file-uploader-leave-to {
+  opacity: 0;
+  transform: translateY(-20px) scaleY(0.8);
+  max-height: 0;
 }
 </style>
