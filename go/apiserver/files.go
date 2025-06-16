@@ -135,12 +135,15 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		Title:       input.Data.Attributes.Title,
-		Description: input.Data.Attributes.Description,
-		Type:        models.FileTypeOther, // Default type, should be updated when file is uploaded
-		Tags:        input.Data.Attributes.Tags,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		Title:            input.Data.Attributes.Title,
+		Description:      input.Data.Attributes.Description,
+		Type:             models.FileTypeOther, // Default type, should be updated when file is uploaded
+		Tags:             input.Data.Attributes.Tags,
+		LinkedEntityType: input.Data.Attributes.LinkedEntityType,
+		LinkedEntityID:   input.Data.Attributes.LinkedEntityID,
+		LinkedEntityMeta: input.Data.Attributes.LinkedEntityMeta,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		File: &models.File{
 			Path:         input.Data.Attributes.Path,
 			OriginalPath: input.Data.Attributes.Path,
@@ -225,6 +228,9 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 	file.Description = input.Data.Attributes.Description
 	file.Tags = input.Data.Attributes.Tags
 	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	file.LinkedEntityType = input.Data.Attributes.LinkedEntityType
+	file.LinkedEntityID = input.Data.Attributes.LinkedEntityID
+	file.LinkedEntityMeta = input.Data.Attributes.LinkedEntityMeta
 	file.UpdatedAt = time.Now() // Set updated timestamp
 
 	// Auto-detect file type from MIME type if available

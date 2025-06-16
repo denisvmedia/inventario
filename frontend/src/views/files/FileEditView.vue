@@ -114,6 +114,79 @@
           </div>
         </div>
 
+        <!-- Entity Linking Section -->
+        <div class="form-section">
+          <h3>Entity Linking</h3>
+          <div class="form-help">Link this file to a commodity or export for better organization</div>
+
+          <div class="form-group">
+            <label for="linked_entity_type">Link Type</label>
+            <select
+              id="linked_entity_type"
+              v-model="form.linked_entity_type"
+              class="form-control"
+              @change="onEntityTypeChange"
+            >
+              <option value="">No link (standalone file)</option>
+              <option value="commodity">Commodity</option>
+              <option value="export">Export</option>
+            </select>
+            <div class="form-help">Choose what type of entity to link this file to</div>
+          </div>
+
+          <div v-if="form.linked_entity_type" class="form-group">
+            <label for="linked_entity_id">Entity ID</label>
+            <input
+              id="linked_entity_id"
+              v-model="form.linked_entity_id"
+              type="text"
+              class="form-control"
+              :placeholder="`Enter ${form.linked_entity_type} ID`"
+            />
+            <div class="form-help">The ID of the {{ form.linked_entity_type }} to link to</div>
+          </div>
+
+          <div v-if="form.linked_entity_type === 'commodity'" class="form-group">
+            <label for="linked_entity_meta">File Category</label>
+            <select
+              id="linked_entity_meta"
+              v-model="form.linked_entity_meta"
+              class="form-control"
+            >
+              <option value="">Select category</option>
+              <option value="images">Images</option>
+              <option value="invoices">Invoices</option>
+              <option value="manuals">Manuals</option>
+            </select>
+            <div class="form-help">What type of commodity file this is</div>
+          </div>
+
+          <div v-if="form.linked_entity_type === 'export'" class="form-group">
+            <label for="linked_entity_meta">Export Version</label>
+            <select
+              id="linked_entity_meta"
+              v-model="form.linked_entity_meta"
+              class="form-control"
+            >
+              <option value="">Select version</option>
+              <option value="xml-1.0">XML 1.0</option>
+            </select>
+            <div class="form-help">The version of the export file format</div>
+          </div>
+
+          <!-- Show current link if exists -->
+          <div v-if="file && isLinked(file)" class="current-link-info">
+            <div class="info-badge">
+              <FontAwesomeIcon icon="link" />
+              Currently linked: {{ getLinkedEntityDisplay(file) }}
+              <a v-if="getLinkedEntityUrl(file)" :href="getLinkedEntityUrl(file)" class="link-nav">
+                <FontAwesomeIcon icon="external-link-alt" />
+                View
+              </a>
+            </div>
+          </div>
+        </div>
+
         <!-- 3. Read-only File Information Fields -->
         <div class="form-group">
           <label>File Type</label>
@@ -178,11 +251,17 @@ const form = ref<FileUpdateData>({
   title: '',
   description: '',
   tags: [],
-  path: ''
+  path: '',
+  linked_entity_type: '',
+  linked_entity_id: '',
+  linked_entity_meta: ''
 })
 
 const tagsInput = ref('')
 const errors = ref<Record<string, string>>({})
+
+// Make fileService available in template
+const { isLinked, getLinkedEntityDisplay, getLinkedEntityUrl } = fileService
 
 // Helper function to get file type label
 const getFileTypeLabel = (type: string): string => {
@@ -218,7 +297,10 @@ const loadFile = async () => {
       title: file.value.title,
       description: file.value.description || '',
       tags: [...file.value.tags],
-      path: file.value.path
+      path: file.value.path,
+      linked_entity_type: file.value.linked_entity_type || '',
+      linked_entity_id: file.value.linked_entity_id || '',
+      linked_entity_meta: file.value.linked_entity_meta || ''
     }
     
     tagsInput.value = file.value.tags.join(', ')
@@ -263,6 +345,12 @@ const updateTags = () => {
 const removeTag = (tagToRemove: string) => {
   form.value.tags = form.value.tags.filter(tag => tag !== tagToRemove)
   tagsInput.value = form.value.tags.join(', ')
+}
+
+const onEntityTypeChange = () => {
+  // Clear entity ID and meta when type changes
+  form.value.linked_entity_id = ''
+  form.value.linked_entity_meta = ''
 }
 
 const validateForm = (): boolean => {
@@ -496,6 +584,49 @@ onMounted(() => {
   margin-top: 0.25rem;
   font-size: 0.875rem;
   color: $danger-color;
+}
+
+.form-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid $border-color;
+
+  h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.125rem;
+    color: $text-color;
+  }
+
+  > .form-help {
+    margin-bottom: 1rem;
+    color: $text-secondary-color;
+  }
+}
+
+.current-link-info {
+  margin-top: 1rem;
+
+  .info-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background-color: #e3f2fd;
+    color: #1565c0;
+    border-radius: $default-radius;
+    font-size: 0.875rem;
+    border: 1px solid #bbdefb;
+
+    .link-nav {
+      margin-left: 0.5rem;
+      color: inherit;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
 }
 
 .tags-preview {

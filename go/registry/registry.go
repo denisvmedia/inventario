@@ -118,6 +118,12 @@ type FileRegistry interface {
 
 	// ListPaginated returns paginated list of files
 	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error)
+
+	// ListByLinkedEntity returns files linked to a specific entity
+	ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
+
+	// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
+	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, entityMeta string) ([]*models.FileEntity, error)
 }
 
 type RestoreOperationRegistry interface {

@@ -12,6 +12,9 @@ export interface FileEntity {
   original_path: string
   ext: string
   mime_type: string
+  linked_entity_type?: string
+  linked_entity_id?: string
+  linked_entity_meta?: string
   created_at?: string
   updated_at?: string
 }
@@ -35,6 +38,9 @@ export interface FileUpdateData {
   description: string
   tags: string[]
   path: string
+  linked_entity_type?: string
+  linked_entity_id?: string
+  linked_entity_meta?: string
 }
 
 const fileService = {
@@ -241,6 +247,55 @@ const fileService = {
       return file.path
     }
     return 'Untitled'
+  },
+
+  /**
+   * Check if file is linked to an entity
+   */
+  isLinked(file: FileEntity): boolean {
+    return !!(file.linked_entity_type && file.linked_entity_id)
+  },
+
+  /**
+   * Get linked entity display name
+   */
+  getLinkedEntityDisplay(file: FileEntity): string {
+    if (!this.isLinked(file)) {
+      return ''
+    }
+
+    const type = file.linked_entity_type
+    const meta = file.linked_entity_meta
+
+    if (type === 'commodity') {
+      switch (meta) {
+        case 'images': return 'Commodity Images'
+        case 'invoices': return 'Commodity Invoices'
+        case 'manuals': return 'Commodity Manuals'
+        default: return 'Commodity'
+      }
+    } else if (type === 'export') {
+      return `Export (${meta})`
+    }
+
+    return type || ''
+  },
+
+  /**
+   * Get navigation URL for linked entity
+   */
+  getLinkedEntityUrl(file: FileEntity): string {
+    if (!this.isLinked(file)) {
+      return ''
+    }
+
+    if (file.linked_entity_type === 'commodity') {
+      return `/commodities/${file.linked_entity_id}`
+    } else if (file.linked_entity_type === 'export') {
+      return `/exports/${file.linked_entity_id}`
+    }
+
+    return ''
   }
 }
 
