@@ -36,13 +36,13 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 
 	query := `
 		INSERT INTO files (id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-		RETURNING created_at, updated_at`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
-	err = r.db.QueryRowContext(ctx, query,
+	_, err = r.db.ExecContext(ctx, query,
 		file.ID, file.Title, file.Description, file.Type, tagsJSON,
 		file.Path, file.OriginalPath, file.Ext, file.MIMEType,
-	).Scan(&file.CreatedAt, &file.UpdatedAt)
+		file.CreatedAt, file.UpdatedAt,
+	)
 
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create file")
@@ -146,19 +146,24 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 
 	query := `
 		UPDATE files
-		SET title = $2, description = $3, type = $4, tags = $5, path = $6, updated_at = NOW()
-		WHERE id = $1
-		RETURNING updated_at`
+		SET title = $2, description = $3, type = $4, tags = $5, path = $6, updated_at = $7
+		WHERE id = $1`
 
-	err = r.db.QueryRowContext(ctx, query,
-		file.ID, file.Title, file.Description, file.Type, tagsJSON, file.Path,
-	).Scan(&file.UpdatedAt)
+	result, err := r.db.ExecContext(ctx, query,
+		file.ID, file.Title, file.Description, file.Type, tagsJSON, file.Path, file.UpdatedAt,
+	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, registry.ErrNotFound
-		}
 		return nil, errkit.Wrap(err, "failed to update file")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get rows affected")
+	}
+
+	if rowsAffected == 0 {
+		return nil, registry.ErrNotFound
 	}
 
 	return &file, nil

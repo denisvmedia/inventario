@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -132,11 +133,14 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := time.Now()
 	fileEntity := models.FileEntity{
 		Title:       input.Data.Attributes.Title,
 		Description: input.Data.Attributes.Description,
 		Type:        models.FileTypeOther, // Default type, should be updated when file is uploaded
 		Tags:        input.Data.Attributes.Tags,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         input.Data.Attributes.Path,
 			OriginalPath: input.Data.Attributes.Path,
@@ -221,6 +225,7 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 	file.Description = input.Data.Attributes.Description
 	file.Tags = input.Data.Attributes.Tags
 	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	file.UpdatedAt = time.Now() // Set updated timestamp
 
 	// Auto-detect file type from MIME type if available
 	if file.File != nil && file.MIMEType != "" {
