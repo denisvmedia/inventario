@@ -296,6 +296,13 @@ const fileService = {
     }
 
     return ''
+  },
+
+  /**
+   * Check if a file is linked to an export (readonly)
+   */
+  isExportFile(file: FileEntity): boolean {
+    return file.linked_entity_type === 'export'
   }
 }
 
