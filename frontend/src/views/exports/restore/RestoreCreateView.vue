@@ -56,12 +56,12 @@
 
     <div v-else-if="error" class="error-message-block">
       {{ error }}
-      <button @click="loadExport" class="btn btn-secondary">
+      <button class="btn btn-secondary" @click="loadExport">
         <font-awesome-icon icon="refresh" /> Retry
       </button>
     </div>
 
-    <form v-else @submit.prevent="createRestore" class="restore-form">
+    <form v-else class="restore-form" @submit.prevent="createRestore">
       <!-- Restore Description -->
       <div class="form-section">
         <div class="card-header">

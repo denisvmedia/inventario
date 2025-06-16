@@ -107,6 +107,19 @@ type ExportRegistry interface {
 	HardDelete(ctx context.Context, id string) error
 }
 
+type FileRegistry interface {
+	Registry[models.FileEntity]
+
+	// ListByType returns files filtered by type
+	ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error)
+
+	// Search returns files matching the search criteria
+	Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error)
+
+	// ListPaginated returns paginated list of files
+	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error)
+}
+
 type RestoreOperationRegistry interface {
 	Registry[models.RestoreOperation]
 
@@ -135,6 +148,7 @@ type Set struct {
 	ExportRegistry           ExportRegistry
 	RestoreOperationRegistry RestoreOperationRegistry
 	RestoreStepRegistry      RestoreStepRegistry
+	FileRegistry             FileRegistry
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {
@@ -149,6 +163,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.InvoiceRegistry, validation.Required),
 		validation.Field(&s.SettingsRegistry, validation.Required),
 		validation.Field(&s.ExportRegistry, validation.Required),
+		validation.Field(&s.FileRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

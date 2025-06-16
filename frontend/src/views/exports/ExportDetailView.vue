@@ -290,7 +290,7 @@
                     <div class="step-content">
                       <div class="step-name">{{ step.name }}</div>
                       <div class="step-details">
-                        <span class="step-duration" v-if="step.duration">{{ formatDuration(step.duration) }}</span>
+                        <span v-if="step.duration" class="step-duration">{{ formatDuration(step.duration) }}</span>
                         <span class="step-result" :class="`result-${step.result}`">{{ formatStepResult(step.result) }}</span>
                       </div>
                       <div v-if="step.reason" class="step-reason">{{ step.reason }}</div>
@@ -851,7 +851,7 @@ onMounted(() => {
 @use '@/assets/main' as *;
 
 .export-detail-page {
-  max-width: 1000px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 20px;
 }
