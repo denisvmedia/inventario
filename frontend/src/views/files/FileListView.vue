@@ -118,6 +118,21 @@
                 +{{ file.tags.length - 3 }} more
               </span>
             </div>
+
+            <div v-if="isLinked(file)" class="file-linked-entity">
+              <div class="entity-badge-small">
+                <FontAwesomeIcon :icon="getEntityIcon(file)" />
+                <span class="entity-text">{{ getLinkedEntityDisplay(file) }}</span>
+                <router-link
+                  :to="getLinkedEntityUrl(file)"
+                  class="entity-link-small"
+                  title="View linked entity"
+                  @click.stop
+                >
+                  <FontAwesomeIcon icon="external-link-alt" />
+                </router-link>
+              </div>
+            </div>
           </div>
           
           <div class="file-actions" @click.stop>
@@ -257,6 +272,9 @@ const fileToDelete = ref<FileEntity | null>(null)
 // File type options
 const fileTypeOptions = fileService.getFileTypeOptions()
 
+// Make fileService methods available in template
+const { isLinked, getLinkedEntityDisplay, getLinkedEntityUrl } = fileService
+
 // Computed
 const totalPages = computed(() => Math.ceil(totalFiles.value / pageSize.value))
 
@@ -341,6 +359,15 @@ const getFileTypeLabel = (type: string) => {
 
 const getDisplayTitle = (file: FileEntity) => {
   return fileService.getDisplayTitle(file)
+}
+
+const getEntityIcon = (file: FileEntity) => {
+  if (file.linked_entity_type === 'commodity') {
+    return 'box'
+  } else if (file.linked_entity_type === 'export') {
+    return 'file-export'
+  }
+  return 'link'
 }
 
 const handleImageError = (event: Event) => {
@@ -530,6 +557,59 @@ onMounted(() => {
       .tag-more {
         font-size: 0.75rem;
         color: $text-secondary-color;
+      }
+    }
+
+    .file-linked-entity {
+      margin-top: 0.75rem;
+
+      .entity-badge-small {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background-color: #e3f2fd;
+        color: #1565c0;
+        border-radius: $default-radius;
+        font-size: 0.75rem;
+        font-weight: 500;
+        border: 1px solid #bbdefb;
+        transition: all 0.2s ease;
+        max-width: 100%;
+
+        &:hover {
+          background-color: #e1f5fe;
+          border-color: #90caf9;
+        }
+
+        .entity-text {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          min-width: 0;
+        }
+
+        .entity-link-small {
+          color: inherit;
+          text-decoration: none;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          padding: 0.125rem;
+          border-radius: 3px;
+          transition: background-color 0.2s ease;
+          flex-shrink: 0;
+
+          &:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+            text-decoration: none;
+          }
+
+          svg {
+            font-size: 0.625rem;
+          }
+        }
       }
     }
   }

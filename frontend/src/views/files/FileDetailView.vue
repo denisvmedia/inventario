@@ -114,6 +114,23 @@
             <p v-else class="no-tags">No tags</p>
           </div>
 
+          <div v-if="isLinked(file)" class="info-card">
+            <h2>Linked Entity</h2>
+            <div class="linked-entity-info">
+              <div class="entity-badge">
+                <FontAwesomeIcon :icon="getEntityIcon(file)" />
+                <span class="entity-text">{{ getLinkedEntityDisplay(file) }}</span>
+                <router-link
+                  :to="getLinkedEntityUrl(file)"
+                  class="entity-link"
+                  title="View linked entity"
+                >
+                  <FontAwesomeIcon icon="external-link-alt" />
+                </router-link>
+              </div>
+            </div>
+          </div>
+
           <div class="info-card">
             <h2>File Details</h2>
             <div class="file-details">
@@ -184,6 +201,9 @@ const showDeleteModal = ref(false)
 // File type options for labels
 const fileTypeOptions = fileService.getFileTypeOptions()
 
+// Make fileService methods available in template
+const { isLinked, getLinkedEntityDisplay, getLinkedEntityUrl } = fileService
+
 // Computed
 const fileId = computed(() => route.params.id as string)
 
@@ -221,6 +241,15 @@ const getFileTypeLabel = (type: string) => {
 
 const getDisplayTitle = (file: FileEntity) => {
   return fileService.getDisplayTitle(file)
+}
+
+const getEntityIcon = (file: FileEntity) => {
+  if (file.linked_entity_type === 'commodity') {
+    return 'box'
+  } else if (file.linked_entity_type === 'export') {
+    return 'file-export'
+  }
+  return 'link'
 }
 
 const formatDate = (dateString: string) => {
@@ -452,6 +481,51 @@ onMounted(() => {
         .value {
           color: $text-color;
           word-break: break-all;
+        }
+      }
+    }
+
+    .linked-entity-info {
+      .entity-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background-color: #e3f2fd;
+        color: #1565c0;
+        border-radius: $default-radius;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border: 1px solid #bbdefb;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background-color: #e1f5fe;
+          border-color: #90caf9;
+        }
+
+        .entity-text {
+          flex: 1;
+        }
+
+        .entity-link {
+          color: inherit;
+          text-decoration: none;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          padding: 0.25rem;
+          border-radius: 4px;
+          transition: background-color 0.2s ease;
+
+          &:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+            text-decoration: none;
+          }
+
+          svg {
+            font-size: 0.75rem;
+          }
         }
       }
     }

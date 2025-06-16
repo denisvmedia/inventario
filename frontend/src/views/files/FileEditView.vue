@@ -41,6 +41,18 @@
             <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
             <span class="file-ext">{{ file.ext }}</span>
           </div>
+
+          <!-- Show current link if exists -->
+          <div v-if="file && isLinked(file)" class="current-link-info">
+            <div class="info-badge">
+              <FontAwesomeIcon icon="link" />
+              Currently linked: {{ getLinkedEntityDisplay(file) }}
+              <a v-if="getLinkedEntityUrl(file)" :href="getLinkedEntityUrl(file)" class="link-nav">
+                <FontAwesomeIcon icon="external-link-alt" />
+                View
+              </a>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -199,17 +211,6 @@
             <div class="form-help">Export file version cannot be changed</div>
           </div>
 
-          <!-- Show current link if exists -->
-          <div v-if="file && isLinked(file)" class="current-link-info">
-            <div class="info-badge">
-              <FontAwesomeIcon icon="link" />
-              Currently linked: {{ getLinkedEntityDisplay(file) }}
-              <a v-if="getLinkedEntityUrl(file)" :href="getLinkedEntityUrl(file)" class="link-nav">
-                <FontAwesomeIcon icon="external-link-alt" />
-                View
-              </a>
-            </div>
-          </div>
         </div>
 
         <!-- 3. Read-only File Information Fields -->
@@ -567,13 +568,17 @@ onMounted(async () => {
 
 .file-preview-card {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  align-items: flex-start;
+  gap: 1.5rem;
   margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: $default-radius;
+  border: 1px solid $border-color;
 
   .file-preview {
-    width: 80px;
-    height: 80px;
+    width: 120px;
+    height: 120px;
     border-radius: $default-radius;
     overflow: hidden;
     background: $light-bg-color;
@@ -581,6 +586,7 @@ onMounted(async () => {
     align-items: center;
     justify-content: center;
     border: 1px solid $border-color;
+    flex-shrink: 0;
 
     .preview-image {
       width: 100%;
@@ -589,31 +595,112 @@ onMounted(async () => {
     }
 
     .file-icon {
-      font-size: 2.5rem;
+      font-size: 3rem;
       color: $text-secondary-color;
     }
   }
 
   .file-info {
     flex: 1;
+    min-width: 0;
 
     h3 {
-      margin: 0 0 0.5rem;
+      margin: 0 0 1rem;
       color: $text-color;
-      font-size: 1.125rem;
+      font-size: 1.25rem;
+      font-weight: 600;
+      word-break: break-all;
     }
 
     .file-meta {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
 
-      span {
+      .file-type {
         font-size: 0.875rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        background: $light-bg-color;
-        color: $text-secondary-color;
-        border: 1px solid $border-color;
+        padding: 0.375rem 0.75rem;
+        border-radius: 12px;
+        background: $primary-color;
+        color: white;
+        font-weight: 500;
+        text-transform: capitalize;
+      }
+
+      .file-ext {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 12px;
+        background: $text-secondary-color;
+        color: white;
+        font-weight: 500;
+        text-transform: uppercase;
+      }
+    }
+
+    .current-link-info {
+      margin-top: 0;
+
+      .info-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background-color: #e3f2fd;
+        color: #1565c0;
+        border-radius: $default-radius;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border: 1px solid #bbdefb;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background-color: #e1f5fe;
+          border-color: #90caf9;
+        }
+
+        .link-nav {
+          color: inherit;
+          text-decoration: none;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+
+          &:hover {
+            text-decoration: underline;
+          }
+
+          svg {
+            font-size: 0.75rem;
+          }
+        }
+      }
+    }
+  }
+
+  // Responsive design
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+
+    .file-preview {
+      align-self: center;
+      width: 100px;
+      height: 100px;
+    }
+
+    .file-info {
+      text-align: center;
+
+      .file-meta {
+        justify-content: center;
+      }
+
+      .current-link-info {
+        text-align: left;
       }
     }
   }
@@ -757,26 +844,41 @@ onMounted(async () => {
 }
 
 .current-link-info {
-  margin-top: 1rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
 
   .info-badge {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
     background-color: #e3f2fd;
     color: #1565c0;
     border-radius: $default-radius;
     font-size: 0.875rem;
+    font-weight: 500;
     border: 1px solid #bbdefb;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background-color: #e1f5fe;
+      border-color: #90caf9;
+    }
 
     .link-nav {
-      margin-left: 0.5rem;
       color: inherit;
       text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
 
       &:hover {
         text-decoration: underline;
+      }
+
+      svg {
+        font-size: 0.75rem;
       }
     }
   }

@@ -48,7 +48,9 @@ import {
   faVideo,
   faMusic,
   faArchive,
-  faSave
+  faSave,
+  faExternalLinkAlt,
+  faFileExport
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -103,7 +105,9 @@ library.add(
   faVideo,
   faMusic,
   faArchive,
-  faSave
+  faSave,
+  faExternalLinkAlt,
+  faFileExport
 )
 
 export { FontAwesomeIcon }
