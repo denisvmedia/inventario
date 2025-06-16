@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -223,11 +224,14 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Create file entity with auto-generated title from filename
+		now := time.Now()
 		fileEntity := models.FileEntity{
 			Title:       pathWithoutExt, // Use filename as default title
 			Description: "",             // Empty description
 			Type:        fileType,
 			Tags:        []string{}, // Empty tags
+			CreatedAt:   now,
+			UpdatedAt:   now,
 			File: &models.File{
 				Path:         pathWithoutExt,
 				OriginalPath: originalPath,
