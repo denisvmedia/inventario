@@ -537,8 +537,13 @@ const goBack = () => {
 }
 
 // Lifecycle
-onMounted(() => {
-  loadFile()
+onMounted(async () => {
+  await loadFile()
+
+  // If the file has a linked commodity, load commodities to show the selection
+  if (form.value.linked_entity_type === 'commodity' && form.value.linked_entity_id) {
+    await loadCommodities()
+  }
 })
 </script>
 
