@@ -90,7 +90,7 @@ services:
 
   # MariaDB Database (Production)
   mariadb:
-    image: mariadb:10.11
+    image: mariadb:11.8
     container_name: inventario-mariadb
     restart: unless-stopped
     environment:
@@ -203,7 +203,7 @@ services:
   # MariaDB Test Database
   mariadb-test:
     profiles: ["test"]
-    image: mariadb:10.11
+    image: mariadb:11.8
     container_name: inventario-mariadb-test
     environment:
       MARIADB_DATABASE: ${MARIADB_TEST_DB:-inventario_test}
