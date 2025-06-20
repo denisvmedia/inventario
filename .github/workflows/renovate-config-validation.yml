@@ -1,0 +1,33 @@
+name: Renovate Config Validation
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'renovate.json'
+  pull_request:
+    paths:
+      - 'renovate.json'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Renovate Config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Renovate
+        run: npm install -g renovate
+      
+      - name: Validate Renovate Config
+        run: renovate-config-validator
