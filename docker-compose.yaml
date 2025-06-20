@@ -59,7 +59,7 @@ services:
 
   # MySQL Database (Production)
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: inventario-mysql
     restart: unless-stopped
     environment:
@@ -165,7 +165,7 @@ services:
   # MySQL Test Database
   mysql-test:
     profiles: ["test"]
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: inventario-mysql-test
     environment:
       MYSQL_DATABASE: ${MYSQL_TEST_DB:-inventario_test}
