@@ -64,6 +64,11 @@
       "matchFileNames": ["frontend/package.json", "e2e/package.json"],
       "rangeStrategy": "pin",
       "schedule": ["before 6am on monday"]
+    },
+    {
+      "matchPackageNames": ["mysql", "postgres", "mariadb"],
+      "updateType": "major",
+      "enabled": false
     }
   ],
   "postUpdateOptions": ["gomodTidy", "npmDedupe"],
