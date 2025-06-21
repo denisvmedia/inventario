@@ -33,7 +33,7 @@ require (
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
 	go.etcd.io/bbolt v1.4.1
 	gocloud.dev v0.41.0
-	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
+	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 	golang.org/x/sync v0.15.0
 	golang.org/x/text v0.26.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
