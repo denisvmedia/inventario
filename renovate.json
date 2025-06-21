@@ -64,6 +64,13 @@
       "matchFileNames": ["frontend/package.json", "e2e/package.json"],
       "rangeStrategy": "pin",
       "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Disallow major versions update for databases",
+      "matchDatasources": ["docker", "github-actions"],
+      "matchPackageNames": ["postgres", "mysql", "mariadb"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     }
   ],
   "postUpdateOptions": ["gomodTidy", "npmDedupe"],
