@@ -66,8 +66,10 @@
       "schedule": ["before 6am on monday"]
     },
     {
-      "matchPackageNames": ["mysql", "postgres", "mariadb"],
-      "updateType": "major",
+      "description": "Disallow major versions update for databases"
+      "matchDatasources": ["docker", "github-actions"],
+      "matchPackageNames": ["postgres", "mysql", "mariadb"],
+      "matchUpdateTypes": ["major"],
       "enabled": false
     }
   ],
