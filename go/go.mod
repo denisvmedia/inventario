@@ -10,7 +10,7 @@ require (
 	github.com/bojanz/currency v1.3.1
 	github.com/frankban/quicktest v1.14.6
 	github.com/gabriel-vasile/mimetype v1.4.9
-	github.com/go-chi/chi/v5 v5.2.1
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/render v1.0.3
 	github.com/go-extras/cobraflags v0.0.0-20250512094330-25bc6361d257
 	github.com/go-extras/go-kit v1.2.0
