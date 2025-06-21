@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database (Production)
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: inventario-postgres
     restart: unless-stopped
     environment:
@@ -121,7 +121,7 @@ services:
   # PostgreSQL Test Database
   postgres-test:
     profiles: ["test"]
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: inventario-postgres-test
     environment:
       POSTGRES_DB: ${POSTGRES_TEST_DB:-inventario_test}

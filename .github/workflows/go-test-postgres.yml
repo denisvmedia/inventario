@@ -17,7 +17,7 @@ jobs:
     
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17
         env:
           POSTGRES_DB: inventario_test
           POSTGRES_USER: inventario_test
