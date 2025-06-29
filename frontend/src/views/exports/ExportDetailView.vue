@@ -1461,4 +1461,44 @@ onMounted(() => {
     border-color: #1565c0;
   }
 }
+
+/* Entity Badge Styling for Export File */
+.linked-entity-info {
+  .entity-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: #e3f2fd;
+    color: #1565c0;
+    border-radius: $default-radius;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid #bbdefb;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    cursor: pointer;
+
+    &:hover {
+      background-color: #e1f5fe;
+      border-color: #90caf9;
+      text-decoration: none;
+    }
+
+    .entity-text {
+      flex: 1;
+    }
+
+    .entity-link-icon {
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+    }
+
+    &:hover .entity-link-icon {
+      opacity: 1;
+    }
+  }
+}
 </style>
