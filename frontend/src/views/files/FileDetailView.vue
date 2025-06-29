@@ -29,10 +29,10 @@
     <div v-else-if="file">
       <!-- Breadcrumb Navigation -->
       <div class="breadcrumb-nav">
-        <button class="breadcrumb-link" @click="goBack">
+        <a href="#" class="breadcrumb-link" @click.prevent="goBack">
           <font-awesome-icon icon="arrow-left" />
           {{ backLinkText }}
-        </button>
+        </a>
       </div>
 
       <!-- Header -->
@@ -391,9 +391,6 @@ onMounted(() => {
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-  background: none;
-  border: none;
-  cursor: pointer;
 
   &:hover {
     color: $primary-color;

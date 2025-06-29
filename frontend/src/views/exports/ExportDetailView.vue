@@ -1,9 +1,9 @@
 <template>
   <div class="export-detail-page" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
     <div class="breadcrumb-nav">
-      <button class="breadcrumb-link" @click="goBack">
+      <a href="#" class="breadcrumb-link" @click.prevent="goBack">
         <font-awesome-icon icon="arrow-left" /> {{ backLinkText }}
-      </button>
+      </a>
     </div>
     <div class="header">
       <h1>Export Details</h1>
@@ -935,13 +935,11 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
+  transition: color 0.2s;
 
   &:hover {
     color: $primary-color;
+    text-decoration: none;
   }
 }
 
