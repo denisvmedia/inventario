@@ -5,7 +5,7 @@
       No {{ fileType }} uploaded yet.
     </div>
     <div v-else class="files-container">
-      <div v-for="file in files" :key="file.id" class="file-item">
+      <div v-for="file in files" :key="file.id" class="file-item" :data-file-id="file.id" :data-file-ext="file.ext">
         <div v-if="isImageFile(file)" class="file-preview image-preview" @click="openViewer(file)">
           <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
         </div>
