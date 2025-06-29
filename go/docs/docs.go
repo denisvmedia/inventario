@@ -2403,18 +2403,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "data": {
-                    "type": "object",
-                    "properties": {
-                        "attributes": {
-                            "$ref": "#/definitions/jsonapi.FileRequestData"
-                        },
-                        "id": {
-                            "type": "string"
-                        },
-                        "type": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/jsonapi.FileRequestDataWrapper"
                 }
             }
         },
@@ -2422,6 +2411,18 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "description": {
+                    "type": "string"
+                },
+                "linked_entity_id": {
+                    "description": "ID of linked entity",
+                    "type": "string"
+                },
+                "linked_entity_meta": {
+                    "description": "metadata about the link",
+                    "type": "string"
+                },
+                "linked_entity_type": {
+                    "description": "commodity, export, or empty",
                     "type": "string"
                 },
                 "path": {
@@ -2435,6 +2436,20 @@ const docTemplate = `{
                     }
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.FileRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.FileRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -2487,6 +2502,18 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "description": {
+                    "type": "string"
+                },
+                "linked_entity_id": {
+                    "description": "ID of linked entity",
+                    "type": "string"
+                },
+                "linked_entity_meta": {
+                    "description": "metadata about the link",
+                    "type": "string"
+                },
+                "linked_entity_type": {
+                    "description": "commodity, export, or empty",
                     "type": "string"
                 },
                 "path": {
@@ -3045,7 +3072,11 @@ const docTemplate = `{
                 "error_message": {
                     "type": "string"
                 },
+                "file_id": {
+                    "type": "string"
+                },
                 "file_path": {
+                    "description": "Deprecated: will be removed after migration",
                     "type": "string"
                 },
                 "file_size": {
@@ -3175,6 +3206,18 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
+                    "type": "string"
+                },
+                "linked_entity_id": {
+                    "description": "LinkedEntityID is the ID of the linked entity (commodity or export)",
+                    "type": "string"
+                },
+                "linked_entity_meta": {
+                    "description": "LinkedEntityMeta contains metadata about the link type\nFor commodities: \"images\", \"invoices\", \"manuals\"\nFor exports: \"xml-1.0\" (version of the export file format)",
+                    "type": "string"
+                },
+                "linked_entity_type": {
+                    "description": "LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files)",
                     "type": "string"
                 },
                 "mime_type": {

@@ -223,18 +223,20 @@ definitions:
   jsonapi.FileRequest:
     properties:
       data:
-        properties:
-          attributes:
-            $ref: '#/definitions/jsonapi.FileRequestData'
-          id:
-            type: string
-          type:
-            type: string
-        type: object
+        $ref: '#/definitions/jsonapi.FileRequestDataWrapper'
     type: object
   jsonapi.FileRequestData:
     properties:
       description:
+        type: string
+      linked_entity_id:
+        description: ID of linked entity
+        type: string
+      linked_entity_meta:
+        description: metadata about the link
+        type: string
+      linked_entity_type:
+        description: commodity, export, or empty
         type: string
       path:
         description: Only for updates
@@ -244,6 +246,15 @@ definitions:
           type: string
         type: array
       title:
+        type: string
+    type: object
+  jsonapi.FileRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.FileRequestData'
+      id:
+        type: string
+      type:
         type: string
     type: object
   jsonapi.FileResponse:
@@ -278,6 +289,15 @@ definitions:
   jsonapi.FileUpdateRequestFileData:
     properties:
       description:
+        type: string
+      linked_entity_id:
+        description: ID of linked entity
+        type: string
+      linked_entity_meta:
+        description: metadata about the link
+        type: string
+      linked_entity_type:
+        description: commodity, export, or empty
         type: string
       path:
         description: User-editable filename
@@ -652,7 +672,10 @@ definitions:
         type: string
       error_message:
         type: string
+      file_id:
+        type: string
       file_path:
+        description: 'Deprecated: will be removed after migration'
         type: string
       file_size:
         description: Export statistics
@@ -749,6 +772,19 @@ definitions:
           Example: ".pdf"
         type: string
       id:
+        type: string
+      linked_entity_id:
+        description: LinkedEntityID is the ID of the linked entity (commodity or export)
+        type: string
+      linked_entity_meta:
+        description: |-
+          LinkedEntityMeta contains metadata about the link type
+          For commodities: "images", "invoices", "manuals"
+          For exports: "xml-1.0" (version of the export file format)
+        type: string
+      linked_entity_type:
+        description: LinkedEntityType indicates what type of entity this file is linked
+          to (commodity, export, or empty for standalone files)
         type: string
       mime_type:
         description: |-

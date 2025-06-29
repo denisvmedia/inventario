@@ -66,13 +66,13 @@ func createFileEntityFromExport(ctx context.Context, registrySet *registry.Set, 
 	now := time.Now()
 	fileEntity := models.FileEntity{
 		Title:            fmt.Sprintf("Export: %s", export.Description),
-		Description:      fmt.Sprintf("Export file generated on %s", export.CreatedDate.Time().Format("2006-01-02 15:04:05")),
+		Description:      fmt.Sprintf("Export file generated on %s", export.CreatedDate.ToTime().Format("2006-01-02 15:04:05")),
 		Type:             models.FileTypeDocument, // XML files are documents
 		Tags:             []string{"export", "xml"},
 		LinkedEntityType: "export",
 		LinkedEntityID:   export.ID,
 		LinkedEntityMeta: "xml-1.0", // Mark as export file with version
-		CreatedAt:        export.CreatedDate.Time(),
+		CreatedAt:        export.CreatedDate.ToTime(),
 		UpdatedAt:        now,
 		File: &models.File{
 			Path:         filename,
@@ -110,7 +110,10 @@ func main() {
 	ctx := context.Background()
 
 	// Initialize registry
-	registrySet, err := postgres.NewRegistrySet(ctx, *dbURL)
+	registrySetFunc, cleanup := postgres.NewRegistrySet()
+	defer cleanup()
+
+	registrySet, err := registrySetFunc(registry.Config(*dbURL))
 	if err != nil {
 		log.Fatalf("Failed to initialize registry: %v", err)
 	}
