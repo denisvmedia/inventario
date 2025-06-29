@@ -525,5 +525,3 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 	return files, total, nil
 }
-
-

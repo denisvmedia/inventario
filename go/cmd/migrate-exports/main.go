@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -91,16 +92,16 @@ func createFileEntityFromExport(ctx context.Context, registrySet *registry.Set, 
 	return created, nil
 }
 
-func main() {
+func run() error {
 	var (
-		dbURL = flag.String("db", "", "Database URL (required)")
+		dbURL  = flag.String("db", "", "Database URL (required)")
 		dryRun = flag.Bool("dry-run", false, "Show what would be migrated without making changes")
 	)
 	flag.Parse()
 
 	if *dbURL == "" {
 		fmt.Fprintf(os.Stderr, "Usage: %s -db <database-url>\n", os.Args[0])
-		os.Exit(1)
+		return errors.New("database URL is required")
 	}
 
 	if *dryRun {
@@ -115,14 +116,14 @@ func main() {
 
 	registrySet, err := registrySetFunc(registry.Config(*dbURL))
 	if err != nil {
-		log.Fatalf("Failed to initialize registry: %v", err)
+		return errkit.Wrap(err, "failed to initialize registry")
 	}
 
 	if *dryRun {
 		// In dry run mode, just count what would be migrated
 		exports, err := registrySet.ExportRegistry.List(ctx)
 		if err != nil {
-			log.Fatalf("Failed to list exports: %v", err)
+			return errkit.Wrap(err, "failed to list exports")
 		}
 
 		count := 0
@@ -134,13 +135,20 @@ func main() {
 		}
 
 		log.Printf("DRY RUN: Would migrate %d exports", count)
-		return
+		return nil
 	}
 
 	// Perform the actual migration
 	if err := migrateExportsToFileEntities(ctx, registrySet); err != nil {
-		log.Fatalf("Migration failed: %v", err)
+		return errkit.Wrap(err, "migration failed")
 	}
 
 	log.Println("Migration completed successfully")
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 }

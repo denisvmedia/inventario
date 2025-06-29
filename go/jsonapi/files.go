@@ -95,8 +95,8 @@ func (frdw *FileRequestDataWrapper) ValidateWithContext(ctx context.Context) err
 			return errors.New("linked entity meta is required for commodity files")
 		}
 		if frdw.Attributes.LinkedEntityMeta != "images" &&
-		   frdw.Attributes.LinkedEntityMeta != "invoices" &&
-		   frdw.Attributes.LinkedEntityMeta != "manuals" {
+			frdw.Attributes.LinkedEntityMeta != "invoices" &&
+			frdw.Attributes.LinkedEntityMeta != "manuals" {
 			return errors.New("linked entity meta must be one of: images, invoices, manuals")
 		}
 	}
@@ -134,7 +134,7 @@ type FileRequestData struct {
 	Title            string   `json:"title"`
 	Description      string   `json:"description"`
 	Tags             []string `json:"tags"`
-	Path             string   `json:"path,omitempty"`              // Only for updates
+	Path             string   `json:"path,omitempty"`               // Only for updates
 	LinkedEntityType string   `json:"linked_entity_type,omitempty"` // commodity, export, or empty
 	LinkedEntityID   string   `json:"linked_entity_id,omitempty"`   // ID of linked entity
 	LinkedEntityMeta string   `json:"linked_entity_meta,omitempty"` // metadata about the link
@@ -153,7 +153,7 @@ func (frd *FileRequestData) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&frd.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&frd.Description, validation.Length(0, 1000)),
-		validation.Field(&frd.Tags, validation.Length(0, 100)), // Allow up to 100 tags
+		validation.Field(&frd.Tags, validation.Length(0, 100)),                  // Allow up to 100 tags
 		validation.Field(&frd.LinkedEntityType, validation.In("", "commodity")), // Only allow commodity for manual creation
 		validation.Field(&frd.LinkedEntityID, validation.Length(0, 255)),
 		validation.Field(&frd.LinkedEntityMeta, validation.Length(0, 255)),
@@ -240,19 +240,20 @@ func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) e
 		validation.Field(&fur.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&fur.Description, validation.Length(0, 1000)),
 		validation.Field(&fur.Path, validation.Required),
-		validation.Field(&fur.Tags, validation.Length(0, 100)), // Allow up to 100 tags
+		validation.Field(&fur.Tags, validation.Length(0, 100)),                            // Allow up to 100 tags
 		validation.Field(&fur.LinkedEntityType, validation.In("", "commodity", "export")), // Allow export for existing files
 		validation.Field(&fur.LinkedEntityID, validation.Length(0, 255)),
 		validation.Field(&fur.LinkedEntityMeta, validation.Length(0, 255)),
 	)
 
 	// If linked entity type is specified, validate the linked entity ID and meta
-	if fur.LinkedEntityType == "commodity" {
+	switch fur.LinkedEntityType {
+	case "commodity":
 		fields = append(fields,
 			validation.Field(&fur.LinkedEntityID, validation.Required),
 			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("images", "invoices", "manuals")),
 		)
-	} else if fur.LinkedEntityType == "export" {
+	case "export":
 		fields = append(fields,
 			validation.Field(&fur.LinkedEntityID, validation.Required),
 			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("xml-1.0")),

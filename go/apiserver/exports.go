@@ -180,14 +180,15 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	var fileEntity *models.FileEntity
 	var err error
 
-	if exp.FileID != "" {
+	switch {
+	case exp.FileID != "":
 		// Use new file entity system
 		fileEntity, err = api.registrySet.FileRegistry.Get(r.Context(), exp.FileID)
 		if err != nil {
 			internalServerError(w, r, err)
 			return
 		}
-	} else if exp.FilePath != "" {
+	case exp.FilePath != "":
 		// Fallback to old file path system for backward compatibility
 		attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, exp.FilePath)
 		if err != nil {
@@ -213,7 +214,7 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		return
-	} else {
+	default:
 		http.NotFound(w, r)
 		return
 	}

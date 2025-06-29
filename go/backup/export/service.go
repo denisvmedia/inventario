@@ -214,7 +214,6 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 
 // createExportFileEntity creates a file entity for an export file
 func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, description, filePath string) (*models.FileEntity, error) {
-
 	// Extract filename from path for title
 	filename := filepath.Base(filePath)
 	if ext := filepath.Ext(filename); ext != "" {

@@ -157,10 +157,3 @@ func (w *ExportWorker) cleanupDeletedExports(ctx context.Context) {
 	// No-op: cleanup is now handled immediately during export deletion
 	log.Info("Export cleanup called but is no longer needed - exports use immediate deletion")
 }
-
-// cleanupDeletedExport is deprecated - exports now use immediate hard delete with file entities
-// This method is kept for backward compatibility but is no longer used
-func (w *ExportWorker) cleanupDeletedExport(ctx context.Context, exportID, filePath string) {
-	// No-op: cleanup is now handled immediately during export deletion
-	log.WithField("export_id", exportID).Info("Export cleanup called but is no longer needed - exports use immediate deletion")
-}
