@@ -130,17 +130,15 @@
           <div v-if="isLinked(file)" class="info-card">
             <h2>Linked Entity</h2>
             <div class="linked-entity-info">
-              <div class="entity-badge">
+              <router-link
+                :to="getLinkedEntityUrl(file)"
+                class="entity-badge"
+                title="View linked entity"
+              >
                 <FontAwesomeIcon :icon="getEntityIcon(file)" />
                 <span class="entity-text">{{ getLinkedEntityDisplay(file) }}</span>
-                <router-link
-                  :to="getLinkedEntityUrl(file)"
-                  class="entity-link"
-                  title="View linked entity"
-                >
-                  <FontAwesomeIcon icon="external-link-alt" />
-                </router-link>
-              </div>
+                <FontAwesomeIcon icon="external-link-alt" class="entity-link-icon" />
+              </router-link>
             </div>
           </div>
 
@@ -232,11 +230,11 @@ const deleteRestrictionReason = computed(() => {
 const loadFile = async () => {
   loading.value = true
   error.value = null
-  
+
   try {
     const response = await fileService.getFile(fileId.value)
     file.value = response.data.attributes
-    
+
     // Try to get file size (this would need to be added to the API response)
     // For now, we'll skip this or implement it later
   } catch (err: any) {
@@ -324,9 +322,9 @@ const cancelDelete = () => {
 
 const deleteFile = async () => {
   if (!file.value) return
-  
+
   deleting.value = true
-  
+
   try {
     await fileService.deleteFile(file.value.id)
     router.push('/files')
@@ -522,34 +520,28 @@ onMounted(() => {
         font-weight: 500;
         border: 1px solid #bbdefb;
         transition: all 0.2s ease;
+        text-decoration: none;
+        cursor: pointer;
 
         &:hover {
           background-color: #e1f5fe;
           border-color: #90caf9;
+          text-decoration: none;
         }
 
         .entity-text {
           flex: 1;
         }
 
-        .entity-link {
-          color: inherit;
-          text-decoration: none;
-          font-weight: 600;
-          display: inline-flex;
-          align-items: center;
-          padding: 0.25rem;
-          border-radius: 4px;
-          transition: background-color 0.2s ease;
+        .entity-link-icon {
+          flex-shrink: 0;
+          font-size: 0.75rem;
+          opacity: 0.8;
+          transition: opacity 0.2s ease;
+        }
 
-          &:hover {
-            background-color: rgba(255, 255, 255, 0.3);
-            text-decoration: none;
-          }
-
-          svg {
-            font-size: 0.75rem;
-          }
+        &:hover .entity-link-icon {
+          opacity: 1;
         }
       }
     }

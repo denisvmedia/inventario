@@ -44,14 +44,17 @@
 
           <!-- Show current link if exists -->
           <div v-if="file && isLinked(file)" class="current-link-info">
-            <div class="info-badge">
+            <a
+              v-if="getLinkedEntityUrl(file)"
+              :href="getLinkedEntityUrl(file)"
+              class="info-badge"
+              title="View linked entity"
+            >
               <FontAwesomeIcon icon="link" />
               Currently linked: {{ getLinkedEntityDisplay(file) }}
-              <a v-if="getLinkedEntityUrl(file)" :href="getLinkedEntityUrl(file)" class="link-nav">
-                <FontAwesomeIcon icon="external-link-alt" />
-                View
-              </a>
-            </div>
+              <FontAwesomeIcon icon="external-link-alt" class="link-nav-icon" />
+              View
+            </a>
           </div>
         </div>
       </div>
@@ -337,11 +340,11 @@ const isExportFile = computed(() => {
 const loadFile = async () => {
   loading.value = true
   error.value = null
-  
+
   try {
     const response = await fileService.getFile(fileId.value)
     file.value = response.data.attributes
-    
+
     // Populate form with current values
     form.value = {
       title: file.value.title,
@@ -352,7 +355,7 @@ const loadFile = async () => {
       linked_entity_id: file.value.linked_entity_id || '',
       linked_entity_meta: file.value.linked_entity_meta || ''
     }
-    
+
     tagsInput.value = file.value.tags.join(', ')
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to load file'
@@ -388,7 +391,7 @@ const updateTags = () => {
     .split(',')
     .map(tag => tag.trim())
     .filter(tag => tag.length > 0)
-  
+
   form.value.tags = [...new Set(tags)] // Remove duplicates
 }
 
@@ -639,45 +642,7 @@ onMounted(async () => {
       }
     }
 
-    .current-link-info {
-      margin-top: 0;
 
-      .info-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.75rem 1rem;
-        background-color: #e3f2fd;
-        color: #1565c0;
-        border-radius: $default-radius;
-        font-size: 0.875rem;
-        font-weight: 500;
-        border: 1px solid #bbdefb;
-        transition: all 0.2s ease;
-
-        &:hover {
-          background-color: #e1f5fe;
-          border-color: #90caf9;
-        }
-
-        .link-nav {
-          color: inherit;
-          text-decoration: none;
-          font-weight: 600;
-          display: inline-flex;
-          align-items: center;
-          gap: 0.25rem;
-
-          &:hover {
-            text-decoration: underline;
-          }
-
-          svg {
-            font-size: 0.75rem;
-          }
-        }
-      }
-    }
   }
 
   // Responsive design
@@ -859,27 +824,23 @@ onMounted(async () => {
     font-weight: 500;
     border: 1px solid #bbdefb;
     transition: all 0.2s ease;
+    text-decoration: none;
+    cursor: pointer;
 
     &:hover {
       background-color: #e1f5fe;
       border-color: #90caf9;
+      text-decoration: none;
     }
 
-    .link-nav {
-      color: inherit;
-      text-decoration: none;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
+    .link-nav-icon {
+      font-size: 0.75rem;
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+    }
 
-      &:hover {
-        text-decoration: underline;
-      }
-
-      svg {
-        font-size: 0.75rem;
-      }
+    &:hover .link-nav-icon {
+      opacity: 1;
     }
   }
 }

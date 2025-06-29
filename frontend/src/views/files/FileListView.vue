@@ -100,16 +100,16 @@
               <FontAwesomeIcon :icon="getFileIcon(file)" />
             </div>
           </div>
-          
+
           <div class="file-info">
             <h3 class="file-title" :title="getDisplayTitle(file)">{{ getDisplayTitle(file) }}</h3>
             <p class="file-description" :title="file.description">{{ file.description || 'No description' }}</p>
-            
+
             <div class="file-meta">
               <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
               <span class="file-ext">{{ file.ext }}</span>
             </div>
-            
+
             <div v-if="file.tags && file.tags.length > 0" class="file-tags">
               <span v-for="tag in file.tags.slice(0, 3)" :key="tag" class="tag">
                 {{ tag }}
@@ -120,21 +120,19 @@
             </div>
 
             <div v-if="isLinked(file)" class="file-linked-entity">
-              <div class="entity-badge-small">
+              <router-link
+                :to="getLinkedEntityUrl(file)"
+                class="entity-badge-small"
+                title="View linked entity"
+                @click.stop
+              >
                 <FontAwesomeIcon :icon="getEntityIcon(file)" />
                 <span class="entity-text">{{ getLinkedEntityDisplay(file) }}</span>
-                <router-link
-                  :to="getLinkedEntityUrl(file)"
-                  class="entity-link-small"
-                  title="View linked entity"
-                  @click.stop
-                >
-                  <FontAwesomeIcon icon="external-link-alt" />
-                </router-link>
-              </div>
+                <FontAwesomeIcon icon="external-link-alt" class="entity-link-icon" />
+              </router-link>
             </div>
           </div>
-          
+
           <div class="file-actions" @click.stop>
             <button
               class="btn-icon"
@@ -295,11 +293,11 @@ const visiblePages = computed(() => {
   const pages = []
   const start = Math.max(1, currentPage.value - 2)
   const end = Math.min(totalPages.value, currentPage.value + 2)
-  
+
   for (let i = start; i <= end; i++) {
     pages.push(i)
   }
-  
+
   return pages
 })
 
@@ -307,7 +305,7 @@ const visiblePages = computed(() => {
 const loadFiles = async () => {
   loading.value = true
   error.value = null
-  
+
   try {
     const params = {
       page: currentPage.value,
@@ -316,7 +314,7 @@ const loadFiles = async () => {
       ...(filters.value.type && { type: filters.value.type }),
       ...(filters.value.tags && { tags: filters.value.tags })
     }
-    
+
     const response = await fileService.getFiles(params)
     files.value = response.data.data
     totalFiles.value = response.data.meta.total
@@ -423,9 +421,9 @@ const cancelDelete = () => {
 
 const deleteFile = async () => {
   if (!fileToDelete.value) return
-  
+
   deleting.value = true
-  
+
   try {
     await fileService.deleteFile(fileToDelete.value.id)
     await loadFiles() // Reload the list
@@ -596,10 +594,13 @@ onMounted(() => {
         border: 1px solid #bbdefb;
         transition: all 0.2s ease;
         max-width: 100%;
+        text-decoration: none;
+        cursor: pointer;
 
         &:hover {
           background-color: #e1f5fe;
           border-color: #90caf9;
+          text-decoration: none;
         }
 
         .entity-text {
@@ -610,25 +611,15 @@ onMounted(() => {
           min-width: 0;
         }
 
-        .entity-link-small {
-          color: inherit;
-          text-decoration: none;
-          font-weight: 600;
-          display: inline-flex;
-          align-items: center;
-          padding: 0.125rem;
-          border-radius: 3px;
-          transition: background-color 0.2s ease;
+        .entity-link-icon {
           flex-shrink: 0;
+          font-size: 0.625rem;
+          opacity: 0.8;
+          transition: opacity 0.2s ease;
+        }
 
-          &:hover {
-            background-color: rgba(255, 255, 255, 0.3);
-            text-decoration: none;
-          }
-
-          svg {
-            font-size: 0.625rem;
-          }
+        &:hover .entity-link-icon {
+          opacity: 1;
         }
       }
     }
