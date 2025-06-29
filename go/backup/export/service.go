@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -172,6 +173,16 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return errkit.Wrap(err, "failed to generate export")
 	}
 
+	// Create file entity for the export
+	fileEntity, err := s.createExportFileEntity(ctx, export.ID, export.Description, filePath)
+	if err != nil {
+		// Update status to failed
+		export.Status = models.ExportStatusFailed
+		export.ErrorMessage = err.Error()
+		s.registrySet.ExportRegistry.Update(ctx, *export)
+		return errkit.Wrap(err, "failed to create export file entity")
+	}
+
 	// Store statistics in export record
 	export.LocationCount = stats.LocationCount
 	export.AreaCount = stats.AreaCount
@@ -188,7 +199,8 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 
 	// Update status to completed
 	export.Status = models.ExportStatusCompleted
-	export.FilePath = filePath
+	export.FileID = fileEntity.ID
+	export.FilePath = filePath // Keep for backward compatibility during migration
 	export.CompletedDate = models.PNow()
 	export.ErrorMessage = ""
 
@@ -200,8 +212,50 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	return nil
 }
 
-// DeleteExportFile deletes an export file from blob storage
+// createExportFileEntity creates a file entity for an export file
+func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, description, filePath string) (*models.FileEntity, error) {
+	// Extract filename from path for title
+	filename := filepath.Base(filePath)
+	if ext := filepath.Ext(filename); ext != "" {
+		filename = strings.TrimSuffix(filename, ext)
+	}
+
+	// Create file entity
+	now := time.Now()
+	fileEntity := models.FileEntity{
+		Title:            fmt.Sprintf("Export: %s", description),
+		Description:      fmt.Sprintf("Export file generated on %s", now.Format("2006-01-02 15:04:05")),
+		Type:             models.FileTypeDocument, // XML files are documents
+		Tags:             []string{"export", "xml"},
+		LinkedEntityType: "export",
+		LinkedEntityID:   exportID,
+		LinkedEntityMeta: "xml-1.0", // Mark as export file with version
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         filename,
+			OriginalPath: filePath,
+			Ext:          ".xml",
+			MIMEType:     "application/xml",
+		},
+	}
+
+	// Create the file entity
+	created, err := s.registrySet.FileRegistry.Create(ctx, fileEntity)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create file entity")
+	}
+
+	return created, nil
+}
+
+// DeleteExportFile is deprecated - export files are now managed through the file entity system
+// This method is kept for backward compatibility but should not be used for new exports
 func (s *ExportService) DeleteExportFile(ctx context.Context, filePath string) error {
+	if filePath == "" {
+		return nil // Nothing to delete
+	}
+
 	// Open blob bucket
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {

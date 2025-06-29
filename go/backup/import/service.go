@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/backup/export"
+	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -73,10 +77,17 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to parse XML metadata: %v", err))
 	}
 
+	// Create file entity for the imported export
+	fileEntity, err := s.createImportFileEntity(ctx, exportRecord.ID, exportRecord.Description, sourceFilePath, attrs.Size)
+	if err != nil {
+		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to create file entity: %v", err))
+	}
+
 	// Update the original export record with the parsed data
 	exportRecord.Status = models.ExportStatusCompleted
 	exportRecord.CompletedDate = models.PNow()
-	exportRecord.FilePath = sourceFilePath
+	exportRecord.FileID = fileEntity.ID
+	exportRecord.FilePath = sourceFilePath // Keep for backward compatibility
 	exportRecord.FileSize = attrs.Size
 	exportRecord.LocationCount = stats.LocationCount
 	exportRecord.AreaCount = stats.AreaCount
@@ -93,6 +104,43 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 	}
 
 	return nil
+}
+
+// createImportFileEntity creates a file entity for an imported export file
+func (s *ImportService) createImportFileEntity(ctx context.Context, exportID, description, filePath string, fileSize int64) (*models.FileEntity, error) {
+	// Extract filename from path for title
+	filename := filepath.Base(filePath)
+	if ext := filepath.Ext(filename); ext != "" {
+		filename = strings.TrimSuffix(filename, ext)
+	}
+
+	// Create file entity
+	now := time.Now()
+	fileEntity := models.FileEntity{
+		Title:            fmt.Sprintf("Import: %s", description),
+		Description:      fmt.Sprintf("Imported export file uploaded on %s", now.Format("2006-01-02 15:04:05")),
+		Type:             models.FileTypeDocument, // XML files are documents
+		Tags:             []string{"export", "xml", "imported"},
+		LinkedEntityType: "export",
+		LinkedEntityID:   exportID,
+		LinkedEntityMeta: "xml-1.0", // Mark as export file with version
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         filename,
+			OriginalPath: filePath,
+			Ext:          ".xml",
+			MIMEType:     "application/xml",
+		},
+	}
+
+	// Create the file entity
+	created, err := s.registrySet.FileRegistry.Create(ctx, fileEntity)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create file entity")
+	}
+
+	return created, nil
 }
 
 // markImportFailed marks an import operation as failed with an error message

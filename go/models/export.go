@@ -143,7 +143,8 @@ type Export struct {
 	Status          ExportStatus                    `json:"status" db:"status" userinput:"false"`
 	IncludeFileData bool                            `json:"include_file_data" db:"include_file_data"`
 	SelectedItems   ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
-	FilePath        string                          `json:"file_path" db:"file_path" userinput:"false"`
+	FileID          string                          `json:"file_id" db:"file_id" userinput:"false"`
+	FilePath        string                          `json:"file_path" db:"file_path" userinput:"false"` // Deprecated: will be removed after migration
 	CreatedDate     PTimestamp                      `json:"created_date" db:"created_date" userinput:"false"`
 	CompletedDate   PTimestamp                      `json:"completed_date" db:"completed_date" userinput:"false"`
 	DeletedAt       PTimestamp                      `json:"deleted_at" db:"deleted_at" userinput:"false"`
@@ -167,7 +168,7 @@ func NewImportedExport(description, sourceFilePath string) Export {
 		Type:        ExportTypeImported,
 		Status:      ExportStatusPending,
 		CreatedDate: PNow(),
-		FilePath:    sourceFilePath,
+		FilePath:    sourceFilePath, // Temporary: will be replaced by FileID during import processing
 		Imported:    true,
 	}
 }

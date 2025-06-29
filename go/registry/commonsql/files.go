@@ -35,12 +35,13 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 	}
 
 	query := `
-		INSERT INTO files (id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+		INSERT INTO files (id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		file.ID, file.Title, file.Description, file.Type, tagsJSON,
 		file.Path, file.OriginalPath, file.Ext, file.MIMEType,
+		file.LinkedEntityType, file.LinkedEntityID, file.LinkedEntityMeta,
 		file.CreatedAt, file.UpdatedAt,
 	)
 
@@ -56,13 +57,14 @@ func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, 
 	var tagsJSON []byte
 
 	query := `
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
 		FROM files
 		WHERE id = $1`
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
 		&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+		&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
 		&file.CreatedAt, &file.UpdatedAt,
 	)
 
@@ -93,7 +95,7 @@ func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, 
 
 func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 	query := `
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
 		FROM files
 		ORDER BY created_at DESC`
 
@@ -111,6 +113,7 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 		err := rows.Scan(
 			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
 			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
 			&file.CreatedAt, &file.UpdatedAt,
 		)
 		if err != nil {
@@ -138,6 +141,114 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 	return files, nil
 }
 
+// ListByLinkedEntity returns files linked to a specific entity
+func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
+	query := `
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
+		FROM files
+		WHERE linked_entity_type = $1 AND linked_entity_id = $2
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, entityType, entityID)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list files by linked entity")
+	}
+	defer rows.Close()
+
+	var files []*models.FileEntity
+	for rows.Next() {
+		var file models.FileEntity
+		var tagsJSON []byte
+
+		err := rows.Scan(
+			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
+			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
+			&file.CreatedAt, &file.UpdatedAt,
+		)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to scan file")
+		}
+
+		if len(tagsJSON) > 0 {
+			err = json.Unmarshal(tagsJSON, &file.Tags)
+			if err != nil {
+				return nil, errkit.Wrap(err, "failed to unmarshal tags")
+			}
+		}
+
+		// Initialize File struct
+		file.File = &models.File{
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Ext:          file.Ext,
+			MIMEType:     file.MIMEType,
+		}
+
+		files = append(files, &file)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, errkit.Wrap(err, "failed to iterate over files")
+	}
+
+	return files, nil
+}
+
+// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
+func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error) {
+	query := `
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
+		FROM files
+		WHERE linked_entity_type = $1 AND linked_entity_id = $2 AND linked_entity_meta = $3
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, entityType, entityID, meta)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list files by linked entity and meta")
+	}
+	defer rows.Close()
+
+	var files []*models.FileEntity
+	for rows.Next() {
+		var file models.FileEntity
+		var tagsJSON []byte
+
+		err := rows.Scan(
+			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
+			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
+			&file.CreatedAt, &file.UpdatedAt,
+		)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to scan file")
+		}
+
+		if len(tagsJSON) > 0 {
+			err = json.Unmarshal(tagsJSON, &file.Tags)
+			if err != nil {
+				return nil, errkit.Wrap(err, "failed to unmarshal tags")
+			}
+		}
+
+		// Initialize File struct
+		file.File = &models.File{
+			Path:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Ext:          file.Ext,
+			MIMEType:     file.MIMEType,
+		}
+
+		files = append(files, &file)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, errkit.Wrap(err, "failed to iterate over files")
+	}
+
+	return files, nil
+}
+
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	tagsJSON, err := json.Marshal(file.Tags)
 	if err != nil {
@@ -146,11 +257,12 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 
 	query := `
 		UPDATE files
-		SET title = $2, description = $3, type = $4, tags = $5, path = $6, updated_at = $7
+		SET title = $2, description = $3, type = $4, tags = $5, path = $6, linked_entity_type = $7, linked_entity_id = $8, linked_entity_meta = $9, updated_at = $10
 		WHERE id = $1`
 
 	result, err := r.db.ExecContext(ctx, query,
-		file.ID, file.Title, file.Description, file.Type, tagsJSON, file.Path, file.UpdatedAt,
+		file.ID, file.Title, file.Description, file.Type, tagsJSON, file.Path,
+		file.LinkedEntityType, file.LinkedEntityID, file.LinkedEntityMeta, file.UpdatedAt,
 	)
 
 	if err != nil {
@@ -203,7 +315,7 @@ func (r *FileRegistry) Count(ctx context.Context) (int, error) {
 
 func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error) {
 	query := `
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
 		FROM files
 		WHERE type = $1
 		ORDER BY created_at DESC`
@@ -222,6 +334,7 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 		err := rows.Scan(
 			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
 			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
 			&file.CreatedAt, &file.UpdatedAt,
 		)
 		if err != nil {
@@ -285,7 +398,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 	}
 
 	sqlQuery := fmt.Sprintf(`
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
 		FROM files
 		%s
 		ORDER BY created_at DESC`, whereClause)
@@ -304,6 +417,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 		err := rows.Scan(
 			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
 			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
 			&file.CreatedAt, &file.UpdatedAt,
 		)
 		if err != nil {
@@ -355,7 +469,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 	if fileType != nil {
 		dataQuery = `
-			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
 			FROM files
 			WHERE type = $1
 			ORDER BY created_at DESC
@@ -363,7 +477,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 		dataArgs = []any{*fileType, limit, offset}
 	} else {
 		dataQuery = `
-			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, created_at, updated_at
+			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
 			FROM files
 			ORDER BY created_at DESC
 			LIMIT $1 OFFSET $2`
@@ -384,6 +498,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 		err := rows.Scan(
 			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
 			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
+			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
 			&file.CreatedAt, &file.UpdatedAt,
 		)
 		if err != nil {

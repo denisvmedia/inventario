@@ -58,8 +58,12 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	pool, err := pgxpool.New(t.Context(), dsn)
 	c.Assert(err, qt.IsNil)
 
-	// Clean up any existing test tables
+	// Clean up any existing test tables (order matters due to foreign key constraints)
 	_, err = pool.Exec(t.Context(), `
+		DROP TABLE IF EXISTS restore_steps CASCADE;
+		DROP TABLE IF EXISTS restore_operations CASCADE;
+		DROP TABLE IF EXISTS files CASCADE;
+		DROP TABLE IF EXISTS exports CASCADE;
 		DROP TABLE IF EXISTS images CASCADE;
 		DROP TABLE IF EXISTS invoices CASCADE;
 		DROP TABLE IF EXISTS manuals CASCADE;

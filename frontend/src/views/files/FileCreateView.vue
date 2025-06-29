@@ -2,10 +2,10 @@
   <div class="file-create-view">
     <!-- Breadcrumb Navigation -->
     <div class="breadcrumb-nav">
-      <button class="breadcrumb-link" @click="goBack">
+      <a href="#" class="breadcrumb-link" @click.prevent="goBack">
         <FontAwesomeIcon icon="arrow-left" />
         Back to Files
-      </button>
+      </a>
     </div>
 
     <!-- Page Header -->
@@ -186,9 +186,6 @@ const goBack = () => {
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-  background: none;
-  border: none;
-  cursor: pointer;
 
   &:hover {
     color: $primary-color;

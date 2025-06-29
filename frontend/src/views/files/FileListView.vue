@@ -100,16 +100,16 @@
               <FontAwesomeIcon :icon="getFileIcon(file)" />
             </div>
           </div>
-          
+
           <div class="file-info">
             <h3 class="file-title" :title="getDisplayTitle(file)">{{ getDisplayTitle(file) }}</h3>
             <p class="file-description" :title="file.description">{{ file.description || 'No description' }}</p>
-            
+
             <div class="file-meta">
               <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
               <span class="file-ext">{{ file.ext }}</span>
             </div>
-            
+
             <div v-if="file.tags && file.tags.length > 0" class="file-tags">
               <span v-for="tag in file.tags.slice(0, 3)" :key="tag" class="tag">
                 {{ tag }}
@@ -118,8 +118,21 @@
                 +{{ file.tags.length - 3 }} more
               </span>
             </div>
+
+            <div v-if="isLinked(file)" class="file-linked-entity">
+              <router-link
+                :to="getLinkedEntityUrl(file)"
+                class="entity-badge-small"
+                title="View linked entity"
+                @click.stop
+              >
+                <FontAwesomeIcon :icon="getEntityIcon(file)" />
+                <span class="entity-text">{{ getLinkedEntityDisplay(file) }}</span>
+                <FontAwesomeIcon icon="external-link-alt" class="entity-link-icon" />
+              </router-link>
+            </div>
           </div>
-          
+
           <div class="file-actions" @click.stop>
             <button
               class="btn-icon"
@@ -136,11 +149,20 @@
               <FontAwesomeIcon icon="edit" />
             </button>
             <button
+              v-if="canDeleteFile(file)"
               class="btn-icon btn-danger"
               title="Delete"
               @click="confirmDelete(file)"
             >
               <FontAwesomeIcon icon="trash" />
+            </button>
+            <button
+              v-else
+              class="btn-icon btn-disabled"
+              :title="getDeleteRestrictionReason(file)"
+              disabled
+            >
+              <FontAwesomeIcon icon="lock" />
             </button>
           </div>
         </div>
@@ -227,10 +249,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import fileService, { type FileEntity } from '@/services/fileService'
 
 const router = useRouter()
+const route = useRoute()
 
 // State
 const files = ref<FileEntity[]>([])
@@ -257,6 +280,14 @@ const fileToDelete = ref<FileEntity | null>(null)
 // File type options
 const fileTypeOptions = fileService.getFileTypeOptions()
 
+// Make fileService methods available in template
+const { isLinked, getLinkedEntityDisplay } = fileService
+
+// Wrapper function to pass current route context
+const getLinkedEntityUrl = (file: any) => {
+  return fileService.getLinkedEntityUrl(file, route)
+}
+
 // Computed
 const totalPages = computed(() => Math.ceil(totalFiles.value / pageSize.value))
 
@@ -268,11 +299,11 @@ const visiblePages = computed(() => {
   const pages = []
   const start = Math.max(1, currentPage.value - 2)
   const end = Math.min(totalPages.value, currentPage.value + 2)
-  
+
   for (let i = start; i <= end; i++) {
     pages.push(i)
   }
-  
+
   return pages
 })
 
@@ -280,7 +311,7 @@ const visiblePages = computed(() => {
 const loadFiles = async () => {
   loading.value = true
   error.value = null
-  
+
   try {
     const params = {
       page: currentPage.value,
@@ -289,7 +320,7 @@ const loadFiles = async () => {
       ...(filters.value.type && { type: filters.value.type }),
       ...(filters.value.tags && { tags: filters.value.tags })
     }
-    
+
     const response = await fileService.getFiles(params)
     files.value = response.data.data
     totalFiles.value = response.data.meta.total
@@ -343,6 +374,15 @@ const getDisplayTitle = (file: FileEntity) => {
   return fileService.getDisplayTitle(file)
 }
 
+const getEntityIcon = (file: FileEntity) => {
+  if (file.linked_entity_type === 'commodity') {
+    return 'box'
+  } else if (file.linked_entity_type === 'export') {
+    return 'file-export'
+  }
+  return 'link'
+}
+
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
   img.style.display = 'none'
@@ -364,7 +404,18 @@ const downloadFile = (file: FileEntity) => {
   fileService.downloadFile(file)
 }
 
+const canDeleteFile = (file: FileEntity) => {
+  return fileService.canDelete(file)
+}
+
+const getDeleteRestrictionReason = (file: FileEntity) => {
+  return fileService.getDeleteRestrictionReason(file)
+}
+
 const confirmDelete = (file: FileEntity) => {
+  if (!canDeleteFile(file)) {
+    return // Don't allow deletion of restricted files
+  }
   fileToDelete.value = file
   showDeleteModal.value = true
 }
@@ -376,9 +427,9 @@ const cancelDelete = () => {
 
 const deleteFile = async () => {
   if (!fileToDelete.value) return
-  
+
   deleting.value = true
-  
+
   try {
     await fileService.deleteFile(fileToDelete.value.id)
     await loadFiles() // Reload the list
@@ -532,6 +583,52 @@ onMounted(() => {
         color: $text-secondary-color;
       }
     }
+
+    .file-linked-entity {
+      margin-top: 0.75rem;
+
+      .entity-badge-small {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background-color: #e3f2fd;
+        color: #1565c0;
+        border-radius: $default-radius;
+        font-size: 0.75rem;
+        font-weight: 500;
+        border: 1px solid #bbdefb;
+        transition: all 0.2s ease;
+        max-width: 100%;
+        text-decoration: none;
+        cursor: pointer;
+
+        &:hover {
+          background-color: #e1f5fe;
+          border-color: #90caf9;
+          text-decoration: none;
+        }
+
+        .entity-text {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          min-width: 0;
+        }
+
+        .entity-link-icon {
+          flex-shrink: 0;
+          font-size: 0.625rem;
+          opacity: 0.8;
+          transition: opacity 0.2s ease;
+        }
+
+        &:hover .entity-link-icon {
+          opacity: 1;
+        }
+      }
+    }
   }
 
   .file-actions {
@@ -562,6 +659,16 @@ onMounted(() => {
 
       &.btn-danger {
         color: $danger-color;
+      }
+
+      &.btn-disabled {
+        color: $text-secondary-color;
+        cursor: not-allowed;
+        opacity: 0.5;
+
+        &:hover {
+          background: rgb(255 255 255 / 90%);
+        }
       }
     }
   }

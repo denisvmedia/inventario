@@ -261,15 +261,8 @@ const getFileUrl = (file: any) => {
     }
   }
 
-  // Build the URL based on file type
-  if (props.fileType === 'images') {
-    return `/api/v1/${props.entityType}/${props.entityId}/images/${file.id}.${ext}`
-  } else if (props.fileType === 'manuals') {
-    return `/api/v1/${props.entityType}/${props.entityId}/manuals/${file.id}.${ext}`
-  } else if (props.fileType === 'invoices') {
-    return `/api/v1/${props.entityType}/${props.entityId}/invoices/${file.id}.${ext}`
-  }
-  return ''
+  // Use generic file entity download URL
+  return `/api/v1/files/${file.id}.${ext}`
 }
 
 const getFileName = (file: any) => {

@@ -135,12 +135,15 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		Title:       input.Data.Attributes.Title,
-		Description: input.Data.Attributes.Description,
-		Type:        models.FileTypeOther, // Default type, should be updated when file is uploaded
-		Tags:        input.Data.Attributes.Tags,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		Title:            input.Data.Attributes.Title,
+		Description:      input.Data.Attributes.Description,
+		Type:             models.FileTypeOther, // Default type, should be updated when file is uploaded
+		Tags:             input.Data.Attributes.Tags,
+		LinkedEntityType: input.Data.Attributes.LinkedEntityType,
+		LinkedEntityID:   input.Data.Attributes.LinkedEntityID,
+		LinkedEntityMeta: input.Data.Attributes.LinkedEntityMeta,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		File: &models.File{
 			Path:         input.Data.Attributes.Path,
 			OriginalPath: input.Data.Attributes.Path,
@@ -220,11 +223,32 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if this is an export file and prevent changing entity linking
+	if file.LinkedEntityType == "export" {
+		// For export files, only allow updating title, description, tags, and path
+		// Entity linking fields cannot be changed
+		if input.Data.Attributes.LinkedEntityType != file.LinkedEntityType ||
+			input.Data.Attributes.LinkedEntityID != file.LinkedEntityID ||
+			input.Data.Attributes.LinkedEntityMeta != file.LinkedEntityMeta {
+			err := errors.New("export file entity linking cannot be changed")
+			unprocessableEntityError(w, r, err)
+			return
+		}
+	}
+
 	// Update the editable fields (file type is auto-detected from MIME type and cannot be changed manually)
 	file.Title = input.Data.Attributes.Title
 	file.Description = input.Data.Attributes.Description
 	file.Tags = input.Data.Attributes.Tags
 	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+
+	// Only update entity linking for non-export files or if values haven't changed
+	if file.LinkedEntityType != "export" {
+		file.LinkedEntityType = input.Data.Attributes.LinkedEntityType
+		file.LinkedEntityID = input.Data.Attributes.LinkedEntityID
+		file.LinkedEntityMeta = input.Data.Attributes.LinkedEntityMeta
+	}
+
 	file.UpdatedAt = time.Now() // Set updated timestamp
 
 	// Auto-detect file type from MIME type if available

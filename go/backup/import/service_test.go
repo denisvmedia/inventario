@@ -16,23 +16,12 @@ import (
 )
 
 func newTestRegistrySet() *registry.Set {
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	restoreStepRegistry := memory.NewRestoreStepRegistry()
-
-	return &registry.Set{
-		LocationRegistry:         locationRegistry,
-		AreaRegistry:             areaRegistry,
-		CommodityRegistry:        commodityRegistry,
-		ImageRegistry:            memory.NewImageRegistry(commodityRegistry),
-		InvoiceRegistry:          memory.NewInvoiceRegistry(commodityRegistry),
-		ManualRegistry:           memory.NewManualRegistry(commodityRegistry),
-		SettingsRegistry:         memory.NewSettingsRegistry(),
-		ExportRegistry:           memory.NewExportRegistry(),
-		RestoreOperationRegistry: memory.NewRestoreOperationRegistry(restoreStepRegistry),
-		RestoreStepRegistry:      restoreStepRegistry,
+	// Use the proper NewRegistrySet function to ensure all dependencies are set up correctly
+	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
+	if err != nil {
+		panic(err)
 	}
+	return registrySet
 }
 
 func TestNewImportService(t *testing.T) {
@@ -204,6 +193,21 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 	c.Assert(updatedExport.FileSize > 0, qt.IsTrue)
 	c.Assert(updatedExport.CommodityCount, qt.Equals, 1)
 	c.Assert(updatedExport.CompletedDate, qt.IsNotNil)
+
+	// Verify file entity was created
+	c.Assert(updatedExport.FileID, qt.Not(qt.Equals), "")
+	fileEntity, err := registrySet.FileRegistry.Get(ctx, updatedExport.FileID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(fileEntity.LinkedEntityType, qt.Equals, "export")
+	c.Assert(fileEntity.LinkedEntityID, qt.Equals, updatedExport.ID)
+	c.Assert(fileEntity.LinkedEntityMeta, qt.Equals, "xml-1.0")
+	c.Assert(fileEntity.Type, qt.Equals, models.FileTypeDocument)
+	c.Assert(fileEntity.Tags, qt.Contains, "export")
+	c.Assert(fileEntity.Tags, qt.Contains, "xml")
+	c.Assert(fileEntity.Tags, qt.Contains, "imported")
+	c.Assert(fileEntity.Title, qt.Contains, "Import:")
+	c.Assert(fileEntity.File.Ext, qt.Equals, ".xml")
+	c.Assert(fileEntity.File.MIMEType, qt.Equals, "application/xml")
 }
 
 func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {

@@ -123,3 +123,37 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 	paginatedFiles := allFiles[start:end]
 	return paginatedFiles, total, nil
 }
+
+// ListByLinkedEntity returns files linked to a specific entity
+func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
+	allFiles, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*models.FileEntity
+	for _, file := range allFiles {
+		if file.LinkedEntityType == entityType && file.LinkedEntityID == entityID {
+			filtered = append(filtered, file)
+		}
+	}
+
+	return filtered, nil
+}
+
+// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
+func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, entityMeta string) ([]*models.FileEntity, error) {
+	allFiles, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*models.FileEntity
+	for _, file := range allFiles {
+		if file.LinkedEntityType == entityType && file.LinkedEntityID == entityID && file.LinkedEntityMeta == entityMeta {
+			filtered = append(filtered, file)
+		}
+	}
+
+	return filtered, nil
+}

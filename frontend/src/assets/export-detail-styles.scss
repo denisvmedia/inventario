@@ -214,18 +214,7 @@
   line-height: 1.4;
 }
 
-/* Header Styles */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-
-  h1 {
-    margin: 0;
-    font-size: 2rem;
-  }
-}
+/* Header Styles - using shared _header.scss */
 
 /* Actions */
 .actions {
