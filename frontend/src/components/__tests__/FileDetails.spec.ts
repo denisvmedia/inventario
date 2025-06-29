@@ -95,7 +95,7 @@ describe('FileDetails.vue', () => {
       expect(wrapper.find('.file-details-modal').exists()).toBe(true)
       expect(wrapper.find('.file-details-header h3').text()).toBe('File Details')
       expect(wrapper.find('.image-preview').exists()).toBe(true)
-      expect(wrapper.find('.image-preview img').attributes('src')).toBe('/api/v1/commodities/commodity-1/images/file-1.jpg')
+      expect(wrapper.find('.image-preview img').attributes('src')).toBe('/api/v1/files/file-1.jpg')
       expect(wrapper.find('.file-icon-preview').exists()).toBe(false)
     })
 
@@ -165,23 +165,23 @@ describe('FileDetails.vue', () => {
   describe('Computed Properties', () => {
     it('computes fileUrl correctly for images', () => {
       const wrapper = createWrapper()
-      expect(wrapper.vm.fileUrl).toBe('/api/v1/commodities/commodity-1/images/file-1.jpg')
+      expect(wrapper.vm.fileUrl).toBe('/api/v1/files/file-1.jpg')
     })
 
     it('computes fileUrl correctly for manuals', () => {
       const wrapper = createWrapper({ file: mockPdfFile, fileType: 'manuals' })
-      expect(wrapper.vm.fileUrl).toBe('/api/v1/commodities/commodity-1/manuals/file-2.pdf')
+      expect(wrapper.vm.fileUrl).toBe('/api/v1/files/file-2.pdf')
     })
 
     it('computes fileUrl correctly for invoices', () => {
       const wrapper = createWrapper({ file: mockInvoiceFile, fileType: 'invoices' })
-      expect(wrapper.vm.fileUrl).toBe('/api/v1/commodities/commodity-1/invoices/file-4.docx')
+      expect(wrapper.vm.fileUrl).toBe('/api/v1/files/file-4.docx')
     })
 
-    it('returns empty fileUrl for invalid fileType', () => {
+    it('returns generic file URL regardless of fileType', () => {
       // @ts-ignore - Testing invalid prop value
       const wrapper = createWrapper({ fileType: 'invalid' })
-      expect(wrapper.vm.fileUrl).toBe('')
+      expect(wrapper.vm.fileUrl).toBe('/api/v1/files/file-1.jpg')
     })
 
     it('identifies image files correctly by extension', () => {
