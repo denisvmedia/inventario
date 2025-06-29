@@ -945,17 +945,7 @@ onMounted(() => {
   }
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.header h1 {
-  margin: 0;
-  font-size: 2rem;
-}
+// Header styles are now in shared _header.scss
 
 .export-content {
   display: flex;

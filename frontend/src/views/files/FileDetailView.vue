@@ -46,7 +46,7 @@
           </div>
         </div>
 
-        <div class="header-actions">
+        <div class="actions">
           <button class="btn btn-secondary" @click="downloadFile">
             <font-awesome-icon icon="download" />
             Download
