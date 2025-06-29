@@ -113,17 +113,17 @@ type FileRegistry interface {
 	// ListByType returns files filtered by type
 	ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error)
 
+	// ListByLinkedEntity returns files linked to a specific entity
+	ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
+
+	// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
+	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error)
+
 	// Search returns files matching the search criteria
 	Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error)
 
 	// ListPaginated returns paginated list of files
 	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error)
-
-	// ListByLinkedEntity returns files linked to a specific entity
-	ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
-
-	// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
-	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, entityMeta string) ([]*models.FileEntity, error)
 }
 
 type RestoreOperationRegistry interface {
