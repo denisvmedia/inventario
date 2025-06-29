@@ -70,7 +70,7 @@
             disabled
           >
             <font-awesome-icon icon="lock" />
-            Protected
+            Delete
           </button>
         </div>
       </div>
