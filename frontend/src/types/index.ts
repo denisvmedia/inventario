@@ -84,7 +84,8 @@ export interface Export {
   status: ExportStatus;
   include_file_data: boolean;
   selected_items: ExportSelectedItem[];
-  file_path: string;
+  file_id?: string;
+  file_path?: string; // Deprecated: will be removed after migration
   created_date: string;
   completed_date?: string;
   deleted_at?: string;

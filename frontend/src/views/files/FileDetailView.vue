@@ -55,9 +55,22 @@
             <font-awesome-icon icon="edit" />
             Edit
           </button>
-          <button class="btn btn-danger" @click="confirmDelete">
+          <button
+            v-if="canDeleteFile"
+            class="btn btn-danger"
+            @click="confirmDelete"
+          >
             <font-awesome-icon icon="trash" />
             Delete
+          </button>
+          <button
+            v-else
+            class="btn btn-secondary btn-disabled"
+            :title="deleteRestrictionReason"
+            disabled
+          >
+            <font-awesome-icon icon="lock" />
+            Protected
           </button>
         </div>
       </div>
@@ -207,6 +220,14 @@ const { isLinked, getLinkedEntityDisplay, getLinkedEntityUrl } = fileService
 // Computed
 const fileId = computed(() => route.params.id as string)
 
+const canDeleteFile = computed(() => {
+  return file.value ? fileService.canDelete(file.value) : false
+})
+
+const deleteRestrictionReason = computed(() => {
+  return file.value ? fileService.getDeleteRestrictionReason(file.value) : ''
+})
+
 // Methods
 const loadFile = async () => {
   loading.value = true
@@ -291,6 +312,9 @@ const editFile = () => {
 }
 
 const confirmDelete = () => {
+  if (!canDeleteFile.value) {
+    return // Don't allow deletion of restricted files
+  }
   showDeleteModal.value = true
 }
 

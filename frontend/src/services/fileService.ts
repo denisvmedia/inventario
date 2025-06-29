@@ -303,6 +303,30 @@ const fileService = {
    */
   isExportFile(file: FileEntity): boolean {
     return file.linked_entity_type === 'export'
+  },
+
+  /**
+   * Check if a file can be manually deleted
+   */
+  canDelete(file: FileEntity): boolean {
+    return !this.isExportFile(file)
+  },
+
+  /**
+   * Check if a file can be manually unlinked from its entity
+   */
+  canUnlink(file: FileEntity): boolean {
+    return !this.isExportFile(file)
+  },
+
+  /**
+   * Get explanation for why a file cannot be deleted
+   */
+  getDeleteRestrictionReason(file: FileEntity): string {
+    if (this.isExportFile(file)) {
+      return 'Export files cannot be manually deleted. Delete the export to remove this file.'
+    }
+    return ''
   }
 }
 

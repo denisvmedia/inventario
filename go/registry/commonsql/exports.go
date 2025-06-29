@@ -2,6 +2,7 @@ package commonsql
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -117,12 +118,31 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	// Soft delete the export by setting deleted_at timestamp
-	deletedAt := string(models.Now())
-	query := fmt.Sprintf("UPDATE %s SET deleted_at = $1 WHERE id = $2 AND deleted_at IS NULL", r.tableNames.Exports())
-	result, err := tx.ExecContext(ctx, query, deletedAt, id)
+	// Get the export first to check if it has an associated file
+	var export models.Export
+	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND deleted_at IS NULL", r.tableNames.Exports())
+	err = tx.GetContext(ctx, &export, query, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to soft delete export")
+		if errors.Is(err, sql.ErrNoRows) {
+			return errkit.Wrap(registry.ErrNotFound, "export not found or already deleted")
+		}
+		return errkit.Wrap(err, "failed to get export")
+	}
+
+	// Delete associated file entity if it exists
+	if export.FileID != "" {
+		deleteFileQuery := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Files())
+		_, err = tx.ExecContext(ctx, deleteFileQuery, export.FileID)
+		if err != nil {
+			return errkit.Wrap(err, "failed to delete associated file entity")
+		}
+	}
+
+	// Hard delete the export (no soft delete needed since we're using file entities now)
+	deleteExportQuery := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Exports())
+	result, err := tx.ExecContext(ctx, deleteExportQuery, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete export")
 	}
 
 	rowsAffected, err := result.RowsAffected()
@@ -131,7 +151,7 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	}
 
 	if rowsAffected == 0 {
-		return errkit.Wrap(registry.ErrNotFound, "export not found or already deleted")
+		return errkit.Wrap(registry.ErrNotFound, "export not found")
 	}
 
 	return nil

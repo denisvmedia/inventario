@@ -151,11 +151,20 @@
               <FontAwesomeIcon icon="edit" />
             </button>
             <button
+              v-if="canDeleteFile(file)"
               class="btn-icon btn-danger"
               title="Delete"
               @click="confirmDelete(file)"
             >
               <FontAwesomeIcon icon="trash" />
+            </button>
+            <button
+              v-else
+              class="btn-icon btn-disabled"
+              :title="getDeleteRestrictionReason(file)"
+              disabled
+            >
+              <FontAwesomeIcon icon="lock" />
             </button>
           </div>
         </div>
@@ -391,7 +400,18 @@ const downloadFile = (file: FileEntity) => {
   fileService.downloadFile(file)
 }
 
+const canDeleteFile = (file: FileEntity) => {
+  return fileService.canDelete(file)
+}
+
+const getDeleteRestrictionReason = (file: FileEntity) => {
+  return fileService.getDeleteRestrictionReason(file)
+}
+
 const confirmDelete = (file: FileEntity) => {
+  if (!canDeleteFile(file)) {
+    return // Don't allow deletion of restricted files
+  }
   fileToDelete.value = file
   showDeleteModal.value = true
 }
@@ -642,6 +662,16 @@ onMounted(() => {
 
       &.btn-danger {
         color: $danger-color;
+      }
+
+      &.btn-disabled {
+        color: $text-secondary-color;
+        cursor: not-allowed;
+        opacity: 0.5;
+
+        &:hover {
+          background: rgb(255 255 255 / 90%);
+        }
       }
     }
   }
