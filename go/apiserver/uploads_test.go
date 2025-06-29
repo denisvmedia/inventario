@@ -24,67 +24,73 @@ func TestUploads(t *testing.T) {
 		typ            string
 		contentType    string
 		filePath       string
-		expectedLength func(c *qt.C) int
+		expectedLength func(c *qt.C, commodityID string) int
 		checkResult    func(c *qt.C, expectedLen int, expectedCommodityID string)
 	}{
 		{
 			typ:         "images",
 			contentType: "image/jpeg",
 			filePath:    "testdata/image.jpg",
-			expectedLength: func(c *qt.C) int {
-				images, err := params.RegistrySet.ImageRegistry.List(c.Context())
+			expectedLength: func(c *qt.C, commodityID string) int {
+				// Get file entities linked to commodity with "images" meta
+				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "images")
 				c.Assert(err, qt.IsNil)
-				expectedLen := len(images) + 1
+				expectedLen := len(files) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				images, err := params.RegistrySet.ImageRegistry.List(c.Context())
+				// Get file entities linked to this commodity with "images" meta
+				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "images")
 				c.Assert(err, qt.IsNil)
-				c.Assert(images, qt.HasLen, expectedLen)
-				c.Assert(images[expectedLen-1].Path, qt.Matches, `image-\d+`)
-				c.Assert(images[expectedLen-1].Ext, qt.Equals, ".jpg")
-				c.Assert(images[expectedLen-1].MIMEType, qt.Equals, "image/jpeg")
-				c.Assert(images[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
+				c.Assert(files, qt.HasLen, expectedLen)
+				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `image-\d+`)
+				c.Assert(files[expectedLen-1].File.Ext, qt.Equals, ".jpg")
+				c.Assert(files[expectedLen-1].File.MIMEType, qt.Equals, "image/jpeg")
+				c.Assert(files[expectedLen-1].LinkedEntityID, qt.Equals, expectedCommodityID)
 			},
 		},
 		{
 			typ:         "manuals",
 			contentType: "application/pdf",
 			filePath:    "testdata/manual.pdf",
-			expectedLength: func(c *qt.C) int {
-				manuals, err := params.RegistrySet.ManualRegistry.List(c.Context())
+			expectedLength: func(c *qt.C, commodityID string) int {
+				// Get file entities linked to commodity with "manuals" meta
+				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "manuals")
 				c.Assert(err, qt.IsNil)
-				expectedLen := len(manuals) + 1
+				expectedLen := len(files) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				manuals, err := params.RegistrySet.ManualRegistry.List(c.Context())
+				// Get file entities linked to this commodity with "manuals" meta
+				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "manuals")
 				c.Assert(err, qt.IsNil)
-				c.Assert(manuals, qt.HasLen, expectedLen)
-				c.Assert(manuals[expectedLen-1].Path, qt.Matches, `manual-\d+`)
-				c.Assert(manuals[expectedLen-1].Ext, qt.Equals, ".pdf")
-				c.Assert(manuals[expectedLen-1].MIMEType, qt.Equals, "application/pdf")
-				c.Assert(manuals[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
+				c.Assert(files, qt.HasLen, expectedLen)
+				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `manual-\d+`)
+				c.Assert(files[expectedLen-1].File.Ext, qt.Equals, ".pdf")
+				c.Assert(files[expectedLen-1].File.MIMEType, qt.Equals, "application/pdf")
+				c.Assert(files[expectedLen-1].LinkedEntityID, qt.Equals, expectedCommodityID)
 			},
 		},
 		{
 			typ:         "invoices",
 			contentType: "application/pdf",
 			filePath:    "testdata/invoice.pdf",
-			expectedLength: func(c *qt.C) int {
-				invoices, err := params.RegistrySet.InvoiceRegistry.List(c.Context())
+			expectedLength: func(c *qt.C, commodityID string) int {
+				// Get file entities linked to commodity with "invoices" meta
+				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "invoices")
 				c.Assert(err, qt.IsNil)
-				expectedLen := len(invoices) + 1
+				expectedLen := len(files) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
-				invoices, err := params.RegistrySet.InvoiceRegistry.List(c.Context())
+				// Get file entities linked to this commodity with "invoices" meta
+				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "invoices")
 				c.Assert(err, qt.IsNil)
-				c.Assert(invoices, qt.HasLen, expectedLen)
-				c.Assert(invoices[expectedLen-1].Path, qt.Matches, `invoice-\d+`)
-				c.Assert(invoices[expectedLen-1].Ext, qt.Equals, ".pdf")
-				c.Assert(invoices[expectedLen-1].MIMEType, qt.Equals, "application/pdf")
-				c.Assert(invoices[expectedLen-1].CommodityID, qt.Equals, expectedCommodityID)
+				c.Assert(files, qt.HasLen, expectedLen)
+				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `invoice-\d+`)
+				c.Assert(files[expectedLen-1].File.Ext, qt.Equals, ".pdf")
+				c.Assert(files[expectedLen-1].File.MIMEType, qt.Equals, "application/pdf")
+				c.Assert(files[expectedLen-1].LinkedEntityID, qt.Equals, expectedCommodityID)
 			},
 		},
 	}
@@ -95,7 +101,7 @@ func TestUploads(t *testing.T) {
 
 			expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
 			commodity := expectedCommodities[0]
-			expectedLen := tc.expectedLength(c)
+			expectedLen := tc.expectedLength(c, commodity.ID)
 
 			// Create a buffer to write the form data
 			bodyBuf := &bytes.Buffer{}
