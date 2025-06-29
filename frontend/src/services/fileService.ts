@@ -284,7 +284,7 @@ const fileService = {
   /**
    * Get navigation URL for linked entity
    */
-  getLinkedEntityUrl(file: FileEntity): string {
+  getLinkedEntityUrl(file: FileEntity, currentRoute?: any): string {
     if (!this.isLinked(file)) {
       return ''
     }
@@ -292,7 +292,18 @@ const fileService = {
     if (file.linked_entity_type === 'commodity') {
       return `/commodities/${file.linked_entity_id}`
     } else if (file.linked_entity_type === 'export') {
-      return `/exports/${file.linked_entity_id}`
+      // Determine the source page context
+      let fromPage = 'file-view'
+      if (currentRoute) {
+        if (currentRoute.name === 'files') {
+          fromPage = 'file-list'
+        } else if (currentRoute.name === 'file-edit') {
+          fromPage = 'file-edit'
+        } else if (currentRoute.name === 'file-detail') {
+          fromPage = 'file-view'
+        }
+      }
+      return `/exports/${file.linked_entity_id}?from=${fromPage}&fileId=${file.id}`
     }
 
     return ''

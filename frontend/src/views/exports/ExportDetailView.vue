@@ -1,9 +1,9 @@
 <template>
   <div class="export-detail-page" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
     <div class="breadcrumb-nav">
-      <router-link to="/exports" class="breadcrumb-link">
-        <font-awesome-icon icon="arrow-left" /> Back to Exports
-      </router-link>
+      <button class="breadcrumb-link" @click="goBack">
+        <font-awesome-icon icon="arrow-left" /> {{ backLinkText }}
+      </button>
     </div>
     <div class="header">
       <h1>Export Details</h1>
@@ -104,6 +104,26 @@
               <label>File Size</label>
               <div class="value">{{ formatFileSize(exportData.file_size) }}</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export File -->
+      <div v-if="exportData.file_id && exportData.status === 'completed'" class="export-card">
+        <div class="card-header">
+          <h2>Export File</h2>
+        </div>
+        <div class="card-body">
+          <div class="linked-entity-info">
+            <router-link
+              :to="getExportFileUrl(exportData)"
+              class="entity-badge"
+              title="View export file"
+            >
+              <FontAwesomeIcon icon="file-export" />
+              <span class="entity-text">Export File (xml-1.0)</span>
+              <FontAwesomeIcon icon="external-link-alt" class="entity-link-icon" />
+            </router-link>
           </div>
         </div>
       </div>
@@ -430,6 +450,25 @@ const hasStatistics = computed(() => {
          exportData.value.binary_data_size !== undefined
 })
 
+const backLinkText = computed(() => {
+  const from = route.query.from as string
+  const fileId = route.query.fileId as string
+
+  if (from && fileId) {
+    switch (from) {
+      case 'file-list':
+        return 'Back to Files'
+      case 'file-edit':
+        return 'Back to File Edit'
+      case 'file-view':
+        return 'Back to File'
+      default:
+        return 'Back to File'
+    }
+  }
+  return 'Back to Exports'
+})
+
 const loadExport = async () => {
   try {
     loading.value = true
@@ -718,6 +757,35 @@ const navigateToRestore = () => {
   }
 }
 
+const getExportFileUrl = (exportItem: any) => {
+  if (!exportItem.file_id) return ''
+  return `/files/${exportItem.file_id}?from=export&exportId=${exportItem.id}`
+}
+
+const goBack = () => {
+  const from = route.query.from as string
+  const fileId = route.query.fileId as string
+
+  if (from && fileId) {
+    switch (from) {
+      case 'file-list':
+        router.push('/files')
+        break
+      case 'file-edit':
+        router.push(`/files/${fileId}/edit`)
+        break
+      case 'file-view':
+        router.push(`/files/${fileId}`)
+        break
+      default:
+        router.push(`/files/${fileId}`)
+        break
+    }
+  } else {
+    router.push('/exports')
+  }
+}
+
 const retryExport = async () => {
   if (!exportData.value?.id) return
 
@@ -854,6 +922,27 @@ onMounted(() => {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.breadcrumb-nav {
+  margin-bottom: 1rem;
+}
+
+.breadcrumb-link {
+  color: $secondary-color;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    color: $primary-color;
+  }
 }
 
 .header {

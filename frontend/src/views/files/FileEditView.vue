@@ -12,7 +12,7 @@
       <div class="breadcrumb-nav">
         <a href="#" class="breadcrumb-link" @click.prevent="goBack">
           <FontAwesomeIcon icon="arrow-left" />
-          Back to File
+          {{ backLinkText }}
         </a>
       </div>
 
@@ -310,7 +310,12 @@ const commodityMetaOptions = [
 ]
 
 // Make fileService available in template
-const { isLinked, getLinkedEntityDisplay, getLinkedEntityUrl } = fileService
+const { isLinked, getLinkedEntityDisplay } = fileService
+
+// Wrapper function to pass current route context
+const getLinkedEntityUrl = (file: any) => {
+  return fileService.getLinkedEntityUrl(file, route)
+}
 
 // Helper function to get file type label
 const getFileTypeLabel = (type: string): string => {
@@ -327,6 +332,14 @@ const getFileTypeLabel = (type: string): string => {
 
 // Computed
 const fileId = computed(() => route.params.id as string)
+
+const backLinkText = computed(() => {
+  const from = route.query.from as string
+  if (from === 'export') {
+    return 'Back to Export File'
+  }
+  return 'Back to File'
+})
 
 const isFormValid = computed(() => {
   return form.value.path.trim() // Only path is required, title is optional
@@ -525,7 +538,16 @@ const updateFile = async () => {
 
   try {
     await fileService.updateFile(fileId.value, form.value)
-    router.push(`/files/${fileId.value}`)
+
+    // Preserve context when redirecting after save
+    const from = route.query.from as string
+    const exportId = route.query.exportId as string
+
+    if (from === 'export' && exportId) {
+      router.push(`/files/${fileId.value}?from=export&exportId=${exportId}`)
+    } else {
+      router.push(`/files/${fileId.value}`)
+    }
   } catch (err: any) {
     saveError.value = err.response?.data?.message || 'Failed to save changes'
     console.error('Error updating file:', err)
@@ -537,7 +559,14 @@ const updateFile = async () => {
 
 
 const goBack = () => {
-  router.push(`/files/${fileId.value}`)
+  const from = route.query.from as string
+  const exportId = route.query.exportId as string
+
+  if (from === 'export' && exportId) {
+    router.push(`/files/${fileId.value}?from=export&exportId=${exportId}`)
+  } else {
+    router.push(`/files/${fileId.value}`)
+  }
 }
 
 // Lifecycle

@@ -249,10 +249,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import fileService, { type FileEntity } from '@/services/fileService'
 
 const router = useRouter()
+const route = useRoute()
 
 // State
 const files = ref<FileEntity[]>([])
@@ -280,7 +281,12 @@ const fileToDelete = ref<FileEntity | null>(null)
 const fileTypeOptions = fileService.getFileTypeOptions()
 
 // Make fileService methods available in template
-const { isLinked, getLinkedEntityDisplay, getLinkedEntityUrl } = fileService
+const { isLinked, getLinkedEntityDisplay } = fileService
+
+// Wrapper function to pass current route context
+const getLinkedEntityUrl = (file: any) => {
+  return fileService.getLinkedEntityUrl(file, route)
+}
 
 // Computed
 const totalPages = computed(() => Math.ceil(totalFiles.value / pageSize.value))

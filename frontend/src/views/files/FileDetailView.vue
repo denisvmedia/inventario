@@ -31,7 +31,7 @@
       <div class="breadcrumb-nav">
         <button class="breadcrumb-link" @click="goBack">
           <font-awesome-icon icon="arrow-left" />
-          Back to Files
+          {{ backLinkText }}
         </button>
       </div>
 
@@ -213,10 +213,23 @@ const showDeleteModal = ref(false)
 const fileTypeOptions = fileService.getFileTypeOptions()
 
 // Make fileService methods available in template
-const { isLinked, getLinkedEntityDisplay, getLinkedEntityUrl } = fileService
+const { isLinked, getLinkedEntityDisplay } = fileService
+
+// Wrapper function to pass current route context
+const getLinkedEntityUrl = (file: any) => {
+  return fileService.getLinkedEntityUrl(file, route)
+}
 
 // Computed
 const fileId = computed(() => route.params.id as string)
+
+const backLinkText = computed(() => {
+  const from = route.query.from as string
+  if (from === 'export') {
+    return 'Back to Export'
+  }
+  return 'Back to Files'
+})
 
 const canDeleteFile = computed(() => {
   return file.value ? fileService.canDelete(file.value) : false
@@ -296,7 +309,14 @@ const handlePdfError = () => {
 }
 
 const goBack = () => {
-  router.push('/files')
+  const from = route.query.from as string
+  const exportId = route.query.exportId as string
+
+  if (from === 'export' && exportId) {
+    router.push(`/exports/${exportId}`)
+  } else {
+    router.push('/files')
+  }
 }
 
 const downloadFile = () => {
@@ -306,7 +326,14 @@ const downloadFile = () => {
 }
 
 const editFile = () => {
-  router.push(`/files/${fileId.value}/edit`)
+  const from = route.query.from as string
+  const exportId = route.query.exportId as string
+
+  if (from === 'export' && exportId) {
+    router.push(`/files/${fileId.value}/edit?from=export&exportId=${exportId}`)
+  } else {
+    router.push(`/files/${fileId.value}/edit`)
+  }
 }
 
 const confirmDelete = () => {
