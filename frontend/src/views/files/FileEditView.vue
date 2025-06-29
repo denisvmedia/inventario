@@ -598,6 +598,12 @@ onMounted(async () => {
   }
 }
 
+h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  color: $text-color;
+}
+
 .file-preview-card {
   display: flex;
   align-items: flex-start;
@@ -675,7 +681,7 @@ onMounted(async () => {
   }
 
   // Responsive design
-  @media (max-width: 768px) {
+  @media (width <= 768px) {
     flex-direction: column;
     gap: 1rem;
     padding: 1rem;
@@ -825,12 +831,6 @@ onMounted(async () => {
   padding-top: 1.5rem;
   border-top: 1px solid $border-color;
 
-  h3 {
-    margin: 0 0 0.5rem;
-    font-size: 1.125rem;
-    color: $text-color;
-  }
-
   > .form-help {
     margin-bottom: 1rem;
     color: $text-secondary-color;
@@ -953,8 +953,10 @@ onMounted(async () => {
     }
   }
 
-  &:not(.p-disabled):hover .p-select-label {
-    border-color: darken($border-color, 10%);
+  &.p-disabled .p-select-label {
+    background-color: #f8f9fa;
+    color: $text-secondary-color;
+    cursor: not-allowed;
   }
 
   &.p-focus .p-select-label {
@@ -962,10 +964,8 @@ onMounted(async () => {
     box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
   }
 
-  &.p-disabled .p-select-label {
-    background-color: #f8f9fa;
-    color: $text-secondary-color;
-    cursor: not-allowed;
+  &:not(.p-disabled):hover .p-select-label {
+    border-color: color.adjust($border-color, $lightness: -10%);
   }
 }
 </style>
