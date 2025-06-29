@@ -132,7 +132,7 @@ describe('FileList.vue', () => {
 
       expect(wrapper.find('.image-preview').exists()).toBe(true)
       expect(wrapper.find('.preview-image').exists()).toBe(true)
-      expect(wrapper.find('.preview-image').attributes('src')).toBe('/api/v1/commodities/commodity-1/images/file-1.jpg')
+      expect(wrapper.find('.preview-image').attributes('src')).toBe('/api/v1/files/file-1.jpg')
     })
 
     it('renders non-image files with icon preview', () => {
@@ -169,17 +169,17 @@ describe('FileList.vue', () => {
   describe('Methods', () => {
     it('getFileUrl returns correct URL for images', () => {
       const wrapper = createWrapper()
-      expect(wrapper.vm.getFileUrl(mockImageFile)).toBe('/api/v1/commodities/commodity-1/images/file-1.jpg')
+      expect(wrapper.vm.getFileUrl(mockImageFile)).toBe('/api/v1/files/file-1.jpg')
     })
 
     it('getFileUrl returns correct URL for manuals', () => {
       const wrapper = createWrapper({ fileType: 'manuals' })
-      expect(wrapper.vm.getFileUrl(mockPdfFile)).toBe('/api/v1/commodities/commodity-1/manuals/file-2.pdf')
+      expect(wrapper.vm.getFileUrl(mockPdfFile)).toBe('/api/v1/files/file-2.pdf')
     })
 
     it('getFileUrl returns correct URL for invoices', () => {
       const wrapper = createWrapper({ fileType: 'invoices' })
-      expect(wrapper.vm.getFileUrl(mockInvoiceFile)).toBe('/api/v1/commodities/commodity-1/invoices/file-4.docx')
+      expect(wrapper.vm.getFileUrl(mockInvoiceFile)).toBe('/api/v1/files/file-4.docx')
     })
 
     it('getFileName returns path + extension when path is available', () => {

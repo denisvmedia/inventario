@@ -12,7 +12,7 @@
       <div class="breadcrumb-nav">
         <a href="#" class="breadcrumb-link" @click.prevent="goBack">
           <FontAwesomeIcon icon="arrow-left" />
-          Back to File
+          {{ backLinkText }}
         </a>
       </div>
 
@@ -40,6 +40,21 @@
           <div class="file-meta">
             <span class="file-type">{{ getFileTypeLabel(file.type) }}</span>
             <span class="file-ext">{{ file.ext }}</span>
+          </div>
+
+          <!-- Show current link if exists -->
+          <div v-if="file && isLinked(file)" class="current-link-info">
+            <a
+              v-if="getLinkedEntityUrl(file)"
+              :href="getLinkedEntityUrl(file)"
+              class="info-badge"
+              title="View linked entity"
+            >
+              <FontAwesomeIcon icon="link" />
+              Currently linked: {{ getLinkedEntityDisplay(file) }}
+              <FontAwesomeIcon icon="external-link-alt" class="link-nav-icon" />
+              View
+            </a>
           </div>
         </div>
       </div>
@@ -114,6 +129,93 @@
           </div>
         </div>
 
+        <!-- Entity Linking Section -->
+        <div class="form-section">
+          <h3>Entity Linking</h3>
+          <div class="form-help">Link this file to a commodity or export for better organization</div>
+
+          <div class="form-group">
+            <label for="linked_entity_type">Link Type</label>
+            <Select
+              id="linked_entity_type"
+              v-model="form.linked_entity_type"
+              :options="entityTypeOptions"
+              option-label="label"
+              option-value="value"
+              placeholder="Choose entity type"
+              :disabled="isExportFile"
+              @change="onEntityTypeChange"
+            />
+            <div class="form-help">
+              <span v-if="isExportFile">Export files cannot be manually relinked</span>
+              <span v-else>Choose what type of entity to link this file to</span>
+            </div>
+          </div>
+
+          <div v-if="form.linked_entity_type === 'commodity'" class="form-group">
+            <label for="linked_entity_id">Commodity</label>
+            <Select
+              id="linked_entity_id"
+              v-model="form.linked_entity_id"
+              :options="commodityOptions"
+              option-label="label"
+              option-value="value"
+              option-group-label="label"
+              option-group-children="items"
+              :placeholder="loadingCommodities ? 'Loading commodities...' : 'Select commodity'"
+              filter
+              :loading="loadingCommodities"
+              :disabled="isExportFile || loadingCommodities"
+              @show="loadCommodities"
+            />
+            <div class="form-help">
+              <span v-if="isExportFile">Export file entity ID cannot be changed</span>
+              <span v-else-if="loadingCommodities">Loading commodities...</span>
+              <span v-else>Choose the commodity to link this file to</span>
+            </div>
+          </div>
+
+          <div v-if="form.linked_entity_type === 'export'" class="form-group">
+            <label for="linked_entity_id">Export ID</label>
+            <input
+              id="linked_entity_id"
+              v-model="form.linked_entity_id"
+              type="text"
+              class="form-control"
+              disabled
+              readonly
+            />
+            <div class="form-help">Export file entity ID cannot be changed</div>
+          </div>
+
+          <div v-if="form.linked_entity_type === 'commodity'" class="form-group">
+            <label for="linked_entity_meta">File Category</label>
+            <Select
+              id="linked_entity_meta"
+              v-model="form.linked_entity_meta"
+              :options="commodityMetaOptions"
+              option-label="label"
+              option-value="value"
+              placeholder="Select category"
+            />
+            <div class="form-help">What type of commodity file this is</div>
+          </div>
+
+          <div v-if="form.linked_entity_type === 'export'" class="form-group">
+            <label for="linked_entity_meta">Export Version</label>
+            <input
+              id="linked_entity_meta"
+              v-model="form.linked_entity_meta"
+              type="text"
+              class="form-control"
+              disabled
+              readonly
+            />
+            <div class="form-help">Export file version cannot be changed</div>
+          </div>
+
+        </div>
+
         <!-- 3. Read-only File Information Fields -->
         <div class="form-group">
           <label>File Type</label>
@@ -161,7 +263,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import Select from 'primevue/select'
 import fileService, { type FileEntity, type FileUpdateData } from '@/services/fileService'
+import commodityService from '@/services/commodityService'
+import locationService from '@/services/locationService'
+import areaService from '@/services/areaService'
 
 const route = useRoute()
 const router = useRouter()
@@ -178,11 +284,38 @@ const form = ref<FileUpdateData>({
   title: '',
   description: '',
   tags: [],
-  path: ''
+  path: '',
+  linked_entity_type: '',
+  linked_entity_id: '',
+  linked_entity_meta: ''
 })
 
 const tagsInput = ref('')
 const errors = ref<Record<string, string>>({})
+
+// Commodity selection state
+const loadingCommodities = ref(false)
+const commodityOptions = ref<any[]>([])
+
+// Options for select components
+const entityTypeOptions = [
+  { label: 'No link (standalone file)', value: '' },
+  { label: 'Commodity', value: 'commodity' }
+]
+
+const commodityMetaOptions = [
+  { label: 'Images', value: 'images' },
+  { label: 'Invoices', value: 'invoices' },
+  { label: 'Manuals', value: 'manuals' }
+]
+
+// Make fileService available in template
+const { isLinked, getLinkedEntityDisplay } = fileService
+
+// Wrapper function to pass current route context
+const getLinkedEntityUrl = (file: any) => {
+  return fileService.getLinkedEntityUrl(file, route)
+}
 
 // Helper function to get file type label
 const getFileTypeLabel = (type: string): string => {
@@ -200,27 +333,42 @@ const getFileTypeLabel = (type: string): string => {
 // Computed
 const fileId = computed(() => route.params.id as string)
 
+const backLinkText = computed(() => {
+  const from = route.query.from as string
+  if (from === 'export') {
+    return 'Back to Export File'
+  }
+  return 'Back to File'
+})
+
 const isFormValid = computed(() => {
   return form.value.path.trim() // Only path is required, title is optional
+})
+
+const isExportFile = computed(() => {
+  return form.value.linked_entity_type === 'export'
 })
 
 // Methods
 const loadFile = async () => {
   loading.value = true
   error.value = null
-  
+
   try {
     const response = await fileService.getFile(fileId.value)
     file.value = response.data.attributes
-    
+
     // Populate form with current values
     form.value = {
       title: file.value.title,
       description: file.value.description || '',
       tags: [...file.value.tags],
-      path: file.value.path
+      path: file.value.path,
+      linked_entity_type: file.value.linked_entity_type || '',
+      linked_entity_id: file.value.linked_entity_id || '',
+      linked_entity_meta: file.value.linked_entity_meta || ''
     }
-    
+
     tagsInput.value = file.value.tags.join(', ')
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to load file'
@@ -256,13 +404,118 @@ const updateTags = () => {
     .split(',')
     .map(tag => tag.trim())
     .filter(tag => tag.length > 0)
-  
+
   form.value.tags = [...new Set(tags)] // Remove duplicates
 }
 
 const removeTag = (tagToRemove: string) => {
   form.value.tags = form.value.tags.filter(tag => tag !== tagToRemove)
   tagsInput.value = form.value.tags.join(', ')
+}
+
+const onEntityTypeChange = () => {
+  // Clear entity ID and meta when type changes (but not for export files)
+  if (!isExportFile.value) {
+    form.value.linked_entity_id = ''
+    form.value.linked_entity_meta = ''
+  }
+}
+
+const loadCommodities = async () => {
+  if (commodityOptions.value.length > 0) {
+    return // Already loaded
+  }
+
+  loadingCommodities.value = true
+
+  try {
+    // Load all data in parallel
+    const [locationsResponse, areasResponse, commoditiesResponse] = await Promise.all([
+      locationService.getLocations(),
+      areaService.getAreas(),
+      commodityService.getCommodities()
+    ])
+
+    const locations = locationsResponse.data.data.map((item: any) => ({
+      id: item.id,
+      ...item.attributes
+    }))
+
+    const areas = areasResponse.data.data.map((item: any) => ({
+      id: item.id,
+      ...item.attributes
+    }))
+
+    const commodities = commoditiesResponse.data.data.map((item: any) => ({
+      id: item.id,
+      ...item.attributes
+    }))
+
+    // Create maps for quick lookups
+    const locationMap = new Map(locations.map(loc => [loc.id, loc]))
+    const areaMap = new Map(areas.map(area => [area.id, area]))
+
+    // Group commodities by location and area (flat structure for PrimeVue)
+    const groupedOptions: any[] = []
+    const areaGroups = new Map<string, any>()
+
+    // Group commodities by their areas
+    commodities.forEach(commodity => {
+      const area = areaMap.get(commodity.area_id)
+      if (!area) return
+
+      const location = locationMap.get(area.location_id)
+      if (!location) return
+
+      const commodityOption = {
+        label: `${commodity.name} (${commodity.short_name})`,
+        value: commodity.id
+      }
+
+      const areaKey = `${location.id}-${area.id}`
+      if (!areaGroups.has(areaKey)) {
+        areaGroups.set(areaKey, {
+          label: `${location.name} - ${area.name}`,
+          items: []
+        })
+      }
+
+      areaGroups.get(areaKey).items.push(commodityOption)
+    })
+
+    // Convert to array and sort
+    areaGroups.forEach(group => {
+      if (group.items.length > 0) {
+        // Sort commodities within group
+        group.items.sort((a: any, b: any) => a.label.localeCompare(b.label))
+        groupedOptions.push(group)
+      }
+    })
+
+    // Sort groups by location and area name
+    groupedOptions.sort((a, b) => a.label.localeCompare(b.label))
+
+    commodityOptions.value = groupedOptions
+  } catch (err: any) {
+    console.error('Error loading commodities:', err)
+    // Fallback: load all commodities without grouping
+    try {
+      const commoditiesResponse = await commodityService.getCommodities()
+      const commodities = commoditiesResponse.data.data.map((item: any) => ({
+        label: `${item.attributes.name} (${item.attributes.short_name})`,
+        value: item.id
+      }))
+
+      commodityOptions.value = [{
+        label: 'All Commodities',
+        items: commodities
+      }]
+    } catch (fallbackErr: any) {
+      console.error('Error loading commodities fallback:', fallbackErr)
+    }
+  } finally {
+    loadingCommodities.value = false
+  }
 }
 
 const validateForm = (): boolean => {
@@ -285,7 +538,16 @@ const updateFile = async () => {
 
   try {
     await fileService.updateFile(fileId.value, form.value)
-    router.push(`/files/${fileId.value}`)
+
+    // Preserve context when redirecting after save
+    const from = route.query.from as string
+    const exportId = route.query.exportId as string
+
+    if (from === 'export' && exportId) {
+      router.push(`/files/${fileId.value}?from=export&exportId=${exportId}`)
+    } else {
+      router.push(`/files/${fileId.value}`)
+    }
   } catch (err: any) {
     saveError.value = err.response?.data?.message || 'Failed to save changes'
     console.error('Error updating file:', err)
@@ -297,12 +559,24 @@ const updateFile = async () => {
 
 
 const goBack = () => {
-  router.push(`/files/${fileId.value}`)
+  const from = route.query.from as string
+  const exportId = route.query.exportId as string
+
+  if (from === 'export' && exportId) {
+    router.push(`/files/${fileId.value}?from=export&exportId=${exportId}`)
+  } else {
+    router.push(`/files/${fileId.value}`)
+  }
 }
 
 // Lifecycle
-onMounted(() => {
-  loadFile()
+onMounted(async () => {
+  await loadFile()
+
+  // If the file has a linked commodity, load commodities to show the selection
+  if (form.value.linked_entity_type === 'commodity' && form.value.linked_entity_id) {
+    await loadCommodities()
+  }
 })
 </script>
 
@@ -324,15 +598,25 @@ onMounted(() => {
   }
 }
 
+h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  color: $text-color;
+}
+
 .file-preview-card {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  align-items: flex-start;
+  gap: 1.5rem;
   margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: $default-radius;
+  border: 1px solid $border-color;
 
   .file-preview {
-    width: 80px;
-    height: 80px;
+    width: 120px;
+    height: 120px;
     border-radius: $default-radius;
     overflow: hidden;
     background: $light-bg-color;
@@ -340,6 +624,7 @@ onMounted(() => {
     align-items: center;
     justify-content: center;
     border: 1px solid $border-color;
+    flex-shrink: 0;
 
     .preview-image {
       width: 100%;
@@ -348,31 +633,74 @@ onMounted(() => {
     }
 
     .file-icon {
-      font-size: 2.5rem;
+      font-size: 3rem;
       color: $text-secondary-color;
     }
   }
 
   .file-info {
     flex: 1;
+    min-width: 0;
 
     h3 {
-      margin: 0 0 0.5rem;
+      margin: 0 0 1rem;
       color: $text-color;
-      font-size: 1.125rem;
+      font-size: 1.25rem;
+      font-weight: 600;
+      word-break: break-all;
     }
 
     .file-meta {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
 
-      span {
+      .file-type {
         font-size: 0.875rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        background: $light-bg-color;
-        color: $text-secondary-color;
-        border: 1px solid $border-color;
+        padding: 0.375rem 0.75rem;
+        border-radius: 12px;
+        background: $primary-color;
+        color: white;
+        font-weight: 500;
+        text-transform: capitalize;
+      }
+
+      .file-ext {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 12px;
+        background: $text-secondary-color;
+        color: white;
+        font-weight: 500;
+        text-transform: uppercase;
+      }
+    }
+
+
+  }
+
+  // Responsive design
+  @media (width <= 768px) {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+
+    .file-preview {
+      align-self: center;
+      width: 100px;
+      height: 100px;
+    }
+
+    .file-info {
+      text-align: center;
+
+      .file-meta {
+        justify-content: center;
+      }
+
+      .current-link-info {
+        text-align: left;
       }
     }
   }
@@ -498,6 +826,54 @@ onMounted(() => {
   color: $danger-color;
 }
 
+.form-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid $border-color;
+
+  > .form-help {
+    margin-bottom: 1rem;
+    color: $text-secondary-color;
+  }
+}
+
+.current-link-info {
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+
+  .info-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: #e3f2fd;
+    color: #1565c0;
+    border-radius: $default-radius;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid #bbdefb;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    cursor: pointer;
+
+    &:hover {
+      background-color: #e1f5fe;
+      border-color: #90caf9;
+      text-decoration: none;
+    }
+
+    .link-nav-icon {
+      font-size: 0.75rem;
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+    }
+
+    &:hover .link-nav-icon {
+      opacity: 1;
+    }
+  }
+}
+
 .tags-preview {
   margin-top: 0.75rem;
   display: flex;
@@ -554,6 +930,42 @@ onMounted(() => {
 
   svg {
     font-size: 0.75rem;
+  }
+}
+
+// PrimeVue Select styling to match form controls
+:deep(.p-select) {
+  width: 100%;
+
+  .p-select-label {
+    padding: 0.75rem;
+    font-size: 1rem;
+    border: 1px solid $border-color;
+    border-radius: $default-radius;
+    background: white;
+    color: $text-color;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+
+    &.p-placeholder {
+      color: $text-secondary-color;
+    }
+  }
+
+  &.p-disabled .p-select-label {
+    background-color: #f8f9fa;
+    color: $text-secondary-color;
+    cursor: not-allowed;
+  }
+
+  &.p-focus .p-select-label {
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
+
+  &:not(.p-disabled):hover .p-select-label {
+    border-color: #c4c4c4;
   }
 }
 </style>

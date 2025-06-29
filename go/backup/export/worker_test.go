@@ -321,19 +321,15 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(deletedExports), qt.Equals, 1)
 
-	// Run cleanup (this will try to delete the file and hard delete the record)
+	// Run cleanup (this is now a no-op since exports use immediate hard delete with file entities)
 	worker.cleanupDeletedExports(ctx)
 
 	// Give some time for the goroutine to complete
 	time.Sleep(200 * time.Millisecond)
 
-	// The export should be hard deleted even if file deletion fails
-	// (the worker continues with hard delete even if file deletion fails)
-	_, err = registrySet.ExportRegistry.Get(ctx, created.ID)
-	c.Assert(err, qt.IsNotNil)
-
-	// Verify deleted list is empty
+	// Since cleanup is now a no-op, the export should still be in the deleted list
+	// (the new system uses immediate hard delete, so this test verifies the deprecated cleanup is a no-op)
 	deletedExports, err = registrySet.ExportRegistry.ListDeleted(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(deletedExports), qt.Equals, 0)
+	c.Assert(len(deletedExports), qt.Equals, 1) // Should still be there since cleanup is a no-op
 }

@@ -303,14 +303,14 @@ describe('FileViewer.vue', () => {
     it('generates correct URL for image files', () => {
       const wrapper = createWrapper()
 
-      const expectedUrl = '/api/v1/commodities/commodity-1/images/file-1.jpg'
+      const expectedUrl = '/api/v1/files/file-1.jpg'
       expect(wrapper.vm.getFileUrl(mockImageFile)).toBe(expectedUrl)
     })
 
     it('generates correct URL for PDF files', () => {
       const wrapper = createWrapper({ fileType: 'manuals' })
 
-      const expectedUrl = '/api/v1/commodities/commodity-1/manuals/file-2.pdf'
+      const expectedUrl = '/api/v1/files/file-2.pdf'
       expect(wrapper.vm.getFileUrl(mockPdfFile)).toBe(expectedUrl)
     })
 
@@ -325,7 +325,7 @@ describe('FileViewer.vue', () => {
         mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       }
 
-      const expectedUrl = '/api/v1/commodities/commodity-1/invoices/file-3.docx'
+      const expectedUrl = '/api/v1/files/file-3.docx'
       expect(wrapper.vm.getFileUrl(invoiceFile)).toBe(expectedUrl)
     })
 
@@ -350,7 +350,7 @@ describe('FileViewer.vue', () => {
         mime_type: 'image/png'
       }
 
-      const expectedUrl = '/api/v1/commodities/commodity-1/images/file-5.png'
+      const expectedUrl = '/api/v1/files/file-5.png'
       expect(wrapper.vm.getFileUrl(fileWithoutExt)).toBe(expectedUrl)
     })
 
@@ -363,7 +363,7 @@ describe('FileViewer.vue', () => {
       }
 
       // Should default to .bin for unknown file types
-      const expectedUrl = '/api/v1/commodities/commodity-1/images/file-6.bin'
+      const expectedUrl = '/api/v1/files/file-6.bin'
       expect(wrapper.vm.getFileUrl(fileWithoutExtAndMime)).toBe(expectedUrl)
     })
   })
@@ -978,7 +978,7 @@ describe('FileViewer.vue', () => {
       // Should correctly process the file
       expect(wrapper.vm.getFileName(fileWithAttributes)).toBe('test-attr.png')
       expect(wrapper.vm.isImageFile(fileWithAttributes)).toBe(true)
-      expect(wrapper.vm.getFileUrl(fileWithAttributes)).toBe('/api/v1/commodities/commodity-1/images/file-attr.png')
+      expect(wrapper.vm.getFileUrl(fileWithAttributes)).toBe('/api/v1/files/file-attr.png')
     })
 
     it('does nothing when trying to confirm delete with no file', async () => {

@@ -112,7 +112,7 @@
     transition: border-color 0.2s, box-shadow 0.2s;
 
     &:hover {
-      border-color: color.adjust($border-color, $lightness: -10%);
+      border-color: #c4c4c4;
     }
 
     &:focus {

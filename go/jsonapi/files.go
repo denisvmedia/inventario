@@ -2,6 +2,7 @@ package jsonapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -69,15 +70,48 @@ func (*FilesResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 
 // FileRequest represents a request to create or update a file.
 type FileRequest struct {
-	Data struct {
-		ID         string          `json:"id,omitempty"`
-		Type       string          `json:"type"`
-		Attributes FileRequestData `json:"attributes"`
-	} `json:"data"`
+	Data *FileRequestDataWrapper `json:"data"`
+}
+
+// FileRequestDataWrapper wraps the file request data
+type FileRequestDataWrapper struct {
+	ID         string          `json:"id,omitempty"`
+	Type       string          `json:"type"`
+	Attributes FileRequestData `json:"attributes"`
+}
+
+func (frdw *FileRequestDataWrapper) ValidateWithContext(ctx context.Context) error {
+	// Prevent manual creation of export-linked files
+	if frdw.Attributes.LinkedEntityType == "export" {
+		return errors.New("export files cannot be manually created")
+	}
+
+	// Validate commodity linking
+	if frdw.Attributes.LinkedEntityType == "commodity" {
+		if frdw.Attributes.LinkedEntityID == "" {
+			return errors.New("linked entity ID is required for commodity files")
+		}
+		if frdw.Attributes.LinkedEntityMeta == "" {
+			return errors.New("linked entity meta is required for commodity files")
+		}
+		if frdw.Attributes.LinkedEntityMeta != "images" &&
+			frdw.Attributes.LinkedEntityMeta != "invoices" &&
+			frdw.Attributes.LinkedEntityMeta != "manuals" {
+			return errors.New("linked entity meta must be one of: images, invoices, manuals")
+		}
+	}
+
+	fields := make([]*validation.FieldRules, 0)
+	fields = append(fields,
+		validation.Field(&frdw.Type, validation.Required, validation.In("files")),
+		validation.Field(&frdw.Attributes, validation.Required),
+	)
+	return validation.ValidateStructWithContext(ctx, frdw, fields...)
 }
 
 var _ render.Binder = (*FileRequest)(nil)
 var _ validation.ValidatableWithContext = (*FileRequest)(nil)
+var _ validation.ValidatableWithContext = (*FileRequestDataWrapper)(nil)
 
 // Bind validates the FileRequest.
 func (fr *FileRequest) Bind(r *http.Request) error {
@@ -89,8 +123,7 @@ func (fr *FileRequest) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&fr.Data.Type, validation.Required, validation.In("files")),
-		validation.Field(&fr.Data.Attributes, validation.Required),
+		validation.Field(&fr.Data, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, fr, fields...)
@@ -98,11 +131,17 @@ func (fr *FileRequest) ValidateWithContext(ctx context.Context) error {
 
 // FileRequestData contains the attributes for creating/updating a file.
 type FileRequestData struct {
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Path        string   `json:"path,omitempty"` // Only for updates
+	Title            string   `json:"title"`
+	Description      string   `json:"description"`
+	Tags             []string `json:"tags"`
+	Path             string   `json:"path,omitempty"`               // Only for updates
+	LinkedEntityType string   `json:"linked_entity_type,omitempty"` // commodity, export, or empty
+	LinkedEntityID   string   `json:"linked_entity_id,omitempty"`   // ID of linked entity
+	LinkedEntityMeta string   `json:"linked_entity_meta,omitempty"` // metadata about the link
 }
+
+// FileAttributes is an alias for FileRequestData for backward compatibility with tests
+type FileAttributes = FileRequestData
 
 func (frd *FileRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
@@ -114,8 +153,19 @@ func (frd *FileRequestData) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&frd.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&frd.Description, validation.Length(0, 1000)),
-		validation.Field(&frd.Tags),
+		validation.Field(&frd.Tags, validation.Length(0, 100)),                  // Allow up to 100 tags
+		validation.Field(&frd.LinkedEntityType, validation.In("", "commodity")), // Only allow commodity for manual creation
+		validation.Field(&frd.LinkedEntityID, validation.Length(0, 255)),
+		validation.Field(&frd.LinkedEntityMeta, validation.Length(0, 255)),
 	)
+
+	// If linked entity type is specified, validate the linked entity ID and meta
+	if frd.LinkedEntityType == "commodity" {
+		fields = append(fields,
+			validation.Field(&frd.LinkedEntityID, validation.Required),
+			validation.Field(&frd.LinkedEntityMeta, validation.Required, validation.In("images", "invoices", "manuals")),
+		)
+	}
 
 	return validation.ValidateStructWithContext(ctx, frd, fields...)
 }
@@ -169,10 +219,13 @@ func (fd *FileUpdateRequestData) ValidateWithContext(ctx context.Context) error 
 
 // FileUpdateRequestFileData contains the attributes for updating a file.
 type FileUpdateRequestFileData struct {
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Path        string   `json:"path"` // User-editable filename
+	Title            string   `json:"title"`
+	Description      string   `json:"description"`
+	Tags             []string `json:"tags"`
+	Path             string   `json:"path"`                         // User-editable filename
+	LinkedEntityType string   `json:"linked_entity_type,omitempty"` // commodity, export, or empty
+	LinkedEntityID   string   `json:"linked_entity_id,omitempty"`   // ID of linked entity
+	LinkedEntityMeta string   `json:"linked_entity_meta,omitempty"` // metadata about the link
 }
 
 func (fur *FileUpdateRequestFileData) Validate() error {
@@ -187,8 +240,25 @@ func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) e
 		validation.Field(&fur.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&fur.Description, validation.Length(0, 1000)),
 		validation.Field(&fur.Path, validation.Required),
-		validation.Field(&fur.Tags),
+		validation.Field(&fur.Tags, validation.Length(0, 100)),                            // Allow up to 100 tags
+		validation.Field(&fur.LinkedEntityType, validation.In("", "commodity", "export")), // Allow export for existing files
+		validation.Field(&fur.LinkedEntityID, validation.Length(0, 255)),
+		validation.Field(&fur.LinkedEntityMeta, validation.Length(0, 255)),
 	)
+
+	// If linked entity type is specified, validate the linked entity ID and meta
+	switch fur.LinkedEntityType {
+	case "commodity":
+		fields = append(fields,
+			validation.Field(&fur.LinkedEntityID, validation.Required),
+			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("images", "invoices", "manuals")),
+		)
+	case "export":
+		fields = append(fields,
+			validation.Field(&fur.LinkedEntityID, validation.Required),
+			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("xml-1.0")),
+		)
+	}
 
 	return validation.ValidateStructWithContext(ctx, fur, fields...)
 }

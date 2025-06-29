@@ -5,7 +5,7 @@
       No {{ fileType }} uploaded yet.
     </div>
     <div v-else class="files-container">
-      <div v-for="file in files" :key="file.id" class="file-item">
+      <div v-for="file in files" :key="file.id" class="file-item" :data-file-id="file.id" :data-file-ext="file.ext">
         <div v-if="isImageFile(file)" class="file-preview image-preview" @click="openViewer(file)">
           <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
         </div>
@@ -80,14 +80,9 @@ const props = defineProps({
 const emit = defineEmits(['delete', 'download', 'update', 'view-details', 'open-viewer'])
 
 const getFileUrl = (file: any) => {
-  if (props.fileType === 'images') {
-    return `/api/v1/commodities/${props.commodityId}/images/${file.id}${file.ext}`
-  } else if (props.fileType === 'manuals') {
-    return `/api/v1/commodities/${props.commodityId}/manuals/${file.id}${file.ext}`
-  } else if (props.fileType === 'invoices') {
-    return `/api/v1/commodities/${props.commodityId}/invoices/${file.id}${file.ext}`
-  }
-  return ''
+  // Use generic file entity download URL
+  const ext = file.ext.startsWith('.') ? file.ext.substring(1) : file.ext
+  return `/api/v1/files/${file.id}.${ext}`
 }
 
 const getFileName = (file: any) => {

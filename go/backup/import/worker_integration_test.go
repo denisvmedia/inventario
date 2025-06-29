@@ -15,23 +15,12 @@ import (
 )
 
 func newTestRegistrySet() *registry.Set {
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	restoreStepRegistry := memory.NewRestoreStepRegistry()
-
-	return &registry.Set{
-		LocationRegistry:         locationRegistry,
-		AreaRegistry:             areaRegistry,
-		CommodityRegistry:        commodityRegistry,
-		ImageRegistry:            memory.NewImageRegistry(commodityRegistry),
-		InvoiceRegistry:          memory.NewInvoiceRegistry(commodityRegistry),
-		ManualRegistry:           memory.NewManualRegistry(commodityRegistry),
-		SettingsRegistry:         memory.NewSettingsRegistry(),
-		ExportRegistry:           memory.NewExportRegistry(),
-		RestoreOperationRegistry: memory.NewRestoreOperationRegistry(restoreStepRegistry),
-		RestoreStepRegistry:      restoreStepRegistry,
+	// Use the proper NewRegistrySet function to ensure all dependencies are set up correctly
+	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
+	if err != nil {
+		panic(err)
 	}
+	return registrySet
 }
 
 func TestImportWorkerHandlesProcessingErrors(t *testing.T) {

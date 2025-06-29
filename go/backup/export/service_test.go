@@ -23,6 +23,7 @@ func newTestRegistrySet() *registry.Set {
 		AreaRegistry:      memory.NewAreaRegistry(memory.NewLocationRegistry()),
 		CommodityRegistry: memory.NewCommodityRegistry(memory.NewAreaRegistry(memory.NewLocationRegistry())),
 		ExportRegistry:    memory.NewExportRegistry(),
+		FileRegistry:      memory.NewFileRegistry(),
 	}
 	return registrySet
 }
@@ -713,6 +714,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		InvoiceRegistry:   invoiceRegistry,
 		ManualRegistry:    manualRegistry,
 		ExportRegistry:    exportRegistry,
+		FileRegistry:      memory.NewFileRegistry(),
 	}
 
 	// Create test locations

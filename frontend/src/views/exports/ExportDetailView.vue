@@ -1,9 +1,9 @@
 <template>
   <div class="export-detail-page" :class="{ 'deleted': exportData && isExportDeleted(exportData) }">
     <div class="breadcrumb-nav">
-      <router-link to="/exports" class="breadcrumb-link">
-        <font-awesome-icon icon="arrow-left" /> Back to Exports
-      </router-link>
+      <a href="#" class="breadcrumb-link" @click.prevent="goBack">
+        <font-awesome-icon icon="arrow-left" /> {{ backLinkText }}
+      </a>
     </div>
     <div class="header">
       <h1>Export Details</h1>
@@ -104,6 +104,26 @@
               <label>File Size</label>
               <div class="value">{{ formatFileSize(exportData.file_size) }}</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export File -->
+      <div v-if="exportData.file_id && exportData.status === 'completed'" class="export-card">
+        <div class="card-header">
+          <h2>Export File</h2>
+        </div>
+        <div class="card-body">
+          <div class="linked-entity-info">
+            <router-link
+              :to="getExportFileUrl(exportData)"
+              class="entity-badge"
+              title="View export file"
+            >
+              <FontAwesomeIcon icon="file-export" />
+              <span class="entity-text">Export File (xml-1.0)</span>
+              <FontAwesomeIcon icon="external-link-alt" class="entity-link-icon" />
+            </router-link>
           </div>
         </div>
       </div>
@@ -430,6 +450,25 @@ const hasStatistics = computed(() => {
          exportData.value.binary_data_size !== undefined
 })
 
+const backLinkText = computed(() => {
+  const from = route.query.from as string
+  const fileId = route.query.fileId as string
+
+  if (from && fileId) {
+    switch (from) {
+      case 'file-list':
+        return 'Back to Files'
+      case 'file-edit':
+        return 'Back to File Edit'
+      case 'file-view':
+        return 'Back to File'
+      default:
+        return 'Back to File'
+    }
+  }
+  return 'Back to Exports'
+})
+
 const loadExport = async () => {
   try {
     loading.value = true
@@ -718,6 +757,35 @@ const navigateToRestore = () => {
   }
 }
 
+const getExportFileUrl = (exportItem: any) => {
+  if (!exportItem.file_id) return ''
+  return `/files/${exportItem.file_id}?from=export&exportId=${exportItem.id}`
+}
+
+const goBack = () => {
+  const from = route.query.from as string
+  const fileId = route.query.fileId as string
+
+  if (from && fileId) {
+    switch (from) {
+      case 'file-list':
+        router.push('/files')
+        break
+      case 'file-edit':
+        router.push(`/files/${fileId}/edit`)
+        break
+      case 'file-view':
+        router.push(`/files/${fileId}`)
+        break
+      default:
+        router.push(`/files/${fileId}`)
+        break
+    }
+  } else {
+    router.push('/exports')
+  }
+}
+
 const retryExport = async () => {
   if (!exportData.value?.id) return
 
@@ -856,17 +924,26 @@ onMounted(() => {
   padding: 20px;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+.breadcrumb-nav {
+  margin-bottom: 1rem;
 }
 
-.header h1 {
-  margin: 0;
-  font-size: 2rem;
+.breadcrumb-link {
+  color: $secondary-color;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+
+  &:hover {
+    color: $primary-color;
+    text-decoration: none;
+  }
 }
+
+// Header styles are now in shared _header.scss
 
 .export-content {
   display: flex;
@@ -1370,6 +1447,46 @@ onMounted(() => {
   &:hover:not(:disabled) {
     background-color: #1565c0;
     border-color: #1565c0;
+  }
+}
+
+/* Entity Badge Styling for Export File */
+.linked-entity-info {
+  .entity-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: #e3f2fd;
+    color: #1565c0;
+    border-radius: $default-radius;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid #bbdefb;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    cursor: pointer;
+
+    &:hover {
+      background-color: #e1f5fe;
+      border-color: #90caf9;
+      text-decoration: none;
+    }
+
+    .entity-text {
+      flex: 1;
+    }
+
+    .entity-link-icon {
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+    }
+
+    &:hover .entity-link-icon {
+      opacity: 1;
+    }
   }
 }
 </style>

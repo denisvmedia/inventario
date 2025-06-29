@@ -170,38 +170,89 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if export is completed and has a file path
-	if exp.Status != models.ExportStatusCompleted || exp.FilePath == "" {
+	// Check if export is completed and has a file entity
+	if exp.Status != models.ExportStatusCompleted {
 		http.NotFound(w, r)
 		return
 	}
 
-	// Get file attributes to set Content-Length and other headers
-	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, exp.FilePath)
+	// Get the file entity for the export
+	var fileEntity *models.FileEntity
+	var err error
+
+	switch {
+	case exp.FileID != "":
+		// Use new file entity system
+		fileEntity, err = api.registrySet.FileRegistry.Get(r.Context(), exp.FileID)
+		if err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+	case exp.FilePath != "":
+		// Fallback to old file path system for backward compatibility
+		attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, exp.FilePath)
+		if err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+
+		file, err := api.getDownloadFile(r.Context(), exp.FilePath)
+		if err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+		defer file.Close()
+
+		filename := path.Base(exp.FilePath)
+		if filename == "" {
+			filename = "export.xml"
+		}
+
+		downloadutils.SetStreamingHeaders(w, "application/xml", attrs.Size, filename)
+		if err := downloadutils.CopyFileInChunks(w, file); err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+		return
+	default:
+		http.NotFound(w, r)
+		return
+	}
+
+	// Use file entity download
+	if fileEntity.File == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Get file attributes for Content-Length header
+	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, fileEntity.OriginalPath)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
-	file, err := api.getDownloadFile(r.Context(), exp.FilePath)
+	// Set streaming headers
+	filename := fileEntity.Path + fileEntity.Ext
+	downloadutils.SetStreamingHeaders(w, fileEntity.MIMEType, attrs.Size, filename)
+
+	// Open and stream the file
+	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
 	if err != nil {
-		internalServerError(w, r, err)
+		internalServerError(w, r, errkit.Wrap(err, "failed to open bucket"))
 		return
 	}
-	defer file.Close()
+	defer b.Close()
 
-	// Generate filename based on export description and type
-	filename := path.Base(exp.FilePath)
-	if filename == "" {
-		filename = "exp.xml"
+	reader, err := b.NewReader(r.Context(), fileEntity.OriginalPath, nil)
+	if err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to open file"))
+		return
 	}
+	defer reader.Close()
 
-	// Set headers to optimize streaming and prevent browser preloading
-	// downloadutils.SetStreamingHeaders(w, "application/xml", attrs.Size, filename)
-	downloadutils.SetStreamingHeaders(w, "application/octet-stream", attrs.Size, filename)
-
-	// Use chunked copying to prevent browser buffering
-	if err := downloadutils.CopyFileInChunks(w, file); err != nil {
+	// Stream the file in chunks
+	if err := downloadutils.CopyFileInChunks(w, reader); err != nil {
 		internalServerError(w, r, err)
 		return
 	}

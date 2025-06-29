@@ -29,10 +29,10 @@
     <div v-else-if="file">
       <!-- Breadcrumb Navigation -->
       <div class="breadcrumb-nav">
-        <button class="breadcrumb-link" @click="goBack">
+        <a href="#" class="breadcrumb-link" @click.prevent="goBack">
           <font-awesome-icon icon="arrow-left" />
-          Back to Files
-        </button>
+          {{ backLinkText }}
+        </a>
       </div>
 
       <!-- Header -->
@@ -46,7 +46,7 @@
           </div>
         </div>
 
-        <div class="header-actions">
+        <div class="actions">
           <button class="btn btn-secondary" @click="downloadFile">
             <font-awesome-icon icon="download" />
             Download
@@ -55,8 +55,21 @@
             <font-awesome-icon icon="edit" />
             Edit
           </button>
-          <button class="btn btn-danger" @click="confirmDelete">
+          <button
+            v-if="canDeleteFile"
+            class="btn btn-danger"
+            @click="confirmDelete"
+          >
             <font-awesome-icon icon="trash" />
+            Delete
+          </button>
+          <button
+            v-else
+            class="btn btn-secondary btn-disabled"
+            :title="deleteRestrictionReason"
+            disabled
+          >
+            <font-awesome-icon icon="lock" />
             Delete
           </button>
         </div>
@@ -112,6 +125,21 @@
               </span>
             </div>
             <p v-else class="no-tags">No tags</p>
+          </div>
+
+          <div v-if="isLinked(file)" class="info-card">
+            <h2>Linked Entity</h2>
+            <div class="linked-entity-info">
+              <router-link
+                :to="getLinkedEntityUrl(file)"
+                class="entity-badge"
+                title="View linked entity"
+              >
+                <FontAwesomeIcon :icon="getEntityIcon(file)" />
+                <span class="entity-text">{{ getLinkedEntityDisplay(file) }}</span>
+                <FontAwesomeIcon icon="external-link-alt" class="entity-link-icon" />
+              </router-link>
+            </div>
           </div>
 
           <div class="info-card">
@@ -184,18 +212,42 @@ const showDeleteModal = ref(false)
 // File type options for labels
 const fileTypeOptions = fileService.getFileTypeOptions()
 
+// Make fileService methods available in template
+const { isLinked, getLinkedEntityDisplay } = fileService
+
+// Wrapper function to pass current route context
+const getLinkedEntityUrl = (file: any) => {
+  return fileService.getLinkedEntityUrl(file, route)
+}
+
 // Computed
 const fileId = computed(() => route.params.id as string)
+
+const backLinkText = computed(() => {
+  const from = route.query.from as string
+  if (from === 'export') {
+    return 'Back to Export'
+  }
+  return 'Back to Files'
+})
+
+const canDeleteFile = computed(() => {
+  return file.value ? fileService.canDelete(file.value) : false
+})
+
+const deleteRestrictionReason = computed(() => {
+  return file.value ? fileService.getDeleteRestrictionReason(file.value) : ''
+})
 
 // Methods
 const loadFile = async () => {
   loading.value = true
   error.value = null
-  
+
   try {
     const response = await fileService.getFile(fileId.value)
     file.value = response.data.attributes
-    
+
     // Try to get file size (this would need to be added to the API response)
     // For now, we'll skip this or implement it later
   } catch (err: any) {
@@ -223,6 +275,15 @@ const getDisplayTitle = (file: FileEntity) => {
   return fileService.getDisplayTitle(file)
 }
 
+const getEntityIcon = (file: FileEntity) => {
+  if (file.linked_entity_type === 'commodity') {
+    return 'box'
+  } else if (file.linked_entity_type === 'export') {
+    return 'file-export'
+  }
+  return 'link'
+}
+
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString()
 }
@@ -248,7 +309,14 @@ const handlePdfError = () => {
 }
 
 const goBack = () => {
-  router.push('/files')
+  const from = route.query.from as string
+  const exportId = route.query.exportId as string
+
+  if (from === 'export' && exportId) {
+    router.push(`/exports/${exportId}`)
+  } else {
+    router.push('/files')
+  }
 }
 
 const downloadFile = () => {
@@ -258,10 +326,20 @@ const downloadFile = () => {
 }
 
 const editFile = () => {
-  router.push(`/files/${fileId.value}/edit`)
+  const from = route.query.from as string
+  const exportId = route.query.exportId as string
+
+  if (from === 'export' && exportId) {
+    router.push(`/files/${fileId.value}/edit?from=export&exportId=${exportId}`)
+  } else {
+    router.push(`/files/${fileId.value}/edit`)
+  }
 }
 
 const confirmDelete = () => {
+  if (!canDeleteFile.value) {
+    return // Don't allow deletion of restricted files
+  }
   showDeleteModal.value = true
 }
 
@@ -271,9 +349,9 @@ const cancelDelete = () => {
 
 const deleteFile = async () => {
   if (!file.value) return
-  
+
   deleting.value = true
-  
+
   try {
     await fileService.deleteFile(file.value.id)
     router.push('/files')
@@ -313,9 +391,6 @@ onMounted(() => {
   align-items: center;
   gap: 0.5rem;
   transition: color 0.2s;
-  background: none;
-  border: none;
-  cursor: pointer;
 
   &:hover {
     color: $primary-color;
@@ -452,6 +527,45 @@ onMounted(() => {
         .value {
           color: $text-color;
           word-break: break-all;
+        }
+      }
+    }
+
+    .linked-entity-info {
+      .entity-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background-color: #e3f2fd;
+        color: #1565c0;
+        border-radius: $default-radius;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border: 1px solid #bbdefb;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        cursor: pointer;
+
+        &:hover {
+          background-color: #e1f5fe;
+          border-color: #90caf9;
+          text-decoration: none;
+        }
+
+        .entity-text {
+          flex: 1;
+        }
+
+        .entity-link-icon {
+          flex-shrink: 0;
+          font-size: 0.75rem;
+          opacity: 0.8;
+          transition: opacity 0.2s ease;
+        }
+
+        &:hover .entity-link-icon {
+          opacity: 1;
         }
       }
     }

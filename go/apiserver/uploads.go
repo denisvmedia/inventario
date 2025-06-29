@@ -68,20 +68,32 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.imageRegistry.Create(r.Context(), models.Image{
-			CommodityID: entityID,
+		// Create file entity instead of image
+		now := time.Now()
+		fileEntity := models.FileEntity{
+			Title:            pathWithoutExt, // Use filename as title
+			Description:      "",
+			Type:             models.FileTypeImage,
+			Tags:             []string{},
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   entityID,
+			LinkedEntityMeta: "images",
+			CreatedAt:        now,
+			UpdatedAt:        now,
 			File: &models.File{
-				Path:         pathWithoutExt, // Just the filename without extension
+				Path:         pathWithoutExt,
 				OriginalPath: originalPath,
 				Ext:          ext,
 				MIMEType:     f.MIMEType,
 			},
-		})
+		}
+
+		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
 		}
-		uploadData.FileNames = append(uploadData.FileNames, img.Path)
+		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
@@ -115,20 +127,32 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.manualRegistry.Create(r.Context(), models.Manual{
-			CommodityID: entityID,
+		// Create file entity instead of manual
+		now := time.Now()
+		fileEntity := models.FileEntity{
+			Title:            pathWithoutExt, // Use filename as title
+			Description:      "",
+			Type:             models.FileTypeDocument,
+			Tags:             []string{},
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   entityID,
+			LinkedEntityMeta: "manuals",
+			CreatedAt:        now,
+			UpdatedAt:        now,
 			File: &models.File{
-				Path:         pathWithoutExt, // Just the filename without extension
+				Path:         pathWithoutExt,
 				OriginalPath: originalPath,
 				Ext:          ext,
 				MIMEType:     f.MIMEType,
 			},
-		})
+		}
+
+		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
 		}
-		uploadData.FileNames = append(uploadData.FileNames, img.Path)
+		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
@@ -162,20 +186,32 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.invoiceRegistry.Create(r.Context(), models.Invoice{
-			CommodityID: entityID,
+		// Create file entity instead of invoice
+		now := time.Now()
+		fileEntity := models.FileEntity{
+			Title:            pathWithoutExt, // Use filename as title
+			Description:      "",
+			Type:             models.FileTypeDocument,
+			Tags:             []string{},
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   entityID,
+			LinkedEntityMeta: "invoices",
+			CreatedAt:        now,
+			UpdatedAt:        now,
 			File: &models.File{
-				Path:         pathWithoutExt, // Just the filename without extension
+				Path:         pathWithoutExt,
 				OriginalPath: originalPath,
 				Ext:          ext,
 				MIMEType:     f.MIMEType,
 			},
-		})
+		}
+
+		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
 		}
-		uploadData.FileNames = append(uploadData.FileNames, img.Path)
+		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)

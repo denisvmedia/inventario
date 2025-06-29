@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -273,21 +274,24 @@ func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var images []*models.Image
-	imageIDs, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
+	// Get file entities linked to this commodity with "images" meta
+	files, err := api.registrySet.FileRegistry.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "images")
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
-	for _, id := range imageIDs {
-		img, err := api.registrySet.ImageRegistry.Get(r.Context(), id)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
+
+	// Convert file entities to legacy image format for compatibility
+	var images []*models.Image
+	for _, file := range files {
+		image := &models.Image{
+			EntityID:    models.EntityID{ID: file.ID},
+			CommodityID: commodity.ID,
+			File:        file.File,
 		}
-		images = append(images, img)
+		images = append(images, image)
 	}
-	response := jsonapi.NewImagesResponse(images, len(imageIDs))
+	response := jsonapi.NewImagesResponse(images, len(files))
 
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
@@ -311,21 +315,24 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var invoices []*models.Invoice
-	invoiceIDs, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
+	// Get file entities linked to this commodity with "invoices" meta
+	files, err := api.registrySet.FileRegistry.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "invoices")
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
-	for _, id := range invoiceIDs {
-		invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), id)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
+
+	// Convert file entities to legacy invoice format for compatibility
+	var invoices []*models.Invoice
+	for _, file := range files {
+		invoice := &models.Invoice{
+			EntityID:    models.EntityID{ID: file.ID},
+			CommodityID: commodity.ID,
+			File:        file.File,
 		}
 		invoices = append(invoices, invoice)
 	}
-	response := jsonapi.NewInvoicesResponse(invoices, len(invoiceIDs))
+	response := jsonapi.NewInvoicesResponse(invoices, len(files))
 
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
@@ -349,21 +356,24 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var manuals []*models.Manual
-	manualIDs, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
+	// Get file entities linked to this commodity with "manuals" meta
+	files, err := api.registrySet.FileRegistry.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "manuals")
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
-	for _, id := range manualIDs {
-		manual, err := api.registrySet.ManualRegistry.Get(r.Context(), id)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
+
+	// Convert file entities to legacy manual format for compatibility
+	var manuals []*models.Manual
+	for _, file := range files {
+		manual := &models.Manual{
+			EntityID:    models.EntityID{ID: file.ID},
+			CommodityID: commodity.ID,
+			File:        file.File,
 		}
 		manuals = append(manuals, manual)
 	}
-	response := jsonapi.NewManualsResponse(manuals, len(manualIDs))
+	response := jsonapi.NewManualsResponse(manuals, len(files))
 
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
@@ -390,18 +400,21 @@ func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	imageID := chi.URLParam(r, "imageID")
-	image, err := api.registrySet.ImageRegistry.Get(r.Context(), imageID)
+
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	if image.CommodityID != commodity.ID {
-		unprocessableEntityError(w, r, errors.New("image does not belong to commodity"))
+	// Verify it belongs to this commodity and is an image
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodity.ID || file.LinkedEntityMeta != "images" {
+		unprocessableEntityError(w, r, errors.New("file does not belong to commodity or is not an image"))
 		return
 	}
 
-	err = api.registrySet.ImageRegistry.Delete(r.Context(), imageID)
+	err = api.registrySet.FileRegistry.Delete(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -429,18 +442,21 @@ func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request)
 	}
 
 	invoiceID := chi.URLParam(r, "invoiceID")
-	invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), invoiceID)
+
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	if invoice.CommodityID != commodity.ID {
-		unprocessableEntityError(w, r, errors.New("invoice does not belong to commodity"))
+	// Verify it belongs to this commodity and is an invoice
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodity.ID || file.LinkedEntityMeta != "invoices" {
+		unprocessableEntityError(w, r, errors.New("file does not belong to commodity or is not an invoice"))
 		return
 	}
 
-	err = api.registrySet.InvoiceRegistry.Delete(r.Context(), invoiceID)
+	err = api.registrySet.FileRegistry.Delete(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -468,18 +484,21 @@ func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) 
 	}
 
 	manualID := chi.URLParam(r, "manualID")
-	manual, err := api.registrySet.ManualRegistry.Get(r.Context(), manualID)
+
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	if manual.CommodityID != commodity.ID {
-		unprocessableEntityError(w, r, errors.New("manual does not belong to commodity"))
+	// Verify it belongs to this commodity and is a manual
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodity.ID || file.LinkedEntityMeta != "manuals" {
+		unprocessableEntityError(w, r, errors.New("file does not belong to commodity or is not a manual"))
 		return
 	}
 
-	err = api.registrySet.ManualRegistry.Delete(r.Context(), manualID)
+	err = api.registrySet.FileRegistry.Delete(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -675,10 +694,24 @@ func (api *commoditiesAPI) getDownloadFile(ctx context.Context, originalPath str
 func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	imageID := chi.URLParam(r, "imageID")
 
-	image, err := api.registrySet.ImageRegistry.Get(r.Context(), imageID)
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
+	}
+
+	// Verify it's a commodity image
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityMeta != "images" {
+		unprocessableEntityError(w, r, errors.New("file is not a commodity image"))
+		return
+	}
+
+	// Convert to legacy image format for compatibility
+	image := &models.Image{
+		EntityID:    models.EntityID{ID: file.ID},
+		CommodityID: file.LinkedEntityID,
+		File:        file.File,
 	}
 
 	response := jsonapi.NewImageResponse(image)
@@ -703,10 +736,24 @@ func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) 
 func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	invoiceID := chi.URLParam(r, "invoiceID")
 
-	invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), invoiceID)
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
+	}
+
+	// Verify it's a commodity invoice
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityMeta != "invoices" {
+		unprocessableEntityError(w, r, errors.New("file is not a commodity invoice"))
+		return
+	}
+
+	// Convert to legacy invoice format for compatibility
+	invoice := &models.Invoice{
+		EntityID:    models.EntityID{ID: file.ID},
+		CommodityID: file.LinkedEntityID,
+		File:        file.File,
 	}
 
 	response := jsonapi.NewInvoiceResponse(invoice)
@@ -731,10 +778,24 @@ func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request
 func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	manualID := chi.URLParam(r, "manualID")
 
-	manual, err := api.registrySet.ManualRegistry.Get(r.Context(), manualID)
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
+	}
+
+	// Verify it's a commodity manual
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityMeta != "manuals" {
+		unprocessableEntityError(w, r, errors.New("file is not a commodity manual"))
+		return
+	}
+
+	// Convert to legacy manual format for compatibility
+	manual := &models.Manual{
+		EntityID:    models.EntityID{ID: file.ID},
+		CommodityID: file.LinkedEntityID,
+		File:        file.File,
 	}
 
 	response := jsonapi.NewManualResponse(manual)
@@ -771,19 +832,34 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	image, err := api.registrySet.ImageRegistry.Get(r.Context(), imageID)
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	// Only update the Path field
-	image.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	// Verify it's a commodity image
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityMeta != "images" {
+		unprocessableEntityError(w, r, errors.New("file is not a commodity image"))
+		return
+	}
 
-	updatedImage, err := api.registrySet.ImageRegistry.Update(r.Context(), *image)
+	// Update the file entity
+	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	file.UpdatedAt = time.Now()
+
+	updatedFile, err := api.registrySet.FileRegistry.Update(r.Context(), *file)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
+	}
+
+	// Convert back to legacy image format for compatibility
+	updatedImage := &models.Image{
+		EntityID:    models.EntityID{ID: updatedFile.ID},
+		CommodityID: updatedFile.LinkedEntityID,
+		File:        updatedFile.File,
 	}
 
 	response := jsonapi.NewImageResponse(updatedImage)
@@ -820,19 +896,34 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), invoiceID)
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	// Only update the Path field
-	invoice.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	// Verify it's a commodity invoice
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityMeta != "invoices" {
+		unprocessableEntityError(w, r, errors.New("file is not a commodity invoice"))
+		return
+	}
 
-	updatedInvoice, err := api.registrySet.InvoiceRegistry.Update(r.Context(), *invoice)
+	// Update the file entity
+	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	file.UpdatedAt = time.Now()
+
+	updatedFile, err := api.registrySet.FileRegistry.Update(r.Context(), *file)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
+	}
+
+	// Convert back to legacy invoice format for compatibility
+	updatedInvoice := &models.Invoice{
+		EntityID:    models.EntityID{ID: updatedFile.ID},
+		CommodityID: updatedFile.LinkedEntityID,
+		File:        updatedFile.File,
 	}
 
 	response := jsonapi.NewInvoiceResponse(updatedInvoice)
@@ -869,19 +960,34 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	manual, err := api.registrySet.ManualRegistry.Get(r.Context(), manualID)
+	// Get the file entity
+	file, err := api.registrySet.FileRegistry.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	// Only update the Path field
-	manual.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	// Verify it's a commodity manual
+	if file.LinkedEntityType != "commodity" || file.LinkedEntityMeta != "manuals" {
+		unprocessableEntityError(w, r, errors.New("file is not a commodity manual"))
+		return
+	}
 
-	updatedManual, err := api.registrySet.ManualRegistry.Update(r.Context(), *manual)
+	// Update the file entity
+	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	file.UpdatedAt = time.Now()
+
+	updatedFile, err := api.registrySet.FileRegistry.Update(r.Context(), *file)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
+	}
+
+	// Convert back to legacy manual format for compatibility
+	updatedManual := &models.Manual{
+		EntityID:    models.EntityID{ID: updatedFile.ID},
+		CommodityID: updatedFile.LinkedEntityID,
+		File:        updatedFile.File,
 	}
 
 	response := jsonapi.NewManualResponse(updatedManual)

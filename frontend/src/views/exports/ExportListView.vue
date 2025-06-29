@@ -12,7 +12,7 @@
           <ToggleSwitch v-model="showDeleted" @change="loadExports" />
           <label class="toggle-label">Show deleted exports</label>
         </div>
-        <div class="action-buttons">
+        <div class="actions">
           <router-link to="/exports/import" class="btn btn-secondary">
             <font-awesome-icon icon="upload" /> Import
           </router-link>
@@ -280,11 +280,6 @@ onMounted(() => {
 }
 
 // Header styles are now in shared _header.scss
-
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
 
 .empty-message p {
   color: $text-secondary-color;
