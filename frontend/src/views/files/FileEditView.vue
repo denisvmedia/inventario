@@ -965,7 +965,7 @@ h3 {
   }
 
   &:not(.p-disabled):hover .p-select-label {
-    border-color: color.adjust($border-color, $lightness: -10%);
+    border-color: #c4c4c4;
   }
 }
 </style>
