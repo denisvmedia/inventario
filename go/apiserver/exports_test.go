@@ -26,7 +26,6 @@ func TestExportHardDelete(t *testing.T) {
 	// Create test registry
 	exportRegistry := memory.NewExportRegistry()
 	fileRegistry := memory.NewFileRegistry()
-	exportRegistry.(*memory.ExportRegistry).SetFileRegistry(fileRegistry)
 
 	registrySet := &registry.Set{
 		ExportRegistry: exportRegistry,

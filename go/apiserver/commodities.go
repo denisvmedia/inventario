@@ -19,11 +19,13 @@ import (
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 type commoditiesAPI struct {
 	uploadLocation string
 	registrySet    *registry.Set
+	entityService  *services.EntityService
 }
 
 // listCommodities lists all commodities.
@@ -172,7 +174,7 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := api.registrySet.CommodityRegistry.DeleteRecursive(r.Context(), commodity.ID)
+	err := api.entityService.DeleteCommodityRecursive(r.Context(), commodity.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -1002,6 +1004,7 @@ func Commodities(params Params) func(r chi.Router) {
 	api := &commoditiesAPI{
 		uploadLocation: params.UploadLocation,
 		registrySet:    params.RegistrySet,
+		entityService:  params.EntityService,
 	}
 
 	return func(r chi.Router) {

@@ -12,13 +12,14 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func newTestRegistrySet() *registry.Set {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
 	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, fileRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	restoreStepRegistry := memory.NewRestoreStepRegistry()
 
 	return &registry.Set{
@@ -44,7 +45,8 @@ func TestNewRestoreWorker(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	restoreService := restore.NewRestoreService(registrySet, uploadLocation)
+	entityService := services.NewEntityService(registrySet)
+	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	c.Assert(worker, qt.IsNotNil)
@@ -59,7 +61,8 @@ func TestRestoreWorkerStartStop(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	restoreService := restore.NewRestoreService(registrySet, uploadLocation)
+	entityService := services.NewEntityService(registrySet)
+	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -93,7 +96,8 @@ func TestRestoreWorkerConcurrentAccess(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	restoreService := restore.NewRestoreService(registrySet, uploadLocation)
+	entityService := services.NewEntityService(registrySet)
+	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -139,7 +143,8 @@ func TestRestoreWorkerContextCancellation(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	restoreService := restore.NewRestoreService(registrySet, uploadLocation)
+	entityService := services.NewEntityService(registrySet)
+	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -166,7 +171,8 @@ func TestRestoreWorkerConfigurableConcurrentLimit(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	restoreService := restore.NewRestoreService(registrySet, uploadLocation)
+	entityService := services.NewEntityService(registrySet)
+	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 
 	// Test with different concurrent limits
 	worker1 := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
@@ -182,7 +188,8 @@ func TestHasRunningRestores(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	restoreService := restore.NewRestoreService(registrySet, uploadLocation)
+	entityService := services.NewEntityService(registrySet)
+	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	ctx := context.Background()
@@ -221,7 +228,8 @@ func TestHasRunningRestores_PendingAlsoBlocks(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	restoreService := restore.NewRestoreService(registrySet, uploadLocation)
+	entityService := services.NewEntityService(registrySet)
+	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	ctx := context.Background()

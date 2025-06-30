@@ -12,6 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_FileElementParsing(t *testing.T) {
@@ -74,7 +75,8 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 </inventory>`
 
 	// Create restore service with file:// blob storage for testing
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
 	options := restore.RestoreOptions{
@@ -193,7 +195,8 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing DISABLED
 	options := restore.RestoreOptions{
@@ -275,7 +278,8 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
@@ -383,7 +387,8 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
@@ -501,7 +506,8 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 </inventory>`
 
 	// Create restore service with file:// blob storage for testing
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
 	options := restore.RestoreOptions{

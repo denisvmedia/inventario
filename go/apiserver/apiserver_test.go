@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 const uploadLocation = "file://uploads?memfs=1&create_dir=1"
@@ -56,8 +57,8 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 	return areaRegistry
 }
 
-func newCommodityRegistry(areaRegistry registry.AreaRegistry, fileRegistry registry.FileRegistry) registry.CommodityRegistry {
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, fileRegistry)
+func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 
 	areas := must.Must(areaRegistry.List(context.Background()))
 
@@ -474,11 +475,14 @@ func newParams() apiserver.Params {
 	// Create FileRegistry and populate it with test data first
 	params.RegistrySet.FileRegistry = memory.NewFileRegistry()
 
-	// Create CommodityRegistry with the same FileRegistry instance
-	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry, params.RegistrySet.FileRegistry)
+	// Create CommodityRegistry
+	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry)
 	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
+
+	// Create EntityService
+	params.EntityService = services.NewEntityService(params.RegistrySet)
 
 	// Populate FileRegistry with test data using the same instance
 	populateFileRegistryWithTestData(params.RegistrySet.FileRegistry, params.RegistrySet.CommodityRegistry)

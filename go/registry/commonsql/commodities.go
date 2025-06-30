@@ -3,7 +3,6 @@ package commonsql
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
@@ -15,20 +14,18 @@ import (
 var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
 
 type CommodityRegistry struct {
-	dbx          *sqlx.DB
-	tableNames   TableNames
-	fileRegistry registry.FileRegistry
+	dbx        *sqlx.DB
+	tableNames TableNames
 }
 
-func NewCommodityRegistry(dbx *sqlx.DB, fileRegistry registry.FileRegistry) *CommodityRegistry {
-	return NewCommodityRegistryWithTableNames(dbx, DefaultTableNames, fileRegistry)
+func NewCommodityRegistry(dbx *sqlx.DB) *CommodityRegistry {
+	return NewCommodityRegistryWithTableNames(dbx, DefaultTableNames)
 }
 
-func NewCommodityRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames, fileRegistry registry.FileRegistry) *CommodityRegistry {
+func NewCommodityRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *CommodityRegistry {
 	return &CommodityRegistry{
-		dbx:          dbx,
-		tableNames:   tableNames,
-		fileRegistry: fileRegistry,
+		dbx:        dbx,
+		tableNames: tableNames,
 	}
 }
 
@@ -183,47 +180,7 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// DeleteRecursive deletes a commodity and all its linked files recursively
-func (r *CommodityRegistry) DeleteRecursive(ctx context.Context, id string) error {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
 
-	// Check if the commodity exists
-	_, err = r.get(ctx, tx, id)
-	if err != nil {
-		return err
-	}
-
-	// First, delete all linked files
-	if r.fileRegistry != nil {
-		files, err := r.fileRegistry.ListByLinkedEntity(ctx, "commodity", id)
-		if err != nil {
-			return errkit.Wrap(err, "failed to get linked files")
-		}
-
-		// Delete all linked files
-		for _, file := range files {
-			err = r.fileRegistry.Delete(ctx, file.ID)
-			if err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to delete linked file %s", file.ID))
-			}
-		}
-	}
-
-	// Finally, delete the commodity
-	err = DeleteEntityByField(ctx, tx, r.tableNames.Commodities(), "id", id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete commodity")
-	}
-
-	return nil
-}
 
 func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 	cnt, err := CountEntities(ctx, r.dbx, r.tableNames.Commodities())
