@@ -17,7 +17,8 @@ import (
 func newTestRegistrySet() *registry.Set {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+	fileRegistry := memory.NewFileRegistry()
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, fileRegistry)
 	restoreStepRegistry := memory.NewRestoreStepRegistry()
 
 	return &registry.Set{
@@ -31,6 +32,7 @@ func newTestRegistrySet() *registry.Set {
 		ExportRegistry:           memory.NewExportRegistry(),
 		RestoreOperationRegistry: memory.NewRestoreOperationRegistry(restoreStepRegistry),
 		RestoreStepRegistry:      restoreStepRegistry,
+		FileRegistry:             fileRegistry,
 	}
 }
 
