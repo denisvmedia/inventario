@@ -1026,7 +1026,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete a commodity by ID",
+                "description": "Delete a commodity by ID and all its linked files",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
