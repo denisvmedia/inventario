@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -22,17 +22,17 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			name: "delete commodity with files",
 			setupData: func(registrySet *registry.Set) (string, []string) {
 				ctx := context.Background()
-				
+
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 				area, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area", LocationID: location.ID})
-				
+
 				// Create commodity
 				commodity, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity",
 					AreaID: area.ID,
 				})
-				
+
 				// Create linked files
 				file1, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
 					LinkedEntityType: "commodity",
@@ -56,7 +56,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 						MIMEType:     "application/pdf",
 					},
 				})
-				
+
 				return commodity.ID, []string{file1.ID, file2.ID}
 			},
 			expectError: false,
@@ -65,17 +65,17 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			name: "delete commodity without files",
 			setupData: func(registrySet *registry.Set) (string, []string) {
 				ctx := context.Background()
-				
+
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 				area, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area", LocationID: location.ID})
-				
+
 				// Create commodity without files
 				commodity, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity",
 					AreaID: area.ID,
 				})
-				
+
 				return commodity.ID, []string{}
 			},
 			expectError: false,
@@ -84,12 +84,12 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 			ctx := context.Background()
 
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Create service
 			service := services.NewEntityService(registrySet)
@@ -101,20 +101,20 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			err = service.DeleteCommodityRecursive(ctx, commodityID)
 
 			if tt.expectError {
-				c.Assert(err, quicktest.IsNotNil)
+				c.Assert(err, qt.IsNotNil)
 				return
 			}
 
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Verify commodity is deleted
 			_, err = registrySet.CommodityRegistry.Get(ctx, commodityID)
-			c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+			c.Assert(err, qt.Equals, registry.ErrNotFound)
 
 			// Verify all files are deleted
 			for _, fileID := range fileIDs {
 				_, err = registrySet.FileRegistry.Get(ctx, fileID)
-				c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+				c.Assert(err, qt.Equals, registry.ErrNotFound)
 			}
 		})
 	}
@@ -130,11 +130,11 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			name: "delete area with commodities and files",
 			setupData: func(registrySet *registry.Set) (string, []string, []string) {
 				ctx := context.Background()
-				
+
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 				area, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area", LocationID: location.ID})
-				
+
 				// Create commodities
 				commodity1, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity 1",
@@ -144,7 +144,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 					Name:   "Test Commodity 2",
 					AreaID: area.ID,
 				})
-				
+
 				// Create linked files
 				file1, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
 					LinkedEntityType: "commodity",
@@ -168,7 +168,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 						MIMEType:     "application/pdf",
 					},
 				})
-				
+
 				return area.ID, []string{commodity1.ID, commodity2.ID}, []string{file1.ID, file2.ID}
 			},
 			expectError: false,
@@ -177,11 +177,11 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			name: "delete area without commodities",
 			setupData: func(registrySet *registry.Set) (string, []string, []string) {
 				ctx := context.Background()
-				
+
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 				area, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area", LocationID: location.ID})
-				
+
 				return area.ID, []string{}, []string{}
 			},
 			expectError: false,
@@ -190,12 +190,12 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 			ctx := context.Background()
 
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Create service
 			service := services.NewEntityService(registrySet)
@@ -207,26 +207,26 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			err = service.DeleteAreaRecursive(ctx, areaID)
 
 			if tt.expectError {
-				c.Assert(err, quicktest.IsNotNil)
+				c.Assert(err, qt.IsNotNil)
 				return
 			}
 
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Verify area is deleted
 			_, err = registrySet.AreaRegistry.Get(ctx, areaID)
-			c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+			c.Assert(err, qt.Equals, registry.ErrNotFound)
 
 			// Verify all commodities are deleted
 			for _, commodityID := range commodityIDs {
 				_, err = registrySet.CommodityRegistry.Get(ctx, commodityID)
-				c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+				c.Assert(err, qt.Equals, registry.ErrNotFound)
 			}
 
 			// Verify all files are deleted
 			for _, fileID := range fileIDs {
 				_, err = registrySet.FileRegistry.Get(ctx, fileID)
-				c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+				c.Assert(err, qt.Equals, registry.ErrNotFound)
 			}
 		})
 	}
@@ -304,12 +304,12 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 			ctx := context.Background()
 
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Create service
 			service := services.NewEntityService(registrySet)
@@ -321,32 +321,32 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 			err = service.DeleteLocationRecursive(ctx, locationID)
 
 			if tt.expectError {
-				c.Assert(err, quicktest.IsNotNil)
+				c.Assert(err, qt.IsNotNil)
 				return
 			}
 
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Verify location is deleted
 			_, err = registrySet.LocationRegistry.Get(ctx, locationID)
-			c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+			c.Assert(err, qt.Equals, registry.ErrNotFound)
 
 			// Verify all areas are deleted
 			for _, areaID := range areaIDs {
 				_, err = registrySet.AreaRegistry.Get(ctx, areaID)
-				c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+				c.Assert(err, qt.Equals, registry.ErrNotFound)
 			}
 
 			// Verify all commodities are deleted
 			for _, commodityID := range commodityIDs {
 				_, err = registrySet.CommodityRegistry.Get(ctx, commodityID)
-				c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+				c.Assert(err, qt.Equals, registry.ErrNotFound)
 			}
 
 			// Verify all files are deleted
 			for _, fileID := range fileIDs {
 				_, err = registrySet.FileRegistry.Get(ctx, fileID)
-				c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+				c.Assert(err, qt.Equals, registry.ErrNotFound)
 			}
 		})
 	}
@@ -403,12 +403,12 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 			ctx := context.Background()
 
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Create service
 			service := services.NewEntityService(registrySet)
@@ -420,20 +420,20 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 			err = service.DeleteExportWithFile(ctx, exportID)
 
 			if tt.expectError {
-				c.Assert(err, quicktest.IsNotNil)
+				c.Assert(err, qt.IsNotNil)
 				return
 			}
 
-			c.Assert(err, quicktest.IsNil)
+			c.Assert(err, qt.IsNil)
 
 			// Verify export is deleted
 			_, err = registrySet.ExportRegistry.Get(ctx, exportID)
-			c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+			c.Assert(err, qt.Equals, registry.ErrNotFound)
 
 			// Verify file is deleted if it existed
 			if fileID != "" {
 				_, err = registrySet.FileRegistry.Get(ctx, fileID)
-				c.Assert(err, quicktest.Equals, registry.ErrNotFound)
+				c.Assert(err, qt.Equals, registry.ErrNotFound)
 			}
 		})
 	}

@@ -34,8 +34,6 @@ func NewExportRegistry(db *bolt.DB) registry.ExportRegistry {
 	}
 }
 
-
-
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
 	return r.registry.Create(export,
 		func(tx dbx.TransactionOrBucket, e *models.Export) error {

@@ -45,7 +45,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 	// Create test files linked to the commodity
 	now := time.Now()
-	
+
 	// Create an image file
 	imageFile := models.FileEntity{
 		Title:            "Test Image",

@@ -31,8 +31,6 @@ func NewAreaRegistry(locationRegistry registry.LocationRegistry) *AreaRegistry {
 	}
 }
 
-
-
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	_, err := r.locationRegistry.Get(ctx, area.LocationID)
 	if err != nil {
@@ -74,8 +72,6 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
-
-
 
 func (r *AreaRegistry) AddCommodity(_ context.Context, areaID, commodityID string) error {
 	r.commoditiesLock.Lock()

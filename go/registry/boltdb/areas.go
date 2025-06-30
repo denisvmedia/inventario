@@ -46,8 +46,6 @@ func NewAreaRegistry(db *bolt.DB, locationRegistry registry.LocationRegistry) *A
 	}
 }
 
-
-
 func (r *AreaRegistry) Create(ctx context.Context, m models.Area) (*models.Area, error) {
 	result, err := r.registry.Create(m, func(tx dbx.TransactionOrBucket, area *models.Area) error {
 		if area.Name == "" {
@@ -182,5 +180,3 @@ func (r *AreaRegistry) GetCommodities(_ context.Context, areaID string) ([]strin
 func (r *AreaRegistry) DeleteCommodity(_ context.Context, areaID, commodityID string) error {
 	return r.registry.DeleteChild(bucketNameCommodities, areaID, commodityID)
 }
-
-

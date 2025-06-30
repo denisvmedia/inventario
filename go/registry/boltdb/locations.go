@@ -44,8 +44,6 @@ func NewLocationRegistry(db *bolt.DB) *LocationRegistry {
 	}
 }
 
-
-
 func (r *LocationRegistry) Create(_ context.Context, m models.Location) (*models.Location, error) {
 	return r.registry.Create(m, func(tx dbx.TransactionOrBucket, location *models.Location) error {
 		if location.Name == "" {
@@ -157,5 +155,3 @@ func (r *LocationRegistry) GetAreas(_ context.Context, locationID string) ([]str
 func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID string) error {
 	return r.registry.DeleteChild(bucketNameAreas, locationID, areaID)
 }
-
-

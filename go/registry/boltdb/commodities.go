@@ -160,8 +160,6 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-
-
 func (r *CommodityRegistry) Count(_ context.Context) (int, error) {
 	return r.registry.Count()
 }

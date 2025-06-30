@@ -29,8 +29,6 @@ func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *AreaReg
 	}
 }
 
-
-
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	// Begin a transaction (atomic operation)
 	tx, err := r.dbx.Beginx()
@@ -276,5 +274,3 @@ func (r *AreaRegistry) getLocation(ctx context.Context, tx sqlx.ExtContext, id s
 
 	return &location, nil
 }
-
-

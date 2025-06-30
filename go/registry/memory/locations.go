@@ -28,8 +28,6 @@ func NewLocationRegistry() *LocationRegistry {
 	}
 }
 
-
-
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 	_, err := r.baseLocationRegistry.Get(ctx, id)
 	if err != nil {
@@ -77,5 +75,3 @@ func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID stri
 
 	return nil
 }
-
-

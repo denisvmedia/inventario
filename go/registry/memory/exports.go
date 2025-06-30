@@ -18,8 +18,6 @@ func NewExportRegistry() registry.ExportRegistry {
 	}
 }
 
-
-
 // List returns only non-deleted exports
 func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
 	allExports, err := r.Registry.List(ctx)

@@ -69,8 +69,6 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-
-
 func (r *CommodityRegistry) AddImage(_ context.Context, commodityID, imageID string) error {
 	r.imagesLock.Lock()
 	r.images[commodityID] = append(r.images[commodityID], imageID)

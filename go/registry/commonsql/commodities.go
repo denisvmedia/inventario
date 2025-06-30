@@ -180,8 +180,6 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-
-
 func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 	cnt, err := CountEntities(ctx, r.dbx, r.tableNames.Commodities())
 	if err != nil {

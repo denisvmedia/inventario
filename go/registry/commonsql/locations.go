@@ -29,8 +29,6 @@ func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *Loc
 	}
 }
 
-
-
 func (r *LocationRegistry) Create(ctx context.Context, location models.Location) (*models.Location, error) {
 	if location.Name == "" {
 		return nil, errkit.WithStack(registry.ErrFieldRequired,
@@ -249,5 +247,3 @@ func (r *LocationRegistry) DeleteArea(ctx context.Context, locationID, areaID st
 
 	return nil
 }
-
-
