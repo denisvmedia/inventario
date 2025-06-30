@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -10,12 +11,18 @@ import (
 
 type ExportRegistry struct {
 	*Registry[models.Export, *models.Export]
+	fileRegistry registry.FileRegistry
 }
 
 func NewExportRegistry() registry.ExportRegistry {
 	return &ExportRegistry{
 		Registry: NewRegistry[models.Export, *models.Export](),
 	}
+}
+
+// SetFileRegistry sets the file registry for file deletion
+func (r *ExportRegistry) SetFileRegistry(fileRegistry registry.FileRegistry) {
+	r.fileRegistry = fileRegistry
 }
 
 // List returns only non-deleted exports
@@ -50,7 +57,7 @@ func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, er
 	return export, nil
 }
 
-// Delete performs soft delete by setting deleted_at timestamp
+// Delete performs hard delete to be consistent with PostgreSQL implementation
 func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	export, err := r.Registry.Get(ctx, id)
 	if err != nil {
@@ -61,11 +68,16 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.WithStack(registry.ErrNotFound, "export already deleted")
 	}
 
-	// Set deleted_at timestamp
-	export.DeletedAt = models.PNow()
+	// Delete associated file entity if it exists
+	if export.FileID != "" && r.fileRegistry != nil {
+		err = r.fileRegistry.Delete(ctx, export.FileID)
+		if err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errkit.Wrap(err, "failed to delete associated file entity")
+		}
+	}
 
-	_, err = r.Registry.Update(ctx, *export)
-	return err
+	// Hard delete the export
+	return r.Registry.Delete(ctx, id)
 }
 
 // Count returns count of non-deleted exports

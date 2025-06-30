@@ -157,7 +157,7 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 
 // deleteCommodity deletes a commodity by ID.
 // @Summary Delete a commodity
-// @Description Delete a commodity by ID
+// @Description Delete a commodity by ID and all its linked files
 // @Tags commodities
 // @Accept  json-api
 // @Produce  json-api
@@ -172,7 +172,7 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := api.registrySet.CommodityRegistry.Delete(r.Context(), commodity.ID)
+	err := api.registrySet.CommodityRegistry.DeleteRecursive(r.Context(), commodity.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

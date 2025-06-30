@@ -35,18 +35,19 @@ func NewRegistrySet(c registry.Config) (*registry.Set, error) {
 	s.LocationRegistry = NewLocationRegistry(db)
 	s.AreaRegistry = NewAreaRegistry(db, s.LocationRegistry)
 	s.SettingsRegistry = NewSettingsRegistry(db)
-	s.CommodityRegistry = NewCommodityRegistry(db, s.AreaRegistry)
+	s.FileRegistry = NewFileRegistry(db)
+	s.CommodityRegistry = NewCommodityRegistry(db, s.AreaRegistry, s.FileRegistry)
 	s.ImageRegistry = NewImageRegistry(db, s.CommodityRegistry)
 	s.InvoiceRegistry = NewInvoiceRegistry(db, s.CommodityRegistry)
 	s.ManualRegistry = NewManualRegistry(db, s.CommodityRegistry)
 	s.ExportRegistry = NewExportRegistry(db)
 	s.RestoreStepRegistry = NewRestoreStepRegistry(db)
 	s.RestoreOperationRegistry = NewRestoreOperationRegistry(db, s.RestoreStepRegistry)
-	s.FileRegistry = NewFileRegistry(db)
 
 	// Set up dependencies for recursive deletion
 	s.LocationRegistry.(*LocationRegistry).SetAreaRegistry(s.AreaRegistry)
 	s.AreaRegistry.(*AreaRegistry).SetCommodityRegistry(s.CommodityRegistry)
+	s.ExportRegistry.(*ExportRegistry).SetFileRegistry(s.FileRegistry)
 
 	return s, nil
 }

@@ -2,6 +2,7 @@ package boltdb
 
 import (
 	"context"
+	"errors"
 
 	bolt "go.etcd.io/bbolt"
 
@@ -20,9 +21,10 @@ const (
 var _ registry.ExportRegistry = (*ExportRegistry)(nil)
 
 type ExportRegistry struct {
-	db       *bolt.DB
-	base     *dbx.BaseRepository[models.Export, *models.Export]
-	registry *Registry[models.Export, *models.Export]
+	db           *bolt.DB
+	base         *dbx.BaseRepository[models.Export, *models.Export]
+	registry     *Registry[models.Export, *models.Export]
+	fileRegistry registry.FileRegistry
 }
 
 func NewExportRegistry(db *bolt.DB) registry.ExportRegistry {
@@ -32,6 +34,11 @@ func NewExportRegistry(db *bolt.DB) registry.ExportRegistry {
 		base:     base,
 		registry: NewRegistry(db, base, entityNameExport, bucketNameExportsChildren),
 	}
+}
+
+// SetFileRegistry sets the file registry for file deletion
+func (r *ExportRegistry) SetFileRegistry(fileRegistry registry.FileRegistry) {
+	r.fileRegistry = fileRegistry
 }
 
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
@@ -95,20 +102,29 @@ func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*mod
 }
 
 func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
-	_, err := r.registry.Update(models.Export{EntityID: models.EntityID{ID: id}},
-		func(tx dbx.TransactionOrBucket, e *models.Export) error {
-			// Check if already deleted
-			if e.IsDeleted() {
-				return errkit.WithStack(registry.ErrNotFound, "export already deleted")
-			}
+	// Get the export first to check if it has an associated file
+	export, err := r.registry.Get(id)
+	if err != nil {
+		return err
+	}
 
-			// Set deleted_at timestamp
-			e.DeletedAt = models.PNow()
-			return nil
-		},
+	if export.IsDeleted() {
+		return errkit.WithStack(registry.ErrNotFound, "export already deleted")
+	}
+
+	// Delete associated file entity if it exists
+	if export.FileID != "" && r.fileRegistry != nil {
+		err = r.fileRegistry.Delete(ctx, export.FileID)
+		if err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errkit.Wrap(err, "failed to delete associated file entity")
+		}
+	}
+
+	// Hard delete the export
+	return r.registry.Delete(id,
+		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 	)
-	return err
 }
 
 func (r *ExportRegistry) Count(ctx context.Context) (int, error) {

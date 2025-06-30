@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -16,6 +17,7 @@ type CommodityRegistry struct {
 	*baseCommodityRegistry
 
 	areaRegistry registry.AreaRegistry
+	fileRegistry registry.FileRegistry
 	imagesLock   sync.RWMutex
 	images       models.CommodityImages
 	manualsLock  sync.RWMutex
@@ -24,10 +26,11 @@ type CommodityRegistry struct {
 	invoices     models.CommodityInvoices
 }
 
-func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry {
+func NewCommodityRegistry(areaRegistry registry.AreaRegistry, fileRegistry registry.FileRegistry) *CommodityRegistry {
 	return &CommodityRegistry{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
 		areaRegistry:          areaRegistry,
+		fileRegistry:          fileRegistry,
 		images:                make(models.CommodityImages),
 		manuals:               make(models.CommodityManuals),
 		invoices:              make(models.CommodityInvoices),
@@ -67,6 +70,28 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// DeleteRecursive deletes a commodity and all its linked files recursively
+func (r *CommodityRegistry) DeleteRecursive(ctx context.Context, id string) error {
+	// First, get all linked files for this commodity
+	if r.fileRegistry != nil {
+		files, err := r.fileRegistry.ListByLinkedEntity(ctx, "commodity", id)
+		if err != nil {
+			return errkit.Wrap(err, "failed to get linked files")
+		}
+
+		// Delete all linked files
+		for _, file := range files {
+			err = r.fileRegistry.Delete(ctx, file.ID)
+			if err != nil {
+				return errkit.Wrap(err, fmt.Sprintf("failed to delete linked file %s", file.ID))
+			}
+		}
+	}
+
+	// Then delete the commodity itself
+	return r.Delete(ctx, id)
 }
 
 func (r *CommodityRegistry) AddImage(_ context.Context, commodityID, imageID string) error {

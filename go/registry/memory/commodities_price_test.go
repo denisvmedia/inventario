@@ -20,7 +20,8 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
 
 	// Create commodity registry
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+	fileRegistry := memory.NewFileRegistry()
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, fileRegistry)
 
 	// Create a location
 	location, err := locationRegistry.Create(ctx, models.Location{
@@ -97,7 +98,8 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
 
 	// Create commodity registry
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+	fileRegistry := memory.NewFileRegistry()
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, fileRegistry)
 
 	// Create a location
 	location, err := locationRegistry.Create(ctx, models.Location{

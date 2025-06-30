@@ -63,6 +63,9 @@ type CommodityRegistry interface {
 	AddInvoice(ctx context.Context, commodityID, invoiceID string) error
 	GetInvoices(ctx context.Context, commodityID string) ([]string, error)
 	DeleteInvoice(ctx context.Context, commodityID, invoiceID string) error
+
+	// DeleteRecursive deletes a commodity and all its linked files
+	DeleteRecursive(ctx context.Context, id string) error
 }
 
 type LocationRegistry interface {

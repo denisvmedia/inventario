@@ -3,6 +3,7 @@ package boltdb
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	bolt "go.etcd.io/bbolt"
 
@@ -28,9 +29,10 @@ type CommodityRegistry struct {
 	base         *dbx.BaseRepository[models.Commodity, *models.Commodity]
 	registry     *Registry[models.Commodity, *models.Commodity]
 	areaRegistry registry.AreaRegistry
+	fileRegistry registry.FileRegistry
 }
 
-func NewCommodityRegistry(db *bolt.DB, areaRegistry registry.AreaRegistry) *CommodityRegistry {
+func NewCommodityRegistry(db *bolt.DB, areaRegistry registry.AreaRegistry, fileRegistry registry.FileRegistry) *CommodityRegistry {
 	base := dbx.NewBaseRepository[models.Commodity, *models.Commodity](bucketNameCommodities)
 
 	return &CommodityRegistry{
@@ -43,6 +45,7 @@ func NewCommodityRegistry(db *bolt.DB, areaRegistry registry.AreaRegistry) *Comm
 			bucketNameCommoditiesChildren,
 		),
 		areaRegistry: areaRegistry,
+		fileRegistry: fileRegistry,
 	}
 }
 
@@ -158,6 +161,28 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// DeleteRecursive deletes a commodity and all its linked files recursively
+func (r *CommodityRegistry) DeleteRecursive(ctx context.Context, id string) error {
+	// First, get all linked files for this commodity
+	if r.fileRegistry != nil {
+		files, err := r.fileRegistry.ListByLinkedEntity(ctx, "commodity", id)
+		if err != nil {
+			return errkit.Wrap(err, "failed to get linked files")
+		}
+
+		// Delete all linked files
+		for _, file := range files {
+			err = r.fileRegistry.Delete(ctx, file.ID)
+			if err != nil {
+				return errkit.Wrap(err, fmt.Sprintf("failed to delete linked file %s", file.ID))
+			}
+		}
+	}
+
+	// Then delete the commodity itself
+	return r.Delete(ctx, id)
 }
 
 func (r *CommodityRegistry) Count(_ context.Context) (int, error) {

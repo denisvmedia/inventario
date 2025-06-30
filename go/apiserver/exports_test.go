@@ -20,12 +20,17 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func TestExportSoftDelete(t *testing.T) {
+func TestExportHardDelete(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
+	exportRegistry := memory.NewExportRegistry()
+	fileRegistry := memory.NewFileRegistry()
+	exportRegistry.(*memory.ExportRegistry).SetFileRegistry(fileRegistry)
+
 	registrySet := &registry.Set{
-		ExportRegistry: memory.NewExportRegistry(),
+		ExportRegistry: exportRegistry,
+		FileRegistry:   fileRegistry,
 	}
 
 	// Create test export
@@ -50,19 +55,16 @@ func TestExportSoftDelete(t *testing.T) {
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
-	// Test soft delete
+	// Test hard delete
 	req := httptest.NewRequest("DELETE", "/exports/"+created.ID, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	c.Assert(w.Code, qt.Equals, http.StatusNoContent)
 
-	// Verify export is soft deleted
-	retrieved, err := registrySet.ExportRegistry.Get(context.Background(), created.ID)
-	c.Assert(err, qt.ErrorIs, registry.ErrDeleted)
-	c.Assert(err, qt.ErrorIs, registry.ErrNotFound) // ErrNotFound is a superset of ErrDeleted
-	c.Assert(retrieved, qt.IsNotNil)                // make sure even though we got an error, we still got the record
-	c.Assert(retrieved.IsDeleted(), qt.IsTrue)
+	// Verify export is hard deleted (completely gone)
+	_, err = registrySet.ExportRegistry.Get(context.Background(), created.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Test that download is blocked for deleted export
 	req = httptest.NewRequest("GET", "/exports/"+created.ID+"/download", nil)
@@ -157,7 +159,7 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	created2, err := registrySet.ExportRegistry.Create(context.Background(), export2)
 	c.Assert(err, qt.IsNil)
 
-	// Soft delete one export
+	// Hard delete one export (changed from soft delete to be consistent with PostgreSQL)
 	err = registrySet.ExportRegistry.Delete(context.Background(), created2.ID)
 	c.Assert(err, qt.IsNil)
 
@@ -183,16 +185,11 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	c.Assert(err, qt.IsNil)
 
-	// Should return both exports (active and deleted)
-	c.Assert(response.Data, qt.HasLen, 2)
+	// Should return only the active export (since exports are now hard deleted)
+	c.Assert(response.Data, qt.HasLen, 1)
 
-	// Verify we have both exports
-	exportIDs := make([]string, len(response.Data))
-	for i, exp := range response.Data {
-		exportIDs[i] = exp.ID
-	}
-	c.Assert(exportIDs, qt.Contains, created1.ID)
-	c.Assert(exportIDs, qt.Contains, created2.ID)
+	// Verify we only have the active export
+	c.Assert(response.Data[0].ID, qt.Equals, created1.ID)
 }
 
 func TestExportCreate_SetsCreatedDate(t *testing.T) {
