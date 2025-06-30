@@ -32,7 +32,7 @@ func setupTestInvoiceRegistry(t *testing.T) (*boltdb.InvoiceRegistry, *boltdb.Co
 	fileRegistry := boltdb.NewFileRegistry(db)
 
 	// Create a commodity registry
-	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry, fileRegistry)
+	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry)
 
 	// Create an invoice registry
 	invoiceRegistry := boltdb.NewInvoiceRegistry(db, commodityRegistry)

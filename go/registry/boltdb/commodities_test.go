@@ -33,7 +33,7 @@ func setupTestCommodityRegistry(t *testing.T) (*boltdb.CommodityRegistry, *boltd
 	fileRegistry := boltdb.NewFileRegistry(db)
 
 	// Create a commodity registry
-	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry, fileRegistry)
+	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry)
 
 	// Return the registries and a cleanup function
 	cleanup := func() {

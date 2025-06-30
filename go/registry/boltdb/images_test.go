@@ -33,7 +33,7 @@ func setupTestImageRegistry(t *testing.T) (*boltdb.ImageRegistry, *boltdb.Commod
 	fileRegistry := boltdb.NewFileRegistry(db)
 
 	// Create a commodity registry
-	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry, fileRegistry)
+	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry)
 
 	// Create an image registry
 	imageRegistry := boltdb.NewImageRegistry(db, commodityRegistry)

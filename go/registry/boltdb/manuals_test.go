@@ -32,7 +32,7 @@ func setupTestManualRegistry(t *testing.T) (*boltdb.ManualRegistry, *boltdb.Comm
 	fileRegistry := boltdb.NewFileRegistry(db)
 
 	// Create a commodity registry
-	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry, fileRegistry)
+	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry)
 
 	// Create a manual registry
 	manualRegistry := boltdb.NewManualRegistry(db, commodityRegistry)

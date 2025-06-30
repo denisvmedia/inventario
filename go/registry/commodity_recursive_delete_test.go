@@ -10,15 +10,19 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
-func TestCommodityRegistry_DeleteRecursive(t *testing.T) {
+func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	// Create registry set with proper dependencies
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 	c.Assert(err, qt.IsNil)
+
+	// Create entity service
+	entityService := services.NewEntityService(registrySet)
 
 	// Create test data hierarchy: Location -> Area -> Commodity -> Files
 	location := models.Location{Name: "Test Location"}
@@ -127,7 +131,7 @@ func TestCommodityRegistry_DeleteRecursive(t *testing.T) {
 	c.Assert(invoiceFiles[0].ID, qt.Equals, createdInvoiceFile.ID)
 
 	// Test recursive delete
-	err = registrySet.CommodityRegistry.DeleteRecursive(ctx, createdCommodity.ID)
+	err = entityService.DeleteCommodityRecursive(ctx, createdCommodity.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify commodity is deleted
@@ -157,13 +161,16 @@ func TestCommodityRegistry_DeleteRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNil) // Should still exist
 }
 
-func TestCommodityRegistry_DeleteRecursive_NoFiles(t *testing.T) {
+func TestEntityService_DeleteCommodityRecursive_NoFiles(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	// Create registry set with proper dependencies
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 	c.Assert(err, qt.IsNil)
+
+	// Create entity service
+	entityService := services.NewEntityService(registrySet)
 
 	// Create test data hierarchy: Location -> Area -> Commodity (no files)
 	location := models.Location{Name: "Test Location"}
@@ -190,7 +197,7 @@ func TestCommodityRegistry_DeleteRecursive_NoFiles(t *testing.T) {
 	c.Assert(files, qt.HasLen, 0)
 
 	// Test recursive delete (should work even with no files)
-	err = registrySet.CommodityRegistry.DeleteRecursive(ctx, createdCommodity.ID)
+	err = entityService.DeleteCommodityRecursive(ctx, createdCommodity.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify commodity is deleted
@@ -205,7 +212,7 @@ func TestCommodityRegistry_DeleteRecursive_NoFiles(t *testing.T) {
 	c.Assert(err, qt.IsNil) // Should still exist
 }
 
-func TestCommodityRegistry_DeleteRecursive_NonExistentCommodity(t *testing.T) {
+func TestEntityService_DeleteCommodityRecursive_NonExistentCommodity(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -213,7 +220,10 @@ func TestCommodityRegistry_DeleteRecursive_NonExistentCommodity(t *testing.T) {
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 	c.Assert(err, qt.IsNil)
 
+	// Create entity service
+	entityService := services.NewEntityService(registrySet)
+
 	// Test recursive delete on non-existent commodity
-	err = registrySet.CommodityRegistry.DeleteRecursive(ctx, "non-existent-id")
+	err = entityService.DeleteCommodityRecursive(ctx, "non-existent-id")
 	c.Assert(err, qt.IsNotNil) // Should fail
 }
