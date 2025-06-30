@@ -29,9 +29,6 @@ func setupTestCommodityRegistry(t *testing.T) (*boltdb.CommodityRegistry, *boltd
 	// Create an area registry
 	areaRegistry := boltdb.NewAreaRegistry(db, locationRegistry)
 
-	// Create a file registry
-	fileRegistry := boltdb.NewFileRegistry(db)
-
 	// Create a commodity registry
 	commodityRegistry := boltdb.NewCommodityRegistry(db, areaRegistry)
 
