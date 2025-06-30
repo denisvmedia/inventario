@@ -25,7 +25,7 @@ func newTestRegistrySet() *registry.Set {
 	registrySet := &registry.Set{
 		LocationRegistry:  locationRegistry,
 		AreaRegistry:      areaRegistry,
-		CommodityRegistry: memory.NewCommodityRegistry(areaRegistry, fileRegistry),
+		CommodityRegistry: memory.NewCommodityRegistry(areaRegistry),
 		ExportRegistry:    memory.NewExportRegistry(),
 		FileRegistry:      fileRegistry,
 	}
@@ -255,7 +255,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
 	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, fileRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	imageRegistry := memory.NewImageRegistry(commodityRegistry)
 	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
 	manualRegistry := memory.NewManualRegistry(commodityRegistry)
@@ -387,7 +387,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
 	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, fileRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	imageRegistry := memory.NewImageRegistry(commodityRegistry)
 	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
 	manualRegistry := memory.NewManualRegistry(commodityRegistry)
@@ -709,7 +709,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
 	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry, fileRegistry)
+	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	imageRegistry := memory.NewImageRegistry(commodityRegistry)
 	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
 	manualRegistry := memory.NewManualRegistry(commodityRegistry)

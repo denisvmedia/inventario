@@ -13,6 +13,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_RestoreFromXML(t *testing.T) {
@@ -24,7 +25,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, "/tmp/test-uploads")
+		entityService := services.NewEntityService(testRegistrySet)
+		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
@@ -111,7 +113,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, "/tmp/test-uploads")
+		entityService := services.NewEntityService(testRegistrySet)
+		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		// First, create some existing data
 		existingLocation := models.Location{
@@ -168,7 +171,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, "/tmp/test-uploads")
+		entityService := services.NewEntityService(testRegistrySet)
+		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		// First, create some existing data
 		existingLocation := models.Location{
@@ -225,7 +229,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, "/tmp/test-uploads")
+		entityService := services.NewEntityService(testRegistrySet)
+		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
@@ -264,7 +269,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		// Create restore processor
-		processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "/tmp/test-uploads")
+		entityService := services.NewEntityService(registrySet)
+		processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "/tmp/test-uploads")
 		c.Assert(processor, qt.IsNotNil)
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
@@ -294,7 +300,8 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with a commodity that has pricing information
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -360,7 +367,8 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	registrySet, err := memory.NewRegistrySet("")
 	c.Assert(err, qt.IsNil)
 
-	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with a commodity that has pricing information
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -435,7 +443,8 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
-	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with the same structure as sample_export.xml
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -569,7 +578,8 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
-	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, "")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Read the actual sample XML file
 	xmlContent, err := os.ReadFile("testdata/sample_export.xml")

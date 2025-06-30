@@ -12,6 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
@@ -31,7 +32,8 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// First, create some initial data with files
 	initialXML := `<?xml version="1.0" encoding="UTF-8"?>
@@ -184,7 +186,8 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// First, create initial data with one file
 	initialXML := `<?xml version="1.0" encoding="UTF-8"?>

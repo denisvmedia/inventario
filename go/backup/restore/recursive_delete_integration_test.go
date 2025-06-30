@@ -11,6 +11,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
@@ -61,7 +62,8 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 </backup>`
 
 	// Create restore service
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "mem://")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
 
 	// Test restore with full replace strategy (this should now work with recursive delete)
 	options := restore.RestoreOptions{
@@ -134,7 +136,8 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 	c.Assert(commodities, qt.HasLen, 6)
 
 	// Create restore service
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "mem://")
+	entityService := services.NewEntityService(registrySet)
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
 
 	// Test restore with full replace strategy
 	options := restore.RestoreOptions{
