@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 const uploadLocation = "file://uploads?memfs=1&create_dir=1"
@@ -344,17 +345,148 @@ func newFileRegistry(commodityRegistry registry.CommodityRegistry) registry.File
 	return fileRegistry
 }
 
+func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commodityRegistry registry.CommodityRegistry) {
+	commodities := must.Must(commodityRegistry.List(context.Background()))
+	if len(commodities) == 0 {
+		return
+	}
+
+	now := time.Now()
+
+	// Create file entities for images
+	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+		Title:            "image1",
+		Description:      "Test image 1",
+		Type:             models.FileTypeImage,
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodities[0].ID,
+		LinkedEntityMeta: "images",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         "image1",
+			OriginalPath: "image1.jpg",
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+		Title:            "image2",
+		Description:      "Test image 2",
+		Type:             models.FileTypeImage,
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodities[0].ID,
+		LinkedEntityMeta: "images",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         "image2",
+			OriginalPath: "image2.jpg",
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	// Create file entities for invoices
+	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+		Title:            "invoice1",
+		Description:      "Test invoice 1",
+		Type:             models.FileTypeDocument,
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodities[0].ID,
+		LinkedEntityMeta: "invoices",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         "invoice1",
+			OriginalPath: "invoice1.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+		Title:            "invoice2",
+		Description:      "Test invoice 2",
+		Type:             models.FileTypeDocument,
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodities[0].ID,
+		LinkedEntityMeta: "invoices",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         "invoice2",
+			OriginalPath: "invoice2.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	// Create file entities for manuals
+	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+		Title:            "manual1",
+		Description:      "Test manual 1",
+		Type:             models.FileTypeDocument,
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodities[0].ID,
+		LinkedEntityMeta: "manuals",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         "manual1",
+			OriginalPath: "manual1.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+		Title:            "manual2",
+		Description:      "Test manual 2",
+		Type:             models.FileTypeDocument,
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodities[0].ID,
+		LinkedEntityMeta: "manuals",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         "manual2",
+			OriginalPath: "manual2.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+}
+
 func newParams() apiserver.Params {
 	var params apiserver.Params
 	params.RegistrySet = &registry.Set{}
 	params.RegistrySet.LocationRegistry = newLocationRegistry()
 	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
 	params.RegistrySet.SettingsRegistry = newSettingsRegistry()
+
+	// Create FileRegistry and populate it with test data first
+	params.RegistrySet.FileRegistry = memory.NewFileRegistry()
+
+	// Create CommodityRegistry
 	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry)
 	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
-	params.RegistrySet.FileRegistry = newFileRegistry(params.RegistrySet.CommodityRegistry)
+
+	// Create EntityService
+	params.EntityService = services.NewEntityService(params.RegistrySet)
+
+	// Populate FileRegistry with test data using the same instance
+	populateFileRegistryWithTestData(params.RegistrySet.FileRegistry, params.RegistrySet.CommodityRegistry)
+
 	params.UploadLocation = uploadLocation
 	return params
 }

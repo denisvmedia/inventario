@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"path"
@@ -138,6 +139,31 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get the associated file entity before deleting the export (if it exists)
+	var fileEntity *models.FileEntity
+	if exp.FileID != "" {
+		file, err := api.registrySet.FileRegistry.Get(r.Context(), exp.FileID)
+		if err != nil && !errors.Is(err, registry.ErrNotFound) {
+			renderEntityError(w, r, err)
+			return
+		}
+		if err == nil {
+			fileEntity = file
+		}
+	}
+
+	// Delete the physical file first if it exists
+	if fileEntity != nil && fileEntity.File != nil && fileEntity.File.OriginalPath != "" {
+		if err := api.deletePhysicalFile(r.Context(), fileEntity.File.OriginalPath); err != nil {
+			// Log the error but don't fail the operation - we'll still delete the database records
+			// This prevents inconsistent state where the file remains but the database records are deleted
+			// In a production system, you might want to implement a background cleanup job for orphaned files
+			internalServerError(w, r, errkit.Wrap(err, "failed to delete physical file"))
+			return
+		}
+	}
+
+	// Delete the export (this will also delete the file entity record)
 	err := api.registrySet.ExportRegistry.Delete(r.Context(), exp.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
@@ -345,4 +371,31 @@ func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Rou
 			r.Route("/restores", ExportRestores(params, restoreWorker))
 		})
 	}
+}
+
+// deletePhysicalFile deletes the physical file from storage.
+func (api *exportsAPI) deletePhysicalFile(ctx context.Context, filePath string) error {
+	b, err := blob.OpenBucket(ctx, api.uploadLocation)
+	if err != nil {
+		return errkit.Wrap(err, "failed to open bucket")
+	}
+	defer b.Close()
+
+	// Check if file exists before trying to delete it
+	exists, err := b.Exists(ctx, filePath)
+	if err != nil {
+		return errkit.Wrap(err, "failed to check if file exists")
+	}
+
+	if !exists {
+		// File doesn't exist, nothing to delete - this is not an error
+		return nil
+	}
+
+	err = b.Delete(ctx, filePath)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete file")
+	}
+
+	return nil
 }

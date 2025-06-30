@@ -18,6 +18,8 @@ func NewExportRegistry() registry.ExportRegistry {
 	}
 }
 
+
+
 // List returns only non-deleted exports
 func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
 	allExports, err := r.Registry.List(ctx)
@@ -50,7 +52,7 @@ func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, er
 	return export, nil
 }
 
-// Delete performs soft delete by setting deleted_at timestamp
+// Delete performs hard delete to be consistent with PostgreSQL implementation
 func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	export, err := r.Registry.Get(ctx, id)
 	if err != nil {
@@ -61,11 +63,8 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.WithStack(registry.ErrNotFound, "export already deleted")
 	}
 
-	// Set deleted_at timestamp
-	export.DeletedAt = models.PNow()
-
-	_, err = r.Registry.Update(ctx, *export)
-	return err
+	// Hard delete the export
+	return r.Registry.Delete(ctx, id)
 }
 
 // Count returns count of non-deleted exports

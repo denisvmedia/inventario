@@ -2,8 +2,6 @@ package memory
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/go-extras/go-kit/must"
@@ -20,10 +18,9 @@ type baseAreaRegistry = Registry[models.Area, *models.Area]
 type AreaRegistry struct {
 	*baseAreaRegistry
 
-	locationRegistry  registry.LocationRegistry
-	commodityRegistry registry.CommodityRegistry
-	commoditiesLock   sync.RWMutex
-	commodities       models.AreaCommodities
+	locationRegistry registry.LocationRegistry
+	commoditiesLock  sync.RWMutex
+	commodities      models.AreaCommodities
 }
 
 func NewAreaRegistry(locationRegistry registry.LocationRegistry) *AreaRegistry {
@@ -34,10 +31,7 @@ func NewAreaRegistry(locationRegistry registry.LocationRegistry) *AreaRegistry {
 	}
 }
 
-// SetCommodityRegistry sets the commodity registry for recursive deletion
-func (r *AreaRegistry) SetCommodityRegistry(commodityRegistry registry.CommodityRegistry) {
-	r.commodityRegistry = commodityRegistry
-}
+
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	_, err := r.locationRegistry.Get(ctx, area.LocationID)
@@ -81,52 +75,7 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// DeleteRecursive deletes an area and all its commodities recursively
-func (r *AreaRegistry) DeleteRecursive(ctx context.Context, id string) error {
-	// Get the area to ensure it exists - if it's already deleted, that's fine
-	area, err := r.baseAreaRegistry.Get(ctx, id)
-	if err != nil {
-		if errors.Is(err, registry.ErrNotFound) {
-			// Area is already deleted, nothing to do
-			return nil
-		}
-		return errkit.Wrap(err, "failed to get area")
-	}
 
-	// Get all commodities in this area
-	commodities, err := r.GetCommodities(ctx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get commodities")
-	}
-
-	// Delete all commodities
-	for _, commodityID := range commodities {
-		if r.commodityRegistry != nil {
-			if err := r.commodityRegistry.Delete(ctx, commodityID); err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to delete commodity %s", commodityID))
-			}
-		}
-	}
-
-	// Now delete the area itself
-	err = r.baseAreaRegistry.Delete(ctx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete area")
-	}
-
-	// Remove area from location
-	err = r.locationRegistry.DeleteArea(ctx, area.LocationID, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete area from location")
-	}
-
-	// Clean up the commodities mapping
-	r.commoditiesLock.Lock()
-	delete(r.commodities, id)
-	r.commoditiesLock.Unlock()
-
-	return nil
-}
 
 func (r *AreaRegistry) AddCommodity(_ context.Context, areaID, commodityID string) error {
 	r.commoditiesLock.Lock()

@@ -3,7 +3,6 @@ package commonsql
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
@@ -15,9 +14,8 @@ import (
 var _ registry.AreaRegistry = (*AreaRegistry)(nil)
 
 type AreaRegistry struct {
-	dbx               *sqlx.DB
-	tableNames        TableNames
-	commodityRegistry registry.CommodityRegistry
+	dbx        *sqlx.DB
+	tableNames TableNames
 }
 
 func NewAreaRegistry(dbx *sqlx.DB) *AreaRegistry {
@@ -31,10 +29,7 @@ func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *AreaReg
 	}
 }
 
-// SetCommodityRegistry sets the commodity registry for recursive deletion
-func (r *AreaRegistry) SetCommodityRegistry(commodityRegistry registry.CommodityRegistry) {
-	r.commodityRegistry = commodityRegistry
-}
+
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	// Begin a transaction (atomic operation)
@@ -282,47 +277,4 @@ func (r *AreaRegistry) getLocation(ctx context.Context, tx sqlx.ExtContext, id s
 	return &location, nil
 }
 
-// DeleteRecursive deletes an area and all its commodities recursively
-func (r *AreaRegistry) DeleteRecursive(ctx context.Context, id string) error {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
 
-	// Check if the area exists - if it's already deleted, that's fine
-	_, err = r.get(ctx, tx, id)
-	if err != nil {
-		if errors.Is(err, registry.ErrNotFound) {
-			// Area is already deleted, nothing to do
-			return nil
-		}
-		return err
-	}
-
-	// Get all commodities in this area
-	commodities, err := r.getCommodities(ctx, tx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get commodities")
-	}
-
-	// Delete all commodities
-	for _, commodityID := range commodities {
-		if r.commodityRegistry != nil {
-			if err := r.commodityRegistry.Delete(ctx, commodityID); err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to delete commodity %s", commodityID))
-			}
-		}
-	}
-
-	// Finally, delete the area
-	err = DeleteEntityByField(ctx, tx, r.tableNames.Areas(), "id", id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete area")
-	}
-
-	return nil
-}

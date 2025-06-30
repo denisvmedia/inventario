@@ -2,8 +2,6 @@ package memory
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/go-extras/go-kit/must"
@@ -19,9 +17,8 @@ type baseLocationRegistry = Registry[models.Location, *models.Location]
 type LocationRegistry struct {
 	*baseLocationRegistry
 
-	areasLock    sync.RWMutex
-	areas        models.LocationAreas
-	areaRegistry registry.AreaRegistry
+	areasLock sync.RWMutex
+	areas     models.LocationAreas
 }
 
 func NewLocationRegistry() *LocationRegistry {
@@ -31,10 +28,7 @@ func NewLocationRegistry() *LocationRegistry {
 	}
 }
 
-// SetAreaRegistry sets the area registry for recursive deletion
-func (r *LocationRegistry) SetAreaRegistry(areaRegistry registry.AreaRegistry) {
-	r.areaRegistry = areaRegistry
-}
+
 
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 	_, err := r.baseLocationRegistry.Get(ctx, id)
@@ -84,44 +78,4 @@ func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID stri
 	return nil
 }
 
-// DeleteRecursive deletes a location and all its areas and commodities recursively
-func (r *LocationRegistry) DeleteRecursive(ctx context.Context, id string) error {
-	// Get the location to ensure it exists
-	_, err := r.baseLocationRegistry.Get(ctx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get location")
-	}
 
-	// Get all areas in this location
-	areas, err := r.GetAreas(ctx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get areas")
-	}
-
-	// Delete all areas recursively (this will also delete their commodities)
-	for _, areaID := range areas {
-		// We need access to the area registry to delete areas recursively
-		// This will be injected via constructor or setter
-		if r.areaRegistry != nil {
-			if err := r.areaRegistry.DeleteRecursive(ctx, areaID); err != nil {
-				// If the area is already deleted, that's fine - continue with others
-				if !errors.Is(err, registry.ErrNotFound) {
-					return errkit.Wrap(err, fmt.Sprintf("failed to delete area %s recursively", areaID))
-				}
-			}
-		}
-	}
-
-	// Now delete the location itself
-	err = r.baseLocationRegistry.Delete(ctx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete location")
-	}
-
-	// Clean up the areas mapping
-	r.areasLock.Lock()
-	delete(r.areas, id)
-	r.areasLock.Unlock()
-
-	return nil
-}
