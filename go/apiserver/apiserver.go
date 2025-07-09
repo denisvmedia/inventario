@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
 	"github.com/rs/cors"
+	"github.com/shopspring/decimal"
 	swagger "github.com/swaggo/http-swagger"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
@@ -20,7 +21,8 @@ import (
 
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
-	_ "github.com/denisvmedia/inventario/internal/fileblob"
+	"github.com/denisvmedia/inventario/internal/currency"
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -121,10 +123,22 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	))
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// Create a currency conversion service with a basic rate provider
+		// TODO: Replace with a real currency rate provider that fetches live rates
+		rateProvider := currency.NewStaticRateProvider(map[string]decimal.Decimal{
+			"USD_EUR": decimal.NewFromFloat(0.85),
+			"EUR_USD": decimal.NewFromFloat(1.18),
+			"USD_GBP": decimal.NewFromFloat(0.73),
+			"GBP_USD": decimal.NewFromFloat(1.37),
+			"EUR_GBP": decimal.NewFromFloat(0.86),
+			"GBP_EUR": decimal.NewFromFloat(1.16),
+		})
+		conversionService := currency.NewConversionService(params.RegistrySet.CommodityRegistry, rateProvider)
+
 		r.With(defaultAPIMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
-		r.With(defaultAPIMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry, conversionService))
 		r.With(defaultAPIMiddlewares...).Route("/exports", Exports(params, restoreWorker))
 		r.With(defaultAPIMiddlewares...).Route("/files", Files(params))
 		r.Route("/currencies", Currencies())
