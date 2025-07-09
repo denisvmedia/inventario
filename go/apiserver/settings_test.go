@@ -107,7 +107,7 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(*finalSettings.ShowDebugInfo, qt.Equals, showDebugInfo)
 }
 
-func TestMainCurrencyRestriction(t *testing.T) {
+func TestMainCurrencyCanBeChanged(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a memory registry for testing
@@ -142,21 +142,22 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Should get an error
-	c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity)
+	// Should succeed now
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
 
-	// Try to change the main currency to EUR using PATCH
-	currencyJSON, err := json.Marshal(newCurrency)
+	// Try to change the main currency to GBP using PATCH
+	finalCurrency := "GBP"
+	currencyJSON, err := json.Marshal(finalCurrency)
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PATCH", "/settings/system.main_currency", bytes.NewReader(currencyJSON))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Should get an error
-	c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity)
+	// Should succeed now
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
 
-	// Verify the main currency is still USD
+	// Verify the main currency is now GBP
 	req = httptest.NewRequest("GET", "/settings", nil)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -166,5 +167,5 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	var retrievedSettings models.SettingsObject
 	err = json.Unmarshal(w.Body.Bytes(), &retrievedSettings)
 	c.Assert(err, qt.IsNil)
-	c.Assert(*retrievedSettings.MainCurrency, qt.Equals, currency) // Should still be USD
+	c.Assert(*retrievedSettings.MainCurrency, qt.Equals, finalCurrency) // Should be GBP
 }
