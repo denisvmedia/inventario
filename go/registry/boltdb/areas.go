@@ -3,7 +3,6 @@ package boltdb
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	bolt "go.etcd.io/bbolt"
 
@@ -25,11 +24,10 @@ const (
 var _ registry.AreaRegistry = (*AreaRegistry)(nil)
 
 type AreaRegistry struct {
-	db                *bolt.DB
-	base              *dbx.BaseRepository[models.Area, *models.Area]
-	registry          *Registry[models.Area, *models.Area]
-	locationRegistry  registry.LocationRegistry
-	commodityRegistry registry.CommodityRegistry
+	db               *bolt.DB
+	base             *dbx.BaseRepository[models.Area, *models.Area]
+	registry         *Registry[models.Area, *models.Area]
+	locationRegistry registry.LocationRegistry
 }
 
 func NewAreaRegistry(db *bolt.DB, locationRegistry registry.LocationRegistry) *AreaRegistry {
@@ -46,11 +44,6 @@ func NewAreaRegistry(db *bolt.DB, locationRegistry registry.LocationRegistry) *A
 		),
 		locationRegistry: locationRegistry,
 	}
-}
-
-// SetCommodityRegistry sets the commodity registry for recursive deletion
-func (r *AreaRegistry) SetCommodityRegistry(commodityRegistry registry.CommodityRegistry) {
-	r.commodityRegistry = commodityRegistry
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, m models.Area) (*models.Area, error) {
@@ -186,56 +179,4 @@ func (r *AreaRegistry) GetCommodities(_ context.Context, areaID string) ([]strin
 
 func (r *AreaRegistry) DeleteCommodity(_ context.Context, areaID, commodityID string) error {
 	return r.registry.DeleteChild(bucketNameCommodities, areaID, commodityID)
-}
-
-// DeleteRecursive deletes an area and all its commodities recursively
-func (r *AreaRegistry) DeleteRecursive(ctx context.Context, id string) error {
-	// Check if area exists first - if it's already deleted, that's fine
-	_, err := r.Get(ctx, id)
-	if err != nil {
-		if errors.Is(err, registry.ErrNotFound) {
-			// Area is already deleted, nothing to do
-			return nil
-		}
-		return errkit.Wrap(err, "failed to get area")
-	}
-
-	// Get all commodities in this area first
-	commodities, err := r.GetCommodities(ctx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get commodities")
-	}
-
-	// Delete all commodities
-	for _, commodityID := range commodities {
-		if r.commodityRegistry != nil {
-			if err := r.commodityRegistry.Delete(ctx, commodityID); err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to delete commodity %s", commodityID))
-			}
-		}
-	}
-
-	// Now delete the area itself using the regular delete logic but without the constraint check
-	var locationID string
-	err = r.registry.Delete(id, func(tx dbx.TransactionOrBucket, area *models.Area) error {
-		locationID = area.LocationID
-		// Skip the commodities check since we've already deleted them
-		return r.registry.DeleteEmptyBuckets(
-			tx,
-			area.ID,
-			bucketNameCommodities,
-		)
-	}, func(tx dbx.TransactionOrBucket, result *models.Area) error {
-		return r.base.DeleteIndexValue(tx, idxAreasByName, result.Name)
-	})
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete area")
-	}
-
-	err = r.locationRegistry.DeleteArea(ctx, locationID, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete area from location")
-	}
-
-	return nil
 }

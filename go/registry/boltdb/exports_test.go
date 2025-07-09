@@ -141,33 +141,23 @@ func TestExportRegistry_Delete(t *testing.T) {
 	created, err := reg.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
 
-	// Soft delete export
+	// Hard delete export (changed from soft delete to be consistent with PostgreSQL)
 	err = reg.Delete(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 
-	// Verify it's still accessible via Get (soft deleted)
-	retrieved, err := reg.Get(ctx, created.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(retrieved.IsDeleted(), qt.IsTrue)
+	// Verify it's completely gone (hard delete)
+	_, err = reg.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNotNil)
 
 	// Verify it's not in the regular list
 	exports, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(exports), qt.Equals, 0)
 
-	// Verify it's in the deleted list
+	// Verify it's not in the deleted list either (since it's hard deleted)
 	deletedExports, err := reg.ListDeleted(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(deletedExports), qt.Equals, 1)
-	c.Assert(deletedExports[0].ID, qt.Equals, created.ID)
-
-	// Hard delete export
-	err = reg.HardDelete(ctx, created.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Verify it's completely gone
-	_, err = reg.Get(ctx, created.ID)
-	c.Assert(err, qt.IsNotNil)
+	c.Assert(len(deletedExports), qt.Equals, 0)
 }
 
 func TestExportRegistry_Create_Validation(t *testing.T) {

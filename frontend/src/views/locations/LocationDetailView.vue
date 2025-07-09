@@ -1,7 +1,12 @@
 <template>
   <div class="location-detail">
+    <!-- Error Notification Stack -->
+    <ErrorNotificationStack
+      :errors="errors"
+      @dismiss="removeError"
+    />
+
     <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!location" class="not-found">Location not found</div>
     <div v-else>
       <div class="header">
@@ -84,19 +89,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import AreaForm from '@/components/AreaForm.vue'
-import Confirmation from "@/components/Confirmation.vue";
+import Confirmation from "@/components/Confirmation.vue"
+import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import { useErrorState } from '@/utils/errorUtils'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref<boolean>(true)
-const error = ref<string | null>(null)
 const location = ref<any>(null)
 const areas = ref<any[]>([])
+
+// Error state management
+const { errors, handleError, removeError, cleanup } = useErrorState()
 
 // State for inline forms
 const showAreaForm = ref(false)
@@ -122,7 +131,7 @@ onMounted(async () => {
 
 
   } catch (err: any) {
-    error.value = 'Failed to load location: ' + (err.message || 'Unknown error')
+    handleError(err, 'location', 'Failed to load location')
     loading.value = false
   }
 })
@@ -151,7 +160,7 @@ const deleteLocation = async () => {
     await locationService.deleteLocation(location.value.id)
     router.push('/locations')
   } catch (err: any) {
-    error.value = 'Failed to delete location: ' + (err.message || 'Unknown error')
+    handleError(err, 'location', 'Failed to delete location')
   }
 }
 
@@ -190,7 +199,7 @@ const deleteArea = async (id: string) => {
     // Remove the deleted area from the list
     areas.value = areas.value.filter(area => area.id !== id)
   } catch (err: any) {
-    error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
+    handleError(err, 'area', 'Failed to delete area')
   }
 }
 
@@ -199,6 +208,11 @@ const handleAreaCreated = (newArea: any) => {
   areas.value.push(newArea)
   showAreaForm.value = false
 }
+
+// Add cleanup when component unmounts
+onBeforeUnmount(() => {
+  cleanup()
+})
 </script>
 
 <style lang="scss" scoped>

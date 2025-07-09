@@ -312,14 +312,18 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 	created, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
 
-	// Soft delete the export
+	// Hard delete the export (changed from soft delete to be consistent with PostgreSQL)
 	err = registrySet.ExportRegistry.Delete(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 
-	// Verify it's in the deleted list
+	// Verify it's completely gone (hard delete)
+	_, err = registrySet.ExportRegistry.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNotNil)
+
+	// Verify it's not in the deleted list (since it's hard deleted)
 	deletedExports, err := registrySet.ExportRegistry.ListDeleted(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(deletedExports), qt.Equals, 1)
+	c.Assert(len(deletedExports), qt.Equals, 0)
 
 	// Run cleanup (this is now a no-op since exports use immediate hard delete with file entities)
 	worker.cleanupDeletedExports(ctx)
@@ -327,9 +331,9 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 	// Give some time for the goroutine to complete
 	time.Sleep(200 * time.Millisecond)
 
-	// Since cleanup is now a no-op, the export should still be in the deleted list
-	// (the new system uses immediate hard delete, so this test verifies the deprecated cleanup is a no-op)
+	// Since we now use immediate hard delete, there should be no deleted exports
+	// (the cleanup is now a no-op since exports are hard deleted immediately)
 	deletedExports, err = registrySet.ExportRegistry.ListDeleted(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(deletedExports), qt.Equals, 1) // Should still be there since cleanup is a no-op
+	c.Assert(len(deletedExports), qt.Equals, 0) // Should be empty since export was hard deleted
 }

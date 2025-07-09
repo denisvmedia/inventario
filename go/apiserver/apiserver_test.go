@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 const uploadLocation = "file://uploads?memfs=1&create_dir=1"
@@ -220,12 +221,10 @@ func newSettingsRegistry() registry.SettingsRegistry {
 	return settingsRegistry
 }
 
-func newFileRegistry(commodityRegistry registry.CommodityRegistry) registry.FileRegistry {
-	var fileRegistry = memory.NewFileRegistry()
-
+func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commodityRegistry registry.CommodityRegistry) {
 	commodities := must.Must(commodityRegistry.List(context.Background()))
 	if len(commodities) == 0 {
-		return fileRegistry
+		return
 	}
 
 	now := time.Now()
@@ -340,8 +339,6 @@ func newFileRegistry(commodityRegistry registry.CommodityRegistry) registry.File
 			MIMEType:     "application/pdf",
 		},
 	}))
-
-	return fileRegistry
 }
 
 func newParams() apiserver.Params {
@@ -350,12 +347,23 @@ func newParams() apiserver.Params {
 	params.RegistrySet.LocationRegistry = newLocationRegistry()
 	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
 	params.RegistrySet.SettingsRegistry = newSettingsRegistry()
+
+	// Create FileRegistry and populate it with test data first
+	params.RegistrySet.FileRegistry = memory.NewFileRegistry()
+
+	// Create CommodityRegistry
 	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry)
 	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
-	params.RegistrySet.FileRegistry = newFileRegistry(params.RegistrySet.CommodityRegistry)
+
 	params.UploadLocation = uploadLocation
+
+	// Create EntityService
+	params.EntityService = services.NewEntityService(params.RegistrySet, params.UploadLocation)
+
+	// Populate FileRegistry with test data using the same instance
+	populateFileRegistryWithTestData(params.RegistrySet.FileRegistry, params.RegistrySet.CommodityRegistry)
 	return params
 }
 

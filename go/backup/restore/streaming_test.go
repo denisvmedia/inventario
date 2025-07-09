@@ -8,6 +8,7 @@ import (
 
 	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_StreamingXMLParsing(t *testing.T) {
@@ -22,7 +23,8 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "")
+	entityService := services.NewEntityService(registrySet, "")
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
 
 	// Create XML with processing instructions and various token types that should be handled properly
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -99,7 +101,8 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, "")
+	entityService := services.NewEntityService(registrySet, "")
+	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
 
 	// This test demonstrates that the streaming XML parsing works correctly
 	// without loading everything into memory

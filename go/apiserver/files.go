@@ -1,7 +1,6 @@
 package apiserver
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
+	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -18,11 +18,13 @@ import (
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 type filesAPI struct {
 	registrySet    *registry.Set
 	uploadLocation string
+	fileService    *services.FileService
 }
 
 // listFiles lists all files with optional filtering and pagination.
@@ -282,26 +284,11 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
 
-	// Get the file first to get the file path for deletion
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), fileID)
+	// Use file service to delete both physical file and database record
+	err := api.fileService.DeleteFileWithPhysical(r.Context(), fileID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
-	}
-
-	// Delete from database first
-	err = api.registrySet.FileRegistry.Delete(r.Context(), fileID)
-	if err != nil {
-		renderEntityError(w, r, err)
-		return
-	}
-
-	// Delete the physical file
-	if file.File != nil && file.OriginalPath != "" {
-		if err := api.deletePhysicalFile(r.Context(), file.OriginalPath); err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -341,7 +328,8 @@ func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
 	// Get file attributes for Content-Length header
 	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, file.OriginalPath)
 	if err != nil {
-		internalServerError(w, r, err)
+		// GetFileAttributes now returns registry.ErrNotFound for missing files
+		renderEntityError(w, r, err)
 		return
 	}
 
@@ -359,6 +347,11 @@ func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 	reader, err := b.NewReader(r.Context(), file.OriginalPath, nil)
 	if err != nil {
+		// Check if this is a NotFound error from blob storage
+		if gcerrors.Code(err) == gcerrors.NotFound {
+			renderEntityError(w, r, registry.ErrNotFound)
+			return
+		}
 		internalServerError(w, r, errkit.Wrap(err, "failed to open file"))
 		return
 	}
@@ -371,27 +364,12 @@ func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// deletePhysicalFile deletes the physical file from storage.
-func (api *filesAPI) deletePhysicalFile(ctx context.Context, filePath string) error {
-	b, err := blob.OpenBucket(ctx, api.uploadLocation)
-	if err != nil {
-		return errkit.Wrap(err, "failed to open bucket")
-	}
-	defer b.Close()
-
-	err = b.Delete(ctx, filePath)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete file")
-	}
-
-	return nil
-}
-
 // Files sets up the files API routes.
 func Files(params Params) func(r chi.Router) {
 	api := &filesAPI{
 		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
+		fileService:    services.NewFileService(params.RegistrySet, params.UploadLocation),
 	}
 
 	return func(r chi.Router) {

@@ -129,16 +129,7 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(err, "failed to get export")
 	}
 
-	// Delete associated file entity if it exists
-	if export.FileID != "" {
-		deleteFileQuery := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Files())
-		_, err = tx.ExecContext(ctx, deleteFileQuery, export.FileID)
-		if err != nil {
-			return errkit.Wrap(err, "failed to delete associated file entity")
-		}
-	}
-
-	// Hard delete the export (no soft delete needed since we're using file entities now)
+	// Hard delete the export
 	deleteExportQuery := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Exports())
 	result, err := tx.ExecContext(ctx, deleteExportQuery, id)
 	if err != nil {

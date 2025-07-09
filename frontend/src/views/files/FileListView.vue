@@ -168,40 +168,54 @@
         </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="pagination-section">
+      <div v-if="totalPages > 1" class="pagination-card">
         <div class="pagination-info">
           Showing {{ (currentPage - 1) * pageSize + 1 }} to {{ Math.min(currentPage * pageSize, totalFiles) }} of {{ totalFiles }} files
         </div>
         <div class="pagination-controls">
-          <button
-            class="btn btn-secondary"
-            :disabled="currentPage <= 1"
-            @click="goToPage(currentPage - 1)"
+          <router-link
+            v-if="currentPage > 1"
+            :to="getPaginationUrl(currentPage - 1)"
+            class="btn btn-secondary pagination-link"
           >
             <font-awesome-icon icon="chevron-left" />
             Previous
-          </button>
+          </router-link>
+          <span
+            v-else
+            class="btn btn-secondary pagination-link disabled"
+          >
+            <font-awesome-icon icon="chevron-left" />
+            Previous
+          </span>
 
           <div class="page-numbers">
-            <button
+            <router-link
               v-for="page in visiblePages"
               :key="page"
-              class="btn"
+              :to="getPaginationUrl(page)"
+              class="btn pagination-link"
               :class="{ 'btn-primary': page === currentPage, 'btn-secondary': page !== currentPage }"
-              @click="goToPage(page)"
             >
               {{ page }}
-            </button>
+            </router-link>
           </div>
 
-          <button
-            class="btn btn-secondary"
-            :disabled="currentPage >= totalPages"
-            @click="goToPage(currentPage + 1)"
+          <router-link
+            v-if="currentPage < totalPages"
+            :to="getPaginationUrl(currentPage + 1)"
+            class="btn btn-secondary pagination-link"
           >
             Next
             <font-awesome-icon icon="chevron-right" />
-          </button>
+          </router-link>
+          <span
+            v-else
+            class="btn btn-secondary pagination-link disabled"
+          >
+            Next
+            <font-awesome-icon icon="chevron-right" />
+          </span>
         </div>
       </div>
     </div>
@@ -225,32 +239,26 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteModal" class="modal-overlay" @click="cancelDelete">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>Delete File</h3>
-          <button class="btn-close" @click="cancelDelete">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p>Are you sure you want to delete <strong>{{ fileToDelete ? getDisplayTitle(fileToDelete) : '' }}</strong>?</p>
-          <p class="warning-text">This action cannot be undone. The file will be permanently deleted.</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="cancelDelete">Cancel</button>
-          <button class="btn btn-danger" :disabled="deleting" @click="deleteFile">
-            <span v-if="deleting">Deleting...</span>
-            <span v-else>Delete</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <Confirmation
+      v-model:visible="showDeleteModal"
+      :title="'Delete File'"
+      :message="`Are you sure you want to delete <strong>${fileToDelete ? getDisplayTitle(fileToDelete) : ''}</strong>?<br><br><span class='warning-text'>This action cannot be undone. The file will be permanently deleted.</span>`"
+      :confirm-label="deleting ? 'Deleting...' : 'Delete'"
+      :cancel-label="'Cancel'"
+      :confirm-button-class="'danger'"
+      :confirm-disabled="deleting"
+      :confirmation-icon="'exclamation-triangle'"
+      @confirm="deleteFile"
+      @cancel="cancelDelete"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import fileService, { type FileEntity } from '@/services/fileService'
+import Confirmation from '@/components/Confirmation.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -352,9 +360,20 @@ const clearFilters = () => {
   loadFiles()
 }
 
-const goToPage = (page: number) => {
-  currentPage.value = page
-  loadFiles()
+
+
+// Generate pagination URL for a specific page
+const getPaginationUrl = (page: number) => {
+  const query = { ...route.query }
+  if (page > 1) {
+    query.page = page.toString()
+  } else {
+    delete query.page
+  }
+  return {
+    path: route.path,
+    query
+  }
 }
 
 const getFileUrl = (file: FileEntity) => {
@@ -442,8 +461,29 @@ const deleteFile = async () => {
   }
 }
 
+// Initialize current page from URL parameters
+const initializeFromUrl = () => {
+  const pageParam = route.query.page
+  if (pageParam && typeof pageParam === 'string') {
+    const page = parseInt(pageParam, 10)
+    if (page > 0) {
+      currentPage.value = page
+    }
+  }
+}
+
+// Watch for route changes to update pagination
+watch(() => route.query.page, (newPage) => {
+  const page = newPage && typeof newPage === 'string' ? parseInt(newPage, 10) : 1
+  if (page > 0 && page !== currentPage.value) {
+    currentPage.value = page
+    loadFiles()
+  }
+}, { immediate: true })
+
 // Lifecycle
 onMounted(() => {
+  initializeFromUrl()
   loadFiles()
 })
 </script>
@@ -678,15 +718,33 @@ onMounted(() => {
   }
 }
 
-.pagination-section {
+.pagination-card {
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+  margin-top: 2rem;
+  padding: 1.5rem;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 2rem;
+
+  @media (width <= 768px) {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem;
+  }
 
   .pagination-info {
     color: $text-secondary-color;
     font-size: 0.875rem;
+    font-weight: 500;
+    margin: 0;
+
+    @media (width <= 768px) {
+      text-align: center;
+    }
   }
 
   .pagination-controls {
@@ -694,9 +752,90 @@ onMounted(() => {
     align-items: center;
     gap: 0.5rem;
 
+    .pagination-link {
+      text-decoration: none;
+      min-width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: $default-radius;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+      font-size: 0.875rem;
+
+      &.btn-primary {
+        background-color: $primary-color;
+        color: white;
+        border-color: $primary-color;
+        box-shadow: 0 1px 3px rgba($primary-color, 0.3);
+
+        &:hover {
+          background-color: $primary-hover-color;
+          border-color: $primary-hover-color;
+          text-decoration: none;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 6px rgba($primary-color, 0.4);
+        }
+      }
+
+      &.btn-secondary {
+        background-color: white;
+        color: $text-color;
+        border-color: $border-color;
+        box-shadow: 0 1px 3px rgba($border-color, 0.3);
+
+        &:hover {
+          background-color: $light-bg-color;
+          border-color: $primary-color;
+          color: $primary-color;
+          text-decoration: none;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 6px rgba($primary-color, 0.2);
+        }
+      }
+
+      &.disabled {
+        background-color: $light-bg-color;
+        color: $text-secondary-color;
+        border-color: $border-color;
+        cursor: not-allowed;
+        opacity: 0.6;
+        box-shadow: none;
+
+        &:hover {
+          background-color: $light-bg-color;
+          color: $text-secondary-color;
+          border-color: $border-color;
+          transform: none;
+          box-shadow: none;
+        }
+      }
+
+      // Icon spacing
+      .fa-chevron-left {
+        margin-right: 0.5rem;
+      }
+
+      .fa-chevron-right {
+        margin-left: 0.5rem;
+      }
+    }
+
     .page-numbers {
       display: flex;
       gap: 0.25rem;
+      margin: 0 0.75rem;
+
+      @media (width <= 768px) {
+        margin: 0 0.5rem;
+      }
+
+      .pagination-link {
+        min-width: 2.5rem;
+        padding: 0;
+      }
     }
   }
 }

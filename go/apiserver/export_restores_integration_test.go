@@ -17,11 +17,13 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func newTestRegistrySet() *registry.Set {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	fileRegistry := memory.NewFileRegistry()
 	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	restoreStepRegistry := memory.NewRestoreStepRegistry()
 
@@ -36,6 +38,7 @@ func newTestRegistrySet() *registry.Set {
 		ExportRegistry:           memory.NewExportRegistry(),
 		RestoreOperationRegistry: memory.NewRestoreOperationRegistry(restoreStepRegistry),
 		RestoreStepRegistry:      restoreStepRegistry,
+		FileRegistry:             fileRegistry,
 	}
 }
 
@@ -210,7 +213,8 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	}
 
 	// Use real restore worker (not mock) to test actual logic
-	restoreService := restore.NewRestoreService(registrySet, "memory://")
+	entityService := services.NewEntityService(registrySet, "memory://")
+	restoreService := restore.NewRestoreService(registrySet, entityService, "memory://")
 	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, "memory://")
 	r.Route("/api/v1/exports", apiserver.Exports(params, restoreWorker))
 
