@@ -62,7 +62,7 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 </backup>`
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "mem://")
 	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
 
 	// Test restore with full replace strategy (this should now work with recursive delete)
@@ -136,7 +136,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 	c.Assert(commodities, qt.HasLen, 6)
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "mem://")
 	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
 
 	// Test restore with full replace strategy

@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gocloud.dev/blob"
 	qt "github.com/frankban/quicktest"
+	"gocloud.dev/blob"
 
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
 )
 
 func TestFileService_DeleteFileWithPhysical(t *testing.T) {

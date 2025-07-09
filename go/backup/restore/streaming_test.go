@@ -23,7 +23,7 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "")
 	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
 
 	// Create XML with processing instructions and various token types that should be handled properly
@@ -101,7 +101,7 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "")
 	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
 
 	// This test demonstrates that the streaming XML parsing works correctly

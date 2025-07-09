@@ -45,7 +45,7 @@ func TestNewRestoreWorker(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, uploadLocation)
 	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
@@ -61,7 +61,7 @@ func TestRestoreWorkerStartStop(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, uploadLocation)
 	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
@@ -96,7 +96,7 @@ func TestRestoreWorkerConcurrentAccess(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, uploadLocation)
 	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
@@ -143,7 +143,7 @@ func TestRestoreWorkerContextCancellation(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, uploadLocation)
 	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
@@ -171,7 +171,7 @@ func TestRestoreWorkerConfigurableConcurrentLimit(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, uploadLocation)
 	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 
 	// Test with different concurrent limits
@@ -188,7 +188,7 @@ func TestHasRunningRestores(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, uploadLocation)
 	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
@@ -228,7 +228,7 @@ func TestHasRunningRestores_PendingAlsoBlocks(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, uploadLocation)
 	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 

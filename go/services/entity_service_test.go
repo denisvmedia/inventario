@@ -6,11 +6,11 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
 )
 
 func TestEntityService_DeleteCommodityRecursive(t *testing.T) {

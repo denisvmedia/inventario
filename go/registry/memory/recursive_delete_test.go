@@ -21,7 +21,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create entity service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity
 	location := models.Location{Name: "Test Location"}
@@ -79,7 +79,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create entity service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity
 	location := models.Location{Name: "Test Location"}

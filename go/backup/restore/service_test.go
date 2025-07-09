@@ -25,7 +25,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		entityService := services.NewEntityService(testRegistrySet)
+		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
@@ -113,7 +113,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		entityService := services.NewEntityService(testRegistrySet)
+		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		// First, create some existing data
@@ -171,7 +171,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		entityService := services.NewEntityService(testRegistrySet)
+		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		// First, create some existing data
@@ -229,7 +229,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Create fresh registry set for this test
 		testRegistrySet, err := memory.NewRegistrySet("")
 		c.Assert(err, qt.IsNil)
-		entityService := services.NewEntityService(testRegistrySet)
+		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
@@ -269,7 +269,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		// Create restore processor
-		entityService := services.NewEntityService(registrySet)
+		entityService := services.NewEntityService(registrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "/tmp/test-uploads")
 		c.Assert(processor, qt.IsNotNil)
 
@@ -300,7 +300,7 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "")
 	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with a commodity that has pricing information
@@ -367,7 +367,7 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	registrySet, err := memory.NewRegistrySet("")
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "")
 	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with a commodity that has pricing information
@@ -443,7 +443,7 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "")
 	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with the same structure as sample_export.xml
@@ -578,7 +578,7 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "")
 	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Read the actual sample XML file

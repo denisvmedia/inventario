@@ -32,7 +32,7 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// First, create some initial data with files
@@ -186,7 +186,7 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// First, create initial data with one file

@@ -7,6 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -22,7 +23,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create entity service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity -> Files
 	location := models.Location{Name: "Test Location"}
@@ -170,7 +171,7 @@ func TestEntityService_DeleteCommodityRecursive_NoFiles(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create entity service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity (no files)
 	location := models.Location{Name: "Test Location"}
@@ -221,7 +222,7 @@ func TestEntityService_DeleteCommodityRecursive_NonExistentCommodity(t *testing.
 	c.Assert(err, qt.IsNil)
 
 	// Create entity service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Test recursive delete on non-existent commodity
 	err = entityService.DeleteCommodityRecursive(ctx, "non-existent-id")

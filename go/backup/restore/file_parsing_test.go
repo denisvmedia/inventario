@@ -75,7 +75,7 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 </inventory>`
 
 	// Create restore service with file:// blob storage for testing
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
@@ -195,7 +195,7 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing DISABLED
@@ -278,7 +278,7 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
@@ -387,7 +387,7 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
@@ -506,7 +506,7 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 </inventory>`
 
 	// Create restore service with file:// blob storage for testing
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
