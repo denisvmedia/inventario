@@ -111,7 +111,7 @@ const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
 
 // Error state management
-const { errors, showErrors, handleError, removeError, clearAllErrors, cleanup } = useErrorState()
+const { errors, handleError, removeError, cleanup } = useErrorState()
 
 
 // Area total value

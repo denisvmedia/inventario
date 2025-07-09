@@ -7,8 +7,8 @@
         class="error-notification"
         role="alert"
         aria-live="assertive"
-        @touchstart="handleTouchStart($event, error.id)"
-        @touchmove="handleTouchMove($event, error.id)"
+        @touchstart="handleTouchStart($event)"
+        @touchmove="handleTouchMove($event)"
         @touchend="handleTouchEnd($event, error.id)"
       >
         <div class="error-content">
@@ -21,17 +21,17 @@
             {{ error.message }}
           </div>
           <button
-            class="error-dismiss"
-            @click="$emit('dismiss', error.id)"
-            aria-label="Dismiss error"
             type="button"
+            class="error-dismiss"
+            aria-label="Dismiss error"
+            @click="$emit('dismiss', error.id)"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
             </svg>
           </button>
         </div>
-        <div class="error-context" v-if="error.context">
+        <div v-if="error.context" class="error-context">
           {{ formatContext(error.context) }}
         </div>
         <div class="error-hint mobile-only">
@@ -69,14 +69,14 @@ let touchStartX = 0;
 let touchStartY = 0;
 let touchStartTime = 0;
 
-const handleTouchStart = (event: TouchEvent, errorId: string) => {
+const handleTouchStart = (event: TouchEvent) => {
   const touch = event.touches[0];
   touchStartX = touch.clientX;
   touchStartY = touch.clientY;
   touchStartTime = Date.now();
 };
 
-const handleTouchMove = (event: TouchEvent, errorId: string) => {
+const handleTouchMove = (event: TouchEvent) => {
   // Prevent scrolling when swiping horizontally
   const touch = event.touches[0];
   const deltaX = Math.abs(touch.clientX - touchStartX);

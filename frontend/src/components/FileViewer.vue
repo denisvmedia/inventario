@@ -135,7 +135,6 @@ const props = defineProps({
   },
   entityType: {
     type: String,
-    required: true,
     default: 'commodities'
   },
   fileType: {

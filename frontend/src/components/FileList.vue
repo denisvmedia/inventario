@@ -59,7 +59,6 @@ import { ref, nextTick } from 'vue'
 const props = defineProps({
   files: {
     type: Array,
-    required: true,
     default: () => []
   },
   fileType: {

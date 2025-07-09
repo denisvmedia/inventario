@@ -105,7 +105,7 @@ const location = ref<any>(null)
 const areas = ref<any[]>([])
 
 // Error state management
-const { errors, showErrors, handleError, removeError, clearAllErrors, cleanup } = useErrorState()
+const { errors, handleError, removeError, cleanup } = useErrorState()
 
 // State for inline forms
 const showAreaForm = ref(false)

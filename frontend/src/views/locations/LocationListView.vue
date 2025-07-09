@@ -163,7 +163,7 @@ const areas = ref<any[]>([])
 const loading = ref<boolean>(true)
 
 // Error state management
-const { errors, showErrors, handleError, removeError, clearAllErrors, cleanup } = useErrorState()
+const { errors, handleError, removeError, cleanup } = useErrorState()
 
 // Values data
 const areaTotals = ref<any[]>([])

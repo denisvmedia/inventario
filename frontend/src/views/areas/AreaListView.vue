@@ -70,7 +70,7 @@ const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 
 // Error state management
-const { errors, showErrors, handleError, removeError, clearAllErrors, cleanup } = useErrorState()
+const { errors, handleError, removeError, cleanup } = useErrorState()
 
 onMounted(async () => {
   try {
