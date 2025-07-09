@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 const exportCtxKey ctxValueKey = "export"
@@ -31,6 +32,7 @@ func exportFromContext(ctx context.Context) *models.Export {
 type exportsAPI struct {
 	registrySet    *registry.Set
 	uploadLocation string
+	entityService  *services.EntityService
 }
 
 // listExports lists all exports.
@@ -138,7 +140,8 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := api.registrySet.ExportRegistry.Delete(r.Context(), exp.ID)
+	// Use entity service to properly handle export and file deletion
+	err := api.entityService.DeleteExportWithFile(r.Context(), exp.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -330,6 +333,7 @@ func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Rou
 	api := &exportsAPI{
 		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
+		entityService:  params.EntityService,
 	}
 
 	return func(r chi.Router) {

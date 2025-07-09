@@ -1647,7 +1647,7 @@ paths:
     delete:
       consumes:
       - application/vnd.api+json
-      description: Delete a commodity by ID
+      description: Delete a commodity by ID and all its linked files
       parameters:
       - description: Commodity ID
         in: path

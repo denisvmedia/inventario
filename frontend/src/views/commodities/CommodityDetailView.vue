@@ -1,6 +1,15 @@
 <template>
   <div class="commodity-detail">
     <div v-if="loading" class="loading">Loading...</div>
+    <ResourceNotFound
+      v-else-if="is404Error"
+      resource-type="commodity"
+      :title="get404Title('commodity')"
+      :message="get404Message('commodity')"
+      :go-back-text="sourceIsArea ? 'Back to Area' : 'Back to Commodities'"
+      @go-back="navigateBack"
+      @try-again="loadCommodity"
+    />
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!commodity" class="not-found">Commodity not found</div>
     <div v-else>
@@ -264,6 +273,8 @@ import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 import { formatPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
 import FileUploader from '@/components/FileUploader.vue'
 import FileViewer from '@/components/FileViewer.vue'
@@ -275,10 +286,14 @@ const route = useRoute()
 const commodity = ref<any>(null)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+const lastError = ref<any>(null) // Store the last error object for 404 detection
 
 // Navigation source tracking
 const sourceIsArea = computed(() => route.query.source === 'area')
 const areaId = computed(() => route.query.areaId as string || '')
+
+// Error state computed properties
+const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
 
 // File states
 const images = ref<any[]>([])
@@ -305,8 +320,11 @@ const imageUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
 const manualUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
 const invoiceUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
 
-onMounted(async () => {
+const loadCommodity = async () => {
   const id = route.params.id as string
+  loading.value = true
+  error.value = null
+  lastError.value = null
 
   try {
     const response = await commodityService.getCommodity(id)
@@ -316,9 +334,19 @@ onMounted(async () => {
     // Load files after commodity is loaded
     loadFiles()
   } catch (err: any) {
-    error.value = 'Failed to load commodity: ' + (err.message || 'Unknown error')
-    loading.value = false
+    lastError.value = err
+    if (checkIs404Error(err)) {
+      // 404 errors will be handled by the ResourceNotFound component
+      loading.value = false
+    } else {
+      error.value = 'Failed to load commodity: ' + (err.message || 'Unknown error')
+      loading.value = false
+    }
   }
+}
+
+onMounted(() => {
+  loadCommodity()
 })
 
 const loadFiles = async () => {

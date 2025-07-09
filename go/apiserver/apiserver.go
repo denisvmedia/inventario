@@ -22,6 +22,7 @@ import (
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 // RestoreWorkerInterface defines the interface for the restore worker
@@ -62,6 +63,7 @@ func paginate(next http.Handler) http.Handler {
 
 type Params struct {
 	RegistrySet    *registry.Set
+	EntityService  *services.EntityService
 	UploadLocation string
 	DebugInfo      *debug.Info
 }
@@ -71,6 +73,7 @@ func (p *Params) Validate() error {
 
 	fields = append(fields,
 		validation.Field(&p.RegistrySet, validation.Required),
+		validation.Field(&p.EntityService, validation.Required),
 		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(_value any) error {
 			ctx := context.Background()
 			b, err := blob.OpenBucket(ctx, p.UploadLocation)

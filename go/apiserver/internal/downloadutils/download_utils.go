@@ -8,13 +8,16 @@ import (
 	"strconv"
 
 	"gocloud.dev/blob"
+	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/mimekit"
+	"github.com/denisvmedia/inventario/registry"
 )
 
 // GetFileAttributes retrieves file attributes including size for setting Content-Length header.
 // This function opens a bucket connection, retrieves the file attributes, and closes the connection.
+// Returns registry.ErrNotFound if the file doesn't exist in blob storage.
 func GetFileAttributes(ctx context.Context, uploadLocation, filePath string) (*blob.Attributes, error) {
 	b, err := blob.OpenBucket(ctx, uploadLocation)
 	if err != nil {
@@ -24,6 +27,10 @@ func GetFileAttributes(ctx context.Context, uploadLocation, filePath string) (*b
 
 	attrs, err := b.Attributes(ctx, filePath)
 	if err != nil {
+		// Check if this is a NotFound error from blob storage
+		if gcerrors.Code(err) == gcerrors.NotFound {
+			return nil, registry.ErrNotFound
+		}
 		return nil, errkit.Wrap(err, "failed to get file attributes")
 	}
 

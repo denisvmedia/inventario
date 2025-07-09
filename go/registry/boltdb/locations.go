@@ -3,7 +3,6 @@ package boltdb
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	bolt "go.etcd.io/bbolt"
 
@@ -25,10 +24,9 @@ const (
 var _ registry.LocationRegistry = (*LocationRegistry)(nil)
 
 type LocationRegistry struct {
-	db           *bolt.DB
-	base         *dbx.BaseRepository[models.Location, *models.Location]
-	registry     *Registry[models.Location, *models.Location]
-	areaRegistry registry.AreaRegistry
+	db       *bolt.DB
+	base     *dbx.BaseRepository[models.Location, *models.Location]
+	registry *Registry[models.Location, *models.Location]
 }
 
 func NewLocationRegistry(db *bolt.DB) *LocationRegistry {
@@ -44,11 +42,6 @@ func NewLocationRegistry(db *bolt.DB) *LocationRegistry {
 			bucketNameLocationsChildren,
 		),
 	}
-}
-
-// SetAreaRegistry sets the area registry for recursive deletion
-func (r *LocationRegistry) SetAreaRegistry(areaRegistry registry.AreaRegistry) {
-	r.areaRegistry = areaRegistry
 }
 
 func (r *LocationRegistry) Create(_ context.Context, m models.Location) (*models.Location, error) {
@@ -161,37 +154,4 @@ func (r *LocationRegistry) GetAreas(_ context.Context, locationID string) ([]str
 
 func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID string) error {
 	return r.registry.DeleteChild(bucketNameAreas, locationID, areaID)
-}
-
-// DeleteRecursive deletes a location and all its areas and commodities recursively
-func (r *LocationRegistry) DeleteRecursive(ctx context.Context, id string) error {
-	// Get all areas in this location first
-	areas, err := r.GetAreas(ctx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get areas")
-	}
-
-	// Delete all areas recursively (this will also delete their commodities)
-	for _, areaID := range areas {
-		if r.areaRegistry != nil {
-			if err := r.areaRegistry.DeleteRecursive(ctx, areaID); err != nil {
-				// If the area is already deleted, that's fine - continue with others
-				if !errors.Is(err, registry.ErrNotFound) {
-					return errkit.Wrap(err, fmt.Sprintf("failed to delete area %s recursively", areaID))
-				}
-			}
-		}
-	}
-
-	// Now delete the location itself using the regular delete logic but without the constraint check
-	return r.registry.Delete(id, func(tx dbx.TransactionOrBucket, location *models.Location) error {
-		// Skip the areas check since we've already deleted them
-		return r.registry.DeleteEmptyBuckets(
-			tx,
-			location.ID,
-			bucketNameAreas,
-		)
-	}, func(tx dbx.TransactionOrBucket, result *models.Location) error {
-		return r.base.DeleteIndexValue(tx, idxLocationsByName, result.Name)
-	})
 }

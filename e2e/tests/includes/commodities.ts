@@ -1,7 +1,7 @@
 import {expect, Page} from "@playwright/test";
 import {TestRecorder} from "../../utils/test-recorder.js";
 
-export async function createCommodity(page: Page, recorder: TestRecorder,testCommodity: any) {
+export async function createCommodity(page: Page, recorder: TestRecorder,testCommodity: any): Promise<string> {
     await recorder.takeScreenshot('commodities-create-01-before-create');
 
     // Click the New button to show the commodity form
@@ -73,8 +73,10 @@ export async function createCommodity(page: Page, recorder: TestRecorder,testCom
     await page.click('button:has-text("Create Commodity")');
 
     // Wait to be redirected to the commodity detail page
-    await page.waitForURL(/\/commodities\/[a-zA-Z0-9-]+\?/);
+    await page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/);
     await recorder.takeScreenshot('commodity-create-03-created');
+
+    return page.url();
 }
 
 export async function verifyCommodityDetails(page: Page, testCommodity: any) {

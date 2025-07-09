@@ -95,20 +95,21 @@ func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*mod
 }
 
 func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
-	_, err := r.registry.Update(models.Export{EntityID: models.EntityID{ID: id}},
-		func(tx dbx.TransactionOrBucket, e *models.Export) error {
-			// Check if already deleted
-			if e.IsDeleted() {
-				return errkit.WithStack(registry.ErrNotFound, "export already deleted")
-			}
+	// Get the export first to check if it exists
+	export, err := r.registry.Get(id)
+	if err != nil {
+		return err
+	}
 
-			// Set deleted_at timestamp
-			e.DeletedAt = models.PNow()
-			return nil
-		},
+	if export.IsDeleted() {
+		return errkit.WithStack(registry.ErrNotFound, "export already deleted")
+	}
+
+	// Hard delete the export
+	return r.registry.Delete(id,
+		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 	)
-	return err
 }
 
 func (r *ExportRegistry) Count(ctx context.Context) (int, error) {

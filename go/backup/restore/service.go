@@ -17,6 +17,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 // RestoreStrategy defines how to handle existing data during restore
@@ -84,33 +85,37 @@ type PendingFileData struct {
 // RestoreService handles XML restore operations with different strategies
 type RestoreService struct {
 	registrySet    *registry.Set
+	entityService  *services.EntityService
 	uploadLocation string
 }
 
 // NewRestoreService creates a new restore service
-func NewRestoreService(registrySet *registry.Set, uploadLocation string) *RestoreService {
+func NewRestoreService(registrySet *registry.Set, entityService *services.EntityService, uploadLocation string) *RestoreService {
 	return &RestoreService{
 		registrySet:    registrySet,
+		entityService:  entityService,
 		uploadLocation: uploadLocation,
 	}
 }
 
 // ProcessRestoreOperation processes a restore operation in the background with detailed logging
 func (s *RestoreService) ProcessRestoreOperation(ctx context.Context, restoreOperationID, uploadLocation string) error {
-	return NewRestoreOperationProcessor(restoreOperationID, s.registrySet, uploadLocation).Process(ctx)
+	return NewRestoreOperationProcessor(restoreOperationID, s.registrySet, s.entityService, uploadLocation).Process(ctx)
 }
 
 // RestoreOperationProcessor wraps the restore service to provide detailed logging
 type RestoreOperationProcessor struct {
 	restoreOperationID string
 	registrySet        *registry.Set
+	entityService      *services.EntityService
 	uploadLocation     string
 }
 
-func NewRestoreOperationProcessor(restoreOperationID string, registrySet *registry.Set, uploadLocation string) *RestoreOperationProcessor {
+func NewRestoreOperationProcessor(restoreOperationID string, registrySet *registry.Set, entityService *services.EntityService, uploadLocation string) *RestoreOperationProcessor {
 	return &RestoreOperationProcessor{
 		restoreOperationID: restoreOperationID,
 		registrySet:        registrySet,
+		entityService:      entityService,
 		uploadLocation:     uploadLocation,
 	}
 }
@@ -370,7 +375,7 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 		return errkit.Wrap(err, "failed to list locations for deletion")
 	}
 	for _, location := range locations {
-		if err := l.registrySet.LocationRegistry.DeleteRecursive(ctx, location.ID); err != nil {
+		if err := l.entityService.DeleteLocationRecursive(ctx, location.ID); err != nil {
 			return errkit.Wrap(err, fmt.Sprintf("failed to delete location %s recursively", location.ID))
 		}
 	}

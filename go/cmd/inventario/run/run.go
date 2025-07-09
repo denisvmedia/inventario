@@ -22,6 +22,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 var runCmd = &cobra.Command{
@@ -162,6 +163,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 
 	params.RegistrySet = registrySet
 	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
+	params.EntityService = services.NewEntityService(registrySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 
 	err = validation.Validate(params)
@@ -181,7 +183,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	defer exportWorker.Stop()
 
 	// Start restore worker
-	restoreService := restore.NewRestoreService(registrySet, params.UploadLocation)
+	restoreService := restore.NewRestoreService(registrySet, params.EntityService, params.UploadLocation)
 	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, params.UploadLocation)
 	restoreWorker.Start(ctx)
 	defer restoreWorker.Stop()

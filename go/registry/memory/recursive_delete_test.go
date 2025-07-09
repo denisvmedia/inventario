@@ -9,15 +9,19 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
-func TestLocationRegistry_DeleteRecursive(t *testing.T) {
+func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	// Create registry set with proper dependencies
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 	c.Assert(err, qt.IsNil)
+
+	// Create entity service
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity
 	location := models.Location{Name: "Test Location"}
@@ -52,7 +56,7 @@ func TestLocationRegistry_DeleteRecursive(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, "location has areas")
 
 	// Test recursive delete succeeds
-	err = registrySet.LocationRegistry.DeleteRecursive(ctx, createdLocation.ID)
+	err = entityService.DeleteLocationRecursive(ctx, createdLocation.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify everything is deleted
@@ -66,13 +70,16 @@ func TestLocationRegistry_DeleteRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 }
 
-func TestAreaRegistry_DeleteRecursive(t *testing.T) {
+func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	// Create registry set with proper dependencies
 	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 	c.Assert(err, qt.IsNil)
+
+	// Create entity service
+	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity
 	location := models.Location{Name: "Test Location"}
@@ -96,7 +103,7 @@ func TestAreaRegistry_DeleteRecursive(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, "area has commodities")
 
 	// Test recursive delete succeeds
-	err = registrySet.AreaRegistry.DeleteRecursive(ctx, createdArea.ID)
+	err = entityService.DeleteAreaRecursive(ctx, createdArea.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify area and commodity are deleted, but location remains

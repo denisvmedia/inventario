@@ -6,7 +6,18 @@
       <p>Loading file...</p>
     </div>
 
-    <!-- Error State -->
+    <!-- 404 Error State -->
+    <ResourceNotFound
+      v-if="is404Error"
+      resource-type="file"
+      :title="get404Title('file')"
+      :message="get404Message('file')"
+      :go-back-text="backLinkText"
+      @go-back="goBack"
+      @try-again="loadFile"
+    />
+
+    <!-- Other Error State -->
     <div v-else-if="error" class="error">
       <div class="error-icon">
         <font-awesome-icon icon="exclamation-triangle" />
@@ -168,25 +179,18 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteModal" class="modal-overlay" @click="cancelDelete">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>Delete File</h3>
-          <button class="btn-close" @click="cancelDelete">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p>Are you sure you want to delete <strong>{{ file ? getDisplayTitle(file) : '' }}</strong>?</p>
-          <p class="warning-text">This action cannot be undone. The file will be permanently deleted.</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="cancelDelete">Cancel</button>
-          <button class="btn btn-danger" :disabled="deleting" @click="deleteFile">
-            <span v-if="deleting">Deleting...</span>
-            <span v-else>Delete</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <Confirmation
+      v-model:visible="showDeleteModal"
+      :title="'Delete File'"
+      :message="`Are you sure you want to delete <strong>${file ? getDisplayTitle(file) : ''}</strong>?<br><br><span class='warning-text'>This action cannot be undone. The file will be permanently deleted.</span>`"
+      :confirm-label="deleting ? 'Deleting...' : 'Delete'"
+      :cancel-label="'Cancel'"
+      :confirm-button-class="'danger'"
+      :confirm-disabled="deleting"
+      :confirmation-icon="'exclamation-triangle'"
+      @confirm="deleteFile"
+      @cancel="cancelDelete"
+    />
   </div>
 </template>
 
@@ -195,6 +199,9 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PDFViewerCanvas from '@/components/PDFViewerCanvas.vue'
 import fileService, { type FileEntity } from '@/services/fileService'
+import Confirmation from '@/components/Confirmation.vue'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 
 const route = useRoute()
 const router = useRouter()
@@ -203,6 +210,7 @@ const router = useRouter()
 const file = ref<FileEntity | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const lastError = ref<any>(null) // Store the last error object for 404 detection
 const deleting = ref(false)
 const fileSize = ref<string | null>(null)
 
@@ -239,10 +247,14 @@ const deleteRestrictionReason = computed(() => {
   return file.value ? fileService.getDeleteRestrictionReason(file.value) : ''
 })
 
+// Error state computed properties
+const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
+
 // Methods
 const loadFile = async () => {
   loading.value = true
   error.value = null
+  lastError.value = null
 
   try {
     const response = await fileService.getFile(fileId.value)
@@ -251,7 +263,12 @@ const loadFile = async () => {
     // Try to get file size (this would need to be added to the API response)
     // For now, we'll skip this or implement it later
   } catch (err: any) {
-    error.value = err.response?.data?.message || 'Failed to load file'
+    lastError.value = err
+    if (checkIs404Error(err)) {
+      // 404 errors will be handled by the ResourceNotFound component
+    } else {
+      error.value = err.response?.data?.message || 'Failed to load file'
+    }
     console.error('Error loading file:', err)
   } finally {
     loading.value = false

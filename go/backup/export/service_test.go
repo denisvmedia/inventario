@@ -18,12 +18,16 @@ import (
 )
 
 func newTestRegistrySet() *registry.Set {
+	locationRegistry := memory.NewLocationRegistry()
+	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	fileRegistry := memory.NewFileRegistry()
+
 	registrySet := &registry.Set{
-		LocationRegistry:  memory.NewLocationRegistry(),
-		AreaRegistry:      memory.NewAreaRegistry(memory.NewLocationRegistry()),
-		CommodityRegistry: memory.NewCommodityRegistry(memory.NewAreaRegistry(memory.NewLocationRegistry())),
+		LocationRegistry:  locationRegistry,
+		AreaRegistry:      areaRegistry,
+		CommodityRegistry: memory.NewCommodityRegistry(areaRegistry),
 		ExportRegistry:    memory.NewExportRegistry(),
-		FileRegistry:      memory.NewFileRegistry(),
+		FileRegistry:      fileRegistry,
 	}
 	return registrySet
 }
@@ -250,6 +254,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	// Create interconnected registries
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	fileRegistry := memory.NewFileRegistry()
 	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	imageRegistry := memory.NewImageRegistry(commodityRegistry)
 	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
@@ -264,6 +269,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 		InvoiceRegistry:   invoiceRegistry,
 		ManualRegistry:    manualRegistry,
 		ExportRegistry:    exportRegistry,
+		FileRegistry:      fileRegistry,
 	}
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
@@ -380,6 +386,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 	// Create interconnected registries
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	fileRegistry := memory.NewFileRegistry()
 	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	imageRegistry := memory.NewImageRegistry(commodityRegistry)
 	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
@@ -394,6 +401,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 		InvoiceRegistry:   invoiceRegistry,
 		ManualRegistry:    manualRegistry,
 		ExportRegistry:    exportRegistry,
+		FileRegistry:      fileRegistry,
 	}
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
@@ -700,6 +708,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 	// Create interconnected registries
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	fileRegistry := memory.NewFileRegistry()
 	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	imageRegistry := memory.NewImageRegistry(commodityRegistry)
 	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
@@ -714,7 +723,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		InvoiceRegistry:   invoiceRegistry,
 		ManualRegistry:    manualRegistry,
 		ExportRegistry:    exportRegistry,
-		FileRegistry:      memory.NewFileRegistry(),
+		FileRegistry:      fileRegistry,
 	}
 
 	// Create test locations
