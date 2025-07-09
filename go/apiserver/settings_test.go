@@ -9,8 +9,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/internal/currency"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
@@ -22,9 +24,18 @@ func TestSettingsAPI(t *testing.T) {
 	registrySet, err := memory.NewRegistrySet("")
 	c.Assert(err, qt.IsNil)
 
+	// Create a conversion service for testing
+	rateProvider := currency.NewStaticRateProvider(map[string]decimal.Decimal{
+		"USD_EUR": decimal.NewFromFloat(0.85),
+		"EUR_USD": decimal.NewFromFloat(1.18),
+		"EUR_GBP": decimal.NewFromFloat(0.86),
+		"GBP_EUR": decimal.NewFromFloat(1.16),
+	})
+	conversionService := currency.NewConversionService(registrySet.CommodityRegistry, rateProvider)
+
 	// Create a router with the settings endpoint
 	r := chi.NewRouter()
-	r.Route("/settings", apiserver.Settings(registrySet.SettingsRegistry))
+	r.Route("/settings", apiserver.Settings(registrySet.SettingsRegistry, conversionService))
 
 	// Test GET /settings (empty settings)
 	req := httptest.NewRequest("GET", "/settings", nil)
@@ -114,14 +125,23 @@ func TestMainCurrencyCanBeChanged(t *testing.T) {
 	registrySet, err := memory.NewRegistrySet("")
 	c.Assert(err, qt.IsNil)
 
+	// Create a conversion service for testing
+	rateProvider := currency.NewStaticRateProvider(map[string]decimal.Decimal{
+		"USD_EUR": decimal.NewFromFloat(0.85),
+		"EUR_USD": decimal.NewFromFloat(1.18),
+		"EUR_GBP": decimal.NewFromFloat(0.86),
+		"GBP_EUR": decimal.NewFromFloat(1.16),
+	})
+	conversionService := currency.NewConversionService(registrySet.CommodityRegistry, rateProvider)
+
 	// Create a router with the settings endpoint
 	r := chi.NewRouter()
-	r.Route("/settings", apiserver.Settings(registrySet.SettingsRegistry))
+	r.Route("/settings", apiserver.Settings(registrySet.SettingsRegistry, conversionService))
 
 	// First, set the main currency to USD
-	currency := "USD"
+	mainCurrency := "USD"
 	testSettings := models.SettingsObject{
-		MainCurrency: &currency,
+		MainCurrency: &mainCurrency,
 	}
 	settingsJSON, err := json.Marshal(testSettings)
 	c.Assert(err, qt.IsNil)
@@ -155,6 +175,10 @@ func TestMainCurrencyCanBeChanged(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	// Should succeed now
+	if w.Code != http.StatusOK {
+		c.Logf("Response body: %s", w.Body.String())
+		c.Logf("Response code: %d", w.Code)
+	}
 	c.Assert(w.Code, qt.Equals, http.StatusOK)
 
 	// Verify the main currency is now GBP
