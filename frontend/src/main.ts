@@ -1,8 +1,11 @@
 import { createApp } from 'vue'
 import PrimeVue from 'primevue/config';
+import ToastService from 'primevue/toastservice';
 import Select from 'primevue/select'
-import InputSwitch from 'primevue/inputswitch'
+import ToggleSwitch from 'primevue/toggleswitch'
 import Dialog from 'primevue/dialog'
+import DatePicker from 'primevue/datepicker'
+import Toast from 'primevue/toast'
 // import Aura from '@primeuix/themes/aura';
 // import Nora from '@primeuix/themes/nora';
 // import Lara from '@primeuix/themes/lara';
@@ -14,6 +17,12 @@ import './assets/main.scss'
 import './assets/primevue-dropdown.scss'
 import './assets/primevue-toggleswitch.scss'
 import './assets/primevue-dialog.scss'
+import './assets/primevue-datepicker.scss'
+import './assets/primevue-toast.scss'
+import './assets/primevue-fileupload.scss'
+import './assets/primevue-progressbar.scss'
+import './assets/primevue-progressspinner.scss'
+import './assets/primevue-badge.scss'
 import { FontAwesomeIcon } from './fontawesome'
 
 // Add some debug logging
@@ -44,10 +53,16 @@ app.use(PrimeVue, {
   // theme: {
   //   preset: Aura
   // }
+  locale: {
+    firstDayOfWeek: 1,
+  },
 })
+app.use(ToastService)
 app.component('Select', Select)
-app.component('InputSwitch', InputSwitch)
+app.component('ToggleSwitch', ToggleSwitch)
 app.component('Dialog', Dialog)
+app.component('DatePicker', DatePicker)
+app.component('Toast', Toast)
 
 // Register Font Awesome component globally
 app.component('FontAwesomeIcon', FontAwesomeIcon)

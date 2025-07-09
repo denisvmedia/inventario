@@ -398,7 +398,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                            "$ref": "#/definitions/jsonapi.CommodityFileUpdateRequest"
                         }
                     }
                 ],
@@ -616,7 +616,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                            "$ref": "#/definitions/jsonapi.CommodityFileUpdateRequest"
                         }
                     }
                 ],
@@ -834,7 +834,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                            "$ref": "#/definitions/jsonapi.CommodityFileUpdateRequest"
                         }
                     }
                 ],
@@ -1026,7 +1026,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete a commodity by ID",
+                "description": "Delete a commodity by ID and all its linked files",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -1103,6 +1103,659 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/debug.Info"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports": {
+            "get": {
+                "description": "get exports",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "List exports",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Include deleted exports",
+                        "name": "include_deleted",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Create an export",
+                "parameters": [
+                    {
+                        "description": "Export",
+                        "name": "export",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/import": {
+            "post": {
+                "description": "Import an uploaded XML export file and create an export record",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Import XML export",
+                "parameters": [
+                    {
+                        "description": "Import request data",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ImportExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/{id}": {
+            "get": {
+                "description": "get export by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Get an export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ExportResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Delete an export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/{id}/download": {
+            "get": {
+                "description": "Download an export XML file",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Download an export file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/{id}/restores": {
+            "get": {
+                "description": "get restore operations for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "List export restore operations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new restore operation for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Create export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Restore operation data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/exports/{id}/restores/{restoreId}": {
+            "get": {
+                "description": "get restore operation by ID for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Get export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restore Operation ID",
+                        "name": "restoreId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.RestoreOperationResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete a restore operation for an export",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "exports"
+                ],
+                "summary": "Delete export restore operation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restore Operation ID",
+                        "name": "restoreId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/files": {
+            "get": {
+                "description": "get files with optional filtering",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "List files",
+                "parameters": [
+                    {
+                        "enum": [
+                            "image",
+                            "document",
+                            "video",
+                            "audio",
+                            "archive",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Filter by file type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search in title, description, and file paths",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by tags (comma-separated)",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Items per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FilesResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new file entity with metadata (file upload handled separately)",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Create a file entity",
+                "parameters": [
+                    {
+                        "description": "File metadata",
+                        "name": "file",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}": {
+            "get": {
+                "description": "get file by ID",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Get a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update file metadata",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Update a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "File update data",
+                        "name": "file",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete file and its associated file",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Delete a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}.{ext}": {
+            "get": {
+                "description": "download file content",
+                "tags": [
+                    "files"
+                ],
+                "summary": "Download a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File extension",
+                        "name": "ext",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File content"
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
@@ -1546,6 +2199,40 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityFileUpdateParams": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "description": "Only the Path field can be updated",
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityFileUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "$ref": "#/definitions/jsonapi.CommodityFileUpdateParams"
+                        },
+                        "id": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "images",
+                                "manuals",
+                                "invoices"
+                            ],
+                            "example": "images"
+                        }
+                    }
+                }
+            }
+        },
         "jsonapi.CommodityMeta": {
             "type": "object",
             "properties": {
@@ -1639,12 +2326,149 @@ const docTemplate = `{
                 }
             }
         },
-        "jsonapi.FileUpdateParams": {
+        "jsonapi.ExportCreateRequest": {
             "type": "object",
             "properties": {
-                "path": {
-                    "description": "Only the Path field can be updated",
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ExportCreateRequestData"
+                }
+            }
+        },
+        "jsonapi.ExportCreateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Export"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "exports"
+                    ],
+                    "example": "exports"
+                }
+            }
+        },
+        "jsonapi.ExportResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ExportResponseData"
+                }
+            }
+        },
+        "jsonapi.ExportResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Export"
+                },
+                "id": {
                     "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "exports"
+                    ],
+                    "example": "exports"
+                }
+            }
+        },
+        "jsonapi.ExportsMeta": {
+            "type": "object",
+            "properties": {
+                "exports": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.ExportsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.ExportResponseData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ExportsMeta"
+                }
+            }
+        },
+        "jsonapi.FileRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.FileRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.FileRequestData": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "linked_entity_id": {
+                    "description": "ID of linked entity",
+                    "type": "string"
+                },
+                "linked_entity_meta": {
+                    "description": "metadata about the link",
+                    "type": "string"
+                },
+                "linked_entity_type": {
+                    "description": "commodity, export, or empty",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "Only for updates",
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.FileRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.FileRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.FileResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.FileEntity"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "files"
+                    ],
+                    "example": "files"
                 }
             }
         },
@@ -1652,24 +2476,87 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "data": {
-                    "type": "object",
-                    "properties": {
-                        "attributes": {
-                            "$ref": "#/definitions/jsonapi.FileUpdateParams"
-                        },
-                        "id": {
-                            "type": "string"
-                        },
-                        "type": {
-                            "type": "string",
-                            "enum": [
-                                "images",
-                                "manuals",
-                                "invoices"
-                            ],
-                            "example": "images"
-                        }
+                    "$ref": "#/definitions/jsonapi.FileUpdateRequestData"
+                }
+            }
+        },
+        "jsonapi.FileUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.FileUpdateRequestFileData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "files"
+                    ],
+                    "example": "files"
+                }
+            }
+        },
+        "jsonapi.FileUpdateRequestFileData": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "linked_entity_id": {
+                    "description": "ID of linked entity",
+                    "type": "string"
+                },
+                "linked_entity_meta": {
+                    "description": "metadata about the link",
+                    "type": "string"
+                },
+                "linked_entity_type": {
+                    "description": "commodity, export, or empty",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "User-editable filename",
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.FilesMeta": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 100
+                }
+            }
+        },
+        "jsonapi.FilesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.FileEntity"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.FilesMeta"
                 }
             }
         },
@@ -1712,6 +2599,40 @@ const docTemplate = `{
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.ImagesMeta"
+                }
+            }
+        },
+        "jsonapi.ImportExportAttributes": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "source_file_path": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.ImportExportRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ImportExportRequestData"
+                }
+            }
+        },
+        "jsonapi.ImportExportRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ImportExportAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "exports"
+                    ],
+                    "example": "exports"
                 }
             }
         },
@@ -1895,6 +2816,66 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.RestoreOperationCreateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.RestoreOperationCreateRequestData"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationCreateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.RestoreOperation"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "restores"
+                    ],
+                    "example": "restores"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.RestoreOperationResponseData"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.RestoreOperation"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "restores"
+                    ],
+                    "example": "restores"
+                }
+            }
+        },
+        "jsonapi.RestoreOperationsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.RestoreOperationResponseData"
+                    }
+                }
+            }
+        },
         "jsonapi.ValueAttrs": {
             "type": "object",
             "properties": {
@@ -2064,6 +3045,237 @@ const docTemplate = `{
                 "CommodityTypeOther"
             ]
         },
+        "models.Export": {
+            "type": "object",
+            "properties": {
+                "area_count": {
+                    "type": "integer"
+                },
+                "binary_data_size": {
+                    "type": "integer"
+                },
+                "commodity_count": {
+                    "type": "integer"
+                },
+                "completed_date": {
+                    "type": "string"
+                },
+                "created_date": {
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "file_id": {
+                    "type": "string"
+                },
+                "file_path": {
+                    "description": "Deprecated: will be removed after migration",
+                    "type": "string"
+                },
+                "file_size": {
+                    "description": "Export statistics",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_count": {
+                    "type": "integer"
+                },
+                "imported": {
+                    "type": "boolean"
+                },
+                "include_file_data": {
+                    "type": "boolean"
+                },
+                "invoice_count": {
+                    "type": "integer"
+                },
+                "location_count": {
+                    "type": "integer"
+                },
+                "manual_count": {
+                    "type": "integer"
+                },
+                "selected_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ExportSelectedItem"
+                    }
+                },
+                "status": {
+                    "$ref": "#/definitions/models.ExportStatus"
+                },
+                "type": {
+                    "$ref": "#/definitions/models.ExportType"
+                }
+            }
+        },
+        "models.ExportSelectedItem": {
+            "type": "object",
+            "properties": {
+                "area_id": {
+                    "description": "For commodities: which area they belong to",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "include_all": {
+                    "type": "boolean"
+                },
+                "location_id": {
+                    "description": "Relationship fields for preserving hierarchy snapshot",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/models.ExportSelectedItemType"
+                }
+            }
+        },
+        "models.ExportSelectedItemType": {
+            "type": "string",
+            "enum": [
+                "location",
+                "area",
+                "commodity"
+            ],
+            "x-enum-varnames": [
+                "ExportSelectedItemTypeLocation",
+                "ExportSelectedItemTypeArea",
+                "ExportSelectedItemTypeCommodity"
+            ]
+        },
+        "models.ExportStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "in_progress",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "ExportStatusPending",
+                "ExportStatusInProgress",
+                "ExportStatusCompleted",
+                "ExportStatusFailed"
+            ]
+        },
+        "models.ExportType": {
+            "type": "string",
+            "enum": [
+                "full_database",
+                "selected_items",
+                "locations",
+                "areas",
+                "commodities",
+                "imported"
+            ],
+            "x-enum-varnames": [
+                "ExportTypeFullDatabase",
+                "ExportTypeSelectedItems",
+                "ExportTypeLocations",
+                "ExportTypeAreas",
+                "ExportTypeCommodities",
+                "ExportTypeImported"
+            ]
+        },
+        "models.FileEntity": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "CreatedAt is when the file was created",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "Description is an optional description of the file",
+                    "type": "string"
+                },
+                "ext": {
+                    "description": "Ext is the file extension including the dot.\nExample: \".pdf\"",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "linked_entity_id": {
+                    "description": "LinkedEntityID is the ID of the linked entity (commodity or export)",
+                    "type": "string"
+                },
+                "linked_entity_meta": {
+                    "description": "LinkedEntityMeta contains metadata about the link type\nFor commodities: \"images\", \"invoices\", \"manuals\"\nFor exports: \"xml-1.0\" (version of the export file format)",
+                    "type": "string"
+                },
+                "linked_entity_type": {
+                    "description": "LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files)",
+                    "type": "string"
+                },
+                "mime_type": {
+                    "description": "MIMEType is the MIME type of the file.\nExample: \"application/pdf\"",
+                    "type": "string"
+                },
+                "original_path": {
+                    "description": "OriginalPath is the original filename as uploaded by the user.\nExample: \"invoice.pdf\"",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
+                    "type": "string"
+                },
+                "tags": {
+                    "description": "Tags are optional tags for categorization and search",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "description": "Title is the user-defined title for the file",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "Type represents the category of the file (image, document, etc.)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.FileType"
+                        }
+                    ]
+                },
+                "updated_at": {
+                    "description": "UpdatedAt is when the file was last updated",
+                    "type": "string"
+                }
+            }
+        },
+        "models.FileType": {
+            "type": "string",
+            "enum": [
+                "image",
+                "document",
+                "video",
+                "audio",
+                "archive",
+                "other"
+            ],
+            "x-enum-varnames": [
+                "FileTypeImage",
+                "FileTypeDocument",
+                "FileTypeVideo",
+                "FileTypeAudio",
+                "FileTypeArchive",
+                "FileTypeOther"
+            ]
+        },
         "models.Image": {
             "type": "object",
             "properties": {
@@ -2158,6 +3370,147 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "models.RestoreOperation": {
+            "type": "object",
+            "properties": {
+                "area_count": {
+                    "type": "integer"
+                },
+                "binary_data_size": {
+                    "type": "integer"
+                },
+                "commodity_count": {
+                    "type": "integer"
+                },
+                "completed_date": {
+                    "type": "string"
+                },
+                "created_date": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "error_count": {
+                    "type": "integer"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "export_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_count": {
+                    "type": "integer"
+                },
+                "invoice_count": {
+                    "type": "integer"
+                },
+                "location_count": {
+                    "description": "Statistics",
+                    "type": "integer"
+                },
+                "manual_count": {
+                    "type": "integer"
+                },
+                "options": {
+                    "$ref": "#/definitions/models.RestoreOptions"
+                },
+                "started_date": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.RestoreStatus"
+                },
+                "steps": {
+                    "description": "Related steps (not stored in DB, loaded separately)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.RestoreStep"
+                    }
+                }
+            }
+        },
+        "models.RestoreOptions": {
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "include_file_data": {
+                    "type": "boolean"
+                },
+                "strategy": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.RestoreStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "running",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "RestoreStatusPending",
+                "RestoreStatusRunning",
+                "RestoreStatusCompleted",
+                "RestoreStatusFailed"
+            ]
+        },
+        "models.RestoreStep": {
+            "type": "object",
+            "properties": {
+                "created_date": {
+                    "type": "string"
+                },
+                "duration": {
+                    "description": "Duration in milliseconds",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason for error or skip",
+                    "type": "string"
+                },
+                "restore_operation_id": {
+                    "type": "string"
+                },
+                "result": {
+                    "$ref": "#/definitions/models.RestoreStepResult"
+                },
+                "updated_date": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.RestoreStepResult": {
+            "type": "string",
+            "enum": [
+                "todo",
+                "in_progress",
+                "success",
+                "error",
+                "skipped"
+            ],
+            "x-enum-varnames": [
+                "RestoreStepResultTodo",
+                "RestoreStepResultInProgress",
+                "RestoreStepResultSuccess",
+                "RestoreStepResultError",
+                "RestoreStepResultSkipped"
+            ]
         },
         "models.SettingsObject": {
             "type": "object",

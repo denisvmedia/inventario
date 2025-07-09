@@ -5,7 +5,7 @@
       No {{ fileType }} uploaded yet.
     </div>
     <div v-else class="files-container">
-      <div v-for="file in files" :key="file.id" class="file-item">
+      <div v-for="file in files" :key="file.id" class="file-item" :data-file-id="file.id" :data-file-ext="file.ext">
         <div v-if="isImageFile(file)" class="file-preview image-preview" @click="openViewer(file)">
           <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
         </div>
@@ -15,7 +15,7 @@
         <div class="file-info">
           <div class="file-name-container">
             <div v-if="editingFile !== file.id" class="file-name" @click="startEditing(file)">
-              {{ getFileName(file) }}
+              <span class="file-name-text" :title="getFileName(file)">{{ getFileName(file) }}</span>
               <font-awesome-icon icon="pencil-alt" class="edit-icon" />
             </div>
             <div v-else class="file-name-edit">
@@ -59,7 +59,6 @@ import { ref, nextTick } from 'vue'
 const props = defineProps({
   files: {
     type: Array,
-    required: true,
     default: () => []
   },
   fileType: {
@@ -80,14 +79,9 @@ const props = defineProps({
 const emit = defineEmits(['delete', 'download', 'update', 'view-details', 'open-viewer'])
 
 const getFileUrl = (file: any) => {
-  if (props.fileType === 'images') {
-    return `/api/v1/commodities/${props.commodityId}/images/${file.id}${file.ext}`
-  } else if (props.fileType === 'manuals') {
-    return `/api/v1/commodities/${props.commodityId}/manuals/${file.id}${file.ext}`
-  } else if (props.fileType === 'invoices') {
-    return `/api/v1/commodities/${props.commodityId}/invoices/${file.id}${file.ext}`
-  }
-  return ''
+  // Use generic file entity download URL
+  const ext = file.ext.startsWith('.') ? file.ext.substring(1) : file.ext
+  return `/api/v1/files/${file.id}.${ext}`
 }
 
 const getFileName = (file: any) => {
@@ -221,6 +215,7 @@ const isPdfFile = (file: any) => {
   margin-left: 0.5rem;
   color: $secondary-color;
   opacity: 0;
+  width: 0;
   transition: opacity 0.2s ease;
 }
 
@@ -301,6 +296,18 @@ const isPdfFile = (file: any) => {
 
   &:hover .edit-icon {
     opacity: 1;
+    width: auto;
+    visibility: visible;
+  }
+
+  .file-name-text {
+    display: inline-block;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+    cursor: pointer;
   }
 }
 
@@ -326,6 +333,7 @@ const isPdfFile = (file: any) => {
 .file-actions {
   display: flex;
   gap: 0.5rem;
+  justify-content: center;
 }
 
 .btn-sm {

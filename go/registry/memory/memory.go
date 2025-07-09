@@ -15,10 +15,14 @@ func NewRegistrySet(_ registry.Config) (*registry.Set, error) {
 	s.LocationRegistry = NewLocationRegistry()
 	s.AreaRegistry = NewAreaRegistry(s.LocationRegistry)
 	s.SettingsRegistry = NewSettingsRegistry()
+	s.FileRegistry = NewFileRegistry()
 	s.CommodityRegistry = NewCommodityRegistry(s.AreaRegistry)
 	s.ImageRegistry = NewImageRegistry(s.CommodityRegistry)
 	s.InvoiceRegistry = NewInvoiceRegistry(s.CommodityRegistry)
 	s.ManualRegistry = NewManualRegistry(s.CommodityRegistry)
+	s.ExportRegistry = NewExportRegistry()
+	s.RestoreStepRegistry = NewRestoreStepRegistry()
+	s.RestoreOperationRegistry = NewRestoreOperationRegistry(s.RestoreStepRegistry)
 
 	return s, nil
 }

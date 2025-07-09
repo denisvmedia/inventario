@@ -102,23 +102,17 @@
     </div>
 
     <!-- Delete Confirmation Dialog -->
-    <Dialog
+    <Confirmation
       v-model:visible="showDeleteConfirmation"
-      :header="'Confirm Delete'"
-      :modal="true"
-      class="confirmation-modal p-confirm-dialog-danger"
-    >
-      <div class="confirmation-content">
-        <font-awesome-icon icon="exclamation-triangle" class="confirmation-icon" />
-        <div class="confirmation-message">
-          <p>Are you sure you want to delete this {{ fileType.slice(0, -1) }}?</p>
-        </div>
-      </div>
-      <template #footer>
-        <button class="btn btn-secondary" @click="cancelDelete">Cancel</button>
-        <button class="btn btn-danger" @click="confirmDelete">Delete</button>
-      </template>
-    </Dialog>
+      :title="'Confirm Delete'"
+      :message="`Are you sure you want to delete this ${fileType.slice(0, -1)}?`"
+      :confirm-label="'Delete'"
+      :cancel-label="'Cancel'"
+      :confirm-button-class="'danger'"
+      :confirmation-icon="'exclamation-triangle'"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+    />
   </div>
 </template>
 
@@ -128,6 +122,7 @@ import PDFViewerCanvas from './PDFViewerCanvas.vue'
 // PDFViewer is not used, using PDFViewerCanvas instead
 import FileList from './FileList.vue'
 import FileDetails from './FileDetails.vue'
+import Confirmation from './Confirmation.vue'
 
 const props = defineProps({
   files: {
@@ -140,7 +135,6 @@ const props = defineProps({
   },
   entityType: {
     type: String,
-    required: true,
     default: 'commodities'
   },
   fileType: {
@@ -261,15 +255,8 @@ const getFileUrl = (file: any) => {
     }
   }
 
-  // Build the URL based on file type
-  if (props.fileType === 'images') {
-    return `/api/v1/${props.entityType}/${props.entityId}/images/${file.id}.${ext}`
-  } else if (props.fileType === 'manuals') {
-    return `/api/v1/${props.entityType}/${props.entityId}/manuals/${file.id}.${ext}`
-  } else if (props.fileType === 'invoices') {
-    return `/api/v1/${props.entityType}/${props.entityId}/invoices/${file.id}.${ext}`
-  }
-  return ''
+  // Use generic file entity download URL
+  return `/api/v1/files/${file.id}.${ext}`
 }
 
 const getFileName = (file: any) => {

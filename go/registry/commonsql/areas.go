@@ -46,8 +46,10 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 		return nil, errkit.Wrap(err, "failed to get location")
 	}
 
-	// Generate a new ID
-	area.SetID(generateID())
+	// Generate a new ID if one is not already provided
+	if area.GetID() == "" {
+		area.SetID(generateID())
+	}
 
 	err = InsertEntity(ctx, tx, r.tableNames.Areas(), area)
 	if err != nil {

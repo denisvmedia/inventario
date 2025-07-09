@@ -1,6 +1,15 @@
 <template>
   <div class="commodity-detail">
     <div v-if="loading" class="loading">Loading...</div>
+    <ResourceNotFound
+      v-else-if="is404Error"
+      resource-type="commodity"
+      :title="get404Title('commodity')"
+      :message="get404Message('commodity')"
+      :go-back-text="sourceIsArea ? 'Back to Area' : 'Back to Commodities'"
+      @go-back="navigateBack"
+      @try-again="loadCommodity"
+    />
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!commodity" class="not-found">Commodity not found</div>
     <div v-else>
@@ -118,18 +127,28 @@
         <div class="info-card full-width commodity-images">
           <div class="section-header">
             <h2>Images</h2>
-            <button class="btn btn-sm btn-primary" @click="showImageUploader = !showImageUploader">
+            <button
+              class="btn btn-sm"
+              :class="showImageUploader ? 'btn-secondary-alt' : 'btn-primary'"
+              @click="showImageUploader = !showImageUploader"
+            >
               {{ showImageUploader ? 'Cancel' : 'Add Images' }}
             </button>
           </div>
 
-          <FileUploader
-            v-if="showImageUploader"
-            :multiple="true"
-            accept=".gif,.jpg,.jpeg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
-            upload-prompt="Drag and drop images here"
-            @upload="uploadImages"
-          />
+          <Transition name="file-uploader" mode="out-in">
+            <FileUploader
+              v-if="showImageUploader"
+              ref="imageUploaderRef"
+              :multiple="true"
+              accept=".gif,.jpg,.jpeg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
+              upload-prompt="Drag and drop images here"
+              upload-hint="Supports GIF, JPG, JPEG, PNG, and WebP image formats"
+              @upload="uploadImages"
+              @files-selected="onFilesSelected('images')"
+              @files-cleared="onFilesCleared('images')"
+            />
+          </Transition>
 
           <div v-if="loadingImages" class="loading">Loading images...</div>
           <FileViewer
@@ -148,18 +167,28 @@
         <div class="info-card full-width commodity-manuals">
           <div class="section-header">
             <h2>Manuals</h2>
-            <button class="btn btn-sm btn-primary" @click="showManualUploader = !showManualUploader">
+            <button
+              class="btn btn-sm"
+              :class="showManualUploader ? 'btn-secondary-alt' : 'btn-primary'"
+              @click="showManualUploader = !showManualUploader"
+            >
               {{ showManualUploader ? 'Cancel' : 'Add Manuals' }}
             </button>
           </div>
 
-          <FileUploader
-            v-if="showManualUploader"
-            :multiple="true"
-            accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
-            upload-prompt="Drag and drop manuals here"
-            @upload="uploadManuals"
-          />
+          <Transition name="file-uploader" mode="out-in">
+            <FileUploader
+              v-if="showManualUploader"
+              ref="manualUploaderRef"
+              :multiple="true"
+              accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
+              upload-prompt="Drag and drop manuals here"
+              upload-hint="Supports PDF documents and image formats (GIF, JPG, PNG, WebP)"
+              @upload="uploadManuals"
+              @files-selected="onFilesSelected('manuals')"
+              @files-cleared="onFilesCleared('manuals')"
+            />
+          </Transition>
 
           <div v-if="loadingManuals" class="loading">Loading manuals...</div>
           <FileViewer
@@ -178,18 +207,28 @@
         <div class="info-card full-width commodity-invoices">
           <div class="section-header">
             <h2>Invoices</h2>
-            <button class="btn btn-sm btn-primary" @click="showInvoiceUploader = !showInvoiceUploader">
+            <button
+              class="btn btn-sm"
+              :class="showInvoiceUploader ? 'btn-secondary-alt' : 'btn-primary'"
+              @click="showInvoiceUploader = !showInvoiceUploader"
+            >
               {{ showInvoiceUploader ? 'Cancel' : 'Add Invoices' }}
             </button>
           </div>
 
-          <FileUploader
-            v-if="showInvoiceUploader"
-            :multiple="true"
-            accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
-            upload-prompt="Drag and drop invoices here"
-            @upload="uploadInvoices"
-          />
+          <Transition name="file-uploader" mode="out-in">
+            <FileUploader
+              v-if="showInvoiceUploader"
+              ref="invoiceUploaderRef"
+              :multiple="true"
+              accept=".pdf,.gif,.jpg,.jpeg,.png,.webp,application/pdf,image/gif,image/jpeg,image/png,image/webp"
+              upload-prompt="Drag and drop invoices here"
+              upload-hint="Supports PDF documents and image formats (GIF, JPG, PNG, WebP)"
+              @upload="uploadInvoices"
+              @files-selected="onFilesSelected('invoices')"
+              @files-cleared="onFilesCleared('invoices')"
+            />
+          </Transition>
 
           <div v-if="loadingInvoices" class="loading">Loading invoices...</div>
           <FileViewer
@@ -216,6 +255,14 @@
         confirmationIcon="exclamation-triangle"
         @confirm="onConfirmDelete"
       />
+
+      <!-- Focus Overlay for Upload Reminder -->
+      <FocusOverlay
+        :show="showFocusOverlay"
+        :target-element="focusTargetElement"
+        message="Don't forget to upload your selected files!"
+        @close="closeFocusOverlay"
+      />
     </div>
   </div>
 </template>
@@ -226,20 +273,27 @@ import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import { COMMODITY_TYPES } from '@/constants/commodityTypes'
 import { COMMODITY_STATUSES } from '@/constants/commodityStatuses'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 import { formatPrice, calculatePricePerUnit, getMainCurrency } from '@/services/currencyService'
 import FileUploader from '@/components/FileUploader.vue'
 import FileViewer from '@/components/FileViewer.vue'
-import Confirmation from "@/components/Confirmation.vue";
+import Confirmation from "@/components/Confirmation.vue"
+import FocusOverlay from '@/components/FocusOverlay.vue'
 
 const router = useRouter()
 const route = useRoute()
 const commodity = ref<any>(null)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+const lastError = ref<any>(null) // Store the last error object for 404 detection
 
 // Navigation source tracking
 const sourceIsArea = computed(() => route.query.source === 'area')
 const areaId = computed(() => route.query.areaId as string || '')
+
+// Error state computed properties
+const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
 
 // File states
 const images = ref<any[]>([])
@@ -256,8 +310,21 @@ const showImageUploader = ref<boolean>(false)
 const showManualUploader = ref<boolean>(false)
 const showInvoiceUploader = ref<boolean>(false)
 
-onMounted(async () => {
+// Focus overlay state
+const showFocusOverlay = ref<boolean>(false)
+const focusTargetElement = ref<HTMLElement | null>(null)
+const activeUploader = ref<string | null>(null)
+
+// File uploader refs
+const imageUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
+const manualUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
+const invoiceUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
+
+const loadCommodity = async () => {
   const id = route.params.id as string
+  loading.value = true
+  error.value = null
+  lastError.value = null
 
   try {
     const response = await commodityService.getCommodity(id)
@@ -267,9 +334,19 @@ onMounted(async () => {
     // Load files after commodity is loaded
     loadFiles()
   } catch (err: any) {
-    error.value = 'Failed to load commodity: ' + (err.message || 'Unknown error')
-    loading.value = false
+    lastError.value = err
+    if (checkIs404Error(err)) {
+      // 404 errors will be handled by the ResourceNotFound component
+      loading.value = false
+    } else {
+      error.value = 'Failed to load commodity: ' + (err.message || 'Unknown error')
+      loading.value = false
+    }
   }
+}
+
+onMounted(() => {
+  loadCommodity()
 })
 
 const loadFiles = async () => {
@@ -315,6 +392,9 @@ const uploadImages = async (files: File[]) => {
   try {
     await commodityService.uploadImages(commodity.value.id, files)
     showImageUploader.value = false
+    closeFocusOverlay()
+    // Mark upload as completed in the uploader
+    imageUploaderRef.value?.markUploadCompleted()
     // Reload images after upload
     loadingImages.value = true
     const response = await commodityService.getImages(commodity.value.id)
@@ -322,6 +402,7 @@ const uploadImages = async (files: File[]) => {
     loadingImages.value = false
   } catch (err: any) {
     error.value = 'Failed to upload images: ' + (err.message || 'Unknown error')
+    imageUploaderRef.value?.markUploadFailed()
   }
 }
 
@@ -331,6 +412,9 @@ const uploadManuals = async (files: File[]) => {
   try {
     await commodityService.uploadManuals(commodity.value.id, files)
     showManualUploader.value = false
+    closeFocusOverlay()
+    // Mark upload as completed in the uploader
+    manualUploaderRef.value?.markUploadCompleted()
     // Reload manuals after upload
     loadingManuals.value = true
     const response = await commodityService.getManuals(commodity.value.id)
@@ -338,6 +422,7 @@ const uploadManuals = async (files: File[]) => {
     loadingManuals.value = false
   } catch (err: any) {
     error.value = 'Failed to upload manuals: ' + (err.message || 'Unknown error')
+    manualUploaderRef.value?.markUploadFailed()
   }
 }
 
@@ -347,6 +432,9 @@ const uploadInvoices = async (files: File[]) => {
   try {
     await commodityService.uploadInvoices(commodity.value.id, files)
     showInvoiceUploader.value = false
+    closeFocusOverlay()
+    // Mark upload as completed in the uploader
+    invoiceUploaderRef.value?.markUploadCompleted()
     // Reload invoices after upload
     loadingInvoices.value = true
     const response = await commodityService.getInvoices(commodity.value.id)
@@ -354,7 +442,50 @@ const uploadInvoices = async (files: File[]) => {
     loadingInvoices.value = false
   } catch (err: any) {
     error.value = 'Failed to upload invoices: ' + (err.message || 'Unknown error')
+    invoiceUploaderRef.value?.markUploadFailed()
   }
+}
+
+// Focus overlay event handlers
+const onFilesSelected = (uploaderType: string) => {
+  activeUploader.value = uploaderType
+
+  // Get the upload button from the appropriate uploader
+  let uploaderRef: any = null
+  switch (uploaderType) {
+    case 'images':
+      uploaderRef = imageUploaderRef.value
+      break
+    case 'manuals':
+      uploaderRef = manualUploaderRef.value
+      break
+    case 'invoices':
+      uploaderRef = invoiceUploaderRef.value
+      break
+  }
+
+  if (uploaderRef) {
+    // Wait for next tick to ensure the upload button is rendered
+    setTimeout(() => {
+      const uploadButton = uploaderRef.getUploadButton()
+      if (uploadButton) {
+        focusTargetElement.value = uploadButton
+        showFocusOverlay.value = true
+      }
+    }, 100)
+  }
+}
+
+const onFilesCleared = (uploaderType: string) => {
+  if (activeUploader.value === uploaderType) {
+    closeFocusOverlay()
+  }
+}
+
+const closeFocusOverlay = () => {
+  showFocusOverlay.value = false
+  focusTargetElement.value = null
+  activeUploader.value = null
 }
 
 const deleteImage = async (image: any) => {
@@ -688,14 +819,6 @@ const formatDate = (date: string): string => {
   margin-right: 0.5rem;
 }
 
-.btn {
-  padding: 0.5rem 1rem;
-  border-radius: $default-radius;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-}
-
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
@@ -721,5 +844,36 @@ const formatDate = (date: string): string => {
     padding-bottom: 0;
     border-bottom: none;
   }
+}
+
+/* File uploader transition animations */
+.file-uploader-enter-active,
+.file-uploader-leave-active {
+  transition: all 0.3s ease;
+  transform-origin: top;
+}
+
+.file-uploader-enter-from {
+  opacity: 0;
+  transform: translateY(-20px) scaleY(0.8);
+  max-height: 0;
+}
+
+.file-uploader-enter-to {
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  max-height: 500px; /* Adjust based on your content */
+}
+
+.file-uploader-leave-from {
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  max-height: 500px;
+}
+
+.file-uploader-leave-to {
+  opacity: 0;
+  transform: translateY(-20px) scaleY(0.8);
+  max-height: 0;
 }
 </style>

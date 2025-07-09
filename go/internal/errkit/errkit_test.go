@@ -47,9 +47,17 @@ func TestError_WithFields(t *testing.T) {
 
 	newErr := e.WithFields(fields)
 
-	c.Assert(newErr.Error(), qt.Equals, "wrapped error: some error (fields: map[key1:value1 key2:2])")
-	c.Assert(newErr.WithField("key3", true).Error(), qt.Equals, "wrapped error: some error (fields: map[key1:value1 key2:2 key3:true])")
-	c.Assert(newErr.WithField("key1", "updated").Error(), qt.Equals, "wrapped error: some error (fields: map[key1:updated key2:2])")
+	c.Assert(newErr.Error(), qt.Matches, `wrapped error: some error \(\s*(key1=value1, key2=2|key2=2, key1=value1)\s*\)`)
+
+	// Test with three fields - use a more robust pattern that matches any order
+	threeFieldErr := newErr.WithField("key3", true)
+	threeFieldStr := threeFieldErr.Error()
+	c.Assert(threeFieldStr, qt.Matches, `wrapped error: some error \(.*\)`)
+	c.Assert(threeFieldStr, qt.Contains, "key1=value1")
+	c.Assert(threeFieldStr, qt.Contains, "key2=2")
+	c.Assert(threeFieldStr, qt.Contains, "key3=true")
+
+	c.Assert(newErr.WithField("key1", "updated").Error(), qt.Matches, `wrapped error: some error \(\s*(key1=updated, key2=2|key2=2, key1=updated)\s*\)`)
 
 	data, err := json.Marshal(newErr)
 	c.Assert(err, qt.IsNil)
@@ -84,7 +92,7 @@ func TestWrap(t *testing.T) {
 		err := errors.New("some error")
 		e := errkit.Wrap(err, "wrapped error", "aaa", 123, "bbb", "test")
 
-		c.Assert(e.Error(), qt.Equals, "wrapped error: some error (fields: map[aaa:123 bbb:test])")
+		c.Assert(e.Error(), qt.Matches, `wrapped error: some error \((aaa=123, bbb=test|bbb=test, aaa=123)\)`)
 	})
 }
 
@@ -99,7 +107,7 @@ func TestWrapWithFields(t *testing.T) {
 
 	e := errkit.Wrap(err, "wrapped error", fields)
 
-	c.Assert(e.Error(), qt.Equals, "wrapped error: some error (fields: map[key1:value1 key2:2])")
+	c.Assert(e.Error(), qt.Matches, `wrapped error: some error \((key1=value1, key2=2|key2=2, key1=value1)\)`)
 }
 
 func TestWithMessage(t *testing.T) {
@@ -122,7 +130,7 @@ func TestWithFields(t *testing.T) {
 
 	e := errkit.WithFields(err, fields)
 
-	c.Assert(e.Error(), qt.Equals, "some error (fields: map[key1:value1 key2:2])")
+	c.Assert(e.Error(), qt.Matches, `some error \((key1=value1, key2=2|key2=2, key1=value1)\)`)
 }
 
 func TestError_Unwrap(t *testing.T) {

@@ -1,7 +1,12 @@
 <template>
   <div class="area-detail">
+    <!-- Error Notification Stack -->
+    <ErrorNotificationStack
+      :errors="errors"
+      @dismiss="removeError"
+    />
+
     <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!area" class="not-found">Area not found</div>
     <div v-else>
       <div class="breadcrumb-nav">
@@ -29,7 +34,7 @@
           <div class="section-title">
             <h2>Commodities</h2>
             <div class="filter-toggle">
-              <InputSwitch v-model="showInactiveItems" />
+              <ToggleSwitch v-model="showInactiveItems" />
               <label class="toggle-label">Show drafts & inactive items</label>
             </div>
           </div>
@@ -93,6 +98,8 @@ import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice, getDisplayPrice, getMainCurrency } from '@/services/currencyService'
 import Confirmation from "@/components/Confirmation.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
+import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import { useErrorState } from '@/utils/errorUtils'
 
 const router = useRouter()
 const route = useRoute()
@@ -100,9 +107,11 @@ const area = ref<any>(null)
 const locations = ref<any[]>([])
 const commodities = ref<any[]>([])
 const loading = ref<boolean>(true)
-const error = ref<string | null>(null)
 const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
+
+// Error state management
+const { errors, handleError, removeError, cleanup } = useErrorState()
 
 
 // Area total value
@@ -239,7 +248,7 @@ onMounted(async () => {
       })
     }
   } catch (err: any) {
-    error.value = 'Failed to load area: ' + (err.message || 'Unknown error')
+    handleError(err, 'area', 'Failed to load area')
     loading.value = false
   }
 })
@@ -250,6 +259,7 @@ onBeforeUnmount(() => {
     window.clearTimeout(highlightTimeout)
     highlightTimeout = null
   }
+  cleanup()
 })
 
 // These functions are now handled by the CommodityListItem component
@@ -278,7 +288,7 @@ const deleteArea = async () => {
     await areaService.deleteArea(area.value.id)
     router.push('/locations')
   } catch (err: any) {
-    error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
+    handleError(err, 'area', 'Failed to delete area')
   }
 }
 
@@ -343,7 +353,7 @@ const deleteCommodity = async (id: string) => {
     // Remove the deleted commodity from the list
     commodities.value = commodities.value.filter(commodity => commodity.id !== id)
   } catch (err: any) {
-    error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
+    handleError(err, 'commodity', 'Failed to delete commodity')
   }
 }
 </script>
@@ -377,12 +387,7 @@ const deleteCommodity = async (id: string) => {
   }
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-}
+// Header styles are now in shared _header.scss
 
 .title-section {
   display: flex;
@@ -398,18 +403,6 @@ const deleteCommodity = async (id: string) => {
   font-style: italic;
   margin-top: 0;
   margin-bottom: 0.5rem;
-}
-
-.total-value {
-  font-size: 1rem;
-  color: $text-color;
-  margin-top: 0.25rem;
-
-  .value-amount {
-    font-weight: bold;
-    color: $primary-color;
-    font-size: 1.1rem;
-  }
 }
 
 .actions {
@@ -450,22 +443,7 @@ const deleteCommodity = async (id: string) => {
   gap: 1rem;
 }
 
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: #f8f9fa;
-  padding: 0.5rem 0.75rem;
-  border-radius: $default-radius;
-  border: 1px solid #e9ecef;
-}
-
-.toggle-label {
-  font-size: 0.9rem;
-  margin: 0;
-  white-space: nowrap;
-  color: $text-color;
-}
+// Filter toggle styles are now in shared _filter-toggle.scss
 
 .commodities-grid {
   display: grid;

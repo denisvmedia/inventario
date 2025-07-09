@@ -137,8 +137,17 @@ func (r *AreaRegistry) Count(_ context.Context) (int, error) {
 }
 
 func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
+	// Check if the area has commodities before attempting to delete
+	commodities, err := r.GetCommodities(ctx, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get commodities")
+	}
+	if len(commodities) > 0 {
+		return errors.New("area has commodities: cannot delete")
+	}
+
 	var locationID string
-	err := r.registry.Delete(id, func(tx dbx.TransactionOrBucket, area *models.Area) error {
+	err = r.registry.Delete(id, func(tx dbx.TransactionOrBucket, area *models.Area) error {
 		locationID = area.LocationID
 		return r.registry.DeleteEmptyBuckets(
 			tx,

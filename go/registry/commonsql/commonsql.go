@@ -14,6 +14,8 @@ type TableNames struct {
 	Images      func() string
 	Invoices    func() string
 	Manuals     func() string
+	Exports     func() string
+	Files       func() string
 }
 
 var DefaultTableNames = TableNames{
@@ -24,6 +26,8 @@ var DefaultTableNames = TableNames{
 	Images:      func() string { return "images" },
 	Invoices:    func() string { return "invoices" },
 	Manuals:     func() string { return "manuals" },
+	Exports:     func() string { return "exports" },
+	Files:       func() string { return "files" },
 }
 
 func NewRegistrySet(dbx *sqlx.DB) *registry.Set {
@@ -31,10 +35,14 @@ func NewRegistrySet(dbx *sqlx.DB) *registry.Set {
 	s.LocationRegistry = NewLocationRegistry(dbx)
 	s.AreaRegistry = NewAreaRegistry(dbx)
 	s.SettingsRegistry = NewSettingsRegistry(dbx)
+	s.FileRegistry = NewFileRegistry(dbx)
 	s.CommodityRegistry = NewCommodityRegistry(dbx)
 	s.ImageRegistry = NewImageRegistry(dbx)
 	s.InvoiceRegistry = NewInvoiceRegistry(dbx)
 	s.ManualRegistry = NewManualRegistry(dbx)
+	s.ExportRegistry = NewExportRegistry(dbx)
+	s.RestoreStepRegistry = NewRestoreStepRegistry(dbx)
+	s.RestoreOperationRegistry = NewRestoreOperationRegistry(dbx, s.RestoreStepRegistry)
 
 	return s
 }

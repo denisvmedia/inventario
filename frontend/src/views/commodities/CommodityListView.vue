@@ -9,7 +9,7 @@
       </div>
       <div class="header-actions">
         <div class="filter-toggle">
-          <InputSwitch v-model="showInactiveItems" />
+          <ToggleSwitch v-model="showInactiveItems" />
           <label class="toggle-label">Show drafts & inactive items</label>
         </div>
         <router-link v-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
@@ -272,53 +272,7 @@ const deleteCommodity = async (id: string) => {
   padding: 20px;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: #f8f9fa;
-  padding: 0.5rem 0.75rem;
-  border-radius: $default-radius;
-  border: 1px solid #e9ecef;
-}
-
-.toggle-label {
-  font-size: 0.9rem;
-  margin: 0;
-  white-space: nowrap;
-  color: $text-color;
-}
-
-.header-title {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.total-value {
-  font-size: 1rem;
-  color: $text-color;
-  margin-top: 0.5rem;
-
-  .value-amount {
-    font-weight: bold;
-    color: $primary-color;
-    font-size: 1.1rem;
-  }
-}
+// Header styles are now in shared _header.scss
 
 .loading, .error, .empty {
   text-align: center;

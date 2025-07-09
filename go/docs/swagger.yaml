@@ -88,6 +88,29 @@ definitions:
         example: commodities
         type: string
     type: object
+  jsonapi.CommodityFileUpdateParams:
+    properties:
+      path:
+        description: Only the Path field can be updated
+        type: string
+    type: object
+  jsonapi.CommodityFileUpdateRequest:
+    properties:
+      data:
+        properties:
+          attributes:
+            $ref: '#/definitions/jsonapi.CommodityFileUpdateParams'
+          id:
+            type: string
+          type:
+            enum:
+            - images
+            - manuals
+            - invoices
+            example: images
+            type: string
+        type: object
+    type: object
   jsonapi.CommodityMeta:
     properties:
       images:
@@ -149,28 +172,162 @@ definitions:
           $ref: '#/definitions/jsonapi.Error'
         type: array
     type: object
-  jsonapi.FileUpdateParams:
+  jsonapi.ExportCreateRequest:
     properties:
+      data:
+        $ref: '#/definitions/jsonapi.ExportCreateRequestData'
+    type: object
+  jsonapi.ExportCreateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Export'
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
+  jsonapi.ExportResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ExportResponseData'
+    type: object
+  jsonapi.ExportResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Export'
+      id:
+        type: string
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
+  jsonapi.ExportsMeta:
+    properties:
+      exports:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ExportsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.ExportResponseData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.ExportsMeta'
+    type: object
+  jsonapi.FileRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.FileRequestDataWrapper'
+    type: object
+  jsonapi.FileRequestData:
+    properties:
+      description:
+        type: string
+      linked_entity_id:
+        description: ID of linked entity
+        type: string
+      linked_entity_meta:
+        description: metadata about the link
+        type: string
+      linked_entity_type:
+        description: commodity, export, or empty
+        type: string
       path:
-        description: Only the Path field can be updated
+        description: Only for updates
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  jsonapi.FileRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.FileRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.FileResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.FileEntity'
+      id:
+        type: string
+      type:
+        enum:
+        - files
+        example: files
         type: string
     type: object
   jsonapi.FileUpdateRequest:
     properties:
       data:
-        properties:
-          attributes:
-            $ref: '#/definitions/jsonapi.FileUpdateParams'
-          id:
-            type: string
-          type:
-            enum:
-            - images
-            - manuals
-            - invoices
-            example: images
-            type: string
-        type: object
+        $ref: '#/definitions/jsonapi.FileUpdateRequestData'
+    type: object
+  jsonapi.FileUpdateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.FileUpdateRequestFileData'
+      id:
+        type: string
+      type:
+        enum:
+        - files
+        example: files
+        type: string
+    type: object
+  jsonapi.FileUpdateRequestFileData:
+    properties:
+      description:
+        type: string
+      linked_entity_id:
+        description: ID of linked entity
+        type: string
+      linked_entity_meta:
+        description: metadata about the link
+        type: string
+      linked_entity_type:
+        description: commodity, export, or empty
+        type: string
+      path:
+        description: User-editable filename
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  jsonapi.FilesMeta:
+    properties:
+      files:
+        example: 10
+        format: int64
+        type: integer
+      total:
+        example: 100
+        format: int64
+        type: integer
+    type: object
+  jsonapi.FilesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.FileEntity'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.FilesMeta'
     type: object
   jsonapi.ImageResponse:
     properties:
@@ -199,6 +356,28 @@ definitions:
         type: array
       meta:
         $ref: '#/definitions/jsonapi.ImagesMeta'
+    type: object
+  jsonapi.ImportExportAttributes:
+    properties:
+      description:
+        type: string
+      source_file_path:
+        type: string
+    type: object
+  jsonapi.ImportExportRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ImportExportRequestData'
+    type: object
+  jsonapi.ImportExportRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ImportExportAttributes'
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
     type: object
   jsonapi.InvoiceResponse:
     properties:
@@ -319,6 +498,45 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ManualsMeta'
     type: object
+  jsonapi.RestoreOperationCreateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.RestoreOperationCreateRequestData'
+    type: object
+  jsonapi.RestoreOperationCreateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.RestoreOperation'
+      type:
+        enum:
+        - restores
+        example: restores
+        type: string
+    type: object
+  jsonapi.RestoreOperationResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.RestoreOperationResponseData'
+    type: object
+  jsonapi.RestoreOperationResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.RestoreOperation'
+      id:
+        type: string
+      type:
+        enum:
+        - restores
+        example: restores
+        type: string
+    type: object
+  jsonapi.RestoreOperationsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.RestoreOperationResponseData'
+        type: array
+    type: object
   jsonapi.ValueAttrs:
     properties:
       area_totals:
@@ -436,6 +654,185 @@ definitions:
     - CommodityTypeFurniture
     - CommodityTypeClothes
     - CommodityTypeOther
+  models.Export:
+    properties:
+      area_count:
+        type: integer
+      binary_data_size:
+        type: integer
+      commodity_count:
+        type: integer
+      completed_date:
+        type: string
+      created_date:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      error_message:
+        type: string
+      file_id:
+        type: string
+      file_path:
+        description: 'Deprecated: will be removed after migration'
+        type: string
+      file_size:
+        description: Export statistics
+        type: integer
+      id:
+        type: string
+      image_count:
+        type: integer
+      imported:
+        type: boolean
+      include_file_data:
+        type: boolean
+      invoice_count:
+        type: integer
+      location_count:
+        type: integer
+      manual_count:
+        type: integer
+      selected_items:
+        items:
+          $ref: '#/definitions/models.ExportSelectedItem'
+        type: array
+      status:
+        $ref: '#/definitions/models.ExportStatus'
+      type:
+        $ref: '#/definitions/models.ExportType'
+    type: object
+  models.ExportSelectedItem:
+    properties:
+      area_id:
+        description: 'For commodities: which area they belong to'
+        type: string
+      id:
+        type: string
+      include_all:
+        type: boolean
+      location_id:
+        description: Relationship fields for preserving hierarchy snapshot
+        type: string
+      name:
+        type: string
+      type:
+        $ref: '#/definitions/models.ExportSelectedItemType'
+    type: object
+  models.ExportSelectedItemType:
+    enum:
+    - location
+    - area
+    - commodity
+    type: string
+    x-enum-varnames:
+    - ExportSelectedItemTypeLocation
+    - ExportSelectedItemTypeArea
+    - ExportSelectedItemTypeCommodity
+  models.ExportStatus:
+    enum:
+    - pending
+    - in_progress
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - ExportStatusPending
+    - ExportStatusInProgress
+    - ExportStatusCompleted
+    - ExportStatusFailed
+  models.ExportType:
+    enum:
+    - full_database
+    - selected_items
+    - locations
+    - areas
+    - commodities
+    - imported
+    type: string
+    x-enum-varnames:
+    - ExportTypeFullDatabase
+    - ExportTypeSelectedItems
+    - ExportTypeLocations
+    - ExportTypeAreas
+    - ExportTypeCommodities
+    - ExportTypeImported
+  models.FileEntity:
+    properties:
+      created_at:
+        description: CreatedAt is when the file was created
+        type: string
+      description:
+        description: Description is an optional description of the file
+        type: string
+      ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
+        type: string
+      id:
+        type: string
+      linked_entity_id:
+        description: LinkedEntityID is the ID of the linked entity (commodity or export)
+        type: string
+      linked_entity_meta:
+        description: |-
+          LinkedEntityMeta contains metadata about the link type
+          For commodities: "images", "invoices", "manuals"
+          For exports: "xml-1.0" (version of the export file format)
+        type: string
+      linked_entity_type:
+        description: LinkedEntityType indicates what type of entity this file is linked
+          to (commodity, export, or empty for standalone files)
+        type: string
+      mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
+        type: string
+      path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
+        type: string
+      tags:
+        description: Tags are optional tags for categorization and search
+        items:
+          type: string
+        type: array
+      title:
+        description: Title is the user-defined title for the file
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/models.FileType'
+        description: Type represents the category of the file (image, document, etc.)
+      updated_at:
+        description: UpdatedAt is when the file was last updated
+        type: string
+    type: object
+  models.FileType:
+    enum:
+    - image
+    - document
+    - video
+    - audio
+    - archive
+    - other
+    type: string
+    x-enum-varnames:
+    - FileTypeImage
+    - FileTypeDocument
+    - FileTypeVideo
+    - FileTypeAudio
+    - FileTypeArchive
+    - FileTypeOther
   models.Image:
     properties:
       commodity_id:
@@ -526,6 +923,105 @@ definitions:
           Example: "invoice-2023"
         type: string
     type: object
+  models.RestoreOperation:
+    properties:
+      area_count:
+        type: integer
+      binary_data_size:
+        type: integer
+      commodity_count:
+        type: integer
+      completed_date:
+        type: string
+      created_date:
+        type: string
+      description:
+        type: string
+      error_count:
+        type: integer
+      error_message:
+        type: string
+      export_id:
+        type: string
+      id:
+        type: string
+      image_count:
+        type: integer
+      invoice_count:
+        type: integer
+      location_count:
+        description: Statistics
+        type: integer
+      manual_count:
+        type: integer
+      options:
+        $ref: '#/definitions/models.RestoreOptions'
+      started_date:
+        type: string
+      status:
+        $ref: '#/definitions/models.RestoreStatus'
+      steps:
+        description: Related steps (not stored in DB, loaded separately)
+        items:
+          $ref: '#/definitions/models.RestoreStep'
+        type: array
+    type: object
+  models.RestoreOptions:
+    properties:
+      dry_run:
+        type: boolean
+      include_file_data:
+        type: boolean
+      strategy:
+        type: string
+    type: object
+  models.RestoreStatus:
+    enum:
+    - pending
+    - running
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - RestoreStatusPending
+    - RestoreStatusRunning
+    - RestoreStatusCompleted
+    - RestoreStatusFailed
+  models.RestoreStep:
+    properties:
+      created_date:
+        type: string
+      duration:
+        description: Duration in milliseconds
+        type: integer
+      id:
+        type: string
+      name:
+        type: string
+      reason:
+        description: Reason for error or skip
+        type: string
+      restore_operation_id:
+        type: string
+      result:
+        $ref: '#/definitions/models.RestoreStepResult'
+      updated_date:
+        type: string
+    type: object
+  models.RestoreStepResult:
+    enum:
+    - todo
+    - in_progress
+    - success
+    - error
+    - skipped
+    type: string
+    x-enum-varnames:
+    - RestoreStepResultTodo
+    - RestoreStepResultInProgress
+    - RestoreStepResultSuccess
+    - RestoreStepResultError
+    - RestoreStepResultSkipped
   models.SettingsObject:
     properties:
       defaultDateFormat:
@@ -807,7 +1303,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
       produces:
       - application/vnd.api+json
       responses:
@@ -953,7 +1449,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
       produces:
       - application/vnd.api+json
       responses:
@@ -1099,7 +1595,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
       produces:
       - application/vnd.api+json
       responses:
@@ -1151,7 +1647,7 @@ paths:
     delete:
       consumes:
       - application/vnd.api+json
-      description: Delete a commodity by ID
+      description: Delete a commodity by ID and all its linked files
       parameters:
       - description: Commodity ID
         in: path
@@ -1273,6 +1769,440 @@ paths:
       summary: Get debug information
       tags:
       - debug
+  /exports:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get exports
+      parameters:
+      - description: Include deleted exports
+        in: query
+        name: include_deleted
+        type: boolean
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ExportsResponse'
+      summary: List exports
+      tags:
+      - exports
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new export
+      parameters:
+      - description: Export
+        in: body
+        name: export
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ExportCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create an export
+      tags:
+      - exports
+  /exports/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an export
+      tags:
+      - exports
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get export by ID
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get an export
+      tags:
+      - exports
+  /exports/{id}/download:
+    get:
+      consumes:
+      - application/octet-stream
+      description: Download an export XML file
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download an export file
+      tags:
+      - exports
+  /exports/{id}/restores:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get restore operations for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationsResponse'
+      summary: List export restore operations
+      tags:
+      - exports
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new restore operation for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore operation data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.RestoreOperationCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create export restore operation
+      tags:
+      - exports
+  /exports/{id}/restores/{restoreId}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete a restore operation for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore Operation ID
+        in: path
+        name: restoreId
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete export restore operation
+      tags:
+      - exports
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get restore operation by ID for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore Operation ID
+        in: path
+        name: restoreId
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationResponse'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get export restore operation
+      tags:
+      - exports
+  /exports/import:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Import an uploaded XML export file and create an export record
+      parameters:
+      - description: Import request data
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ImportExportRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Import XML export
+      tags:
+      - exports
+  /files:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get files with optional filtering
+      parameters:
+      - description: Filter by file type
+        enum:
+        - image
+        - document
+        - video
+        - audio
+        - archive
+        - other
+        in: query
+        name: type
+        type: string
+      - description: Search in title, description, and file paths
+        in: query
+        name: search
+        type: string
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: 1
+        description: Page number (1-based)
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FilesResponse'
+      summary: List files
+      tags:
+      - files
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new file entity with metadata (file upload handled separately)
+      parameters:
+      - description: File metadata
+        in: body
+        name: file
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a file entity
+      tags:
+      - files
+  /files/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete file and its associated file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a file
+      tags:
+      - files
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get file by ID
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a file
+      tags:
+      - files
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update file metadata
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File update data
+        in: body
+        name: file
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a file
+      tags:
+      - files
+  /files/{id}.{ext}:
+    get:
+      description: download file content
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File extension
+        in: path
+        name: ext
+        required: true
+        type: string
+      responses:
+        "200":
+          description: File content
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download a file
+      tags:
+      - files
   /locations:
     get:
       consumes:

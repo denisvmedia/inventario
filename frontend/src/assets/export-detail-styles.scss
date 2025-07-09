@@ -1,0 +1,282 @@
+// Shared styles for export-related pages (Export Details, Restore Create, etc.)
+// This file contains common styling patterns for export information display
+@use 'variables' as *;
+
+/* Page Layout */
+.export-detail-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.export-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Card Components */
+.export-card {
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+  overflow: hidden;
+}
+
+.export-card.error-card {
+  border-left: 4px solid $error-color;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background-color: $light-bg-color;
+  border-bottom: 1px solid $border-color;
+
+  h2 {
+    margin: 0;
+    font-size: 1.25rem;
+  }
+}
+
+.card-body {
+  padding: 20px;
+}
+
+/* Export Information Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.info-item {
+  label {
+    display: block;
+    font-weight: 600;
+    color: $text-secondary-color;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+  }
+
+  .value {
+    font-size: 1rem;
+    color: $text-color;
+  }
+}
+
+.file-path {
+  word-break: break-all;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Status and Type Badges */
+.status-badge,
+.type-badge,
+.bool-badge,
+.count-badge {
+  padding: 4px 8px;
+  border-radius: $default-radius;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status-pending {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-in_progress {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-completed {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+.status-failed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.export-status--deleted {
+  background-color: #f5f5f5;
+  color: #6c757d;
+  text-decoration: line-through;
+}
+
+.type-full_database {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.type-selected_items {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.type-locations {
+  background-color: #e8f5e8;
+  color: #388e3c;
+}
+
+.type-areas {
+  background-color: #fff3e0;
+  color: #f57c00;
+}
+
+.type-commodities {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.type-imported {
+  background-color: #f0f4f8;
+  color: #4a5568;
+}
+
+.bool-badge.yes {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.bool-badge.no {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.count-badge {
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+/* Loading and Error States */
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: $text-secondary-color;
+}
+
+.error {
+  text-align: center;
+  padding: 2rem;
+  background: white;
+  border-radius: $default-radius;
+  box-shadow: $box-shadow;
+  color: $danger-color;
+}
+
+.loading-items {
+  text-align: center;
+  padding: 20px;
+  color: $text-secondary-color;
+  font-style: italic;
+}
+
+/* Block-level error messages with action buttons */
+.error-message-block {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: $default-radius;
+  border: 1px solid #f5c6cb;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+
+  .btn {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+}
+
+/* Legacy error-message for backward compatibility - simple styling */
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: $default-radius;
+  border: 1px solid #f5c6cb;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+/* Header Styles - using shared _header.scss */
+
+/* Actions */
+.actions {
+  display: flex;
+  gap: 0.5rem;
+
+  &.right-aligned {
+    justify-content: flex-end;
+  }
+}
+
+/* Deleted Export Styling */
+.export-detail-page.deleted {
+  opacity: 0.8;
+
+  .export-card {
+    background-color: #f8f9fa;
+    border-left: 4px solid #6c757d;
+  }
+}
+
+.deleted-status {
+  color: #6c757d;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deleted-date {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+/* Button Styles */
+.btn-warning {
+  background-color: #ffc107;
+  color: #212529;
+
+  &:hover:not(:disabled) {
+    background-color: #e0a800;
+  }
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: white;
+  border: 1px solid #28a745;
+
+  &:hover:not(:disabled) {
+    background-color: #218838;
+    border-color: #1e7e34;
+  }
+}
+
+.btn-restore {
+  background-color: #1976d2;
+  color: white;
+  border: 1px solid #1976d2;
+
+  &:hover:not(:disabled) {
+    background-color: #1565c0;
+    border-color: #1565c0;
+  }
+}

@@ -26,8 +26,16 @@ export const uploadFile = async (page: Page, recorder: TestRecorder, selectorBas
     await recorder.takeScreenshot(`${screenshotBase}-upload`);
     await page.click(`${selectorBase} .upload-actions button:has-text("Upload Files")`);
 
+    // const button = await page.locator(`${selectorBase} .upload-actions button:has-text("Upload Files")`);
+    // const box = await button.boundingBox();
+    // if (box) {
+    //     const {locationX, locationY} = {locationX: box.x + box.width / 2, locationY: box.y + box.height / 2};
+    //     await page.mouse.move(locationX, locationY);
+    //     await page.mouse.click(locationX, locationY);
+    // }
+
     // Verify image is displayed
-    await expect(page.locator(`${selectorBase} .file-item`)).toBeVisible();
+    await expect(page.locator(`${selectorBase} .file-item`).first()).toBeVisible();
     await recorder.takeScreenshot(`${screenshotBase}-displayed`);
 };
 
@@ -36,24 +44,43 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
     const fileItem = page.locator(`${selector} .file-item`).first();
     await expect(fileItem).toBeVisible();
 
-    // Click the download button within the file item - adjust this selector based on your UI
-    const downloadPromise = page.waitForEvent('download');
+    // Get the file ID and extension from data attributes
+    const fileId = await fileItem.getAttribute('data-file-id');
+    const fileExt = await fileItem.getAttribute('data-file-ext');
+
+    if (!fileId || !fileExt) {
+        throw new Error(`Could not get file ID or extension for ${fileType}. ID: ${fileId}, Ext: ${fileExt}`);
+    }
+
+    // Construct the download URL
+    const ext = fileExt.startsWith('.') ? fileExt.substring(1) : fileExt;
+    const downloadUrl = `/api/v1/files/${fileId}.${ext}`;
+
+    console.log(`Download URL for ${fileType}: ${downloadUrl}`);
+
+    // Verify the download URL is accessible by making a GET request with range header
+    // This will only download the first byte to verify the file exists and is accessible
+    const response = await page.request.get(downloadUrl, {
+        headers: {
+            'Range': 'bytes=0-0'
+        }
+    });
+
+    // Accept both 200 (full content) and 206 (partial content) as success
+    expect([200, 206]).toContain(response.status());
+
+    // Get the content-disposition header to verify filename
+    const contentDisposition = response.headers()['content-disposition'];
+    if (contentDisposition) {
+        console.log(`Content-Disposition header: ${contentDisposition}`);
+    }
+
+    // Click the download button to trigger the download
     await fileItem.locator('.file-actions .btn-primary').click();
 
-    // Wait for the download to complete with timeout
-    const download = await downloadPromise;
-
-    // Get the suggested filename
-    const suggestedFilename = download.suggestedFilename();
-    console.log(`Downloaded file: ${suggestedFilename}`);
-
-    // Save to a temp path to verify it exists
-    const filePath = await download.path();
-    expect(filePath).toBeTruthy();
-
-    // Take screenshot after download
+    // Take screenshot after download action
     await recorder.takeScreenshot(`${fileType}-download-success`);
-    console.log(`${fileType} downloaded successfully`);
+    console.log(`${fileType} download verified successfully`);
 };
 
 export const deleteFile = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {

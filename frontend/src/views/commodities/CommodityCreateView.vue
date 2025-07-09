@@ -178,9 +178,7 @@ onMounted(async () => {
       try {
         // Try to get the localized currency name
         currencyName = currencyNames.of(code)
-      /* eslint-disable no-unused-vars */
-      } catch (_) {
-      /* eslint-enable no-unused-vars */
+      } catch {
         console.warn(`Could not get display name for currency: ${code}`)
       }
 

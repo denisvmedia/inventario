@@ -59,7 +59,7 @@ const commodityService = {
     })
   },
 
-  // File upload methods
+  // File upload methods - now using generic file entity system
   uploadImages(id: string, files: File[]) {
     const formData = new FormData()
     files.forEach(file => {
@@ -112,14 +112,21 @@ const commodityService = {
     return axios.get(`${API_URL}/${id}/invoices`)
   },
 
-  // File update methods
+  // File update methods - now using generic file entity system
   updateImage(commodityId: string, imageId: string, data: any) {
-    return axios.put(`${API_URL}/${commodityId}/images/${imageId}`, {
+    // Use the generic file service for updates
+    return axios.put(`/api/v1/files/${imageId}`, {
       data: {
         id: imageId,
-        type: 'images',
+        type: 'files',
         attributes: {
-          path: data.path
+          title: data.title || data.path,
+          description: data.description || '',
+          tags: data.tags || [],
+          path: data.path,
+          linked_entity_type: 'commodity',
+          linked_entity_id: commodityId,
+          linked_entity_meta: 'images'
         }
       }
     }, {
@@ -131,12 +138,19 @@ const commodityService = {
   },
 
   updateManual(commodityId: string, manualId: string, data: any) {
-    return axios.put(`${API_URL}/${commodityId}/manuals/${manualId}`, {
+    // Use the generic file service for updates
+    return axios.put(`/api/v1/files/${manualId}`, {
       data: {
         id: manualId,
-        type: 'manuals',
+        type: 'files',
         attributes: {
-          path: data.path
+          title: data.title || data.path,
+          description: data.description || '',
+          tags: data.tags || [],
+          path: data.path,
+          linked_entity_type: 'commodity',
+          linked_entity_id: commodityId,
+          linked_entity_meta: 'manuals'
         }
       }
     }, {
@@ -148,12 +162,19 @@ const commodityService = {
   },
 
   updateInvoice(commodityId: string, invoiceId: string, data: any) {
-    return axios.put(`${API_URL}/${commodityId}/invoices/${invoiceId}`, {
+    // Use the generic file service for updates
+    return axios.put(`/api/v1/files/${invoiceId}`, {
       data: {
         id: invoiceId,
-        type: 'invoices',
+        type: 'files',
         attributes: {
-          path: data.path
+          title: data.title || data.path,
+          description: data.description || '',
+          tags: data.tags || [],
+          path: data.path,
+          linked_entity_type: 'commodity',
+          linked_entity_id: commodityId,
+          linked_entity_meta: 'invoices'
         }
       }
     }, {
@@ -164,17 +185,20 @@ const commodityService = {
     })
   },
 
-  // File deletion methods
+  // File deletion methods - now using generic file entity system
   deleteImage(commodityId: string, imageId: string) {
-    return axios.delete(`${API_URL}/${commodityId}/images/${imageId}`)
+    // Use the generic file service for deletion
+    return axios.delete(`/api/v1/files/${imageId}`)
   },
 
   deleteManual(commodityId: string, manualId: string) {
-    return axios.delete(`${API_URL}/${commodityId}/manuals/${manualId}`)
+    // Use the generic file service for deletion
+    return axios.delete(`/api/v1/files/${manualId}`)
   },
 
   deleteInvoice(commodityId: string, invoiceId: string) {
-    return axios.delete(`${API_URL}/${commodityId}/invoices/${invoiceId}`)
+    // Use the generic file service for deletion
+    return axios.delete(`/api/v1/files/${invoiceId}`)
   }
 }
 

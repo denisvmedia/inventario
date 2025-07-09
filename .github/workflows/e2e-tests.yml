@@ -10,27 +10,26 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
-
+    #container:
+    #  image: mcr.microsoft.com/playwright:v1.50.0-noble
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - id: vars
+        uses: ./.github/actions/vars
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.3'
+          go-version: ${{ steps.vars.outputs.go_version }}
           cache: true
-
-      - name: Read Node.js version from package.json
-        id: node
-        run: |
-          echo "version=$(jq -r .volta.node package.json)" >> $GITHUB_OUTPUT
-        working-directory: frontend
+          cache-dependency-path: go/go.sum
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ steps.node.outputs.version }}
+          node-version: ${{ steps.vars.outputs.node_version }}
           cache: 'npm'
           cache-dependency-path: |
             frontend/package-lock.json

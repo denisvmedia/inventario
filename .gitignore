@@ -5,6 +5,7 @@
 *.so
 *.dylib
 /inventario
+go/inventario
 
 # Test binary, built with `go test -c`
 *.test
@@ -22,14 +23,18 @@
 /uploads/
 /go/uploads/
 /sample/
-/.db
+*.db
 /bin/*
 coverage
+report.html
+
+# Export files
+/exports/
 
 # Docker volumes and data
 /.docker/
 .env
 docker-compose.override.yaml
-ptah/integration/reports
-test-reports
-/ptah/lint/
+
+# GoReleaser build artifacts
+dist/

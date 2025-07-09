@@ -88,14 +88,67 @@ type SettingsRegistry interface {
 	Patch(ctx context.Context, configfield string, value any) error
 }
 
+type ExportRegistry interface {
+	Registry[models.Export]
+
+	// ListWithDeleted returns all exports including soft deleted ones
+	ListWithDeleted(ctx context.Context) ([]*models.Export, error)
+
+	// ListDeleted returns only soft deleted exports
+	ListDeleted(ctx context.Context) ([]*models.Export, error)
+
+	// HardDelete permanently deletes an export from the database
+	HardDelete(ctx context.Context, id string) error
+}
+
+type FileRegistry interface {
+	Registry[models.FileEntity]
+
+	// ListByType returns files filtered by type
+	ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error)
+
+	// ListByLinkedEntity returns files linked to a specific entity
+	ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
+
+	// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
+	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error)
+
+	// Search returns files matching the search criteria
+	Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error)
+
+	// ListPaginated returns paginated list of files
+	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error)
+}
+
+type RestoreOperationRegistry interface {
+	Registry[models.RestoreOperation]
+
+	// ListByExport returns all restore operations for an export
+	ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error)
+}
+
+type RestoreStepRegistry interface {
+	Registry[models.RestoreStep]
+
+	// ListByRestoreOperation returns all restore steps for a restore operation
+	ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error)
+
+	// DeleteByRestoreOperation deletes all restore steps for a restore operation
+	DeleteByRestoreOperation(ctx context.Context, restoreOperationID string) error
+}
+
 type Set struct {
-	LocationRegistry  LocationRegistry
-	AreaRegistry      AreaRegistry
-	CommodityRegistry CommodityRegistry
-	ImageRegistry     ImageRegistry
-	InvoiceRegistry   InvoiceRegistry
-	ManualRegistry    ManualRegistry
-	SettingsRegistry  SettingsRegistry
+	LocationRegistry         LocationRegistry
+	AreaRegistry             AreaRegistry
+	CommodityRegistry        CommodityRegistry
+	ImageRegistry            ImageRegistry
+	InvoiceRegistry          InvoiceRegistry
+	ManualRegistry           ManualRegistry
+	SettingsRegistry         SettingsRegistry
+	ExportRegistry           ExportRegistry
+	RestoreOperationRegistry RestoreOperationRegistry
+	RestoreStepRegistry      RestoreStepRegistry
+	FileRegistry             FileRegistry
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {
@@ -109,6 +162,8 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.ManualRegistry, validation.Required),
 		validation.Field(&s.InvoiceRegistry, validation.Required),
 		validation.Field(&s.SettingsRegistry, validation.Required),
+		validation.Field(&s.ExportRegistry, validation.Required),
+		validation.Field(&s.FileRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

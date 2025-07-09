@@ -14,6 +14,7 @@ import {
   faBook,
   faFileInvoiceDollar,
   faFile,
+  faFileAlt,
   faDownload,
   faTrash,
   faTimes,
@@ -36,9 +37,21 @@ import {
   faSearchPlus,
   faCopy,
   faUpload,
+  faCloudUploadAlt,
   faExclamationTriangle,
   faExclamationCircle,
-  faCheckCircle
+  faCheckCircle,
+  faSpinner,
+  faRedo,
+  faCalendar,
+  faImage,
+  faVideo,
+  faMusic,
+  faArchive,
+  faSave,
+  faExternalLinkAlt,
+  faFileExport,
+  faLock
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -57,6 +70,7 @@ library.add(
   faBook,
   faFileInvoiceDollar,
   faFile,
+  faFileAlt,
 
   // Actions
   faDownload,
@@ -81,9 +95,21 @@ library.add(
   faSearchPlus,
   faCopy,
   faUpload,
+  faCloudUploadAlt,
   faExclamationTriangle,
   faExclamationCircle,
-  faCheckCircle
+  faCheckCircle,
+  faSpinner,
+  faRedo,
+  faCalendar,
+  faImage,
+  faVideo,
+  faMusic,
+  faArchive,
+  faSave,
+  faExternalLinkAlt,
+  faFileExport,
+  faLock
 )
 
 export { FontAwesomeIcon }

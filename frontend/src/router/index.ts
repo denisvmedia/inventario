@@ -62,6 +62,53 @@ const routes = [
     name: 'commodity-print',
     component: () => import('../views/commodities/CommodityPrintView.vue')
   },
+  // Exports
+  {
+    path: '/exports',
+    name: 'exports',
+    component: () => import('../views/exports/ExportListView.vue')
+  },
+  {
+    path: '/exports/new',
+    name: 'export-create',
+    component: () => import('../views/exports/ExportCreateView.vue')
+  },
+  {
+    path: '/exports/import',
+    name: 'export-import',
+    component: () => import('../views/exports/ExportImportView.vue')
+  },
+  {
+    path: '/exports/:id',
+    name: 'export-detail',
+    component: () => import('../views/exports/ExportDetailView.vue')
+  },
+  {
+    path: '/exports/:id/restore',
+    name: 'export-restore',
+    component: () => import('../views/exports/restore/RestoreCreateView.vue')
+  },
+  // Files
+  {
+    path: '/files',
+    name: 'files',
+    component: () => import('../views/files/FileListView.vue')
+  },
+  {
+    path: '/files/create',
+    name: 'file-create',
+    component: () => import('../views/files/FileCreateView.vue')
+  },
+  {
+    path: '/files/:id',
+    name: 'file-detail',
+    component: () => import('../views/files/FileDetailView.vue')
+  },
+  {
+    path: '/files/:id/edit',
+    name: 'file-edit',
+    component: () => import('../views/files/FileEditView.vue')
+  },
   // Settings
   {
     path: '/settings',

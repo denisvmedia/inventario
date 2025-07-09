@@ -29,7 +29,8 @@ func TestCommoditiesList(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -70,7 +71,8 @@ func TestCommodityGet(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -154,7 +156,8 @@ func TestCommodityCreate(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	body := rr.Body.Bytes()
@@ -225,7 +228,8 @@ func TestCommodityUpdate(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	body := rr.Body.Bytes()
@@ -274,7 +278,8 @@ func TestCommodityDelete(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Check(rr.Code, qt.Equals, http.StatusNoContent)
@@ -293,7 +298,8 @@ func TestCommodityDelete_MissingCommodity(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -343,7 +349,8 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
@@ -356,11 +363,19 @@ func TestCommodityListImages(t *testing.T) {
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
-	imageIDs, err := params.RegistrySet.CommodityRegistry.GetImages(context.Background(), commodity.ID)
+	// Get file entities linked to this commodity with "images" meta
+	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "images")
 	c.Assert(err, qt.IsNil)
-	expectedImages := make([]*models.Image, 0, len(imageIDs))
-	for _, id := range imageIDs {
-		expectedImages = append(expectedImages, must.Must(params.RegistrySet.ImageRegistry.Get(context.Background(), id)))
+
+	// Convert file entities to legacy image format for comparison
+	expectedImages := make([]*models.Image, 0, len(files))
+	for _, file := range files {
+		image := &models.Image{
+			EntityID:    models.EntityID{ID: file.ID},
+			CommodityID: commodity.ID,
+			File:        file.File,
+		}
+		expectedImages = append(expectedImages, image)
 	}
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images", nil)
@@ -368,7 +383,8 @@ func TestCommodityListImages(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -388,11 +404,19 @@ func TestCommodityListInvoices(t *testing.T) {
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
-	invoiceIDs, err := params.RegistrySet.CommodityRegistry.GetInvoices(context.Background(), commodity.ID)
+	// Get file entities linked to this commodity with "invoices" meta
+	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "invoices")
 	c.Assert(err, qt.IsNil)
-	expectedInvoices := make([]*models.Invoice, 0, len(invoiceIDs))
-	for _, id := range invoiceIDs {
-		expectedInvoices = append(expectedInvoices, must.Must(params.RegistrySet.InvoiceRegistry.Get(context.Background(), id)))
+
+	// Convert file entities to legacy invoice format for comparison
+	expectedInvoices := make([]*models.Invoice, 0, len(files))
+	for _, file := range files {
+		invoice := &models.Invoice{
+			EntityID:    models.EntityID{ID: file.ID},
+			CommodityID: commodity.ID,
+			File:        file.File,
+		}
+		expectedInvoices = append(expectedInvoices, invoice)
 	}
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices", nil)
@@ -400,7 +424,8 @@ func TestCommodityListInvoices(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -420,11 +445,19 @@ func TestCommodityListManuals(t *testing.T) {
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
-	manualIDs, err := params.RegistrySet.CommodityRegistry.GetManuals(context.Background(), commodity.ID)
+	// Get file entities linked to this commodity with "manuals" meta
+	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "manuals")
 	c.Assert(err, qt.IsNil)
-	expectedManuals := make([]*models.Manual, 0, len(manualIDs))
-	for _, id := range manualIDs {
-		expectedManuals = append(expectedManuals, must.Must(params.RegistrySet.ManualRegistry.Get(context.Background(), id)))
+
+	// Convert file entities to legacy manual format for comparison
+	expectedManuals := make([]*models.Manual, 0, len(files))
+	for _, file := range files {
+		manual := &models.Manual{
+			EntityID:    models.EntityID{ID: file.ID},
+			CommodityID: commodity.ID,
+			File:        file.File,
+		}
+		expectedManuals = append(expectedManuals, manual)
 	}
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals", nil)
@@ -432,7 +465,8 @@ func TestCommodityListManuals(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -458,7 +492,8 @@ func TestCommodityDeleteImage(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -477,7 +512,8 @@ func TestCommodityDeleteInvoice(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -496,7 +532,8 @@ func TestCommodityDeleteManual(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -517,7 +554,8 @@ func TestDownloadImage(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -537,7 +575,8 @@ func TestDownloadImage_CommodityNotFound(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -558,7 +597,8 @@ func TestDownloadInvoice(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -578,7 +618,8 @@ func TestDownloadInvoice_CommodityNotFound(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -599,7 +640,8 @@ func TestDownloadManual(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -619,7 +661,8 @@ func TestDownloadManual_CommodityNotFound(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -630,28 +673,34 @@ func TestGetImageData(t *testing.T) {
 
 	params := newParams()
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
-	expectedImages := must.Must(params.RegistrySet.ImageRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
-	imageID := expectedImages[0].ID
+
+	// Get file entities linked to this commodity with "images" meta
+	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "images")
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(files), qt.Not(qt.Equals), 0)
+	imageID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images/"+imageID, nil)
 	c.Assert(err, qt.IsNil)
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	expectedImage := must.Must(params.RegistrySet.ImageRegistry.Get(c.Context(), imageID))
+	// Get the expected file entity
+	expectedFile := must.Must(params.RegistrySet.FileRegistry.Get(c.Context(), imageID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "images")
-	c.Check(body, checkers.JSONPathEquals("$.id"), expectedImage.ID)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.path"), expectedImage.Path)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.ext"), expectedImage.Ext)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.commodity_id"), expectedImage.CommodityID)
+	c.Check(body, checkers.JSONPathEquals("$.id"), expectedFile.ID)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.path"), expectedFile.File.Path)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.ext"), expectedFile.File.Ext)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.commodity_id"), commodity.ID)
 }
 
 func TestGetImageData_ImageNotFound(t *testing.T) {
@@ -667,7 +716,8 @@ func TestGetImageData_ImageNotFound(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -678,28 +728,34 @@ func TestGetInvoiceData(t *testing.T) {
 
 	params := newParams()
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
-	expectedInvoices := must.Must(params.RegistrySet.InvoiceRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
-	invoiceID := expectedInvoices[0].ID
+
+	// Get file entities linked to this commodity with "invoices" meta
+	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "invoices")
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(files), qt.Not(qt.Equals), 0)
+	invoiceID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices/"+invoiceID, nil)
 	c.Assert(err, qt.IsNil)
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	expectedInvoice := must.Must(params.RegistrySet.InvoiceRegistry.Get(c.Context(), invoiceID))
+	// Get the expected file entity
+	expectedFile := must.Must(params.RegistrySet.FileRegistry.Get(c.Context(), invoiceID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "invoices")
-	c.Check(body, checkers.JSONPathEquals("$.id"), expectedInvoice.ID)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.path"), expectedInvoice.Path)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.ext"), expectedInvoice.Ext)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.commodity_id"), expectedInvoice.CommodityID)
+	c.Check(body, checkers.JSONPathEquals("$.id"), expectedFile.ID)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.path"), expectedFile.File.Path)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.ext"), expectedFile.File.Ext)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.commodity_id"), commodity.ID)
 }
 
 func TestGetInvoiceData_InvoiceNotFound(t *testing.T) {
@@ -715,7 +771,8 @@ func TestGetInvoiceData_InvoiceNotFound(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
@@ -726,28 +783,34 @@ func TestGetManualsData(t *testing.T) {
 
 	params := newParams()
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
-	expectedManuals := must.Must(params.RegistrySet.ManualRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
-	manualID := expectedManuals[0].ID
+
+	// Get file entities linked to this commodity with "manuals" meta
+	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "manuals")
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(files), qt.Not(qt.Equals), 0)
+	manualID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+manualID, nil)
 	c.Assert(err, qt.IsNil)
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 
-	expectedManual := must.Must(params.RegistrySet.ManualRegistry.Get(c.Context(), manualID))
+	// Get the expected file entity
+	expectedFile := must.Must(params.RegistrySet.FileRegistry.Get(c.Context(), manualID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "manuals")
-	c.Check(body, checkers.JSONPathEquals("$.id"), expectedManual.ID)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.path"), expectedManual.Path)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.ext"), expectedManual.Ext)
-	c.Check(body, checkers.JSONPathEquals("$.attributes.commodity_id"), expectedManual.CommodityID)
+	c.Check(body, checkers.JSONPathEquals("$.id"), expectedFile.ID)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.path"), expectedFile.File.Path)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.ext"), expectedFile.File.Ext)
+	c.Check(body, checkers.JSONPathEquals("$.attributes.commodity_id"), commodity.ID)
 }
 
 func TestGetManualsData_ManualNotFound(t *testing.T) {
@@ -763,7 +826,8 @@ func TestGetManualsData_ManualNotFound(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	handler := apiserver.APIServer(params)
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)

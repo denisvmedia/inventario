@@ -80,7 +80,7 @@ describe('FileUploader.vue', () => {
       expect(wrapper.find('.upload-area').exists()).toBe(true)
       expect(wrapper.find('.file-input').exists()).toBe(true)
       expect(wrapper.find('.upload-prompt').text()).toBe('Drag and drop files here')
-      expect(wrapper.find('.browse-button').text()).toBe('Browse Files')
+      expect(wrapper.find('.browse-button').text()).toBe('click to browse')
       expect(wrapper.find('.selected-files').exists()).toBe(false)
     })
 
@@ -152,8 +152,8 @@ describe('FileUploader.vue', () => {
       expect(wrapper.vm.selectedFiles[0].name).toBe('test-file.jpg')
 
       // Check if the selected file is displayed
-      expect(wrapper.find('.selected-files').exists()).toBe(true)
-      expect(wrapper.find('.file-name').text()).toBe('test-file.jpg')
+      expect(wrapper.find('.selected-files-content').exists()).toBe(true)
+      expect(wrapper.find('.file-info h3').text()).toBe('test-file.jpg')
     })
 
     it('removes isDragOver when files are dropped', async () => {
@@ -194,8 +194,8 @@ describe('FileUploader.vue', () => {
       expect(wrapper.vm.selectedFiles[0].name).toBe('test-file.jpg')
 
       // Check if the selected file is displayed
-      expect(wrapper.find('.selected-files').exists()).toBe(true)
-      expect(wrapper.find('.file-name').text()).toBe('test-file.jpg')
+      expect(wrapper.find('.selected-files-content').exists()).toBe(true)
+      expect(wrapper.find('.file-info h3').text()).toBe('test-file.jpg')
     })
 
     it('triggers file input when browse button is clicked', async () => {
@@ -217,14 +217,14 @@ describe('FileUploader.vue', () => {
 
       // Check if the file was added
       expect(wrapper.vm.selectedFiles.length).toBe(1)
-      expect(wrapper.find('.selected-files').exists()).toBe(true)
+      expect(wrapper.find('.selected-files-content').exists()).toBe(true)
 
       // Remove the file
-      await wrapper.find('.remove-file').trigger('click')
+      await wrapper.find('.btn-remove').trigger('click')
 
       // Check if the file was removed
       expect(wrapper.vm.selectedFiles.length).toBe(0)
-      expect(wrapper.find('.selected-files').exists()).toBe(false)
+      expect(wrapper.find('.selected-files-content').exists()).toBe(false)
     })
 
     it('replaces files when multiple is false', () => {
@@ -312,9 +312,13 @@ describe('FileUploader.vue', () => {
       // Click upload button
       await wrapper.find('.btn-primary').trigger('click')
 
+      // Simulate upload completion by clearing files (as parent component would do)
+      wrapper.vm.clearFiles()
+      await wrapper.vm.$nextTick()
+
       // Check if selectedFiles was cleared
       expect(wrapper.vm.selectedFiles.length).toBe(0)
-      expect(wrapper.find('.selected-files').exists()).toBe(false)
+      expect(wrapper.find('.selected-files-content').exists()).toBe(false)
     })
 
     it('emits upload event when upload button is clicked', async () => {
@@ -332,6 +336,10 @@ describe('FileUploader.vue', () => {
       expect(wrapper.emitted('upload')).toBeTruthy()
       expect(wrapper.emitted('upload')![0][0]).toEqual([mockFile])
 
+      // Simulate upload completion by clearing files (as parent component would do)
+      wrapper.vm.clearFiles()
+      await wrapper.vm.$nextTick()
+
       // Check that selectedFiles was cleared
       expect(wrapper.vm.selectedFiles.length).toBe(0)
     })
@@ -344,11 +352,15 @@ describe('FileUploader.vue', () => {
       wrapper.vm.addFiles([mockFile])
       await wrapper.vm.$nextTick()
 
-      // Set isUploading to true
-      wrapper.vm.isUploading = true
-
       // Start upload
       await wrapper.find('.btn-primary').trigger('click')
+
+      // Check that isUploading is true during upload
+      expect(wrapper.vm.isUploading).toBe(true)
+
+      // Simulate upload completion
+      wrapper.vm.markUploadCompleted()
+      await wrapper.vm.$nextTick()
 
       // Check if isUploading was reset
       expect(wrapper.vm.isUploading).toBe(false)

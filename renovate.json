@@ -1,0 +1,88 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "UTC",
+  "schedule": ["before 6am on monday"],
+  "packageRules": [
+    {
+      "description": "Group Cloud SDKs updates",
+      "groupName": "cloud-sdks",
+      "matchPackageNames": [
+        "/^cloud\\.google\\.com//",
+        "/^github\\.com/Azure/azure-sdk-for-go//",
+        "/^github\\.com/Azure/go-autorest//",
+        "/^github\\.com/aws/aws-sdk-go$/",
+        "/^github\\.com/aws/aws-sdk-go-v2/",
+        "/^github\\.com/digitalocean//",
+        "/^github\\.com/minio/minio-go//"
+      ]
+    },
+    {
+      "description": "Group Golang core packages",
+      "groupName": "golang",
+      "matchPackageNames": [
+        "/^golang\\.org/x//",
+        "/^google\\.golang\\.org//"
+      ]
+    },
+    {
+      "description": "Group OpenAPI packages",
+      "groupName": "openapi",
+      "matchPackageNames": [
+        "/^github\\.com/go-openapi//"
+      ]
+    },
+    {
+      "description": "Go modules configuration",
+      "matchManagers": ["gomod"],
+      "matchFileNames": ["go/**"],
+      "allowedVersions": "!/^0\\./",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Frontend npm packages",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["frontend/**"],
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "E2E npm packages", 
+      "matchManagers": ["npm"],
+      "matchFileNames": ["e2e/**"],
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Volta Node.js and npm version pinning",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["frontend/package.json", "e2e/package.json"],
+      "rangeStrategy": "pin",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Disallow major versions update for databases",
+      "matchDatasources": ["docker", "github-actions"],
+      "matchPackageNames": ["postgres", "mysql", "mariadb"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ],
+  "postUpdateOptions": ["gomodTidy", "npmDedupe"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "labels": ["dependencies"],
+  "assignees": ["denisgcm"],
+  "reviewers": ["denisgcm"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 2,
+  "commitMessagePrefix": "chore(deps):",
+  "semanticCommits": "enabled"
+}

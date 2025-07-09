@@ -29,6 +29,11 @@ nav a.router-link-active {
   text-decoration: underline;
 }
 
+nav a.custom-active {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
 main {
   flex: 1;
   padding: 2rem 0;
@@ -119,6 +124,15 @@ textarea.form-control {
 .btn-secondary {
   background-color: $secondary-color;
   color: white;
+}
+
+.btn-info {
+  background-color: $info-bg-color;
+  color: black;
+
+  &:hover {
+    background-color: $info-hover-bg-color;
+  }
 }
 
 /* Breadcrumb styles */

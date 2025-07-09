@@ -47,14 +47,15 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
-  // create dist directory and a file in it if it doesn't exist (required to build backend)
+  // Build frontend for embedding
+  console.log('Building frontend for embedding...')
   try {
-    const { mkdir, writeFile } = await import('fs/promises');
-    await mkdir(`${frontendRoot}/dist`, { recursive: true });
-    await writeFile(`${frontendRoot}/dist/inventario.txt`, '');
-    console.log(`Created dist directory in ${frontendRoot}`);
+    const { execSync } = await import('child_process');
+    execSync('npm install', { cwd: frontendRoot });
+    execSync('npm run build', { cwd: frontendRoot });
+    console.log('Frontend built successfully');
   } catch (error) {
-    console.error('Error creating dist directory:', error);
+    console.error('Error building frontend:', error);
     throw error;
   }
 
@@ -68,11 +69,11 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
-  console.log('Executing: go run main.go run');
-  backendProcess = spawn('go', ['run', 'main.go', 'run'], {
+  console.log('Executing: go run -tags with_frontend main.go run');
+  backendProcess = spawn('go', ['run', '-tags', 'with_frontend', 'main.go', 'run'], {
     cwd: backendRoot,
-    stdio: 'pipe',
-    shell: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, PATH: process.env.PATH },
   });
 
   // Handle process output
@@ -144,6 +145,9 @@ async function waitForBackend(maxRetries = 60, retryInterval = 1000): Promise<vo
 export async function seedDatabase(): Promise<void> {
   console.log('Seeding database...');
 
+  // Give the backend a moment to fully initialize
+  await sleep(500);
+
   try {
     const response = await axios.post('http://localhost:3333/api/v1/seed');
     if (response.status === 200) {
@@ -214,7 +218,7 @@ export async function startFrontend(): Promise<void> {
 /**
  * Wait for the frontend to be available
  */
-async function waitForFrontend(maxRetries = 60, retryInterval = 1000): Promise<void> {
+async function waitForFrontend(maxRetries = 120, retryInterval = 1000): Promise<void> {
   let retries = 0;
 
   console.log('Waiting for frontend to be available at http://localhost:5173');

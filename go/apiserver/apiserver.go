@@ -22,7 +22,13 @@ import (
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
+
+// RestoreWorkerInterface defines the interface for the restore worker
+type RestoreWorkerInterface interface {
+	HasRunningRestores(ctx context.Context) (bool, error) // Returns true if any restore is running or pending
+}
 
 type ctxValueKey string
 
@@ -57,6 +63,7 @@ func paginate(next http.Handler) http.Handler {
 
 type Params struct {
 	RegistrySet    *registry.Set
+	EntityService  *services.EntityService
 	UploadLocation string
 	DebugInfo      *debug.Info
 }
@@ -66,6 +73,7 @@ func (p *Params) Validate() error {
 
 	fields = append(fields,
 		validation.Field(&p.RegistrySet, validation.Required),
+		validation.Field(&p.EntityService, validation.Required),
 		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(_value any) error {
 			ctx := context.Background()
 			b, err := blob.OpenBucket(ctx, p.UploadLocation)
@@ -80,7 +88,7 @@ func (p *Params) Validate() error {
 	return validation.ValidateStruct(p, fields...)
 }
 
-func APIServer(params Params) http.Handler {
+func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler {
 	render.Decode = JSONAPIAwareDecoder
 
 	r := chi.NewRouter()
@@ -117,6 +125,8 @@ func APIServer(params Params) http.Handler {
 		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
 		r.With(defaultAPIMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/exports", Exports(params, restoreWorker))
+		r.With(defaultAPIMiddlewares...).Route("/files", Files(params))
 		r.Route("/currencies", Currencies())
 		r.Route("/uploads", Uploads(params))
 		r.Route("/seed", Seed(params.RegistrySet))

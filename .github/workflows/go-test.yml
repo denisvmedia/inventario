@@ -15,17 +15,24 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: vars
+        uses: ./.github/actions/vars
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.3'
+          go-version: ${{ steps.vars.outputs.go_version }}
           cache: true
+          cache-dependency-path: go/go.sum
+
       - name: Install dependencies
         run: go mod download
         working-directory: go
-      - name: Create dist directory
-        run: mkdir -p frontend/dist && echo "" > frontend/dist/inventario.txt
+
       - name: Run tests
         run: go test -v -race ./...
         working-directory: go

@@ -56,6 +56,9 @@ linters:
       min-complexity: 20
     importas:
       no-unaliased: true
+      alias:
+        - pkg: github.com/frankban/quicktest
+          alias: qt
     lll:
       line-length: 240
     nakedret: # Discussions on why naked return can be a problem: https://github.com/golang/go/issues/21291
@@ -120,7 +123,7 @@ linters:
         - name: error-return
           disabled: false
         - name: error-strings
-          disabled: false
+          disabled: true # until decided
         - name: filename-format
           arguments:
             - '^[_a-z][_a-z0-9]*.go$'
@@ -243,26 +246,9 @@ linters:
       # Allow migration filenames to have numbers at the beginning
       - path: 'registry/postgres/migrations/.*\.go$'
         text: 'filename-format:'
-      - path: '(test\_entities|test\_simple)/.*\.go$'
-        text: 'var-naming:'
-      - path: 'ptah/examples/ast\_demo/.*\.go$'
-        linters:
-          - unused
-      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
-        text: 'use of `fmt\..*` forbidden by pattern'
-      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
-        linters:
-          - gocognit
-          - nestif
-          - gocyclo
-      - path: '(ast_demo|cmd|example[s]?|integration)/.*\.go$'
-        text: 'deep-exit:'
       - path: 'cmd/.*\.go$'
         linters:
           - gochecknoinits
-      - path: 'integration/.*\.go$'
-        linters:
-          - unused
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'

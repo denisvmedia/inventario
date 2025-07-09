@@ -32,7 +32,7 @@ BINARY_PATH=$(BIN_DIR)/$(BINARY_NAME)$(BINARY_EXT)
 
 # Server configuration
 SERVER_ADDR=:3333
-UPLOAD_LOCATION=file://$(CURRENT_DIR)/uploads?create_dir=1
+UPLOAD_LOCATION=file://./uploads?create_dir=1
 DB_DSN=memory://
 
 # Database configuration examples
@@ -54,6 +54,11 @@ build: build-frontend build-backend
 # Build the Go backend
 .PHONY: build-backend
 build-backend:
+	$(call MKDIR,$(BIN_DIR))
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -tags with_frontend -o ../$(BINARY_PATH) .
+
+.PHONY: build-backend-nofe
+build-backend-nofe:
 	$(call MKDIR,$(BIN_DIR))
 	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -o ../$(BINARY_PATH) .
 
@@ -133,7 +138,7 @@ test: test-go test-frontend
 # Run end-to-end tests
 .PHONY: test-e2e
 test-e2e:
-	$(CD) $(FRONTEND_DIR) && npm run test:e2e
+	$(CD) e2e && npm install && npm run test
 
 # Seed the database
 .PHONY: seed-db
@@ -248,7 +253,8 @@ ifeq ($(OS),Windows_NT)
 	@echo Available commands:
 	@echo   all              - Build everything (default)
 	@echo   build            - Build backend and frontend
-	@echo   build-backend    - Build only the backend
+	@echo   build-backend    - Build backend with embedded frontend
+	@echo   build-backend-nofe - Build backend without frontend
 	@echo   build-frontend   - Build only the frontend
 	@echo   run-backend      - Run the backend server
 	@echo   run-backend-postgres - Run the backend server with PostgreSQL
@@ -286,7 +292,8 @@ else
 	@echo "Available commands:"
 	@echo "  all              - Build everything (default)"
 	@echo "  build            - Build backend and frontend"
-	@echo "  build-backend    - Build only the backend"
+	@echo "  build-backend    - Build backend with embedded frontend"
+	@echo "  build-backend-nofe - Build backend without frontend"
 	@echo "  build-frontend   - Build only the frontend"
 	@echo "  run-backend      - Run the backend server"
 	@echo "  run-backend-postgres - Run the backend server with PostgreSQL"

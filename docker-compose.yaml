@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database (Production)
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: inventario-postgres
     restart: unless-stopped
     environment:
@@ -59,7 +59,7 @@ services:
 
   # MySQL Database (Production)
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: inventario-mysql
     restart: unless-stopped
     environment:
@@ -121,7 +121,7 @@ services:
   # PostgreSQL Test Database
   postgres-test:
     profiles: ["test"]
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: inventario-postgres-test
     environment:
       POSTGRES_DB: ${POSTGRES_TEST_DB:-inventario_test}
@@ -165,7 +165,7 @@ services:
   # MySQL Test Database
   mysql-test:
     profiles: ["test"]
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: inventario-mysql-test
     environment:
       MYSQL_DATABASE: ${MYSQL_TEST_DB:-inventario_test}

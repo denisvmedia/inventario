@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -40,6 +41,7 @@ type uploadsAPI struct {
 	imageRegistry   registry.ImageRegistry
 	manualRegistry  registry.ManualRegistry
 	invoiceRegistry registry.InvoiceRegistry
+	fileRegistry    registry.FileRegistry
 }
 
 func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request) {
@@ -66,20 +68,32 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.imageRegistry.Create(r.Context(), models.Image{
-			CommodityID: entityID,
+		// Create file entity instead of image
+		now := time.Now()
+		fileEntity := models.FileEntity{
+			Title:            pathWithoutExt, // Use filename as title
+			Description:      "",
+			Type:             models.FileTypeImage,
+			Tags:             []string{},
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   entityID,
+			LinkedEntityMeta: "images",
+			CreatedAt:        now,
+			UpdatedAt:        now,
 			File: &models.File{
-				Path:         pathWithoutExt, // Just the filename without extension
+				Path:         pathWithoutExt,
 				OriginalPath: originalPath,
 				Ext:          ext,
 				MIMEType:     f.MIMEType,
 			},
-		})
+		}
+
+		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
 		}
-		uploadData.FileNames = append(uploadData.FileNames, img.Path)
+		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
@@ -113,20 +127,32 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.manualRegistry.Create(r.Context(), models.Manual{
-			CommodityID: entityID,
+		// Create file entity instead of manual
+		now := time.Now()
+		fileEntity := models.FileEntity{
+			Title:            pathWithoutExt, // Use filename as title
+			Description:      "",
+			Type:             models.FileTypeDocument,
+			Tags:             []string{},
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   entityID,
+			LinkedEntityMeta: "manuals",
+			CreatedAt:        now,
+			UpdatedAt:        now,
 			File: &models.File{
-				Path:         pathWithoutExt, // Just the filename without extension
+				Path:         pathWithoutExt,
 				OriginalPath: originalPath,
 				Ext:          ext,
 				MIMEType:     f.MIMEType,
 			},
-		})
+		}
+
+		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
 		}
-		uploadData.FileNames = append(uploadData.FileNames, img.Path)
+		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
@@ -160,23 +186,134 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		img, err := api.invoiceRegistry.Create(r.Context(), models.Invoice{
-			CommodityID: entityID,
+		// Create file entity instead of invoice
+		now := time.Now()
+		fileEntity := models.FileEntity{
+			Title:            pathWithoutExt, // Use filename as title
+			Description:      "",
+			Type:             models.FileTypeDocument,
+			Tags:             []string{},
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   entityID,
+			LinkedEntityMeta: "invoices",
+			CreatedAt:        now,
+			UpdatedAt:        now,
 			File: &models.File{
-				Path:         pathWithoutExt, // Just the filename without extension
+				Path:         pathWithoutExt,
 				OriginalPath: originalPath,
 				Ext:          ext,
 				MIMEType:     f.MIMEType,
 			},
-		})
+		}
+
+		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
 		}
-		uploadData.FileNames = append(uploadData.FileNames, img.Path)
+		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
+	uploadedFiles := uploadedFilesFromContext(r.Context())
+	if len(uploadedFiles) == 0 {
+		unprocessableEntityError(w, r, ErrNoFilesUploaded)
+		return
+	}
+
+	var createdFiles []models.FileEntity
+
+	for _, f := range uploadedFiles {
+		// Get the extension from the MIME type
+		ext := mimekit.ExtensionByMime(f.MIMEType)
+		originalPath := f.FilePath
+		// Set Path to be the filename without extension
+		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+
+		// Auto-detect file type based on MIME type
+		var fileType models.FileType
+		switch {
+		case strings.HasPrefix(f.MIMEType, "image/"):
+			fileType = models.FileTypeImage
+		case strings.HasPrefix(f.MIMEType, "video/"):
+			fileType = models.FileTypeVideo
+		case strings.HasPrefix(f.MIMEType, "audio/"):
+			fileType = models.FileTypeAudio
+		case f.MIMEType == "application/zip" || f.MIMEType == "application/x-zip-compressed":
+			fileType = models.FileTypeArchive
+		case f.MIMEType == "application/pdf" ||
+			f.MIMEType == "text/plain" ||
+			f.MIMEType == "text/csv" ||
+			strings.Contains(f.MIMEType, "document") ||
+			strings.Contains(f.MIMEType, "spreadsheet") ||
+			strings.Contains(f.MIMEType, "presentation"):
+			fileType = models.FileTypeDocument
+		default:
+			fileType = models.FileTypeOther
+		}
+
+		// Create file entity with auto-generated title from filename
+		now := time.Now()
+		fileEntity := models.FileEntity{
+			Title:       pathWithoutExt, // Use filename as default title
+			Description: "",             // Empty description
+			Type:        fileType,
+			Tags:        []string{}, // Empty tags
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			File: &models.File{
+				Path:         pathWithoutExt,
+				OriginalPath: originalPath,
+				Ext:          ext,
+				MIMEType:     f.MIMEType,
+			},
+		}
+
+		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
+		if err != nil {
+			renderEntityError(w, r, err)
+			return
+		}
+		createdFiles = append(createdFiles, *createdFile)
+	}
+
+	// Return the created files
+	var filePtrs []*models.FileEntity
+	for i := range createdFiles {
+		filePtrs = append(filePtrs, &createdFiles[i])
+	}
+
+	response := jsonapi.NewFilesResponse(filePtrs, len(createdFiles))
+	render.Status(r, http.StatusCreated)
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+func (api *uploadsAPI) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
+	uploadedFiles := uploadedFilesFromContext(r.Context())
+	if len(uploadedFiles) == 0 {
+		unprocessableEntityError(w, r, ErrNoFilesUploaded)
+		return
+	}
+
+	uploadData := jsonapi.UploadData{
+		Type: "restores",
+	}
+
+	for _, f := range uploadedFiles {
+		uploadData.FileNames = append(uploadData.FileNames, f.FilePath)
+	}
+
+	resp := jsonapi.NewUploadResponse("", uploadData).WithStatusCode(http.StatusOK)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -266,6 +403,7 @@ func Uploads(params Params) func(r chi.Router) {
 		imageRegistry:   params.RegistrySet.ImageRegistry,
 		manualRegistry:  params.RegistrySet.ManualRegistry,
 		invoiceRegistry: params.RegistrySet.InvoiceRegistry,
+		fileRegistry:    params.RegistrySet.FileRegistry,
 	}
 
 	return func(r chi.Router) {
@@ -275,5 +413,11 @@ func Uploads(params Params) func(r chi.Router) {
 				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)
 				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/invoices", api.handleInvoicesUpload)
 			})
+
+		// File uploads - allow all content types
+		r.With(api.uploadFiles(mimekit.AllContentTypes()...)).Post("/files", api.handleFilesUpload)
+
+		// Restore uploads - only allow XML files
+		r.With(api.uploadFiles(mimekit.XMLContentTypes()...)).Post("/restores", api.handleRestoreUpload)
 	}
 }
