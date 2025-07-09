@@ -18,6 +18,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func TestExportHardDelete(t *testing.T) {
@@ -50,6 +51,7 @@ func TestExportHardDelete(t *testing.T) {
 	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
+		EntityService:  services.NewEntityService(registrySet, "memory://"),
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))

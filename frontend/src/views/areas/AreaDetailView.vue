@@ -1,7 +1,12 @@
 <template>
   <div class="area-detail">
+    <!-- Error Notification Stack -->
+    <ErrorNotificationStack
+      :errors="errors"
+      @dismiss="removeError"
+    />
+
     <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!area" class="not-found">Area not found</div>
     <div v-else>
       <div class="breadcrumb-nav">
@@ -93,6 +98,8 @@ import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice, getDisplayPrice, getMainCurrency } from '@/services/currencyService'
 import Confirmation from "@/components/Confirmation.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
+import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import { useErrorState } from '@/utils/errorUtils'
 
 const router = useRouter()
 const route = useRoute()
@@ -100,9 +107,11 @@ const area = ref<any>(null)
 const locations = ref<any[]>([])
 const commodities = ref<any[]>([])
 const loading = ref<boolean>(true)
-const error = ref<string | null>(null)
 const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
+
+// Error state management
+const { errors, showErrors, handleError, removeError, clearAllErrors, cleanup } = useErrorState()
 
 
 // Area total value
@@ -239,7 +248,7 @@ onMounted(async () => {
       })
     }
   } catch (err: any) {
-    error.value = 'Failed to load area: ' + (err.message || 'Unknown error')
+    handleError(err, 'area', 'Failed to load area')
     loading.value = false
   }
 })
@@ -250,6 +259,7 @@ onBeforeUnmount(() => {
     window.clearTimeout(highlightTimeout)
     highlightTimeout = null
   }
+  cleanup()
 })
 
 // These functions are now handled by the CommodityListItem component
@@ -278,7 +288,7 @@ const deleteArea = async () => {
     await areaService.deleteArea(area.value.id)
     router.push('/locations')
   } catch (err: any) {
-    error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
+    handleError(err, 'area', 'Failed to delete area')
   }
 }
 
@@ -343,7 +353,7 @@ const deleteCommodity = async (id: string) => {
     // Remove the deleted commodity from the list
     commodities.value = commodities.value.filter(commodity => commodity.id !== id)
   } catch (err: any) {
-    error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
+    handleError(err, 'commodity', 'Failed to delete commodity')
   }
 }
 </script>

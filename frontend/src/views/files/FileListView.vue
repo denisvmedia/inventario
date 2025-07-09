@@ -239,25 +239,18 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteModal" class="modal-overlay" @click="cancelDelete">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>Delete File</h3>
-          <button class="btn-close" @click="cancelDelete">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p>Are you sure you want to delete <strong>{{ fileToDelete ? getDisplayTitle(fileToDelete) : '' }}</strong>?</p>
-          <p class="warning-text">This action cannot be undone. The file will be permanently deleted.</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="cancelDelete">Cancel</button>
-          <button class="btn btn-danger" :disabled="deleting" @click="deleteFile">
-            <span v-if="deleting">Deleting...</span>
-            <span v-else>Delete</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <Confirmation
+      v-model:visible="showDeleteModal"
+      :title="'Delete File'"
+      :message="`Are you sure you want to delete <strong>${fileToDelete ? getDisplayTitle(fileToDelete) : ''}</strong>?<br><br><span class='warning-text'>This action cannot be undone. The file will be permanently deleted.</span>`"
+      :confirm-label="deleting ? 'Deleting...' : 'Delete'"
+      :cancel-label="'Cancel'"
+      :confirm-button-class="'danger'"
+      :confirm-disabled="deleting"
+      :confirmation-icon="'exclamation-triangle'"
+      @confirm="deleteFile"
+      @cancel="cancelDelete"
+    />
   </div>
 </template>
 
@@ -265,6 +258,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import fileService, { type FileEntity } from '@/services/fileService'
+import Confirmation from '@/components/Confirmation.vue'
 
 const router = useRouter()
 const route = useRoute()

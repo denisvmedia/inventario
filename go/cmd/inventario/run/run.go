@@ -162,8 +162,8 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	params.RegistrySet = registrySet
-	params.EntityService = services.NewEntityService(registrySet)
 	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
+	params.EntityService = services.NewEntityService(registrySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 
 	err = validation.Validate(params)

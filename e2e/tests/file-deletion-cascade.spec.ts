@@ -59,7 +59,7 @@ test.describe('File Deletion Cascade Tests', () => {
     console.log(`Step ${step++}: Creating a new commodity`);
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
-    await createCommodity(page, recorder, testCommodity);
+    const commodityUrl = await createCommodity(page, recorder, testCommodity);
 
     // STEP 4: UPLOAD FILES TO COMMODITY
     console.log(`Step ${step++}: Uploading files to commodity`);
@@ -141,7 +141,7 @@ test.describe('File Deletion Cascade Tests', () => {
 
       // Also check via UI - navigate to file detail page
       await page.goto(`/files/${fileId}`);
-      await expect(page.locator('h1')).toContainText('File Details');
+      await expect(page.locator('.breadcrumb-link')).toContainText('Back to Files');
       console.log(`File entity ${i + 1} confirmed to exist`);
     }
 
@@ -149,6 +149,7 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // STEP 6: DELETE COMMODITY
     console.log(`Step ${step++}: Deleting commodity`);
+    await page.goto(commodityUrl);
     await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS);
 
     // STEP 7: VERIFY FILES ARE NO LONGER ACCESSIBLE
@@ -211,17 +212,32 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 9: CLEANUP
     console.log(`Step ${step++}: Cleaning up - deleting area and location`);
     await navigateTo(page, recorder, TO_LOCATIONS);
-    await deleteArea(page, recorder, testArea.name);
+    await deleteArea(page, recorder, testArea.name, testLocation.name);
     await deleteLocation(page, recorder, testLocation.name);
   });
 
   test('should delete export files when export is deleted', async ({ page, recorder }) => {
     let step = 1;
 
+    // STEP 1: CREATE LOCATION
+    console.log(`Step ${step++}: Creating a new location`);
+    await navigateTo(page, recorder, TO_LOCATIONS);
+    await createLocation(page, recorder, testLocation);
+
+    // STEP 2: CREATE AREA
+    console.log(`Step ${step++}: Creating a new area`);
+    await createArea(page, recorder, testArea);
+
+    // STEP 3: CREATE COMMODITY
+    console.log(`Step ${step++}: Creating a new commodity`);
+    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
+    await verifyAreaHasCommodities(page, recorder);
+    const commodityUrl = await createCommodity(page, recorder, testCommodity);
+
     // STEP 1: CREATE EXPORT
     console.log(`Step ${step++}: Creating a new export`);
     await navigateTo(page, recorder, TO_EXPORTS);
-    await createExport(page, recorder, testExport);
+    await createExport(page, recorder, testExport, testLocation.name, testArea.name, testCommodity.name);
 
     // STEP 2: WAIT FOR EXPORT TO COMPLETE AND GET FILE INFO
     console.log(`Step ${step++}: Waiting for export to complete and getting file info`);
@@ -254,7 +270,7 @@ test.describe('File Deletion Cascade Tests', () => {
     const exportResponse = await page.request.get(`/api/v1/exports/${exportId}`);
     expect(exportResponse.status()).toBe(200);
     const exportData = await exportResponse.json();
-    const fileId = exportData.attributes.file_id;
+    const fileId = exportData.data.attributes.file_id;
     console.log(`Export file entity ID: ${fileId}`);
 
     // Verify the file entity exists before deletion
@@ -265,7 +281,7 @@ test.describe('File Deletion Cascade Tests', () => {
 
       // Also check via UI
       await page.goto(`/files/${fileId}`);
-      await expect(page.locator('h1')).toContainText('File Details');
+      await expect(page.locator('h1')).toContainText('Export: Test Export for File Deletion');
       console.log(`Export file entity accessible via UI: ${fileId}`);
     }
 
@@ -273,6 +289,7 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // STEP 4: DELETE EXPORT
     console.log(`Step ${step++}: Deleting export`);
+    await page.goto(`/exports/${exportId}`);
     await deleteExport(page, recorder, testExport.description);
 
     // STEP 5: VERIFY EXPORT FILE IS NO LONGER ACCESSIBLE
@@ -315,6 +332,15 @@ test.describe('File Deletion Cascade Tests', () => {
     }
 
     await recorder.takeScreenshot('export-file-after-deletion-verified');
+
+
+    // STEP 9: CLEANUP
+    console.log(`Step ${step++}: Cleaning up - deleting commodity, area, and location`);
+    await page.goto(commodityUrl);
+    await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS);
+    await navigateTo(page, recorder, TO_LOCATIONS);
+    await deleteArea(page, recorder, testArea.name, testLocation.name);
+    await deleteLocation(page, recorder, testLocation.name);
   });
 
   test('should delete multiple commodity files when commodity with many files is deleted', async ({ page, recorder }) => {
@@ -333,7 +359,7 @@ test.describe('File Deletion Cascade Tests', () => {
     console.log(`Step ${step++}: Creating a new commodity`);
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
-    await createCommodity(page, recorder, testCommodity);
+    const commodityUrl = await createCommodity(page, recorder, testCommodity);
 
     // STEP 4: UPLOAD MULTIPLE FILES OF EACH TYPE
     console.log(`Step ${step++}: Uploading multiple files to commodity`);
@@ -440,6 +466,7 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // STEP 7: DELETE COMMODITY
     console.log(`Step ${step++}: Deleting commodity with multiple files`);
+    await page.goto(commodityUrl);
     await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS);
 
     // STEP 8: VERIFY ALL FILES ARE NO LONGER ACCESSIBLE
@@ -518,7 +545,7 @@ test.describe('File Deletion Cascade Tests', () => {
     console.log(`Step ${step++}: Creating a new commodity without files`);
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
-    await createCommodity(page, recorder, testCommodity);
+    const commodityUrl = await createCommodity(page, recorder, testCommodity);
 
     // STEP 4: VERIFY NO FILES ARE PRESENT
     console.log(`Step ${step++}: Verifying no files are present`);
@@ -536,6 +563,7 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // STEP 5: DELETE COMMODITY (SHOULD WORK WITHOUT ERRORS)
     console.log(`Step ${step++}: Deleting commodity with no files`);
+    await page.goto(commodityUrl);
     await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS);
 
     await recorder.takeScreenshot('commodity-no-files-after-deletion');

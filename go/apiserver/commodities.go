@@ -26,6 +26,7 @@ type commoditiesAPI struct {
 	uploadLocation string
 	registrySet    *registry.Set
 	entityService  *services.EntityService
+	fileService    *services.FileService
 }
 
 // listCommodities lists all commodities.
@@ -416,7 +417,7 @@ func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = api.registrySet.FileRegistry.Delete(r.Context(), imageID)
+	err = api.fileService.DeleteFileWithPhysical(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -458,7 +459,7 @@ func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err = api.registrySet.FileRegistry.Delete(r.Context(), invoiceID)
+	err = api.fileService.DeleteFileWithPhysical(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -500,7 +501,7 @@ func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = api.registrySet.FileRegistry.Delete(r.Context(), manualID)
+	err = api.fileService.DeleteFileWithPhysical(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -1005,6 +1006,7 @@ func Commodities(params Params) func(r chi.Router) {
 		uploadLocation: params.UploadLocation,
 		registrySet:    params.RegistrySet,
 		entityService:  params.EntityService,
+		fileService:    services.NewFileService(params.RegistrySet, params.UploadLocation),
 	}
 
 	return func(r chi.Router) {

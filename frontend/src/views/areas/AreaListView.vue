@@ -5,8 +5,13 @@
       <router-link to="/areas/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
     </div>
 
+    <!-- Error Notification Stack -->
+    <ErrorNotificationStack
+      :errors="errors"
+      @dismiss="removeError"
+    />
+
     <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="areas.length === 0" class="empty">
       <div class="empty-message">
         <p>No areas found. Create your first area!</p>
@@ -51,17 +56,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
-import Confirmation from "@/components/Confirmation.vue";
+import Confirmation from "@/components/Confirmation.vue"
+import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import { useErrorState } from '@/utils/errorUtils'
 
 const router = useRouter()
 const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
-const error = ref<string | null>(null)
+
+// Error state management
+const { errors, showErrors, handleError, removeError, clearAllErrors, cleanup } = useErrorState()
 
 onMounted(async () => {
   try {
@@ -75,7 +84,7 @@ onMounted(async () => {
     locations.value = locationsResponse.data.data
     loading.value = false
   } catch (err: any) {
-    error.value = 'Failed to load areas: ' + (err.message || 'Unknown error')
+    handleError(err, 'area', 'Failed to load areas')
     loading.value = false
   }
 })
@@ -120,9 +129,14 @@ const deleteArea = async (id: string) => {
     // Remove the deleted area from the list
     areas.value = areas.value.filter(area => area.id !== id)
   } catch (err: any) {
-    error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
+    handleError(err, 'area', 'Failed to delete area')
   }
 }
+
+// Add cleanup when component unmounts
+onBeforeUnmount(() => {
+  cleanup()
+})
 </script>
 
 <style lang="scss" scoped>

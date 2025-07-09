@@ -10,6 +10,7 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
 )
 
 func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
@@ -87,12 +88,16 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
 
+			// Create temporary directory for test files
+			tempDir := c.TempDir()
+			uploadLocation := "file://" + tempDir + "?create_dir=1"
+
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 			c.Assert(err, qt.IsNil)
 
 			// Create service
-			service := services.NewEntityService(registrySet)
+			service := services.NewEntityService(registrySet, uploadLocation)
 
 			// Setup test data
 			commodityID, fileIDs := tt.setupData(registrySet)
@@ -193,12 +198,16 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
 
+			// Create temporary directory for test files
+			tempDir := c.TempDir()
+			uploadLocation := "file://" + tempDir + "?create_dir=1"
+
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 			c.Assert(err, qt.IsNil)
 
 			// Create service
-			service := services.NewEntityService(registrySet)
+			service := services.NewEntityService(registrySet, uploadLocation)
 
 			// Setup test data
 			areaID, commodityIDs, fileIDs := tt.setupData(registrySet)
@@ -307,12 +316,16 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
 
+			// Create temporary directory for test files
+			tempDir := c.TempDir()
+			uploadLocation := "file://" + tempDir + "?create_dir=1"
+
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 			c.Assert(err, qt.IsNil)
 
 			// Create service
-			service := services.NewEntityService(registrySet)
+			service := services.NewEntityService(registrySet, uploadLocation)
 
 			// Setup test data
 			locationID, areaIDs, commodityIDs, fileIDs := tt.setupData(registrySet)
@@ -406,12 +419,16 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
 
+			// Create temporary directory for test files
+			tempDir := c.TempDir()
+			uploadLocation := "file://" + tempDir + "?create_dir=1"
+
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
 			c.Assert(err, qt.IsNil)
 
 			// Create service
-			service := services.NewEntityService(registrySet)
+			service := services.NewEntityService(registrySet, uploadLocation)
 
 			// Setup test data
 			exportID, fileID := tt.setupData(registrySet)

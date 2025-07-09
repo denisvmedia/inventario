@@ -213,7 +213,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	}
 
 	// Use real restore worker (not mock) to test actual logic
-	entityService := services.NewEntityService(registrySet)
+	entityService := services.NewEntityService(registrySet, "memory://")
 	restoreService := restore.NewRestoreService(registrySet, entityService, "memory://")
 	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, "memory://")
 	r.Route("/api/v1/exports", apiserver.Exports(params, restoreWorker))

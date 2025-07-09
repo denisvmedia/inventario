@@ -12,29 +12,23 @@ import (
 // EntityService provides business logic for entity operations including recursive deletion
 type EntityService struct {
 	registrySet *registry.Set
+	fileService *FileService
 }
 
 // NewEntityService creates a new entity service
-func NewEntityService(registrySet *registry.Set) *EntityService {
+func NewEntityService(registrySet *registry.Set, uploadLocation string) *EntityService {
 	return &EntityService{
 		registrySet: registrySet,
+		fileService: NewFileService(registrySet, uploadLocation),
 	}
 }
 
 // DeleteCommodityRecursive deletes a commodity and all its linked files recursively
 func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string) error {
-	// First, get all linked files for this commodity
-	files, err := s.registrySet.FileRegistry.ListByLinkedEntity(ctx, "commodity", id)
+	// Delete all linked files (both physical and database records)
+	err := s.fileService.DeleteLinkedFiles(ctx, "commodity", id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get linked files")
-	}
-
-	// Delete all linked files
-	for _, file := range files {
-		err = s.registrySet.FileRegistry.Delete(ctx, file.ID)
-		if err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to delete linked file %s", file.ID))
-		}
+		return errkit.Wrap(err, "failed to delete linked files")
 	}
 
 	// Then delete the commodity itself
@@ -109,9 +103,9 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 		return errkit.Wrap(err, "failed to get export")
 	}
 
-	// If export has a linked file, delete it first
+	// If export has a linked file, delete it (both physical and database record)
 	if export.FileID != "" {
-		err = s.registrySet.FileRegistry.Delete(ctx, export.FileID)
+		err = s.fileService.DeleteFileWithPhysical(ctx, export.FileID)
 		if err != nil && !errors.Is(err, registry.ErrNotFound) {
 			return errkit.Wrap(err, "failed to delete export file")
 		}

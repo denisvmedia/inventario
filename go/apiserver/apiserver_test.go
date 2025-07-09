@@ -357,13 +357,13 @@ func newParams() apiserver.Params {
 	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)
 	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
 
+	params.UploadLocation = uploadLocation
+
 	// Create EntityService
-	params.EntityService = services.NewEntityService(params.RegistrySet)
+	params.EntityService = services.NewEntityService(params.RegistrySet, params.UploadLocation)
 
 	// Populate FileRegistry with test data using the same instance
 	populateFileRegistryWithTestData(params.RegistrySet.FileRegistry, params.RegistrySet.CommodityRegistry)
-
-	params.UploadLocation = uploadLocation
 	return params
 }
 

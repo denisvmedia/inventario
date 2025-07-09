@@ -22,8 +22,13 @@
       @cancel="showLocationForm = false"
     />
 
+    <!-- Error Notification Stack -->
+    <ErrorNotificationStack
+      :errors="errors"
+      @dismiss="removeError"
+    />
+
     <div v-if="loading" class="loading">Loading...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="locations.length === 0" class="empty">
       <div class="empty-message">
         <p>No locations found. Create your first location!</p>
@@ -137,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
@@ -146,7 +151,9 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { formatPrice } from '@/services/currencyService'
 import LocationForm from '@/components/LocationForm.vue'
 import AreaForm from '@/components/AreaForm.vue'
-import Confirmation from "@/components/Confirmation.vue";
+import Confirmation from "@/components/Confirmation.vue"
+import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import { useErrorState } from '@/utils/errorUtils'
 
 const router = useRouter()
 const route = useRoute()
@@ -154,7 +161,9 @@ const settingsStore = useSettingsStore()
 const locations = ref<any[]>([])
 const areas = ref<any[]>([])
 const loading = ref<boolean>(true)
-const error = ref<string | null>(null)
+
+// Error state management
+const { errors, showErrors, handleError, removeError, clearAllErrors, cleanup } = useErrorState()
 
 // Values data
 const areaTotals = ref<any[]>([])
@@ -321,7 +330,7 @@ onMounted(async () => {
       expandedLocations.value = [locations.value[0].id]
     }
   } catch (err: any) {
-    error.value = 'Failed to load locations: ' + (err.message || 'Unknown error')
+    handleError(err, 'location', 'Failed to load locations')
     loading.value = false
   }
 })
@@ -395,7 +404,7 @@ const deleteLocation = async (id: string) => {
     // Remove from expanded locations if present
     expandedLocations.value = expandedLocations.value.filter(locationId => locationId !== id)
   } catch (err: any) {
-    error.value = 'Failed to delete location: ' + (err.message || 'Unknown error')
+    handleError(err, 'location', 'Failed to delete location')
   }
 }
 
@@ -453,9 +462,14 @@ const deleteArea = async (id: string) => {
     // Remove the deleted area from the list
     areas.value = areas.value.filter(area => area.id !== id)
   } catch (err: any) {
-    error.value = 'Failed to delete area: ' + (err.message || 'Unknown error')
+    handleError(err, 'area', 'Failed to delete area')
   }
 }
+
+// Add cleanup when component unmounts
+onBeforeUnmount(() => {
+  cleanup()
+})
 </script>
 
 <style lang="scss" scoped>
