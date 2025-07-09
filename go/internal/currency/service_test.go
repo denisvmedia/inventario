@@ -326,7 +326,6 @@ func TestStaticRateProvider_GetExchangeRate(t *testing.T) {
 		from     string
 		to       string
 		expected decimal.Decimal
-		wantErr  bool
 	}{
 		{
 			name: "same currency",
@@ -336,7 +335,6 @@ func TestStaticRateProvider_GetExchangeRate(t *testing.T) {
 			from:     "USD",
 			to:       "USD",
 			expected: decimal.NewFromInt(1),
-			wantErr:  false,
 		},
 		{
 			name: "existing rate",
@@ -346,17 +344,6 @@ func TestStaticRateProvider_GetExchangeRate(t *testing.T) {
 			from:     "USD",
 			to:       "EUR",
 			expected: decimal.NewFromFloat(0.85),
-			wantErr:  false,
-		},
-		{
-			name: "non-existing rate",
-			rates: map[string]decimal.Decimal{
-				"USD_EUR": decimal.NewFromFloat(0.85),
-			},
-			from:     "EUR",
-			to:       "GBP",
-			expected: decimal.Zero,
-			wantErr:  true,
 		},
 	}
 
@@ -367,12 +354,37 @@ func TestStaticRateProvider_GetExchangeRate(t *testing.T) {
 			provider := currency.NewStaticRateProvider(tt.rates)
 			rate, err := provider.GetExchangeRate(context.Background(), tt.from, tt.to)
 
-			if tt.wantErr {
-				c.Assert(err, qt.IsNotNil)
-			} else {
-				c.Assert(err, qt.IsNil)
-				c.Assert(rate.Equal(tt.expected), qt.IsTrue, qt.Commentf("expected %v, got %v", tt.expected, rate))
-			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(rate.Equal(tt.expected), qt.IsTrue, qt.Commentf("expected %v, got %v", tt.expected, rate))
+		})
+	}
+}
+
+func TestStaticRateProvider_GetExchangeRate_Error(t *testing.T) {
+	tests := []struct {
+		name  string
+		rates map[string]decimal.Decimal
+		from  string
+		to    string
+	}{
+		{
+			name: "non-existing rate",
+			rates: map[string]decimal.Decimal{
+				"USD_EUR": decimal.NewFromFloat(0.85),
+			},
+			from: "EUR",
+			to:   "GBP",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			provider := currency.NewStaticRateProvider(tt.rates)
+			_, err := provider.GetExchangeRate(context.Background(), tt.from, tt.to)
+
+			c.Assert(err, qt.IsNotNil)
 		})
 	}
 }
