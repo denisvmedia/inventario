@@ -525,7 +525,7 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 10: CLEANUP
     console.log(`Step ${step++}: Cleaning up - deleting area and location`);
     await navigateTo(page, recorder, TO_LOCATIONS);
-    await deleteArea(page, recorder, testArea.name);
+    await deleteArea(page, recorder, testArea.name, testLocation.name);
     await deleteLocation(page, recorder, testLocation.name);
   });
 
@@ -571,7 +571,7 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 6: CLEANUP
     console.log(`Step ${step++}: Cleaning up - deleting area and location`);
     await navigateTo(page, recorder, TO_LOCATIONS);
-    await deleteArea(page, recorder, testArea.name);
+    await deleteArea(page, recorder, testArea.name, testLocation.name);
     await deleteLocation(page, recorder, testLocation.name);
   });
 });
