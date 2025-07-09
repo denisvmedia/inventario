@@ -35,7 +35,7 @@ export const uploadFile = async (page: Page, recorder: TestRecorder, selectorBas
     // }
 
     // Verify image is displayed
-    await expect(page.locator(`${selectorBase} .file-item`)).toBeVisible();
+    await expect(page.locator(`${selectorBase} .file-item`).first()).toBeVisible();
     await recorder.takeScreenshot(`${screenshotBase}-displayed`);
 };
 
