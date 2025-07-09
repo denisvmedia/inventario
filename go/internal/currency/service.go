@@ -34,14 +34,27 @@ func NewConversionService(commodityRegistry registry.CommodityRegistry, rateProv
 // ConvertCommodityPrices converts all commodity prices from one currency to another.
 // This is used when the main currency is changed.
 func (s *ConversionService) ConvertCommodityPrices(ctx context.Context, fromCurrency, toCurrency string) error {
+	return s.ConvertCommodityPricesWithRate(ctx, fromCurrency, toCurrency, nil)
+}
+
+// ConvertCommodityPricesWithRate converts all commodity prices from one currency to another using a specific rate.
+// If rate is nil, it will use the rate provider to get the exchange rate.
+func (s *ConversionService) ConvertCommodityPricesWithRate(ctx context.Context, fromCurrency, toCurrency string, rate *decimal.Decimal) error {
 	if fromCurrency == toCurrency {
 		return nil // No conversion needed
 	}
 
-	// Get exchange rate
-	rate, err := s.rateProvider.GetExchangeRate(ctx, fromCurrency, toCurrency)
-	if err != nil {
-		return errkit.Wrap(err, fmt.Sprintf("failed to get exchange rate from %s to %s", fromCurrency, toCurrency))
+	var exchangeRate decimal.Decimal
+	var err error
+
+	// Use provided rate or get from rate provider
+	if rate != nil {
+		exchangeRate = *rate
+	} else {
+		exchangeRate, err = s.rateProvider.GetExchangeRate(ctx, fromCurrency, toCurrency)
+		if err != nil {
+			return errkit.Wrap(err, fmt.Sprintf("failed to get exchange rate from %s to %s", fromCurrency, toCurrency))
+		}
 	}
 
 	// Get all commodities
@@ -56,13 +69,13 @@ func (s *ConversionService) ConvertCommodityPrices(ctx context.Context, fromCurr
 
 		// Convert ConvertedOriginalPrice (from old main currency to new main currency)
 		if !commodity.ConvertedOriginalPrice.IsZero() {
-			commodity.ConvertedOriginalPrice = commodity.ConvertedOriginalPrice.Mul(rate)
+			commodity.ConvertedOriginalPrice = commodity.ConvertedOriginalPrice.Mul(exchangeRate)
 			updated = true
 		}
 
 		// Convert CurrentPrice (from old main currency to new main currency)
 		if !commodity.CurrentPrice.IsZero() {
-			commodity.CurrentPrice = commodity.CurrentPrice.Mul(rate)
+			commodity.CurrentPrice = commodity.CurrentPrice.Mul(exchangeRate)
 			updated = true
 		}
 
@@ -73,7 +86,7 @@ func (s *ConversionService) ConvertCommodityPrices(ctx context.Context, fromCurr
 
 			// Convert the original price to the new currency
 			if !commodity.OriginalPrice.IsZero() {
-				commodity.OriginalPrice = commodity.OriginalPrice.Mul(rate)
+				commodity.OriginalPrice = commodity.OriginalPrice.Mul(exchangeRate)
 				updated = true
 			}
 
