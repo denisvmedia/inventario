@@ -18,6 +18,15 @@ interface APIError {
 }
 
 /**
+ * Checks if an error is a 404 Not Found error
+ * @param err The error object from axios or similar HTTP client
+ * @returns True if the error is a 404 error
+ */
+export function is404Error(err: APIError): boolean {
+  return err.response?.status === 404;
+}
+
+/**
  * Extracts a meaningful error message from an API error response
  * @param err The error object from axios or similar HTTP client
  * @param fallbackMessage Default message to use if no meaningful message can be extracted
@@ -112,6 +121,26 @@ export function createUserFriendlyMessage(rawMessage: string, context?: string):
   
   // Return the original message if no specific handling is needed
   return rawMessage;
+}
+
+/**
+ * Gets a user-friendly 404 error message for a specific resource type
+ * @param resourceType The type of resource (e.g., 'commodity', 'file', 'area')
+ * @returns A user-friendly 404 error message
+ */
+export function get404Message(resourceType: string): string {
+  const capitalizedType = resourceType.charAt(0).toUpperCase() + resourceType.slice(1);
+  return `${capitalizedType} not found. It may have been deleted or moved.`;
+}
+
+/**
+ * Gets a user-friendly 404 error title for a specific resource type
+ * @param resourceType The type of resource (e.g., 'commodity', 'file', 'area')
+ * @returns A user-friendly 404 error title
+ */
+export function get404Title(resourceType: string): string {
+  const capitalizedType = resourceType.charAt(0).toUpperCase() + resourceType.slice(1);
+  return `${capitalizedType} Not Found`;
 }
 
 /**

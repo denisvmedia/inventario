@@ -162,21 +162,9 @@ test.describe('File Deletion Cascade Tests', () => {
       // Navigate to the file URL
       await page.goto(fileUrl);
 
-      // Verify that the file is no longer accessible (should show 404 or redirect)
-      // The exact behavior depends on the implementation, but the file should not be accessible
-      const currentUrl = page.url();
-      const pageContent = await page.textContent('body');
-
-      // Check if we're redirected away from the file URL or if there's an error
-      const isFileNotFound = currentUrl !== fileUrl ||
-                            pageContent?.includes('404') ||
-                            pageContent?.includes('Not Found') ||
-                            pageContent?.includes('File not found') ||
-                            currentUrl.includes('/404') ||
-                            currentUrl === '/';
-
-      expect(isFileNotFound).toBe(true);
-      console.log(`File ${i + 1} is no longer accessible: ${isFileNotFound}`);
+      // Verify that the file is no longer accessible (should show 404)
+      await page.waitForSelector('.resource-not-found')
+      console.log(`File ${i + 1} is no longer accessible`);
     }
 
     // STEP 8: VERIFY FILE ENTITIES ARE DELETED FROM DATABASE
@@ -193,18 +181,10 @@ test.describe('File Deletion Cascade Tests', () => {
 
       // Check via UI - should show error or redirect
       await page.goto(`/files/${fileId}`);
-      const currentUrl = page.url();
-      const pageContent = await page.textContent('body');
 
-      const isEntityNotFound = currentUrl !== `/files/${fileId}` ||
-                              pageContent?.includes('404') ||
-                              pageContent?.includes('Not Found') ||
-                              pageContent?.includes('File not found') ||
-                              currentUrl.includes('/404') ||
-                              currentUrl === '/';
-
-      expect(isEntityNotFound).toBe(true);
-      console.log(`File entity ${i + 1} is no longer accessible via UI: ${isEntityNotFound}`);
+      // Verify that the file is no longer accessible (should show 404)
+      await page.waitForSelector('.resource-not-found')
+      console.log(`File entity ${i + 1} is no longer accessible via UI`);
     }
 
     await recorder.takeScreenshot('commodity-files-after-deletion-verified');
@@ -315,18 +295,10 @@ test.describe('File Deletion Cascade Tests', () => {
 
       // Check via UI - should show error or redirect
       await page.goto(`/files/${fileId}`);
-      const currentFileUrl = page.url();
-      const pageContent = await page.textContent('body');
 
-      const isFileEntityNotFound = currentFileUrl !== `/files/${fileId}` ||
-                                  pageContent?.includes('404') ||
-                                  pageContent?.includes('Not Found') ||
-                                  pageContent?.includes('File not found') ||
-                                  currentFileUrl.includes('/404') ||
-                                  currentFileUrl === '/';
-
-      expect(isFileEntityNotFound).toBe(true);
-      console.log(`Export file entity is no longer accessible via UI: ${isFileEntityNotFound}`);
+      // Verify that the file is no longer accessible (should show 404)
+      await page.waitForSelector('.resource-not-found')
+      console.log(`Export file entity is no longer accessible via UI`);
     } else {
       console.log('No file entity ID found, skipping file entity deletion check');
     }
@@ -478,18 +450,9 @@ test.describe('File Deletion Cascade Tests', () => {
 
       await page.goto(fileUrl);
 
-      const currentUrl = page.url();
-      const pageContent = await page.textContent('body');
-
-      const isFileNotFound = currentUrl !== fileUrl ||
-                            pageContent?.includes('404') ||
-                            pageContent?.includes('Not Found') ||
-                            pageContent?.includes('File not found') ||
-                            currentUrl.includes('/404') ||
-                            currentUrl === '/';
-
-      expect(isFileNotFound).toBe(true);
-      console.log(`File ${i + 1} is no longer accessible: ${isFileNotFound}`);
+      // Verify that the file is no longer accessible (should show 404)
+      await page.waitForSelector('.resource-not-found')
+      console.log(`File ${i + 1} is no longer accessible`);
     }
 
     // STEP 9: VERIFY ALL FILE ENTITIES ARE DELETED FROM DATABASE
@@ -506,18 +469,10 @@ test.describe('File Deletion Cascade Tests', () => {
 
       // Check via UI - should show error or redirect
       await page.goto(`/files/${fileId}`);
-      const currentUrl = page.url();
-      const pageContent = await page.textContent('body');
 
-      const isEntityNotFound = currentUrl !== `/files/${fileId}` ||
-                              pageContent?.includes('404') ||
-                              pageContent?.includes('Not Found') ||
-                              pageContent?.includes('File not found') ||
-                              currentUrl.includes('/404') ||
-                              currentUrl === '/';
-
-      expect(isEntityNotFound).toBe(true);
-      console.log(`File entity ${i + 1} is no longer accessible via UI: ${isEntityNotFound}`);
+      // Verify that the file is no longer accessible (should show 404)
+      await page.waitForSelector('.resource-not-found')
+      console.log(`File entity ${i + 1} is no longer accessible via UI`);
     }
 
     await recorder.takeScreenshot('commodity-multiple-files-after-deletion-verified');

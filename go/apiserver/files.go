@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
+	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -327,7 +328,8 @@ func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
 	// Get file attributes for Content-Length header
 	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, file.OriginalPath)
 	if err != nil {
-		internalServerError(w, r, err)
+		// GetFileAttributes now returns registry.ErrNotFound for missing files
+		renderEntityError(w, r, err)
 		return
 	}
 
@@ -345,6 +347,11 @@ func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 	reader, err := b.NewReader(r.Context(), file.OriginalPath, nil)
 	if err != nil {
+		// Check if this is a NotFound error from blob storage
+		if gcerrors.Code(err) == gcerrors.NotFound {
+			renderEntityError(w, r, registry.ErrNotFound)
+			return
+		}
 		internalServerError(w, r, errkit.Wrap(err, "failed to open file"))
 		return
 	}
