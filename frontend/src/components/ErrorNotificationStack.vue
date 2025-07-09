@@ -127,7 +127,7 @@ const handleTouchEnd = (event: TouchEvent, errorId: string) => {
   border-left: 4px solid #dc2626;
   border-radius: 8px;
   padding: 16px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 10%), 0 4px 6px -2px rgb(0 0 0 / 5%);
   pointer-events: auto;
   max-width: 100%;
   word-wrap: break-word;
@@ -238,17 +238,14 @@ const handleTouchEnd = (event: TouchEvent, errorId: string) => {
 }
 
 /* Mobile-first responsive design */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .error-notification-stack {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: auto;
+    inset: 0 0 auto;
     z-index: 9999;
     max-width: none;
     padding: 10px;
-    background: rgba(0, 0, 0, 0.02);
+    background: rgb(0 0 0 / 2%);
     backdrop-filter: blur(2px);
   }
 
@@ -262,7 +259,7 @@ const handleTouchEnd = (event: TouchEvent, errorId: string) => {
     padding: 16px;
     margin: 0;
     border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
     border-left-width: 6px;
     font-size: 0.9rem;
     line-height: 1.4;
@@ -286,7 +283,7 @@ const handleTouchEnd = (event: TouchEvent, errorId: string) => {
   .error-message {
     font-size: 0.9rem;
     line-height: 1.4;
-    word-break: break-word;
+    overflow-wrap: break-word;
     hyphens: auto;
   }
 
@@ -314,7 +311,7 @@ const handleTouchEnd = (event: TouchEvent, errorId: string) => {
 }
 
 /* Small mobile devices */
-@media (max-width: 480px) {
+@media (width <= 480px) {
   .error-notification-stack {
     padding: 8px;
   }
@@ -366,11 +363,11 @@ const handleTouchEnd = (event: TouchEvent, errorId: string) => {
 }
 
 /* Landscape mobile orientation */
-@media (max-width: 768px) and (orientation: landscape) {
+@media (width <= 768px) and (orientation: landscape) {
   .error-notification-stack {
     top: 5px;
     padding: 5px;
-    background: rgba(0, 0, 0, 0.05);
+    background: rgb(0 0 0 / 5%);
   }
 
   .error-stack-container {
