@@ -64,7 +64,7 @@ func generateSampleConfig() string {
 # You can modify these values to match your environment and preferences.
 #
 # Environment variables and command-line flags will override these settings.
-# Environment variable format: INVENTARIO_<SECTION>_<KEY> (e.g., INVENTARIO_SERVER_ADDR)
+# Environment variable format: INVENTARIO_<SECTION>_<KEY> (e.g., INVENTARIO_ADDR)
 
 # Server Configuration
 server:
