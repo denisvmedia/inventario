@@ -139,16 +139,16 @@ func initConfigCommand(_ *cobra.Command, _ []string) error {
 	sampleContent := generateSampleConfig()
 
 	// Write the sample config file
-	err = os.WriteFile(configFilePath, []byte(sampleContent), 0o644)
+	err = os.WriteFile(configFilePath, []byte(sampleContent), 0o600)
 	if err != nil {
 		log.WithError(err).WithField("path", configFilePath).Error("Failed to write config file")
 		return fmt.Errorf("failed to write config file %s: %w", configFilePath, err)
 	}
 
-	log.WithField("path", configFilePath).Info("Configuration file created successfully")
-	fmt.Printf("✅ Configuration file created successfully at: %s\n", configFilePath)
-	fmt.Println("\nYou can now edit this file to customize your Inventario settings.")
-	fmt.Println("Environment variables and command-line flags will override these settings.")
+	// log.WithField("path", configFilePath).Info("Configuration file created successfully")
+	fmt.Printf("✅ Configuration file created successfully at: %s\n", configFilePath)          //nolint:forbidigo // CLI output is OK
+	fmt.Println("\nYou can now edit this file to customize your Inventario settings.")        //nolint:forbidigo // CLI output is OK
+	fmt.Println("Environment variables and command-line flags will override these settings.") //nolint:forbidigo // CLI output is OK
 
 	return nil
 }

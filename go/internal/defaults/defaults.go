@@ -37,7 +37,7 @@ func getFileURL(path string) string {
 		// Fallback to relative path if we can't get working directory
 		return "file://./" + path + "?create_dir=1"
 	}
-	
+
 	absPath = filepath.ToSlash(filepath.Join(absPath, path))
 	if strings.Contains(absPath, ":") {
 		absPath = "/" + absPath // Ensure the drive letter is prefixed with a slash
@@ -88,5 +88,3 @@ func GetMaxConcurrentExports() int {
 func GetMaxConcurrentImports() int {
 	return defaultConfig.Workers.MaxConcurrentImports
 }
-
-

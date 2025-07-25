@@ -73,7 +73,7 @@ func TestInitConfigCommand_Success(t *testing.T) {
 
 	// Create a temporary directory to use as config dir
 	tempDir := t.TempDir()
-	
+
 	// Override the user config directory for this test
 	originalConfigDir := os.Getenv("XDG_CONFIG_HOME")
 	t.Cleanup(func() {
@@ -110,7 +110,7 @@ func TestInitConfigCommand_Success(t *testing.T) {
 	// Verify the content contains expected sections
 	content, err := os.ReadFile(configPath)
 	c.Assert(err, qt.IsNil)
-	
+
 	contentStr := string(content)
 	cfg := defaults.New()
 
@@ -126,7 +126,7 @@ func TestInitConfigCommand_FileAlreadyExists(t *testing.T) {
 
 	// Create a temporary directory to use as config dir
 	tempDir := t.TempDir()
-	
+
 	// Override the user config directory for this test
 	originalConfigDir := os.Getenv("XDG_CONFIG_HOME")
 	t.Cleanup(func() {
@@ -155,9 +155,9 @@ func TestInitConfigCommand_FileAlreadyExists(t *testing.T) {
 	configDir := filepath.Join(tempDir, "inventario")
 	err := os.MkdirAll(configDir, 0o755)
 	c.Assert(err, qt.IsNil)
-	
+
 	configPath := filepath.Join(configDir, "config.yaml")
-	err = os.WriteFile(configPath, []byte("existing config"), 0o644)
+	err = os.WriteFile(configPath, []byte("existing config"), 0o600)
 	c.Assert(err, qt.IsNil)
 
 	cmd := initconfig.NewInitConfigCommand()
@@ -170,7 +170,7 @@ func TestInitConfigCommand_DirectoryCreation(t *testing.T) {
 
 	// Create a temporary directory to use as config dir
 	tempDir := t.TempDir()
-	
+
 	// Override the user config directory for this test
 	originalConfigDir := os.Getenv("XDG_CONFIG_HOME")
 	t.Cleanup(func() {
@@ -299,11 +299,11 @@ func TestConfigurationFileContent_MatchesRunCommandFlags(t *testing.T) {
 	// Expected configuration keys and their corresponding run command flags
 	// Using actual default values from the shared defaults package
 	expectedMappings := map[string]string{
-		fmt.Sprintf("addr: \"%s\"", cfg.Server.Addr):                                    "--addr",
-		"upload-location:":                                                              "--upload-location",
-		fmt.Sprintf("db-dsn: \"%s\"", cfg.Database.DSN):                                "--db-dsn",
-		fmt.Sprintf("max-concurrent-exports: %d", cfg.Workers.MaxConcurrentExports):    "--max-concurrent-exports",
-		fmt.Sprintf("max-concurrent-imports: %d", cfg.Workers.MaxConcurrentImports):    "--max-concurrent-imports",
+		fmt.Sprintf("addr: \"%s\"", cfg.Server.Addr):                                "--addr",
+		"upload-location:":                                                          "--upload-location",
+		fmt.Sprintf("db-dsn: \"%s\"", cfg.Database.DSN):                             "--db-dsn",
+		fmt.Sprintf("max-concurrent-exports: %d", cfg.Workers.MaxConcurrentExports): "--max-concurrent-exports",
+		fmt.Sprintf("max-concurrent-imports: %d", cfg.Workers.MaxConcurrentImports): "--max-concurrent-imports",
 	}
 
 	for configLine, flagName := range expectedMappings {

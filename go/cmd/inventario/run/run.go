@@ -119,12 +119,6 @@ var runFlags = map[string]cobraflags.Flag{
 	},
 }
 
-
-
-
-
-
-
 func NewRunCommand() *cobra.Command {
 	cobraflags.RegisterMap(runCmd, runFlags)
 

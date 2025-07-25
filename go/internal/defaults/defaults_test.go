@@ -54,5 +54,3 @@ func TestDefaultsConsistency(t *testing.T) {
 	c.Assert(defaults.GetMaxConcurrentImports(), qt.Equals, cfg.Workers.MaxConcurrentImports)
 	c.Assert(defaults.GetUploadLocation(), qt.Equals, cfg.Server.UploadLocation)
 }
-
-
