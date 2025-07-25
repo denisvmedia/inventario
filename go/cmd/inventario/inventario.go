@@ -2,6 +2,7 @@ package inventario
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -62,23 +63,45 @@ Use "inventario [command] --help" for detailed information about each command.`,
 	},
 }
 
+// loadGlobalConfigFile loads the configuration file for all commands
+func loadGlobalConfigFile() {
+	// Get the user's config directory
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return // Not a fatal error
+	}
+
+	// Define the config file path
+	configFilePath := filepath.Join(configDir, "inventario", "config.yaml")
+
+	// Check if the config file exists
+	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
+		return // Not an error if the file doesn't exist
+	}
+
+	// Set the config file for viper
+	viper.SetConfigFile(configFilePath)
+
+	// Read the config file
+	// No manual mapping needed - config keys match flag names exactly
+	viper.ReadInConfig() // Ignore errors, not fatal
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(args ...string) {
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix(envPrefix)
 
-	// Set up environment variable key mappings for nested config structure
-	// This allows INVENTARIO_ADDR to map to server.addr in the config file
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	// Set up environment variable key mappings
+	// This allows INVENTARIO_DB_DSN to map to db-dsn flag name
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 
-	// Bind environment variables to config keys
+	// Environment variables are automatically bound via AutomaticEnv() and SetEnvPrefix()
 	// This enables the priority order: CLI flags > env vars > config file > defaults
-	viper.BindEnv("server.addr", "INVENTARIO_ADDR")
-	viper.BindEnv("server.upload_location", "INVENTARIO_UPLOAD_LOCATION")
-	viper.BindEnv("database.dsn", "INVENTARIO_DB_DSN")
-	viper.BindEnv("workers.max_concurrent_exports", "INVENTARIO_MAX_CONCURRENT_EXPORTS")
-	viper.BindEnv("workers.max_concurrent_imports", "INVENTARIO_MAX_CONCURRENT_IMPORTS")
+
+	// Load configuration file before processing commands
+	loadGlobalConfigFile()
 
 	rootCmd.SetArgs(args)
 	rootCmd.AddCommand(initconfig.NewInitConfigCommand())

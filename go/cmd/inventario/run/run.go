@@ -5,9 +5,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/go-extras/cobraflags"
@@ -122,67 +119,11 @@ var runFlags = map[string]cobraflags.Flag{
 	},
 }
 
-// loadConfigFile loads the configuration file from the standard user config directory
-// and sets up viper to use it. If the config file doesn't exist, this is not an error.
-func loadConfigFile() error {
-	// Get the user's config directory
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		log.WithError(err).Debug("Failed to get user config directory, skipping config file loading")
-		return nil // Not a fatal error
-	}
 
-	// Define the config file path
-	configFilePath := filepath.Join(configDir, "inventario", "config.yaml")
 
-	// Check if the config file exists
-	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
-		log.WithField("path", configFilePath).Debug("Configuration file does not exist, using defaults")
-		return nil // Not an error if the file doesn't exist
-	}
 
-	// Set the config file for viper
-	viper.SetConfigFile(configFilePath)
 
-	// Read the config file
-	if err := viper.ReadInConfig(); err != nil {
-		log.WithError(err).WithField("path", configFilePath).Warn("Failed to read configuration file, using defaults")
-		return nil // Not a fatal error, continue with defaults
-	}
 
-	log.WithField("path", configFilePath).Info("Configuration file loaded successfully")
-	return nil
-}
-
-// getConfigValue gets a configuration value with the proper priority order:
-// 1. Command-line flags (handled by cobraflags)
-// 2. Environment variables (handled by viper)
-// 3. Configuration file values (handled by viper)
-// 4. Default values
-func getConfigValue(flagName, configKey string, defaultValue interface{}) interface{} {
-	// Check if viper has a value from environment variables first
-	envKey := strings.ToUpper(strings.ReplaceAll(configKey, ".", "_"))
-	envKey = "INVENTARIO_" + envKey
-	if envValue := os.Getenv(envKey); envValue != "" {
-		// Convert to appropriate type
-		switch defaultValue.(type) {
-		case string:
-			return envValue
-		case int:
-			if intVal, err := strconv.Atoi(envValue); err == nil {
-				return intVal
-			}
-		}
-	}
-
-	// Check if viper has a value from config file
-	if viper.IsSet(configKey) {
-		return viper.Get(configKey)
-	}
-
-	// Fall back to default value
-	return defaultValue
-}
 
 func NewRunCommand() *cobra.Command {
 	cobraflags.RegisterMap(runCmd, runFlags)
@@ -191,20 +132,13 @@ func NewRunCommand() *cobra.Command {
 }
 
 func runCommand(_ *cobra.Command, _ []string) error {
-	// Load configuration file first (if it exists)
-	if err := loadConfigFile(); err != nil {
-		return err
-	}
-
 	srv := &httpserver.APIServer{}
+	bindAddr := runFlags[addrFlag].GetString()
+	dsn := runFlags[dbDSNFlag].GetString()
 
-	// Get configuration values with proper priority order
-	bindAddr := getConfigValue(addrFlag, "server.addr", defaults.GetServerAddr()).(string)
-	dsn := getConfigValue(dbDSNFlag, "database.dsn", defaults.GetDatabaseDSN()).(string)
-
-	log.WithFields(log.Fields{
-		"config_file": viper.ConfigFileUsed(),
-	}).Debug("Configuration loaded")
+	if configFile := viper.ConfigFileUsed(); configFile != "" {
+		log.WithField("config_file", configFile).Debug("Configuration file loaded")
+	}
 	parsedDSN := must.Must(registry.Config(dsn).Parse())
 	if parsedDSN.User != nil {
 		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
@@ -230,7 +164,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	params.RegistrySet = registrySet
-	params.UploadLocation = getConfigValue(uploadLocationFlag, "server.upload_location", defaults.GetUploadLocation()).(string)
+	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
 	params.EntityService = services.NewEntityService(registrySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 
@@ -244,7 +178,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	defer cancel()
 
 	// Start export worker
-	maxConcurrentExports := getConfigValue(maxConcurrentExportsFlag, "workers.max_concurrent_exports", defaults.GetMaxConcurrentExports()).(int)
+	maxConcurrentExports := runFlags[maxConcurrentExportsFlag].GetInt()
 	exportService := export.NewExportService(registrySet, params.UploadLocation)
 	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
 	exportWorker.Start(ctx)
@@ -257,7 +191,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	defer restoreWorker.Stop()
 
 	// Start import worker
-	maxConcurrentImports := getConfigValue(maxConcurrentImportsFlag, "workers.max_concurrent_imports", defaults.GetMaxConcurrentImports()).(int)
+	maxConcurrentImports := runFlags[maxConcurrentImportsFlag].GetInt()
 	importService := importpkg.NewImportService(registrySet, params.UploadLocation)
 	importWorker := importpkg.NewImportWorker(importService, registrySet, maxConcurrentImports)
 	importWorker.Start(ctx)

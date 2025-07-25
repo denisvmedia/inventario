@@ -64,40 +64,37 @@ func generateSampleConfig() string {
 # You can modify these values to match your environment and preferences.
 #
 # Environment variables and command-line flags will override these settings.
-# Environment variable format: INVENTARIO_<SECTION>_<KEY> (e.g., INVENTARIO_ADDR)
+# Environment variable format: INVENTARIO_<FLAG_NAME> (e.g., INVENTARIO_ADDR)
 
-# Server Configuration
-server:
-  # Network address and port where the server will listen
-  # Format: "[host]:port" (e.g., ":8080", "localhost:3333", "0.0.0.0:8080")
-  # Use ":0" to let the system choose an available port
-  addr: "%s"
+# Configuration keys match the command-line flag names exactly
+# This eliminates the need for manual mapping between config and flags
 
-  # Location for uploaded files
-  # Supports local filesystem and cloud storage URLs
-  # Local examples:
-  #   - "file:///var/lib/inventario/uploads?create_dir=1"
-  #   - "file://./uploads?create_dir=1" (relative to working directory)
-  # The "create_dir=1" parameter creates the directory if it doesn't exist
-  upload_location: "%s"
+# Network address and port where the server will listen
+# Format: "[host]:port" (e.g., ":8080", "localhost:3333", "0.0.0.0:8080")
+# Use ":0" to let the system choose an available port
+addr: "%s"
 
-# Database Configuration
-database:
-  # Database connection string supporting multiple backends:
-  # • PostgreSQL: "postgres://user:password@host:port/database?sslmode=disable"
-  # • BoltDB: "boltdb://path/to/database.db"
-  # • In-memory: "memory://" (data lost on restart, useful for testing)
-  dsn: "%s"
+# Location for uploaded files
+# Supports local filesystem and cloud storage URLs
+# Local examples:
+#   - "file:///var/lib/inventario/uploads?create_dir=1"
+#   - "file://./uploads?create_dir=1" (relative to working directory)
+# The "create_dir=1" parameter creates the directory if it doesn't exist
+upload-location: "%s"
 
-# Background Worker Configuration
-workers:
-  # Maximum number of concurrent export processes
-  # Higher values allow more exports to run simultaneously but use more resources
-  max_concurrent_exports: %d
+# Database connection string supporting multiple backends:
+# • PostgreSQL: "postgres://user:password@host:port/database?sslmode=disable"
+# • BoltDB: "boltdb://path/to/database.db"
+# • In-memory: "memory://" (data lost on restart, useful for testing)
+db-dsn: "%s"
 
-  # Maximum number of concurrent import processes
-  # Higher values allow more imports to run simultaneously but use more resources
-  max_concurrent_imports: %d
+# Maximum number of concurrent export processes
+# Higher values allow more exports to run simultaneously but use more resources
+max-concurrent-exports: %d
+
+# Maximum number of concurrent import processes
+# Higher values allow more imports to run simultaneously but use more resources
+max-concurrent-imports: %d
 
 # NOTE: User interface settings (theme, debug info, date format) and system settings
 # (main currency) are stored in the database and configured through the web interface

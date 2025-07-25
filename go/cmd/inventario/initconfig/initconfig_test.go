@@ -115,13 +115,10 @@ func TestInitConfigCommand_Success(t *testing.T) {
 	cfg := defaults.New()
 
 	c.Assert(contentStr, qt.Contains, "# Inventario Configuration File")
-	c.Assert(contentStr, qt.Contains, "server:")
-	c.Assert(contentStr, qt.Contains, "database:")
-	c.Assert(contentStr, qt.Contains, "workers:")
 	c.Assert(contentStr, qt.Contains, fmt.Sprintf("addr: \"%s\"", cfg.Server.Addr))
-	c.Assert(contentStr, qt.Contains, fmt.Sprintf("max_concurrent_exports: %d", cfg.Workers.MaxConcurrentExports))
-	c.Assert(contentStr, qt.Contains, fmt.Sprintf("dsn: \"%s\"", cfg.Database.DSN))
-	c.Assert(contentStr, qt.Contains, fmt.Sprintf("upload_location: \"%s\"", cfg.Server.UploadLocation))
+	c.Assert(contentStr, qt.Contains, fmt.Sprintf("max-concurrent-exports: %d", cfg.Workers.MaxConcurrentExports))
+	c.Assert(contentStr, qt.Contains, fmt.Sprintf("db-dsn: \"%s\"", cfg.Database.DSN))
+	c.Assert(contentStr, qt.Contains, fmt.Sprintf("upload-location: \"%s\"", cfg.Server.UploadLocation))
 }
 
 func TestInitConfigCommand_FileAlreadyExists(t *testing.T) {
@@ -234,43 +231,37 @@ func TestEnvironmentVariableOverrides_Documentation(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		configSection  string
 		configKey      string
 		expectedEnvVar string
 		flagName       string
 	}{
 		{
 			name:           "server address",
-			configSection:  "server",
 			configKey:      "addr",
 			expectedEnvVar: "INVENTARIO_ADDR",
 			flagName:       "--addr",
 		},
 		{
 			name:           "upload location",
-			configSection:  "server",
-			configKey:      "upload_location",
+			configKey:      "upload-location",
 			expectedEnvVar: "INVENTARIO_UPLOAD_LOCATION",
 			flagName:       "--upload-location",
 		},
 		{
 			name:           "database DSN",
-			configSection:  "database",
-			configKey:      "dsn",
+			configKey:      "db-dsn",
 			expectedEnvVar: "INVENTARIO_DB_DSN",
 			flagName:       "--db-dsn",
 		},
 		{
 			name:           "max concurrent exports",
-			configSection:  "workers",
-			configKey:      "max_concurrent_exports",
+			configKey:      "max-concurrent-exports",
 			expectedEnvVar: "INVENTARIO_MAX_CONCURRENT_EXPORTS",
 			flagName:       "--max-concurrent-exports",
 		},
 		{
 			name:           "max concurrent imports",
-			configSection:  "workers",
-			configKey:      "max_concurrent_imports",
+			configKey:      "max-concurrent-imports",
 			expectedEnvVar: "INVENTARIO_MAX_CONCURRENT_IMPORTS",
 			flagName:       "--max-concurrent-imports",
 		},
@@ -282,17 +273,14 @@ func TestEnvironmentVariableOverrides_Documentation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			// Verify the configuration file contains the expected section and key
-			c.Assert(sampleContent, qt.Contains, test.configSection+":")
+			// Verify the configuration file contains the expected key
 			c.Assert(sampleContent, qt.Contains, test.configKey+":")
 
 			// Verify the documentation mentions the environment variable format
-			c.Assert(sampleContent, qt.Contains, "INVENTARIO_<SECTION>_<KEY>")
+			c.Assert(sampleContent, qt.Contains, "INVENTARIO_<FLAG_NAME>")
 
 			// The environment variable names should follow the documented pattern
 			// This test ensures our documentation is accurate
-			// Note: The actual environment variables are based on the flag names, not config keys
-			// So we just verify that the expected environment variable is reasonable
 			c.Assert(strings.HasPrefix(test.expectedEnvVar, "INVENTARIO_"), qt.IsTrue,
 				qt.Commentf("Environment variable %s should start with INVENTARIO_", test.expectedEnvVar))
 		})
@@ -308,14 +296,14 @@ func TestConfigurationFileContent_MatchesRunCommandFlags(t *testing.T) {
 	sampleContent := getSampleConfig(t)
 	cfg := defaults.New()
 
-	// Expected configuration sections and their corresponding run command flags
+	// Expected configuration keys and their corresponding run command flags
 	// Using actual default values from the shared defaults package
 	expectedMappings := map[string]string{
 		fmt.Sprintf("addr: \"%s\"", cfg.Server.Addr):                                    "--addr",
-		"upload_location:":                                                              "--upload-location",
-		fmt.Sprintf("dsn: \"%s\"", cfg.Database.DSN):                                   "--db-dsn",
-		fmt.Sprintf("max_concurrent_exports: %d", cfg.Workers.MaxConcurrentExports):    "--max-concurrent-exports",
-		fmt.Sprintf("max_concurrent_imports: %d", cfg.Workers.MaxConcurrentImports):    "--max-concurrent-imports",
+		"upload-location:":                                                              "--upload-location",
+		fmt.Sprintf("db-dsn: \"%s\"", cfg.Database.DSN):                                "--db-dsn",
+		fmt.Sprintf("max-concurrent-exports: %d", cfg.Workers.MaxConcurrentExports):    "--max-concurrent-exports",
+		fmt.Sprintf("max-concurrent-imports: %d", cfg.Workers.MaxConcurrentImports):    "--max-concurrent-imports",
 	}
 
 	for configLine, flagName := range expectedMappings {

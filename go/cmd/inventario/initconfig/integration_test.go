@@ -163,13 +163,10 @@ func TestConfigFileAndEnvironmentVariablePrecedence_Integration(t *testing.T) {
 	err = os.MkdirAll(inventarioConfigDir, 0o755)
 	c.Assert(err, qt.IsNil)
 
-	configContent := `server:
-  addr: ":7777"
-database:
-  dsn: "memory://config-test"
-workers:
-  max_concurrent_exports: 5
-  max_concurrent_imports: 7
+	configContent := `addr: ":7777"
+db-dsn: "memory://config-test"
+max-concurrent-exports: 5
+max-concurrent-imports: 7
 `
 	configPath := filepath.Join(inventarioConfigDir, "config.yaml")
 	err = os.WriteFile(configPath, []byte(configContent), 0o644)
