@@ -62,27 +62,29 @@ func New() Config {
 	}
 }
 
+var defaultConfig = New()
+
 // GetServerAddr returns the default server address
 func GetServerAddr() string {
-	return New().Server.Addr
+	return defaultConfig.Server.Addr
 }
 
 // GetUploadLocation returns the default upload location
 func GetUploadLocation() string {
-	return New().Server.UploadLocation
+	return defaultConfig.Server.UploadLocation
 }
 
 // GetDatabaseDSN returns the default database DSN
 func GetDatabaseDSN() string {
-	return New().Database.DSN
+	return defaultConfig.Database.DSN
 }
 
 // GetMaxConcurrentExports returns the default max concurrent exports
 func GetMaxConcurrentExports() int {
-	return New().Workers.MaxConcurrentExports
+	return defaultConfig.Workers.MaxConcurrentExports
 }
 
 // GetMaxConcurrentImports returns the default max concurrent imports
 func GetMaxConcurrentImports() int {
-	return New().Workers.MaxConcurrentImports
+	return defaultConfig.Workers.MaxConcurrentImports
 }
