@@ -221,7 +221,7 @@ func TestInitConfigCommand_DirectoryCreation(t *testing.T) {
 
 	// Only check permissions on Unix-like systems
 	if runtime.GOOS != "windows" {
-		c.Assert(info.Mode().Perm(), qt.Equals, os.FileMode(0o644))
+		c.Assert(info.Mode().Perm(), qt.Equals, os.FileMode(0o600))
 	}
 }
 
