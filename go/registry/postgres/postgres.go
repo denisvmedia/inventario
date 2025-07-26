@@ -12,7 +12,6 @@ import (
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/commonsql"
 	pgmigrations "github.com/denisvmedia/inventario/registry/postgres/migrations"
 )
 
@@ -77,7 +76,9 @@ func NewRegistrySet() (registrySetFunc func(c registry.Config) (registrySet *reg
 		// Create sqlx DB wrapper from pgxpool
 		sqlDB := stdlib.OpenDBFromPool(pool)
 		sqlxDB := sqlx.NewDb(sqlDB, "pgx")
-		s := commonsql.NewRegistrySet(sqlxDB)
+
+		// Create enhanced PostgreSQL registry with advanced features
+		enhancedRegistry := NewEnhancedPostgreSQLRegistry(pool, sqlxDB)
 
 		doCleanup = func() error {
 			err := sqlxDB.Close()
@@ -85,7 +86,7 @@ func NewRegistrySet() (registrySetFunc func(c registry.Config) (registrySet *reg
 			return err
 		}
 
-		return s, nil
+		return enhancedRegistry.Set, nil
 	}, fn
 }
 
