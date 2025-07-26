@@ -54,6 +54,10 @@ type ImagesResponse struct {
 
 // NewImagesResponse creates a new ImagesResponse instance.
 func NewImagesResponse(images []*models.Image, total int) *ImagesResponse {
+	// Ensure Data is never nil to maintain consistent JSON output
+	if images == nil {
+		images = []*models.Image{}
+	}
 	return &ImagesResponse{
 		Data: images,
 		Meta: ImagesMeta{Images: total},

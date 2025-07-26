@@ -24,7 +24,7 @@ func TestDefaults(t *testing.T) {
 
 	// Test worker defaults
 	c.Assert(cfg.Workers.MaxConcurrentExports, qt.Equals, 3)
-	c.Assert(cfg.Workers.MaxConcurrentImports, qt.Equals, 3)
+	c.Assert(cfg.Workers.MaxConcurrentImports, qt.Equals, 1)
 }
 
 func TestDefaultGetters(t *testing.T) {
@@ -34,7 +34,7 @@ func TestDefaultGetters(t *testing.T) {
 	c.Assert(defaults.GetServerAddr(), qt.Equals, ":3333")
 	c.Assert(defaults.GetDatabaseDSN(), qt.Equals, "memory://")
 	c.Assert(defaults.GetMaxConcurrentExports(), qt.Equals, 3)
-	c.Assert(defaults.GetMaxConcurrentImports(), qt.Equals, 3)
+	c.Assert(defaults.GetMaxConcurrentImports(), qt.Equals, 1)
 
 	// Test upload location getter
 	uploadLocation := defaults.GetUploadLocation()

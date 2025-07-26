@@ -54,6 +54,10 @@ type ManualsResponse struct {
 
 // NewManualsResponse creates a new ManualsResponse instance.
 func NewManualsResponse(manuals []*models.Manual, total int) *ManualsResponse {
+	// Ensure Data is never nil to maintain consistent JSON output
+	if manuals == nil {
+		manuals = []*models.Manual{}
+	}
 	return &ManualsResponse{
 		Data: manuals,
 		Meta: ManualsMeta{Manuals: total},

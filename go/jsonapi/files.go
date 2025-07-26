@@ -56,6 +56,10 @@ type FilesResponse struct {
 
 // NewFilesResponse creates a new FilesResponse instance.
 func NewFilesResponse(files []*models.FileEntity, total int) *FilesResponse {
+	// Ensure Data is never nil to maintain consistent JSON output
+	if files == nil {
+		files = []*models.FileEntity{}
+	}
 	return &FilesResponse{
 		Data: files,
 		Meta: FilesMeta{Files: len(files), Total: total},
