@@ -54,6 +54,10 @@ type InvoicesResponse struct {
 
 // NewInvoicesResponse creates a new InvoicesResponse instance.
 func NewInvoicesResponse(invoices []*models.Invoice, total int) *InvoicesResponse {
+	// Ensure Data is never nil to maintain consistent JSON output
+	if invoices == nil {
+		invoices = []*models.Invoice{}
+	}
 	return &InvoicesResponse{
 		Data: invoices,
 		Meta: InvoicesMeta{Invoices: total},

@@ -57,7 +57,7 @@ func New() Config {
 		},
 		Workers: Workers{
 			MaxConcurrentExports: 3,
-			MaxConcurrentImports: 3,
+			MaxConcurrentImports: 1,
 		},
 	}
 }
