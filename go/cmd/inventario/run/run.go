@@ -5,20 +5,20 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/go-extras/cobraflags"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/backup/export"
 	importpkg "github.com/denisvmedia/inventario/backup/import"
 	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/debug"
+	"github.com/denisvmedia/inventario/internal/defaults"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
@@ -91,38 +91,30 @@ const (
 	maxConcurrentImportsFlag = "max-concurrent-imports"
 )
 
-func getFileURL(path string) string {
-	absPath := filepath.ToSlash(filepath.Join(must.Must(os.Getwd()), path))
-	if strings.Contains(absPath, ":") {
-		absPath = "/" + absPath // Ensure the drive letter is prefixed with a slash
-	}
-	return "file://" + absPath + "?create_dir=1"
-}
-
 var runFlags = map[string]cobraflags.Flag{
 	addrFlag: &cobraflags.StringFlag{
 		Name:  addrFlag,
-		Value: ":3333",
+		Value: defaults.GetServerAddr(),
 		Usage: "Bind address for the server",
 	},
 	uploadLocationFlag: &cobraflags.StringFlag{
 		Name:  uploadLocationFlag,
-		Value: getFileURL("uploads"),
+		Value: defaults.GetUploadLocation(),
 		Usage: "Location for the uploaded files",
 	},
 	dbDSNFlag: &cobraflags.StringFlag{
 		Name:  dbDSNFlag,
-		Value: "memory://",
+		Value: defaults.GetDatabaseDSN(),
 		Usage: "Database DSN",
 	},
 	maxConcurrentExportsFlag: &cobraflags.IntFlag{
 		Name:  maxConcurrentExportsFlag,
-		Value: 3,
+		Value: defaults.GetMaxConcurrentExports(),
 		Usage: "Maximum number of concurrent export processes",
 	},
 	maxConcurrentImportsFlag: &cobraflags.IntFlag{
 		Name:  maxConcurrentImportsFlag,
-		Value: 3,
+		Value: defaults.GetMaxConcurrentImports(),
 		Usage: "Maximum number of concurrent import processes",
 	},
 }
@@ -137,6 +129,10 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	srv := &httpserver.APIServer{}
 	bindAddr := runFlags[addrFlag].GetString()
 	dsn := runFlags[dbDSNFlag].GetString()
+
+	if configFile := viper.ConfigFileUsed(); configFile != "" {
+		log.WithField("config_file", configFile).Debug("Configuration file loaded")
+	}
 	parsedDSN := must.Must(registry.Config(dsn).Parse())
 	if parsedDSN.User != nil {
 		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
