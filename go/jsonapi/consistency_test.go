@@ -11,7 +11,6 @@ import (
 )
 
 func TestResponseConsistency_EmptySlicesNotNull(t *testing.T) {
-
 	tests := []struct {
 		name     string
 		response any
