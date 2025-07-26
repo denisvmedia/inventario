@@ -137,28 +137,50 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 	)
 }
 
+//migrator:schema:table name="exports"
 type Export struct {
+	//migrator:embedded mode="inline"
 	EntityID
-	Type            ExportType                      `json:"type" db:"type"`
-	Status          ExportStatus                    `json:"status" db:"status" userinput:"false"`
-	IncludeFileData bool                            `json:"include_file_data" db:"include_file_data"`
-	SelectedItems   ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
-	FileID          string                          `json:"file_id" db:"file_id" userinput:"false"`
-	FilePath        string                          `json:"file_path" db:"file_path" userinput:"false"` // Deprecated: will be removed after migration
-	CreatedDate     PTimestamp                      `json:"created_date" db:"created_date" userinput:"false"`
-	CompletedDate   PTimestamp                      `json:"completed_date" db:"completed_date" userinput:"false"`
-	DeletedAt       PTimestamp                      `json:"deleted_at" db:"deleted_at" userinput:"false"`
-	ErrorMessage    string                          `json:"error_message" db:"error_message" userinput:"false"`
-	Description     string                          `json:"description" db:"description"`
-	Imported        bool                            `json:"imported" db:"imported" userinput:"false"`
+	//migrator:schema:field name="type" type="TEXT" not_null="true"
+	Type ExportType `json:"type" db:"type"`
+	//migrator:schema:field name="status" type="TEXT" not_null="true"
+	Status ExportStatus `json:"status" db:"status" userinput:"false"`
+	//migrator:schema:field name="include_file_data" type="BOOLEAN" not_null="true" default="false"
+	IncludeFileData bool `json:"include_file_data" db:"include_file_data"`
+	//migrator:schema:field name="selected_items" type="JSONB"
+	SelectedItems ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
+	//migrator:schema:field name="file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_export_file"
+	FileID string `json:"file_id" db:"file_id" userinput:"false"`
+	//migrator:schema:field name="file_path" type="TEXT"
+	FilePath string `json:"file_path" db:"file_path" userinput:"false"` // Deprecated: will be removed after migration
+	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	CreatedDate PTimestamp `json:"created_date" db:"created_date" userinput:"false"`
+	//migrator:schema:field name="completed_date" type="TIMESTAMP"
+	CompletedDate PTimestamp `json:"completed_date" db:"completed_date" userinput:"false"`
+	//migrator:schema:field name="deleted_at" type="TIMESTAMP"
+	DeletedAt PTimestamp `json:"deleted_at" db:"deleted_at" userinput:"false"`
+	//migrator:schema:field name="error_message" type="TEXT"
+	ErrorMessage string `json:"error_message" db:"error_message" userinput:"false"`
+	//migrator:schema:field name="description" type="TEXT"
+	Description string `json:"description" db:"description"`
+	//migrator:schema:field name="imported" type="BOOLEAN" not_null="true" default="false"
+	Imported bool `json:"imported" db:"imported" userinput:"false"`
 	// Export statistics
-	FileSize       int64 `json:"file_size" db:"file_size" userinput:"false"`
-	LocationCount  int   `json:"location_count" db:"location_count" userinput:"false"`
-	AreaCount      int   `json:"area_count" db:"area_count" userinput:"false"`
-	CommodityCount int   `json:"commodity_count" db:"commodity_count" userinput:"false"`
-	ImageCount     int   `json:"image_count" db:"image_count" userinput:"false"`
-	InvoiceCount   int   `json:"invoice_count" db:"invoice_count" userinput:"false"`
-	ManualCount    int   `json:"manual_count" db:"manual_count" userinput:"false"`
+	//migrator:schema:field name="file_size" type="BIGINT" default="0"
+	FileSize int64 `json:"file_size" db:"file_size" userinput:"false"`
+	//migrator:schema:field name="location_count" type="INTEGER" default="0"
+	LocationCount int `json:"location_count" db:"location_count" userinput:"false"`
+	//migrator:schema:field name="area_count" type="INTEGER" default="0"
+	AreaCount int `json:"area_count" db:"area_count" userinput:"false"`
+	//migrator:schema:field name="commodity_count" type="INTEGER" default="0"
+	CommodityCount int `json:"commodity_count" db:"commodity_count" userinput:"false"`
+	//migrator:schema:field name="image_count" type="INTEGER" default="0"
+	ImageCount int `json:"image_count" db:"image_count" userinput:"false"`
+	//migrator:schema:field name="invoice_count" type="INTEGER" default="0"
+	InvoiceCount int `json:"invoice_count" db:"invoice_count" userinput:"false"`
+	//migrator:schema:field name="manual_count" type="INTEGER" default="0"
+	ManualCount int `json:"manual_count" db:"manual_count" userinput:"false"`
+	//migrator:schema:field name="binary_data_size" type="BIGINT" default="0"
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
 }
 

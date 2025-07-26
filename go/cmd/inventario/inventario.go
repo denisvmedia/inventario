@@ -11,7 +11,6 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/features"
 	"github.com/denisvmedia/inventario/cmd/inventario/initconfig"
 	"github.com/denisvmedia/inventario/cmd/inventario/migrate"
-	"github.com/denisvmedia/inventario/cmd/inventario/ptahmigrate"
 	"github.com/denisvmedia/inventario/cmd/inventario/run"
 	"github.com/denisvmedia/inventario/cmd/inventario/seed"
 	"github.com/denisvmedia/inventario/internal/version"
@@ -108,7 +107,6 @@ func Execute(args ...string) {
 	rootCmd.SetArgs(args)
 	rootCmd.AddCommand(initconfig.NewInitConfigCommand())
 	rootCmd.AddCommand(migrate.NewMigrateCommand())
-	rootCmd.AddCommand(ptahmigrate.NewPtahMigrateCommand())
 	rootCmd.AddCommand(run.NewRunCommand())
 	rootCmd.AddCommand(seed.NewSeedCommand())
 	rootCmd.AddCommand(features.NewFeaturesCommand())

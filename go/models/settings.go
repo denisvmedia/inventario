@@ -6,9 +6,12 @@ import (
 	"github.com/denisvmedia/inventario/internal/typekit"
 )
 
+//migrator:schema:table name="settings"
 type Setting struct {
-	Name  string `db:"name"`
-	Value any    `db:"value"`
+	//migrator:schema:field name="name" type="TEXT" primary="true"
+	Name string `db:"name"`
+	//migrator:schema:field name="value" type="JSONB" not_null="true"
+	Value any `db:"value"`
 }
 
 type JSONBValue struct {

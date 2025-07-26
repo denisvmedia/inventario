@@ -32,18 +32,22 @@ var (
 type File struct {
 	// Path is the filename without extension. This is the only field that can be modified by the user.
 	// Example: "invoice-2023"
+	//migrator:schema:field name="path" type="TEXT" not_null="true"
 	Path string `json:"path" db:"path"`
 
 	// OriginalPath is the original filename as uploaded by the user.
 	// Example: "invoice.pdf"
+	//migrator:schema:field name="original_path" type="TEXT" not_null="true"
 	OriginalPath string `json:"original_path" db:"original_path"`
 
 	// Ext is the file extension including the dot.
 	// Example: ".pdf"
+	//migrator:schema:field name="ext" type="TEXT" not_null="true"
 	Ext string `json:"ext" db:"ext"`
 
 	// MIMEType is the MIME type of the file.
 	// Example: "application/pdf"
+	//migrator:schema:field name="mime_type" type="TEXT" not_null="true"
 	MIMEType string `json:"mime_type" db:"mime_type"`
 }
 
@@ -101,40 +105,64 @@ func FileTypeFromMIME(mimeType string) FileType {
 }
 
 // FileEntity represents a file entity in the system
+//migrator:schema:table name="files"
 type FileEntity struct {
+	//migrator:embedded mode="inline"
 	EntityID
 
 	// Title is the user-defined title for the file
+	//migrator:schema:field name="title" type="TEXT"
 	Title string `json:"title" db:"title"`
 
 	// Description is an optional description of the file
+	//migrator:schema:field name="description" type="TEXT"
 	Description string `json:"description" db:"description"`
 
 	// Type represents the category of the file (image, document, etc.)
+	//migrator:schema:field name="type" type="TEXT" not_null="true"
 	Type FileType `json:"type" db:"type"`
 
 	// Tags are optional tags for categorization and search
+	//migrator:schema:field name="tags" type="JSONB"
 	Tags []string `json:"tags" db:"tags"`
 
 	// LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files)
+	//migrator:schema:field name="linked_entity_type" type="TEXT"
 	LinkedEntityType string `json:"linked_entity_type" db:"linked_entity_type"`
 
 	// LinkedEntityID is the ID of the linked entity (commodity or export)
+	//migrator:schema:field name="linked_entity_id" type="TEXT"
 	LinkedEntityID string `json:"linked_entity_id" db:"linked_entity_id"`
 
 	// LinkedEntityMeta contains metadata about the link type
 	// For commodities: "images", "invoices", "manuals"
 	// For exports: "xml-1.0" (version of the export file format)
+	//migrator:schema:field name="linked_entity_meta" type="TEXT"
 	LinkedEntityMeta string `json:"linked_entity_meta" db:"linked_entity_meta"`
 
 	// CreatedAt is when the file was created
+	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 	// UpdatedAt is when the file was last updated
+	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 
 	// File contains the actual file metadata
+	//migrator:embedded mode="inline"
 	*File
+}
+
+// PostgreSQL-specific indexes for files
+type FileIndexes struct {
+	//migrator:schema:index name="files_tags_gin_idx" fields="tags"
+	_ int
+	//migrator:schema:index name="files_type_created_idx" fields="type,created_at"
+	_ int
+	//migrator:schema:index name="files_linked_entity_idx" fields="linked_entity_type,linked_entity_id"
+	_ int
+	//migrator:schema:index name="files_linked_entity_meta_idx" fields="linked_entity_type,linked_entity_id,linked_entity_meta"
+	_ int
 }
 
 func (*FileEntity) Validate() error {
@@ -195,6 +223,7 @@ var (
 )
 
 type EntityID struct {
+	//migrator:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id" userinput:"false"`
 }
 
