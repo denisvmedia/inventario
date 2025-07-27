@@ -324,6 +324,30 @@ async function waitForBackend(maxRetries = 60, retryInterval = 1000): Promise<vo
 }
 
 /**
+ * Run database migrations
+ */
+export async function runMigrations(): Promise<void> {
+  console.log('Running database migrations...');
+
+  // Use PostgreSQL DSN if available, otherwise fall back to local
+  const dbDSN = process.env.INVENTARIO_DB_DSN || POSTGRES_DSN;
+
+  try {
+    const { execSync } = await import('child_process');
+    const migrateCommand = `go run main.go migrate --db-dsn="${dbDSN}"`;
+    console.log(`Executing: ${migrateCommand}`);
+    execSync(migrateCommand, {
+      cwd: backendRoot,
+      stdio: 'inherit'
+    });
+    console.log('Database migrations completed successfully');
+  } catch (error) {
+    console.error('Error running migrations:', error);
+    throw error;
+  }
+}
+
+/**
  * Seed the database with test data
  */
 export async function seedDatabase(): Promise<void> {
@@ -444,6 +468,10 @@ export async function startStack(): Promise<void> {
     if (!process.env.INVENTARIO_DB_DSN) {
       await startPostgres();
     }
+
+    // Run migrations before starting backend
+    await runMigrations();
+
     await startBackend();
     await seedDatabase();
     await startFrontend();

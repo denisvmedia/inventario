@@ -1,4 +1,4 @@
-import { resetDatabase } from '../setup/setup-stack.js';
+import { resetDatabase, runMigrations } from '../setup/setup-stack.js';
 import axios from 'axios';
 
 /**
@@ -38,6 +38,14 @@ export async function seedTestData(): Promise<void> {
 export async function resetAndSeedDatabase(): Promise<void> {
   await cleanDatabase();
   await seedTestData();
+}
+
+/**
+ * Run database migrations
+ * This ensures the database schema is up to date
+ */
+export async function runDatabaseMigrations(): Promise<void> {
+  await runMigrations();
 }
 
 /**
