@@ -3,147 +3,456 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/go-extras/cobraflags"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/internal/log"
-	"github.com/denisvmedia/inventario/registry/migrations"
+	"github.com/denisvmedia/inventario/internal/errkit"
+	ptahintegration "github.com/denisvmedia/inventario/registry/ptah"
 )
 
-var migrateCmd = &cobra.Command{
-	Use:   "migrate",
-	Short: "Run database migrations",
-	Long: `Migrate applies database schema migrations to create or update the database
-structure required by Inventario. This command ensures your database has all the
-necessary tables, indexes, and constraints needed for the application to function.
-
-Migrations are version-controlled database changes that are applied incrementally.
-The system tracks which migrations have been applied, so running this command
-multiple times is safe - only new migrations will be executed.
-
-This command must be run before using the application for the first time, and
-should be run whenever you update Inventario to a newer version that includes
-database schema changes.
-
-USAGE EXAMPLES:
-
-  Migrate a PostgreSQL database:
-    inventario migrate --db-dsn="postgres://user:pass@localhost/inventario"
-
-  Migrate a local BoltDB database:
-    inventario migrate --db-dsn="boltdb://./inventario.db"
-
-  Preview migrations without applying (dry-run mode):
-    inventario migrate --dry-run --db-dsn="postgres://user:pass@localhost/inventario"
-
-FLAG DETAILS:
-
-  --db-dsn (REQUIRED)
-    Database connection string specifying which database to migrate.
-    Unlike other commands, this flag has no default and must be provided.
-
-    Supported database types:
-    • PostgreSQL: "postgres://user:password@host:port/database?sslmode=disable"
-      - Requires PostgreSQL 12 or later
-      - User must have CREATE TABLE, CREATE INDEX, and INSERT permissions
-      - Database must already exist (migrations don't create databases)
-
-    • BoltDB: "boltdb://path/to/database.db"
-      - Creates the database file if it doesn't exist
-      - Requires write permissions to the target directory
-      - Suitable for single-user deployments and development
-
-    • Memory: "memory://"
-      - Creates temporary in-memory database
-      - Data is lost when the process exits
-      - Useful for testing and development only
-
-  --dry-run (default false)
-    When enabled, shows what migrations would be applied without making changes.
-    Note: Dry-run mode is not yet fully implemented and will return an error.
-    For now, use external tools like 'ptah migrate' for dry-run SQL generation.
-
-MIGRATION PROCESS:
-  1. Connects to the specified database
-  2. Creates a migrations tracking table if it doesn't exist
-  3. Compares applied migrations with available migration files
-  4. Applies any pending migrations in chronological order
-  5. Updates the tracking table to record successful migrations
-
-TYPICAL WORKFLOW:
-  1. First-time setup:
-     inventario migrate --db-dsn="your-database-url"
-     inventario seed --db-dsn="your-database-url"
-     inventario run --db-dsn="your-database-url"
-
-  2. After updating Inventario:
-     inventario migrate --db-dsn="your-database-url"
-     inventario run --db-dsn="your-database-url"
-
-TROUBLESHOOTING:
-  • If migrations fail, check database permissions and connectivity
-  • Failed migrations may leave the database in an inconsistent state
-  • Always backup your database before running migrations in production
-  • Check logs for specific error messages if migrations fail
-
-SAFETY NOTES:
-  • Migrations are typically safe to run multiple times
-  • Some migrations may be irreversible (e.g., dropping columns)
-  • Always test migrations on a copy of production data first
-  • Consider maintenance windows for production migration runs`,
-	RunE: migrateCommand,
-}
-
 const (
-	dbDSNFlag  = "db-dsn"
-	dryRunFlag = "dry-run"
+	dbDSNFlag = "db-dsn"
 )
 
 var migrateFlags = map[string]cobraflags.Flag{
 	dbDSNFlag: &cobraflags.StringFlag{
-		Name:  dbDSNFlag,
-		Value: "",
-		Usage: "Database DSN (required). Supported types: postgres://, memory://, boltdb://",
-	},
-	dryRunFlag: &cobraflags.BoolFlag{
-		Name:  dryRunFlag,
-		Value: false,
-		Usage: "Show what migrations would be executed without making actual changes",
+		Name:       dbDSNFlag,
+		Value:      "", // No default for migrate command - must be explicitly provided
+		Usage:      "PostgreSQL database connection string (required)",
+		Persistent: true, // Make this flag available to all subcommands
 	},
 }
 
+var migrateCmd = &cobra.Command{
+	Use:   "migrate",
+	Short: "PostgreSQL database migration management",
+	Long: `Advanced PostgreSQL database migration management using Ptah.
+
+This command provides comprehensive PostgreSQL migration capabilities including:
+- Apply pending migrations (up)
+- Rollback migrations (down)
+- Check migration status
+- Dry run mode for safe testing
+
+All migrations are embedded in the binary and support PostgreSQL-specific features
+like triggers, functions, JSONB operators, and advanced indexing.
+
+IMPORTANT: This migration system ONLY supports PostgreSQL databases.
+Other database types are no longer supported in this version.
+
+USAGE EXAMPLES:
+
+  Apply all pending migrations:
+    inventario migrate
+    inventario migrate up
+
+  Rollback to specific version:
+    inventario migrate down 5
+
+  Check migration status:
+    inventario migrate status
+
+  Preview migrations without applying:
+    inventario migrate up --dry-run
+
+CONFIGURATION:
+
+  The command reads database configuration from:
+  1. Command line flag: --db-dsn
+  2. Environment variable: DB_DSN
+  3. Configuration file: db-dsn setting
+
+  PostgreSQL connection string format:
+    postgres://user:password@host:port/database?sslmode=disable
+
+MIGRATION SAFETY:
+
+  • Each migration runs in its own transaction
+  • Failed migrations are automatically rolled back
+  • Migration state is tracked in schema_migrations table
+  • Always backup your database before running migrations in production`,
+	RunE: migrateCommand,
+}
+
+// NewMigrateCommand creates the main migrate command using Ptah
 func NewMigrateCommand() *cobra.Command {
+	// Register cobraflags which automatically handles viper binding and persistent flags
 	cobraflags.RegisterMap(migrateCmd, migrateFlags)
+
+	// Add subcommands
+	migrateCmd.AddCommand(newMigrateUpCommand())
+	migrateCmd.AddCommand(newMigrateDownCommand())
+	migrateCmd.AddCommand(newMigrateStatusCommand())
+	migrateCmd.AddCommand(newMigrateGenerateCommand())
+	migrateCmd.AddCommand(newMigrateResetCommand())
+	migrateCmd.AddCommand(newMigrateDropCommand())
 
 	return migrateCmd
 }
 
-func migrateCommand(_ *cobra.Command, _ []string) error {
-	dsn := migrateFlags[dbDSNFlag].GetString()
-	dryRun := migrateFlags[dryRunFlag].GetBool()
+// newMigrateUpCommand creates the migrate up subcommand
+func newMigrateUpCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "up",
+		Short: "Apply all pending migrations",
+		Long: `Apply all pending database migrations to bring the schema up to date.
 
+Each migration runs in its own transaction, so if any migration fails,
+it will be rolled back and the migration process will stop.
+
+Examples:
+  inventario migrate up                    # Apply all pending migrations
+  inventario migrate up --dry-run          # Preview what would be applied`,
+		RunE: migrateUpCommand,
+	}
+
+	cmd.Flags().Bool("dry-run", false, "Show what migrations would be applied without executing them")
+
+	return cmd
+}
+
+// newMigrateDownCommand creates the migrate down subcommand
+func newMigrateDownCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "down [target-version]",
+		Short: "Rollback migrations to a specific version",
+		Long: `Rollback database migrations to a specific version.
+
+WARNING: Down migrations can cause data loss! Always backup your database
+before running down migrations in production.
+
+Examples:
+  inventario migrate down 5                # Rollback to version 5
+  inventario migrate down 5 --dry-run      # Preview rollback to version 5
+  inventario migrate down 5 --confirm      # Skip confirmation prompt`,
+		Args: cobra.ExactArgs(1),
+		RunE: migrateDownCommand,
+	}
+
+	cmd.Flags().Bool("dry-run", false, "Show what migrations would be rolled back without executing them")
+	cmd.Flags().Bool("confirm", false, "Skip confirmation prompt (dangerous!)")
+
+	return cmd
+}
+
+// newMigrateStatusCommand creates the migrate status subcommand
+func newMigrateStatusCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show current migration status",
+		Long: `Display the current migration status including:
+- Current database version
+- Total number of migrations
+- Number of pending migrations
+- List of pending migrations (with --verbose)
+
+Examples:
+  inventario migrate status                # Show basic status
+  inventario migrate status --verbose      # Show detailed status with pending migrations`,
+		RunE: migrateStatusCommand,
+	}
+
+	cmd.Flags().Bool("verbose", false, "Show detailed status information")
+
+	return cmd
+}
+
+// newMigrateGenerateCommand creates the migrate generate subcommand
+func newMigrateGenerateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "generate [migration-name]",
+		Short: "Generate timestamped migration files from Go entity annotations",
+		Long: `Generate timestamped migration files using Ptah's migration generator.
+
+This command uses Ptah's migration generator to compare your Go struct
+annotations with the actual database schema and generates both UP and DOWN
+migration files with proper timestamps.
+
+Examples:
+  inventario migrate generate                    # Generate migration files from schema differences
+  inventario migrate generate add_user_table    # Generate migration with custom name
+  inventario migrate generate --schema           # Generate complete schema SQL (preview only)
+  inventario migrate generate --initial          # Generate initial migration for empty database`,
+		RunE: migrateGenerateCommand,
+	}
+
+	cmd.Flags().Bool("schema", false, "Generate complete schema SQL (preview only, no files created)")
+	cmd.Flags().Bool("initial", false, "Generate initial migration for empty database")
+
+	return cmd
+}
+
+// migrateCommand is the default action (same as migrate up)
+func migrateCommand(cmd *cobra.Command, args []string) error {
+	dsn := getDatabaseDSN()
 	if dsn == "" {
-		return fmt.Errorf("database DSN is required")
+		return fmt.Errorf("database DSN is required (set --db-dsn, DB_DSN environment variable, or db-dsn in config file)")
 	}
 
-	if dryRun {
-		// log.WithField(dbDSNFlag, dsn).Info("[DRY RUN] Would run migrations")
-		// fmt.Println("⚠️  [DRY RUN] Migration dry run mode is not yet fully implemented.")
-		// fmt.Println("⚠️  This would run migrations against the database.")
-		// fmt.Println("⚠️  For now, use the ptah tool 'migrate' command for dry run migration SQL generation.")
-		return fmt.Errorf("dry run mode is not yet implemented")
+	// Validate that this is a PostgreSQL DSN
+	if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
+		return fmt.Errorf(`This migration system only supports PostgreSQL databases.
+
+Current DSN: %s
+
+Please use a PostgreSQL connection string like:
+  postgres://user:password@localhost:5432/database?sslmode=disable
+
+For other database types, this version no longer provides migration support.`, dsn)
 	}
 
-	log.WithField(dbDSNFlag, dsn).Info("Running migrations")
+	fmt.Println("Running default migration (migrate up)...")                                //nolint:forbidigo // CLI output is OK
+	fmt.Println("Use 'inventario migrate --help' to see all available migration commands.") //nolint:forbidigo // CLI output is OK
+	fmt.Println()                                                                           //nolint:forbidigo // CLI output is OK
 
-	// Run migrations using the standardized interface
-	err := migrations.RunMigrations(context.Background(), dsn)
+	// Delegate to migrate up command
+	return migrateUpCommand(cmd, args)
+}
+
+// migrateUpCommand handles the migrate up subcommand
+func migrateUpCommand(cmd *cobra.Command, args []string) error {
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+	migrator, err := createPtahMigrator()
 	if err != nil {
-		log.WithError(err).Error("Failed to run migrations")
 		return err
 	}
 
-	log.Info("Migrations completed successfully")
+	dsn := getDatabaseDSN()
+	fmt.Println("=== MIGRATE UP ===") //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Database: %s\n", dsn) //nolint:forbidigo // CLI output is OK
+	fmt.Println()                     //nolint:forbidigo // CLI output is OK
+
+	return migrator.MigrateUp(context.Background(), dryRun)
+}
+
+// migrateDownCommand handles the migrate down subcommand
+func migrateDownCommand(cmd *cobra.Command, args []string) error {
+	targetVersionStr := args[0]
+	targetVersion, err := strconv.Atoi(targetVersionStr)
+	if err != nil {
+		return fmt.Errorf("invalid target version: %s", targetVersionStr)
+	}
+
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	confirm, _ := cmd.Flags().GetBool("confirm")
+
+	migrator, err := createPtahMigrator()
+	if err != nil {
+		return err
+	}
+
+	dsn := getDatabaseDSN()
+	fmt.Println("=== MIGRATE DOWN ===")               //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Database: %s\n", dsn)                 //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Target version: %d\n", targetVersion) //nolint:forbidigo // CLI output is OK
+	fmt.Println()                                     //nolint:forbidigo // CLI output is OK
+
+	return migrator.MigrateDown(context.Background(), targetVersion, dryRun, confirm)
+}
+
+// migrateStatusCommand handles the migrate status subcommand
+func migrateStatusCommand(cmd *cobra.Command, args []string) error {
+	verbose, _ := cmd.Flags().GetBool("verbose")
+
+	migrator, err := createPtahMigrator()
+	if err != nil {
+		return err
+	}
+
+	return migrator.PrintMigrationStatus(context.Background(), verbose)
+}
+
+// migrateGenerateCommand handles the migrate generate subcommand
+func migrateGenerateCommand(cmd *cobra.Command, args []string) error {
+	generateSchema, _ := cmd.Flags().GetBool("schema")
+	generateInitial, _ := cmd.Flags().GetBool("initial")
+
+	migrator, err := createPtahMigrator()
+	if err != nil {
+		return err
+	}
+
+	// Handle schema preview mode (no files created)
+	if generateSchema {
+		statements, err := migrator.GenerateSchemaSQL(context.Background())
+		if err != nil {
+			return errkit.Wrap(err, "failed to generate schema SQL")
+		}
+
+		if len(statements) == 0 {
+			fmt.Println("✅ No schema found in Go annotations") //nolint:forbidigo // CLI output is OK
+			return nil
+		}
+
+		fmt.Println("=== COMPLETE SCHEMA SQL (PREVIEW) ===")                             //nolint:forbidigo // CLI output is OK
+		fmt.Println()                                                                    //nolint:forbidigo // CLI output is OK
+		fmt.Println("-- Complete schema generated from Go entity annotations")           //nolint:forbidigo // CLI output is OK
+		fmt.Printf("-- Generated from: %s\n", "./models")                                //nolint:forbidigo // CLI output is OK
+		fmt.Println("-- NOTE: This is a preview only. No migration files were created.") //nolint:forbidigo // CLI output is OK
+		fmt.Println()                                                                    //nolint:forbidigo // CLI output is OK
+		for i, stmt := range statements {
+			fmt.Printf("-- Statement %d\n%s;\n\n", i+1, stmt) //nolint:forbidigo // CLI output is OK
+		}
+
+		fmt.Printf("Generated %d SQL statements (preview only).\n", len(statements))                              //nolint:forbidigo // CLI output is OK
+		fmt.Println("💡 Use 'migrate generate --initial' to create actual migration files for an empty database.") //nolint:forbidigo // CLI output is OK
+		return nil
+	}
+
+	// Handle initial migration generation
+	if generateInitial {
+		_, err := migrator.GenerateInitialMigration(context.Background())
+		if err != nil {
+			return errkit.Wrap(err, "failed to generate initial migration")
+		}
+
+		fmt.Println("🎉 Initial migration files created successfully!")          //nolint:forbidigo // CLI output is OK
+		fmt.Printf("Next steps:\n")                                             //nolint:forbidigo // CLI output is OK
+		fmt.Printf("  1. Review the generated migration files\n")               //nolint:forbidigo // CLI output is OK
+		fmt.Printf("  2. Run 'inventario migrate up' to apply the migration\n") //nolint:forbidigo // CLI output is OK
+
+		return nil
+	}
+
+	// Handle regular migration generation from schema differences
+	migrationName := "migration"
+	if len(args) > 0 {
+		migrationName = args[0]
+	}
+
+	files, err := migrator.GenerateMigrationFiles(context.Background(), migrationName)
+	if err != nil {
+		return errkit.Wrap(err, "failed to generate migration files")
+	}
+
+	fmt.Println("🎉 Migration files created successfully!")                                        //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Next steps:\n")                                                                   //nolint:forbidigo // CLI output is OK
+	fmt.Printf("  1. Review the generated migration files\n")                                     //nolint:forbidigo // CLI output is OK
+	fmt.Printf("  2. Run 'inventario migrate up' to apply the migration\n")                       //nolint:forbidigo // CLI output is OK
+	fmt.Printf("  3. Test rollback with 'inventario migrate down %d' if needed\n", files.Version) //nolint:forbidigo // CLI output is OK
+
 	return nil
+}
+
+// getDatabaseDSN gets the database DSN from various sources (flag, env, config)
+func getDatabaseDSN() string {
+	// cobraflags automatically binds to viper, so this includes:
+	// 1. Command line flag
+	// 2. Environment variables
+	// 3. Configuration file
+	return migrateFlags[dbDSNFlag].GetString()
+}
+
+// createPtahMigrator creates a Ptah migrator instance
+func createPtahMigrator() (*ptahintegration.PtahMigrator, error) {
+	dsn := getDatabaseDSN()
+	if dsn == "" {
+		return nil, fmt.Errorf("database DSN is required")
+	}
+
+	// Validate that this is a PostgreSQL DSN
+	if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
+		return nil, fmt.Errorf("Ptah migrations only support PostgreSQL databases")
+	}
+
+	// Create the migrator with the models directory for schema parsing
+	migrator, err := ptahintegration.NewPtahMigrator(nil, dsn, "./models")
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create Ptah migrator")
+	}
+
+	return migrator, nil
+}
+
+// newMigrateResetCommand creates the migrate reset subcommand
+func newMigrateResetCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reset",
+		Short: "Drop all tables and recreate from scratch",
+		Long: `Drop all database tables and recreate the schema from scratch.
+
+This command performs a complete database reset by:
+1. Dropping all existing tables, indexes, and constraints
+2. Applying all migrations from the beginning
+
+WARNING: This operation will DELETE ALL DATA in the database!
+Always backup your database before running this command in production.
+
+Examples:
+  inventario migrate reset                     # Reset database (with confirmation)
+  inventario migrate reset --confirm           # Reset without confirmation prompt
+  inventario migrate reset --dry-run           # Preview what would be reset`,
+		RunE: migrateResetCommand,
+	}
+
+	cmd.Flags().Bool("dry-run", false, "Show what would be reset without executing")
+	cmd.Flags().Bool("confirm", false, "Skip confirmation prompt (dangerous!)")
+
+	return cmd
+}
+
+// newMigrateDropCommand creates the migrate drop subcommand
+func newMigrateDropCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "drop",
+		Short: "Drop all database tables and data",
+		Long: `Drop all database tables, indexes, constraints, and data.
+
+This command completely cleans the database by dropping all tables.
+Unlike 'reset', this command does NOT recreate the schema afterward.
+
+WARNING: This operation will DELETE ALL DATA and SCHEMA in the database!
+Always backup your database before running this command in production.
+
+Examples:
+  inventario migrate drop                      # Drop all tables (with confirmation)
+  inventario migrate drop --confirm            # Drop without confirmation prompt
+  inventario migrate drop --dry-run            # Preview what would be dropped`,
+		RunE: migrateDropCommand,
+	}
+
+	cmd.Flags().Bool("dry-run", false, "Show what would be dropped without executing")
+	cmd.Flags().Bool("confirm", false, "Skip confirmation prompt (dangerous!)")
+
+	return cmd
+}
+
+// migrateResetCommand handles the migrate reset subcommand
+func migrateResetCommand(cmd *cobra.Command, args []string) error {
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	confirm, _ := cmd.Flags().GetBool("confirm")
+
+	migrator, err := createPtahMigrator()
+	if err != nil {
+		return err
+	}
+
+	dsn := getDatabaseDSN()
+	fmt.Println("=== MIGRATE RESET ===") //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Database: %s\n", dsn)    //nolint:forbidigo // CLI output is OK
+	fmt.Println()                        //nolint:forbidigo // CLI output is OK
+
+	return migrator.ResetDatabase(context.Background(), dryRun, confirm)
+}
+
+// migrateDropCommand handles the migrate drop subcommand
+func migrateDropCommand(cmd *cobra.Command, args []string) error {
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	confirm, _ := cmd.Flags().GetBool("confirm")
+
+	migrator, err := createPtahMigrator()
+	if err != nil {
+		return err
+	}
+
+	dsn := getDatabaseDSN()
+	fmt.Println("=== MIGRATE DROP ===") //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Database: %s\n", dsn)   //nolint:forbidigo // CLI output is OK
+	fmt.Println()                       //nolint:forbidigo // CLI output is OK
+
+	return migrator.DropDatabase(context.Background(), dryRun, confirm)
 }

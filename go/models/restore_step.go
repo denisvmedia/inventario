@@ -52,15 +52,25 @@ var (
 )
 
 // RestoreStep represents an individual step in a restore operation
+//
+//migrator:schema:table name="restore_steps"
 type RestoreStep struct {
+	//migrator:embedded mode="inline"
 	EntityID
-	RestoreOperationID string            `json:"restore_operation_id" db:"restore_operation_id"`
-	Name               string            `json:"name" db:"name"`
-	Result             RestoreStepResult `json:"result" db:"result"`
-	Duration           *int64            `json:"duration" db:"duration"` // Duration in milliseconds
-	Reason             string            `json:"reason" db:"reason"`     // Reason for error or skip
-	CreatedDate        PTimestamp        `json:"created_date" db:"created_date"`
-	UpdatedDate        PTimestamp        `json:"updated_date" db:"updated_date"`
+	//migrator:schema:field name="restore_operation_id" type="TEXT" not_null="true" foreign="restore_operations(id)" foreign_key_name="fk_restore_step_operation"
+	RestoreOperationID string `json:"restore_operation_id" db:"restore_operation_id"`
+	//migrator:schema:field name="name" type="TEXT" not_null="true"
+	Name string `json:"name" db:"name"`
+	//migrator:schema:field name="result" type="TEXT" not_null="true"
+	Result RestoreStepResult `json:"result" db:"result"`
+	//migrator:schema:field name="duration" type="BIGINT"
+	Duration *int64 `json:"duration" db:"duration"` // Duration in milliseconds
+	//migrator:schema:field name="reason" type="TEXT"
+	Reason string `json:"reason" db:"reason"` // Reason for error or skip
+	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	CreatedDate PTimestamp `json:"created_date" db:"created_date"`
+	//migrator:schema:field name="updated_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	UpdatedDate PTimestamp `json:"updated_date" db:"updated_date"`
 }
 
 func (*RestoreStep) Validate() error {

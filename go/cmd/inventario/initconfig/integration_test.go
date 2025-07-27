@@ -49,7 +49,7 @@ func TestEnvironmentVariableOverrides_Integration(t *testing.T) {
 		},
 		{
 			name:        "INVENTARIO_DB_DSN override",
-			envVar:      "INVENTARIO_DB_DSN", 
+			envVar:      "INVENTARIO_DB_DSN",
 			envValue:    "memory://test",
 			expectedLog: "db-dsn=\"memory://test\"",
 			description: "Database DSN should be overridden by environment variable",
@@ -78,17 +78,17 @@ func TestEnvironmentVariableOverrides_Integration(t *testing.T) {
 
 			cmd := exec.CommandContext(ctx, binaryPath, "run")
 			cmd.Env = append(os.Environ(), test.envVar+"="+test.envValue)
-			
+
 			// Capture both stdout and stderr
 			output, err := cmd.CombinedOutput()
-			
+
 			// The command should either:
 			// 1. Start successfully and we kill it (context deadline exceeded)
 			// 2. Fail with a specific error but show our environment variable was used
 			// We don't expect it to run successfully since we don't have a proper database setup
-			
+
 			outputStr := string(output)
-			
+
 			// Check if our environment variable value appears in the logs
 			// The run command logs the configuration it's using
 			if strings.Contains(outputStr, test.expectedLog) {
@@ -98,7 +98,7 @@ func TestEnvironmentVariableOverrides_Integration(t *testing.T) {
 				// If we don't see the expected log, let's check what we got
 				c.Logf("Command output: %s", outputStr)
 				c.Logf("Command error: %v", err)
-				
+
 				// For some environment variables, we might need to look for different patterns
 				// Let's be more flexible in our checking
 				if test.envVar == "INVENTARIO_ADDR" && strings.Contains(outputStr, test.envValue) {
@@ -213,7 +213,7 @@ func TestEnvironmentVariableFormat_Integration(t *testing.T) {
 	}{
 		{
 			section:     "server",
-			key:         "addr", 
+			key:         "addr",
 			envVar:      "INVENTARIO_ADDR",
 			testValue:   ":8888",
 			shouldWork:  true,
@@ -222,7 +222,7 @@ func TestEnvironmentVariableFormat_Integration(t *testing.T) {
 		{
 			section:     "database",
 			key:         "dsn",
-			envVar:      "INVENTARIO_DB_DSN", 
+			envVar:      "INVENTARIO_DB_DSN",
 			testValue:   "memory://integration-test",
 			shouldWork:  true,
 			description: "Database DSN using documented format",
@@ -240,7 +240,7 @@ func TestEnvironmentVariableFormat_Integration(t *testing.T) {
 	for _, test := range envVarTests {
 		t.Run(test.description, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			// Set the environment variable
 			originalValue := os.Getenv(test.envVar)
 			t.Cleanup(func() {
@@ -250,14 +250,14 @@ func TestEnvironmentVariableFormat_Integration(t *testing.T) {
 					os.Unsetenv(test.envVar)
 				}
 			})
-			
+
 			if test.shouldWork {
 				os.Setenv(test.envVar, test.testValue)
-				
+
 				// Verify the environment variable is set
 				actualValue := os.Getenv(test.envVar)
 				c.Assert(actualValue, qt.Equals, test.testValue)
-				
+
 				c.Logf("✅ Environment variable %s set to %s", test.envVar, test.testValue)
 			}
 		})
