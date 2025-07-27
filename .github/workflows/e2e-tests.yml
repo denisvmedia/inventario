@@ -12,6 +12,25 @@ jobs:
     runs-on: ubuntu-latest
     #container:
     #  image: mcr.microsoft.com/playwright:v1.50.0-noble
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: inventario_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      DB_URL: postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,6 +63,12 @@ jobs:
       # Install browsers with all system dependencies
       - name: Install Playwright browsers
         run: cd e2e && npx playwright install --with-deps
+
+      - name: Run database migrations
+        run: |
+          cd go
+          go mod download
+          go run main.go migrate up --db-dsn "${{ env.DB_URL }}"
 
       - name: Start application stack and run tests
         run: |
