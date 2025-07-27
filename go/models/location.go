@@ -13,13 +13,13 @@ var (
 	_ IDable                 = (*Location)(nil)
 )
 
-//migrator:schema:table name="location" platform.mysql.engine="InnoDB" platform.mysql.comment="Locations are the top-level objects"
+//migrator:schema:table name="locations"
 type Location struct {
-	//migrator:embedded
+	//migrator:embedded mode="inline"
 	EntityID
-	//migrator:schema:field name="name" type="VARCHAR(100)" primary="true"
+	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
-	//migrator:schema:field name="name" type="TEXT"
+	//migrator:schema:field name="address" type="TEXT" not_null="true"
 	Address string `json:"address" db:"address"`
 }
 

@@ -11,9 +11,13 @@ var (
 	_ IDable                 = (*Manual)(nil)
 )
 
+//migrator:schema:table name="manuals"
 type Manual struct {
+	//migrator:embedded mode="inline"
 	EntityID
+	//migrator:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_manual_commodity"
 	CommodityID string `json:"commodity_id" db:"commodity_id"`
+	//migrator:embedded mode="inline"
 	*File
 }
 

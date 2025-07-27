@@ -51,26 +51,45 @@ func (r RestoreOptions) ValidateWithContext(ctx context.Context) error {
 }
 
 // RestoreOperation represents a restore operation performed on an export
+//
+//migrator:schema:table name="restore_operations"
 type RestoreOperation struct {
+	//migrator:embedded mode="inline"
 	EntityID
-	ExportID      string         `json:"export_id" db:"export_id"`
-	Description   string         `json:"description" db:"description"`
-	Status        RestoreStatus  `json:"status" db:"status" userinput:"false"`
-	Options       RestoreOptions `json:"options" db:"options"`
-	CreatedDate   PTimestamp     `json:"created_date" db:"created_date" userinput:"false"`
-	StartedDate   PTimestamp     `json:"started_date" db:"started_date" userinput:"false"`
-	CompletedDate PTimestamp     `json:"completed_date" db:"completed_date" userinput:"false"`
-	ErrorMessage  string         `json:"error_message" db:"error_message" userinput:"false"`
+	//migrator:schema:field name="export_id" type="TEXT" not_null="true" foreign="exports(id)" foreign_key_name="fk_restore_operation_export"
+	ExportID string `json:"export_id" db:"export_id"`
+	//migrator:schema:field name="description" type="TEXT" not_null="true"
+	Description string `json:"description" db:"description"`
+	//migrator:schema:field name="status" type="TEXT" not_null="true"
+	Status RestoreStatus `json:"status" db:"status" userinput:"false"`
+	//migrator:schema:field name="options" type="JSONB" not_null="true"
+	Options RestoreOptions `json:"options" db:"options"`
+	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
+	CreatedDate PTimestamp `json:"created_date" db:"created_date" userinput:"false"`
+	//migrator:schema:field name="started_date" type="TIMESTAMP"
+	StartedDate PTimestamp `json:"started_date" db:"started_date" userinput:"false"`
+	//migrator:schema:field name="completed_date" type="TIMESTAMP"
+	CompletedDate PTimestamp `json:"completed_date" db:"completed_date" userinput:"false"`
+	//migrator:schema:field name="error_message" type="TEXT"
+	ErrorMessage string `json:"error_message" db:"error_message" userinput:"false"`
 
 	// Statistics
-	LocationCount  int   `json:"location_count" db:"location_count" userinput:"false"`
-	AreaCount      int   `json:"area_count" db:"area_count" userinput:"false"`
-	CommodityCount int   `json:"commodity_count" db:"commodity_count" userinput:"false"`
-	ImageCount     int   `json:"image_count" db:"image_count" userinput:"false"`
-	InvoiceCount   int   `json:"invoice_count" db:"invoice_count" userinput:"false"`
-	ManualCount    int   `json:"manual_count" db:"manual_count" userinput:"false"`
+	//migrator:schema:field name="location_count" type="INTEGER" default="0"
+	LocationCount int `json:"location_count" db:"location_count" userinput:"false"`
+	//migrator:schema:field name="area_count" type="INTEGER" default="0"
+	AreaCount int `json:"area_count" db:"area_count" userinput:"false"`
+	//migrator:schema:field name="commodity_count" type="INTEGER" default="0"
+	CommodityCount int `json:"commodity_count" db:"commodity_count" userinput:"false"`
+	//migrator:schema:field name="image_count" type="INTEGER" default="0"
+	ImageCount int `json:"image_count" db:"image_count" userinput:"false"`
+	//migrator:schema:field name="invoice_count" type="INTEGER" default="0"
+	InvoiceCount int `json:"invoice_count" db:"invoice_count" userinput:"false"`
+	//migrator:schema:field name="manual_count" type="INTEGER" default="0"
+	ManualCount int `json:"manual_count" db:"manual_count" userinput:"false"`
+	//migrator:schema:field name="binary_data_size" type="BIGINT" default="0"
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
-	ErrorCount     int   `json:"error_count" db:"error_count" userinput:"false"`
+	//migrator:schema:field name="error_count" type="INTEGER" default="0"
+	ErrorCount int `json:"error_count" db:"error_count" userinput:"false"`
 
 	// Related steps (not stored in DB, loaded separately)
 	Steps []RestoreStep `json:"steps,omitempty" db:"-"`

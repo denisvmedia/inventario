@@ -13,9 +13,13 @@ var (
 	_ IDable                 = (*Area)(nil)
 )
 
+//migrator:schema:table name="areas"
 type Area struct {
+	//migrator:embedded mode="inline"
 	EntityID
-	Name       string `json:"name" db:"name"`
+	//migrator:schema:field name="name" type="TEXT" not_null="true"
+	Name string `json:"name" db:"name"`
+	//migrator:schema:field name="location_id" type="TEXT" not_null="true" foreign="locations(id)" foreign_key_name="fk_area_location"
 	LocationID string `json:"location_id" db:"location_id"`
 }
 

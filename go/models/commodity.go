@@ -90,28 +90,85 @@ var (
 	_ json.Unmarshaler                  = (*Commodity)(nil)
 )
 
+//migrator:schema:table name="commodities"
 type Commodity struct {
+	//migrator:embedded mode="inline"
 	EntityID
-	Name                   string              `json:"name" db:"name"`
-	ShortName              string              `json:"short_name" db:"short_name"`
-	Type                   CommodityType       `json:"type" db:"type"`
-	AreaID                 string              `json:"area_id" db:"area_id"`
-	Count                  int                 `json:"count" db:"count"`
-	OriginalPrice          decimal.Decimal     `json:"original_price" db:"original_price"`
-	OriginalPriceCurrency  Currency            `json:"original_price_currency" db:"original_price_currency"`
-	ConvertedOriginalPrice decimal.Decimal     `json:"converted_original_price" db:"converted_original_price"`
-	CurrentPrice           decimal.Decimal     `json:"current_price" db:"current_price"`
-	SerialNumber           string              `json:"serial_number" db:"serial_number"`
-	ExtraSerialNumbers     ValuerSlice[string] `json:"extra_serial_numbers" db:"extra_serial_numbers"`
-	PartNumbers            ValuerSlice[string] `json:"part_numbers" db:"part_numbers"`
-	Tags                   ValuerSlice[string] `json:"tags" db:"tags"`
-	Status                 CommodityStatus     `json:"status" db:"status"`
-	PurchaseDate           PDate               `json:"purchase_date" db:"purchase_date"`
-	RegisteredDate         PDate               `json:"registered_date" db:"registered_date"`
-	LastModifiedDate       PDate               `json:"last_modified_date" db:"last_modified_date"`
-	URLs                   ValuerSlice[*URL]   `json:"urls" swaggertype:"string" db:"urls"`
-	Comments               string              `json:"comments" db:"comments"`
-	Draft                  bool                `json:"draft" db:"draft"`
+	//migrator:schema:field name="name" type="TEXT" not_null="true"
+	Name string `json:"name" db:"name"`
+	//migrator:schema:field name="short_name" type="TEXT"
+	ShortName string `json:"short_name" db:"short_name"`
+	//migrator:schema:field name="type" type="TEXT" not_null="true"
+	Type CommodityType `json:"type" db:"type"`
+	//migrator:schema:field name="area_id" type="TEXT" not_null="true" foreign="areas(id)" foreign_key_name="fk_commodity_area"
+	AreaID string `json:"area_id" db:"area_id"`
+	//migrator:schema:field name="count" type="INTEGER" not_null="true" default="1"
+	Count int `json:"count" db:"count"`
+	//migrator:schema:field name="original_price" type="DECIMAL(15,2)"
+	OriginalPrice decimal.Decimal `json:"original_price" db:"original_price"`
+	//migrator:schema:field name="original_price_currency" type="TEXT"
+	OriginalPriceCurrency Currency `json:"original_price_currency" db:"original_price_currency"`
+	//migrator:schema:field name="converted_original_price" type="DECIMAL(15,2)"
+	ConvertedOriginalPrice decimal.Decimal `json:"converted_original_price" db:"converted_original_price"`
+	//migrator:schema:field name="current_price" type="DECIMAL(15,2)"
+	CurrentPrice decimal.Decimal `json:"current_price" db:"current_price"`
+	//migrator:schema:field name="serial_number" type="TEXT"
+	SerialNumber string `json:"serial_number" db:"serial_number"`
+	//migrator:schema:field name="extra_serial_numbers" type="JSONB"
+	ExtraSerialNumbers ValuerSlice[string] `json:"extra_serial_numbers" db:"extra_serial_numbers"`
+	//migrator:schema:field name="part_numbers" type="JSONB"
+	PartNumbers ValuerSlice[string] `json:"part_numbers" db:"part_numbers"`
+	//migrator:schema:field name="tags" type="JSONB"
+	Tags ValuerSlice[string] `json:"tags" db:"tags"`
+	//migrator:schema:field name="status" type="TEXT" not_null="true"
+	Status CommodityStatus `json:"status" db:"status"`
+	//migrator:schema:field name="purchase_date" type="TEXT"
+	PurchaseDate PDate `json:"purchase_date" db:"purchase_date"`
+	//migrator:schema:field name="registered_date" type="TEXT"
+	RegisteredDate PDate `json:"registered_date" db:"registered_date"`
+	//migrator:schema:field name="last_modified_date" type="TEXT"
+	LastModifiedDate PDate `json:"last_modified_date" db:"last_modified_date"`
+	//migrator:schema:field name="urls" type="JSONB"
+	URLs ValuerSlice[*URL] `json:"urls" swaggertype:"string" db:"urls"`
+	//migrator:schema:field name="comments" type="TEXT"
+	Comments string `json:"comments" db:"comments"`
+	//migrator:schema:field name="draft" type="BOOLEAN" not_null="true" default="false"
+	Draft bool `json:"draft" db:"draft"`
+}
+
+// PostgreSQL-specific indexes for commodities
+type CommodityIndexes struct {
+	// GIN index for JSONB tags field
+	//migrator:schema:index name="commodities_tags_gin_idx" fields="tags" type="GIN" table="commodities"
+	_ int
+
+	// GIN index for JSONB extra_serial_numbers field
+	//migrator:schema:index name="commodities_extra_serial_numbers_gin_idx" fields="extra_serial_numbers" type="GIN" table="commodities"
+	_ int
+
+	// GIN index for JSONB part_numbers field
+	//migrator:schema:index name="commodities_part_numbers_gin_idx" fields="part_numbers" type="GIN" table="commodities"
+	_ int
+
+	// GIN index for JSONB urls field
+	//migrator:schema:index name="commodities_urls_gin_idx" fields="urls" type="GIN" table="commodities"
+	_ int
+
+	// Partial index for active commodities (non-draft)
+	//migrator:schema:index name="commodities_active_idx" fields="status,area_id" condition="draft = false" table="commodities"
+	_ int
+
+	// Partial index for draft commodities
+	//migrator:schema:index name="commodities_draft_idx" fields="last_modified_date" condition="draft = true" table="commodities"
+	_ int
+
+	// Trigram similarity index for commodity name search
+	//migrator:schema:index name="commodities_name_trgm_idx" fields="name" type="GIN" ops="gin_trgm_ops" table="commodities"
+	_ int
+
+	// Trigram similarity index for short name search
+	//migrator:schema:index name="commodities_short_name_trgm_idx" fields="short_name" type="GIN" ops="gin_trgm_ops" table="commodities"
+	_ int
 }
 
 func (*Commodity) Validate() error {

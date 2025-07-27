@@ -83,10 +83,29 @@ addr: "%s"
 upload-location: "%s"
 
 # Database connection string supporting multiple backends:
-# • PostgreSQL: "postgres://user:password@host:port/database?sslmode=disable"
-# • BoltDB: "boltdb://path/to/database.db"
-# • In-memory: "memory://" (data lost on restart, useful for testing)
+# • PostgreSQL (recommended - full feature support): "postgres://user:password@host:port/database?sslmode=disable"
+# • BoltDB (basic features only): "boltdb://path/to/database.db"
+# • In-memory (testing only): "memory://" (data lost on restart, useful for testing)
+#
+# PostgreSQL provides advanced features like:
+# - Full-text search with ranking
+# - JSONB operators for complex queries
+# - Advanced indexing (GIN, GiST, partial indexes)
+# - Similarity search and aggregations
+# Other databases use fallback implementations with reduced performance
 db-dsn: "%s"
+
+# Enable PostgreSQL-specific advanced features (ignored for other databases)
+# When true, PostgreSQL will use full-text search, JSONB operators, and advanced indexing
+# When false, PostgreSQL will use basic SQL queries similar to other databases
+enable-advanced-features: true
+
+# Fallback behavior when advanced features are not supported
+# Options: "error", "warn", "silent"
+# - "error": Return errors when advanced features are requested
+# - "warn": Log warnings and use fallback implementations
+# - "silent": Silently use fallback implementations
+unsupported-feature-handling: "warn"
 
 # Maximum number of concurrent export processes
 # Higher values allow more exports to run simultaneously but use more resources

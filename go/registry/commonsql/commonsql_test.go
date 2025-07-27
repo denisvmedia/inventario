@@ -1,8 +1,10 @@
 package commonsql_test
 
 import (
+	"context"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -12,8 +14,100 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
-	pgmigrations "github.com/denisvmedia/inventario/registry/postgres/migrations"
+	"github.com/denisvmedia/inventario/registry/ptah"
 )
+
+var (
+	// Global migration setup - track if migrations have been run
+	migrationsRun  = make(map[string]bool)
+	migrationMutex sync.Mutex
+	// Shared connection pool for tests
+	sharedPools = make(map[string]*pgxpool.Pool)
+	poolMutex   sync.Mutex
+)
+
+// ensureMigrationsRun runs database migrations once per DSN
+func ensureMigrationsRun(dsn string) error {
+	migrationMutex.Lock()
+	defer migrationMutex.Unlock()
+
+	// Check if migrations have already been run for this DSN
+	if migrationsRun[dsn] {
+		return nil
+	}
+
+	// Run migrations using Ptah migrator
+	migrator, err := ptah.NewPtahMigrator(nil, dsn, "../../models")
+	if err != nil {
+		return err
+	}
+
+	// Use a context with timeout for migrations
+	ctx := context.Background()
+	err = migrator.MigrateUp(ctx, false)
+	if err != nil {
+		return err
+	}
+
+	// Mark migrations as run for this DSN
+	migrationsRun[dsn] = true
+	return nil
+}
+
+// cleanupTestData removes all test data by dropping and recreating the schema
+func cleanupTestData(dsn string) error {
+	// Use the migration drop and recreate functionality
+	migrator, err := ptah.NewPtahMigrator(nil, dsn, "../../models")
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	// Drop all tables (this cleans all data)
+	err = migrator.DropDatabase(ctx, false, true) // dryRun=false, confirm=true
+	if err != nil {
+		return err
+	}
+
+	// Recreate the schema
+	err = migrator.MigrateUp(ctx, false)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// getOrCreatePool gets or creates a shared connection pool for the given DSN
+func getOrCreatePool(dsn string) (*pgxpool.Pool, error) {
+	poolMutex.Lock()
+	defer poolMutex.Unlock()
+
+	if pool, exists := sharedPools[dsn]; exists {
+		return pool, nil
+	}
+
+	// Parse the DSN and add connection pool limits for testing
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add connection pool limits to prevent exhaustion
+	q := u.Query()
+	q.Set("pool_max_conns", "2")
+	q.Set("pool_min_conns", "1")
+	u.RawQuery = q.Encode()
+
+	pool, err := pgxpool.New(context.Background(), u.String())
+	if err != nil {
+		return nil, err
+	}
+
+	sharedPools[dsn] = pool
+	return pool, nil
+}
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
 func skipIfNoPostgreSQL(t *testing.T) string {
@@ -31,7 +125,7 @@ func skipIfNoPostgreSQL(t *testing.T) string {
 	if err != nil {
 		t.Skipf("Skipping PostgreSQL tests: failed to parse DSN: %v", err)
 	}
-	dsn = postgres.ParsePostgreSQLURL(u)
+	dsn = u.String()
 
 	// Test connection
 	pool, err := pgxpool.New(t.Context(), dsn)
@@ -54,43 +148,26 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	dsn := skipIfNoPostgreSQL(t)
 	c := qt.New(t)
 
-	// Create connection pool
-	pool, err := pgxpool.New(t.Context(), dsn)
+	// Ensure shared connection pool exists and migrations are run
+	_, err := getOrCreatePool(dsn)
 	c.Assert(err, qt.IsNil)
 
-	// Clean up any existing test tables (order matters due to foreign key constraints)
-	_, err = pool.Exec(t.Context(), `
-		DROP TABLE IF EXISTS restore_steps CASCADE;
-		DROP TABLE IF EXISTS restore_operations CASCADE;
-		DROP TABLE IF EXISTS files CASCADE;
-		DROP TABLE IF EXISTS exports CASCADE;
-		DROP TABLE IF EXISTS images CASCADE;
-		DROP TABLE IF EXISTS invoices CASCADE;
-		DROP TABLE IF EXISTS manuals CASCADE;
-		DROP TABLE IF EXISTS commodities CASCADE;
-		DROP TABLE IF EXISTS areas CASCADE;
-		DROP TABLE IF EXISTS locations CASCADE;
-		DROP TABLE IF EXISTS settings CASCADE;
-		DROP TABLE IF EXISTS schema_migrations CASCADE;
-	`)
+	err = ensureMigrationsRun(dsn)
 	c.Assert(err, qt.IsNil)
 
-	// Run migrations
-	err = pgmigrations.RunMigrations(t.Context(), pool)
-	c.Assert(err, qt.IsNil)
+	// Don't clean at the beginning - let tests run on existing data
+	// Cleanup will happen at the end via cleanupFunc
 
 	// Create registry set using the postgres package
-	registrySetFunc, cleanup := postgres.NewRegistrySet()
+	registrySetFunc, _ := postgres.NewRegistrySet()
 	registrySet, err := registrySetFunc(registry.Config(dsn))
 	c.Assert(err, qt.IsNil)
 
 	cleanupFunc := func() {
-		if err := cleanup(); err != nil {
-			t.Logf("Cleanup error: %v", err)
-		}
-		if pool != nil {
-			pool.Close()
-		}
+		// Clean test data using migration drop/recreate
+		_ = cleanupTestData(dsn) // Ignore errors during cleanup
+		// Don't close the shared pool - it will be reused by other tests
+		// Registry-specific resources will be cleaned up automatically when they go out of scope
 	}
 
 	return registrySet, cleanupFunc

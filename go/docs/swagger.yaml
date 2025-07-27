@@ -60,6 +60,20 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.AreasMeta'
     type: object
+  jsonapi.CapabilitiesData:
+    properties:
+      attributes:
+        $ref: '#/definitions/registry.DatabaseCapabilities'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.CapabilitiesResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CapabilitiesData'
+    type: object
   jsonapi.CommoditiesMeta:
     properties:
       commodities:
@@ -536,6 +550,21 @@ definitions:
         items:
           $ref: '#/definitions/jsonapi.RestoreOperationResponseData'
         type: array
+    type: object
+  jsonapi.SearchMeta:
+    properties:
+      entity_type:
+        type: string
+      query:
+        type: string
+      total:
+        type: integer
+    type: object
+  jsonapi.SearchResponse:
+    properties:
+      data: {}
+      meta:
+        $ref: '#/definitions/jsonapi.SearchMeta'
     type: object
   jsonapi.ValueAttrs:
     properties:
@@ -1032,6 +1061,33 @@ definitions:
         type: boolean
       theme:
         type: string
+    type: object
+  registry.DatabaseCapabilities:
+    properties:
+      advancedIndexing:
+        description: GIN, GiST, partial indexes
+        type: boolean
+      arrayOperations:
+        description: Array data types and operations
+        type: boolean
+      bulkOperations:
+        description: Efficient bulk insert/update
+        type: boolean
+      fullTextSearch:
+        description: PostgreSQL tsvector, MySQL FULLTEXT
+        type: boolean
+      jsonboperators:
+        description: PostgreSQL JSONB operators (@>, ?, etc.)
+        type: boolean
+      storedProcedures:
+        description: Stored procedures/functions
+        type: boolean
+      transactions:
+        description: Transaction support
+        type: boolean
+      triggers:
+        description: Database triggers
+        type: boolean
     type: object
 info:
   contact:
@@ -2324,6 +2380,74 @@ paths:
       summary: Update a location
       tags:
       - locations
+  /search:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Perform advanced search across commodities, files, and other entities
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Entity type to search
+        enum:
+        - commodities
+        - files
+        - areas
+        - locations
+        in: query
+        name: type
+        type: string
+      - default: 20
+        description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of results to skip
+        in: query
+        name: offset
+        type: integer
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: OR
+        description: Tag operator
+        enum:
+        - AND
+        - OR
+        in: query
+        name: operator
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Search results
+          schema:
+            $ref: '#/definitions/jsonapi.SearchResponse'
+      summary: Advanced search
+      tags:
+      - search
+  /search/capabilities:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Get information about what features are supported by the current
+        database backend
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Database capabilities
+          schema:
+            $ref: '#/definitions/jsonapi.CapabilitiesResponse'
+      summary: Get database capabilities
+      tags:
+      - search
   /seed:
     post:
       consumes:
