@@ -1,6 +1,16 @@
 # End-to-End Testing for Inventario
 
-This directory contains end-to-end tests for the Inventario application using Playwright.
+This directory contains end-to-end tests for the Inventario application using Playwright with PostgreSQL-centric testing.
+
+## 🚀 PostgreSQL-Centric Testing
+
+The e2e tests are now **PostgreSQL-centric**, meaning they run against a real PostgreSQL database instead of in-memory storage. This provides:
+
+- **Production Parity**: Tests run against the same database type as production
+- **Feature Coverage**: Tests PostgreSQL-specific features like JSONB, full-text search
+- **Better Reliability**: Catches PostgreSQL-specific issues early
+
+See [README-POSTGRES.md](./README-POSTGRES.md) for detailed PostgreSQL setup documentation.
 
 ## Directory Structure
 
@@ -18,6 +28,7 @@ e2e/
 
 ### Prerequisites
 
+- **Docker**: Required for PostgreSQL container
 - Node.js (v18 or later)
 - npm (v8 or later)
 - Go (v1.24 or later)
@@ -33,23 +44,37 @@ npm run install-browsers
 
 ### Running the Tests
 
-1. Start the application stack (backend + frontend):
+#### Automatic Mode (Recommended)
 
 ```bash
 # From the e2e directory
-npm run stack
+npm test
 ```
 
-This will:
-- Start the Go backend server
+This will automatically:
+- Start a PostgreSQL container
+- Start the Go backend server with PostgreSQL
 - Seed the database with test data
 - Start the Vue.js frontend
+- Run all tests
+- Clean up containers and processes
+
+#### Manual Mode (Development)
+
+1. Start the application stack manually:
+
+```bash
+# From the e2e directory
+npm run start-stack
+```
 
 2. In a separate terminal, run the tests:
 
 ```bash
 # From the e2e directory
-npm run test
+npm run test:headed  # With browser UI
+# or
+npm run test:debug   # With debugging
 ```
 
 ### Running Tests with Screenshots and Videos

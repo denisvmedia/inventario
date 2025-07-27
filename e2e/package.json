@@ -5,8 +5,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "stack": "cross-env START_STACK=true tsx setup/run-stack.ts",
+    "start-stack": "tsx setup/run-stack.ts",
     "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
     "test:record": "playwright test --config=playwright.config.ts",
     "test:recorder": "playwright test fixture-recorder.spec.ts",
     "test:screenshots": "playwright test screenshots-example.spec.ts",
@@ -16,10 +18,12 @@
     "test:area-crud": "playwright test area-simple-crud.spec.ts --project=chromium",
     "test:commodity-crud": "playwright test commodity-simple-crud.spec.ts --project=chromium",
     "test:simple-crud": "playwright test location-simple-crud.spec.ts area-simple-crud.spec.ts commodity-simple-crud.spec.ts --project=chromium",
+    "test:postgres": "playwright test --project=chromium",
     "install-browsers": "playwright install",
     "ui": "playwright test --ui",
     "report": "playwright show-report",
-    "clean:artifacts": "rimraf test-results"
+    "clean:artifacts": "rimraf test-results",
+    "clean:containers": "docker ps -a | grep inventario-e2e-postgres | awk '{print $1}' | xargs docker rm -f || true"
   },
   "devDependencies": {
     "@playwright/test": "1.54.1",

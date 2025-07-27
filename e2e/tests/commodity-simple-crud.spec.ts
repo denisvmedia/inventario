@@ -15,6 +15,7 @@ import {
   TO_AREA_COMMODITIES,
   TO_LOCATIONS
 } from "./includes/navigate.js";
+import { resetAndSeedDatabase } from '../utils/database.js';
 
 test.describe('Commodity Simple CRUD Operations', () => {
   // Test data with timestamps to ensure uniqueness
@@ -27,6 +28,11 @@ test.describe('Commodity Simple CRUD Operations', () => {
   const testArea = {
     name: `Test Area for Commodity ${timestamp}`
   };
+
+  // Reset database before each test to ensure clean state with PostgreSQL
+  test.beforeEach(async () => {
+    await resetAndSeedDatabase();
+  });
 
   const testCommodity = {
     name: `Test Commodity ${timestamp}`,

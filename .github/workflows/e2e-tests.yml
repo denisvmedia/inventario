@@ -8,10 +8,27 @@ on:
 
 jobs:
   e2e-tests:
-    name: E2E Tests
+    name: E2E Tests (PostgreSQL)
     runs-on: ubuntu-latest
     #container:
     #  image: mcr.microsoft.com/playwright:v1.50.0-noble
+
+    # PostgreSQL service for e2e tests
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: inventario_e2e
+          POSTGRES_USER: inventario_e2e
+          POSTGRES_PASSWORD: inventario_e2e_password
+          POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -45,16 +62,23 @@ jobs:
       - name: Install Playwright browsers
         run: cd e2e && npx playwright install --with-deps
 
-      - name: Start application stack and run tests
+      - name: Set PostgreSQL environment variables
         run: |
-          # Start the backend, seed the database, and start the frontend
-          cd e2e && npm run stack &
+          echo "E2E_POSTGRES_DB=inventario_e2e" >> $GITHUB_ENV
+          echo "E2E_POSTGRES_USER=inventario_e2e" >> $GITHUB_ENV
+          echo "E2E_POSTGRES_PASSWORD=inventario_e2e_password" >> $GITHUB_ENV
+          echo "E2E_POSTGRES_PORT=5433" >> $GITHUB_ENV
+          echo "CI=true" >> $GITHUB_ENV
 
-          # Wait for stack to be ready
-          npx wait-on http://localhost:5173
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
 
-          # Run the tests
-          cd e2e && npm run test
+      - name: Run E2E tests with PostgreSQL
+        run: |
+          # The tests will automatically start PostgreSQL-centric stack
+          cd e2e && npm test
 
       - name: Upload test results
         if: always()

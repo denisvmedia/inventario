@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import axios from 'axios';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -9,6 +9,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Process management
 let backendProcess: ChildProcess | null = null;
 let frontendProcess: ChildProcess | null = null;
+let postgresContainerName: string | null = null;
 
 // Path resolution for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -16,6 +17,178 @@ const __dirname = dirname(__filename);
 const projectRoot = resolve(__dirname, '../..');
 const frontendRoot = resolve(projectRoot, 'frontend');
 const backendRoot = resolve(projectRoot, 'go');
+
+// Database configuration
+const POSTGRES_DB = process.env.E2E_POSTGRES_DB || 'inventario_e2e';
+const POSTGRES_USER = process.env.E2E_POSTGRES_USER || 'inventario_e2e';
+const POSTGRES_PASSWORD = process.env.E2E_POSTGRES_PASSWORD || 'inventario_e2e_password';
+const POSTGRES_PORT = process.env.E2E_POSTGRES_PORT || '5433'; // Different port to avoid conflicts
+const POSTGRES_DSN = `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable`;
+
+// Check if running in CI environment (GitHub Actions)
+const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+
+/**
+ * Start PostgreSQL container for e2e tests (local development only)
+ */
+export async function startPostgres(): Promise<void> {
+  // In CI environment, PostgreSQL service is already running
+  if (isCI) {
+    console.log('Running in CI environment, using existing PostgreSQL service...');
+    await waitForPostgres();
+    return;
+  }
+
+  console.log('Starting PostgreSQL container for e2e tests...');
+
+  // Generate unique container name
+  const timestamp = Date.now();
+  postgresContainerName = `inventario-e2e-postgres-${timestamp}`;
+
+  try {
+    // Check if Docker is available
+    execSync('docker --version', { stdio: 'ignore' });
+  } catch (error) {
+    throw new Error('Docker is not available. Please install Docker to run e2e tests with PostgreSQL.');
+  }
+
+  try {
+    // Start PostgreSQL container
+    const dockerCommand = [
+      'docker', 'run', '-d',
+      '--name', postgresContainerName,
+      '-e', `POSTGRES_DB=${POSTGRES_DB}`,
+      '-e', `POSTGRES_USER=${POSTGRES_USER}`,
+      '-e', `POSTGRES_PASSWORD=${POSTGRES_PASSWORD}`,
+      '-e', 'POSTGRES_INITDB_ARGS=--encoding=UTF8 --lc-collate=C --lc-ctype=C',
+      '-p', `${POSTGRES_PORT}:5432`,
+      'postgres:17-alpine'
+    ];
+
+    console.log(`Executing: ${dockerCommand.join(' ')}`);
+    execSync(dockerCommand.join(' '), { stdio: 'inherit' });
+
+    console.log(`PostgreSQL container ${postgresContainerName} started`);
+
+    // Wait for PostgreSQL to be ready
+    await waitForPostgres();
+    console.log('PostgreSQL is ready for connections');
+
+  } catch (error) {
+    console.error('Failed to start PostgreSQL container:', error);
+    await stopPostgres(); // Cleanup on failure
+    throw error;
+  }
+}
+
+/**
+ * Wait for PostgreSQL to be ready
+ */
+async function waitForPostgres(maxRetries = 60, retryInterval = 1000): Promise<void> {
+  let retries = 0;
+
+  console.log(`Waiting for PostgreSQL to be ready at localhost:${POSTGRES_PORT}`);
+
+  while (retries < maxRetries) {
+    try {
+      console.log(`Attempt ${retries + 1}/${maxRetries} to connect to PostgreSQL...`);
+
+      if (isCI || !postgresContainerName) {
+        // In CI or when using external PostgreSQL, use psql directly
+        const checkCommand = `psql "${POSTGRES_DSN}" -c "SELECT 1;" > /dev/null 2>&1`;
+        execSync(checkCommand, { stdio: 'ignore' });
+      } else {
+        // Use docker exec to check if PostgreSQL is ready
+        const checkCommand = [
+          'docker', 'exec', postgresContainerName,
+          'pg_isready', '-U', POSTGRES_USER, '-d', POSTGRES_DB
+        ];
+        execSync(checkCommand.join(' '), { stdio: 'ignore' });
+      }
+
+      console.log('Successfully connected to PostgreSQL!');
+      return;
+
+    } catch (error) {
+      console.log(`PostgreSQL not ready yet, waiting ${retryInterval}ms before next attempt...`);
+      await sleep(retryInterval);
+      retries++;
+
+      if (retries === maxRetries) {
+        throw new Error('PostgreSQL failed to start within the expected time');
+      }
+    }
+  }
+}
+
+/**
+ * Stop PostgreSQL container (local development only)
+ */
+export async function stopPostgres(): Promise<void> {
+  // In CI environment, PostgreSQL service is managed by GitHub Actions
+  if (isCI) {
+    console.log('Running in CI environment, PostgreSQL service will be cleaned up automatically');
+    return;
+  }
+
+  if (!postgresContainerName) {
+    return;
+  }
+
+  console.log(`Stopping PostgreSQL container ${postgresContainerName}...`);
+
+  try {
+    // Stop and remove the container
+    execSync(`docker stop ${postgresContainerName}`, { stdio: 'ignore' });
+    execSync(`docker rm ${postgresContainerName}`, { stdio: 'ignore' });
+    console.log(`PostgreSQL container ${postgresContainerName} stopped and removed`);
+  } catch (error) {
+    console.error(`Failed to stop PostgreSQL container: ${error}`);
+  } finally {
+    postgresContainerName = null;
+  }
+}
+
+/**
+ * Reset the database for clean test state
+ */
+export async function resetDatabase(): Promise<void> {
+  console.log('Resetting database for clean test state...');
+
+  try {
+    if (isCI || !postgresContainerName) {
+      // In CI or when using external PostgreSQL, use psql directly
+      const postgresMainDSN = `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/postgres?sslmode=disable`;
+
+      const dropCommand = `psql "${postgresMainDSN}" -c "DROP DATABASE IF EXISTS ${POSTGRES_DB};"`;
+      const createCommand = `psql "${postgresMainDSN}" -c "CREATE DATABASE ${POSTGRES_DB};"`;
+
+      execSync(dropCommand, { stdio: 'ignore' });
+      execSync(createCommand, { stdio: 'ignore' });
+    } else {
+      // Use docker exec for local container
+      const dropCommand = [
+        'docker', 'exec', postgresContainerName,
+        'psql', '-U', POSTGRES_USER, '-d', 'postgres',
+        '-c', `DROP DATABASE IF EXISTS ${POSTGRES_DB};`
+      ];
+
+      const createCommand = [
+        'docker', 'exec', postgresContainerName,
+        'psql', '-U', POSTGRES_USER, '-d', 'postgres',
+        '-c', `CREATE DATABASE ${POSTGRES_DB};`
+      ];
+
+      execSync(dropCommand.join(' '), { stdio: 'ignore' });
+      execSync(createCommand.join(' '), { stdio: 'ignore' });
+    }
+
+    console.log('Database reset completed');
+  } catch (error) {
+    console.error('Failed to reset database:', error);
+    throw error;
+  }
+}
 
 /**
  * Start the backend server
@@ -69,8 +242,11 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
-  console.log('Executing: go run -tags with_frontend main.go run');
-  backendProcess = spawn('go', ['run', '-tags', 'with_frontend', 'main.go', 'run'], {
+  console.log(`Executing: go run -tags with_frontend main.go run --db-dsn="${POSTGRES_DSN}"`);
+  backendProcess = spawn('go', [
+    'run', '-tags', 'with_frontend', 'main.go', 'run',
+    '--db-dsn', POSTGRES_DSN
+  ], {
     cwd: backendRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, PATH: process.env.PATH },
@@ -252,10 +428,11 @@ async function waitForFrontend(maxRetries = 120, retryInterval = 1000): Promise<
 }
 
 /**
- * Start the entire stack (backend + frontend)
+ * Start the entire stack (postgres + backend + frontend)
  */
 export async function startStack(): Promise<void> {
   try {
+    await startPostgres();
     await startBackend();
     await seedDatabase();
     await startFrontend();
@@ -266,7 +443,7 @@ export async function startStack(): Promise<void> {
 }
 
 /**
- * Stop all running processes
+ * Stop all running processes and containers
  */
 export async function stopStack(): Promise<void> {
   console.log('Stopping all services...');
@@ -280,6 +457,8 @@ export async function stopStack(): Promise<void> {
     frontendProcess.kill('SIGTERM');
     frontendProcess = null;
   }
+
+  await stopPostgres();
 
   console.log('All services stopped');
 }
