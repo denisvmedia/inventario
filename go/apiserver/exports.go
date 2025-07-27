@@ -186,6 +186,16 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case exp.FileID != nil && *exp.FileID != "":
 		// Use new file entity system
+		if api.registrySet == nil {
+			panic("api.registrySet is nil")
+		}
+		if api.registrySet.FileRegistry == nil {
+			panic("api.registrySet.FileRegistry is nil")
+		}
+		if r == nil {
+			panic("r is nil")
+		}
+
 		fileEntity, err = api.registrySet.FileRegistry.Get(r.Context(), *exp.FileID)
 		if err != nil {
 			internalServerError(w, r, err)
