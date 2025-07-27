@@ -54,6 +54,7 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 
 func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
 	var file models.FileEntity
+	file.File = &models.File{}
 	var tagsJSON []byte
 
 	query := `
