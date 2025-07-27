@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq" // PostgreSQL driver for database/sql
 	"github.com/stokaro/ptah/core/goschema"
 	"github.com/stokaro/ptah/dbschema"
@@ -24,7 +23,7 @@ type PtahMigrator struct {
 }
 
 // NewPtahMigrator creates a new Ptah-based migrator
-func NewPtahMigrator(pool *pgxpool.Pool, dbURL string, schemaDir string) (*PtahMigrator, error) {
+func NewPtahMigrator(dbURL string, schemaDir string) (*PtahMigrator, error) {
 	return &PtahMigrator{
 		dbURL:     dbURL,
 		schemaDir: schemaDir,
@@ -96,7 +95,9 @@ func (m *PtahMigrator) MigrateUp(ctx context.Context, dryRun bool) error { //nol
 		fmt.Println()                                                 //nolint:forbidigo // CLI output is OK
 	}
 
-	// Connect to database
+	// Connect to database using standard ptah approach
+	// When using a shared pool, we still create a separate connection for migrations
+	// but the pool limits will prevent connection exhaustion
 	conn, err := dbschema.ConnectToDatabase(m.dbURL)
 	if err != nil {
 		return errkit.Wrap(err, "failed to connect to database")
@@ -109,7 +110,7 @@ func (m *PtahMigrator) MigrateUp(ctx context.Context, dryRun bool) error { //nol
 	// Try embedded migrations first
 	if HasEmbeddedMigrations() {
 		fmt.Println("Using embedded migrations...") //nolint:forbidigo // CLI output is OK
-		err = RegisterEmbeddedMigrations(ptahMigrator)
+		err := RegisterEmbeddedMigrations(ptahMigrator)
 		if err != nil {
 			return errkit.Wrap(err, "failed to register embedded migrations")
 		}

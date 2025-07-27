@@ -391,7 +391,7 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 				// Create export with file
 				export, _ := registrySet.ExportRegistry.Create(ctx, models.Export{
 					Description: "Test Export",
-					FileID:      file.ID,
+					FileID:      &file.ID,
 				})
 
 				return export.ID, file.ID

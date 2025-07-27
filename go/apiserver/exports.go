@@ -184,9 +184,9 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	switch {
-	case exp.FileID != "":
+	case exp.FileID != nil && *exp.FileID != "":
 		// Use new file entity system
-		fileEntity, err = api.registrySet.FileRegistry.Get(r.Context(), exp.FileID)
+		fileEntity, err = api.registrySet.FileRegistry.Get(r.Context(), *exp.FileID)
 		if err != nil {
 			internalServerError(w, r, err)
 			return

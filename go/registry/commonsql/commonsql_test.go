@@ -9,6 +9,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
@@ -18,54 +20,15 @@ import (
 )
 
 var (
-	// Global migration setup - track if migrations have been run
-	migrationsRun  = make(map[string]bool)
-	migrationMutex sync.Mutex
 	// Shared connection pool for tests
 	sharedPools = make(map[string]*pgxpool.Pool)
 	poolMutex   sync.Mutex
 )
 
-// ensureMigrationsRun runs database migrations once per DSN
-func ensureMigrationsRun(dsn string) error {
-	migrationMutex.Lock()
-	defer migrationMutex.Unlock()
-
-	// Check if migrations have already been run for this DSN
-	if migrationsRun[dsn] {
-		return nil
-	}
-
-	// Run migrations using Ptah migrator
-	migrator, err := ptah.NewPtahMigrator(nil, dsn, "../../models")
-	if err != nil {
-		return err
-	}
-
-	// Use a context with timeout for migrations
-	ctx := context.Background()
-	err = migrator.MigrateUp(ctx, false)
-	if err != nil {
-		return err
-	}
-
-	// Mark migrations as run for this DSN
-	migrationsRun[dsn] = true
-	return nil
-}
-
-// cleanupTestData removes all test data by dropping and recreating the schema
-func cleanupTestData(dsn string) error {
-	// Use the migration drop and recreate functionality
-	migrator, err := ptah.NewPtahMigrator(nil, dsn, "../../models")
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-
+// migrateUp removes all test data by dropping and recreating the schema
+func migrateUp(ctx context.Context, migrator *ptah.PtahMigrator) error {
 	// Drop all tables (this cleans all data)
-	err = migrator.DropDatabase(ctx, false, true) // dryRun=false, confirm=true
+	err := migrator.DropDatabase(ctx, false, true) // dryRun=false, confirm=true
 	if err != nil {
 		return err
 	}
@@ -88,25 +51,35 @@ func getOrCreatePool(dsn string) (*pgxpool.Pool, error) {
 		return pool, nil
 	}
 
-	// Parse the DSN and add connection pool limits for testing
-	u, err := url.Parse(dsn)
+	// Create pool config with connection limits for testing
+	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	// Add connection pool limits to prevent exhaustion
-	q := u.Query()
-	q.Set("pool_max_conns", "2")
-	q.Set("pool_min_conns", "1")
-	u.RawQuery = q.Encode()
+	// Set connection pool limits to prevent exhaustion - increased for better test performance
+	config.MaxConns = 10 // Increased from 2 to 10
+	config.MinConns = 2  // Increased from 1 to 2
 
-	pool, err := pgxpool.New(context.Background(), u.String())
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		return nil, err
 	}
 
 	sharedPools[dsn] = pool
 	return pool, nil
+}
+
+// createRegistrySetFromPool creates a registry set using an existing shared pool
+func createRegistrySetFromPool(pool *pgxpool.Pool) *registry.Set {
+	// Create sqlx DB wrapper from the shared pgxpool
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	sqlxDB := sqlx.NewDb(sqlDB, "pgx")
+
+	// Create enhanced PostgreSQL registry with the shared pool
+	enhancedRegistry := postgres.NewEnhancedPostgreSQLRegistry(pool, sqlxDB)
+
+	return enhancedRegistry.Set
 }
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -149,28 +122,21 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	c := qt.New(t)
 
 	// Ensure shared connection pool exists and migrations are run
-	_, err := getOrCreatePool(dsn)
+	pool, err := getOrCreatePool(dsn)
 	c.Assert(err, qt.IsNil)
 
-	err = ensureMigrationsRun(dsn)
+	// Use the migration drop and recreate functionality
+	migrator, err := ptah.NewPtahMigrator(dsn, "../../models")
 	c.Assert(err, qt.IsNil)
 
-	// Don't clean at the beginning - let tests run on existing data
-	// Cleanup will happen at the end via cleanupFunc
-
-	// Create registry set using the postgres package
-	registrySetFunc, _ := postgres.NewRegistrySet()
-	registrySet, err := registrySetFunc(registry.Config(dsn))
+	ctx := context.Background()
+	err = migrateUp(ctx, migrator)
 	c.Assert(err, qt.IsNil)
 
-	cleanupFunc := func() {
-		// Clean test data using migration drop/recreate
-		_ = cleanupTestData(dsn) // Ignore errors during cleanup
-		// Don't close the shared pool - it will be reused by other tests
-		// Registry-specific resources will be cleaned up automatically when they go out of scope
-	}
+	// Create registry set using the shared pool instead of creating a new one
+	registrySet := createRegistrySetFromPool(pool)
 
-	return registrySet, cleanupFunc
+	return registrySet, func() {}
 }
 
 // createTestLocation creates a test location for use in tests.

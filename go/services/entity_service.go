@@ -103,14 +103,25 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 		return errkit.Wrap(err, "failed to get export")
 	}
 
-	// If export has a linked file, delete it (both physical and database record)
-	if export.FileID != "" {
-		err = s.fileService.DeleteFileWithPhysical(ctx, export.FileID)
+	// Store file ID for deletion after export is deleted
+	var fileIDToDelete *string
+	if export.FileID != nil && *export.FileID != "" {
+		fileIDToDelete = export.FileID
+	}
+
+	// Delete the export first to avoid foreign key constraint violation
+	err = s.registrySet.ExportRegistry.Delete(ctx, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete export")
+	}
+
+	// Then delete the associated file if it exists
+	if fileIDToDelete != nil {
+		err = s.fileService.DeleteFileWithPhysical(ctx, *fileIDToDelete)
 		if err != nil && !errors.Is(err, registry.ErrNotFound) {
 			return errkit.Wrap(err, "failed to delete export file")
 		}
 	}
 
-	// Then delete the export itself
-	return s.registrySet.ExportRegistry.Delete(ctx, id)
+	return nil
 }
