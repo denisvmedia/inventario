@@ -83,14 +83,6 @@ func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, 
 		}
 	}
 
-	// Initialize File struct
-	file.File = &models.File{
-		Path:         file.Path,
-		OriginalPath: file.OriginalPath,
-		Ext:          file.Ext,
-		MIMEType:     file.MIMEType,
-	}
-
 	return &file, nil
 }
 
