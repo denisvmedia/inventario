@@ -312,7 +312,7 @@ func TestFileService_ExportFileDeletion_Integration(t *testing.T) {
 		Type:        models.ExportTypeFullDatabase,
 		Status:      models.ExportStatusCompleted,
 		Description: "Test export",
-		FileID:      createdFile.ID,
+		FileID:      &createdFile.ID,
 	}
 
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, exportEntity)

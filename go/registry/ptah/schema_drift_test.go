@@ -81,7 +81,7 @@ func TestMigrationFilesSyncWithAnnotations(t *testing.T) {
 	defer dropTestDatabase(t, testDBURL)
 
 	// Apply current migration files to empty database
-	migrator, err := ptahintegration.NewPtahMigrator(nil, testDBURL, "../../models")
+	migrator, err := ptahintegration.NewPtahMigrator(testDBURL, "../../models")
 	c.Assert(err, qt.IsNil)
 
 	// Apply migrations

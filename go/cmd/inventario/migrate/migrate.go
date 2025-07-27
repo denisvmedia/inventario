@@ -360,7 +360,7 @@ func createPtahMigrator() (*ptahintegration.PtahMigrator, error) {
 	}
 
 	// Create the migrator with the models directory for schema parsing
-	migrator, err := ptahintegration.NewPtahMigrator(nil, dsn, "./models")
+	migrator, err := ptahintegration.NewPtahMigrator(dsn, "./models")
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create Ptah migrator")
 	}

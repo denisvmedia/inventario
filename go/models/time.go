@@ -2,7 +2,10 @@ package models
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -18,9 +21,13 @@ var (
 	_ validation.Validatable = (*Date)(nil)
 	_ json.Marshaler         = (*Date)(nil)
 	_ json.Unmarshaler       = (*Date)(nil)
+	_ driver.Valuer          = (*Date)(nil)
+	_ sql.Scanner            = (*Date)(nil)
 	_ validation.Validatable = (*Timestamp)(nil)
 	_ json.Marshaler         = (*Timestamp)(nil)
 	_ json.Unmarshaler       = (*Timestamp)(nil)
+	_ driver.Valuer          = (*Timestamp)(nil)
+	_ sql.Scanner            = (*Timestamp)(nil)
 )
 
 const dateFormat = "2006-01-02"
@@ -117,6 +124,36 @@ func ToPDate(d Date) PDate {
 	return &d
 }
 
+// Scan implements the sql.Scanner interface for Date.
+// It can scan from string, []byte, or time.Time values.
+func (d *Date) Scan(value any) error {
+	if value == nil {
+		*d = ""
+		return nil
+	}
+
+	switch v := value.(type) {
+	case string:
+		*d = Date(v)
+	case []byte:
+		*d = Date(v)
+	case time.Time:
+		*d = Date(v.Format(dateFormat))
+	default:
+		return fmt.Errorf("cannot scan %T into Date", value)
+	}
+
+	return nil
+}
+
+// Value implements the driver.Valuer interface for Date.
+func (d Date) Value() (driver.Value, error) {
+	if d == "" {
+		return nil, nil
+	}
+	return string(d), nil
+}
+
 // MarshalJSON marshals the Timestamp to JSON.
 func (t *Timestamp) MarshalJSON() ([]byte, error) {
 	if t == nil {
@@ -200,6 +237,36 @@ func ToPTimestamp(t Timestamp) PTimestamp {
 		return nil
 	}
 	return &t
+}
+
+// Scan implements the sql.Scanner interface for Timestamp.
+// It can scan from string, []byte, or time.Time values.
+func (t *Timestamp) Scan(value any) error {
+	if value == nil {
+		*t = ""
+		return nil
+	}
+
+	switch v := value.(type) {
+	case string:
+		*t = Timestamp(v)
+	case []byte:
+		*t = Timestamp(v)
+	case time.Time:
+		*t = Timestamp(v.Format(timestampFormat))
+	default:
+		return fmt.Errorf("cannot scan %T into Timestamp", value)
+	}
+
+	return nil
+}
+
+// Value implements the driver.Valuer interface for Timestamp.
+func (t Timestamp) Value() (driver.Value, error) {
+	if t == "" {
+		return nil, nil
+	}
+	return string(t), nil
 }
 
 // NewTimestamp creates a new Timestamp from a time.Time.

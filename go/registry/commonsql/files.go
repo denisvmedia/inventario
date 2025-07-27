@@ -54,6 +54,7 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 
 func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
 	var file models.FileEntity
+	file.File = &models.File{}
 	var tagsJSON []byte
 
 	query := `
@@ -82,14 +83,6 @@ func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, 
 		}
 	}
 
-	// Initialize File struct
-	file.File = &models.File{
-		Path:         file.Path,
-		OriginalPath: file.OriginalPath,
-		Ext:          file.Ext,
-		MIMEType:     file.MIMEType,
-	}
-
 	return &file, nil
 }
 
@@ -108,6 +101,7 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 	var files []*models.FileEntity
 	for rows.Next() {
 		var file models.FileEntity
+		file.File = &models.File{}
 		var tagsJSON []byte
 
 		err := rows.Scan(
@@ -125,14 +119,6 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 			if err != nil {
 				return nil, errkit.Wrap(err, "failed to unmarshal tags")
 			}
-		}
-
-		// Initialize File struct
-		file.File = &models.File{
-			Path:         file.Path,
-			OriginalPath: file.OriginalPath,
-			Ext:          file.Ext,
-			MIMEType:     file.MIMEType,
 		}
 
 		files = append(files, &file)
@@ -158,6 +144,7 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 	var files []*models.FileEntity
 	for rows.Next() {
 		var file models.FileEntity
+		file.File = &models.File{}
 		var tagsJSON []byte
 
 		err := rows.Scan(
@@ -175,14 +162,6 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 			if err != nil {
 				return nil, errkit.Wrap(err, "failed to unmarshal tags")
 			}
-		}
-
-		// Initialize File struct
-		file.File = &models.File{
-			Path:         file.Path,
-			OriginalPath: file.OriginalPath,
-			Ext:          file.Ext,
-			MIMEType:     file.MIMEType,
 		}
 
 		files = append(files, &file)
@@ -212,6 +191,8 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 	var files []*models.FileEntity
 	for rows.Next() {
 		var file models.FileEntity
+		file.File = &models.File{}
+
 		var tagsJSON []byte
 
 		err := rows.Scan(
@@ -232,13 +213,6 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 		}
 
 		// Initialize File struct
-		file.File = &models.File{
-			Path:         file.Path,
-			OriginalPath: file.OriginalPath,
-			Ext:          file.Ext,
-			MIMEType:     file.MIMEType,
-		}
-
 		files = append(files, &file)
 	}
 
@@ -329,6 +303,7 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 	var files []*models.FileEntity
 	for rows.Next() {
 		var file models.FileEntity
+		file.File = &models.File{}
 		var tagsJSON []byte
 
 		err := rows.Scan(
@@ -346,14 +321,6 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 			if err != nil {
 				return nil, errkit.Wrap(err, "failed to unmarshal tags")
 			}
-		}
-
-		// Initialize File struct
-		file.File = &models.File{
-			Path:         file.Path,
-			OriginalPath: file.OriginalPath,
-			Ext:          file.Ext,
-			MIMEType:     file.MIMEType,
 		}
 
 		files = append(files, &file)
@@ -412,6 +379,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 	var files []*models.FileEntity
 	for rows.Next() {
 		var file models.FileEntity
+		file.File = &models.File{}
 		var tagsJSON []byte
 
 		err := rows.Scan(
@@ -429,14 +397,6 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 			if err != nil {
 				return nil, errkit.Wrap(err, "failed to unmarshal tags")
 			}
-		}
-
-		// Initialize File struct
-		file.File = &models.File{
-			Path:         file.Path,
-			OriginalPath: file.OriginalPath,
-			Ext:          file.Ext,
-			MIMEType:     file.MIMEType,
 		}
 
 		files = append(files, &file)
@@ -493,6 +453,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 	var files []*models.FileEntity
 	for rows.Next() {
 		var file models.FileEntity
+		file.File = &models.File{}
 		var tagsJSON []byte
 
 		err := rows.Scan(
@@ -510,14 +471,6 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 			if err != nil {
 				return nil, 0, errkit.Wrap(err, "failed to unmarshal tags")
 			}
-		}
-
-		// Initialize File struct
-		file.File = &models.File{
-			Path:         file.Path,
-			OriginalPath: file.OriginalPath,
-			Ext:          file.Ext,
-			MIMEType:     file.MIMEType,
 		}
 
 		files = append(files, &file)
