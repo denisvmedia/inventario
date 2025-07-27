@@ -48,6 +48,11 @@ jobs:
         run: go mod download
         working-directory: go
 
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       - name: Wait for PostgreSQL
         run: |
           until pg_isready -h localhost -p 5432 -U inventario_test; do
