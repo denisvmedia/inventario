@@ -55,7 +55,7 @@ export async function startPostgres(): Promise<void> {
   }
 
   try {
-    // Start PostgreSQL container
+    // Start PostgreSQL container with automatic database creation
     const dockerCommand = [
       'docker', 'run', '-d',
       '--name', postgresContainerName,
@@ -334,7 +334,7 @@ export async function runMigrations(): Promise<void> {
 
   try {
     const { execSync } = await import('child_process');
-    const migrateCommand = `go run main.go migrate --db-dsn="${dbDSN}"`;
+    const migrateCommand = `go run main.go migrate up --db-dsn="${dbDSN}"`;
     console.log(`Executing: ${migrateCommand}`);
     execSync(migrateCommand, {
       cwd: backendRoot,

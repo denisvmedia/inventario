@@ -62,6 +62,11 @@ jobs:
       - name: Install Playwright browsers
         run: cd e2e && npx playwright install --with-deps
 
+      - name: Create test database
+        run: |
+          # Create the test database
+          PGPASSWORD=inventario_e2e_password psql -h localhost -p 5433 -U inventario_e2e -d postgres -c "CREATE DATABASE inventario_e2e;"
+
       - name: Start application stack and run tests
         env:
           # PostgreSQL connection for e2e tests

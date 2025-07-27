@@ -55,10 +55,20 @@ jobs:
 
       - name: Wait for PostgreSQL
         run: |
-          until pg_isready -h localhost -p 5432 -U inventario_test; do
-            echo "Waiting for PostgreSQL..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U inventario_test; then
+              echo "PostgreSQL is ready!"
+              break
+            fi
+            echo "Waiting for PostgreSQL... (attempt $i/30)"
             sleep 2
           done
+
+          # Final check
+          if ! pg_isready -h localhost -p 5432 -U inventario_test; then
+            echo "PostgreSQL failed to become ready"
+            exit 1
+          fi
 
       - name: Run PostgreSQL registry tests
         env:
