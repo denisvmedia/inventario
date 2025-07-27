@@ -104,8 +104,8 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 	}
 
 	// If export has a linked file, delete it (both physical and database record)
-	if export.FileID != "" {
-		err = s.fileService.DeleteFileWithPhysical(ctx, export.FileID)
+	if export.FileID != nil && *export.FileID != "" {
+		err = s.fileService.DeleteFileWithPhysical(ctx, *export.FileID)
 		if err != nil && !errors.Is(err, registry.ErrNotFound) {
 			return errkit.Wrap(err, "failed to delete export file")
 		}

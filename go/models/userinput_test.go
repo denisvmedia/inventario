@@ -49,6 +49,7 @@ func TestSanitizeUserInput(t *testing.T) {
 		c.Assert(export.InvoiceCount, qt.Equals, 0)
 		c.Assert(export.ManualCount, qt.Equals, 0)
 		c.Assert(export.BinaryDataSize, qt.Equals, int64(0))
+		c.Assert(export.FileID, qt.IsNil)
 
 		// Check that fields without userinput:"false" tag are NOT reset
 		c.Assert(export.Type, qt.Equals, models.ExportTypeFullDatabase)
@@ -135,6 +136,7 @@ func TestSanitizeUserInput(t *testing.T) {
 		c.Assert(result.FileSize, qt.Equals, int64(0))
 		c.Assert(result.LocationCount, qt.Equals, 0)
 		c.Assert(result.CompletedDate, qt.IsNil)
+		c.Assert(result.FileID, qt.IsNil)
 
 		// Check that system-set values are correct
 		c.Assert(result.Status, qt.Equals, models.ExportStatusPending)

@@ -195,8 +195,8 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 	c.Assert(updatedExport.CompletedDate, qt.IsNotNil)
 
 	// Verify file entity was created
-	c.Assert(updatedExport.FileID, qt.Not(qt.Equals), "")
-	fileEntity, err := registrySet.FileRegistry.Get(ctx, updatedExport.FileID)
+	c.Assert(updatedExport.FileID, qt.IsNotNil)
+	fileEntity, err := registrySet.FileRegistry.Get(ctx, *updatedExport.FileID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(fileEntity.LinkedEntityType, qt.Equals, "export")
 	c.Assert(fileEntity.LinkedEntityID, qt.Equals, updatedExport.ID)

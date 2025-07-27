@@ -150,7 +150,7 @@ type Export struct {
 	//migrator:schema:field name="selected_items" type="JSONB"
 	SelectedItems ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
 	//migrator:schema:field name="file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_export_file"
-	FileID string `json:"file_id" db:"file_id" userinput:"false"`
+	FileID *string `json:"file_id" db:"file_id" userinput:"false"`
 	//migrator:schema:field name="file_path" type="TEXT"
 	FilePath string `json:"file_path" db:"file_path" userinput:"false"` // Deprecated: will be removed after migration
 	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"

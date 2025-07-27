@@ -199,7 +199,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 
 	// Update status to completed
 	export.Status = models.ExportStatusCompleted
-	export.FileID = fileEntity.ID
+	export.FileID = &fileEntity.ID
 	export.FilePath = filePath // Keep for backward compatibility during migration
 	export.CompletedDate = models.PNow()
 	export.ErrorMessage = ""

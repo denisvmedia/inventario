@@ -86,7 +86,7 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 	// Update the original export record with the parsed data
 	exportRecord.Status = models.ExportStatusCompleted
 	exportRecord.CompletedDate = models.PNow()
-	exportRecord.FileID = fileEntity.ID
+	exportRecord.FileID = &fileEntity.ID
 	exportRecord.FilePath = sourceFilePath // Keep for backward compatibility
 	exportRecord.FileSize = attrs.Size
 	exportRecord.LocationCount = stats.LocationCount
