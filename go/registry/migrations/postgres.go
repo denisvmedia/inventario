@@ -16,7 +16,7 @@ type PostgreSQLMigrator struct {
 // NewPostgreSQLMigrator creates a new PostgreSQLMigrator using Ptah
 func NewPostgreSQLMigrator(dsn string) (Migrator, error) {
 	// Create Ptah migrator
-	ptahMigrator, err := ptah.NewPtahMigrator(nil, dsn, "./models")
+	ptahMigrator, err := ptah.NewPtahMigrator(dsn, "./models")
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create Ptah migrator")
 	}
