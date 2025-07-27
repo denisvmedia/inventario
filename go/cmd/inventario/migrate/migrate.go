@@ -19,9 +19,10 @@ const (
 
 var migrateFlags = map[string]cobraflags.Flag{
 	dbDSNFlag: &cobraflags.StringFlag{
-		Name:  dbDSNFlag,
-		Value: "", // No default for migrate command - must be explicitly provided
-		Usage: "PostgreSQL database connection string (required)",
+		Name:       dbDSNFlag,
+		Value:      "", // No default for migrate command - must be explicitly provided
+		Usage:      "PostgreSQL database connection string (required)",
+		Persistent: true, // Make this flag available to all subcommands
 	},
 }
 
@@ -78,16 +79,16 @@ MIGRATION SAFETY:
 
 // NewMigrateCommand creates the main migrate command using Ptah
 func NewMigrateCommand() *cobra.Command {
+	// Register cobraflags which automatically handles viper binding and persistent flags
 	cobraflags.RegisterMap(migrateCmd, migrateFlags)
-
-	// Make the db-dsn flag persistent so subcommands inherit it
-	migrateCmd.PersistentFlags().String("db-dsn", "", "PostgreSQL database connection string (required)")
 
 	// Add subcommands
 	migrateCmd.AddCommand(newMigrateUpCommand())
 	migrateCmd.AddCommand(newMigrateDownCommand())
 	migrateCmd.AddCommand(newMigrateStatusCommand())
 	migrateCmd.AddCommand(newMigrateGenerateCommand())
+	migrateCmd.AddCommand(newMigrateResetCommand())
+	migrateCmd.AddCommand(newMigrateDropCommand())
 
 	return migrateCmd
 }
@@ -203,9 +204,9 @@ Please use a PostgreSQL connection string like:
 For other database types, this version no longer provides migration support.`, dsn)
 	}
 
-	fmt.Println("Running default migration (migrate up)...")
-	fmt.Println("Use 'inventario migrate --help' to see all available migration commands.")
-	fmt.Println()
+	fmt.Println("Running default migration (migrate up)...")                                //nolint:forbidigo // CLI output is OK
+	fmt.Println("Use 'inventario migrate --help' to see all available migration commands.") //nolint:forbidigo // CLI output is OK
+	fmt.Println()                                                                           //nolint:forbidigo // CLI output is OK
 
 	// Delegate to migrate up command
 	return migrateUpCommand(cmd, args)
@@ -221,9 +222,9 @@ func migrateUpCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	dsn := getDatabaseDSN()
-	fmt.Println("=== MIGRATE UP ===")
-	fmt.Printf("Database: %s\n", dsn)
-	fmt.Println()
+	fmt.Println("=== MIGRATE UP ===") //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Database: %s\n", dsn) //nolint:forbidigo // CLI output is OK
+	fmt.Println()                     //nolint:forbidigo // CLI output is OK
 
 	return migrator.MigrateUp(context.Background(), dryRun)
 }
@@ -245,10 +246,10 @@ func migrateDownCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	dsn := getDatabaseDSN()
-	fmt.Println("=== MIGRATE DOWN ===")
-	fmt.Printf("Database: %s\n", dsn)
-	fmt.Printf("Target version: %d\n", targetVersion)
-	fmt.Println()
+	fmt.Println("=== MIGRATE DOWN ===")               //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Database: %s\n", dsn)                 //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Target version: %d\n", targetVersion) //nolint:forbidigo // CLI output is OK
+	fmt.Println()                                     //nolint:forbidigo // CLI output is OK
 
 	return migrator.MigrateDown(context.Background(), targetVersion, dryRun, confirm)
 }
@@ -283,22 +284,22 @@ func migrateGenerateCommand(cmd *cobra.Command, args []string) error {
 		}
 
 		if len(statements) == 0 {
-			fmt.Println("✅ No schema found in Go annotations")
+			fmt.Println("✅ No schema found in Go annotations") //nolint:forbidigo // CLI output is OK
 			return nil
 		}
 
-		fmt.Println("=== COMPLETE SCHEMA SQL (PREVIEW) ===")
-		fmt.Println()
-		fmt.Println("-- Complete schema generated from Go entity annotations")
-		fmt.Printf("-- Generated from: %s\n", "./models")
-		fmt.Println("-- NOTE: This is a preview only. No migration files were created.")
-		fmt.Println()
+		fmt.Println("=== COMPLETE SCHEMA SQL (PREVIEW) ===")                             //nolint:forbidigo // CLI output is OK
+		fmt.Println()                                                                    //nolint:forbidigo // CLI output is OK
+		fmt.Println("-- Complete schema generated from Go entity annotations")           //nolint:forbidigo // CLI output is OK
+		fmt.Printf("-- Generated from: %s\n", "./models")                                //nolint:forbidigo // CLI output is OK
+		fmt.Println("-- NOTE: This is a preview only. No migration files were created.") //nolint:forbidigo // CLI output is OK
+		fmt.Println()                                                                    //nolint:forbidigo // CLI output is OK
 		for i, stmt := range statements {
-			fmt.Printf("-- Statement %d\n%s;\n\n", i+1, stmt)
+			fmt.Printf("-- Statement %d\n%s;\n\n", i+1, stmt) //nolint:forbidigo // CLI output is OK
 		}
 
-		fmt.Printf("Generated %d SQL statements (preview only).\n", len(statements))
-		fmt.Println("💡 Use 'migrate generate --initial' to create actual migration files for an empty database.")
+		fmt.Printf("Generated %d SQL statements (preview only).\n", len(statements))                              //nolint:forbidigo // CLI output is OK
+		fmt.Println("💡 Use 'migrate generate --initial' to create actual migration files for an empty database.") //nolint:forbidigo // CLI output is OK
 		return nil
 	}
 
@@ -309,10 +310,10 @@ func migrateGenerateCommand(cmd *cobra.Command, args []string) error {
 			return errkit.Wrap(err, "failed to generate initial migration")
 		}
 
-		fmt.Println("🎉 Initial migration files created successfully!")
-		fmt.Printf("Next steps:\n")
-		fmt.Printf("  1. Review the generated migration files\n")
-		fmt.Printf("  2. Run 'inventario migrate up' to apply the migration\n")
+		fmt.Println("🎉 Initial migration files created successfully!")          //nolint:forbidigo // CLI output is OK
+		fmt.Printf("Next steps:\n")                                             //nolint:forbidigo // CLI output is OK
+		fmt.Printf("  1. Review the generated migration files\n")               //nolint:forbidigo // CLI output is OK
+		fmt.Printf("  2. Run 'inventario migrate up' to apply the migration\n") //nolint:forbidigo // CLI output is OK
 
 		return nil
 	}
@@ -328,11 +329,11 @@ func migrateGenerateCommand(cmd *cobra.Command, args []string) error {
 		return errkit.Wrap(err, "failed to generate migration files")
 	}
 
-	fmt.Println("🎉 Migration files created successfully!")
-	fmt.Printf("Next steps:\n")
-	fmt.Printf("  1. Review the generated migration files\n")
-	fmt.Printf("  2. Run 'inventario migrate up' to apply the migration\n")
-	fmt.Printf("  3. Test rollback with 'inventario migrate down %d' if needed\n", files.Version)
+	fmt.Println("🎉 Migration files created successfully!")                                        //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Next steps:\n")                                                                   //nolint:forbidigo // CLI output is OK
+	fmt.Printf("  1. Review the generated migration files\n")                                     //nolint:forbidigo // CLI output is OK
+	fmt.Printf("  2. Run 'inventario migrate up' to apply the migration\n")                       //nolint:forbidigo // CLI output is OK
+	fmt.Printf("  3. Test rollback with 'inventario migrate down %d' if needed\n", files.Version) //nolint:forbidigo // CLI output is OK
 
 	return nil
 }
@@ -365,4 +366,93 @@ func createPtahMigrator() (*ptahintegration.PtahMigrator, error) {
 	}
 
 	return migrator, nil
+}
+
+// newMigrateResetCommand creates the migrate reset subcommand
+func newMigrateResetCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reset",
+		Short: "Drop all tables and recreate from scratch",
+		Long: `Drop all database tables and recreate the schema from scratch.
+
+This command performs a complete database reset by:
+1. Dropping all existing tables, indexes, and constraints
+2. Applying all migrations from the beginning
+
+WARNING: This operation will DELETE ALL DATA in the database!
+Always backup your database before running this command in production.
+
+Examples:
+  inventario migrate reset                     # Reset database (with confirmation)
+  inventario migrate reset --confirm           # Reset without confirmation prompt
+  inventario migrate reset --dry-run           # Preview what would be reset`,
+		RunE: migrateResetCommand,
+	}
+
+	cmd.Flags().Bool("dry-run", false, "Show what would be reset without executing")
+	cmd.Flags().Bool("confirm", false, "Skip confirmation prompt (dangerous!)")
+
+	return cmd
+}
+
+// newMigrateDropCommand creates the migrate drop subcommand
+func newMigrateDropCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "drop",
+		Short: "Drop all database tables and data",
+		Long: `Drop all database tables, indexes, constraints, and data.
+
+This command completely cleans the database by dropping all tables.
+Unlike 'reset', this command does NOT recreate the schema afterward.
+
+WARNING: This operation will DELETE ALL DATA and SCHEMA in the database!
+Always backup your database before running this command in production.
+
+Examples:
+  inventario migrate drop                      # Drop all tables (with confirmation)
+  inventario migrate drop --confirm            # Drop without confirmation prompt
+  inventario migrate drop --dry-run            # Preview what would be dropped`,
+		RunE: migrateDropCommand,
+	}
+
+	cmd.Flags().Bool("dry-run", false, "Show what would be dropped without executing")
+	cmd.Flags().Bool("confirm", false, "Skip confirmation prompt (dangerous!)")
+
+	return cmd
+}
+
+// migrateResetCommand handles the migrate reset subcommand
+func migrateResetCommand(cmd *cobra.Command, args []string) error {
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	confirm, _ := cmd.Flags().GetBool("confirm")
+
+	migrator, err := createPtahMigrator()
+	if err != nil {
+		return err
+	}
+
+	dsn := getDatabaseDSN()
+	fmt.Println("=== MIGRATE RESET ===") //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Database: %s\n", dsn)    //nolint:forbidigo // CLI output is OK
+	fmt.Println()                        //nolint:forbidigo // CLI output is OK
+
+	return migrator.ResetDatabase(context.Background(), dryRun, confirm)
+}
+
+// migrateDropCommand handles the migrate drop subcommand
+func migrateDropCommand(cmd *cobra.Command, args []string) error {
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	confirm, _ := cmd.Flags().GetBool("confirm")
+
+	migrator, err := createPtahMigrator()
+	if err != nil {
+		return err
+	}
+
+	dsn := getDatabaseDSN()
+	fmt.Println("=== MIGRATE DROP ===") //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Database: %s\n", dsn)   //nolint:forbidigo // CLI output is OK
+	fmt.Println()                       //nolint:forbidigo // CLI output is OK
+
+	return migrator.DropDatabase(context.Background(), dryRun, confirm)
 }

@@ -15,7 +15,7 @@ import (
 
 // searchAPI handles search-related endpoints
 type searchAPI struct {
-	registrySet interface{}
+	registrySet any
 }
 
 // Search provides advanced search capabilities across different entities
@@ -232,7 +232,7 @@ func (api *searchAPI) searchWithBasicRegistry(w http.ResponseWriter, r *http.Req
 // @Produce json-api
 // @Success 200 {object} jsonapi.CapabilitiesResponse "Database capabilities"
 // @Router /search/capabilities [get]
-func (api *searchAPI) getCapabilities(w http.ResponseWriter, r *http.Request) {
+func (api *searchAPI) getCapabilities(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
 	if enhanced, ok := api.registrySet.(registry.EnhancedRegistry); ok {
 		capabilities := enhanced.GetCapabilities()
 		response := jsonapi.NewCapabilitiesResponse(capabilities)
@@ -251,13 +251,13 @@ func (api *searchAPI) getCapabilities(w http.ResponseWriter, r *http.Request) {
 }
 
 // Search creates the search router
-func Search(registrySet interface{}) func(r chi.Router) {
+func Search(registrySet any) func(r chi.Router) {
 	api := &searchAPI{
 		registrySet: registrySet,
 	}
 
 	return func(r chi.Router) {
-		r.Get("/", api.search)                    // GET /search
+		r.Get("/", api.search)                      // GET /search
 		r.Get("/capabilities", api.getCapabilities) // GET /search/capabilities
 	}
 }

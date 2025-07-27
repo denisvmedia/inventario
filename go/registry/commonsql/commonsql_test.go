@@ -12,7 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
-	pgmigrations "github.com/denisvmedia/inventario/registry/postgres/migrations"
+	"github.com/denisvmedia/inventario/registry/ptah"
 )
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -31,7 +31,7 @@ func skipIfNoPostgreSQL(t *testing.T) string {
 	if err != nil {
 		t.Skipf("Skipping PostgreSQL tests: failed to parse DSN: %v", err)
 	}
-	dsn = postgres.ParsePostgreSQLURL(u)
+	dsn = u.String()
 
 	// Test connection
 	pool, err := pgxpool.New(t.Context(), dsn)
@@ -75,19 +75,18 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	`)
 	c.Assert(err, qt.IsNil)
 
-	// Run migrations
-	err = pgmigrations.RunMigrations(t.Context(), pool)
+	// Run migrations using Ptah migrator
+	migrator, err := ptah.NewPtahMigrator(nil, dsn, "../../models")
+	c.Assert(err, qt.IsNil)
+	err = migrator.MigrateUp(t.Context(), false)
 	c.Assert(err, qt.IsNil)
 
 	// Create registry set using the postgres package
-	registrySetFunc, cleanup := postgres.NewRegistrySet()
+	registrySetFunc, _ := postgres.NewRegistrySet()
 	registrySet, err := registrySetFunc(registry.Config(dsn))
 	c.Assert(err, qt.IsNil)
 
 	cleanupFunc := func() {
-		if err := cleanup(); err != nil {
-			t.Logf("Cleanup error: %v", err)
-		}
 		if pool != nil {
 			pool.Close()
 		}

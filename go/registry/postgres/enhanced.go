@@ -105,7 +105,7 @@ func (r *EnhancedPostgreSQLRegistry) FullTextSearch(ctx context.Context, query s
 }
 
 // JSONBQuery performs JSONB queries on specified table and field
-func (r *EnhancedPostgreSQLRegistry) JSONBQuery(ctx context.Context, table string, jsonbField string, query map[string]interface{}) ([]interface{}, error) {
+func (r *EnhancedPostgreSQLRegistry) JSONBQuery(ctx context.Context, table string, jsonbField string, query map[string]any) ([]any, error) {
 	queryJSON, err := json.Marshal(query)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to marshal query")
@@ -119,7 +119,7 @@ func (r *EnhancedPostgreSQLRegistry) JSONBQuery(ctx context.Context, table strin
 	}
 	defer rows.Close()
 
-	var results []interface{}
+	var results []any
 	for rows.Next() {
 		// This would need to be customized based on the table structure
 		// For now, return a generic map
@@ -134,7 +134,7 @@ func (r *EnhancedPostgreSQLRegistry) JSONBQuery(ctx context.Context, table strin
 }
 
 // BulkUpsert performs bulk upsert operations
-func (r *EnhancedPostgreSQLRegistry) BulkUpsert(ctx context.Context, entities []interface{}) error {
+func (r *EnhancedPostgreSQLRegistry) BulkUpsert(ctx context.Context, entities []any) error {
 	// This would need to be implemented based on entity types
 	// For now, return a placeholder implementation
 	return fmt.Errorf("bulk upsert not yet implemented for %d entities", len(entities))
@@ -366,7 +366,7 @@ func (r *EnhancedPostgreSQLCommodityRegistry) AggregateByArea(ctx context.Contex
 		}
 
 		result := registry.AggregationResult{
-			GroupBy: map[string]interface{}{"area_id": areaID},
+			GroupBy: map[string]any{"area_id": areaID},
 			Count:   count,
 			Avg:     make(map[string]float64),
 			Sum:     make(map[string]float64),

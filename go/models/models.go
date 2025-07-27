@@ -105,6 +105,7 @@ func FileTypeFromMIME(mimeType string) FileType {
 }
 
 // FileEntity represents a file entity in the system
+//
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:embedded mode="inline"
@@ -155,13 +156,28 @@ type FileEntity struct {
 
 // PostgreSQL-specific indexes for files
 type FileIndexes struct {
-	//migrator:schema:index name="files_tags_gin_idx" fields="tags"
+	// GIN index for JSONB tags field
+	//migrator:schema:index name="files_tags_gin_idx" fields="tags" type="GIN" table="files"
 	_ int
-	//migrator:schema:index name="files_type_created_idx" fields="type,created_at"
+
+	// Composite index for type and created_at
+	//migrator:schema:index name="files_type_created_idx" fields="type,created_at" table="files"
 	_ int
-	//migrator:schema:index name="files_linked_entity_idx" fields="linked_entity_type,linked_entity_id"
+
+	// Index for linked entity queries
+	//migrator:schema:index name="files_linked_entity_idx" fields="linked_entity_type,linked_entity_id" table="files"
 	_ int
-	//migrator:schema:index name="files_linked_entity_meta_idx" fields="linked_entity_type,linked_entity_id,linked_entity_meta"
+
+	// Index for linked entity with metadata
+	//migrator:schema:index name="files_linked_entity_meta_idx" fields="linked_entity_type,linked_entity_id,linked_entity_meta" table="files"
+	_ int
+
+	// Trigram similarity index for file title search
+	//migrator:schema:index name="files_title_trgm_idx" fields="title" type="GIN" ops="gin_trgm_ops" table="files"
+	_ int
+
+	// Trigram similarity index for file path search
+	//migrator:schema:index name="files_path_trgm_idx" fields="path" type="GIN" ops="gin_trgm_ops" table="files"
 	_ int
 }
 

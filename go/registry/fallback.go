@@ -101,7 +101,7 @@ func (f *FallbackRegistry) FullTextSearch(ctx context.Context, query string, opt
 	return f.fallbackCommoditySearch(ctx, query)
 }
 
-func (f *FallbackRegistry) JSONBQuery(ctx context.Context, table string, jsonbField string, query map[string]interface{}) ([]interface{}, error) {
+func (f *FallbackRegistry) JSONBQuery(ctx context.Context, table string, jsonbField string, query map[string]any) ([]any, error) {
 	if !f.capabilities.JSONBOperators {
 		log.Printf("JSONB queries not supported by %s, falling back to in-memory filtering", f.dbType)
 		return f.fallbackJSONQuery(ctx, table, jsonbField, query)
@@ -110,7 +110,7 @@ func (f *FallbackRegistry) JSONBQuery(ctx context.Context, table string, jsonbFi
 	return nil, fmt.Errorf("JSONB query not implemented for table %s", table)
 }
 
-func (f *FallbackRegistry) BulkUpsert(ctx context.Context, entities []interface{}) error {
+func (f *FallbackRegistry) BulkUpsert(ctx context.Context, entities []any) error {
 	if !f.capabilities.BulkOperations {
 		log.Printf("Bulk operations not supported by %s, falling back to individual operations", f.dbType)
 		return f.fallbackBulkUpsert(ctx, entities)
@@ -181,14 +181,14 @@ func (f *FallbackRegistry) fallbackCommoditySearch(ctx context.Context, query st
 	return filtered, nil
 }
 
-func (f *FallbackRegistry) fallbackJSONQuery(ctx context.Context, table string, jsonbField string, query map[string]interface{}) ([]interface{}, error) {
+func (f *FallbackRegistry) fallbackJSONQuery(ctx context.Context, table string, jsonbField string, query map[string]any) ([]any, error) {
 	// This would require loading all records and filtering in Go
 	// For now, return empty results with a warning
 	log.Printf("JSONB query fallback not fully implemented for table %s field %s", table, jsonbField)
-	return []interface{}{}, nil
+	return []any{}, nil
 }
 
-func (f *FallbackRegistry) fallbackBulkUpsert(ctx context.Context, entities []interface{}) error {
+func (f *FallbackRegistry) fallbackBulkUpsert(ctx context.Context, entities []any) error {
 	// Perform individual operations
 	for _, entity := range entities {
 		// This would need type switching based on entity type
@@ -343,7 +343,7 @@ func (f *FallbackCommodityRegistry) AggregateByArea(ctx context.Context, groupBy
 	var results []AggregationResult
 	for areaID, count := range areaCount {
 		results = append(results, AggregationResult{
-			GroupBy: map[string]interface{}{"area_id": areaID},
+			GroupBy: map[string]any{"area_id": areaID},
 			Count:   count,
 		})
 	}

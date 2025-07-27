@@ -11,7 +11,7 @@ import (
 func TestCapabilityMatrix(t *testing.T) {
 	t.Run("PostgreSQL capabilities", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		caps, exists := registry.GetCapabilities("postgres")
 		c.Assert(exists, qt.IsTrue)
 		c.Assert(caps.FullTextSearch, qt.IsTrue)
@@ -26,7 +26,7 @@ func TestCapabilityMatrix(t *testing.T) {
 
 	t.Run("BoltDB capabilities", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		caps, exists := registry.GetCapabilities("boltdb")
 		c.Assert(exists, qt.IsTrue)
 		c.Assert(caps.FullTextSearch, qt.IsFalse)
@@ -41,7 +41,7 @@ func TestCapabilityMatrix(t *testing.T) {
 
 	t.Run("Memory capabilities", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		caps, exists := registry.GetCapabilities("memory")
 		c.Assert(exists, qt.IsTrue)
 		c.Assert(caps.FullTextSearch, qt.IsFalse)
@@ -56,7 +56,7 @@ func TestCapabilityMatrix(t *testing.T) {
 
 	t.Run("Unknown database", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		_, exists := registry.GetCapabilities("unknown")
 		c.Assert(exists, qt.IsFalse)
 	})
@@ -65,7 +65,7 @@ func TestCapabilityMatrix(t *testing.T) {
 func TestSupportsFeature(t *testing.T) {
 	t.Run("PostgreSQL supports full-text search", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		supports := registry.SupportsFeature("postgres", func(caps registry.DatabaseCapabilities) bool {
 			return caps.FullTextSearch
 		})
@@ -74,7 +74,7 @@ func TestSupportsFeature(t *testing.T) {
 
 	t.Run("BoltDB does not support full-text search", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		supports := registry.SupportsFeature("boltdb", func(caps registry.DatabaseCapabilities) bool {
 			return caps.FullTextSearch
 		})
@@ -83,7 +83,7 @@ func TestSupportsFeature(t *testing.T) {
 
 	t.Run("Unknown database does not support any features", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		supports := registry.SupportsFeature("unknown", func(caps registry.DatabaseCapabilities) bool {
 			return caps.FullTextSearch
 		})
@@ -105,7 +105,7 @@ func TestFeatureMatrix(t *testing.T) {
 
 	expectedFeatures := []string{
 		"FullTextSearch",
-		"JSONBOperators", 
+		"JSONBOperators",
 		"AdvancedIndexing",
 		"Triggers",
 		"StoredProcedures",
@@ -134,7 +134,7 @@ func TestFeatureMatrix(t *testing.T) {
 func TestSearchOptions(t *testing.T) {
 	t.Run("WithLimit option", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		opts := &registry.SearchOptions{}
 		registry.WithLimit(50)(opts)
 		c.Assert(opts.Limit, qt.Equals, 50)
@@ -142,7 +142,7 @@ func TestSearchOptions(t *testing.T) {
 
 	t.Run("WithOffset option", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		opts := &registry.SearchOptions{}
 		registry.WithOffset(100)(opts)
 		c.Assert(opts.Offset, qt.Equals, 100)
@@ -150,7 +150,7 @@ func TestSearchOptions(t *testing.T) {
 
 	t.Run("WithSort option", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		opts := &registry.SearchOptions{}
 		registry.WithSort("name", "DESC")(opts)
 		c.Assert(opts.SortBy, qt.Equals, "name")
@@ -159,12 +159,12 @@ func TestSearchOptions(t *testing.T) {
 
 	t.Run("Multiple options", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		opts := &registry.SearchOptions{}
 		registry.WithLimit(25)(opts)
 		registry.WithOffset(50)(opts)
 		registry.WithSort("created_at", "ASC")(opts)
-		
+
 		c.Assert(opts.Limit, qt.Equals, 25)
 		c.Assert(opts.Offset, qt.Equals, 50)
 		c.Assert(opts.SortBy, qt.Equals, "created_at")

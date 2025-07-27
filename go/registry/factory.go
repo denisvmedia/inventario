@@ -24,7 +24,7 @@ func (f *RegistryFactory) RegisterBackend(name string, setFunc SetFunc) {
 }
 
 // CreateRegistry creates a registry with capability detection and fallback support
-func (f *RegistryFactory) CreateRegistry(dsn string) (interface{}, error) {
+func (f *RegistryFactory) CreateRegistry(dsn string) (any, error) {
 	parsed, err := url.Parse(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DSN: %w", err)
@@ -57,7 +57,7 @@ func (f *RegistryFactory) CreateRegistry(dsn string) (interface{}, error) {
 
 	log.Printf("Created %s registry with fallback support (capabilities: %+v)", scheme, capabilities)
 	fallbackRegistry := NewFallbackRegistry(baseRegistry, scheme)
-	
+
 	return fallbackRegistry, nil
 }
 
@@ -99,7 +99,7 @@ func (f *RegistryFactory) GetBackendCapabilities(backend string) (DatabaseCapabi
 var DefaultFactory = NewRegistryFactory()
 
 // CreateRegistryWithFactory creates a registry using the default factory
-func CreateRegistryWithFactory(dsn string) (interface{}, error) {
+func CreateRegistryWithFactory(dsn string) (any, error) {
 	return DefaultFactory.CreateRegistry(dsn)
 }
 
@@ -197,27 +197,27 @@ func PrintFeatureMatrix() {
 	features := GetFeatureMatrix()
 	backends := []string{"postgres", "mysql", "boltdb", "memory"}
 
-	fmt.Printf("%-20s", "Feature")
+	fmt.Printf("%-20s", "Feature") //nolint:forbidigo // CLI output is OK
 	for _, backend := range backends {
-		fmt.Printf("%-12s", backend)
+		fmt.Printf("%-12s", backend) //nolint:forbidigo // CLI output is OK
 	}
-	fmt.Println()
+	fmt.Println() //nolint:forbidigo // CLI output is OK
 
-	fmt.Printf("%-20s", "=======")
+	fmt.Printf("%-20s", "=======") //nolint:forbidigo // CLI output is OK
 	for range backends {
-		fmt.Printf("%-12s", "========")
+		fmt.Printf("%-12s", "========") //nolint:forbidigo // CLI output is OK
 	}
-	fmt.Println()
+	fmt.Println() //nolint:forbidigo // CLI output is OK
 
 	for _, feature := range features {
-		fmt.Printf("%-20s", feature.Feature)
+		fmt.Printf("%-20s", feature.Feature) //nolint:forbidigo // CLI output is OK
 		for _, backend := range backends {
 			if feature.Backends[backend] {
-				fmt.Printf("%-12s", "✓")
+				fmt.Printf("%-12s", "✓") //nolint:forbidigo // CLI output is OK
 			} else {
-				fmt.Printf("%-12s", "✗")
+				fmt.Printf("%-12s", "✗") //nolint:forbidigo // CLI output is OK
 			}
 		}
-		fmt.Println()
+		fmt.Println() //nolint:forbidigo // CLI output is OK
 	}
 }

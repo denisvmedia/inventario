@@ -138,17 +138,36 @@ type Commodity struct {
 
 // PostgreSQL-specific indexes for commodities
 type CommodityIndexes struct {
-	//migrator:schema:index name="commodities_tags_gin_idx" fields="tags"
+	// GIN index for JSONB tags field
+	//migrator:schema:index name="commodities_tags_gin_idx" fields="tags" type="GIN" table="commodities"
 	_ int
-	//migrator:schema:index name="commodities_extra_serial_numbers_gin_idx" fields="extra_serial_numbers"
+
+	// GIN index for JSONB extra_serial_numbers field
+	//migrator:schema:index name="commodities_extra_serial_numbers_gin_idx" fields="extra_serial_numbers" type="GIN" table="commodities"
 	_ int
-	//migrator:schema:index name="commodities_part_numbers_gin_idx" fields="part_numbers"
+
+	// GIN index for JSONB part_numbers field
+	//migrator:schema:index name="commodities_part_numbers_gin_idx" fields="part_numbers" type="GIN" table="commodities"
 	_ int
-	//migrator:schema:index name="commodities_urls_gin_idx" fields="urls"
+
+	// GIN index for JSONB urls field
+	//migrator:schema:index name="commodities_urls_gin_idx" fields="urls" type="GIN" table="commodities"
 	_ int
-	//migrator:schema:index name="commodities_active_idx" fields="status,area_id"
+
+	// Partial index for active commodities (non-draft)
+	//migrator:schema:index name="commodities_active_idx" fields="status,area_id" condition="draft = false" table="commodities"
 	_ int
-	//migrator:schema:index name="commodities_draft_idx" fields="last_modified_date"
+
+	// Partial index for draft commodities
+	//migrator:schema:index name="commodities_draft_idx" fields="last_modified_date" condition="draft = true" table="commodities"
+	_ int
+
+	// Trigram similarity index for commodity name search
+	//migrator:schema:index name="commodities_name_trgm_idx" fields="name" type="GIN" ops="gin_trgm_ops" table="commodities"
+	_ int
+
+	// Trigram similarity index for short name search
+	//migrator:schema:index name="commodities_short_name_trgm_idx" fields="short_name" type="GIN" ops="gin_trgm_ops" table="commodities"
 	_ int
 }
 

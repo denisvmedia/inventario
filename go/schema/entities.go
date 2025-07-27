@@ -5,6 +5,7 @@ import (
 )
 
 // Location represents a physical location where areas are located
+//
 //migrator:schema:table name="locations"
 type Location struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -18,6 +19,7 @@ type Location struct {
 }
 
 // Area represents a specific area within a location
+//
 //migrator:schema:table name="areas"
 type Area struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -31,6 +33,7 @@ type Area struct {
 }
 
 // Commodity represents an inventory item
+//
 //migrator:schema:table name="commodities"
 type Commodity struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -102,6 +105,7 @@ type Commodity struct {
 }
 
 // CommodityIndexes defines indexes for the commodities table
+//
 //migrator:schema:index name="commodities_search_vector_idx" fields="search_vector" type="GIN"
 //migrator:schema:index name="commodities_tags_gin_idx" fields="tags" type="GIN"
 //migrator:schema:index name="commodities_extra_serial_numbers_gin_idx" fields="extra_serial_numbers" type="GIN"
@@ -114,6 +118,7 @@ type Commodity struct {
 type CommodityIndexes struct{}
 
 // Image represents an image file associated with a commodity
+//
 //migrator:schema:table name="images"
 type Image struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -136,6 +141,7 @@ type Image struct {
 }
 
 // Invoice represents an invoice file associated with a commodity
+//
 //migrator:schema:table name="invoices"
 type Invoice struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -158,6 +164,7 @@ type Invoice struct {
 }
 
 // Manual represents a manual file associated with a commodity
+//
 //migrator:schema:table name="manuals"
 type Manual struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -180,16 +187,18 @@ type Manual struct {
 }
 
 // Settings represents application settings stored as key-value pairs
+//
 //migrator:schema:table name="settings"
 type Settings struct {
 	//migrator:schema:field name="key" type="TEXT" primary="true"
 	Key string `json:"key"`
 
 	//migrator:schema:field name="value" type="JSONB" not_null="true"
-	Value interface{} `json:"value"`
+	Value any `json:"value"`
 }
 
 // Export represents an export operation
+//
 //migrator:schema:table name="exports"
 type Export struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -217,10 +226,11 @@ type Export struct {
 	DeletedAt *time.Time `json:"deleted_at"`
 
 	//migrator:schema:field name="statistics" type="JSONB"
-	Statistics interface{} `json:"statistics"`
+	Statistics any `json:"statistics"`
 }
 
 // FileEntity represents a generic file entity
+//
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -274,6 +284,7 @@ type FileEntity struct {
 }
 
 // FileIndexes defines indexes for the files table
+//
 //migrator:schema:index name="files_search_vector_idx" fields="search_vector" type="GIN"
 //migrator:schema:index name="files_tags_gin_idx" fields="tags" type="GIN"
 //migrator:schema:index name="files_type_created_idx" fields="type,created_at"
@@ -284,6 +295,7 @@ type FileEntity struct {
 type FileIndexes struct{}
 
 // RestoreOperation represents a restore operation
+//
 //migrator:schema:table name="restore_operations"
 type RestoreOperation struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"
@@ -306,6 +318,7 @@ type RestoreOperation struct {
 }
 
 // RestoreStep represents a step in a restore operation
+//
 //migrator:schema:table name="restore_steps"
 type RestoreStep struct {
 	//migrator:schema:field name="id" type="TEXT" primary="true"

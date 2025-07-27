@@ -270,8 +270,8 @@ func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) e
 
 // SearchResponse represents a generic search response
 type SearchResponse struct {
-	Data interface{}  `json:"data"`
-	Meta SearchMeta   `json:"meta"`
+	Data any        `json:"data"`
+	Meta SearchMeta `json:"meta"`
 }
 
 // SearchMeta contains metadata about search results
@@ -282,7 +282,7 @@ type SearchMeta struct {
 }
 
 // NewSearchResponse creates a new search response
-func NewSearchResponse(entityType string, data interface{}, total int) *SearchResponse {
+func NewSearchResponse(entityType string, data any, total int) *SearchResponse {
 	return &SearchResponse{
 		Data: data,
 		Meta: SearchMeta{
@@ -305,8 +305,8 @@ type CapabilitiesResponse struct {
 
 // CapabilitiesData contains database capability information
 type CapabilitiesData struct {
-	ID         string                       `json:"id"`
-	Type       string                       `json:"type"`
+	ID         string                        `json:"id"`
+	Type       string                        `json:"type"`
 	Attributes registry.DatabaseCapabilities `json:"attributes"`
 }
 

@@ -4,14 +4,14 @@ import "errors"
 
 // DatabaseCapabilities defines what features a database backend supports
 type DatabaseCapabilities struct {
-	FullTextSearch    bool // PostgreSQL tsvector, MySQL FULLTEXT
-	JSONBOperators    bool // PostgreSQL JSONB operators (@>, ?, etc.)
-	AdvancedIndexing  bool // GIN, GiST, partial indexes
-	Triggers          bool // Database triggers
-	StoredProcedures  bool // Stored procedures/functions
-	BulkOperations    bool // Efficient bulk insert/update
-	Transactions      bool // Transaction support
-	ArrayOperations   bool // Array data types and operations
+	FullTextSearch   bool // PostgreSQL tsvector, MySQL FULLTEXT
+	JSONBOperators   bool // PostgreSQL JSONB operators (@>, ?, etc.)
+	AdvancedIndexing bool // GIN, GiST, partial indexes
+	Triggers         bool // Database triggers
+	StoredProcedures bool // Stored procedures/functions
+	BulkOperations   bool // Efficient bulk insert/update
+	Transactions     bool // Transaction support
+	ArrayOperations  bool // Array data types and operations
 }
 
 // CapabilityMatrix defines the capabilities of each database backend

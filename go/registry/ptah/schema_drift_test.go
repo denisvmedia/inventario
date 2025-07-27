@@ -133,14 +133,14 @@ func TestPtahIndexSupport(t *testing.T) {
 	// Log what indexes Ptah found
 	t.Logf("Ptah detected %d indexes:", len(goSchema.Indexes))
 	for _, index := range goSchema.Indexes {
-		t.Logf("  - %s on %s: fields=%v, unique=%v", 
+		t.Logf("  - %s on %s: fields=%v, unique=%v",
 			index.Name, index.StructName, index.Fields, index.Unique)
 	}
 
 	// Check if our PostgreSQL-specific indexes are missing
 	expectedIndexes := []string{
 		"commodities_tags_gin_idx",
-		"commodities_extra_serial_numbers_gin_idx", 
+		"commodities_extra_serial_numbers_gin_idx",
 		"commodities_part_numbers_gin_idx",
 		"commodities_urls_gin_idx",
 		"commodities_active_idx",

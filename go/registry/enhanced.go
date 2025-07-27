@@ -58,7 +58,7 @@ type IndexSpec struct {
 
 // AggregationResult represents aggregated data
 type AggregationResult struct {
-	GroupBy map[string]interface{}
+	GroupBy map[string]any
 	Count   int
 	Sum     map[string]float64
 	Avg     map[string]float64
@@ -85,8 +85,8 @@ type EnhancedRegistry interface {
 
 	// PostgreSQL-specific features (gracefully degrade for other databases)
 	FullTextSearch(ctx context.Context, query string, options ...SearchOption) ([]*models.Commodity, error)
-	JSONBQuery(ctx context.Context, table string, jsonbField string, query map[string]interface{}) ([]interface{}, error)
-	BulkUpsert(ctx context.Context, entities []interface{}) error
+	JSONBQuery(ctx context.Context, table string, jsonbField string, query map[string]any) ([]any, error)
+	BulkUpsert(ctx context.Context, entities []any) error
 	CreateAdvancedIndex(ctx context.Context, spec IndexSpec) error
 
 	// Enhanced registry accessors
