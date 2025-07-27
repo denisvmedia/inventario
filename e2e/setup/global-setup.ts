@@ -4,6 +4,10 @@ import waitOn from 'wait-on';
 
 async function globalSetup(config: FullConfig) {
   console.log('Starting e2e test environment with PostgreSQL...');
+  console.log('Environment variables:');
+  console.log('- CI:', process.env.CI);
+  console.log('- GITHUB_ACTIONS:', process.env.GITHUB_ACTIONS);
+  console.log('- E2E_POSTGRES_PORT:', process.env.E2E_POSTGRES_PORT);
 
   // Always start the stack for e2e tests to ensure PostgreSQL is running
   // This ensures we have a consistent postgres-centric environment

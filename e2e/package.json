@@ -23,7 +23,8 @@
     "ui": "playwright test --ui",
     "report": "playwright show-report",
     "clean:artifacts": "rimraf test-results",
-    "clean:containers": "docker ps -a | grep inventario-e2e-postgres | awk '{print $1}' | xargs docker rm -f || true"
+    "clean:containers": "docker ps -a | grep inventario-e2e-postgres | awk '{print $1}' | xargs docker rm -f || true",
+    "debug:setup": "node debug-setup.js"
   },
   "devDependencies": {
     "@playwright/test": "1.54.1",

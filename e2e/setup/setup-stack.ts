@@ -27,6 +27,7 @@ const POSTGRES_DSN = `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost
 
 // Check if running in CI environment (GitHub Actions)
 const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+console.log(`Environment detection: CI=${process.env.CI}, GITHUB_ACTIONS=${process.env.GITHUB_ACTIONS}, isCI=${isCI}`);
 
 /**
  * Start PostgreSQL container for e2e tests (local development only)
@@ -35,6 +36,7 @@ export async function startPostgres(): Promise<void> {
   // In CI environment, PostgreSQL service is already running
   if (isCI) {
     console.log('Running in CI environment, using existing PostgreSQL service...');
+    console.log(`PostgreSQL DSN: ${POSTGRES_DSN}`);
     await waitForPostgres();
     return;
   }
@@ -95,7 +97,7 @@ async function waitForPostgres(maxRetries = 60, retryInterval = 1000): Promise<v
 
       if (isCI || !postgresContainerName) {
         // In CI or when using external PostgreSQL, use psql directly
-        const checkCommand = `psql "${POSTGRES_DSN}" -c "SELECT 1;" > /dev/null 2>&1`;
+        const checkCommand = `PGPASSWORD="${POSTGRES_PASSWORD}" psql -h localhost -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "SELECT 1;" > /dev/null 2>&1`;
         execSync(checkCommand, { stdio: 'ignore' });
       } else {
         // Use docker exec to check if PostgreSQL is ready
@@ -158,10 +160,8 @@ export async function resetDatabase(): Promise<void> {
   try {
     if (isCI || !postgresContainerName) {
       // In CI or when using external PostgreSQL, use psql directly
-      const postgresMainDSN = `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/postgres?sslmode=disable`;
-
-      const dropCommand = `psql "${postgresMainDSN}" -c "DROP DATABASE IF EXISTS ${POSTGRES_DB};"`;
-      const createCommand = `psql "${postgresMainDSN}" -c "CREATE DATABASE ${POSTGRES_DB};"`;
+      const dropCommand = `PGPASSWORD="${POSTGRES_PASSWORD}" psql -h localhost -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d postgres -c "DROP DATABASE IF EXISTS ${POSTGRES_DB};"`;
+      const createCommand = `PGPASSWORD="${POSTGRES_PASSWORD}" psql -h localhost -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d postgres -c "CREATE DATABASE ${POSTGRES_DB};"`;
 
       execSync(dropCommand, { stdio: 'ignore' });
       execSync(createCommand, { stdio: 'ignore' });
@@ -242,10 +242,13 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
-  console.log(`Executing: go run -tags with_frontend main.go run --db-dsn="${POSTGRES_DSN}"`);
+  // Use PostgreSQL DSN if available, otherwise default to memory
+  const dbDSN = process.env.INVENTARIO_DB_DSN || POSTGRES_DSN;
+  console.log(`Executing: go run -tags with_frontend main.go run --db-dsn="${dbDSN}"`);
+  console.log(`Working directory: ${backendRoot}`);
   backendProcess = spawn('go', [
     'run', '-tags', 'with_frontend', 'main.go', 'run',
-    '--db-dsn', POSTGRES_DSN
+    '--db-dsn', dbDSN
   ], {
     cwd: backendRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -254,20 +257,25 @@ export async function startBackend(): Promise<void> {
 
   // Handle process output
   backendProcess.stdout?.on('data', (data) => {
-    console.log(`Backend: ${data.toString().trim()}`);
+    const output = data.toString().trim();
+    console.log(`Backend stdout: ${output}`);
   });
 
   backendProcess.stderr?.on('data', (data) => {
-    console.error(`Backend error: ${data.toString().trim()}`);
+    const output = data.toString().trim();
+    console.error(`Backend stderr: ${output}`);
   });
 
   backendProcess.on('error', (error) => {
-    console.error(`Failed to start backend: ${error.message}`);
+    console.error(`Failed to start backend process: ${error.message}`);
+    console.error(`Error details:`, error);
     throw error;
   });
 
   backendProcess.on('exit', (code, signal) => {
-    if (code !== null) {
+    if (code !== null && code !== 0) {
+      console.error(`Backend process exited with non-zero code ${code}`);
+    } else if (code !== null) {
       console.log(`Backend process exited with code ${code}`);
     } else if (signal !== null) {
       console.log(`Backend process killed with signal ${signal}`);
@@ -432,7 +440,10 @@ async function waitForFrontend(maxRetries = 120, retryInterval = 1000): Promise<
  */
 export async function startStack(): Promise<void> {
   try {
-    await startPostgres();
+    // Only start PostgreSQL container if not using external database
+    if (!process.env.INVENTARIO_DB_DSN) {
+      await startPostgres();
+    }
     await startBackend();
     await seedDatabase();
     await startFrontend();
@@ -458,7 +469,10 @@ export async function stopStack(): Promise<void> {
     frontendProcess = null;
   }
 
-  await stopPostgres();
+  // Only stop PostgreSQL container if we started it
+  if (!process.env.INVENTARIO_DB_DSN) {
+    await stopPostgres();
+  }
 
   console.log('All services stopped');
 }
