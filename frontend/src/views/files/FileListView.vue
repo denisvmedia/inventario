@@ -288,8 +288,14 @@ const fileToDelete = ref<FileEntity | null>(null)
 // File type options
 const fileTypeOptions = fileService.getFileTypeOptions()
 
-// Make fileService methods available in template
-const { isLinked, getLinkedEntityDisplay } = fileService
+// Wrapper functions to maintain proper context
+const isLinked = (file: FileEntity) => {
+  return fileService.isLinked(file)
+}
+
+const getLinkedEntityDisplay = (file: FileEntity) => {
+  return fileService.getLinkedEntityDisplay(file)
+}
 
 // Wrapper function to pass current route context
 const getLinkedEntityUrl = (file: any) => {
