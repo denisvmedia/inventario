@@ -19,7 +19,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Base Go environment
-FROM golang:1.24.4-alpine AS go-base
+FROM golang:1.24.5-alpine AS go-base
 
 # Install common dependencies
 RUN apk add --no-cache \
