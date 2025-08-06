@@ -28,7 +28,7 @@
     "pdfjs-dist": "5.3.93",
     "pinia": "3.0.3",
     "primeicons": "7.0.0",
-    "primevue": "4.3.6",
+    "primevue": "4.3.7",
     "vue": "3.5.18",
     "vue-router": "4.5.1"
   },
