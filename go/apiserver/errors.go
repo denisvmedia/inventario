@@ -17,6 +17,7 @@ var (
 	ErrInvalidContentType = errors.New("invalid content type")
 	ErrNoFilesUploaded    = errors.New("no files uploaded")
 	ErrEntityNotFound     = errors.New("entity not found")
+	ErrTenantNotFound     = errors.New("tenant not found")
 )
 
 func NewNotFoundError(err error) jsonapi.Error {

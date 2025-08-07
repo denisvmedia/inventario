@@ -137,6 +137,29 @@ type RestoreStepRegistry interface {
 	DeleteByRestoreOperation(ctx context.Context, restoreOperationID string) error
 }
 
+type TenantRegistry interface {
+	Registry[models.Tenant]
+
+	// GetBySlug returns a tenant by its slug
+	GetBySlug(ctx context.Context, slug string) (*models.Tenant, error)
+
+	// GetByDomain returns a tenant by its domain
+	GetByDomain(ctx context.Context, domain string) (*models.Tenant, error)
+}
+
+type UserRegistry interface {
+	Registry[models.User]
+
+	// GetByEmail returns a user by email within a tenant
+	GetByEmail(ctx context.Context, tenantID, email string) (*models.User, error)
+
+	// ListByTenant returns all users for a tenant
+	ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error)
+
+	// ListByRole returns all users with a specific role within a tenant
+	ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error)
+}
+
 type Set struct {
 	LocationRegistry         LocationRegistry
 	AreaRegistry             AreaRegistry
@@ -149,6 +172,8 @@ type Set struct {
 	RestoreOperationRegistry RestoreOperationRegistry
 	RestoreStepRegistry      RestoreStepRegistry
 	FileRegistry             FileRegistry
+	TenantRegistry           TenantRegistry
+	UserRegistry             UserRegistry
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {
@@ -164,6 +189,8 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.SettingsRegistry, validation.Required),
 		validation.Field(&s.ExportRegistry, validation.Required),
 		validation.Field(&s.FileRegistry, validation.Required),
+		validation.Field(&s.TenantRegistry, validation.Required),
+		validation.Field(&s.UserRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)
