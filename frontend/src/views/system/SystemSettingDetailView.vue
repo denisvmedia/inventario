@@ -435,7 +435,7 @@ async function saveSystemConfig() {
 
   // If main currency is already set and hasn't changed, just go back to settings
   if (isMainCurrencySet.value && systemConfig.value.main_currency === originalMainCurrency.value) {
-    router.push('/settings')
+    router.push('/system')
     return
   }
 
