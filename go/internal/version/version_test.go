@@ -83,7 +83,7 @@ func TestGet_HappyPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			tt.setup()
 			defer tt.teardown()
 
@@ -101,10 +101,10 @@ func TestGet_RuntimeValues(t *testing.T) {
 	// Test that runtime values are properly populated
 	c.Assert(got.GoVersion, qt.Not(qt.Equals), "")
 	c.Assert(strings.HasPrefix(got.GoVersion, "go"), qt.IsTrue)
-	
+
 	c.Assert(got.Platform, qt.Not(qt.Equals), "")
 	c.Assert(strings.Contains(got.Platform, "/"), qt.IsTrue)
-	
+
 	// Verify platform format
 	parts := strings.Split(got.Platform, "/")
 	c.Assert(len(parts), qt.Equals, 2)
@@ -167,7 +167,7 @@ func TestString_HappyPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			tt.setup()
 			defer tt.teardown()
 
@@ -234,7 +234,7 @@ func TestString_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			tt.setup()
 			defer tt.teardown()
 
