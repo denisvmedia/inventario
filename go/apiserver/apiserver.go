@@ -66,6 +66,7 @@ type Params struct {
 	EntityService  *services.EntityService
 	UploadLocation string
 	DebugInfo      *debug.Info
+	StartTime      time.Time
 }
 
 func (p *Params) Validate() error {
@@ -125,6 +126,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
 		r.With(defaultAPIMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
+		r.With(defaultAPIMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
 		r.With(defaultAPIMiddlewares...).Route("/exports", Exports(params, restoreWorker))
 		r.With(defaultAPIMiddlewares...).Route("/files", Files(params))
 		r.With(defaultAPIMiddlewares...).Route("/search", Search(params.RegistrySet))

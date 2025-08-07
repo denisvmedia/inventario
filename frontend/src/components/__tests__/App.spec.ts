@@ -27,8 +27,8 @@ describe('App.vue Navigation', () => {
         { path: '/commodities/:id', component: { template: '<div>Commodity Detail</div>' } },
         { path: '/exports', component: { template: '<div>Exports</div>' } },
         { path: '/exports/new', component: { template: '<div>Export Create</div>' } },
-        { path: '/settings', component: { template: '<div>Settings</div>' } },
-        { path: '/settings/:id', component: { template: '<div>Setting Detail</div>' } }
+        { path: '/system', component: { template: '<div>System</div>' } },
+        { path: '/system/settings/:id', component: { template: '<div>System Setting Detail</div>' } }
       ]
     })
   }
@@ -36,7 +36,7 @@ describe('App.vue Navigation', () => {
   it('highlights Home menu when on home page', async () => {
     const router = createRouterForTest()
     await router.push('/')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -44,7 +44,7 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const homeLink = wrapper.find('nav a[href="/"]')
     expect(homeLink.classes()).toContain('custom-active')
   })
@@ -52,7 +52,7 @@ describe('App.vue Navigation', () => {
   it('highlights Locations menu when on locations list page', async () => {
     const router = createRouterForTest()
     await router.push('/locations')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -60,7 +60,7 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const locationsLink = wrapper.find('nav a[href="/locations"]')
     expect(locationsLink.classes()).toContain('custom-active')
   })
@@ -68,7 +68,7 @@ describe('App.vue Navigation', () => {
   it('highlights Locations menu when on location detail page', async () => {
     const router = createRouterForTest()
     await router.push('/locations/123')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -76,7 +76,7 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const locationsLink = wrapper.find('nav a[href="/locations"]')
     expect(locationsLink.classes()).toContain('custom-active')
   })
@@ -84,7 +84,7 @@ describe('App.vue Navigation', () => {
   it('highlights Locations menu when on area detail page', async () => {
     const router = createRouterForTest()
     await router.push('/areas/456')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -92,7 +92,7 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const locationsLink = wrapper.find('nav a[href="/locations"]')
     expect(locationsLink.classes()).toContain('custom-active')
   })
@@ -100,7 +100,7 @@ describe('App.vue Navigation', () => {
   it('highlights Commodities menu when on commodities list page', async () => {
     const router = createRouterForTest()
     await router.push('/commodities')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -108,7 +108,7 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const commoditiesLink = wrapper.find('nav a[href="/commodities"]')
     expect(commoditiesLink.classes()).toContain('custom-active')
   })
@@ -116,7 +116,7 @@ describe('App.vue Navigation', () => {
   it('highlights Commodities menu when on commodity create page', async () => {
     const router = createRouterForTest()
     await router.push('/commodities/new')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -124,7 +124,7 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const commoditiesLink = wrapper.find('nav a[href="/commodities"]')
     expect(commoditiesLink.classes()).toContain('custom-active')
   })
@@ -132,7 +132,7 @@ describe('App.vue Navigation', () => {
   it('highlights Commodities menu when on commodity detail page', async () => {
     const router = createRouterForTest()
     await router.push('/commodities/789')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -140,7 +140,7 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const commoditiesLink = wrapper.find('nav a[href="/commodities"]')
     expect(commoditiesLink.classes()).toContain('custom-active')
   })
@@ -148,7 +148,7 @@ describe('App.vue Navigation', () => {
   it('highlights Exports menu when on exports detail page', async () => {
     const router = createRouterForTest()
     await router.push('/exports/123')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -156,15 +156,15 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const exportsLink = wrapper.find('nav a[href="/exports"]')
     expect(exportsLink.classes()).toContain('custom-active')
   })
 
-  it('highlights Settings menu when on setting detail page', async () => {
+  it('highlights System menu when on system setting detail page', async () => {
     const router = createRouterForTest()
-    await router.push('/settings/456')
-    
+    await router.push('/system/settings/456')
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -172,15 +172,15 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
-    const settingsLink = wrapper.find('nav a[href="/settings"]')
-    expect(settingsLink.classes()).toContain('custom-active')
+
+    const systemLink = wrapper.find('nav a[href="/system"]')
+    expect(systemLink.classes()).toContain('custom-active')
   })
 
   it('does not highlight other menus when on commodities page', async () => {
     const router = createRouterForTest()
     await router.push('/commodities')
-    
+
     const wrapper = mount(App, {
       global: {
         plugins: [router]
@@ -188,15 +188,15 @@ describe('App.vue Navigation', () => {
     })
 
     await wrapper.vm.$nextTick()
-    
+
     const homeLink = wrapper.find('nav a[href="/"]')
     const locationsLink = wrapper.find('nav a[href="/locations"]')
     const exportsLink = wrapper.find('nav a[href="/exports"]')
-    const settingsLink = wrapper.find('nav a[href="/settings"]')
-    
+    const systemLink = wrapper.find('nav a[href="/system"]')
+
     expect(homeLink.classes()).not.toContain('custom-active')
     expect(locationsLink.classes()).not.toContain('custom-active')
     expect(exportsLink.classes()).not.toContain('custom-active')
-    expect(settingsLink.classes()).not.toContain('custom-active')
+    expect(systemLink.classes()).not.toContain('custom-active')
   })
 })

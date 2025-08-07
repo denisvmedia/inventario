@@ -33,9 +33,9 @@
         <h2>Files</h2>
         <p>Upload and manage standalone files</p>
       </div>
-      <div class="card" @click="navigateTo('/settings')">
-        <h2>Settings</h2>
-        <p>Configure application settings</p>
+      <div class="card" @click="navigateTo('/system')">
+        <h2>System</h2>
+        <p>View system information and configure settings</p>
       </div>
     </div>
 

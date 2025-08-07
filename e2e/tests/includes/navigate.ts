@@ -1,22 +1,22 @@
 import {Page} from "@playwright/test";
-import {checkSettingsRequired, navigateAndCheckSettings} from "./settings-check.js";
+import {checkSettingsRequired, navigateAndCheckSettings} from "./settings-check";
 
 export const TO_HOME = 'home';
 export const TO_LOCATIONS = 'locations';
 export const TO_COMMODITIES = 'commodities';
 export const TO_AREA_COMMODITIES = 'area-commodities';
-export const TO_SETTINGS = 'settings';
+export const TO_SYSTEM = 'system';
 export const TO_EXPORTS = 'exports';
 
-export type TypeTo = typeof TO_HOME | typeof TO_LOCATIONS | typeof TO_COMMODITIES | typeof TO_AREA_COMMODITIES | typeof TO_SETTINGS | typeof TO_EXPORTS;
+export type TypeTo = typeof TO_HOME | typeof TO_LOCATIONS | typeof TO_COMMODITIES | typeof TO_AREA_COMMODITIES | typeof TO_SYSTEM | typeof TO_EXPORTS;
 
 export const FROM_HOME = 'home';
 export const FROM_LOCATIONS = 'locations';
 export const FROM_LOCATIONS_AREA = 'locations-area';
 export const FROM_COMMODITIES = 'commodities';
-export const FROM_SETTINGS = 'settings';
+export const FROM_SYSTEM = 'system';
 
-export type TypeFrom = typeof FROM_HOME | typeof FROM_LOCATIONS | typeof FROM_LOCATIONS_AREA | typeof FROM_COMMODITIES | typeof FROM_SETTINGS;
+export type TypeFrom = typeof FROM_HOME | typeof FROM_LOCATIONS | typeof FROM_LOCATIONS_AREA | typeof FROM_COMMODITIES | typeof FROM_SYSTEM;
 
 export async function navigateTo(page: Page, recorder: any, to : TypeTo, from?: TypeFrom, source?: string) {
     switch (to) {
@@ -48,8 +48,8 @@ export async function navigateTo(page: Page, recorder: any, to : TypeTo, from?: 
                     throw new Error('Not supported');
             }
             break;
-        case TO_SETTINGS:
-            await navigateAndCheckSettings(page, '/settings')
+        case TO_SYSTEM:
+            await navigateAndCheckSettings(page, '/system')
             break;
         case TO_EXPORTS:
             await navigateAndCheckSettings(page, '/exports')

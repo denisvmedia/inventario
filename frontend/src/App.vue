@@ -17,7 +17,7 @@
           <router-link to="/commodities" :class="{ 'custom-active': isCommoditiesActive }">Commodities</router-link> |
           <router-link to="/files" :class="{ 'custom-active': isFilesActive }">Files</router-link> |
           <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
-          <router-link to="/settings" :class="{ 'custom-active': isSettingsActive }">Settings</router-link>
+          <router-link to="/system" :class="{ 'custom-active': isSystemActive }">System</router-link>
         </nav>
       </div>
     </header>
@@ -72,8 +72,8 @@ const isExportsActive = computed(() => {
   return route.path.startsWith('/exports')
 })
 
-const isSettingsActive = computed(() => {
-  return route.path.startsWith('/settings')
+const isSystemActive = computed(() => {
+  return route.path.startsWith('/system')
 })
 
 // Initialize global settings when the app starts
