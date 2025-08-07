@@ -1,5 +1,5 @@
 import {Page} from "@playwright/test";
-import {checkSettingsRequired, navigateAndCheckSettings} from "./settings-check.js";
+import {checkSettingsRequired, navigateAndCheckSettings} from "./settings-check";
 
 export const TO_HOME = 'home';
 export const TO_LOCATIONS = 'locations';

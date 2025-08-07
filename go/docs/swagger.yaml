@@ -1,5 +1,39 @@
 basePath: /api/v1
 definitions:
+  apiserver.SystemInfo:
+    properties:
+      build_date:
+        type: string
+      commit:
+        type: string
+      database_backend:
+        description: System information
+        type: string
+      file_storage_backend:
+        type: string
+      go_version:
+        type: string
+      memory_usage:
+        type: string
+      num_cpu:
+        type: integer
+      num_goroutines:
+        type: integer
+      operating_system:
+        type: string
+      platform:
+        type: string
+      settings:
+        allOf:
+        - $ref: '#/definitions/models.SettingsObject'
+        description: Settings information
+      uptime:
+        description: Runtime metrics
+        type: string
+      version:
+        description: Version information
+        type: string
+    type: object
   debug.Info:
     properties:
       database_driver:
@@ -2527,4 +2561,20 @@ paths:
       summary: Patch setting
       tags:
       - settings
+  /system:
+    get:
+      consumes:
+      - application/json
+      description: get comprehensive system information including version, runtime
+        metrics, and settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.SystemInfo'
+      summary: Get system information
+      tags:
+      - system
 swagger: "2.0"

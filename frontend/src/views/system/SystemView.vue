@@ -11,11 +11,11 @@
       </div>
       <div class="banner-content">
         <h2>Settings Required</h2>
-        <p>Please configure your system settings before using the application. At minimum, you need to set up:</p>
+        <p class="banner-text">Please configure your system settings before using the application. At minimum, you need to set up:</p>
         <ul>
           <li>Main Currency</li>
         </ul>
-        <p>Click on the System Settings card below to get started.</p>
+        <p class="banner-text">Click on the System Settings card below to get started.</p>
       </div>
     </div>
 
@@ -122,7 +122,7 @@
         <div class="settings-categories">
 
           <div class="settings-category">
-            <h3>User Interface</h3>
+            <div class="settings-category-title">User Interface</div>
             <div class="settings-card" @click="navigateToSetting('ui_config')">
               <div class="settings-card-content">
                 <h4>UI Settings</h4>
@@ -149,7 +149,7 @@
           </div>
 
           <div class="settings-category">
-            <h3>System</h3>
+            <div class="settings-category-title">System</div>
             <div class="settings-card" @click="navigateToSetting('system_config')">
               <div class="settings-card-content">
                 <h4>System Settings</h4>
@@ -353,7 +353,7 @@ const navigateToSetting = (id: string) => {
   }
 
   .settings-category {
-    h3 {
+    .settings-category-title {
       margin-top: 0;
       margin-bottom: 1rem;
       color: $text-color;
@@ -383,14 +383,14 @@ const navigateToSetting = (id: string) => {
       flex: 1;
 
       h4 {
-        margin: 0 0 0.5rem 0;
+        margin: 0 0 0.5rem;
         color: $text-color;
         font-size: 1.1rem;
         font-weight: 600;
       }
 
       p {
-        margin: 0 0 1rem 0;
+        margin: 0 0 1rem;
         color: $text-secondary-color;
         font-size: 0.9rem;
         line-height: 1.4;
@@ -453,12 +453,12 @@ const navigateToSetting = (id: string) => {
     flex: 1;
 
     h2 {
-      margin: 0 0 10px 0;
+      margin: 0 0 10px;
       font-size: 1.5rem;
     }
 
-    p {
-      margin: 0 0 10px 0;
+    .banner-text {
+      margin: 0 0 10px;
       line-height: 1.5;
     }
 

@@ -75,8 +75,8 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 
 	// Add some test settings
 	testSettings := models.SettingsObject{
-		MainCurrency: ptr.To("USD"),
-		Theme:        ptr.To("dark"),
+		MainCurrency: ptr("USD"),
+		Theme:        ptr("dark"),
 	}
 	err = registrySet.SettingsRegistry.Save(c.Context(), testSettings)
 	c.Assert(err, qt.IsNil)

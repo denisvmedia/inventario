@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/app-fixture.js';
-import { checkSettingsRequired } from './includes/settings-check.js';
+import { checkSettingsRequired } from './includes/settings-check';
 
 test.describe('Application Navigation', () => {
   test.beforeEach(async ({ page }) => {
