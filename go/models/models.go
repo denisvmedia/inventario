@@ -16,6 +16,16 @@ type IDable interface {
 	SetID(string)
 }
 
+type TenantAware interface {
+	GetTenantID() string
+	SetTenantID(string)
+}
+
+type TenantAwareIDable interface {
+	IDable
+	TenantAware
+}
+
 var (
 	_ validation.Validatable = (*File)(nil)
 )
@@ -235,6 +245,7 @@ func (fe *FileEntity) GetDisplayTitle() string {
 
 var (
 	_ IDable                 = (*EntityID)(nil)
+	_ TenantAwareIDable      = (*TenantAwareEntityID)(nil)
 	_ validation.Validatable = (*FileEntity)(nil)
 )
 
@@ -253,6 +264,26 @@ func (i *EntityID) SetID(id string) {
 
 func WithID[T IDable](id string, i T) T {
 	i.SetID(id)
+	return i
+}
+
+type TenantAwareEntityID struct {
+	//migrator:embedded mode="inline"
+	EntityID
+	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
+	TenantID string `json:"tenant_id" db:"tenant_id" userinput:"false"`
+}
+
+func (i *TenantAwareEntityID) GetTenantID() string {
+	return i.TenantID
+}
+
+func (i *TenantAwareEntityID) SetTenantID(tenantID string) {
+	i.TenantID = tenantID
+}
+
+func WithTenantID[T TenantAware](tenantID string, i T) T {
+	i.SetTenantID(tenantID)
 	return i
 }
 
