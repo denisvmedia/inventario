@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-extras/cobraflags"
 	"github.com/go-extras/go-kit/must"
@@ -161,6 +162,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
 	params.EntityService = services.NewEntityService(registrySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
+	params.StartTime = time.Now()
 
 	err = validation.Validate(params)
 	if err != nil {

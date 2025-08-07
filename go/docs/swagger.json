@@ -2154,9 +2154,84 @@
                     }
                 }
             }
+        },
+        "/system": {
+            "get": {
+                "description": "get comprehensive system information including version, runtime metrics, and settings",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get system information",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.SystemInfo"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "apiserver.SystemInfo": {
+            "type": "object",
+            "properties": {
+                "build_date": {
+                    "type": "string"
+                },
+                "commit": {
+                    "type": "string"
+                },
+                "database_backend": {
+                    "description": "System information",
+                    "type": "string"
+                },
+                "file_storage_backend": {
+                    "type": "string"
+                },
+                "go_version": {
+                    "type": "string"
+                },
+                "memory_usage": {
+                    "type": "string"
+                },
+                "num_cpu": {
+                    "type": "integer"
+                },
+                "num_goroutines": {
+                    "type": "integer"
+                },
+                "operating_system": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "settings": {
+                    "description": "Settings information",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.SettingsObject"
+                        }
+                    ]
+                },
+                "uptime": {
+                    "description": "Runtime metrics",
+                    "type": "string"
+                },
+                "version": {
+                    "description": "Version information",
+                    "type": "string"
+                }
+            }
+        },
         "debug.Info": {
             "type": "object",
             "properties": {

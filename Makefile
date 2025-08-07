@@ -5,6 +5,25 @@ BIN_DIR=bin
 FRONTEND_DIR=frontend
 BACKEND_DIR=go
 
+# Version information variables
+# Platform-specific commands for extracting version information
+ifeq ($(OS),Windows_NT)
+    # Windows-specific commands
+    VERSION ?= $(shell git describe --tags --always --dirty 2>nul || echo dev)
+    COMMIT ?= $(shell git rev-parse --short HEAD 2>nul || echo unknown)
+    BUILD_DATE ?= $(shell powershell -Command "Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ'" 2>nul || echo unknown)
+else
+    # Unix-like systems
+    VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+    COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
+endif
+
+# Go ldflags for version injection
+LDFLAGS=-X github.com/denisvmedia/inventario/internal/version.Version=$(VERSION) \
+        -X github.com/denisvmedia/inventario/internal/version.Commit=$(COMMIT) \
+        -X github.com/denisvmedia/inventario/internal/version.Date=$(BUILD_DATE)
+
 # Detect OS for platform-specific commands
 ifeq ($(OS),Windows_NT)
     BINARY_EXT=.exe
@@ -55,17 +74,24 @@ build: build-frontend build-backend
 .PHONY: build-backend
 build-backend:
 	$(call MKDIR,$(BIN_DIR))
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -tags with_frontend -o ../$(BINARY_PATH) .
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -tags with_frontend -ldflags "$(LDFLAGS)" -o ../$(BINARY_PATH) .
 
 .PHONY: build-backend-nofe
 build-backend-nofe:
 	$(call MKDIR,$(BIN_DIR))
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -o ../$(BINARY_PATH) .
+	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../$(BINARY_PATH) .
 
 # Build the frontend
 .PHONY: build-frontend
 build-frontend:
 	$(CD) $(FRONTEND_DIR) && npm install && npm run build
+
+# Show version information that will be injected into the binary
+.PHONY: version
+version:
+	@echo "Version: $(VERSION)"
+	@echo "Commit: $(COMMIT)"
+	@echo "Build Date: $(BUILD_DATE)"
 
 # Run the backend server
 .PHONY: run-backend
@@ -295,6 +321,7 @@ else
 	@echo "  build-backend    - Build backend with embedded frontend"
 	@echo "  build-backend-nofe - Build backend without frontend"
 	@echo "  build-frontend   - Build only the frontend"
+	@echo "  version          - Show version information that will be injected"
 	@echo "  run-backend      - Run the backend server"
 	@echo "  run-backend-postgres - Run the backend server with PostgreSQL"
 	@echo "  run-frontend     - Run the frontend dev server"

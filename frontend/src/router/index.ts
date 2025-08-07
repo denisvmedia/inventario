@@ -109,16 +109,16 @@ const routes = [
     name: 'file-edit',
     component: () => import('../views/files/FileEditView.vue')
   },
-  // Settings
+  // System (formerly Settings)
   {
-    path: '/settings',
-    name: 'settings',
-    component: () => import('../views/settings/SettingsListView.vue')
+    path: '/system',
+    name: 'system',
+    component: () => import('../views/system/SystemView.vue')
   },
   {
-    path: '/settings/:id',
-    name: 'setting-detail',
-    component: () => import('../views/settings/SettingDetailView.vue')
+    path: '/system/settings/:id',
+    name: 'system-setting-detail',
+    component: () => import('../views/system/SystemSettingDetailView.vue')
   },
   // 404 - Keep this as the last route
   {
@@ -148,24 +148,24 @@ router.beforeEach(async (to, from) => {
   console.log('From:', from)
   console.log('Matched routes:', to.matched.map(record => record.path))
 
-  // Skip settings check for settings pages and print pages
-  const isSettingsPage = to.path.startsWith('/settings')
+  // Skip settings check for system pages and print pages
+  const isSystemPage = to.path.startsWith('/system')
   const isPrintPage = to.path.includes('/print')
 
-  // If we're navigating to the settings page from another page, don't check settings
+  // If we're navigating to the system page from another page, don't check settings
   // This prevents the banner from flashing when we already have settings
-  if (isSettingsPage && from.path !== '/') {
+  if (isSystemPage && from.path !== '/') {
     return true
   }
 
-  if (!isSettingsPage && !isPrintPage) {
+  if (!isSystemPage && !isPrintPage) {
     // Check if settings exist
     const hasSettings = await settingsCheckService.hasSettings()
 
     if (!hasSettings) {
-      console.log('No settings found, redirecting to settings page')
+      console.log('No settings found, redirecting to system page')
       // Add a query parameter to indicate that settings are required
-      return { path: '/settings', query: { required: 'true' } }
+      return { path: '/system', query: { required: 'true' } }
     }
   }
 

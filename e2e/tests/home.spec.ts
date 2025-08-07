@@ -42,12 +42,12 @@ test.describe('Home Page', () => {
     await expect(page.locator('h1')).toContainText('Commodities');
   });
 
-  test('should navigate to settings when clicking the settings card', async ({ page }) => {
-    // Click on the Settings card
-    await page.locator('.navigation-cards .card', { hasText: 'Settings' }).click();
-    
-    // Verify we're on the settings page
-    await expect(page).toHaveURL(/\/settings/);
-    await expect(page.locator('h1')).toContainText('Settings');
+  test('should navigate to system when clicking the system card', async ({ page }) => {
+    // Click on the System card
+    await page.locator('.navigation-cards .card', { hasText: 'System' }).click();
+
+    // Verify we're on the system page
+    await expect(page).toHaveURL(/\/system/);
+    await expect(page.locator('h1')).toContainText('System');
   });
 });

@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/app-fixture.js';
-import { checkSettingsRequired } from './includes/settings-check.js';
+import { checkSettingsRequired } from './includes/settings-check';
 
 test.describe('Application Navigation', () => {
   test.beforeEach(async ({ page }) => {
@@ -16,7 +16,7 @@ test.describe('Application Navigation', () => {
     await expect(page.locator('nav')).toContainText('Home');
     await expect(page.locator('nav')).toContainText('Locations');
     await expect(page.locator('nav')).toContainText('Commodities');
-    await expect(page.locator('nav')).toContainText('Settings');
+    await expect(page.locator('nav')).toContainText('System');
     
     // Verify navigation cards are present
     await expect(page.locator('.navigation-cards')).toBeVisible();
@@ -41,12 +41,12 @@ test.describe('Application Navigation', () => {
     await expect(page.locator('h1')).toContainText('Commodities');
   });
 
-  test('should navigate to settings page', async ({ page }) => {
-    // Click on the Settings link in the navigation
-    await page.click('nav >> text=Settings');
+  test('should navigate to system page', async ({ page }) => {
+    // Click on the System link in the navigation
+    await page.click('nav >> text=System');
 
-    // Verify we're on the settings page
-    await expect(page).toHaveURL(/\/settings/);
-    await expect(page.locator('h1')).toContainText('Settings');
+    // Verify we're on the system page
+    await expect(page).toHaveURL(/\/system/);
+    await expect(page.locator('h1')).toContainText('System');
   });
 });
