@@ -41,7 +41,7 @@ func (ts TenantStatus) Validate() error {
 }
 
 // TenantSettings represents tenant-specific configuration settings
-type TenantSettings map[string]interface{}
+type TenantSettings map[string]any
 
 // Value implements the driver.Valuer interface for database storage
 func (ts TenantSettings) Value() (driver.Value, error) {
@@ -52,7 +52,7 @@ func (ts TenantSettings) Value() (driver.Value, error) {
 }
 
 // Scan implements the sql.Scanner interface for database retrieval
-func (ts *TenantSettings) Scan(value interface{}) error {
+func (ts *TenantSettings) Scan(value any) error {
 	if value == nil {
 		*ts = nil
 		return nil
