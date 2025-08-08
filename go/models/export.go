@@ -137,6 +137,10 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 	)
 }
 
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="exports" comment="Enable RLS for multi-tenant export isolation"
+//migrator:schema:rls:policy name="export_tenant_isolation" table="exports" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures exports can only be accessed and modified by their tenant"
+
 //migrator:schema:table name="exports"
 type Export struct {
 	//migrator:embedded mode="inline"

@@ -13,6 +13,10 @@ var (
 	_ IDable                 = (*Location)(nil)
 )
 
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="locations" comment="Enable RLS for multi-tenant location isolation"
+//migrator:schema:rls:policy name="location_tenant_isolation" table="locations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" comment="Ensures locations can only be accessed by their tenant"
+
 //migrator:schema:table name="locations"
 type Location struct {
 	//migrator:embedded mode="inline"

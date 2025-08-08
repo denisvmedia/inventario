@@ -90,6 +90,10 @@ var (
 	_ json.Unmarshaler                  = (*Commodity)(nil)
 )
 
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="commodities" comment="Enable RLS for multi-tenant commodity isolation"
+//migrator:schema:rls:policy name="commodity_tenant_isolation" table="commodities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures commodities can only be accessed and modified by their tenant"
+
 //migrator:schema:table name="commodities"
 type Commodity struct {
 	//migrator:embedded mode="inline"
