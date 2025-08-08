@@ -140,7 +140,7 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 //migrator:schema:table name="exports"
 type Export struct {
 	//migrator:embedded mode="inline"
-	EntityID
+	TenantAwareEntityID
 	//migrator:schema:field name="type" type="TEXT" not_null="true"
 	Type ExportType `json:"type" db:"type"`
 	//migrator:schema:field name="status" type="TEXT" not_null="true"
@@ -207,6 +207,21 @@ func NewExportFromUserInput(export *Export) Export {
 	result.Imported = false
 
 	return result
+}
+
+// ExportIndexes defines performance indexes for the exports table
+type ExportIndexes struct {
+	// Index for tenant-based queries
+	//migrator:schema:index name="idx_exports_tenant_id" fields="tenant_id" table="exports"
+	_ int
+
+	// Composite index for tenant + status queries
+	//migrator:schema:index name="idx_exports_tenant_status" fields="tenant_id,status" table="exports"
+	_ int
+
+	// Composite index for tenant + type queries
+	//migrator:schema:index name="idx_exports_tenant_type" fields="tenant_id,type" table="exports"
+	_ int
 }
 
 func (*Export) Validate() error {

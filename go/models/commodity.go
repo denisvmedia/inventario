@@ -93,7 +93,7 @@ var (
 //migrator:schema:table name="commodities"
 type Commodity struct {
 	//migrator:embedded mode="inline"
-	EntityID
+	TenantAwareEntityID
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
 	//migrator:schema:field name="short_name" type="TEXT"
@@ -138,6 +138,18 @@ type Commodity struct {
 
 // PostgreSQL-specific indexes for commodities
 type CommodityIndexes struct {
+	// Index for tenant-based queries
+	//migrator:schema:index name="idx_commodities_tenant_id" fields="tenant_id" table="commodities"
+	_ int
+
+	// Composite index for tenant + area queries
+	//migrator:schema:index name="idx_commodities_tenant_area" fields="tenant_id,area_id" table="commodities"
+	_ int
+
+	// Composite index for tenant + status queries
+	//migrator:schema:index name="idx_commodities_tenant_status" fields="tenant_id,status" table="commodities"
+	_ int
+
 	// GIN index for JSONB tags field
 	//migrator:schema:index name="commodities_tags_gin_idx" fields="tags" type="GIN" table="commodities"
 	_ int

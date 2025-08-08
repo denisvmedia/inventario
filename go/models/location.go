@@ -16,11 +16,18 @@ var (
 //migrator:schema:table name="locations"
 type Location struct {
 	//migrator:embedded mode="inline"
-	EntityID
+	TenantAwareEntityID
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
 	//migrator:schema:field name="address" type="TEXT" not_null="true"
 	Address string `json:"address" db:"address"`
+}
+
+// LocationIndexes defines performance indexes for the locations table
+type LocationIndexes struct {
+	// Index for tenant-based queries
+	//migrator:schema:index name="idx_locations_tenant_id" fields="tenant_id" table="locations"
+	_ int
 }
 
 func (*Location) Validate() error {

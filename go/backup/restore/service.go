@@ -395,7 +395,10 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 			break
 		}
 		image := &models.Image{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: originalXMLID},
+				TenantID: "default-tenant", // TODO: Get from context
+			},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -421,7 +424,10 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 			break
 		}
 		image := &models.Image{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: originalXMLID},
+				TenantID: "default-tenant", // TODO: Get from context
+			},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -441,7 +447,10 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 		if existingImage == nil {
 			if !options.DryRun {
 				image := &models.Image{
-					EntityID:    models.EntityID{ID: originalXMLID},
+					TenantAwareEntityID: models.TenantAwareEntityID{
+						EntityID: models.EntityID{ID: originalXMLID},
+						TenantID: "default-tenant", // TODO: Get from context
+					},
 					CommodityID: commodityID,
 					File:        file,
 				}
@@ -466,7 +475,7 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 			break
 		}
 		image := &models.Image{
-			EntityID:    existingImage.EntityID, // Keep the existing ID
+			TenantAwareEntityID: existingImage.TenantAwareEntityID, // Keep the existing ID and tenant
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -497,7 +506,10 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 			break
 		}
 		invoice := &models.Invoice{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: originalXMLID},
+				TenantID: "default-tenant", // TODO: Get from context
+			},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -523,7 +535,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 			break
 		}
 		invoice := &models.Invoice{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -543,7 +555,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 		if existingInvoice == nil {
 			if !options.DryRun {
 				invoice := &models.Invoice{
-					EntityID:    models.EntityID{ID: originalXMLID},
+					TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
 					CommodityID: commodityID,
 					File:        file,
 				}
@@ -567,7 +579,7 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 		}
 		// Update existing invoice
 		invoice := &models.Invoice{
-			EntityID:    existingInvoice.EntityID, // Keep the existing ID
+			TenantAwareEntityID: existingInvoice.TenantAwareEntityID, // Keep the existing ID
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -598,7 +610,7 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 			break
 		}
 		manual := &models.Manual{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -624,7 +636,7 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 			break
 		}
 		manual := &models.Manual{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -647,7 +659,7 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 				break
 			}
 			manual := &models.Manual{
-				EntityID:    models.EntityID{ID: originalXMLID},
+				TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
 				CommodityID: commodityID,
 				File:        file,
 			}
@@ -670,7 +682,7 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 			break
 		}
 		manual := &models.Manual{
-			EntityID:    existingManual.EntityID, // Keep the existing ID
+			TenantAwareEntityID: existingManual.TenantAwareEntityID, // Keep the existing ID
 			CommodityID: commodityID,
 			File:        file,
 		}
