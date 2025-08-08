@@ -11,6 +11,10 @@ var (
 	_ IDable                 = (*Manual)(nil)
 )
 
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="manuals" comment="Enable RLS for multi-tenant manual isolation"
+//migrator:schema:rls:policy name="manual_tenant_isolation" table="manuals" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures manuals can only be accessed and modified by their tenant"
+
 //migrator:schema:table name="manuals"
 type Manual struct {
 	//migrator:embedded mode="inline"

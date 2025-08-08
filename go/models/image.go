@@ -11,6 +11,10 @@ var (
 	_ IDable                 = (*Image)(nil)
 )
 
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="images" comment="Enable RLS for multi-tenant image isolation"
+//migrator:schema:rls:policy name="image_tenant_isolation" table="images" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures images can only be accessed and modified by their tenant"
+
 //migrator:schema:table name="images"
 type Image struct {
 	//migrator:embedded mode="inline"

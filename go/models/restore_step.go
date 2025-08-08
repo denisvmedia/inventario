@@ -53,6 +53,10 @@ var (
 
 // RestoreStep represents an individual step in a restore operation
 //
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="restore_steps" comment="Enable RLS for multi-tenant restore step isolation"
+//migrator:schema:rls:policy name="restore_step_tenant_isolation" table="restore_steps" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures restore steps can only be accessed and modified by their tenant"
+
 //migrator:schema:table name="restore_steps"
 type RestoreStep struct {
 	//migrator:embedded mode="inline"

@@ -52,6 +52,10 @@ func (r RestoreOptions) ValidateWithContext(ctx context.Context) error {
 
 // RestoreOperation represents a restore operation performed on an export
 //
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="restore_operations" comment="Enable RLS for multi-tenant restore operation isolation"
+//migrator:schema:rls:policy name="restore_operation_tenant_isolation" table="restore_operations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures restore operations can only be accessed and modified by their tenant"
+
 //migrator:schema:table name="restore_operations"
 type RestoreOperation struct {
 	//migrator:embedded mode="inline"
