@@ -56,7 +56,7 @@ var (
 //migrator:schema:table name="restore_steps"
 type RestoreStep struct {
 	//migrator:embedded mode="inline"
-	EntityID
+	TenantAwareEntityID
 	//migrator:schema:field name="restore_operation_id" type="TEXT" not_null="true" foreign="restore_operations(id)" foreign_key_name="fk_restore_step_operation"
 	RestoreOperationID string `json:"restore_operation_id" db:"restore_operation_id"`
 	//migrator:schema:field name="name" type="TEXT" not_null="true"
@@ -71,6 +71,21 @@ type RestoreStep struct {
 	CreatedDate PTimestamp `json:"created_date" db:"created_date"`
 	//migrator:schema:field name="updated_date" type="TIMESTAMP" not_null="true" default_fn="CURRENT_TIMESTAMP"
 	UpdatedDate PTimestamp `json:"updated_date" db:"updated_date"`
+}
+
+// RestoreStepIndexes defines performance indexes for the restore_steps table
+type RestoreStepIndexes struct {
+	// Index for tenant-based queries
+	//migrator:schema:index name="idx_restore_steps_tenant_id" fields="tenant_id" table="restore_steps"
+	_ int
+
+	// Composite index for tenant + restore operation queries
+	//migrator:schema:index name="idx_restore_steps_tenant_operation" fields="tenant_id,restore_operation_id" table="restore_steps"
+	_ int
+
+	// Composite index for tenant + result queries
+	//migrator:schema:index name="idx_restore_steps_tenant_result" fields="tenant_id,result" table="restore_steps"
+	_ int
 }
 
 func (*RestoreStep) Validate() error {

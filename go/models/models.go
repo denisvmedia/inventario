@@ -119,7 +119,7 @@ func FileTypeFromMIME(mimeType string) FileType {
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:embedded mode="inline"
-	EntityID
+	TenantAwareEntityID
 
 	// Title is the user-defined title for the file
 	//migrator:schema:field name="title" type="TEXT"
@@ -166,6 +166,18 @@ type FileEntity struct {
 
 // PostgreSQL-specific indexes for files
 type FileIndexes struct {
+	// Index for tenant-based queries
+	//migrator:schema:index name="idx_files_tenant_id" fields="tenant_id" table="files"
+	_ int
+
+	// Composite index for tenant + type queries
+	//migrator:schema:index name="idx_files_tenant_type" fields="tenant_id,type" table="files"
+	_ int
+
+	// Composite index for tenant + linked entity queries
+	//migrator:schema:index name="idx_files_tenant_linked_entity" fields="tenant_id,linked_entity_type,linked_entity_id" table="files"
+	_ int
+
 	// GIN index for JSONB tags field
 	//migrator:schema:index name="files_tags_gin_idx" fields="tags" type="GIN" table="files"
 	_ int
