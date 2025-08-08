@@ -137,10 +137,14 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 	)
 }
 
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="exports" comment="Enable RLS for multi-tenant export isolation"
+//migrator:schema:rls:policy name="export_tenant_isolation" table="exports" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures exports can only be accessed and modified by their tenant"
+
 //migrator:schema:table name="exports"
 type Export struct {
 	//migrator:embedded mode="inline"
-	EntityID
+	TenantAwareEntityID
 	//migrator:schema:field name="type" type="TEXT" not_null="true"
 	Type ExportType `json:"type" db:"type"`
 	//migrator:schema:field name="status" type="TEXT" not_null="true"
@@ -207,6 +211,21 @@ func NewExportFromUserInput(export *Export) Export {
 	result.Imported = false
 
 	return result
+}
+
+// ExportIndexes defines performance indexes for the exports table
+type ExportIndexes struct {
+	// Index for tenant-based queries
+	//migrator:schema:index name="idx_exports_tenant_id" fields="tenant_id" table="exports"
+	_ int
+
+	// Composite index for tenant + status queries
+	//migrator:schema:index name="idx_exports_tenant_status" fields="tenant_id,status" table="exports"
+	_ int
+
+	// Composite index for tenant + type queries
+	//migrator:schema:index name="idx_exports_tenant_type" fields="tenant_id,type" table="exports"
+	_ int
 }
 
 func (*Export) Validate() error {

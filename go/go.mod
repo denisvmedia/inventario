@@ -28,7 +28,7 @@ require (
 	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
-	github.com/stokaro/ptah v0.0.0-20250727151319-dff45f23ff3b
+	github.com/stokaro/ptah v0.0.0-20250808155959-032ad2b4f97c
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6

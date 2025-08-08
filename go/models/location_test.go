@@ -74,8 +74,11 @@ func TestLocation_JSONMarshaling(t *testing.T) {
 
 	// Create a location with all fields populated
 	location := models.Location{
-		EntityID: models.EntityID{
-			ID: "location-123",
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{
+				ID: "location-123",
+			},
+			TenantID: "test-tenant",
 		},
 		Name:    "Test Location",
 		Address: "123 Test Street",
@@ -101,8 +104,11 @@ func TestLocation_IDable(t *testing.T) {
 
 	// Create a location
 	location := models.Location{
-		EntityID: models.EntityID{
-			ID: "location-123",
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{
+				ID: "location-123",
+			},
+			TenantID: "test-tenant",
 		},
 		Name:    "Test Location",
 		Address: "123 Test Street",

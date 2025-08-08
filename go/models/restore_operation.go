@@ -52,10 +52,14 @@ func (r RestoreOptions) ValidateWithContext(ctx context.Context) error {
 
 // RestoreOperation represents a restore operation performed on an export
 //
+// Enable RLS for multi-tenant isolation
+//migrator:schema:rls:enable table="restore_operations" comment="Enable RLS for multi-tenant restore operation isolation"
+//migrator:schema:rls:policy name="restore_operation_tenant_isolation" table="restore_operations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures restore operations can only be accessed and modified by their tenant"
+
 //migrator:schema:table name="restore_operations"
 type RestoreOperation struct {
 	//migrator:embedded mode="inline"
-	EntityID
+	TenantAwareEntityID
 	//migrator:schema:field name="export_id" type="TEXT" not_null="true" foreign="exports(id)" foreign_key_name="fk_restore_operation_export"
 	ExportID string `json:"export_id" db:"export_id"`
 	//migrator:schema:field name="description" type="TEXT" not_null="true"
@@ -93,6 +97,21 @@ type RestoreOperation struct {
 
 	// Related steps (not stored in DB, loaded separately)
 	Steps []RestoreStep `json:"steps,omitempty" db:"-"`
+}
+
+// RestoreOperationIndexes defines performance indexes for the restore_operations table
+type RestoreOperationIndexes struct {
+	// Index for tenant-based queries
+	//migrator:schema:index name="idx_restore_operations_tenant_id" fields="tenant_id" table="restore_operations"
+	_ int
+
+	// Composite index for tenant + status queries
+	//migrator:schema:index name="idx_restore_operations_tenant_status" fields="tenant_id,status" table="restore_operations"
+	_ int
+
+	// Composite index for tenant + export queries
+	//migrator:schema:index name="idx_restore_operations_tenant_export" fields="tenant_id,export_id" table="restore_operations"
+	_ int
 }
 
 func NewRestoreOperationFromUserInput(restoreOperation *RestoreOperation) RestoreOperation {
