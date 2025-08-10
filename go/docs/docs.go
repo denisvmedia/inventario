@@ -2890,6 +2890,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3147,6 +3150,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3218,6 +3224,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "tenant_id": {
+                    "type": "string"
                 },
                 "type": {
                     "$ref": "#/definitions/models.CommodityType"
@@ -3330,6 +3339,9 @@ const docTemplate = `{
                 },
                 "status": {
                     "$ref": "#/definitions/models.ExportStatus"
+                },
+                "tenant_id": {
+                    "type": "string"
                 },
                 "type": {
                     "$ref": "#/definitions/models.ExportType"
@@ -3457,6 +3469,9 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "tenant_id": {
+                    "type": "string"
+                },
                 "title": {
                     "description": "Title is the user-defined title for the file",
                     "type": "string"
@@ -3518,6 +3533,9 @@ const docTemplate = `{
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3545,6 +3563,9 @@ const docTemplate = `{
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3558,6 +3579,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "tenant_id": {
                     "type": "string"
                 }
             }
@@ -3585,6 +3609,9 @@ const docTemplate = `{
                 },
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
+                    "type": "string"
+                },
+                "tenant_id": {
                     "type": "string"
                 }
             }
@@ -3650,6 +3677,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.RestoreStep"
                     }
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3707,6 +3737,9 @@ const docTemplate = `{
                 },
                 "result": {
                     "$ref": "#/definitions/models.RestoreStepResult"
+                },
+                "tenant_id": {
+                    "type": "string"
                 },
                 "updated_date": {
                     "type": "string"
