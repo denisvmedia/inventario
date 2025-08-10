@@ -73,7 +73,8 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 -- Ensures areas can only be accessed by their tenant
 DROP POLICY IF EXISTS area_tenant_isolation ON areas;
 CREATE POLICY area_tenant_isolation ON areas FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id());
+    USING (tenant_id = get_current_tenant_id())
+    WITH CHECK (tenant_id = get_current_tenant_id());
 -- Ensures commodities can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS commodity_tenant_isolation ON commodities;
 CREATE POLICY commodity_tenant_isolation ON commodities FOR ALL TO inventario_app
@@ -102,7 +103,8 @@ CREATE POLICY invoice_tenant_isolation ON invoices FOR ALL TO inventario_app
 -- Ensures locations can only be accessed by their tenant
 DROP POLICY IF EXISTS location_tenant_isolation ON locations;
 CREATE POLICY location_tenant_isolation ON locations FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id());
+    USING (tenant_id = get_current_tenant_id())
+    WITH CHECK (tenant_id = get_current_tenant_id());
 -- Ensures manuals can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS manual_tenant_isolation ON manuals;
 CREATE POLICY manual_tenant_isolation ON manuals FOR ALL TO inventario_app

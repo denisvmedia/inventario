@@ -33,26 +33,26 @@ DROP INDEX IF EXISTS users_active_idx;
 DROP INDEX IF EXISTS users_role_idx;
 DROP INDEX IF EXISTS users_tenant_email_idx;
 DROP INDEX IF EXISTS users_tenant_idx;
--- Drop RLS policy area_tenant_isolation from table 
-DROP POLICY IF EXISTS area_tenant_isolation ON;
--- Drop RLS policy commodity_tenant_isolation from table 
-DROP POLICY IF EXISTS commodity_tenant_isolation ON;
--- Drop RLS policy export_tenant_isolation from table 
-DROP POLICY IF EXISTS export_tenant_isolation ON;
--- Drop RLS policy file_tenant_isolation from table 
-DROP POLICY IF EXISTS file_tenant_isolation ON;
--- Drop RLS policy image_tenant_isolation from table 
-DROP POLICY IF EXISTS image_tenant_isolation ON;
--- Drop RLS policy invoice_tenant_isolation from table 
-DROP POLICY IF EXISTS invoice_tenant_isolation ON;
--- Drop RLS policy location_tenant_isolation from table 
-DROP POLICY IF EXISTS location_tenant_isolation ON;
--- Drop RLS policy manual_tenant_isolation from table 
-DROP POLICY IF EXISTS manual_tenant_isolation ON;
--- Drop RLS policy restore_operation_tenant_isolation from table 
-DROP POLICY IF EXISTS restore_operation_tenant_isolation ON;
--- Drop RLS policy restore_step_tenant_isolation from table 
-DROP POLICY IF EXISTS restore_step_tenant_isolation ON;
+-- Drop RLS policy area_tenant_isolation from table areas
+DROP POLICY IF EXISTS area_tenant_isolation ON areas;
+-- Drop RLS policy commodity_tenant_isolation from table commodities
+DROP POLICY IF EXISTS commodity_tenant_isolation ON commodities;
+-- Drop RLS policy export_tenant_isolation from table exports
+DROP POLICY IF EXISTS export_tenant_isolation ON exports;
+-- Drop RLS policy file_tenant_isolation from table files
+DROP POLICY IF EXISTS file_tenant_isolation ON files;
+-- Drop RLS policy image_tenant_isolation from table images
+DROP POLICY IF EXISTS image_tenant_isolation ON images;
+-- Drop RLS policy invoice_tenant_isolation from table invoices
+DROP POLICY IF EXISTS invoice_tenant_isolation ON invoices;
+-- Drop RLS policy location_tenant_isolation from table locations
+DROP POLICY IF EXISTS location_tenant_isolation ON locations;
+-- Drop RLS policy manual_tenant_isolation from table manuals
+DROP POLICY IF EXISTS manual_tenant_isolation ON manuals;
+-- Drop RLS policy restore_operation_tenant_isolation from table restore_operations
+DROP POLICY IF EXISTS restore_operation_tenant_isolation ON restore_operations;
+-- Drop RLS policy restore_step_tenant_isolation from table restore_steps
+DROP POLICY IF EXISTS restore_step_tenant_isolation ON restore_steps;
 -- Drop RLS policy user_tenant_isolation from table 
 DROP POLICY IF EXISTS user_tenant_isolation ON;
 -- NOTE: RLS policies were removed from table  - verify if RLS should be disabled --
