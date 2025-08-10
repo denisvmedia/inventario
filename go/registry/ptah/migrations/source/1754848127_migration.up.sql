@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2025-08-10T14:16:02Z
+-- Generated on: 2025-08-10T17:48:47Z
 -- Direction: UP
 
 -- Application role for Row-Level Security policies
@@ -38,36 +38,36 @@ CREATE TABLE users (
   tenant_id TEXT NOT NULL,
   CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
--- Add/modify columns for table: restore_steps --
--- ALTER statements: --
-ALTER TABLE restore_steps ADD COLUMN tenant_id TEXT NOT NULL;
 -- Add/modify columns for table: invoices --
 -- ALTER statements: --
 ALTER TABLE invoices ADD COLUMN tenant_id TEXT NOT NULL;
--- Add/modify columns for table: locations --
--- ALTER statements: --
-ALTER TABLE locations ADD COLUMN tenant_id TEXT NOT NULL;
--- Add/modify columns for table: areas --
--- ALTER statements: --
-ALTER TABLE areas ADD COLUMN tenant_id TEXT NOT NULL;
--- Add/modify columns for table: images --
--- ALTER statements: --
-ALTER TABLE images ADD COLUMN tenant_id TEXT NOT NULL;
--- Add/modify columns for table: manuals --
--- ALTER statements: --
-ALTER TABLE manuals ADD COLUMN tenant_id TEXT NOT NULL;
 -- Add/modify columns for table: files --
 -- ALTER statements: --
 ALTER TABLE files ADD COLUMN tenant_id TEXT NOT NULL;
 -- Add/modify columns for table: exports --
 -- ALTER statements: --
 ALTER TABLE exports ADD COLUMN tenant_id TEXT NOT NULL;
+-- Add/modify columns for table: areas --
+-- ALTER statements: --
+ALTER TABLE areas ADD COLUMN tenant_id TEXT NOT NULL;
 -- Add/modify columns for table: restore_operations --
 -- ALTER statements: --
 ALTER TABLE restore_operations ADD COLUMN tenant_id TEXT NOT NULL;
+-- Add/modify columns for table: restore_steps --
+-- ALTER statements: --
+ALTER TABLE restore_steps ADD COLUMN tenant_id TEXT NOT NULL;
+-- Add/modify columns for table: locations --
+-- ALTER statements: --
+ALTER TABLE locations ADD COLUMN tenant_id TEXT NOT NULL;
 -- Add/modify columns for table: commodities --
 -- ALTER statements: --
 ALTER TABLE commodities ADD COLUMN tenant_id TEXT NOT NULL;
+-- Add/modify columns for table: images --
+-- ALTER statements: --
+ALTER TABLE images ADD COLUMN tenant_id TEXT NOT NULL;
+-- Add/modify columns for table: manuals --
+-- ALTER statements: --
+ALTER TABLE manuals ADD COLUMN tenant_id TEXT NOT NULL;
 -- Enable RLS for users table
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 -- Ensures areas can only be accessed by their tenant
