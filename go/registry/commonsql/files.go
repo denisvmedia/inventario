@@ -29,22 +29,8 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 		file.SetID(generateID())
 	}
 
-	tagsJSON, err := json.Marshal(file.Tags)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to marshal tags")
-	}
-
-	query := `
-		INSERT INTO files (id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
-
-	_, err = r.db.ExecContext(ctx, query,
-		file.ID, file.Title, file.Description, file.Type, tagsJSON,
-		file.Path, file.OriginalPath, file.Ext, file.MIMEType,
-		file.LinkedEntityType, file.LinkedEntityID, file.LinkedEntityMeta,
-		file.CreatedAt, file.UpdatedAt,
-	)
-
+	// Use InsertEntity like other registries to automatically handle all db-tagged fields including tenant_id
+	err := InsertEntity(ctx, r.db, "files", file)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create file")
 	}
