@@ -371,7 +371,7 @@ func TestCommodityListImages(t *testing.T) {
 	expectedImages := make([]*models.Image, 0, len(files))
 	for _, file := range files {
 		image := &models.Image{
-			EntityID:    models.EntityID{ID: file.ID},
+			TenantAwareEntityID: models.WithTenantAwareEntityID(file.ID, "default-tenant"),
 			CommodityID: commodity.ID,
 			File:        file.File,
 		}
@@ -412,7 +412,7 @@ func TestCommodityListInvoices(t *testing.T) {
 	expectedInvoices := make([]*models.Invoice, 0, len(files))
 	for _, file := range files {
 		invoice := &models.Invoice{
-			EntityID:    models.EntityID{ID: file.ID},
+			TenantAwareEntityID: models.WithTenantAwareEntityID(file.ID, "default-tenant"),
 			CommodityID: commodity.ID,
 			File:        file.File,
 		}
@@ -453,7 +453,7 @@ func TestCommodityListManuals(t *testing.T) {
 	expectedManuals := make([]*models.Manual, 0, len(files))
 	for _, file := range files {
 		manual := &models.Manual{
-			EntityID:    models.EntityID{ID: file.ID},
+			TenantAwareEntityID: models.WithTenantAwareEntityID(file.ID, "default-tenant"),
 			CommodityID: commodity.ID,
 			File:        file.File,
 		}

@@ -456,7 +456,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 		switch tf.fileType {
 		case "image":
 			image := models.Image{
-				EntityID:    models.EntityID{ID: "img-" + tf.path},
+				TenantAwareEntityID: models.WithTenantAwareEntityID("img-"+tf.path, "default-tenant"),
 				CommodityID: createdCommodity.ID,
 				File: &models.File{
 					Path:         "img-" + tf.path,
@@ -469,7 +469,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		case "invoice":
 			invoice := models.Invoice{
-				EntityID:    models.EntityID{ID: "inv-" + tf.path},
+				TenantAwareEntityID: models.WithTenantAwareEntityID("inv-"+tf.path, "default-tenant"),
 				CommodityID: createdCommodity.ID,
 				File: &models.File{
 					Path:         "inv-" + tf.path,
@@ -482,7 +482,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		case "manual":
 			manual := models.Manual{
-				EntityID:    models.EntityID{ID: "man-" + tf.path},
+				TenantAwareEntityID: models.WithTenantAwareEntityID("man-"+tf.path, "default-tenant"),
 				CommodityID: createdCommodity.ID,
 				File: &models.File{
 					Path:         "man-" + tf.path,
