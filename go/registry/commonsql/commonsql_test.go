@@ -37,11 +37,8 @@ func migrateUp(ctx context.Context, migrator *ptah.PtahMigrator, dsn string) err
 
 	// Also drop the inventario_app role if it exists (for test cleanup)
 	// This is needed because DropDatabase only drops tables, not roles
-	err = dropInventarioAppRole(ctx, dsn)
-	if err != nil {
-		// Don't fail if role drop fails - it might not exist
-		// Just log the warning and continue
-	}
+	// Ignore errors since the role might not exist
+	_ = dropInventarioAppRole(ctx, dsn)
 
 	// Recreate the schema
 	err = migrator.MigrateUp(ctx, false)
