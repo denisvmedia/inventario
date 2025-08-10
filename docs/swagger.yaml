@@ -1,0 +1,2602 @@
+basePath: /api/v1
+definitions:
+  apiserver.SystemInfo:
+    properties:
+      build_date:
+        type: string
+      commit:
+        type: string
+      database_backend:
+        description: System information
+        type: string
+      file_storage_backend:
+        type: string
+      go_version:
+        type: string
+      memory_usage:
+        type: string
+      num_cpu:
+        type: integer
+      num_goroutines:
+        type: integer
+      operating_system:
+        type: string
+      platform:
+        type: string
+      settings:
+        allOf:
+        - $ref: '#/definitions/models.SettingsObject'
+        description: Settings information
+      uptime:
+        description: Runtime metrics
+        type: string
+      version:
+        description: Version information
+        type: string
+    type: object
+  debug.Info:
+    properties:
+      database_driver:
+        type: string
+      error: {}
+      file_storage_driver:
+        type: string
+      operating_system:
+        type: string
+    type: object
+  jsonapi.AreaData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Area'
+      id:
+        type: string
+      type:
+        enum:
+        - areas
+        example: areas
+        type: string
+    type: object
+  jsonapi.AreaRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.AreaData'
+    type: object
+  jsonapi.AreaResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.AreaResponseData'
+    type: object
+  jsonapi.AreaResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Area'
+      id:
+        type: string
+      type:
+        enum:
+        - areas
+        example: areas
+        type: string
+    type: object
+  jsonapi.AreasMeta:
+    properties:
+      areas:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.AreasResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.AreaData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.AreasMeta'
+    type: object
+  jsonapi.CapabilitiesData:
+    properties:
+      attributes:
+        $ref: '#/definitions/registry.DatabaseCapabilities'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.CapabilitiesResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CapabilitiesData'
+    type: object
+  jsonapi.CommoditiesMeta:
+    properties:
+      commodities:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.CommoditiesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.CommodityData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.CommoditiesMeta'
+    type: object
+  jsonapi.CommodityData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Commodity'
+      id:
+        type: string
+      type:
+        enum:
+        - commodities
+        example: commodities
+        type: string
+    type: object
+  jsonapi.CommodityFileUpdateParams:
+    properties:
+      path:
+        description: Only the Path field can be updated
+        type: string
+    type: object
+  jsonapi.CommodityFileUpdateRequest:
+    properties:
+      data:
+        properties:
+          attributes:
+            $ref: '#/definitions/jsonapi.CommodityFileUpdateParams'
+          id:
+            type: string
+          type:
+            enum:
+            - images
+            - manuals
+            - invoices
+            example: images
+            type: string
+        type: object
+    type: object
+  jsonapi.CommodityMeta:
+    properties:
+      images:
+        items:
+          type: string
+        type: array
+      images_error:
+        type: string
+      invoices:
+        items:
+          type: string
+        type: array
+      invoices_error:
+        type: string
+      manuals:
+        items:
+          type: string
+        type: array
+      manuals_error:
+        type: string
+    type: object
+  jsonapi.CommodityRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityData'
+    type: object
+  jsonapi.CommodityResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityResponseData'
+    type: object
+  jsonapi.CommodityResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Commodity'
+      id:
+        type: string
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityMeta'
+      type:
+        enum:
+        - commodities
+        example: commodities
+        type: string
+    type: object
+  jsonapi.Error:
+    properties:
+      error:
+        description: user-level error message
+        type: object
+      status:
+        description: user-level status message
+        type: string
+    type: object
+  jsonapi.Errors:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/jsonapi.Error'
+        type: array
+    type: object
+  jsonapi.ExportCreateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ExportCreateRequestData'
+    type: object
+  jsonapi.ExportCreateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Export'
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
+  jsonapi.ExportResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ExportResponseData'
+    type: object
+  jsonapi.ExportResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Export'
+      id:
+        type: string
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
+  jsonapi.ExportsMeta:
+    properties:
+      exports:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ExportsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.ExportResponseData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.ExportsMeta'
+    type: object
+  jsonapi.FileRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.FileRequestDataWrapper'
+    type: object
+  jsonapi.FileRequestData:
+    properties:
+      description:
+        type: string
+      linked_entity_id:
+        description: ID of linked entity
+        type: string
+      linked_entity_meta:
+        description: metadata about the link
+        type: string
+      linked_entity_type:
+        description: commodity, export, or empty
+        type: string
+      path:
+        description: Only for updates
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  jsonapi.FileRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.FileRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.FileResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.FileEntity'
+      id:
+        type: string
+      type:
+        enum:
+        - files
+        example: files
+        type: string
+    type: object
+  jsonapi.FileUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.FileUpdateRequestData'
+    type: object
+  jsonapi.FileUpdateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.FileUpdateRequestFileData'
+      id:
+        type: string
+      type:
+        enum:
+        - files
+        example: files
+        type: string
+    type: object
+  jsonapi.FileUpdateRequestFileData:
+    properties:
+      description:
+        type: string
+      linked_entity_id:
+        description: ID of linked entity
+        type: string
+      linked_entity_meta:
+        description: metadata about the link
+        type: string
+      linked_entity_type:
+        description: commodity, export, or empty
+        type: string
+      path:
+        description: User-editable filename
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  jsonapi.FilesMeta:
+    properties:
+      files:
+        example: 10
+        format: int64
+        type: integer
+      total:
+        example: 100
+        format: int64
+        type: integer
+    type: object
+  jsonapi.FilesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.FileEntity'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.FilesMeta'
+    type: object
+  jsonapi.ImageResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Image'
+      id:
+        type: string
+      type:
+        enum:
+        - images
+        example: images
+        type: string
+    type: object
+  jsonapi.ImagesMeta:
+    properties:
+      images:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ImagesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.Image'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.ImagesMeta'
+    type: object
+  jsonapi.ImportExportAttributes:
+    properties:
+      description:
+        type: string
+      source_file_path:
+        type: string
+    type: object
+  jsonapi.ImportExportRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ImportExportRequestData'
+    type: object
+  jsonapi.ImportExportRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ImportExportAttributes'
+      type:
+        enum:
+        - exports
+        example: exports
+        type: string
+    type: object
+  jsonapi.InvoiceResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Invoice'
+      id:
+        type: string
+      type:
+        enum:
+        - invoices
+        example: invoices
+        type: string
+    type: object
+  jsonapi.InvoicesMeta:
+    properties:
+      invoices:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.InvoicesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.Invoice'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.InvoicesMeta'
+    type: object
+  jsonapi.Location:
+    properties:
+      address:
+        type: string
+      areas:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      name:
+        type: string
+      tenant_id:
+        type: string
+    type: object
+  jsonapi.LocationData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Location'
+      id:
+        type: string
+      type:
+        enum:
+        - locations
+        example: locations
+        type: string
+    type: object
+  jsonapi.LocationRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.LocationData'
+    type: object
+  jsonapi.LocationResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.LocationResponseData'
+    type: object
+  jsonapi.LocationResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.Location'
+      id:
+        type: string
+      type:
+        enum:
+        - locations
+        example: locations
+        type: string
+    type: object
+  jsonapi.LocationsMeta:
+    properties:
+      locations:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.LocationsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.LocationData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.LocationsMeta'
+    type: object
+  jsonapi.ManualResponse:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Manual'
+      id:
+        type: string
+      type:
+        enum:
+        - manuals
+        example: manuals
+        type: string
+    type: object
+  jsonapi.ManualsMeta:
+    properties:
+      manuals:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ManualsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.Manual'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.ManualsMeta'
+    type: object
+  jsonapi.RestoreOperationCreateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.RestoreOperationCreateRequestData'
+    type: object
+  jsonapi.RestoreOperationCreateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.RestoreOperation'
+      type:
+        enum:
+        - restores
+        example: restores
+        type: string
+    type: object
+  jsonapi.RestoreOperationResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.RestoreOperationResponseData'
+    type: object
+  jsonapi.RestoreOperationResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.RestoreOperation'
+      id:
+        type: string
+      type:
+        enum:
+        - restores
+        example: restores
+        type: string
+    type: object
+  jsonapi.RestoreOperationsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.RestoreOperationResponseData'
+        type: array
+    type: object
+  jsonapi.SearchMeta:
+    properties:
+      entity_type:
+        type: string
+      query:
+        type: string
+      total:
+        type: integer
+    type: object
+  jsonapi.SearchResponse:
+    properties:
+      data: {}
+      meta:
+        $ref: '#/definitions/jsonapi.SearchMeta'
+    type: object
+  jsonapi.ValueAttrs:
+    properties:
+      area_totals:
+        additionalProperties:
+          type: number
+        type: object
+      global_total:
+        type: number
+      location_totals:
+        additionalProperties:
+          type: number
+        type: object
+    type: object
+  jsonapi.ValueData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ValueAttrs'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.ValueResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ValueData'
+    type: object
+  models.Area:
+    properties:
+      id:
+        type: string
+      location_id:
+        type: string
+      name:
+        type: string
+      tenant_id:
+        type: string
+    type: object
+  models.Commodity:
+    properties:
+      area_id:
+        type: string
+      comments:
+        type: string
+      converted_original_price:
+        type: number
+      count:
+        type: integer
+      current_price:
+        type: number
+      draft:
+        type: boolean
+      extra_serial_numbers:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      last_modified_date:
+        type: string
+      name:
+        type: string
+      original_price:
+        type: number
+      original_price_currency:
+        type: string
+      part_numbers:
+        items:
+          type: string
+        type: array
+      purchase_date:
+        type: string
+      registered_date:
+        type: string
+      serial_number:
+        type: string
+      short_name:
+        type: string
+      status:
+        $ref: '#/definitions/models.CommodityStatus'
+      tags:
+        items:
+          type: string
+        type: array
+      tenant_id:
+        type: string
+      type:
+        $ref: '#/definitions/models.CommodityType'
+      urls:
+        type: string
+    type: object
+  models.CommodityStatus:
+    enum:
+    - in_use
+    - sold
+    - lost
+    - disposed
+    - written_off
+    type: string
+    x-enum-varnames:
+    - CommodityStatusInUse
+    - CommodityStatusSold
+    - CommodityStatusLost
+    - CommodityStatusDisposed
+    - CommodityStatusWrittenOff
+  models.CommodityType:
+    enum:
+    - white_goods
+    - electronics
+    - equipment
+    - furniture
+    - clothes
+    - other
+    type: string
+    x-enum-varnames:
+    - CommodityTypeWhiteGoods
+    - CommodityTypeElectronics
+    - CommodityTypeEquipment
+    - CommodityTypeFurniture
+    - CommodityTypeClothes
+    - CommodityTypeOther
+  models.Export:
+    properties:
+      area_count:
+        type: integer
+      binary_data_size:
+        type: integer
+      commodity_count:
+        type: integer
+      completed_date:
+        type: string
+      created_date:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      error_message:
+        type: string
+      file_id:
+        type: string
+      file_path:
+        description: 'Deprecated: will be removed after migration'
+        type: string
+      file_size:
+        description: Export statistics
+        type: integer
+      id:
+        type: string
+      image_count:
+        type: integer
+      imported:
+        type: boolean
+      include_file_data:
+        type: boolean
+      invoice_count:
+        type: integer
+      location_count:
+        type: integer
+      manual_count:
+        type: integer
+      selected_items:
+        items:
+          $ref: '#/definitions/models.ExportSelectedItem'
+        type: array
+      status:
+        $ref: '#/definitions/models.ExportStatus'
+      tenant_id:
+        type: string
+      type:
+        $ref: '#/definitions/models.ExportType'
+    type: object
+  models.ExportSelectedItem:
+    properties:
+      area_id:
+        description: 'For commodities: which area they belong to'
+        type: string
+      id:
+        type: string
+      include_all:
+        type: boolean
+      location_id:
+        description: Relationship fields for preserving hierarchy snapshot
+        type: string
+      name:
+        type: string
+      type:
+        $ref: '#/definitions/models.ExportSelectedItemType'
+    type: object
+  models.ExportSelectedItemType:
+    enum:
+    - location
+    - area
+    - commodity
+    type: string
+    x-enum-varnames:
+    - ExportSelectedItemTypeLocation
+    - ExportSelectedItemTypeArea
+    - ExportSelectedItemTypeCommodity
+  models.ExportStatus:
+    enum:
+    - pending
+    - in_progress
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - ExportStatusPending
+    - ExportStatusInProgress
+    - ExportStatusCompleted
+    - ExportStatusFailed
+  models.ExportType:
+    enum:
+    - full_database
+    - selected_items
+    - locations
+    - areas
+    - commodities
+    - imported
+    type: string
+    x-enum-varnames:
+    - ExportTypeFullDatabase
+    - ExportTypeSelectedItems
+    - ExportTypeLocations
+    - ExportTypeAreas
+    - ExportTypeCommodities
+    - ExportTypeImported
+  models.FileEntity:
+    properties:
+      created_at:
+        description: CreatedAt is when the file was created
+        type: string
+      description:
+        description: Description is an optional description of the file
+        type: string
+      ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
+        type: string
+      id:
+        type: string
+      linked_entity_id:
+        description: LinkedEntityID is the ID of the linked entity (commodity or export)
+        type: string
+      linked_entity_meta:
+        description: |-
+          LinkedEntityMeta contains metadata about the link type
+          For commodities: "images", "invoices", "manuals"
+          For exports: "xml-1.0" (version of the export file format)
+        type: string
+      linked_entity_type:
+        description: LinkedEntityType indicates what type of entity this file is linked
+          to (commodity, export, or empty for standalone files)
+        type: string
+      mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
+        type: string
+      path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
+        type: string
+      tags:
+        description: Tags are optional tags for categorization and search
+        items:
+          type: string
+        type: array
+      tenant_id:
+        type: string
+      title:
+        description: Title is the user-defined title for the file
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/models.FileType'
+        description: Type represents the category of the file (image, document, etc.)
+      updated_at:
+        description: UpdatedAt is when the file was last updated
+        type: string
+    type: object
+  models.FileType:
+    enum:
+    - image
+    - document
+    - video
+    - audio
+    - archive
+    - other
+    type: string
+    x-enum-varnames:
+    - FileTypeImage
+    - FileTypeDocument
+    - FileTypeVideo
+    - FileTypeAudio
+    - FileTypeArchive
+    - FileTypeOther
+  models.Image:
+    properties:
+      commodity_id:
+        type: string
+      ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
+        type: string
+      id:
+        type: string
+      mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
+        type: string
+      path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
+        type: string
+      tenant_id:
+        type: string
+    type: object
+  models.Invoice:
+    properties:
+      commodity_id:
+        type: string
+      ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
+        type: string
+      id:
+        type: string
+      mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
+        type: string
+      path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
+        type: string
+      tenant_id:
+        type: string
+    type: object
+  models.Location:
+    properties:
+      address:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      tenant_id:
+        type: string
+    type: object
+  models.Manual:
+    properties:
+      commodity_id:
+        type: string
+      ext:
+        description: |-
+          Ext is the file extension including the dot.
+          Example: ".pdf"
+        type: string
+      id:
+        type: string
+      mime_type:
+        description: |-
+          MIMEType is the MIME type of the file.
+          Example: "application/pdf"
+        type: string
+      original_path:
+        description: |-
+          OriginalPath is the original filename as uploaded by the user.
+          Example: "invoice.pdf"
+        type: string
+      path:
+        description: |-
+          Path is the filename without extension. This is the only field that can be modified by the user.
+          Example: "invoice-2023"
+        type: string
+      tenant_id:
+        type: string
+    type: object
+  models.RestoreOperation:
+    properties:
+      area_count:
+        type: integer
+      binary_data_size:
+        type: integer
+      commodity_count:
+        type: integer
+      completed_date:
+        type: string
+      created_date:
+        type: string
+      description:
+        type: string
+      error_count:
+        type: integer
+      error_message:
+        type: string
+      export_id:
+        type: string
+      id:
+        type: string
+      image_count:
+        type: integer
+      invoice_count:
+        type: integer
+      location_count:
+        description: Statistics
+        type: integer
+      manual_count:
+        type: integer
+      options:
+        $ref: '#/definitions/models.RestoreOptions'
+      started_date:
+        type: string
+      status:
+        $ref: '#/definitions/models.RestoreStatus'
+      steps:
+        description: Related steps (not stored in DB, loaded separately)
+        items:
+          $ref: '#/definitions/models.RestoreStep'
+        type: array
+      tenant_id:
+        type: string
+    type: object
+  models.RestoreOptions:
+    properties:
+      dry_run:
+        type: boolean
+      include_file_data:
+        type: boolean
+      strategy:
+        type: string
+    type: object
+  models.RestoreStatus:
+    enum:
+    - pending
+    - running
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - RestoreStatusPending
+    - RestoreStatusRunning
+    - RestoreStatusCompleted
+    - RestoreStatusFailed
+  models.RestoreStep:
+    properties:
+      created_date:
+        type: string
+      duration:
+        description: Duration in milliseconds
+        type: integer
+      id:
+        type: string
+      name:
+        type: string
+      reason:
+        description: Reason for error or skip
+        type: string
+      restore_operation_id:
+        type: string
+      result:
+        $ref: '#/definitions/models.RestoreStepResult'
+      tenant_id:
+        type: string
+      updated_date:
+        type: string
+    type: object
+  models.RestoreStepResult:
+    enum:
+    - todo
+    - in_progress
+    - success
+    - error
+    - skipped
+    type: string
+    x-enum-varnames:
+    - RestoreStepResultTodo
+    - RestoreStepResultInProgress
+    - RestoreStepResultSuccess
+    - RestoreStepResultError
+    - RestoreStepResultSkipped
+  models.SettingsObject:
+    properties:
+      defaultDateFormat:
+        type: string
+      mainCurrency:
+        type: string
+      showDebugInfo:
+        type: boolean
+      theme:
+        type: string
+    type: object
+  registry.DatabaseCapabilities:
+    properties:
+      advancedIndexing:
+        description: GIN, GiST, partial indexes
+        type: boolean
+      arrayOperations:
+        description: Array data types and operations
+        type: boolean
+      bulkOperations:
+        description: Efficient bulk insert/update
+        type: boolean
+      fullTextSearch:
+        description: PostgreSQL tsvector, MySQL FULLTEXT
+        type: boolean
+      jsonboperators:
+        description: PostgreSQL JSONB operators (@>, ?, etc.)
+        type: boolean
+      storedProcedures:
+        description: Stored procedures/functions
+        type: boolean
+      transactions:
+        description: Transaction support
+        type: boolean
+      triggers:
+        description: Database triggers
+        type: boolean
+    type: object
+info:
+  contact:
+    email: ask@artprima.cz
+    name: Inventario Support
+    url: https://github.com/denisvmedia/inventario/issues
+  description: This is an Inventario daemon.
+  license:
+    name: MIT
+  title: Inventario API
+  version: "1.0"
+paths:
+  /areas:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get areas
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreasResponse'
+      summary: List areas
+      tags:
+      - areas
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: add by area data
+      parameters:
+      - description: Area object
+        in: body
+        name: area
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.AreaRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Area created
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new area
+      tags:
+      - areas
+  /areas/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete by area ID
+      parameters:
+      - description: Area ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an area
+      tags:
+      - areas
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get area by ID
+      parameters:
+      - description: Area ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+      summary: Get an area
+      tags:
+      - areas
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: Update by area data
+      parameters:
+      - description: Area ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Area object
+        in: body
+        name: area
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.AreaRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AreaResponse'
+        "404":
+          description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a area
+      tags:
+      - areas
+  /commodities:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get commodities
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommoditiesResponse'
+      summary: List commodities
+      tags:
+      - commodities
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Add a new commodity
+      parameters:
+      - description: Commodity object
+        in: body
+        name: commodity
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Commodity created
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityResponse'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new commodity
+      tags:
+      - commodities
+  /commodities/{commodityID}/images:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get images for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ImagesResponse'
+      summary: List images for a commodity
+      tags:
+      - commodities
+  /commodities/{commodityID}/images/{imageID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete an image for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Image ID
+        in: path
+        name: imageID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Commodity or image not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an image for a commodity
+      tags:
+      - commodities
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get data of an image for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Image ID
+        in: path
+        name: imageID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ImageResponse'
+        "404":
+          description: Commodity or image not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get image data
+      tags:
+      - commodities
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update an image's path
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Image ID
+        in: path
+        name: imageID
+        required: true
+        type: string
+      - description: Update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ImageResponse'
+        "404":
+          description: Commodity or image not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update an image
+      tags:
+      - commodities
+  /commodities/{commodityID}/images/{imageID}.{imageExt}:
+    get:
+      consumes:
+      - application/octet-stream
+      description: Download an image file for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Image ID
+        in: path
+        name: imageID
+        required: true
+        type: string
+      - description: Image Extension
+        in: path
+        name: imageExt
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Commodity or image not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download an image file for a commodity
+      tags:
+      - commodities
+  /commodities/{commodityID}/invoices:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get invoices for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.InvoicesResponse'
+      summary: List invoices for a commodity
+      tags:
+      - commodities
+  /commodities/{commodityID}/invoices/{invoiceID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete an invoice for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Invoice ID
+        in: path
+        name: invoiceID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Commodity or invoice not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an invoice for a commodity
+      tags:
+      - commodities
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get data of an invoice for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Invoice ID
+        in: path
+        name: invoiceID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.InvoiceResponse'
+        "404":
+          description: Commodity or invoice not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get invoice data
+      tags:
+      - commodities
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update an invoice's path
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Invoice ID
+        in: path
+        name: invoiceID
+        required: true
+        type: string
+      - description: Update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.InvoiceResponse'
+        "404":
+          description: Commodity or invoice not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update an invoice
+      tags:
+      - commodities
+  /commodities/{commodityID}/invoices/{invoiceID}.{invoiceExt}:
+    get:
+      consumes:
+      - application/octet-stream
+      description: Download an invoice file for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Invoice ID
+        in: path
+        name: invoiceID
+        required: true
+        type: string
+      - description: Invoice Extension
+        in: path
+        name: invoiceExt
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Commodity or invoice not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download an invoice file for a commodity
+      tags:
+      - commodities
+  /commodities/{commodityID}/manuals:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get manuals for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ManualsResponse'
+      summary: List manuals for a commodity
+      tags:
+      - commodities
+  /commodities/{commodityID}/manuals/{manualID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete a manual for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Manual ID
+        in: path
+        name: manualID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Commodity or manual not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a manual for a commodity
+      tags:
+      - commodities
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get data of a manual for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Manual ID
+        in: path
+        name: manualID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ManualResponse'
+        "404":
+          description: Commodity or manual not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get manual data
+      tags:
+      - commodities
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update a manual's path
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Manual ID
+        in: path
+        name: manualID
+        required: true
+        type: string
+      - description: Update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityFileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ManualResponse'
+        "404":
+          description: Commodity or manual not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a manual
+      tags:
+      - commodities
+  /commodities/{commodityID}/manuals/{manualID}.{manualExt}:
+    get:
+      consumes:
+      - application/octet-stream
+      description: Download a manual file for a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Manual ID
+        in: path
+        name: manualID
+        required: true
+        type: string
+      - description: Manual Extension
+        in: path
+        name: manualExt
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Commodity or manual not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download a manual file for a commodity
+      tags:
+      - commodities
+  /commodities/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete a commodity by ID and all its linked files
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a commodity
+      tags:
+      - commodities
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get commodity by ID
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityResponse'
+      summary: Get a commodity
+      tags:
+      - commodities
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: Update a commodity
+      parameters:
+      - description: Commodity ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Commodity object
+        in: body
+        name: commodity
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityResponse'
+        "404":
+          description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a commodity
+      tags:
+      - commodities
+  /commodities/values:
+    get:
+      consumes:
+      - application/json
+      description: Get the total value of commodities globally, by location, and by
+        area
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ValueResponse'
+      summary: Get total value of commodities
+      tags:
+      - commodities
+  /currencies:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get list of supported currencies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+      summary: Get supported currencies
+      tags:
+      - currencies
+  /debug:
+    get:
+      consumes:
+      - application/json
+      description: get debug information about file storage, database driver, and
+        operating system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/debug.Info'
+      summary: Get debug information
+      tags:
+      - debug
+  /exports:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get exports
+      parameters:
+      - description: Include deleted exports
+        in: query
+        name: include_deleted
+        type: boolean
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ExportsResponse'
+      summary: List exports
+      tags:
+      - exports
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new export
+      parameters:
+      - description: Export
+        in: body
+        name: export
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ExportCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create an export
+      tags:
+      - exports
+  /exports/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an export
+      tags:
+      - exports
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get export by ID
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get an export
+      tags:
+      - exports
+  /exports/{id}/download:
+    get:
+      consumes:
+      - application/octet-stream
+      description: Download an export XML file
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download an export file
+      tags:
+      - exports
+  /exports/{id}/restores:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get restore operations for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationsResponse'
+      summary: List export restore operations
+      tags:
+      - exports
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new restore operation for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore operation data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.RestoreOperationCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create export restore operation
+      tags:
+      - exports
+  /exports/{id}/restores/{restoreId}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete a restore operation for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore Operation ID
+        in: path
+        name: restoreId
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete export restore operation
+      tags:
+      - exports
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get restore operation by ID for an export
+      parameters:
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore Operation ID
+        in: path
+        name: restoreId
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.RestoreOperationResponse'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get export restore operation
+      tags:
+      - exports
+  /exports/import:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Import an uploaded XML export file and create an export record
+      parameters:
+      - description: Import request data
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ImportExportRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.ExportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Import XML export
+      tags:
+      - exports
+  /files:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get files with optional filtering
+      parameters:
+      - description: Filter by file type
+        enum:
+        - image
+        - document
+        - video
+        - audio
+        - archive
+        - other
+        in: query
+        name: type
+        type: string
+      - description: Search in title, description, and file paths
+        in: query
+        name: search
+        type: string
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: 1
+        description: Page number (1-based)
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FilesResponse'
+      summary: List files
+      tags:
+      - files
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: create a new file entity with metadata (file upload handled separately)
+      parameters:
+      - description: File metadata
+        in: body
+        name: file
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a file entity
+      tags:
+      - files
+  /files/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: delete file and its associated file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a file
+      tags:
+      - files
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get file by ID
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a file
+      tags:
+      - files
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: update file metadata
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File update data
+        in: body
+        name: file
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.FileResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a file
+      tags:
+      - files
+  /files/{id}.{ext}:
+    get:
+      description: download file content
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File extension
+        in: path
+        name: ext
+        required: true
+        type: string
+      responses:
+        "200":
+          description: File content
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Download a file
+      tags:
+      - files
+  /locations:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get locations
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationsResponse'
+      summary: List locations
+      tags:
+      - locations
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: add by location data
+      parameters:
+      - description: Location object
+        in: body
+        name: location
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.LocationRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Location created
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a new location
+      tags:
+      - locations
+  /locations/{id}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete by location ID
+      parameters:
+      - description: Location ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a location
+      tags:
+      - locations
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: get location by ID
+      parameters:
+      - description: Location ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+      summary: Get a location
+      tags:
+      - locations
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: Update by location data
+      parameters:
+      - description: Location ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Location object
+        in: body
+        name: location
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.LocationRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationResponse'
+        "404":
+          description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a location
+      tags:
+      - locations
+  /search:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Perform advanced search across commodities, files, and other entities
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Entity type to search
+        enum:
+        - commodities
+        - files
+        - areas
+        - locations
+        in: query
+        name: type
+        type: string
+      - default: 20
+        description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of results to skip
+        in: query
+        name: offset
+        type: integer
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: OR
+        description: Tag operator
+        enum:
+        - AND
+        - OR
+        in: query
+        name: operator
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Search results
+          schema:
+            $ref: '#/definitions/jsonapi.SearchResponse'
+      summary: Advanced search
+      tags:
+      - search
+  /search/capabilities:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Get information about what features are supported by the current
+        database backend
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Database capabilities
+          schema:
+            $ref: '#/definitions/jsonapi.CapabilitiesResponse'
+      summary: Get database capabilities
+      tags:
+      - search
+  /seed:
+    post:
+      consumes:
+      - application/json
+      description: Seed the database with example data
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Seed database
+      tags:
+      - admin
+  /settings:
+    get:
+      consumes:
+      - application/json
+      description: get current settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsObject'
+      summary: Get current settings
+      tags:
+      - settings
+    put:
+      consumes:
+      - application/json
+      description: update entire settings object
+      parameters:
+      - description: Settings object
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/models.SettingsObject'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsObject'
+      summary: Update settings
+      tags:
+      - settings
+  /settings/{field}:
+    patch:
+      consumes:
+      - application/json
+      description: update a specific setting field
+      parameters:
+      - description: Setting field path (e.g., system.main_currency)
+        in: path
+        name: field
+        required: true
+        type: string
+      - description: Setting value
+        in: body
+        name: value
+        required: true
+        schema: {}
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.SettingsObject'
+      summary: Patch setting
+      tags:
+      - settings
+  /system:
+    get:
+      consumes:
+      - application/json
+      description: get comprehensive system information including version, runtime
+        metrics, and settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.SystemInfo'
+      summary: Get system information
+      tags:
+      - system
+swagger: "2.0"
