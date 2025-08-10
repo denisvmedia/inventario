@@ -118,7 +118,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 
 		// First, create some existing data
 		existingLocation := models.Location{
-			EntityID: models.EntityID{ID: "loc1"},
+			TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"),
 			Name:     "Existing Location",
 			Address:  "456 Existing St",
 		}
@@ -176,7 +176,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 
 		// First, create some existing data
 		existingLocation := models.Location{
-			EntityID: models.EntityID{ID: "loc1"},
+			TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"),
 			Name:     "Existing Location",
 			Address:  "456 Existing St",
 		}

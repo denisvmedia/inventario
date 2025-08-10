@@ -43,13 +43,13 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 	locations := must.Must(locationRegistry.List(context.Background()))
 
 	must.Must(areaRegistry.Create(context.Background(), models.Area{
-		EntityID:   models.EntityID{ID: "1"},
+		TenantAwareEntityID: models.WithTenantAwareEntityID("1", "default-tenant"),
 		Name:       "Area 1",
 		LocationID: locations[0].ID,
 	}))
 
 	must.Must(areaRegistry.Create(context.Background(), models.Area{
-		EntityID:   models.EntityID{ID: "2"},
+		TenantAwareEntityID: models.WithTenantAwareEntityID("2", "default-tenant"),
 		Name:       "Area 2",
 		LocationID: locations[0].ID,
 	}))

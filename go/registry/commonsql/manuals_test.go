@@ -258,7 +258,7 @@ func TestManualRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent manual",
 			manual: models.Manual{
-				EntityID:    models.EntityID{ID: "non-existent-id"},
+				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
 				CommodityID: "some-commodity-id",
 				File: &models.File{
 					Path:         "test-manual",

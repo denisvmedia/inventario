@@ -303,6 +303,14 @@ func WithTenantID[T TenantAware](tenantID string, i T) T {
 	return i
 }
 
+// WithTenantAwareEntityID creates a TenantAwareEntityID with the given ID and tenant ID
+func WithTenantAwareEntityID(id, tenantID string) TenantAwareEntityID {
+	return TenantAwareEntityID{
+		EntityID: EntityID{ID: id},
+		TenantID: tenantID,
+	}
+}
+
 type ValuerSlice[T any] []T
 
 func (s *ValuerSlice[T]) Scan(src any) error {

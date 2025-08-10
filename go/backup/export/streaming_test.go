@@ -20,7 +20,7 @@ func TestStreamCommodityDirectly(t *testing.T) {
 
 	// Create a test commodity
 	commodity := &models.Commodity{
-		EntityID: models.EntityID{ID: "test-commodity-1"},
+		TenantAwareEntityID: models.WithTenantAwareEntityID("test-commodity-1", "default-tenant"),
 		Name:     "Test Commodity",
 		Type:     models.CommodityTypeElectronics,
 		AreaID:   "test-area-1",
@@ -153,7 +153,7 @@ func TestEncodeCommodityMetadata(t *testing.T) {
 	ctx := context.Background()
 
 	commodity := &models.Commodity{
-		EntityID:           models.EntityID{ID: "test-commodity-1"},
+		TenantAwareEntityID: models.WithTenantAwareEntityID("test-commodity-1", "default-tenant"),
 		Name:               "Test Commodity",
 		ShortName:          "TC1",
 		Type:               models.CommodityTypeElectronics,
