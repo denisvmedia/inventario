@@ -218,7 +218,7 @@ func TestGenerateExport(t *testing.T) {
 	ctx := context.Background()
 
 	export := models.Export{
-		EntityID:        models.EntityID{ID: "test-export-123"},
+		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "test-export-123"}, TenantID: "default-tenant"},
 		Type:            models.ExportTypeCommodities,
 		Status:          models.ExportStatusPending,
 		IncludeFileData: false,
