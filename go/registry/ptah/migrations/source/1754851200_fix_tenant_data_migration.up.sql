@@ -4,8 +4,8 @@
 -- This migration assumes the schema migration 1754848127 has already been applied
 
 -- Step 1: Insert default tenant for existing data (if not exists)
-INSERT INTO tenants (id, name, slug, status)
-VALUES ('default-tenant', 'Default Tenant', 'default', 'active')
+INSERT INTO tenants (id, name, slug, status, created_at, updated_at)
+VALUES ('default-tenant', 'Default Tenant', 'default', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (id) DO NOTHING;
 
 -- Step 2: Update all existing records with NULL tenant_id to use the default tenant
