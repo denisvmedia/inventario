@@ -173,7 +173,7 @@ migration files with proper timestamps.
 
 Examples:
   inventario migrate generate                    # Generate migration files from schema differences
-  inventario migrate generate add_user_table    # Generate migration with custom name
+  inventario migrate generate add_user_table     # Generate migration with custom name
   inventario migrate generate --schema           # Generate complete schema SQL (preview only)
   inventario migrate generate --initial          # Generate initial migration for empty database`,
 		RunE: migrateGenerateCommand,
@@ -305,9 +305,17 @@ func migrateGenerateCommand(cmd *cobra.Command, args []string) error {
 
 	// Handle initial migration generation
 	if generateInitial {
-		_, err := migrator.GenerateInitialMigration(context.Background())
+		files, err := migrator.GenerateInitialMigration(context.Background())
 		if err != nil {
 			return errkit.Wrap(err, "failed to generate initial migration")
+		}
+
+		// Check if no migration was needed (files will be nil when no changes detected)
+		if files == nil {
+			fmt.Println("✅ No schema changes detected - no initial migration files generated")     //nolint:forbidigo // CLI output is OK
+			fmt.Printf("The database schema is already in sync with your Go entity annotations.\n") //nolint:forbidigo // CLI output is OK
+			fmt.Printf("No initial migration is needed.\n")                                         //nolint:forbidigo // CLI output is OK
+			return nil
 		}
 
 		fmt.Println("🎉 Initial migration files created successfully!")          //nolint:forbidigo // CLI output is OK
@@ -327,6 +335,14 @@ func migrateGenerateCommand(cmd *cobra.Command, args []string) error {
 	files, err := migrator.GenerateMigrationFiles(context.Background(), migrationName)
 	if err != nil {
 		return errkit.Wrap(err, "failed to generate migration files")
+	}
+
+	// Check if no migration was needed (files will be nil when no changes detected)
+	if files == nil {
+		fmt.Println("✅ No schema changes detected - no migration files generated")                //nolint:forbidigo // CLI output is OK
+		fmt.Printf("The database schema is already in sync with your Go entity annotations.\n")   //nolint:forbidigo // CLI output is OK
+		fmt.Printf("No migration is needed at this time.\n")                                      //nolint:forbidigo // CLI output is OK
+		return nil
 	}
 
 	fmt.Println("🎉 Migration files created successfully!")                                        //nolint:forbidigo // CLI output is OK

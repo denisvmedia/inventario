@@ -2,7 +2,6 @@ services:
   # PostgreSQL Database (Production)
   postgres:
     image: postgres:17-alpine
-    container_name: inventario-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-inventario}
@@ -27,7 +26,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
-    container_name: inventario-app
     restart: unless-stopped
     depends_on:
       postgres:
@@ -60,7 +58,6 @@ services:
   # MySQL Database (Production)
   mysql:
     image: mysql:8.4
-    container_name: inventario-mysql
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${MYSQL_DB:-inventario}
@@ -91,7 +88,6 @@ services:
   # MariaDB Database (Production)
   mariadb:
     image: mariadb:10.11
-    container_name: inventario-mariadb
     restart: unless-stopped
     environment:
       MARIADB_DATABASE: ${MARIADB_DB:-inventario}
@@ -122,7 +118,6 @@ services:
   postgres-test:
     profiles: ["test"]
     image: postgres:17-alpine
-    container_name: inventario-postgres-test
     environment:
       POSTGRES_DB: ${POSTGRES_TEST_DB:-inventario_test}
       POSTGRES_USER: ${POSTGRES_TEST_USER:-inventario_test}
@@ -166,7 +161,6 @@ services:
   mysql-test:
     profiles: ["test"]
     image: mysql:8.4
-    container_name: inventario-mysql-test
     environment:
       MYSQL_DATABASE: ${MYSQL_TEST_DB:-inventario_test}
       MYSQL_USER: ${MYSQL_TEST_USER:-inventario_test}
@@ -204,7 +198,6 @@ services:
   mariadb-test:
     profiles: ["test"]
     image: mariadb:10.11
-    container_name: inventario-mariadb-test
     environment:
       MARIADB_DATABASE: ${MARIADB_TEST_DB:-inventario_test}
       MARIADB_USER: ${MARIADB_TEST_USER:-inventario_test}
@@ -244,7 +237,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: test-runner
-    container_name: inventario-migrate-runner
     depends_on:
       postgres-test:
         condition: service_healthy
@@ -269,7 +261,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: test-runner
-    container_name: inventario-test-runner
     depends_on:
       postgres-test:
         condition: service_healthy
@@ -304,6 +295,71 @@ services:
     # Automatically remove container after stopping
     restart: "no"
 
+  inventario-test-migration:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test-runner
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    environment:
+      # PostgreSQL test configuration
+      POSTGRES_TEST_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=5&pool_min_conns=1"
+
+      # Test configuration
+      GO_TEST_TIMEOUT: "${GO_TEST_TIMEOUT:-10m}"
+      GO_TEST_VERBOSE: "${GO_TEST_VERBOSE:-true}"
+
+      # Application configuration for tests
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
+      INVENTARIO_ADDR: ":3333"
+      INVENTARIO_UPLOAD_LOCATION: "file:///tmp/test-uploads?create_dir=1"
+
+      # Test environment
+      TZ: UTC
+    networks:
+      - inventario-test-network
+    volumes:
+      # Mount source code for development testing
+      - ./go:/app/go:ro
+      - ./go/registry/ptah/migrations/source:/app/go/registry/ptah/migrations/source:rw
+      # Temporary upload location
+      - /tmp/test-uploads
+    working_dir: /app/go
+    # Default command runs all tests
+    command:
+      - sh
+      - -c
+      - |
+        echo "Building application..."
+        go build -o /app/inventario
+        echo "Running migrations..."
+        /app/inventario migrate up
+        echo "Generating schema updates..."
+        /app/inventario migrate generate
+        echo "Count migrations..."
+        count=$$(ls -1 /app/go/registry/ptah/migrations/source/*.up.sql | wc -l)
+        echo "Re-building application..."
+        go build -o /app/inventario
+        echo "Running updated migrations..."
+        /app/inventario migrate up
+        echo "Verifying migrations are up to date..."
+        /app/inventario migrate status
+        echo "Verify no additional migrations are needed..."
+        /app/inventario migrate generate
+        echo "Count migrations again..."
+        count2=$$(ls -1 /app/go/registry/ptah/migrations/source/*.up.sql | wc -l)
+        if [ "$$count" -ne "$$count2" ]; then
+          echo "Additional migrations generated. Please review."
+          exit 1
+        fi
+        # echo color green
+        echo "\033[0;32mAdditional migrations are not needed. Schema is up to date.\033[0m"
+    # Automatically remove container after stopping
+    restart: "no"
+
   # Inventario PostgreSQL-only Test Runner
   inventario-test-postgres:
     profiles: ["test"]
@@ -311,7 +367,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: test-runner
-    container_name: inventario-postgres-test-runner
     depends_on:
       postgres-test:
         condition: service_healthy

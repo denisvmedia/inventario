@@ -5,6 +5,13 @@ package models
 // These functions provide session-based tenant context management
 // for Row-Level Security policies to work effectively.
 
+// Database roles for multi-tenant access control
+type DatabaseRoles struct {
+	// Application role for RLS policies
+	//migrator:schema:role name="inventario_app" login="false" comment="Application role for Row-Level Security policies"
+	_ int
+}
+
 // Multi-tenant context functions for Row-Level Security
 type RLSFunctions struct {
 	// Function to set the current tenant context in the session

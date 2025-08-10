@@ -67,6 +67,12 @@ func (m *PtahMigrator) GenerateMigrationFiles(ctx context.Context, migrationName
 		return nil, errkit.Wrap(err, "failed to generate migration files")
 	}
 
+	// Check if no migration was needed (files will be nil when no changes detected)
+	if files == nil {
+		fmt.Printf("✅ No schema changes detected - no migration files generated\n") //nolint:forbidigo // CLI output is OK
+		return nil, nil
+	}
+
 	fmt.Printf("✅ Generated migration files:\n") //nolint:forbidigo // CLI output is OK
 	fmt.Printf("  UP:   %s\n", files.UpFile)     //nolint:forbidigo // CLI output is OK
 	fmt.Printf("  DOWN: %s\n", files.DownFile)   //nolint:forbidigo // CLI output is OK
