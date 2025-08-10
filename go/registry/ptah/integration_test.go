@@ -26,7 +26,7 @@ func TestGenerateMigrationFilesNoChanges(t *testing.T) {
 	// Note: This test will likely fail with a database connection error,
 	// but it should NOT panic with a nil pointer dereference
 	files, err := migrator.GenerateMigrationFiles(context.Background(), "test_migration")
-	
+
 	// We expect an error due to the fake database URL, but NOT a panic
 	// The important thing is that our code handles the nil return value gracefully
 	if err != nil {
@@ -53,7 +53,7 @@ func TestGenerateInitialMigrationNoChanges(t *testing.T) {
 
 	// This should not panic even if the generator returns nil, nil
 	files, err := migrator.GenerateInitialMigration(context.Background())
-	
+
 	// We expect an error due to the fake database URL, but NOT a panic
 	if err != nil {
 		// This is expected due to the fake database URL

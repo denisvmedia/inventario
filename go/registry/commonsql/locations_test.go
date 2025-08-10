@@ -196,8 +196,8 @@ func TestLocationRegistry_Update_UnhappyPath(t *testing.T) {
 			name: "non-existent location",
 			location: models.Location{
 				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
-				Name:     "Test Location",
-				Address:  "Test Address",
+				Name:                "Test Location",
+				Address:             "Test Address",
 			},
 		},
 	}

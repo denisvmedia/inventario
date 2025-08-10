@@ -117,9 +117,9 @@ func FileTypeFromMIME(mimeType string) FileType {
 // FileEntity represents a file entity in the system
 //
 // Enable RLS for multi-tenant isolation
+//
 //migrator:schema:rls:enable table="files" comment="Enable RLS for multi-tenant file isolation"
 //migrator:schema:rls:policy name="file_tenant_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures files can only be accessed and modified by their tenant"
-//
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:embedded mode="inline"

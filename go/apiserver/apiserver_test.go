@@ -44,14 +44,14 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 
 	must.Must(areaRegistry.Create(context.Background(), models.Area{
 		TenantAwareEntityID: models.WithTenantAwareEntityID("1", "default-tenant"),
-		Name:       "Area 1",
-		LocationID: locations[0].ID,
+		Name:                "Area 1",
+		LocationID:          locations[0].ID,
 	}))
 
 	must.Must(areaRegistry.Create(context.Background(), models.Area{
 		TenantAwareEntityID: models.WithTenantAwareEntityID("2", "default-tenant"),
-		Name:       "Area 2",
-		LocationID: locations[0].ID,
+		Name:                "Area 2",
+		LocationID:          locations[0].ID,
 	}))
 
 	return areaRegistry

@@ -476,8 +476,8 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 		}
 		image := &models.Image{
 			TenantAwareEntityID: existingImage.TenantAwareEntityID, // Keep the existing ID and tenant
-			CommodityID: commodityID,
-			File:        file,
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid image")
@@ -536,8 +536,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 		}
 		invoice := &models.Invoice{
 			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-			CommodityID: commodityID,
-			File:        file,
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid invoice")
@@ -556,8 +556,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 			if !options.DryRun {
 				invoice := &models.Invoice{
 					TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-					CommodityID: commodityID,
-					File:        file,
+					CommodityID:         commodityID,
+					File:                file,
 				}
 				if err := invoice.ValidateWithContext(ctx); err != nil {
 					return errkit.Wrap(err, "invalid invoice")
@@ -580,8 +580,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 		// Update existing invoice
 		invoice := &models.Invoice{
 			TenantAwareEntityID: existingInvoice.TenantAwareEntityID, // Keep the existing ID
-			CommodityID: commodityID,
-			File:        file,
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid invoice")
@@ -611,8 +611,8 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 		}
 		manual := &models.Manual{
 			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-			CommodityID: commodityID,
-			File:        file,
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")
@@ -637,8 +637,8 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 		}
 		manual := &models.Manual{
 			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-			CommodityID: commodityID,
-			File:        file,
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")
@@ -660,8 +660,8 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 			}
 			manual := &models.Manual{
 				TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
-				CommodityID: commodityID,
-				File:        file,
+				CommodityID:         commodityID,
+				File:                file,
 			}
 			if err := manual.ValidateWithContext(ctx); err != nil {
 				return errkit.Wrap(err, "invalid manual")
@@ -683,8 +683,8 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 		}
 		manual := &models.Manual{
 			TenantAwareEntityID: existingManual.TenantAwareEntityID, // Keep the existing ID
-			CommodityID: commodityID,
-			File:        file,
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")

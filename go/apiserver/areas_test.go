@@ -199,8 +199,8 @@ func TestAreaUpdate(t *testing.T) {
 			Type: "areas",
 			Attributes: &models.Area{
 				TenantAwareEntityID: models.WithTenantAwareEntityID(area.ID, "default-tenant"),
-				Name:       "Updated Area",
-				LocationID: area.LocationID,
+				Name:                "Updated Area",
+				LocationID:          area.LocationID,
 			},
 		},
 	}
@@ -305,8 +305,8 @@ func TestAreaUpdate_WrongIDInRequestBody(t *testing.T) {
 			Type: "areas",
 			Attributes: &models.Area{
 				TenantAwareEntityID: models.WithTenantAwareEntityID(wrongID, "default-tenant"), // Using a different ID in the update request
-				Name:       "Updated Area",
-				LocationID: area.LocationID,
+				Name:                "Updated Area",
+				LocationID:          area.LocationID,
 			},
 		},
 	}

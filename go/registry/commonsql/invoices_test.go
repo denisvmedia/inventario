@@ -259,7 +259,7 @@ func TestInvoiceRegistry_Update_UnhappyPath(t *testing.T) {
 			name: "non-existent invoice",
 			invoice: models.Invoice{
 				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
-				CommodityID: "some-commodity-id",
+				CommodityID:         "some-commodity-id",
 				File: &models.File{
 					Path:         "test-invoice",
 					OriginalPath: "test-invoice.pdf",

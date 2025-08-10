@@ -348,7 +348,7 @@ func TestCommodityRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent commodity",
 			commodity: models.Commodity{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
+				TenantAwareEntityID:    models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,

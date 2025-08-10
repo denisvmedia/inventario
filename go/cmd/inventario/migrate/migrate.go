@@ -312,7 +312,7 @@ func migrateGenerateCommand(cmd *cobra.Command, args []string) error {
 
 		// Check if no migration was needed (files will be nil when no changes detected)
 		if files == nil {
-			fmt.Println("✅ No schema changes detected - no initial migration files generated")     //nolint:forbidigo // CLI output is OK
+			fmt.Println("✅ No schema changes detected - no initial migration files generated")      //nolint:forbidigo // CLI output is OK
 			fmt.Printf("The database schema is already in sync with your Go entity annotations.\n") //nolint:forbidigo // CLI output is OK
 			fmt.Printf("No initial migration is needed.\n")                                         //nolint:forbidigo // CLI output is OK
 			return nil
@@ -339,9 +339,9 @@ func migrateGenerateCommand(cmd *cobra.Command, args []string) error {
 
 	// Check if no migration was needed (files will be nil when no changes detected)
 	if files == nil {
-		fmt.Println("✅ No schema changes detected - no migration files generated")                //nolint:forbidigo // CLI output is OK
-		fmt.Printf("The database schema is already in sync with your Go entity annotations.\n")   //nolint:forbidigo // CLI output is OK
-		fmt.Printf("No migration is needed at this time.\n")                                      //nolint:forbidigo // CLI output is OK
+		fmt.Println("✅ No schema changes detected - no migration files generated")              //nolint:forbidigo // CLI output is OK
+		fmt.Printf("The database schema is already in sync with your Go entity annotations.\n") //nolint:forbidigo // CLI output is OK
+		fmt.Printf("No migration is needed at this time.\n")                                    //nolint:forbidigo // CLI output is OK
 		return nil
 	}
 

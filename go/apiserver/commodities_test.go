@@ -372,8 +372,8 @@ func TestCommodityListImages(t *testing.T) {
 	for _, file := range files {
 		image := &models.Image{
 			TenantAwareEntityID: models.WithTenantAwareEntityID(file.ID, "default-tenant"),
-			CommodityID: commodity.ID,
-			File:        file.File,
+			CommodityID:         commodity.ID,
+			File:                file.File,
 		}
 		expectedImages = append(expectedImages, image)
 	}
@@ -413,8 +413,8 @@ func TestCommodityListInvoices(t *testing.T) {
 	for _, file := range files {
 		invoice := &models.Invoice{
 			TenantAwareEntityID: models.WithTenantAwareEntityID(file.ID, "default-tenant"),
-			CommodityID: commodity.ID,
-			File:        file.File,
+			CommodityID:         commodity.ID,
+			File:                file.File,
 		}
 		expectedInvoices = append(expectedInvoices, invoice)
 	}
@@ -454,8 +454,8 @@ func TestCommodityListManuals(t *testing.T) {
 	for _, file := range files {
 		manual := &models.Manual{
 			TenantAwareEntityID: models.WithTenantAwareEntityID(file.ID, "default-tenant"),
-			CommodityID: commodity.ID,
-			File:        file.File,
+			CommodityID:         commodity.ID,
+			File:                file.File,
 		}
 		expectedManuals = append(expectedManuals, manual)
 	}
