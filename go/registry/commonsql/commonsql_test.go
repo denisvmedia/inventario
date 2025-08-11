@@ -2,7 +2,6 @@ package commonsql_test
 
 import (
 	"context"
-	"database/sql"
 	"net/url"
 	"os"
 	"sync"
