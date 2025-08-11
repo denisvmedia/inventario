@@ -48,7 +48,7 @@ func migrateUp(ctx context.Context, migrator *ptah.PtahMigrator, dsn string) err
 
 	// Recreate the schema
 	err = migrator.MigrateUp(ctx, ptah.MigrateArgs{
-		DryRun: false,
+		DryRun:          false,
 		OperationalUser: operationalUser,
 	})
 	if err != nil {
