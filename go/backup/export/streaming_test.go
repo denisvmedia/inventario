@@ -20,13 +20,13 @@ func TestStreamCommodityDirectly(t *testing.T) {
 
 	// Create a test commodity
 	commodity := &models.Commodity{
-		EntityID: models.EntityID{ID: "test-commodity-1"},
-		Name:     "Test Commodity",
-		Type:     models.CommodityTypeElectronics,
-		AreaID:   "test-area-1",
-		Count:    1,
-		Status:   models.CommodityStatusInUse,
-		Draft:    false,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("test-commodity-1", "default-tenant"),
+		Name:                "Test Commodity",
+		Type:                models.CommodityTypeElectronics,
+		AreaID:              "test-area-1",
+		Count:               1,
+		Status:              models.CommodityStatusInUse,
+		Draft:               false,
 	}
 
 	var buf bytes.Buffer
@@ -153,19 +153,19 @@ func TestEncodeCommodityMetadata(t *testing.T) {
 	ctx := context.Background()
 
 	commodity := &models.Commodity{
-		EntityID:           models.EntityID{ID: "test-commodity-1"},
-		Name:               "Test Commodity",
-		ShortName:          "TC1",
-		Type:               models.CommodityTypeElectronics,
-		AreaID:             "test-area-1",
-		Count:              5,
-		SerialNumber:       "SN123456",
-		Status:             models.CommodityStatusInUse,
-		Comments:           "Test comments",
-		Draft:              true,
-		Tags:               []string{"tag1", "tag2"},
-		PartNumbers:        []string{"PN001", "PN002"},
-		ExtraSerialNumbers: []string{"ESN001", "ESN002"},
+		TenantAwareEntityID: models.WithTenantAwareEntityID("test-commodity-1", "default-tenant"),
+		Name:                "Test Commodity",
+		ShortName:           "TC1",
+		Type:                models.CommodityTypeElectronics,
+		AreaID:              "test-area-1",
+		Count:               5,
+		SerialNumber:        "SN123456",
+		Status:              models.CommodityStatusInUse,
+		Comments:            "Test comments",
+		Draft:               true,
+		Tags:                []string{"tag1", "tag2"},
+		PartNumbers:         []string{"PN001", "PN002"},
+		ExtraSerialNumbers:  []string{"ESN001", "ESN002"},
 	}
 
 	var buf bytes.Buffer

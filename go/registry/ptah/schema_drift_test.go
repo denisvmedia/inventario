@@ -2,6 +2,7 @@ package ptah_test
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -85,7 +86,14 @@ func TestMigrationFilesSyncWithAnnotations(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Apply migrations
-	err = migrator.MigrateUp(context.Background(), false)
+	u, err := url.Parse(dbURL)
+	c.Assert(err, qt.IsNil)
+	operationalUser := u.User.Username()
+
+	optionalArgs := ptahintegration.MigrateArgs{
+		OperationalUser: operationalUser,
+	}
+	err = migrator.MigrateUp(context.Background(), optionalArgs)
 	c.Assert(err, qt.IsNil)
 
 	// Now check if the resulting schema matches Go annotations

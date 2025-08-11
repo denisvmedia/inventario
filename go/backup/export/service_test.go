@@ -218,10 +218,10 @@ func TestGenerateExport(t *testing.T) {
 	ctx := context.Background()
 
 	export := models.Export{
-		EntityID:        models.EntityID{ID: "test-export-123"},
-		Type:            models.ExportTypeCommodities,
-		Status:          models.ExportStatusPending,
-		IncludeFileData: false,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("test-export-123", "default-tenant"),
+		Type:                models.ExportTypeCommodities,
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     false,
 	}
 
 	blobKey, _, err := service.generateExport(ctx, export)
@@ -277,21 +277,21 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test data
-	location := models.Location{EntityID: models.EntityID{ID: "loc1"}, Name: "Location 1", Address: "Address 1"}
+	location := models.Location{TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"), Name: "Location 1", Address: "Address 1"}
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 
-	area := models.Area{EntityID: models.EntityID{ID: "area1"}, Name: "Area 1", LocationID: createdLocation.ID}
+	area := models.Area{TenantAwareEntityID: models.WithTenantAwareEntityID("area1", "default-tenant"), Name: "Area 1", LocationID: createdLocation.ID}
 	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
-		EntityID: models.EntityID{ID: "commodity1"},
-		Name:     "Test Commodity",
-		Type:     models.CommodityTypeElectronics,
-		AreaID:   createdArea.ID,
-		Count:    1,
-		Status:   models.CommodityStatusInUse,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("commodity1", "default-tenant"),
+		Name:                "Test Commodity",
+		Type:                models.CommodityTypeElectronics,
+		AreaID:              createdArea.ID,
+		Count:               1,
+		Status:              models.CommodityStatusInUse,
 	}
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
@@ -313,8 +313,8 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 
 	// Create test file models (they will automatically be linked to the commodity)
 	image := models.Image{
-		EntityID:    models.EntityID{ID: "img1"},
-		CommodityID: createdCommodity.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("img1", "default-tenant"),
+		CommodityID:         createdCommodity.ID,
 		File: &models.File{
 			Path:         "test-image",
 			OriginalPath: testImagePath,
@@ -326,8 +326,8 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	invoice := models.Invoice{
-		EntityID:    models.EntityID{ID: "inv1"},
-		CommodityID: createdCommodity.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("inv1", "default-tenant"),
+		CommodityID:         createdCommodity.ID,
 		File: &models.File{
 			Path:         "test-invoice",
 			OriginalPath: testInvoicePath,
@@ -409,21 +409,21 @@ func TestBase64FileDataVerification(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test data
-	location := models.Location{EntityID: models.EntityID{ID: "loc1"}, Name: "Location 1", Address: "Address 1"}
+	location := models.Location{TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"), Name: "Location 1", Address: "Address 1"}
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 
-	area := models.Area{EntityID: models.EntityID{ID: "area1"}, Name: "Area 1", LocationID: createdLocation.ID}
+	area := models.Area{TenantAwareEntityID: models.WithTenantAwareEntityID("area1", "default-tenant"), Name: "Area 1", LocationID: createdLocation.ID}
 	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
-		EntityID: models.EntityID{ID: "commodity1"},
-		Name:     "Test Commodity",
-		Type:     models.CommodityTypeElectronics,
-		AreaID:   createdArea.ID,
-		Count:    1,
-		Status:   models.CommodityStatusInUse,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("commodity1", "default-tenant"),
+		Name:                "Test Commodity",
+		Type:                models.CommodityTypeElectronics,
+		AreaID:              createdArea.ID,
+		Count:               1,
+		Status:              models.CommodityStatusInUse,
 	}
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
@@ -456,8 +456,8 @@ func TestBase64FileDataVerification(t *testing.T) {
 		switch tf.fileType {
 		case "image":
 			image := models.Image{
-				EntityID:    models.EntityID{ID: "img-" + tf.path},
-				CommodityID: createdCommodity.ID,
+				TenantAwareEntityID: models.WithTenantAwareEntityID("img-"+tf.path, "default-tenant"),
+				CommodityID:         createdCommodity.ID,
 				File: &models.File{
 					Path:         "img-" + tf.path,
 					OriginalPath: tf.path,
@@ -469,8 +469,8 @@ func TestBase64FileDataVerification(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		case "invoice":
 			invoice := models.Invoice{
-				EntityID:    models.EntityID{ID: "inv-" + tf.path},
-				CommodityID: createdCommodity.ID,
+				TenantAwareEntityID: models.WithTenantAwareEntityID("inv-"+tf.path, "default-tenant"),
+				CommodityID:         createdCommodity.ID,
 				File: &models.File{
 					Path:         "inv-" + tf.path,
 					OriginalPath: tf.path,
@@ -482,8 +482,8 @@ func TestBase64FileDataVerification(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		case "manual":
 			manual := models.Manual{
-				EntityID:    models.EntityID{ID: "man-" + tf.path},
-				CommodityID: createdCommodity.ID,
+				TenantAwareEntityID: models.WithTenantAwareEntityID("man-"+tf.path, "default-tenant"),
+				CommodityID:         createdCommodity.ID,
 				File: &models.File{
 					Path:         "man-" + tf.path,
 					OriginalPath: tf.path,
@@ -728,14 +728,14 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test locations
 	location1 := models.Location{
-		EntityID: models.EntityID{ID: "loc1"},
-		Name:     "Test Location 1",
-		Address:  "123 Test St",
+		TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"),
+		Name:                "Test Location 1",
+		Address:             "123 Test St",
 	}
 	location2 := models.Location{
-		EntityID: models.EntityID{ID: "loc2"},
-		Name:     "Test Location 2",
-		Address:  "456 Test Ave",
+		TenantAwareEntityID: models.WithTenantAwareEntityID("loc2", "default-tenant"),
+		Name:                "Test Location 2",
+		Address:             "456 Test Ave",
 	}
 
 	savedLocation1, err := registrySet.LocationRegistry.Create(ctx, location1)
@@ -745,19 +745,19 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test areas
 	area1 := models.Area{
-		EntityID:   models.EntityID{ID: "area1"},
-		Name:       "Test Area 1",
-		LocationID: savedLocation1.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("area1", "default-tenant"),
+		Name:                "Test Area 1",
+		LocationID:          savedLocation1.ID,
 	}
 	area2 := models.Area{
-		EntityID:   models.EntityID{ID: "area2"},
-		Name:       "Test Area 2",
-		LocationID: savedLocation1.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("area2", "default-tenant"),
+		Name:                "Test Area 2",
+		LocationID:          savedLocation1.ID,
 	}
 	area3 := models.Area{
-		EntityID:   models.EntityID{ID: "area3"},
-		Name:       "Test Area 3",
-		LocationID: savedLocation2.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("area3", "default-tenant"),
+		Name:                "Test Area 3",
+		LocationID:          savedLocation2.ID,
 	}
 
 	savedArea1, err := registrySet.AreaRegistry.Create(ctx, area1)
@@ -769,20 +769,20 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test commodities
 	commodity1 := models.Commodity{
-		EntityID: models.EntityID{ID: "commodity1"},
-		Name:     "Test Commodity 1",
-		AreaID:   savedArea1.ID,
-		Count:    1,
-		Type:     models.CommodityTypeElectronics,
-		Status:   models.CommodityStatusInUse,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("commodity1", "default-tenant"),
+		Name:                "Test Commodity 1",
+		AreaID:              savedArea1.ID,
+		Count:               1,
+		Type:                models.CommodityTypeElectronics,
+		Status:              models.CommodityStatusInUse,
 	}
 	commodity2 := models.Commodity{
-		EntityID: models.EntityID{ID: "commodity2"},
-		Name:     "Test Commodity 2",
-		AreaID:   savedArea2.ID,
-		Count:    2,
-		Type:     models.CommodityTypeElectronics,
-		Status:   models.CommodityStatusInUse,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("commodity2", "default-tenant"),
+		Name:                "Test Commodity 2",
+		AreaID:              savedArea2.ID,
+		Count:               2,
+		Type:                models.CommodityTypeElectronics,
+		Status:              models.CommodityStatusInUse,
 	}
 
 	savedCommodity1, err := registrySet.CommodityRegistry.Create(ctx, commodity1)
@@ -792,8 +792,8 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test images
 	image1 := models.Image{
-		EntityID:    models.EntityID{ID: "image1"},
-		CommodityID: savedCommodity1.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("image1", "default-tenant"),
+		CommodityID:         savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-image-1",
 			OriginalPath: "test-image-1.jpg",
@@ -802,8 +802,8 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		},
 	}
 	image2 := models.Image{
-		EntityID:    models.EntityID{ID: "image2"},
-		CommodityID: savedCommodity2.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("image2", "default-tenant"),
+		CommodityID:         savedCommodity2.ID,
 		File: &models.File{
 			Path:         "test-image-2",
 			OriginalPath: "test-image-2.png",
@@ -819,8 +819,8 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test invoice
 	invoice1 := models.Invoice{
-		EntityID:    models.EntityID{ID: "invoice1"},
-		CommodityID: savedCommodity1.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("invoice1", "default-tenant"),
+		CommodityID:         savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-invoice-1",
 			OriginalPath: "test-invoice-1.pdf",
@@ -834,8 +834,8 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test manual
 	manual1 := models.Manual{
-		EntityID:    models.EntityID{ID: "manual1"},
-		CommodityID: savedCommodity1.ID,
+		TenantAwareEntityID: models.WithTenantAwareEntityID("manual1", "default-tenant"),
+		CommodityID:         savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-manual-1",
 			OriginalPath: "test-manual-1.pdf",

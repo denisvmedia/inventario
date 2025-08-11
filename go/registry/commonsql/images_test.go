@@ -258,8 +258,8 @@ func TestImageRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent image",
 			image: models.Image{
-				EntityID:    models.EntityID{ID: "non-existent-id"},
-				CommodityID: "some-commodity-id",
+				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
+				CommodityID:         "some-commodity-id",
 				File: &models.File{
 					Path:         "test-image",
 					OriginalPath: "test-image.jpg",

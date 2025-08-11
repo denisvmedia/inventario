@@ -106,7 +106,7 @@ func Execute(args ...string) {
 
 	rootCmd.SetArgs(args)
 	rootCmd.AddCommand(initconfig.NewInitConfigCommand())
-	rootCmd.AddCommand(migrate.NewMigrateCommand())
+	rootCmd.AddCommand(migrate.New())
 	rootCmd.AddCommand(run.NewRunCommand())
 	rootCmd.AddCommand(seed.NewSeedCommand())
 	rootCmd.AddCommand(features.NewFeaturesCommand())

@@ -33,6 +33,7 @@ yarn-error.log*
 
 # Runtime data
 uploads/
+go/uploads/
 sample/
 .db/
 data/

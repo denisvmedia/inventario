@@ -116,10 +116,14 @@ func FileTypeFromMIME(mimeType string) FileType {
 
 // FileEntity represents a file entity in the system
 //
+// Enable RLS for multi-tenant isolation
+//
+//migrator:schema:rls:enable table="files" comment="Enable RLS for multi-tenant file isolation"
+//migrator:schema:rls:policy name="file_tenant_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures files can only be accessed and modified by their tenant"
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:embedded mode="inline"
-	EntityID
+	TenantAwareEntityID
 
 	// Title is the user-defined title for the file
 	//migrator:schema:field name="title" type="TEXT"
@@ -166,6 +170,18 @@ type FileEntity struct {
 
 // PostgreSQL-specific indexes for files
 type FileIndexes struct {
+	// Index for tenant-based queries
+	//migrator:schema:index name="idx_files_tenant_id" fields="tenant_id" table="files"
+	_ int
+
+	// Composite index for tenant + type queries
+	//migrator:schema:index name="idx_files_tenant_type" fields="tenant_id,type" table="files"
+	_ int
+
+	// Composite index for tenant + linked entity queries
+	//migrator:schema:index name="idx_files_tenant_linked_entity" fields="tenant_id,linked_entity_type,linked_entity_id" table="files"
+	_ int
+
 	// GIN index for JSONB tags field
 	//migrator:schema:index name="files_tags_gin_idx" fields="tags" type="GIN" table="files"
 	_ int
@@ -285,6 +301,14 @@ func (i *TenantAwareEntityID) SetTenantID(tenantID string) {
 func WithTenantID[T TenantAware](tenantID string, i T) T {
 	i.SetTenantID(tenantID)
 	return i
+}
+
+// WithTenantAwareEntityID creates a TenantAwareEntityID with the given ID and tenant ID
+func WithTenantAwareEntityID(id, tenantID string) TenantAwareEntityID {
+	return TenantAwareEntityID{
+		EntityID: EntityID{ID: id},
+		TenantID: tenantID,
+	}
 }
 
 type ValuerSlice[T any] []T

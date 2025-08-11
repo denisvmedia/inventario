@@ -1,0 +1,13 @@
+-- NO ROLLBACK AVAILABLE
+-- This is a one-way data migration for multi-tenancy transition
+-- Generated manually on: 2025-08-10T18:40:00Z
+-- Direction: DOWN
+
+-- This migration cannot and should not be rolled back because:
+-- 1. It's a one-time data transformation to enable multi-tenancy
+-- 2. Rolling back would set tenant_id fields to NULL, breaking the application
+-- 3. There's no business case for "undoing" tenant assignment of existing data
+-- 4. The rollback would be destructive and cause data integrity issues
+--
+-- If you need to modify tenant assignments, create a new migration
+-- that updates the tenant_id values to the correct tenant instead.
