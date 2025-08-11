@@ -35,11 +35,6 @@ func migrateUp(t *testing.T, ctx context.Context, migrator *ptah.PtahMigrator, d
 		return err
 	}
 
-	err = dropInventarioAppRole(t, ctx, dsn)
-	if err != nil {
-		return err // this is only when we fail to connect to db
-	}
-
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return err
@@ -53,45 +48,6 @@ func migrateUp(t *testing.T, ctx context.Context, migrator *ptah.PtahMigrator, d
 	})
 	if err != nil {
 		return err
-	}
-
-	return nil
-}
-
-// dropInventarioAppRole drops the inventario_app role if it exists
-// This is needed for test cleanup since DropDatabase only drops tables
-func dropInventarioAppRole(t *testing.T, ctx context.Context, dsn string) error {
-	// Create a direct database connection (similar to what DropDatabase does)
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	// First, revoke all privileges from the role to ensure it can be dropped
-	_, err = db.ExecContext(ctx, "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM inventario_app")
-	if err != nil {
-		t.Logf("Failed to revoke privileges from inventario_app: %v", err)
-	}
-	_, _ = db.ExecContext(ctx, "REVOKE ALL PRIVILEGES ON SCHEMA public FROM inventario_app")
-	if err != nil {
-		t.Logf("Failed to revoke privileges from inventario_app: %v", err)
-	}
-
-	// Terminate any connections that might be using the role
-	_, err = db.ExecContext(ctx, `
-		SELECT pg_terminate_backend(pid)
-		FROM pg_stat_activity
-		WHERE usename = 'inventario_app'
-	`)
-	if err != nil {
-		t.Logf("Failed to terminate connections for inventario_app: %v", err)
-	}
-
-	// Drop the role if it exists
-	_, err = db.ExecContext(ctx, "DROP ROLE inventario_app")
-	if err != nil {
-		t.Logf("Failed to drop inventario_app role: %v", err)
 	}
 
 	return nil

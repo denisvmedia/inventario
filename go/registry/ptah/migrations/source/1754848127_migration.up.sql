@@ -3,7 +3,14 @@
 -- Direction: UP
 
 -- Application role for Row-Level Security policies
-CREATE ROLE inventario_app WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'inventario_app') THEN
+        CREATE ROLE inventario_app WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
+    END IF;
+END
+$$;
+
 -- Gets the current tenant ID from session for RLS policies
 CREATE OR REPLACE FUNCTION get_current_tenant_id() RETURNS TEXT AS $$
 BEGIN RETURN current_setting('app.current_tenant_id', true); END;
