@@ -55,65 +55,6 @@ services:
       retries: 3
       start_period: 40s
 
-  # MySQL Database (Production)
-  mysql:
-    image: mysql:8.4
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: ${MYSQL_DB:-inventario}
-      MYSQL_USER: ${MYSQL_USER:-inventario}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-inventario_password}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
-      MYSQL_CHARSET: utf8mb4
-      MYSQL_COLLATION: utf8mb4_unicode_ci
-    volumes:
-      - ./.docker/mysql:/var/lib/mysql
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-    networks:
-      - inventario-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER:-inventario}", "-p${MYSQL_PASSWORD:-inventario_password}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    command: >
-      --default-authentication-plugin=mysql_native_password
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --innodb-buffer-pool-size=256M
-      --innodb-log-file-size=64M
-      --max-connections=200
-
-  # MariaDB Database (Production)
-  mariadb:
-    image: mariadb:10.11
-    restart: unless-stopped
-    environment:
-      MARIADB_DATABASE: ${MARIADB_DB:-inventario}
-      MARIADB_USER: ${MARIADB_USER:-inventario}
-      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-inventario_password}
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root_password}
-      MARIADB_CHARSET: utf8mb4
-      MARIADB_COLLATION: utf8mb4_unicode_ci
-    volumes:
-      - ./.docker/mariadb:/var/lib/mysql
-    ports:
-      - "${MARIADB_PORT:-3307}:3306"
-    networks:
-      - inventario-network
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    command: >
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --innodb-buffer-pool-size=256M
-      --innodb-log-file-size=64M
-      --max-connections=200
-
   # PostgreSQL Test Database
   postgres-test:
     profiles: ["test"]
@@ -156,79 +97,6 @@ services:
       -c max_parallel_workers_per_gather=1
       -c max_parallel_workers=4
       -c max_parallel_maintenance_workers=1
-
-  # MySQL Test Database
-  mysql-test:
-    profiles: ["test"]
-    image: mysql:8.4
-    environment:
-      MYSQL_DATABASE: ${MYSQL_TEST_DB:-inventario_test}
-      MYSQL_USER: ${MYSQL_TEST_USER:-inventario_test}
-      MYSQL_PASSWORD: ${MYSQL_TEST_PASSWORD:-test_password}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_TEST_ROOT_PASSWORD:-test_root_password}
-      MYSQL_CHARSET: utf8mb4
-      MYSQL_COLLATION: utf8mb4_unicode_ci
-    ports:
-      - "${MYSQL_TEST_PORT:-3308}:3306"  # Use different port to avoid conflicts
-    networks:
-      - inventario-test-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_TEST_USER:-inventario_test}", "-p${MYSQL_TEST_PASSWORD:-test_password}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    # Use tmpfs for faster tests and no persistence
-    tmpfs:
-      - /var/lib/mysql
-    # Automatically remove container after stopping
-    restart: "no"
-    # MySQL configuration for testing
-    command: >
-      --default-authentication-plugin=mysql_native_password
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --innodb-buffer-pool-size=64M
-      --innodb-log-file-size=32M
-      --max-connections=200
-      --innodb-flush-log-at-trx-commit=0
-      --sync-binlog=0
-      --innodb-doublewrite=0
-
-  # MariaDB Test Database
-  mariadb-test:
-    profiles: ["test"]
-    image: mariadb:10.11
-    environment:
-      MARIADB_DATABASE: ${MARIADB_TEST_DB:-inventario_test}
-      MARIADB_USER: ${MARIADB_TEST_USER:-inventario_test}
-      MARIADB_PASSWORD: ${MARIADB_TEST_PASSWORD:-test_password}
-      MARIADB_ROOT_PASSWORD: ${MARIADB_TEST_ROOT_PASSWORD:-test_root_password}
-      MARIADB_CHARSET: utf8mb4
-      MARIADB_COLLATION: utf8mb4_unicode_ci
-    ports:
-      - "${MARIADB_TEST_PORT:-3309}:3306"  # Use different port to avoid conflicts
-    networks:
-      - inventario-test-network
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    # Use tmpfs for faster tests and no persistence
-    tmpfs:
-      - /var/lib/mysql
-    # Automatically remove container after stopping
-    restart: "no"
-    # MariaDB configuration for testing
-    command: >
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --innodb-buffer-pool-size=64M
-      --innodb-log-file-size=32M
-      --max-connections=200
-      --innodb-flush-log-at-trx-commit=0
-      --sync-binlog=0
-      --innodb-doublewrite=0
 
   # Database Migration Service (Test)
   inventario-migrate:
@@ -406,12 +274,8 @@ networks:
 volumes:
   # Named volumes for easier management (optional, using bind mounts above)
   postgres-data:
-  mysql-data:
-  mariadb-data:
   inventario-uploads:
   inventario-data:
 
   # Test volumes (optional, using tmpfs above)
   postgres-test-data:
-  mysql-test-data:
-  mariadb-test-data:
