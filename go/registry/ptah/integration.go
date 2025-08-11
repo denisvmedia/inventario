@@ -181,7 +181,7 @@ func (m *PtahMigrator) MigrateDown(ctx context.Context, targetVersion int, dryRu
 }
 
 // ResetDatabase drops all tables and recreates the schema from scratch
-func (m *PtahMigrator) ResetDatabase(ctx context.Context, args MigrateArgs, confirm bool) error { //nolint:revive // CLI flags are appropriate
+func (m *PtahMigrator) ResetDatabase(ctx context.Context, args MigrateArgs, confirm bool) error {
 	if args.DryRun {
 		fmt.Println("=== DRY RUN MODE ===")                           //nolint:forbidigo // CLI output is OK
 		fmt.Println("No actual changes will be made to the database") //nolint:forbidigo // CLI output is OK
