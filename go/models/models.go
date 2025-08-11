@@ -21,9 +21,24 @@ type TenantAware interface {
 	SetTenantID(string)
 }
 
+type UserAware interface {
+	GetUserID() string
+	SetUserID(string)
+}
+
+type TenantUserAware interface {
+	TenantAware
+	UserAware
+}
+
 type TenantAwareIDable interface {
 	IDable
 	TenantAware
+}
+
+type TenantUserAwareIDable interface {
+	IDable
+	TenantUserAware
 }
 
 var (
@@ -120,6 +135,7 @@ func FileTypeFromMIME(mimeType string) FileType {
 //
 //migrator:schema:rls:enable table="files" comment="Enable RLS for multi-tenant file isolation"
 //migrator:schema:rls:policy name="file_tenant_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures files can only be accessed and modified by their tenant"
+//migrator:schema:rls:policy name="file_user_isolation" table="files" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures files can only be accessed and modified by their user"
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:embedded mode="inline"
@@ -260,9 +276,10 @@ func (fe *FileEntity) GetDisplayTitle() string {
 }
 
 var (
-	_ IDable                 = (*EntityID)(nil)
-	_ TenantAwareIDable      = (*TenantAwareEntityID)(nil)
-	_ validation.Validatable = (*FileEntity)(nil)
+	_ IDable                  = (*EntityID)(nil)
+	_ TenantAwareIDable       = (*TenantAwareEntityID)(nil)
+	_ TenantUserAwareIDable   = (*TenantAwareEntityID)(nil)
+	_ validation.Validatable  = (*FileEntity)(nil)
 )
 
 type EntityID struct {
@@ -288,6 +305,8 @@ type TenantAwareEntityID struct {
 	EntityID
 	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
 	TenantID string `json:"tenant_id" db:"tenant_id" userinput:"false"`
+	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_entity_user"
+	UserID string `json:"user_id" db:"user_id" userinput:"false"`
 }
 
 func (i *TenantAwareEntityID) GetTenantID() string {
@@ -298,8 +317,21 @@ func (i *TenantAwareEntityID) SetTenantID(tenantID string) {
 	i.TenantID = tenantID
 }
 
+func (i *TenantAwareEntityID) GetUserID() string {
+	return i.UserID
+}
+
+func (i *TenantAwareEntityID) SetUserID(userID string) {
+	i.UserID = userID
+}
+
 func WithTenantID[T TenantAware](tenantID string, i T) T {
 	i.SetTenantID(tenantID)
+	return i
+}
+
+func WithUserID[T UserAware](userID string, i T) T {
+	i.SetUserID(userID)
 	return i
 }
 
@@ -308,6 +340,15 @@ func WithTenantAwareEntityID(id, tenantID string) TenantAwareEntityID {
 	return TenantAwareEntityID{
 		EntityID: EntityID{ID: id},
 		TenantID: tenantID,
+	}
+}
+
+// WithTenantUserAwareEntityID creates a TenantAwareEntityID with the given ID, tenant ID, and user ID
+func WithTenantUserAwareEntityID(id, tenantID, userID string) TenantAwareEntityID {
+	return TenantAwareEntityID{
+		EntityID: EntityID{ID: id},
+		TenantID: tenantID,
+		UserID:   userID,
 	}
 }
 
