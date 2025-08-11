@@ -28,17 +28,17 @@ var (
 )
 
 // migrateUp removes all test data by dropping and recreating the schema
-func migrateUp(ctx context.Context, migrator *ptah.PtahMigrator, dsn string) error {
+func migrateUp(t *testing.T, ctx context.Context, migrator *ptah.PtahMigrator, dsn string) error {
 	// Drop all tables (this cleans all data)
 	err := migrator.DropDatabase(ctx, false, true) // dryRun=false, confirm=true
 	if err != nil {
 		return err
 	}
 
-	// Also drop the inventario_app role if it exists (for test cleanup)
-	// This is needed because DropDatabase only drops tables, not roles
-	// Ignore errors since the role might not exist
-	_ = dropInventarioAppRole(ctx, dsn)
+	err = dropInventarioAppRole(t, ctx, dsn)
+	if err != nil {
+		return err // this is only when we fail to connect to db
+	}
 
 	u, err := url.Parse(dsn)
 	if err != nil {
@@ -60,7 +60,7 @@ func migrateUp(ctx context.Context, migrator *ptah.PtahMigrator, dsn string) err
 
 // dropInventarioAppRole drops the inventario_app role if it exists
 // This is needed for test cleanup since DropDatabase only drops tables
-func dropInventarioAppRole(ctx context.Context, dsn string) error {
+func dropInventarioAppRole(t *testing.T, ctx context.Context, dsn string) error {
 	// Create a direct database connection (similar to what DropDatabase does)
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -68,10 +68,30 @@ func dropInventarioAppRole(ctx context.Context, dsn string) error {
 	}
 	defer db.Close()
 
-	// Drop the role if it exists
-	_, err = db.ExecContext(ctx, "DROP ROLE IF EXISTS inventario_app")
+	// First, revoke all privileges from the role to ensure it can be dropped
+	_, err = db.ExecContext(ctx, "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM inventario_app")
 	if err != nil {
-		return err
+		t.Logf("Failed to revoke privileges from inventario_app: %v", err)
+	}
+	_, _ = db.ExecContext(ctx, "REVOKE ALL PRIVILEGES ON SCHEMA public FROM inventario_app")
+	if err != nil {
+		t.Logf("Failed to revoke privileges from inventario_app: %v", err)
+	}
+
+	// Terminate any connections that might be using the role
+	_, err = db.ExecContext(ctx, `
+		SELECT pg_terminate_backend(pid)
+		FROM pg_stat_activity
+		WHERE usename = 'inventario_app'
+	`)
+	if err != nil {
+		t.Logf("Failed to terminate connections for inventario_app: %v", err)
+	}
+
+	// Drop the role if it exists
+	_, err = db.ExecContext(ctx, "DROP ROLE inventario_app")
+	if err != nil {
+		t.Logf("Failed to drop inventario_app role: %v", err)
 	}
 
 	return nil
@@ -165,7 +185,7 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	err = migrateUp(ctx, migrator, dsn)
+	err = migrateUp(t, ctx, migrator, dsn)
 	c.Assert(err, qt.IsNil)
 
 	// Create registry set using the shared pool instead of creating a new one
