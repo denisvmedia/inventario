@@ -316,6 +316,7 @@ services:
       INVENTARIO_DB_DSN: "postgres://${POSTGRES_TEST_USER:-inventario_test}:${POSTGRES_TEST_PASSWORD:-test_password}@postgres-test:5432/${POSTGRES_TEST_DB:-inventario_test}?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
       INVENTARIO_ADDR: ":3333"
       INVENTARIO_UPLOAD_LOCATION: "file:///tmp/test-uploads?create_dir=1"
+      INVENTARIO_OPERATIONAL_USER: "${POSTGRES_TEST_USER:-inventario_test}"
 
       # Test environment
       TZ: UTC

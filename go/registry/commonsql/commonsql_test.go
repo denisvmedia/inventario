@@ -40,8 +40,17 @@ func migrateUp(ctx context.Context, migrator *ptah.PtahMigrator, dsn string) err
 	// Ignore errors since the role might not exist
 	_ = dropInventarioAppRole(ctx, dsn)
 
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return err
+	}
+	operationalUser := u.User.Username()
+
 	// Recreate the schema
-	err = migrator.MigrateUp(ctx, false)
+	err = migrator.MigrateUp(ctx, ptah.MigrateArgs{
+		DryRun: false,
+		OperationalUser: operationalUser,
+	})
 	if err != nil {
 		return err
 	}
