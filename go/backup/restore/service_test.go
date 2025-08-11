@@ -118,9 +118,9 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 
 		// First, create some existing data
 		existingLocation := models.Location{
-			EntityID: models.EntityID{ID: "loc1"},
-			Name:     "Existing Location",
-			Address:  "456 Existing St",
+			TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"),
+			Name:                "Existing Location",
+			Address:             "456 Existing St",
 		}
 		createdLocation, err := testRegistrySet.LocationRegistry.Create(ctx, existingLocation)
 		c.Assert(err, qt.IsNil)
@@ -176,9 +176,9 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 
 		// First, create some existing data
 		existingLocation := models.Location{
-			EntityID: models.EntityID{ID: "loc1"},
-			Name:     "Existing Location",
-			Address:  "456 Existing St",
+			TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"),
+			Name:                "Existing Location",
+			Address:             "456 Existing St",
 		}
 		createdLocation, err := testRegistrySet.LocationRegistry.Create(ctx, existingLocation)
 		c.Assert(err, qt.IsNil)

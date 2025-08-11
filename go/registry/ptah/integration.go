@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "github.com/lib/pq" // PostgreSQL driver for database/sql
 	"github.com/stokaro/ptah/core/goschema"
@@ -15,6 +17,11 @@ import (
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 )
+
+type MigrateArgs struct {
+	OperationalUser string
+	DryRun          bool
+}
 
 // PtahMigrator provides a simple interface to Ptah's migration capabilities
 type PtahMigrator struct {
@@ -67,6 +74,12 @@ func (m *PtahMigrator) GenerateMigrationFiles(ctx context.Context, migrationName
 		return nil, errkit.Wrap(err, "failed to generate migration files")
 	}
 
+	// Check if no migration was needed (files will be nil when no changes detected)
+	if files == nil {
+		fmt.Printf("✅ No schema changes detected - no migration files generated\n") //nolint:forbidigo // CLI output is OK
+		return nil, nil
+	}
+
 	fmt.Printf("✅ Generated migration files:\n") //nolint:forbidigo // CLI output is OK
 	fmt.Printf("  UP:   %s\n", files.UpFile)     //nolint:forbidigo // CLI output is OK
 	fmt.Printf("  DOWN: %s\n", files.DownFile)   //nolint:forbidigo // CLI output is OK
@@ -86,10 +99,10 @@ func (m *PtahMigrator) GenerateInitialMigration(ctx context.Context) (*generator
 }
 
 // MigrateUp applies migrations using embedded migrations or file-based migrations
-func (m *PtahMigrator) MigrateUp(ctx context.Context, dryRun bool) error { //nolint:revive // dryRun flag is appropriate for CLI
+func (m *PtahMigrator) MigrateUp(ctx context.Context, args MigrateArgs) error {
 	fmt.Println("=== MIGRATE UP ===") //nolint:forbidigo // CLI output is OK
 
-	if dryRun {
+	if args.DryRun {
 		fmt.Println("=== DRY RUN MODE ===")                           //nolint:forbidigo // CLI output is OK
 		fmt.Println("No actual changes will be made to the database") //nolint:forbidigo // CLI output is OK
 		fmt.Println()                                                 //nolint:forbidigo // CLI output is OK
@@ -130,7 +143,7 @@ func (m *PtahMigrator) MigrateUp(ctx context.Context, dryRun bool) error { //nol
 		}
 	}
 
-	if dryRun {
+	if args.DryRun {
 		fmt.Println("✅ Dry run completed successfully!") //nolint:forbidigo // CLI output is OK
 		return nil
 	}
@@ -141,30 +154,47 @@ func (m *PtahMigrator) MigrateUp(ctx context.Context, dryRun bool) error { //nol
 		return errkit.Wrap(err, "failed to run migrations")
 	}
 
+	permSQL := strings.ReplaceAll(PermissionsSQL(), "{{OP_USER}}", args.OperationalUser)
+	// extract database name from m.dbURL
+	dbURL, err := url.Parse(m.dbURL)
+	if err != nil {
+		return errkit.Wrap(err, "failed to parse database URL")
+	}
+	// get database name from url (dsn in a form like postgres://postgres:postgres@localhost:5432/inventario?sslmode=disable")
+	if dbURL.Path == "" {
+		return errkit.Wrap(err, "failed to extract database name from URL")
+	}
+	dbName := strings.TrimLeft(dbURL.Path, "/")
+	permSQL = strings.ReplaceAll(permSQL, "{{DB_NAME}}", dbName)
+	_, err = conn.Exec(permSQL)
+	if err != nil {
+		return errkit.Wrap(err, "failed to apply permissions")
+	}
+
 	fmt.Println("✅ Migrations completed successfully!") //nolint:forbidigo // CLI output is OK
 	return nil
 }
 
 // MigrateDown is not supported with Ptah's file-based migrations
 func (m *PtahMigrator) MigrateDown(ctx context.Context, targetVersion int, dryRun bool, confirm bool) error {
-	return fmt.Errorf("rollback migrations are not supported with Ptah's file-based migrations")
+	return fmt.Errorf("rollback migrations are supported by Ptah, but integration is not implemented yet")
 }
 
 // ResetDatabase drops all tables and recreates the schema from scratch
-func (m *PtahMigrator) ResetDatabase(ctx context.Context, dryRun bool, confirm bool) error { //nolint:revive // CLI flags are appropriate
-	if dryRun {
+func (m *PtahMigrator) ResetDatabase(ctx context.Context, args MigrateArgs, confirm bool) error {
+	if args.DryRun {
 		fmt.Println("=== DRY RUN MODE ===")                           //nolint:forbidigo // CLI output is OK
 		fmt.Println("No actual changes will be made to the database") //nolint:forbidigo // CLI output is OK
 		fmt.Println()                                                 //nolint:forbidigo // CLI output is OK
 	}
 
 	// First drop all tables
-	err := m.DropDatabase(ctx, dryRun, confirm)
+	err := m.DropDatabase(ctx, args.DryRun, confirm)
 	if err != nil {
 		return errkit.Wrap(err, "failed to drop database tables")
 	}
 
-	if dryRun {
+	if args.DryRun {
 		fmt.Println("After dropping tables, would apply all migrations...") //nolint:forbidigo // CLI output is OK
 		fmt.Println("✅ Dry run completed successfully!")                    //nolint:forbidigo // CLI output is OK
 		return nil
@@ -176,7 +206,10 @@ func (m *PtahMigrator) ResetDatabase(ctx context.Context, dryRun bool, confirm b
 	fmt.Println()                                          //nolint:forbidigo // CLI output is OK
 
 	// Then apply all migrations
-	err = m.MigrateUp(ctx, false)
+	err = m.MigrateUp(ctx, MigrateArgs{
+		DryRun:          args.DryRun,
+		OperationalUser: args.OperationalUser,
+	})
 	if err != nil {
 		return errkit.Wrap(err, "failed to recreate schema")
 	}

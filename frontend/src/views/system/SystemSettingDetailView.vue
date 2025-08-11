@@ -25,8 +25,9 @@
         <p><strong>Settings Required:</strong> Please configure the Main Currency to continue using the application.</p>
       </div>
     </div>
+
     <!-- UI Settings -->
-    <div v-else-if="settingId === 'ui_config'" class="form">
+    <div v-if="settingId === 'ui_config'" class="form">
       <div class="form-group">
         <label for="theme">Theme</label>
         <Select
@@ -93,7 +94,7 @@
     </div>
 
     <!-- System Settings -->
-    <div v-else-if="settingId === 'system_config'" class="form">
+    <div v-if="settingId === 'system_config'" class="form">
       <div class="form-group">
         <label for="main-currency">Main Currency</label>
         <Select

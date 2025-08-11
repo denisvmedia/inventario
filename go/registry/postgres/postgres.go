@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -99,11 +98,4 @@ func checkSchemaInited(pool *pgxpool.Pool) error {
 	// For production use, consider adding a flag to enable/disable this check
 
 	return nil
-}
-
-// ParsePostgreSQLURL parses a PostgreSQL URL and returns a connection string
-func ParsePostgreSQLURL(u *url.URL) string {
-	cp := *u // shallow copy
-	cp.Scheme = "postgres"
-	return cp.String()
 }

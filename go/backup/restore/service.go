@@ -395,7 +395,10 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 			break
 		}
 		image := &models.Image{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: originalXMLID},
+				TenantID: "default-tenant", // TODO: Get from context
+			},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -421,7 +424,10 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 			break
 		}
 		image := &models.Image{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: originalXMLID},
+				TenantID: "default-tenant", // TODO: Get from context
+			},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -441,7 +447,10 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 		if existingImage == nil {
 			if !options.DryRun {
 				image := &models.Image{
-					EntityID:    models.EntityID{ID: originalXMLID},
+					TenantAwareEntityID: models.TenantAwareEntityID{
+						EntityID: models.EntityID{ID: originalXMLID},
+						TenantID: "default-tenant", // TODO: Get from context
+					},
 					CommodityID: commodityID,
 					File:        file,
 				}
@@ -466,9 +475,9 @@ func (l *RestoreOperationProcessor) createImageRecord(ctx context.Context, file 
 			break
 		}
 		image := &models.Image{
-			EntityID:    existingImage.EntityID, // Keep the existing ID
-			CommodityID: commodityID,
-			File:        file,
+			TenantAwareEntityID: existingImage.TenantAwareEntityID, // Keep the existing ID and tenant
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid image")
@@ -497,7 +506,10 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 			break
 		}
 		invoice := &models.Invoice{
-			EntityID:    models.EntityID{ID: originalXMLID},
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: originalXMLID},
+				TenantID: "default-tenant", // TODO: Get from context
+			},
 			CommodityID: commodityID,
 			File:        file,
 		}
@@ -523,9 +535,9 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 			break
 		}
 		invoice := &models.Invoice{
-			EntityID:    models.EntityID{ID: originalXMLID},
-			CommodityID: commodityID,
-			File:        file,
+			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid invoice")
@@ -543,9 +555,9 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 		if existingInvoice == nil {
 			if !options.DryRun {
 				invoice := &models.Invoice{
-					EntityID:    models.EntityID{ID: originalXMLID},
-					CommodityID: commodityID,
-					File:        file,
+					TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
+					CommodityID:         commodityID,
+					File:                file,
 				}
 				if err := invoice.ValidateWithContext(ctx); err != nil {
 					return errkit.Wrap(err, "invalid invoice")
@@ -567,9 +579,9 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(ctx context.Context, fil
 		}
 		// Update existing invoice
 		invoice := &models.Invoice{
-			EntityID:    existingInvoice.EntityID, // Keep the existing ID
-			CommodityID: commodityID,
-			File:        file,
+			TenantAwareEntityID: existingInvoice.TenantAwareEntityID, // Keep the existing ID
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid invoice")
@@ -598,9 +610,9 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 			break
 		}
 		manual := &models.Manual{
-			EntityID:    models.EntityID{ID: originalXMLID},
-			CommodityID: commodityID,
-			File:        file,
+			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")
@@ -624,9 +636,9 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 			break
 		}
 		manual := &models.Manual{
-			EntityID:    models.EntityID{ID: originalXMLID},
-			CommodityID: commodityID,
-			File:        file,
+			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")
@@ -647,9 +659,9 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 				break
 			}
 			manual := &models.Manual{
-				EntityID:    models.EntityID{ID: originalXMLID},
-				CommodityID: commodityID,
-				File:        file,
+				TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: originalXMLID}, TenantID: "default-tenant"},
+				CommodityID:         commodityID,
+				File:                file,
 			}
 			if err := manual.ValidateWithContext(ctx); err != nil {
 				return errkit.Wrap(err, "invalid manual")
@@ -670,9 +682,9 @@ func (l *RestoreOperationProcessor) createManualRecord(ctx context.Context, file
 			break
 		}
 		manual := &models.Manual{
-			EntityID:    existingManual.EntityID, // Keep the existing ID
-			CommodityID: commodityID,
-			File:        file,
+			TenantAwareEntityID: existingManual.TenantAwareEntityID, // Keep the existing ID
+			CommodityID:         commodityID,
+			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")

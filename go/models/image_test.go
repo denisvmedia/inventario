@@ -88,8 +88,11 @@ func TestImage_JSONMarshaling(t *testing.T) {
 
 	// Create an image with all fields populated
 	image := models.Image{
-		EntityID: models.EntityID{
-			ID: "image-123",
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{
+				ID: "image-123",
+			},
+			TenantID: "test-tenant",
 		},
 		CommodityID: "commodity-123",
 		File: &models.File{
@@ -126,8 +129,11 @@ func TestImage_IDable(t *testing.T) {
 
 	// Create an image
 	image := models.Image{
-		EntityID: models.EntityID{
-			ID: "image-123",
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{
+				ID: "image-123",
+			},
+			TenantID: "test-tenant",
 		},
 		CommodityID: "commodity-123",
 		File: &models.File{

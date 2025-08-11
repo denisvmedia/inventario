@@ -249,6 +249,9 @@ linters:
       - path: 'cmd/.*\.go$'
         linters:
           - gochecknoinits
+      - path: 'models/.*\.go$'
+        linters:
+          - lll
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'

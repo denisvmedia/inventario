@@ -172,16 +172,22 @@ type XMLFile struct {
 // ConvertToLocation converts XMLLocation to models.Location
 func (xl *XMLLocation) ConvertToLocation() *models.Location {
 	return &models.Location{
-		EntityID: models.EntityID{ID: xl.ID},
-		Name:     xl.LocationName,
-		Address:  xl.Address,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: xl.ID},
+			TenantID: "default-tenant", // TODO: Get from context
+		},
+		Name:    xl.LocationName,
+		Address: xl.Address,
 	}
 }
 
 // ConvertToArea converts XMLArea to models.Area
 func (xa *XMLArea) ConvertToArea() *models.Area {
 	return &models.Area{
-		EntityID:   models.EntityID{ID: xa.ID},
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: xa.ID},
+			TenantID: "default-tenant", // TODO: Get from context
+		},
 		Name:       xa.AreaName,
 		LocationID: xa.LocationID,
 	}
@@ -190,7 +196,10 @@ func (xa *XMLArea) ConvertToArea() *models.Area {
 // ConvertToCommodity converts XMLCommodity to models.Commodity
 func (xc *XMLCommodity) ConvertToCommodity() (*models.Commodity, error) {
 	commodity := &models.Commodity{
-		EntityID:  models.EntityID{ID: xc.ID},
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: xc.ID},
+			TenantID: "default-tenant", // TODO: Get from context
+		},
 		Name:      xc.CommodityName,
 		ShortName: xc.ShortName,
 		AreaID:    xc.AreaID,

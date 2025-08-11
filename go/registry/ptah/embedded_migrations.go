@@ -17,6 +17,9 @@ import (
 //go:embed migrations/source/*
 var embeddedMigrations embed.FS
 
+//go:embed  migrations/custom/0000000000_permissions.sql
+var permissionsSQL string
+
 // EmbeddedMigrationInfo contains information about an embedded migration
 type EmbeddedMigrationInfo struct {
 	Version  int64
@@ -172,4 +175,8 @@ func ListEmbeddedMigrations() ([]string, error) {
 
 	sort.Strings(files)
 	return files, nil
+}
+
+func PermissionsSQL() string {
+	return permissionsSQL
 }

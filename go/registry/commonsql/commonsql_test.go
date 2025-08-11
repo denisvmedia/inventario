@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
@@ -26,15 +27,24 @@ var (
 )
 
 // migrateUp removes all test data by dropping and recreating the schema
-func migrateUp(ctx context.Context, migrator *ptah.PtahMigrator) error {
+func migrateUp(t *testing.T, ctx context.Context, migrator *ptah.PtahMigrator, dsn string) error {
 	// Drop all tables (this cleans all data)
 	err := migrator.DropDatabase(ctx, false, true) // dryRun=false, confirm=true
 	if err != nil {
 		return err
 	}
 
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return err
+	}
+	operationalUser := u.User.Username()
+
 	// Recreate the schema
-	err = migrator.MigrateUp(ctx, false)
+	err = migrator.MigrateUp(ctx, ptah.MigrateArgs{
+		DryRun:          false,
+		OperationalUser: operationalUser,
+	})
 	if err != nil {
 		return err
 	}
@@ -130,7 +140,7 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	err = migrateUp(ctx, migrator)
+	err = migrateUp(t, ctx, migrator, dsn)
 	c.Assert(err, qt.IsNil)
 
 	// Create registry set using the shared pool instead of creating a new one
