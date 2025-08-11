@@ -53,8 +53,8 @@ DROP POLICY IF EXISTS manual_tenant_isolation ON manuals;
 DROP POLICY IF EXISTS restore_operation_tenant_isolation ON restore_operations;
 -- Drop RLS policy restore_step_tenant_isolation from table restore_steps
 DROP POLICY IF EXISTS restore_step_tenant_isolation ON restore_steps;
--- Drop RLS policy user_tenant_isolation from table 
-DROP POLICY IF EXISTS user_tenant_isolation ON;
+-- Drop RLS policy user_tenant_isolation from table users
+DROP POLICY IF EXISTS user_tenant_isolation ON users;
 -- NOTE: RLS policies were removed from table  - verify if RLS should be disabled --
 -- Remove columns from table: invoices --
 -- ALTER statements: --
