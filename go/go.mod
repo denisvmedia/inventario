@@ -28,9 +28,8 @@ require (
 	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
-	github.com/stokaro/ptah v0.0.0-20250727151319-dff45f23ff3b
+	github.com/stokaro/ptah v0.0.0-20250810174313-dd8d7447200e
 	github.com/swaggo/http-swagger v1.3.4
-	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
