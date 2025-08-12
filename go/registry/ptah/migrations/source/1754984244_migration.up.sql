@@ -1,55 +1,40 @@
 -- Migration generated from schema differences
--- Generated on: 2025-08-11T20:32:07Z
+-- Generated on: 2025-08-12T07:37:24Z
 -- Direction: UP
 
+-- Add/modify columns for table: areas --
+-- ALTER statements: --
+ALTER TABLE areas ADD COLUMN user_id TEXT NOT NULL;
 -- Add/modify columns for table: commodities --
 -- ALTER statements: --
 ALTER TABLE commodities ADD COLUMN user_id TEXT NOT NULL;
+-- Add/modify columns for table: files --
+-- ALTER statements: --
+ALTER TABLE files ADD COLUMN user_id TEXT NOT NULL;
+-- Add/modify columns for table: restore_operations --
+-- ALTER statements: --
+ALTER TABLE restore_operations ADD COLUMN user_id TEXT NOT NULL;
 -- Add/modify columns for table: exports --
 -- ALTER statements: --
 ALTER TABLE exports ADD COLUMN user_id TEXT NOT NULL;
 -- Add/modify columns for table: images --
 -- ALTER statements: --
 ALTER TABLE images ADD COLUMN user_id TEXT NOT NULL;
--- Add/modify columns for table: manuals --
--- ALTER statements: --
-ALTER TABLE manuals ADD COLUMN user_id TEXT NOT NULL;
--- Add/modify columns for table: files --
--- ALTER statements: --
-ALTER TABLE files ADD COLUMN user_id TEXT NOT NULL;
--- Add/modify columns for table: users --
--- ALTER statements: --
--- Note: Users table gets user_id field that references itself (users.id)
-ALTER TABLE users ADD COLUMN user_id TEXT NOT NULL;
--- Add/modify columns for table: areas --
--- ALTER statements: --
-ALTER TABLE areas ADD COLUMN user_id TEXT NOT NULL;
 -- Add/modify columns for table: invoices --
 -- ALTER statements: --
 ALTER TABLE invoices ADD COLUMN user_id TEXT NOT NULL;
 -- Add/modify columns for table: locations --
 -- ALTER statements: --
 ALTER TABLE locations ADD COLUMN user_id TEXT NOT NULL;
--- Add/modify columns for table: restore_operations --
+-- Add/modify columns for table: manuals --
 -- ALTER statements: --
-ALTER TABLE restore_operations ADD COLUMN user_id TEXT NOT NULL;
+ALTER TABLE manuals ADD COLUMN user_id TEXT NOT NULL;
 -- Add/modify columns for table: restore_steps --
 -- ALTER statements: --
 ALTER TABLE restore_steps ADD COLUMN user_id TEXT NOT NULL;
-
--- Add foreign key constraints for user_id fields
-ALTER TABLE commodities ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE exports ADD CONSTRAINT fk_export_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE images ADD CONSTRAINT fk_image_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE manuals ADD CONSTRAINT fk_manual_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE files ADD CONSTRAINT fk_file_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE users ADD CONSTRAINT fk_user_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE areas ADD CONSTRAINT fk_area_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE invoices ADD CONSTRAINT fk_invoice_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE locations ADD CONSTRAINT fk_location_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE restore_operations ADD CONSTRAINT fk_restore_operation_user FOREIGN KEY (user_id) REFERENCES users(id);
-ALTER TABLE restore_steps ADD CONSTRAINT fk_restore_step_user FOREIGN KEY (user_id) REFERENCES users(id);
-
+-- Add/modify columns for table: users --
+-- ALTER statements: --
+ALTER TABLE users ADD COLUMN user_id TEXT NOT NULL;
 -- Ensures areas can only be accessed and modified by their user
 DROP POLICY IF EXISTS area_user_isolation ON areas;
 CREATE POLICY area_user_isolation ON areas FOR ALL TO inventario_app
