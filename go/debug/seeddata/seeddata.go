@@ -10,22 +10,88 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+// createCommodityWithTenant is a helper function to create commodities with tenant and user IDs
+func createCommodityWithTenant(registrySet *registry.Set, ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	// Set the tenant and user IDs
+	commodity.TenantID = "test-tenant-id"
+	commodity.UserID = "test-user-id"
+
+	return registrySet.CommodityRegistry.Create(ctx, commodity)
+}
+
 // SeedData seeds the database with example data.
 func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's a seed function
 	ctx := context.Background()
+
+	// Create or get test tenant that our tests expect
+	testTenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Organization",
+		Slug:     "test-org",
+		Status:   models.TenantStatusActive,
+	}
+
+	// Try to get existing tenant first, create if it doesn't exist
+	existingTenant, err := registrySet.TenantRegistry.Get(ctx, "test-tenant-id")
+	if err != nil {
+		// Tenant doesn't exist, create it
+		_, err = registrySet.TenantRegistry.Create(ctx, testTenant)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Tenant exists, use it
+		_ = existingTenant
+	}
+
+	// Create or get test user that our tests expect
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id", // Self-reference
+		},
+		Email:    "admin@test-org.com",
+		Name:     "Test Administrator",
+		Role:     models.UserRoleAdmin,
+		IsActive: true,
+	}
+
+	// Set a password
+	err = testUser.SetPassword("testpassword123")
+	if err != nil {
+		return err
+	}
+
+	// Try to get existing user first, create if it doesn't exist
+	existingUser, err := registrySet.UserRegistry.Get(ctx, "test-user-id")
+	if err != nil {
+		// User doesn't exist, create it
+		_, err = registrySet.UserRegistry.Create(ctx, testUser)
+		if err != nil {
+			return err
+		}
+	} else {
+		// User exists, use it
+		_ = existingUser
+	}
 
 	// Create default system configuration with CZK as main currency
 	systemConfig := models.SettingsObject{
 		MainCurrency: ptr.To("CZK"),
 	}
 
-	err := registrySet.SettingsRegistry.Save(ctx, systemConfig)
+	err = registrySet.SettingsRegistry.Save(ctx, systemConfig)
 	if err != nil {
 		return err
 	}
 
 	// Create locations
 	home, err := registrySet.LocationRegistry.Create(ctx, models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:    "Home",
 		Address: "123 Main St, Anytown, USA",
 	})
@@ -34,6 +100,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	office, err := registrySet.LocationRegistry.Create(ctx, models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:    "Office",
 		Address: "456 Business Ave, Worktown, USA",
 	})
@@ -42,6 +112,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	storage, err := registrySet.LocationRegistry.Create(ctx, models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:    "Storage Unit",
 		Address: "789 Storage Blvd, Storeville, USA",
 	})
@@ -51,6 +125,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 
 	// Create areas for Home
 	livingRoom, err := registrySet.AreaRegistry.Create(ctx, models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:       "Living Room",
 		LocationID: home.ID,
 	})
@@ -59,6 +137,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	kitchen, err := registrySet.AreaRegistry.Create(ctx, models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:       "Kitchen",
 		LocationID: home.ID,
 	})
@@ -67,6 +149,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	bedroom, err := registrySet.AreaRegistry.Create(ctx, models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:       "Bedroom",
 		LocationID: home.ID,
 	})
@@ -76,6 +162,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 
 	// Create areas for Office
 	workDesk, err := registrySet.AreaRegistry.Create(ctx, models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:       "Work Desk",
 		LocationID: office.ID,
 	})
@@ -84,6 +174,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	conferenceRoom, err := registrySet.AreaRegistry.Create(ctx, models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:       "Conference Room",
 		LocationID: office.ID,
 	})
@@ -93,6 +187,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 
 	// Create areas for Storage
 	unitA, err := registrySet.AreaRegistry.Create(ctx, models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:       "Unit A",
 		LocationID: storage.ID,
 	})
@@ -102,6 +200,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 
 	// Create commodities for Living Room
 	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:                   "Smart TV",
 		ShortName:              "TV",
 		Type:                   models.CommodityTypeElectronics,
@@ -123,6 +225,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:                   "Sofa",
 		ShortName:              "Sofa",
 		Type:                   models.CommodityTypeFurniture,
@@ -144,7 +250,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	// Create commodities for Kitchen
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                   "Refrigerator",
 		ShortName:              "Fridge",
 		Type:                   models.CommodityTypeWhiteGoods,
@@ -165,7 +271,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 		return err
 	}
 
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                   "Microwave Oven",
 		ShortName:              "Microwave",
 		Type:                   models.CommodityTypeWhiteGoods,
@@ -187,7 +293,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	// Create commodities for Bedroom
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                   "Bed Frame",
 		ShortName:              "Bed",
 		Type:                   models.CommodityTypeFurniture,
@@ -209,7 +315,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	// Create commodities for Work Desk
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                   "Laptop",
 		ShortName:              "Laptop",
 		Type:                   models.CommodityTypeElectronics,
@@ -231,7 +337,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 		return err
 	}
 
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                   "Monitor",
 		ShortName:              "Monitor",
 		Type:                   models.CommodityTypeElectronics,
@@ -255,7 +361,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	// Create commodities for Conference Room
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                   "Projector",
 		ShortName:              "Projector",
 		Type:                   models.CommodityTypeElectronics,
@@ -277,7 +383,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	// Create commodities for Storage Unit
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                  "Winter Clothes",
 		ShortName:             "Winter",
 		Type:                  models.CommodityTypeClothes,
@@ -296,7 +402,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 		return err
 	}
 
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                   "Camping Equipment",
 		ShortName:              "Camping",
 		Type:                   models.CommodityTypeEquipment,
@@ -317,7 +423,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	// Create a new draft commodity with CZK as original currency
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                  "Coffee Machine",
 		ShortName:             "Coffee",
 		Type:                  models.CommodityTypeWhiteGoods,
@@ -339,7 +445,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's
 	}
 
 	// Create a commodity with original price in USD but no current price, only converted price
-	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+	_, err = createCommodityWithTenant(registrySet, ctx, models.Commodity{
 		Name:                   "Desk Chair",
 		ShortName:              "Chair",
 		Type:                   models.CommodityTypeFurniture,
