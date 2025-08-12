@@ -163,7 +163,17 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newArea, err := api.areaRegistry.Update(r.Context(), *input.Data.Attributes)
+	// Preserve tenant_id and user_id from the existing area
+	// This ensures the foreign key constraints are satisfied during updates
+	updateData := *input.Data.Attributes
+	if updateData.TenantID == "" {
+		updateData.TenantID = area.TenantID
+	}
+	if updateData.UserID == "" {
+		updateData.UserID = area.UserID
+	}
+
+	newArea, err := api.areaRegistry.Update(r.Context(), updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

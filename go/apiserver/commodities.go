@@ -232,7 +232,17 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 
 	input.Data.Attributes.ID = input.Data.ID
 
-	updatedCommodity, err := api.registrySet.CommodityRegistry.Update(r.Context(), *input.Data.Attributes)
+	// Preserve tenant_id and user_id from the existing commodity
+	// This ensures the foreign key constraints are satisfied during updates
+	updateData := *input.Data.Attributes
+	if updateData.TenantID == "" {
+		updateData.TenantID = commodity.TenantID
+	}
+	if updateData.UserID == "" {
+		updateData.UserID = commodity.UserID
+	}
+
+	updatedCommodity, err := api.registrySet.CommodityRegistry.Update(r.Context(), updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

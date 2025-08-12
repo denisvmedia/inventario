@@ -171,7 +171,17 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	newLocation, err := api.locationRegistry.Update(r.Context(), *input.Data.Attributes)
+	// Preserve tenant_id and user_id from the existing location
+	// This ensures the foreign key constraints are satisfied during updates
+	updateData := *input.Data.Attributes
+	if updateData.TenantID == "" {
+		updateData.TenantID = location.TenantID
+	}
+	if updateData.UserID == "" {
+		updateData.UserID = location.UserID
+	}
+
+	newLocation, err := api.locationRegistry.Update(r.Context(), updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
