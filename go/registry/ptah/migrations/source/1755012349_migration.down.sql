@@ -1,5 +1,5 @@
 -- Migration rollback
--- Generated on: 2025-08-12T07:37:24Z
+-- Generated on: 2025-08-12T15:25:49Z
 -- Direction: DOWN
 
 -- Drop RLS policy area_user_isolation from table 
@@ -33,14 +33,6 @@ ALTER TABLE areas DROP COLUMN user_id CASCADE;
 -- ALTER statements: --
 ALTER TABLE commodities DROP COLUMN user_id CASCADE;
 -- WARNING: Dropping column commodities.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: files --
--- ALTER statements: --
-ALTER TABLE files DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column files.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: restore_operations --
--- ALTER statements: --
-ALTER TABLE restore_operations DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column restore_operations.user_id with CASCADE - This will delete data and dependent objects! --
 -- Remove columns from table: exports --
 -- ALTER statements: --
 ALTER TABLE exports DROP COLUMN user_id CASCADE;
@@ -53,14 +45,22 @@ ALTER TABLE images DROP COLUMN user_id CASCADE;
 -- ALTER statements: --
 ALTER TABLE invoices DROP COLUMN user_id CASCADE;
 -- WARNING: Dropping column invoices.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: locations --
--- ALTER statements: --
-ALTER TABLE locations DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column locations.user_id with CASCADE - This will delete data and dependent objects! --
 -- Remove columns from table: manuals --
 -- ALTER statements: --
 ALTER TABLE manuals DROP COLUMN user_id CASCADE;
 -- WARNING: Dropping column manuals.user_id with CASCADE - This will delete data and dependent objects! --
+-- Remove columns from table: files --
+-- ALTER statements: --
+ALTER TABLE files DROP COLUMN user_id CASCADE;
+-- WARNING: Dropping column files.user_id with CASCADE - This will delete data and dependent objects! --
+-- Remove columns from table: locations --
+-- ALTER statements: --
+ALTER TABLE locations DROP COLUMN user_id CASCADE;
+-- WARNING: Dropping column locations.user_id with CASCADE - This will delete data and dependent objects! --
+-- Remove columns from table: restore_operations --
+-- ALTER statements: --
+ALTER TABLE restore_operations DROP COLUMN user_id CASCADE;
+-- WARNING: Dropping column restore_operations.user_id with CASCADE - This will delete data and dependent objects! --
 -- Remove columns from table: restore_steps --
 -- ALTER statements: --
 ALTER TABLE restore_steps DROP COLUMN user_id CASCADE;
