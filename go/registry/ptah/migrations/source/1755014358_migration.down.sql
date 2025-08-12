@@ -2,70 +2,59 @@
 -- Generated on: 2025-08-12T15:59:18Z
 -- Direction: DOWN
 
--- Drop RLS policy area_user_isolation from table 
-DROP POLICY IF EXISTS area_user_isolation ON;
--- Drop RLS policy commodity_user_isolation from table 
-DROP POLICY IF EXISTS commodity_user_isolation ON;
--- Drop RLS policy export_user_isolation from table 
-DROP POLICY IF EXISTS export_user_isolation ON;
--- Drop RLS policy file_user_isolation from table 
-DROP POLICY IF EXISTS file_user_isolation ON;
--- Drop RLS policy image_user_isolation from table 
-DROP POLICY IF EXISTS image_user_isolation ON;
--- Drop RLS policy invoice_user_isolation from table 
-DROP POLICY IF EXISTS invoice_user_isolation ON;
--- Drop RLS policy location_user_isolation from table 
-DROP POLICY IF EXISTS location_user_isolation ON;
--- Drop RLS policy manual_user_isolation from table 
-DROP POLICY IF EXISTS manual_user_isolation ON;
--- Drop RLS policy restore_operation_user_isolation from table 
-DROP POLICY IF EXISTS restore_operation_user_isolation ON;
--- Drop RLS policy restore_step_user_isolation from table 
-DROP POLICY IF EXISTS restore_step_user_isolation ON;
--- Drop RLS policy user_user_isolation from table 
-DROP POLICY IF EXISTS user_user_isolation ON;
--- NOTE: RLS policies were removed from table  - verify if RLS should be disabled --
--- Remove columns from table: users --
--- ALTER statements: --
-ALTER TABLE users DROP COLUMN id CASCADE;
--- WARNING: Dropping column users.id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: areas --
--- ALTER statements: --
-ALTER TABLE areas DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column areas.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: restore_operations --
--- ALTER statements: --
-ALTER TABLE restore_operations DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column restore_operations.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: invoices --
--- ALTER statements: --
-ALTER TABLE invoices DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column invoices.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: manuals --
--- ALTER statements: --
-ALTER TABLE manuals DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column manuals.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: locations --
--- ALTER statements: --
-ALTER TABLE locations DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column locations.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: files --
--- ALTER statements: --
-ALTER TABLE files DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column files.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: exports --
--- ALTER statements: --
-ALTER TABLE exports DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column exports.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: commodities --
--- ALTER statements: --
-ALTER TABLE commodities DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column commodities.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: images --
--- ALTER statements: --
-ALTER TABLE images DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column images.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: restore_steps --
--- ALTER statements: --
-ALTER TABLE restore_steps DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column restore_steps.user_id with CASCADE - This will delete data and dependent objects! --;
+-- ============================================================================
+-- CUSTOM INJECTION START: Proper rollback for user isolation migration
+-- WARNING: If this migration is re-generated, this custom logic will be lost!
+-- ============================================================================
+
+-- Drop RLS policies
+DROP POLICY IF EXISTS area_user_isolation ON areas;
+DROP POLICY IF EXISTS commodity_user_isolation ON commodities;
+DROP POLICY IF EXISTS export_user_isolation ON exports;
+DROP POLICY IF EXISTS file_user_isolation ON files;
+DROP POLICY IF EXISTS image_user_isolation ON images;
+DROP POLICY IF EXISTS invoice_user_isolation ON invoices;
+DROP POLICY IF EXISTS location_user_isolation ON locations;
+DROP POLICY IF EXISTS manual_user_isolation ON manuals;
+DROP POLICY IF EXISTS restore_operation_user_isolation ON restore_operations;
+DROP POLICY IF EXISTS restore_step_user_isolation ON restore_steps;
+DROP POLICY IF EXISTS user_user_isolation ON users;
+
+-- Drop foreign key constraints
+ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE areas DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE restore_operations DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE invoices DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE manuals DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE locations DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE files DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE exports DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE commodities DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE images DROP CONSTRAINT IF EXISTS fk_entity_user;
+ALTER TABLE restore_steps DROP CONSTRAINT IF EXISTS fk_entity_user;
+
+-- Drop user_id columns
+ALTER TABLE areas DROP COLUMN IF EXISTS user_id;
+ALTER TABLE restore_operations DROP COLUMN IF EXISTS user_id;
+ALTER TABLE invoices DROP COLUMN IF EXISTS user_id;
+ALTER TABLE manuals DROP COLUMN IF EXISTS user_id;
+ALTER TABLE locations DROP COLUMN IF EXISTS user_id;
+ALTER TABLE files DROP COLUMN IF EXISTS user_id;
+ALTER TABLE exports DROP COLUMN IF EXISTS user_id;
+ALTER TABLE commodities DROP COLUMN IF EXISTS user_id;
+ALTER TABLE images DROP COLUMN IF EXISTS user_id;
+ALTER TABLE restore_steps DROP COLUMN IF EXISTS user_id;
+ALTER TABLE users DROP COLUMN IF EXISTS user_id;
+
+-- Remove the default user (optional - might want to keep for data integrity)
+-- DELETE FROM users WHERE id = 'default-user-id';
+
+-- Remove the default tenant (optional - might want to keep for data integrity)
+-- DELETE FROM tenants WHERE id = 'default-tenant-id';
+
+-- Drop the id column from users table (this will recreate the original state)
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_pkey;
+ALTER TABLE users DROP COLUMN IF EXISTS id;
+
+-- CUSTOM INJECTION END
+-- ============================================================================

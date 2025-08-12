@@ -279,7 +279,6 @@ var (
 	_ IDable                 = (*EntityID)(nil)
 	_ TenantAwareIDable      = (*TenantAwareEntityID)(nil)
 	_ TenantUserAwareIDable  = (*TenantAwareEntityID)(nil)
-	_ TenantUserAwareIDable  = (*UserEntityID)(nil)
 	_ validation.Validatable = (*FileEntity)(nil)
 )
 
@@ -326,31 +325,7 @@ func (i *TenantAwareEntityID) SetUserID(userID string) {
 	i.UserID = userID
 }
 
-// UserEntityID is a special entity ID for User models that only includes tenant_id
-// Users are isolated by their own ID, not by a separate user_id field
-type UserEntityID struct {
-	//migrator:embedded mode="inline"
-	EntityID
-	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
-	TenantID string `json:"tenant_id" db:"tenant_id" userinput:"false"`
-}
 
-func (i *UserEntityID) GetTenantID() string {
-	return i.TenantID
-}
-
-func (i *UserEntityID) SetTenantID(tenantID string) {
-	i.TenantID = tenantID
-}
-
-// UserEntityID implements UserAware by using the ID field as the user ID
-func (i *UserEntityID) GetUserID() string {
-	return i.ID
-}
-
-func (i *UserEntityID) SetUserID(userID string) {
-	i.ID = userID
-}
 
 func WithTenantID[T TenantAware](tenantID string, i T) T {
 	i.SetTenantID(tenantID)
@@ -379,14 +354,7 @@ func WithTenantUserAwareEntityID(id, tenantID, userID string) TenantAwareEntityI
 	}
 }
 
-// WithUserEntityID creates a UserEntityID with the given ID and tenant ID
-// For users, the user ID is the same as the entity ID
-func WithUserEntityID(id, tenantID string) UserEntityID {
-	return UserEntityID{
-		EntityID: EntityID{ID: id},
-		TenantID: tenantID,
-	}
-}
+
 
 type ValuerSlice[T any] []T
 

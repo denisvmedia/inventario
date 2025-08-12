@@ -215,8 +215,9 @@ func createTestUser(c *qt.C, userRegistry registry.UserRegistry, tenantID string
 
 	ctx := c.Context()
 	user := models.User{
-		UserEntityID: models.UserEntityID{
+		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenantID,
+			UserID:   "", // Will be set to the user's own ID after creation
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
@@ -232,7 +233,12 @@ func createTestUser(c *qt.C, userRegistry registry.UserRegistry, tenantID string
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdUser, qt.IsNotNil)
 
-	return createdUser
+	// Update the user to set user_id to its own ID (self-reference)
+	createdUser.UserID = createdUser.ID
+	updatedUser, err := userRegistry.Update(ctx, *createdUser)
+	c.Assert(err, qt.IsNil)
+
+	return updatedUser
 }
 
 // setupMainCurrency sets up the main currency for tests
