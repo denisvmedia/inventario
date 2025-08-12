@@ -146,7 +146,64 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	// Create registry set using the shared pool instead of creating a new one
 	registrySet := createRegistrySetFromPool(pool)
 
+	// Create test tenant and user that the tests expect
+	setupTestTenantAndUser(c, registrySet)
+
 	return registrySet, func() {}
+}
+
+// setupTestTenantAndUser creates the test tenant and user that the tests expect
+func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) {
+	c.Helper()
+
+	ctx := c.Context()
+
+	// Create test tenant if it doesn't exist
+	testTenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+		Slug:     "test-tenant",
+		Status:   models.TenantStatusActive,
+	}
+
+	// Try to get existing tenant first
+	existingTenant, err := registrySet.TenantRegistry.Get(ctx, "test-tenant-id")
+	if err != nil {
+		// Tenant doesn't exist, create it
+		_, err = registrySet.TenantRegistry.Create(ctx, testTenant)
+		c.Assert(err, qt.IsNil)
+	} else {
+		// Tenant exists, use it
+		_ = existingTenant
+	}
+
+	// Create test user if it doesn't exist
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id", // Self-reference
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+
+	// Set a password
+	err = testUser.SetPassword("testpassword123")
+	c.Assert(err, qt.IsNil)
+
+	// Try to get existing user first
+	existingUser, err := registrySet.UserRegistry.Get(ctx, "test-user-id")
+	if err != nil {
+		// User doesn't exist, create it
+		_, err = registrySet.UserRegistry.Create(ctx, testUser)
+		c.Assert(err, qt.IsNil)
+	} else {
+		// User exists, use it
+		_ = existingUser
+	}
 }
 
 // createTestLocation creates a test location for use in tests.

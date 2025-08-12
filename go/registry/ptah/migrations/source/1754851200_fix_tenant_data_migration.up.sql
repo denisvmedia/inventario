@@ -5,8 +5,8 @@
 
 -- Step 1: Insert default tenant for existing data (if not exists)
 INSERT INTO tenants (id, name, slug, status, created_at, updated_at)
-VALUES ('default-tenant', 'Default Tenant', 'default', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON CONFLICT (id) DO NOTHING;
+SELECT 'default-tenant-id', 'Default Tenant', 'default-tenant', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    WHERE NOT EXISTS (SELECT 1 FROM tenants WHERE id = 'default-tenant-id');
 
 -- Step 2: Update all existing records with NULL tenant_id to use the default tenant
 UPDATE areas SET tenant_id = 'default-tenant' WHERE tenant_id IS NULL;

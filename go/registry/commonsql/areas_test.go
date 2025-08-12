@@ -16,13 +16,15 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 		{
 			name: "valid area with all fields",
 			area: models.Area{
-				Name: "Main Storage",
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "default-tenant", "test-user-id"),
+				Name:                "Main Storage",
 			},
 		},
 		{
 			name: "valid area with minimal fields",
 			area: models.Area{
-				Name: "Secondary Storage",
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area2", "default-tenant", "test-user-id"),
+				Name:                "Secondary Storage",
 			},
 		},
 	}
@@ -33,7 +35,7 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 			ctx := c.Context()
 
 			registrySet, cleanup := setupTestRegistrySet(t)
-			defer cleanup()
+			c.Cleanup(cleanup)
 
 			// Create a test location first
 			location := createTestLocation(c, registrySet.LocationRegistry)
