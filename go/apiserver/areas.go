@@ -84,13 +84,23 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	area, err := api.areaRegistry.Create(r.Context(), *input.Data.Attributes)
+	// Temporarily set default tenant and user IDs while multi-tenancy is disabled
+	// TODO: Remove this when proper tenant/user context is implemented
+	area := *input.Data.Attributes
+	if area.TenantID == "" {
+		area.TenantID = "test-tenant-id" // Use the same ID as our tests and seeding
+	}
+	if area.UserID == "" {
+		area.UserID = "test-user-id" // Use the same ID as our tests and seeding
+	}
+
+	createdArea, err := api.areaRegistry.Create(r.Context(), area)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	resp := jsonapi.NewAreaResponse(area).WithStatusCode(http.StatusCreated)
+	resp := jsonapi.NewAreaResponse(createdArea).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return

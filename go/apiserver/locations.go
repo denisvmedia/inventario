@@ -81,20 +81,31 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		unprocessableEntityError(w, r, err)
 		return
 	}
-	location, err := api.locationRegistry.Create(r.Context(), *input.Data.Attributes)
+
+	// Temporarily set default tenant and user IDs while multi-tenancy is disabled
+	// TODO: Remove this when proper tenant/user context is implemented
+	location := *input.Data.Attributes
+	if location.TenantID == "" {
+		location.TenantID = "test-tenant-id" // Use the same ID as our tests and seeding
+	}
+	if location.UserID == "" {
+		location.UserID = "test-user-id" // Use the same ID as our tests and seeding
+	}
+
+	createdLocation, err := api.locationRegistry.Create(r.Context(), location)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(r.Context(), location.ID)
+	areas, err := api.locationRegistry.GetAreas(r.Context(), createdLocation.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
 	respLocation := &jsonapi.Location{
-		Location: location,
+		Location: createdLocation,
 		Areas:    areas,
 	}
 

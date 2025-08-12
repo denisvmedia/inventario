@@ -119,31 +119,41 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	commodity, err := api.registrySet.CommodityRegistry.Create(r.Context(), *input.Data.Attributes)
+	// Temporarily set default tenant and user IDs while multi-tenancy is disabled
+	// TODO: Remove this when proper tenant/user context is implemented
+	commodity := *input.Data.Attributes
+	if commodity.TenantID == "" {
+		commodity.TenantID = "test-tenant-id" // Use the same ID as our tests and seeding
+	}
+	if commodity.UserID == "" {
+		commodity.UserID = "test-user-id" // Use the same ID as our tests and seeding
+	}
+
+	createdCommodity, err := api.registrySet.CommodityRegistry.Create(r.Context(), commodity)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	var imagesError string
-	images, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
+	images, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), createdCommodity.ID)
 	if err != nil {
 		imagesError = err.Error()
 	}
 
 	var manualsError string
-	manuals, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
+	manuals, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), createdCommodity.ID)
 	if err != nil {
 		manualsError = err.Error()
 	}
 
 	var invoicesError string
-	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
+	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), createdCommodity.ID)
 	if err != nil {
 		invoicesError = err.Error()
 	}
 
-	resp := jsonapi.NewCommodityResponse(commodity, &jsonapi.CommodityMeta{
+	resp := jsonapi.NewCommodityResponse(createdCommodity, &jsonapi.CommodityMeta{
 		Images:        images,
 		ImagesError:   imagesError,
 		Manuals:       manuals,
