@@ -20,7 +20,7 @@ func createCommodityWithTenant(registrySet *registry.Set, ctx context.Context, c
 }
 
 // SeedData seeds the database with example data.
-func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo // it's a seed function
+func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
 	ctx := context.Background()
 
 	// Create or get test tenant that our tests expect
