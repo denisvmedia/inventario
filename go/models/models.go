@@ -325,8 +325,6 @@ func (i *TenantAwareEntityID) SetUserID(userID string) {
 	i.UserID = userID
 }
 
-
-
 func WithTenantID[T TenantAware](tenantID string, i T) T {
 	i.SetTenantID(tenantID)
 	return i
@@ -353,8 +351,6 @@ func WithTenantUserAwareEntityID(id, tenantID, userID string) TenantAwareEntityI
 		UserID:   userID,
 	}
 }
-
-
 
 type ValuerSlice[T any] []T
 

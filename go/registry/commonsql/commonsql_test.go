@@ -249,7 +249,7 @@ func createTestArea(c *qt.C, areaRegistry registry.AreaRegistry, locationID stri
 }
 
 // createTestTenant creates a test tenant for use in tests.
-func createTestTenant(c *qt.C, tenantRegistry registry.TenantRegistry) *models.Tenant {
+func createTestTenant(c *qt.C, tenantRegistry registry.TenantRegistry) *models.Tenant { //nolint:unused // for future use
 	c.Helper()
 
 	ctx := c.Context()
@@ -267,7 +267,7 @@ func createTestTenant(c *qt.C, tenantRegistry registry.TenantRegistry) *models.T
 }
 
 // createTestUser creates a test user for use in tests.
-func createTestUser(c *qt.C, userRegistry registry.UserRegistry, tenantID string) *models.User {
+func createTestUser(c *qt.C, userRegistry registry.UserRegistry, tenantID string) *models.User { //nolint:unused // for future use
 	c.Helper()
 
 	ctx := c.Context()
