@@ -1,5 +1,5 @@
 -- Migration rollback
--- Generated on: 2025-08-12T15:42:43Z
+-- Generated on: 2025-08-12T15:59:18Z
 -- Direction: DOWN
 
 -- Drop RLS policy area_user_isolation from table 
@@ -25,10 +25,18 @@ DROP POLICY IF EXISTS restore_step_user_isolation ON;
 -- Drop RLS policy user_user_isolation from table 
 DROP POLICY IF EXISTS user_user_isolation ON;
 -- NOTE: RLS policies were removed from table  - verify if RLS should be disabled --
+-- Remove columns from table: users --
+-- ALTER statements: --
+ALTER TABLE users DROP COLUMN id CASCADE;
+-- WARNING: Dropping column users.id with CASCADE - This will delete data and dependent objects! --
 -- Remove columns from table: areas --
 -- ALTER statements: --
 ALTER TABLE areas DROP COLUMN user_id CASCADE;
 -- WARNING: Dropping column areas.user_id with CASCADE - This will delete data and dependent objects! --
+-- Remove columns from table: restore_operations --
+-- ALTER statements: --
+ALTER TABLE restore_operations DROP COLUMN user_id CASCADE;
+-- WARNING: Dropping column restore_operations.user_id with CASCADE - This will delete data and dependent objects! --
 -- Remove columns from table: invoices --
 -- ALTER statements: --
 ALTER TABLE invoices DROP COLUMN user_id CASCADE;
@@ -37,38 +45,27 @@ ALTER TABLE invoices DROP COLUMN user_id CASCADE;
 -- ALTER statements: --
 ALTER TABLE manuals DROP COLUMN user_id CASCADE;
 -- WARNING: Dropping column manuals.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: images --
--- ALTER statements: --
-ALTER TABLE images DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column images.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: users --
--- ALTER statements: --
-ALTER TABLE users DROP COLUMN id CASCADE;
--- WARNING: Dropping column users.id with CASCADE - This will delete data and dependent objects! --
--- ALTER statements: --
-ALTER TABLE users DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column users.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: files --
--- ALTER statements: --
-ALTER TABLE files DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column files.user_id with CASCADE - This will delete data and dependent objects! --
 -- Remove columns from table: locations --
 -- ALTER statements: --
 ALTER TABLE locations DROP COLUMN user_id CASCADE;
 -- WARNING: Dropping column locations.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: restore_operations --
+-- Remove columns from table: files --
 -- ALTER statements: --
-ALTER TABLE restore_operations DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column restore_operations.user_id with CASCADE - This will delete data and dependent objects! --
+ALTER TABLE files DROP COLUMN user_id CASCADE;
+-- WARNING: Dropping column files.user_id with CASCADE - This will delete data and dependent objects! --
+-- Remove columns from table: exports --
+-- ALTER statements: --
+ALTER TABLE exports DROP COLUMN user_id CASCADE;
+-- WARNING: Dropping column exports.user_id with CASCADE - This will delete data and dependent objects! --
 -- Remove columns from table: commodities --
 -- ALTER statements: --
 ALTER TABLE commodities DROP COLUMN user_id CASCADE;
 -- WARNING: Dropping column commodities.user_id with CASCADE - This will delete data and dependent objects! --
+-- Remove columns from table: images --
+-- ALTER statements: --
+ALTER TABLE images DROP COLUMN user_id CASCADE;
+-- WARNING: Dropping column images.user_id with CASCADE - This will delete data and dependent objects! --
 -- Remove columns from table: restore_steps --
 -- ALTER statements: --
 ALTER TABLE restore_steps DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column restore_steps.user_id with CASCADE - This will delete data and dependent objects! --
--- Remove columns from table: exports --
--- ALTER statements: --
-ALTER TABLE exports DROP COLUMN user_id CASCADE;
--- WARNING: Dropping column exports.user_id with CASCADE - This will delete data and dependent objects! --;
+-- WARNING: Dropping column restore_steps.user_id with CASCADE - This will delete data and dependent objects! --;

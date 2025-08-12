@@ -326,15 +326,13 @@ func (i *TenantAwareEntityID) SetUserID(userID string) {
 	i.UserID = userID
 }
 
-// UserEntityID is a special entity ID for User models that includes tenant_id and user_id
-// but the user_id is a self-reference (users reference their own ID)
+// UserEntityID is a special entity ID for User models that only includes tenant_id
+// Users are isolated by their own ID, not by a separate user_id field
 type UserEntityID struct {
 	//migrator:embedded mode="inline"
 	EntityID
 	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
 	TenantID string `json:"tenant_id" db:"tenant_id" userinput:"false"`
-	//migrator:schema:field name="user_id" type="TEXT" not_null="true"
-	UserID string `json:"user_id" db:"user_id" userinput:"false"`
 }
 
 func (i *UserEntityID) GetTenantID() string {
@@ -345,12 +343,13 @@ func (i *UserEntityID) SetTenantID(tenantID string) {
 	i.TenantID = tenantID
 }
 
+// UserEntityID implements UserAware by using the ID field as the user ID
 func (i *UserEntityID) GetUserID() string {
-	return i.UserID
+	return i.ID
 }
 
 func (i *UserEntityID) SetUserID(userID string) {
-	i.UserID = userID
+	i.ID = userID
 }
 
 func WithTenantID[T TenantAware](tenantID string, i T) T {
@@ -380,12 +379,12 @@ func WithTenantUserAwareEntityID(id, tenantID, userID string) TenantAwareEntityI
 	}
 }
 
-// WithUserEntityID creates a UserEntityID with the given ID, tenant ID, and user ID
-func WithUserEntityID(id, tenantID, userID string) UserEntityID {
+// WithUserEntityID creates a UserEntityID with the given ID and tenant ID
+// For users, the user ID is the same as the entity ID
+func WithUserEntityID(id, tenantID string) UserEntityID {
 	return UserEntityID{
 		EntityID: EntityID{ID: id},
 		TenantID: tenantID,
-		UserID:   userID,
 	}
 }
 
