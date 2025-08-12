@@ -155,6 +155,10 @@ func createTestLocation(c *qt.C, locationRegistry registry.LocationRegistry) *mo
 
 	ctx := c.Context()
 	location := models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:    "Test Location",
 		Address: "123 Test Street",
 	}
@@ -172,6 +176,10 @@ func createTestArea(c *qt.C, areaRegistry registry.AreaRegistry, locationID stri
 
 	ctx := c.Context()
 	area := models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:       "Test Area",
 		LocationID: locationID,
 	}
@@ -181,6 +189,56 @@ func createTestArea(c *qt.C, areaRegistry registry.AreaRegistry, locationID stri
 	c.Assert(createdArea, qt.IsNotNil)
 
 	return createdArea
+}
+
+// createTestTenant creates a test tenant for use in tests.
+func createTestTenant(c *qt.C, tenantRegistry registry.TenantRegistry) *models.Tenant {
+	c.Helper()
+
+	ctx := c.Context()
+	tenant := models.Tenant{
+		Name:   "Test Tenant",
+		Slug:   "test-tenant",
+		Status: models.TenantStatusActive,
+	}
+
+	createdTenant, err := tenantRegistry.Create(ctx, tenant)
+	c.Assert(err, qt.IsNil)
+	c.Assert(createdTenant, qt.IsNotNil)
+
+	return createdTenant
+}
+
+// createTestUser creates a test user for use in tests.
+func createTestUser(c *qt.C, userRegistry registry.UserRegistry, tenantID string) *models.User {
+	c.Helper()
+
+	ctx := c.Context()
+	user := models.User{
+		UserEntityID: models.UserEntityID{
+			TenantID: tenantID,
+			UserID:   "", // Will be set to the user's own ID after creation
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+
+	// Set a password
+	err := user.SetPassword("testpassword123")
+	c.Assert(err, qt.IsNil)
+
+	createdUser, err := userRegistry.Create(ctx, user)
+	c.Assert(err, qt.IsNil)
+	c.Assert(createdUser, qt.IsNotNil)
+
+	// Update the user to set user_id to its own ID (self-reference)
+	createdUser.UserID = createdUser.ID
+	updatedUser, err := userRegistry.Update(ctx, *createdUser)
+	c.Assert(err, qt.IsNil)
+
+	return updatedUser
 }
 
 // setupMainCurrency sets up the main currency for tests
@@ -204,6 +262,10 @@ func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *mod
 	setupMainCurrency(c, registrySet.SettingsRegistry)
 
 	commodity := models.Commodity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Name:                   "Test Commodity",
 		ShortName:              "TC",
 		Type:                   models.CommodityTypeElectronics,

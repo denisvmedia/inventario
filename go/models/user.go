@@ -47,7 +47,7 @@ func (ur UserRole) Validate() error {
 //migrator:schema:table name="users"
 type User struct {
 	//migrator:embedded mode="inline"
-	TenantAwareEntityID
+	UserEntityID
 	//migrator:schema:field name="email" type="TEXT" not_null="true"
 	Email string `json:"email" db:"email"`
 	//migrator:schema:field name="password_hash" type="TEXT" not_null="true"
