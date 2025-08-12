@@ -276,10 +276,10 @@ func (fe *FileEntity) GetDisplayTitle() string {
 }
 
 var (
-	_ IDable                  = (*EntityID)(nil)
-	_ TenantAwareIDable       = (*TenantAwareEntityID)(nil)
-	_ TenantUserAwareIDable   = (*TenantAwareEntityID)(nil)
-	_ validation.Validatable  = (*FileEntity)(nil)
+	_ IDable                 = (*EntityID)(nil)
+	_ TenantAwareIDable      = (*TenantAwareEntityID)(nil)
+	_ TenantUserAwareIDable  = (*TenantAwareEntityID)(nil)
+	_ validation.Validatable = (*FileEntity)(nil)
 )
 
 type EntityID struct {
