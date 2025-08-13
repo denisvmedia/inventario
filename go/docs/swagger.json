@@ -2886,6 +2886,9 @@
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3146,6 +3149,9 @@
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3225,6 +3231,9 @@
                     "$ref": "#/definitions/models.CommodityType"
                 },
                 "urls": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -3338,6 +3347,9 @@
                 },
                 "type": {
                     "$ref": "#/definitions/models.ExportType"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3480,6 +3492,9 @@
                 "updated_at": {
                     "description": "UpdatedAt is when the file was last updated",
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3529,6 +3544,9 @@
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3559,6 +3577,9 @@
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3575,6 +3596,9 @@
                     "type": "string"
                 },
                 "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -3605,6 +3629,9 @@
                     "type": "string"
                 },
                 "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -3673,6 +3700,9 @@
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3735,6 +3765,9 @@
                     "type": "string"
                 },
                 "updated_date": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }

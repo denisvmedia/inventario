@@ -14,6 +14,7 @@ var (
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="manuals" comment="Enable RLS for multi-tenant manual isolation"
 //migrator:schema:rls:policy name="manual_tenant_isolation" table="manuals" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures manuals can only be accessed and modified by their tenant"
+//migrator:schema:rls:policy name="manual_user_isolation" table="manuals" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures manuals can only be accessed and modified by their user"
 
 //migrator:schema:table name="manuals"
 type Manual struct {

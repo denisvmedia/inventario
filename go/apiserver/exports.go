@@ -282,6 +282,15 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	// Create export record with pending status and source file path
 	importedExport := models.NewImportedExport(data.Data.Attributes.Description, data.Data.Attributes.SourceFilePath)
 
+	// Temporarily set default tenant and user IDs while multi-tenancy is disabled
+	// TODO: Remove this when proper tenant/user context is implemented
+	if importedExport.TenantID == "" {
+		importedExport.TenantID = "test-tenant-id" // Use the same ID as our tests and seeding
+	}
+	if importedExport.UserID == "" {
+		importedExport.UserID = "test-user-id" // Use the same ID as our tests and seeding
+	}
+
 	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), importedExport)
 	if err != nil {
 		internalServerError(w, r, err)

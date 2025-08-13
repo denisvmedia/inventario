@@ -22,6 +22,7 @@ func TestInvoiceRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-invoice-id", "default-tenant", "test-user-id"),
 			},
 		},
 		{
@@ -33,6 +34,7 @@ func TestInvoiceRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".docx",
 					MIMEType:     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 				},
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-invoice-id2", "default-tenant", "test-user-id"),
 			},
 		},
 	}
