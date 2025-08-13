@@ -1,4 +1,4 @@
-package commonsql
+package postgres
 
 import (
 	"github.com/jmoiron/sqlx"

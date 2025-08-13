@@ -11,7 +11,6 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/commonsql"
 )
 
 // EnhancedPostgreSQLRegistry implements the enhanced registry interface with PostgreSQL-specific features
@@ -24,7 +23,7 @@ type EnhancedPostgreSQLRegistry struct {
 
 // NewEnhancedPostgreSQLRegistry creates a new enhanced PostgreSQL registry
 func NewEnhancedPostgreSQLRegistry(pool *pgxpool.Pool, sqlxDB *sqlx.DB) *EnhancedPostgreSQLRegistry {
-	baseSet := commonsql.NewRegistrySet(sqlxDB)
+	baseSet := NewRegistrySet(sqlxDB)
 	capabilities := registry.CapabilityMatrix["postgres"]
 
 	return &EnhancedPostgreSQLRegistry{

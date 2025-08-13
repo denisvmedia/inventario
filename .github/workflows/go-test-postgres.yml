@@ -58,5 +58,5 @@ jobs:
       - name: Run PostgreSQL registry tests
         env:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
-        run: go test -v -race ./registry/commonsql/...
+        run: go test -v -race ./registry/postgres/...
         working-directory: go
