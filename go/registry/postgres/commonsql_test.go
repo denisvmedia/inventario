@@ -16,7 +16,7 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/commonsql"
+	"github.com/denisvmedia/inventario/registry/postgres"
 	"github.com/denisvmedia/inventario/registry/ptah"
 )
 
