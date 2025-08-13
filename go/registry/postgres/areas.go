@@ -1,4 +1,4 @@
-package commonsql
+package postgres
 
 import (
 	"context"

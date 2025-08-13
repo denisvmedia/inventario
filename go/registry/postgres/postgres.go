@@ -15,12 +15,12 @@ import (
 const Name = "postgres"
 
 func Register() (cleanup func() error) {
-	newFn, cleanup := NewRegistrySet()
+	newFn, cleanup := NewPostgresRegistrySet()
 	registry.Register(Name, newFn)
 	return cleanup
 }
 
-func NewRegistrySet() (registrySetFunc func(c registry.Config) (registrySet *registry.Set, err error), cleanup func() error) {
+func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (registrySet *registry.Set, err error), cleanup func() error) {
 	doCleanup := func() error { return nil }
 	fn := func() error { return doCleanup() }
 

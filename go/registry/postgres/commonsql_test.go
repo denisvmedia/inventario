@@ -1,4 +1,4 @@
-package commonsql_test
+package postgres_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/registry/commonsql"
 	"github.com/denisvmedia/inventario/registry/ptah"
 )
 
