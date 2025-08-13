@@ -56,6 +56,7 @@ var (
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="restore_steps" comment="Enable RLS for multi-tenant restore step isolation"
 //migrator:schema:rls:policy name="restore_step_tenant_isolation" table="restore_steps" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures restore steps can only be accessed and modified by their tenant"
+//migrator:schema:rls:policy name="restore_step_user_isolation" table="restore_steps" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures restore steps can only be accessed and modified by their user"
 
 //migrator:schema:table name="restore_steps"
 type RestoreStep struct {

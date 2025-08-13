@@ -16,6 +16,7 @@ var (
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="locations" comment="Enable RLS for multi-tenant location isolation"
 //migrator:schema:rls:policy name="location_tenant_isolation" table="locations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" comment="Ensures locations can only be accessed by their tenant"
+//migrator:schema:rls:policy name="location_user_isolation" table="locations" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures locations can only be accessed and modified by their user"
 
 //migrator:schema:table name="locations"
 type Location struct {

@@ -22,6 +22,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id", "default-tenant", "test-user-id"),
 			},
 		},
 		{
@@ -33,6 +34,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".docx",
 					MIMEType:     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 				},
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id2", "default-tenant", "test-user-id"),
 			},
 		},
 	}
@@ -43,7 +45,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 			ctx := c.Context()
 
 			registrySet, cleanup := setupTestRegistrySet(t)
-			defer cleanup()
+			c.Cleanup(cleanup)
 
 			// Create test hierarchy
 			location := createTestLocation(c, registrySet.LocationRegistry)

@@ -127,6 +127,15 @@ func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *mo
 
 	export := models.NewExportFromUserInput(input)
 
+	// Temporarily set default tenant and user IDs while multi-tenancy is disabled
+	// TODO: Remove this when proper tenant/user context is implemented
+	if export.TenantID == "" {
+		export.TenantID = "test-tenant-id" // Use the same ID as our tests and seeding
+	}
+	if export.UserID == "" {
+		export.UserID = "test-user-id" // Use the same ID as our tests and seeding
+	}
+
 	// Enrich selected items with names from the database
 	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
 		if err := s.enrichSelectedItemsWithNames(ctx, &export); err != nil {
@@ -223,6 +232,10 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 	// Create file entity
 	now := time.Now()
 	fileEntity := models.FileEntity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id", // Temporarily set default tenant and user IDs
+			UserID:   "test-user-id",   // TODO: Remove when proper tenant/user context is implemented
+		},
 		Title:            fmt.Sprintf("Export: %s", description),
 		Description:      fmt.Sprintf("Export file generated on %s", now.Format("2006-01-02 15:04:05")),
 		Type:             models.FileTypeDocument, // XML files are documents

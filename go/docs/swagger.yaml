@@ -469,6 +469,8 @@ definitions:
         type: string
       tenant_id:
         type: string
+      user_id:
+        type: string
     type: object
   jsonapi.LocationData:
     properties:
@@ -639,6 +641,8 @@ definitions:
         type: string
       tenant_id:
         type: string
+      user_id:
+        type: string
     type: object
   models.Commodity:
     properties:
@@ -691,6 +695,8 @@ definitions:
       type:
         $ref: '#/definitions/models.CommodityType'
       urls:
+        type: string
+      user_id:
         type: string
     type: object
   models.CommodityStatus:
@@ -773,6 +779,8 @@ definitions:
         type: string
       type:
         $ref: '#/definitions/models.ExportType'
+      user_id:
+        type: string
     type: object
   models.ExportSelectedItem:
     properties:
@@ -889,6 +897,8 @@ definitions:
       updated_at:
         description: UpdatedAt is when the file was last updated
         type: string
+      user_id:
+        type: string
     type: object
   models.FileType:
     enum:
@@ -934,6 +944,8 @@ definitions:
         type: string
       tenant_id:
         type: string
+      user_id:
+        type: string
     type: object
   models.Invoice:
     properties:
@@ -963,6 +975,8 @@ definitions:
         type: string
       tenant_id:
         type: string
+      user_id:
+        type: string
     type: object
   models.Location:
     properties:
@@ -973,6 +987,8 @@ definitions:
       name:
         type: string
       tenant_id:
+        type: string
+      user_id:
         type: string
     type: object
   models.Manual:
@@ -1002,6 +1018,8 @@ definitions:
           Example: "invoice-2023"
         type: string
       tenant_id:
+        type: string
+      user_id:
         type: string
     type: object
   models.RestoreOperation:
@@ -1048,6 +1066,8 @@ definitions:
         type: array
       tenant_id:
         type: string
+      user_id:
+        type: string
     type: object
   models.RestoreOptions:
     properties:
@@ -1091,6 +1111,8 @@ definitions:
       tenant_id:
         type: string
       updated_date:
+        type: string
+      user_id:
         type: string
     type: object
   models.RestoreStepResult:

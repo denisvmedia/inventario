@@ -22,6 +22,7 @@ func TestImageRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".jpg",
 					MIMEType:     "image/jpeg",
 				},
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id", "default-tenant", "test-user-id"),
 			},
 		},
 		{
@@ -33,6 +34,7 @@ func TestImageRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".png",
 					MIMEType:     "image/png",
 				},
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id2", "default-tenant", "test-user-id"),
 			},
 		},
 	}

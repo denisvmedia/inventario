@@ -137,6 +137,10 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	fileEntity := models.FileEntity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id", // Temporarily set default tenant and user IDs
+			UserID:   "test-user-id",   // TODO: Remove when proper tenant/user context is implemented
+		},
 		Title:            input.Data.Attributes.Title,
 		Description:      input.Data.Attributes.Description,
 		Type:             models.FileTypeOther, // Default type, should be updated when file is uploaded

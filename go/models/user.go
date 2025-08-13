@@ -42,6 +42,7 @@ func (ur UserRole) Validate() error {
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="users" comment="Enable RLS for multi-tenant user isolation"
 //migrator:schema:rls:policy name="user_tenant_isolation" table="users" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" comment="Ensures users can only access their tenant's data"
+//migrator:schema:rls:policy name="user_user_isolation" table="users" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures users can only access and modify their own data"
 
 //migrator:schema:table name="users"
 type User struct {

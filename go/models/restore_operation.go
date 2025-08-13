@@ -55,6 +55,7 @@ func (r RestoreOptions) ValidateWithContext(ctx context.Context) error {
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="restore_operations" comment="Enable RLS for multi-tenant restore operation isolation"
 //migrator:schema:rls:policy name="restore_operation_tenant_isolation" table="restore_operations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures restore operations can only be accessed and modified by their tenant"
+//migrator:schema:rls:policy name="restore_operation_user_isolation" table="restore_operations" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures restore operations can only be accessed and modified by their user"
 
 //migrator:schema:table name="restore_operations"
 type RestoreOperation struct {

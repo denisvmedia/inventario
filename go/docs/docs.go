@@ -2893,6 +2893,9 @@ const docTemplate = `{
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3153,6 +3156,9 @@ const docTemplate = `{
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3232,6 +3238,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.CommodityType"
                 },
                 "urls": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -3345,6 +3354,9 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/models.ExportType"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3487,6 +3499,9 @@ const docTemplate = `{
                 "updated_at": {
                     "description": "UpdatedAt is when the file was last updated",
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3536,6 +3551,9 @@ const docTemplate = `{
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3566,6 +3584,9 @@ const docTemplate = `{
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3582,6 +3603,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -3612,6 +3636,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -3680,6 +3707,9 @@ const docTemplate = `{
                 },
                 "tenant_id": {
                     "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3742,6 +3772,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_date": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }

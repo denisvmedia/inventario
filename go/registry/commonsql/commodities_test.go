@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
@@ -31,6 +32,7 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 				RegisteredDate:         models.ToPDate("2023-01-02"),
 				LastModifiedDate:       models.ToPDate("2023-01-03"),
 				Draft:                  false,
+				TenantAwareEntityID:    models.WithTenantUserAwareEntityID("commodity1", "default-tenant", "test-user-id"),
 			},
 		},
 		{
@@ -54,17 +56,19 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 				LastModifiedDate:       models.ToPDate("2023-01-03"),
 				Comments:               "Test comments",
 				Draft:                  false,
+				TenantAwareEntityID:    models.WithTenantUserAwareEntityID("commodity2", "default-tenant", "test-user-id"),
 			},
 		},
 		{
 			name: "valid draft commodity",
 			commodity: models.Commodity{
-				Name:      "Draft Commodity",
-				ShortName: "DC",
-				Type:      models.CommodityTypeOther,
-				Count:     1,
-				Status:    models.CommodityStatusInUse,
-				Draft:     true,
+				Name:                "Draft Commodity",
+				ShortName:           "DC",
+				Type:                models.CommodityTypeOther,
+				Count:               1,
+				Status:              models.CommodityStatusInUse,
+				Draft:               true,
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity3", "default-tenant", "test-user-id"),
 			},
 		},
 	}
@@ -470,6 +474,7 @@ func createTestImage(c *qt.C, registrySet *registry.Set, commodityID string) *mo
 			Ext:          ".jpg",
 			MIMEType:     "image/jpeg",
 		},
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id-"+uuid.New().String(), "test-tenant-id", "test-user-id"),
 	}
 
 	createdImage, err := registrySet.ImageRegistry.Create(ctx, image)
@@ -492,6 +497,7 @@ func createTestManual(c *qt.C, registrySet *registry.Set, commodityID string) *m
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id-"+uuid.New().String(), "test-tenant-id", "test-user-id"),
 	}
 
 	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
@@ -514,6 +520,7 @@ func createTestInvoice(c *qt.C, registrySet *registry.Set, commodityID string) *
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-invoice-id-"+uuid.New().String(), "test-tenant-id", "test-user-id"),
 	}
 
 	createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, invoice)

@@ -71,6 +71,10 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		// Create file entity instead of image
 		now := time.Now()
 		fileEntity := models.FileEntity{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantID: "test-tenant-id", // Temporarily set default tenant and user IDs
+				UserID:   "test-user-id",   // TODO: Remove when proper tenant/user context is implemented
+			},
 			Title:            pathWithoutExt, // Use filename as title
 			Description:      "",
 			Type:             models.FileTypeImage,
@@ -130,6 +134,10 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		// Create file entity instead of manual
 		now := time.Now()
 		fileEntity := models.FileEntity{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantID: "test-tenant-id", // Temporarily set default tenant and user IDs
+				UserID:   "test-user-id",   // TODO: Remove when proper tenant/user context is implemented
+			},
 			Title:            pathWithoutExt, // Use filename as title
 			Description:      "",
 			Type:             models.FileTypeDocument,
@@ -189,6 +197,10 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		// Create file entity instead of invoice
 		now := time.Now()
 		fileEntity := models.FileEntity{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantID: "test-tenant-id", // Temporarily set default tenant and user IDs
+				UserID:   "test-user-id",   // TODO: Remove when proper tenant/user context is implemented
+			},
 			Title:            pathWithoutExt, // Use filename as title
 			Description:      "",
 			Type:             models.FileTypeDocument,
@@ -262,6 +274,10 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 		// Create file entity with auto-generated title from filename
 		now := time.Now()
 		fileEntity := models.FileEntity{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantID: "test-tenant-id", // Temporarily set default tenant and user IDs
+				UserID:   "test-user-id",   // TODO: Remove when proper tenant/user context is implemented
+			},
 			Title:       pathWithoutExt, // Use filename as default title
 			Description: "",             // Empty description
 			Type:        fileType,
