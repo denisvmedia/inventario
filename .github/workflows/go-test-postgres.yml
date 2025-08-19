@@ -64,7 +64,7 @@ jobs:
 
           # Create the main test database for bootstrap tests (must be separate from other commands)
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            CREATE DATABASE inventario;
+            CREATE DATABASE inventario_test;
           "
 
           # Create the main application users that bootstrap migrations expect
@@ -75,8 +75,8 @@ jobs:
 
           # Grant necessary privileges to the main users
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario;
-            GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario_migrator;
+            GRANT ALL PRIVILEGES ON DATABASE inventario_test TO inventario;
+            GRANT ALL PRIVILEGES ON DATABASE inventario_test TO inventario_migrator;
           "
 
           # Grant superuser privileges to inventario_test user for bootstrap tests
