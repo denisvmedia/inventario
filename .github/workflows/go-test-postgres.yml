@@ -64,7 +64,7 @@ jobs:
 
           # Create the main test database for bootstrap tests (must be separate from other commands)
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            CREATE DATABASE inventario_test;
+            CREATE DATABASE inventario;
           "
 
           # Create the main application users that bootstrap migrations expect
