@@ -31,7 +31,6 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stokaro/ptah v0.0.0-20250812152025-34c78fd369ff
 	github.com/swaggo/http-swagger v1.3.4
-	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
@@ -48,9 +47,9 @@ require (
 require (
 	cel.dev/expr v0.24.0 // indirect
 	cloud.google.com/go v0.121.4 // indirect
-	cloud.google.com/go/auth v0.16.3 // indirect
+	cloud.google.com/go/auth v0.16.4 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
-	cloud.google.com/go/compute/metadata v0.7.0 // indirect
+	cloud.google.com/go/compute/metadata v0.8.0 // indirect
 	cloud.google.com/go/iam v1.5.2 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/storage v1.56.0 // indirect
@@ -146,10 +145,10 @@ require (
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
-	google.golang.org/api v0.244.0 // indirect
+	google.golang.org/api v0.247.0 // indirect
 	google.golang.org/genproto v0.0.0-20250715232539-7130f93afb79 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250721164621-a45f3dfb1074 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250728155136-f173205681a0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
+	google.golang.org/protobuf v1.36.7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
