@@ -70,14 +70,14 @@ func ExampleParsePostgreSQLDSN() {
 
 	for _, dsn := range testCases {
 		migrator := New(dsn, nil)
-		
+
 		// This would normally be called internally by DropDatabase
 		dbName, adminDSN, err := migrator.parsePostgreSQLDSN()
 		if err != nil {
 			log.Printf("Failed to parse DSN %s: %v", dsn, err)
 			continue
 		}
-		
+
 		fmt.Printf("Original DSN: %s\n", dsn)
 		fmt.Printf("Database Name: %s\n", dbName)
 		fmt.Printf("Admin DSN: %s\n", adminDSN)

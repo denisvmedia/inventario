@@ -58,15 +58,15 @@ func TestMigrator_parsePostgreSQLDSN(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := quicktest.New(t)
-			
+
 			// Create migrator with test URL
 			m := migrator.New(tt.dbURL, nil)
-			
+
 			// Use reflection to access the private method for testing
 			// Since parsePostgreSQLDSN is private, we'll test it indirectly through DropDatabase
 			// with dry-run mode to avoid actual database operations
 			err := m.DropDatabase(context.Background(), true, true) // dryRun=true, confirm=true
-			
+
 			if tt.expectError {
 				c.Assert(err, quicktest.IsNotNil)
 			} else {
