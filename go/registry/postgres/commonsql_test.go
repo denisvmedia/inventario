@@ -17,6 +17,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/schema/bootstrap"
 	"github.com/denisvmedia/inventario/schema/migrations/migrator"
 )
 
@@ -30,6 +31,26 @@ var (
 func migrateUp(t *testing.T, ctx context.Context, migr *migrator.Migrator, dsn string) error {
 	// Drop all tables (this cleans all data)
 	err := migr.DropTables(ctx, false, true) // dryRun=false, confirm=true
+	if err != nil {
+		return err
+	}
+
+	// extract user from dsn
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return err
+	}
+
+	boots := bootstrap.New()
+
+	err = boots.Apply(ctx, bootstrap.ApplyArgs{
+		DSN: dsn,
+		Template: bootstrap.TemplateData{
+			Username:              u.User.Username(),
+			UsernameForMigrations: u.User.Username(),
+		},
+		DryRun: false,
+	})
 	if err != nil {
 		return err
 	}
