@@ -14,7 +14,7 @@ require (
 	github.com/go-chi/render v1.0.3
 	github.com/go-extras/cobraflags v0.0.0-20250512094330-25bc6361d257
 	github.com/go-extras/go-kit v1.2.0
-	github.com/golang-jwt/jwt/v5 v5.2.3
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.15.0
