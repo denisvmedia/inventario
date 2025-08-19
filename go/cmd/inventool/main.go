@@ -43,7 +43,7 @@ func configPath() string {
 	configFilePath := filepath.Join(configDir, "inventario", "config.yaml")
 
 	// Check if the config file exists
-	if _, err := os.Stat(configFilePath); !os.IsNotExist(err) {
+	if _, err := os.Stat(configFilePath); err != nil && !os.IsNotExist(err) {
 		panic(err)
 	}
 
