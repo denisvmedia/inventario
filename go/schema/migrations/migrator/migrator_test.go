@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/schema/migrations/migrator"
 )
@@ -57,7 +57,7 @@ func TestMigrator_parsePostgreSQLDSN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := quicktest.New(t)
+			c := qt.New(t)
 
 			// Create migrator with test URL
 			m := migrator.New(tt.dbURL, nil)
@@ -68,16 +68,16 @@ func TestMigrator_parsePostgreSQLDSN(t *testing.T) {
 			err := m.DropDatabase(context.Background(), true, true) // dryRun=true, confirm=true
 
 			if tt.expectError {
-				c.Assert(err, quicktest.IsNotNil)
+				c.Assert(err, qt.IsNotNil)
 			} else {
-				c.Assert(err, quicktest.IsNil)
+				c.Assert(err, qt.IsNil)
 			}
 		})
 	}
 }
 
 func TestMigrator_DropDatabase_DryRun(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Test with a valid PostgreSQL DSN in dry-run mode
 	dbURL := "postgres://user:pass@localhost:5432/testdb?sslmode=disable"
@@ -85,11 +85,11 @@ func TestMigrator_DropDatabase_DryRun(t *testing.T) {
 
 	// Test dry-run mode (should not fail even with invalid connection)
 	err := m.DropDatabase(context.Background(), true, true) // dryRun=true, confirm=true
-	c.Assert(err, quicktest.IsNil)
+	c.Assert(err, qt.IsNil)
 }
 
 func TestMigrator_DropDatabase_InvalidScheme(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Test with invalid database scheme
 	dbURL := "mysql://user:pass@localhost:3306/testdb"
@@ -97,6 +97,6 @@ func TestMigrator_DropDatabase_InvalidScheme(t *testing.T) {
 
 	// Should fail even in dry-run mode due to invalid scheme
 	err := m.DropDatabase(context.Background(), true, true) // dryRun=true, confirm=true
-	c.Assert(err, quicktest.IsNotNil)
-	c.Assert(err.Error(), quicktest.Contains, "unsupported database scheme")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "unsupported database scheme")
 }

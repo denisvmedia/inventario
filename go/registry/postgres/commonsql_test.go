@@ -29,7 +29,7 @@ var (
 // migrateUp removes all test data by dropping and recreating the schema
 func migrateUp(t *testing.T, ctx context.Context, migr *migrator.Migrator, dsn string) error {
 	// Drop all tables (this cleans all data)
-	err := migr.DropDatabase(ctx, false, true) // dryRun=false, confirm=true
+	err := migr.DropTables(ctx, false, true) // dryRun=false, confirm=true
 	if err != nil {
 		return err
 	}
