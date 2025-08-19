@@ -62,30 +62,33 @@ jobs:
           # Connect as the superuser to create additional users and databases
           export PGPASSWORD=test_password
 
-          # Create the main test database for bootstrap tests
+          # Create the main test database for bootstrap tests (must be separate from other commands)
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            -- Create the inventario database for bootstrap tests
             CREATE DATABASE inventario;
+          "
 
-            -- Create the main application users that bootstrap migrations expect
+          # Create the main application users that bootstrap migrations expect
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             CREATE USER inventario WITH PASSWORD 'inventario_password';
             CREATE USER inventario_migrator WITH PASSWORD 'inventario_migrator_password';
+          "
 
-            -- Grant necessary privileges to the main users
+          # Grant necessary privileges to the main users
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario;
             GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario_migrator;
+          "
 
-            -- Grant superuser privileges to inventario_test user for bootstrap tests
-            -- (needed to create extensions and manage roles)
+          # Grant superuser privileges to inventario_test user for bootstrap tests
+          # (needed to create extensions and manage roles)
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             ALTER USER inventario_test WITH SUPERUSER;
           "
 
           # Create a limited privilege user for testing transaction rollback
+          # Grant minimal privileges (can connect but cannot create extensions)
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            -- Create limited user without superuser privileges
             CREATE USER limited_user WITH PASSWORD 'limited_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-
-            -- Grant minimal privileges (can connect but cannot create extensions)
             GRANT CONNECT ON DATABASE inventario TO limited_user;
           "
 
