@@ -14,7 +14,7 @@ require (
 	github.com/go-chi/render v1.0.3
 	github.com/go-extras/cobraflags v0.0.0-20250512094330-25bc6361d257
 	github.com/go-extras/go-kit v1.2.0
-	github.com/golang-jwt/jwt/v5 v5.2.3
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.15.0
@@ -31,7 +31,6 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stokaro/ptah v0.0.0-20250812152025-34c78fd369ff
 	github.com/swaggo/http-swagger v1.3.4
-	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
