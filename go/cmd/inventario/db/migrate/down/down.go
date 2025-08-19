@@ -3,15 +3,12 @@ package down
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"strconv"
 
-	"github.com/go-extras/go-kit/must"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/schema/migrations"
 	"github.com/denisvmedia/inventario/schema/migrations/migrator"
 )
 

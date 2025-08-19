@@ -2,14 +2,12 @@ package postgres_test
 
 import (
 	"context"
-	"io/fs"
 	"net/url"
 	"os"
 	"sync"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/go-extras/go-kit/must"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -19,7 +17,6 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/schema/migrations"
 	"github.com/denisvmedia/inventario/schema/migrations/migrator"
 )
 
