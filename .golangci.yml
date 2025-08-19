@@ -252,6 +252,9 @@ linters:
       - path: 'models/.*\.go$'
         linters:
           - lll
+      - path: 'cmd/.*\.go$'
+        linters:
+          - forbidigo
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'

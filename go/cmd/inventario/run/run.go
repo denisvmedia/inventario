@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-extras/cobraflags"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
 	"github.com/spf13/cobra"
@@ -18,18 +17,29 @@ import (
 	"github.com/denisvmedia/inventario/backup/export"
 	importpkg "github.com/denisvmedia/inventario/backup/import"
 	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/cmd/internal/command"
+	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/internal/defaults"
 	"github.com/denisvmedia/inventario/internal/httpserver"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
 
-var runCmd = &cobra.Command{
-	Use:   "run",
-	Short: "Run the application server",
-	Long: `Run starts the Inventario application server, providing a web-based interface
+type Command struct {
+	command.Base
+
+	config   Config
+	dbConfig shared.DatabaseConfig
+}
+
+func New() *Command {
+	c := &Command{}
+
+	c.Base = command.NewBase(&cobra.Command{
+		Use:   "run",
+		Short: "Run the application server",
+		Long: `Run starts the Inventario application server, providing a web-based interface
 for managing your personal inventory. The server hosts both the API endpoints and
 the frontend interface, allowing you to access your inventory through a web browser.
 
@@ -81,55 +91,32 @@ SERVER ENDPOINTS:
   • Health Check: http://localhost:3333/api/health
 
 The server runs until interrupted (Ctrl+C) and gracefully shuts down active connections.`,
-	RunE: runCommand,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.runCommand()
+		},
+	})
+
+	c.registerFlags()
+
+	return c
 }
 
-const (
-	addrFlag                 = "addr"
-	uploadLocationFlag       = "upload-location"
-	dbDSNFlag                = "db-dsn"
-	maxConcurrentExportsFlag = "max-concurrent-exports"
-	maxConcurrentImportsFlag = "max-concurrent-imports"
-)
+func (c *Command) registerFlags() {
+	shared.TryReadSection("run", &c.config)
+	c.config.setDefaults()
 
-var runFlags = map[string]cobraflags.Flag{
-	addrFlag: &cobraflags.StringFlag{
-		Name:  addrFlag,
-		Value: defaults.GetServerAddr(),
-		Usage: "Bind address for the server",
-	},
-	uploadLocationFlag: &cobraflags.StringFlag{
-		Name:  uploadLocationFlag,
-		Value: defaults.GetUploadLocation(),
-		Usage: "Location for the uploaded files",
-	},
-	dbDSNFlag: &cobraflags.StringFlag{
-		Name:  dbDSNFlag,
-		Value: defaults.GetDatabaseDSN(),
-		Usage: "Database DSN",
-	},
-	maxConcurrentExportsFlag: &cobraflags.IntFlag{
-		Name:  maxConcurrentExportsFlag,
-		Value: defaults.GetMaxConcurrentExports(),
-		Usage: "Maximum number of concurrent export processes",
-	},
-	maxConcurrentImportsFlag: &cobraflags.IntFlag{
-		Name:  maxConcurrentImportsFlag,
-		Value: defaults.GetMaxConcurrentImports(),
-		Usage: "Maximum number of concurrent import processes",
-	},
+	flags := c.Cmd().Flags()
+	flags.StringVar(&c.config.Addr, "addr", c.config.Addr, "Bind address for the server")
+	flags.StringVar(&c.config.UploadLocation, "upload-location", c.config.UploadLocation, "Location for the uploaded files")
+	shared.RegisterLocalDatabaseFlags(c.Cmd(), &c.dbConfig)
+	flags.IntVar(&c.config.MaxConcurrentExports, "max-concurrent-exports", c.config.MaxConcurrentExports, "Maximum number of concurrent export processes")
+	flags.IntVar(&c.config.MaxConcurrentImports, "max-concurrent-imports", c.config.MaxConcurrentImports, "Maximum number of concurrent import processes")
 }
 
-func NewRunCommand() *cobra.Command {
-	cobraflags.RegisterMap(runCmd, runFlags)
-
-	return runCmd
-}
-
-func runCommand(_ *cobra.Command, _ []string) error {
+func (c *Command) runCommand() error {
 	srv := &httpserver.APIServer{}
-	bindAddr := runFlags[addrFlag].GetString()
-	dsn := runFlags[dbDSNFlag].GetString()
+	bindAddr := c.config.Addr
+	dsn := c.dbConfig.DBDSN
 
 	if configFile := viper.ConfigFileUsed(); configFile != "" {
 		log.WithField("config_file", configFile).Debug("Configuration file loaded")
@@ -140,8 +127,8 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	log.WithFields(log.Fields{
-		addrFlag:  bindAddr,
-		dbDSNFlag: parsedDSN.String(),
+		"addr":   bindAddr,
+		"db-dsn": parsedDSN.String(),
 	}).Info("Starting server")
 
 	var params apiserver.Params
@@ -159,7 +146,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	params.RegistrySet = registrySet
-	params.UploadLocation = runFlags[uploadLocationFlag].GetString()
+	params.UploadLocation = c.config.UploadLocation
 	params.EntityService = services.NewEntityService(registrySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 	params.StartTime = time.Now()
@@ -174,7 +161,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	defer cancel()
 
 	// Start export worker
-	maxConcurrentExports := runFlags[maxConcurrentExportsFlag].GetInt()
+	maxConcurrentExports := c.config.MaxConcurrentExports
 	exportService := export.NewExportService(registrySet, params.UploadLocation)
 	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
 	exportWorker.Start(ctx)
@@ -187,7 +174,7 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	defer restoreWorker.Stop()
 
 	// Start import worker
-	maxConcurrentImports := runFlags[maxConcurrentImportsFlag].GetInt()
+	maxConcurrentImports := c.config.MaxConcurrentImports
 	importService := importpkg.NewImportService(registrySet, params.UploadLocation)
 	importWorker := importpkg.NewImportWorker(importService, registrySet, maxConcurrentImports)
 	importWorker.Start(ctx)
@@ -196,10 +183,10 @@ func runCommand(_ *cobra.Command, _ []string) error {
 	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	select {
-	case <-c:
+	case <-sigCh:
 	case err := <-errCh:
 		log.WithError(err).Error("Failure during server startup")
 		return err

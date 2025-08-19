@@ -1,4 +1,4 @@
-name: Go Test PostgreSQL
+name: Go Test PostgreSQL & Bootstrap
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   test-postgres:
-    name: test-postgres
+    name: test-postgres-and-bootstrap
     runs-on: ubuntu-latest
     
     services:
@@ -22,6 +22,8 @@ jobs:
           POSTGRES_DB: inventario_test
           POSTGRES_USER: inventario_test
           POSTGRES_PASSWORD: test_password
+          # Enable superuser privileges for the main test user
+          POSTGRES_INITDB_ARGS: "--auth-host=trust"
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -55,8 +57,65 @@ jobs:
             sleep 2
           done
 
+      - name: Set up PostgreSQL users and databases
+        run: |
+          # Connect as the superuser to create additional users and databases
+          export PGPASSWORD=test_password
+
+          # Create the main test database for bootstrap tests
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
+            -- Create the inventario database for bootstrap tests
+            CREATE DATABASE inventario;
+
+            -- Create the main application users that bootstrap migrations expect
+            CREATE USER inventario WITH PASSWORD 'inventario_password';
+            CREATE USER inventario_migrator WITH PASSWORD 'inventario_migrator_password';
+
+            -- Grant necessary privileges to the main users
+            GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario;
+            GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario_migrator;
+
+            -- Grant superuser privileges to inventario_test user for bootstrap tests
+            -- (needed to create extensions and manage roles)
+            ALTER USER inventario_test WITH SUPERUSER;
+          "
+
+          # Create a limited privilege user for testing transaction rollback
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
+            -- Create limited user without superuser privileges
+            CREATE USER limited_user WITH PASSWORD 'limited_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+
+            -- Grant minimal privileges (can connect but cannot create extensions)
+            GRANT CONNECT ON DATABASE inventario TO limited_user;
+          "
+
+          # Connect to the inventario database and set up schema permissions
+          psql -h localhost -p 5432 -U inventario_test -d inventario -c "
+            -- Grant schema usage to main users
+            GRANT ALL ON SCHEMA public TO inventario;
+            GRANT ALL ON SCHEMA public TO inventario_migrator;
+
+            -- Grant minimal schema access to limited user
+            GRANT USAGE ON SCHEMA public TO limited_user;
+          "
+
+          echo "PostgreSQL users and databases set up successfully"
+
       - name: Run PostgreSQL registry tests
         env:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
         run: go test -v -race ./registry/postgres/...
+        working-directory: go
+
+      - name: Run Bootstrap integration tests
+        env:
+          # Main DSN with superuser privileges for successful migration tests
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario?sslmode=disable"
+          # Limited DSN for testing transaction rollback scenarios
+          POSTGRES_LIMITED_TEST_DSN: "postgres://limited_user:limited_password@localhost:5432/inventario?sslmode=disable"
+        run: |
+          echo "Running bootstrap integration tests..."
+          echo "Main DSN: $POSTGRES_TEST_DSN"
+          echo "Limited DSN: $POSTGRES_LIMITED_TEST_DSN"
+          go test -v -race ./schema/bootstrap
         working-directory: go
