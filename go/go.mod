@@ -12,7 +12,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.9
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/render v1.0.3
-	github.com/go-extras/cobraflags v0.0.0-20250512094330-25bc6361d257
+	github.com/go-extras/cobraflags v0.0.0-20250817103120-8d2c81708aea
 	github.com/go-extras/go-kit v1.2.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/go-cmp v0.7.0
