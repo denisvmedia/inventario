@@ -21,6 +21,16 @@ func NewRestoreStepRegistry(db *sqlx.DB) *RestoreStepRegistry {
 	return &RestoreStepRegistry{db: db}
 }
 
+// SetUserContext sets the user context for RLS policies
+func (r *RestoreStepRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.db, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *RestoreStepRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.db, userID, fn)
+}
+
 func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
 	if err := step.ValidateWithContext(ctx); err != nil {
 		return nil, errkit.Wrap(err, "validation failed")
@@ -196,4 +206,78 @@ func (r *RestoreStepRegistry) DeleteByRestoreOperation(ctx context.Context, rest
 	}
 
 	return nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates a restore step with user context
+func (r *RestoreStepRegistry) CreateWithUser(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	step.SetUserID(userID)
+	return r.Create(ctx, step)
+}
+
+// GetWithUser gets a restore step with user context
+func (r *RestoreStepRegistry) GetWithUser(ctx context.Context, id string) (*models.RestoreStep, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	err := SetUserContext(ctx, r.db, userID)
+	if err != nil {
+		return nil, err
+	}
+	return r.Get(ctx, id)
+}
+
+// ListWithUser lists restore steps with user context
+func (r *RestoreStepRegistry) ListWithUser(ctx context.Context) ([]*models.RestoreStep, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	err := SetUserContext(ctx, r.db, userID)
+	if err != nil {
+		return nil, err
+	}
+	return r.List(ctx)
+}
+
+// UpdateWithUser updates a restore step with user context
+func (r *RestoreStepRegistry) UpdateWithUser(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	step.SetUserID(userID)
+	return r.Update(ctx, step)
+}
+
+// DeleteWithUser deletes a restore step with user context
+func (r *RestoreStepRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	err := SetUserContext(ctx, r.db, userID)
+	if err != nil {
+		return err
+	}
+	return r.Delete(ctx, id)
+}
+
+// CountWithUser counts restore steps with user context
+func (r *RestoreStepRegistry) CountWithUser(ctx context.Context) (int, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return 0, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	err := SetUserContext(ctx, r.db, userID)
+	if err != nil {
+		return 0, err
+	}
+	return r.Count(ctx)
 }

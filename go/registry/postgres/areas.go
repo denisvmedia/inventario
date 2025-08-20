@@ -29,6 +29,16 @@ func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *AreaReg
 	}
 }
 
+// SetUserContext sets the user context for RLS policies
+func (r *AreaRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.dbx, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *AreaRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.dbx, userID, fn)
+}
+
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	// Begin a transaction (atomic operation)
 	tx, err := r.dbx.Beginx()
@@ -273,4 +283,140 @@ func (r *AreaRegistry) getLocation(ctx context.Context, tx sqlx.ExtContext, id s
 	}
 
 	return &location, nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates an area with user context
+func (r *AreaRegistry) CreateWithUser(ctx context.Context, area models.Area) (*models.Area, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the area
+	area.SetUserID(userID)
+
+	// Begin a transaction (atomic operation)
+	tx, err := r.dbx.Beginx()
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer func() {
+		err = errors.Join(err, RollbackOrCommit(tx, err))
+	}()
+
+	// Set user context for RLS
+	err = SetUserContext(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the location exists
+	var location models.Location
+	err = ScanEntityByField(ctx, tx, r.tableNames.Locations(), "id", area.LocationID, &location)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get location")
+	}
+
+	// Generate a new ID if one is not already provided
+	if area.GetID() == "" {
+		area.SetID(generateID())
+	}
+
+	err = InsertEntity(ctx, tx, r.tableNames.Areas(), area)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to insert entity")
+	}
+
+	return &area, nil
+}
+
+// GetWithUser gets an area with user context
+func (r *AreaRegistry) GetWithUser(ctx context.Context, id string) (*models.Area, error) {
+	var area models.Area
+	err := ScanEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Areas(), "id", id, &area)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, errkit.WithStack(registry.ErrNotFound,
+				"entity_type", "Area",
+				"entity_id", id,
+			)
+		}
+		return nil, errkit.Wrap(err, "failed to get entity")
+	}
+
+	return &area, nil
+}
+
+// ListWithUser lists areas with user context
+func (r *AreaRegistry) ListWithUser(ctx context.Context) ([]*models.Area, error) {
+	var areas []*models.Area
+
+	// Query the database for all areas with user context
+	for area, err := range ScanEntitiesWithUser[models.Area](ctx, r.dbx, r.tableNames.Areas()) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list areas")
+		}
+		areas = append(areas, &area)
+	}
+
+	return areas, nil
+}
+
+// UpdateWithUser updates an area with user context
+func (r *AreaRegistry) UpdateWithUser(ctx context.Context, area models.Area) (*models.Area, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the area
+	area.SetUserID(userID)
+
+	// Begin a transaction (atomic operation)
+	tx, err := r.dbx.Beginx()
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer func() {
+		err = errors.Join(err, RollbackOrCommit(tx, err))
+	}()
+
+	// Set user context for RLS
+	err = SetUserContext(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the area exists
+	_, err = r.get(ctx, tx, area.ID)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get area")
+	}
+
+	// Check if the location exists
+	_, err = r.getLocation(ctx, tx, area.LocationID)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get location")
+	}
+
+	err = UpdateEntityByField(ctx, tx, r.tableNames.Areas(), "id", area.ID, area)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update entity")
+	}
+
+	return &area, nil
+}
+
+// DeleteWithUser deletes an area with user context
+func (r *AreaRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return DeleteEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Areas(), "id", id)
+}
+
+// CountWithUser counts areas with user context
+func (r *AreaRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Areas())
 }

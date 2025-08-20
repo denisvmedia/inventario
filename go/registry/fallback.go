@@ -484,6 +484,71 @@ func (f *FallbackCommodityRegistry) matchesTags(commodityTags []string, searchTa
 	}
 }
 
+// User-aware methods for FallbackCommodityRegistry
+func (f *FallbackCommodityRegistry) SetUserContext(ctx context.Context, userID string) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Commodity]); ok {
+		return userAware.SetUserContext(ctx, userID)
+	}
+	// Fallback: no-op for registries that don't support user context
+	return nil
+}
+
+func (f *FallbackCommodityRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Commodity]); ok {
+		return userAware.WithUserContext(ctx, userID, fn)
+	}
+	// Fallback: just execute the function
+	return fn(ctx)
+}
+
+func (f *FallbackCommodityRegistry) CreateWithUser(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Commodity]); ok {
+		return userAware.CreateWithUser(ctx, commodity)
+	}
+	// Fallback: use regular Create method
+	return f.base.Create(ctx, commodity)
+}
+
+func (f *FallbackCommodityRegistry) GetWithUser(ctx context.Context, id string) (*models.Commodity, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Commodity]); ok {
+		return userAware.GetWithUser(ctx, id)
+	}
+	// Fallback: use regular Get method
+	return f.base.Get(ctx, id)
+}
+
+func (f *FallbackCommodityRegistry) ListWithUser(ctx context.Context) ([]*models.Commodity, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Commodity]); ok {
+		return userAware.ListWithUser(ctx)
+	}
+	// Fallback: use regular List method
+	return f.base.List(ctx)
+}
+
+func (f *FallbackCommodityRegistry) UpdateWithUser(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Commodity]); ok {
+		return userAware.UpdateWithUser(ctx, commodity)
+	}
+	// Fallback: use regular Update method
+	return f.base.Update(ctx, commodity)
+}
+
+func (f *FallbackCommodityRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Commodity]); ok {
+		return userAware.DeleteWithUser(ctx, id)
+	}
+	// Fallback: use regular Delete method
+	return f.base.Delete(ctx, id)
+}
+
+func (f *FallbackCommodityRegistry) CountWithUser(ctx context.Context) (int, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Commodity]); ok {
+		return userAware.CountWithUser(ctx)
+	}
+	// Fallback: use regular Count method
+	return f.base.Count(ctx)
+}
+
 // FallbackAreaRegistry provides fallback implementations for enhanced area operations
 type FallbackAreaRegistry struct {
 	base         AreaRegistry
@@ -561,6 +626,63 @@ func (f *FallbackAreaRegistry) SearchByName(ctx context.Context, query string) (
 	return filtered, nil
 }
 
+// User-aware methods for FallbackAreaRegistry
+func (f *FallbackAreaRegistry) SetUserContext(ctx context.Context, userID string) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Area]); ok {
+		return userAware.SetUserContext(ctx, userID)
+	}
+	return nil
+}
+
+func (f *FallbackAreaRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Area]); ok {
+		return userAware.WithUserContext(ctx, userID, fn)
+	}
+	return fn(ctx)
+}
+
+func (f *FallbackAreaRegistry) CreateWithUser(ctx context.Context, area models.Area) (*models.Area, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Area]); ok {
+		return userAware.CreateWithUser(ctx, area)
+	}
+	return f.base.Create(ctx, area)
+}
+
+func (f *FallbackAreaRegistry) GetWithUser(ctx context.Context, id string) (*models.Area, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Area]); ok {
+		return userAware.GetWithUser(ctx, id)
+	}
+	return f.base.Get(ctx, id)
+}
+
+func (f *FallbackAreaRegistry) ListWithUser(ctx context.Context) ([]*models.Area, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Area]); ok {
+		return userAware.ListWithUser(ctx)
+	}
+	return f.base.List(ctx)
+}
+
+func (f *FallbackAreaRegistry) UpdateWithUser(ctx context.Context, area models.Area) (*models.Area, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Area]); ok {
+		return userAware.UpdateWithUser(ctx, area)
+	}
+	return f.base.Update(ctx, area)
+}
+
+func (f *FallbackAreaRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Area]); ok {
+		return userAware.DeleteWithUser(ctx, id)
+	}
+	return f.base.Delete(ctx, id)
+}
+
+func (f *FallbackAreaRegistry) CountWithUser(ctx context.Context) (int, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Area]); ok {
+		return userAware.CountWithUser(ctx)
+	}
+	return f.base.Count(ctx)
+}
+
 // FallbackLocationRegistry provides fallback implementations for enhanced location operations
 type FallbackLocationRegistry struct {
 	base         LocationRegistry
@@ -636,6 +758,63 @@ func (f *FallbackLocationRegistry) SearchByName(ctx context.Context, query strin
 	}
 
 	return filtered, nil
+}
+
+// User-aware methods for FallbackLocationRegistry
+func (f *FallbackLocationRegistry) SetUserContext(ctx context.Context, userID string) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Location]); ok {
+		return userAware.SetUserContext(ctx, userID)
+	}
+	return nil
+}
+
+func (f *FallbackLocationRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Location]); ok {
+		return userAware.WithUserContext(ctx, userID, fn)
+	}
+	return fn(ctx)
+}
+
+func (f *FallbackLocationRegistry) CreateWithUser(ctx context.Context, location models.Location) (*models.Location, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Location]); ok {
+		return userAware.CreateWithUser(ctx, location)
+	}
+	return f.base.Create(ctx, location)
+}
+
+func (f *FallbackLocationRegistry) GetWithUser(ctx context.Context, id string) (*models.Location, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Location]); ok {
+		return userAware.GetWithUser(ctx, id)
+	}
+	return f.base.Get(ctx, id)
+}
+
+func (f *FallbackLocationRegistry) ListWithUser(ctx context.Context) ([]*models.Location, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Location]); ok {
+		return userAware.ListWithUser(ctx)
+	}
+	return f.base.List(ctx)
+}
+
+func (f *FallbackLocationRegistry) UpdateWithUser(ctx context.Context, location models.Location) (*models.Location, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Location]); ok {
+		return userAware.UpdateWithUser(ctx, location)
+	}
+	return f.base.Update(ctx, location)
+}
+
+func (f *FallbackLocationRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Location]); ok {
+		return userAware.DeleteWithUser(ctx, id)
+	}
+	return f.base.Delete(ctx, id)
+}
+
+func (f *FallbackLocationRegistry) CountWithUser(ctx context.Context) (int, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.Location]); ok {
+		return userAware.CountWithUser(ctx)
+	}
+	return f.base.Count(ctx)
 }
 
 // FallbackFileRegistry provides fallback implementations for enhanced file operations
@@ -759,4 +938,61 @@ func (f *FallbackFileRegistry) FindLargeFiles(ctx context.Context, minSizeBytes 
 	// File size is not currently tracked in the FileEntity model
 	// Return empty results for now
 	return []*models.FileEntity{}, nil
+}
+
+// User-aware methods for FallbackFileRegistry
+func (f *FallbackFileRegistry) SetUserContext(ctx context.Context, userID string) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.FileEntity]); ok {
+		return userAware.SetUserContext(ctx, userID)
+	}
+	return nil
+}
+
+func (f *FallbackFileRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.FileEntity]); ok {
+		return userAware.WithUserContext(ctx, userID, fn)
+	}
+	return fn(ctx)
+}
+
+func (f *FallbackFileRegistry) CreateWithUser(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.FileEntity]); ok {
+		return userAware.CreateWithUser(ctx, file)
+	}
+	return f.base.Create(ctx, file)
+}
+
+func (f *FallbackFileRegistry) GetWithUser(ctx context.Context, id string) (*models.FileEntity, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.FileEntity]); ok {
+		return userAware.GetWithUser(ctx, id)
+	}
+	return f.base.Get(ctx, id)
+}
+
+func (f *FallbackFileRegistry) ListWithUser(ctx context.Context) ([]*models.FileEntity, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.FileEntity]); ok {
+		return userAware.ListWithUser(ctx)
+	}
+	return f.base.List(ctx)
+}
+
+func (f *FallbackFileRegistry) UpdateWithUser(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.FileEntity]); ok {
+		return userAware.UpdateWithUser(ctx, file)
+	}
+	return f.base.Update(ctx, file)
+}
+
+func (f *FallbackFileRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	if userAware, ok := f.base.(UserAwareRegistry[models.FileEntity]); ok {
+		return userAware.DeleteWithUser(ctx, id)
+	}
+	return f.base.Delete(ctx, id)
+}
+
+func (f *FallbackFileRegistry) CountWithUser(ctx context.Context) (int, error) {
+	if userAware, ok := f.base.(UserAwareRegistry[models.FileEntity]); ok {
+		return userAware.CountWithUser(ctx)
+	}
+	return f.base.Count(ctx)
 }

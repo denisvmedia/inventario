@@ -29,6 +29,16 @@ func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *Loc
 	}
 }
 
+// SetUserContext sets the user context for RLS policies
+func (r *LocationRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.dbx, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *LocationRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.dbx, userID, fn)
+}
+
 func (r *LocationRegistry) Create(ctx context.Context, location models.Location) (*models.Location, error) {
 	if location.Name == "" {
 		return nil, errkit.WithStack(registry.ErrFieldRequired,
@@ -246,4 +256,105 @@ func (r *LocationRegistry) DeleteArea(ctx context.Context, locationID, areaID st
 	}
 
 	return nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates a location with user context
+func (r *LocationRegistry) CreateWithUser(ctx context.Context, location models.Location) (*models.Location, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the location
+	location.SetUserID(userID)
+
+	if location.Name == "" {
+		return nil, errkit.WithStack(registry.ErrFieldRequired,
+			"field_name", "Name",
+		)
+	}
+
+	// Generate a new ID if one is not already provided
+	if location.GetID() == "" {
+		location.SetID(generateID())
+	}
+
+	// Set user context for RLS and insert the location
+	err := InsertEntityWithUser(ctx, r.dbx, r.tableNames.Locations(), location)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to insert entity")
+	}
+
+	return &location, nil
+}
+
+// GetWithUser gets a location with user context
+func (r *LocationRegistry) GetWithUser(ctx context.Context, id string) (*models.Location, error) {
+	var location models.Location
+	err := ScanEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Locations(), "id", id, &location)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, errkit.WithStack(registry.ErrNotFound,
+				"entity_type", "Location",
+				"entity_id", id,
+			)
+		}
+		return nil, errkit.Wrap(err, "failed to get entity")
+	}
+
+	return &location, nil
+}
+
+// ListWithUser lists locations with user context
+func (r *LocationRegistry) ListWithUser(ctx context.Context) ([]*models.Location, error) {
+	var locations []*models.Location
+
+	// Query the database for all locations with user context
+	for location, err := range ScanEntitiesWithUser[models.Location](ctx, r.dbx, r.tableNames.Locations()) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list locations")
+		}
+		locations = append(locations, &location)
+	}
+
+	return locations, nil
+}
+
+// UpdateWithUser updates a location with user context
+func (r *LocationRegistry) UpdateWithUser(ctx context.Context, location models.Location) (*models.Location, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the location
+	location.SetUserID(userID)
+
+	if location.Name == "" {
+		return nil, errkit.WithStack(registry.ErrFieldRequired,
+			"field_name", "Name",
+		)
+	}
+
+	// Update the location with user context
+	err := UpdateEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Locations(), "id", location.ID, location)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update entity")
+	}
+
+	return &location, nil
+}
+
+// DeleteWithUser deletes a location with user context
+func (r *LocationRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return DeleteEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Locations(), "id", id)
+}
+
+// CountWithUser counts locations with user context
+func (r *LocationRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Locations())
 }

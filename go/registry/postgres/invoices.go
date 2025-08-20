@@ -29,6 +29,16 @@ func NewInvoiceRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *Invo
 	}
 }
 
+// SetUserContext sets the user context for RLS policies
+func (r *InvoiceRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.dbx, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *InvoiceRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.dbx, userID, fn)
+}
+
 func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
 	// Begin a transaction (atomic operation)
 	tx, err := r.dbx.Beginx()
@@ -161,4 +171,93 @@ func (r *InvoiceRegistry) getCommodity(ctx context.Context, tx sqlx.ExtContext, 
 	}
 
 	return &commodity, nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates an invoice with user context
+func (r *InvoiceRegistry) CreateWithUser(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the invoice
+	invoice.SetUserID(userID)
+
+	// Generate a new ID if one is not already provided
+	if invoice.GetID() == "" {
+		invoice.SetID(generateID())
+	}
+
+	// Set user context for RLS and insert the invoice
+	err := InsertEntityWithUser(ctx, r.dbx, r.tableNames.Invoices(), invoice)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to insert entity")
+	}
+
+	return &invoice, nil
+}
+
+// GetWithUser gets an invoice with user context
+func (r *InvoiceRegistry) GetWithUser(ctx context.Context, id string) (*models.Invoice, error) {
+	var invoice models.Invoice
+	err := ScanEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Invoices(), "id", id, &invoice)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, errkit.WithStack(registry.ErrNotFound,
+				"entity_type", "Invoice",
+				"entity_id", id,
+			)
+		}
+		return nil, errkit.Wrap(err, "failed to get entity")
+	}
+
+	return &invoice, nil
+}
+
+// ListWithUser lists invoices with user context
+func (r *InvoiceRegistry) ListWithUser(ctx context.Context) ([]*models.Invoice, error) {
+	var invoices []*models.Invoice
+
+	// Query the database for all invoices with user context
+	for invoice, err := range ScanEntitiesWithUser[models.Invoice](ctx, r.dbx, r.tableNames.Invoices()) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list invoices")
+		}
+		invoices = append(invoices, &invoice)
+	}
+
+	return invoices, nil
+}
+
+// UpdateWithUser updates an invoice with user context
+func (r *InvoiceRegistry) UpdateWithUser(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the invoice
+	invoice.SetUserID(userID)
+
+	// Update the invoice with user context
+	err := UpdateEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Invoices(), "id", invoice.ID, invoice)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update entity")
+	}
+
+	return &invoice, nil
+}
+
+// DeleteWithUser deletes an invoice with user context
+func (r *InvoiceRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return DeleteEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Invoices(), "id", id)
+}
+
+// CountWithUser counts invoices with user context
+func (r *InvoiceRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Invoices())
 }

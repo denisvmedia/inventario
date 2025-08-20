@@ -100,3 +100,36 @@ func (r *ImageRegistry) Delete(ctx context.Context, id string) error {
 func (r *ImageRegistry) Count(_ context.Context) (int, error) {
 	return r.registry.Count()
 }
+
+// User-aware methods that delegate to the embedded registry
+func (r *ImageRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return r.registry.SetUserContext(ctx, userID)
+}
+
+func (r *ImageRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return r.registry.WithUserContext(ctx, userID, fn)
+}
+
+func (r *ImageRegistry) CreateWithUser(ctx context.Context, image models.Image) (*models.Image, error) {
+	return r.registry.CreateWithUser(ctx, image)
+}
+
+func (r *ImageRegistry) GetWithUser(ctx context.Context, id string) (*models.Image, error) {
+	return r.registry.GetWithUser(ctx, id)
+}
+
+func (r *ImageRegistry) ListWithUser(ctx context.Context) ([]*models.Image, error) {
+	return r.registry.ListWithUser(ctx)
+}
+
+func (r *ImageRegistry) UpdateWithUser(ctx context.Context, image models.Image) (*models.Image, error) {
+	return r.registry.UpdateWithUser(ctx, image)
+}
+
+func (r *ImageRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return r.registry.DeleteWithUser(ctx, id)
+}
+
+func (r *ImageRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return r.registry.CountWithUser(ctx)
+}

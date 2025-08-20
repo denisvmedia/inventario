@@ -29,6 +29,16 @@ func NewImageRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *ImageR
 	}
 }
 
+// SetUserContext sets the user context for RLS policies
+func (r *ImageRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.dbx, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *ImageRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.dbx, userID, fn)
+}
+
 func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models.Image, error) {
 	// Begin a transaction (atomic operation)
 	tx, err := r.dbx.Beginx()
@@ -161,4 +171,93 @@ func (r *ImageRegistry) getCommodity(ctx context.Context, tx sqlx.ExtContext, co
 	}
 
 	return &commodity, nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates an image with user context
+func (r *ImageRegistry) CreateWithUser(ctx context.Context, image models.Image) (*models.Image, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the image
+	image.SetUserID(userID)
+
+	// Generate a new ID if one is not already provided
+	if image.GetID() == "" {
+		image.SetID(generateID())
+	}
+
+	// Set user context for RLS and insert the image
+	err := InsertEntityWithUser(ctx, r.dbx, r.tableNames.Images(), image)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to insert entity")
+	}
+
+	return &image, nil
+}
+
+// GetWithUser gets an image with user context
+func (r *ImageRegistry) GetWithUser(ctx context.Context, id string) (*models.Image, error) {
+	var image models.Image
+	err := ScanEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Images(), "id", id, &image)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, errkit.WithStack(registry.ErrNotFound,
+				"entity_type", "Image",
+				"entity_id", id,
+			)
+		}
+		return nil, errkit.Wrap(err, "failed to get entity")
+	}
+
+	return &image, nil
+}
+
+// ListWithUser lists images with user context
+func (r *ImageRegistry) ListWithUser(ctx context.Context) ([]*models.Image, error) {
+	var images []*models.Image
+
+	// Query the database for all images with user context
+	for image, err := range ScanEntitiesWithUser[models.Image](ctx, r.dbx, r.tableNames.Images()) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list images")
+		}
+		images = append(images, &image)
+	}
+
+	return images, nil
+}
+
+// UpdateWithUser updates an image with user context
+func (r *ImageRegistry) UpdateWithUser(ctx context.Context, image models.Image) (*models.Image, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the image
+	image.SetUserID(userID)
+
+	// Update the image with user context
+	err := UpdateEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Images(), "id", image.ID, image)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update entity")
+	}
+
+	return &image, nil
+}
+
+// DeleteWithUser deletes an image with user context
+func (r *ImageRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return DeleteEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Images(), "id", id)
+}
+
+// CountWithUser counts images with user context
+func (r *ImageRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Images())
 }

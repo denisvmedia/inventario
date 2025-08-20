@@ -31,6 +31,16 @@ func NewExportRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *Expor
 	}
 }
 
+// SetUserContext sets the user context for RLS policies
+func (r *ExportRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.dbx, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *ExportRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.dbx, userID, fn)
+}
+
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
 	// Begin a transaction (atomic operation)
 	tx, err := r.dbx.Beginx()
@@ -232,4 +242,72 @@ func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates an export with user context
+func (r *ExportRegistry) CreateWithUser(ctx context.Context, export models.Export) (*models.Export, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	export.SetUserID(userID)
+	if export.GetID() == "" {
+		export.SetID(generateID())
+	}
+	err := InsertEntityWithUser(ctx, r.dbx, r.tableNames.Exports(), export)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to insert entity")
+	}
+	return &export, nil
+}
+
+// GetWithUser gets an export with user context
+func (r *ExportRegistry) GetWithUser(ctx context.Context, id string) (*models.Export, error) {
+	var export models.Export
+	err := ScanEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Exports(), "id", id, &export)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, errkit.WithStack(registry.ErrNotFound, "entity_type", "Export", "entity_id", id)
+		}
+		return nil, errkit.Wrap(err, "failed to get entity")
+	}
+	return &export, nil
+}
+
+// ListWithUser lists exports with user context
+func (r *ExportRegistry) ListWithUser(ctx context.Context) ([]*models.Export, error) {
+	var exports []*models.Export
+	for export, err := range ScanEntitiesWithUser[models.Export](ctx, r.dbx, r.tableNames.Exports()) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list exports")
+		}
+		exports = append(exports, &export)
+	}
+	return exports, nil
+}
+
+// UpdateWithUser updates an export with user context
+func (r *ExportRegistry) UpdateWithUser(ctx context.Context, export models.Export) (*models.Export, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	export.SetUserID(userID)
+	err := UpdateEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Exports(), "id", export.ID, export)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update entity")
+	}
+	return &export, nil
+}
+
+// DeleteWithUser deletes an export with user context
+func (r *ExportRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return DeleteEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Exports(), "id", id)
+}
+
+// CountWithUser counts exports with user context
+func (r *ExportRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Exports())
 }
