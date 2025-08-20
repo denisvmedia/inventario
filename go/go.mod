@@ -37,7 +37,7 @@ require (
 	go.etcd.io/bbolt v1.4.2
 	gocloud.dev v0.43.0
 	golang.org/x/crypto v0.41.0
-	golang.org/x/exp v0.0.0-20250811191247-51f88131bc50
+	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
 	golang.org/x/sync v0.16.0
 	golang.org/x/text v0.28.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
