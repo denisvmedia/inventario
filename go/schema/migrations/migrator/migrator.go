@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -296,8 +295,7 @@ func (m *Migrator) PrintMigrationStatus(ctx context.Context, verbose bool) error
 	fmt.Println()
 
 	// Check if migration files exist
-	migrationsDir := filepath.Join(".", "registry", "ptah", "migrations", "source")
-	entries, err := os.ReadDir(migrationsDir)
+	entries, err := fs.ReadDir(m.migFS, ".")
 	if err != nil || len(entries) == 0 {
 		fmt.Println("Status: ⚠️  No migration files found")
 		fmt.Println("Use 'migrate generate --initial' to create initial migration.")
