@@ -17,7 +17,8 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/registry/ptah"
+	"github.com/denisvmedia/inventario/schema/bootstrap"
+	"github.com/denisvmedia/inventario/schema/migrations/migrator"
 )
 
 var (
@@ -27,23 +28,36 @@ var (
 )
 
 // migrateUp removes all test data by dropping and recreating the schema
-func migrateUp(t *testing.T, ctx context.Context, migrator *ptah.PtahMigrator, dsn string) error {
+func migrateUp(t *testing.T, ctx context.Context, migr *migrator.Migrator, dsn string) error {
 	// Drop all tables (this cleans all data)
-	err := migrator.DropDatabase(ctx, false, true) // dryRun=false, confirm=true
+	err := migr.DropTables(ctx, false, true) // dryRun=false, confirm=true
 	if err != nil {
 		return err
 	}
 
+	// extract user from dsn
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return err
 	}
-	operationalUser := u.User.Username()
+
+	boots := bootstrap.New()
+
+	err = boots.Apply(ctx, bootstrap.ApplyArgs{
+		DSN: dsn,
+		Template: bootstrap.TemplateData{
+			Username:              u.User.Username(),
+			UsernameForMigrations: u.User.Username(),
+		},
+		DryRun: false,
+	})
+	if err != nil {
+		return err
+	}
 
 	// Recreate the schema
-	err = migrator.MigrateUp(ctx, ptah.MigrateArgs{
-		DryRun:          false,
-		OperationalUser: operationalUser,
+	err = migr.MigrateUp(ctx, migrator.Args{
+		DryRun: false,
 	})
 	if err != nil {
 		return err
@@ -136,11 +150,10 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	c.Assert(err, qt.IsNil)
 
 	// Use the migration drop and recreate functionality
-	migrator, err := ptah.NewPtahMigrator(dsn, "../../models")
-	c.Assert(err, qt.IsNil)
+	migr := migrator.NewWithFallback(dsn, "../../models")
 
 	ctx := context.Background()
-	err = migrateUp(t, ctx, migrator, dsn)
+	err = migrateUp(t, ctx, migr, dsn)
 	c.Assert(err, qt.IsNil)
 
 	// Create registry set using the shared pool instead of creating a new one

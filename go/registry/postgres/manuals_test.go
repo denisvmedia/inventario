@@ -22,7 +22,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id", "test-tenant-id", "test-user-id"),
 			},
 		},
 		{
@@ -34,7 +34,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".docx",
 					MIMEType:     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 				},
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id2", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id2", "test-tenant-id", "test-user-id"),
 			},
 		},
 	}
@@ -260,7 +260,7 @@ func TestManualRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent manual",
 			manual: models.Manual{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
+				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "test-tenant-id"),
 				CommodityID:         "some-commodity-id",
 				File: &models.File{
 					Path:         "test-manual",

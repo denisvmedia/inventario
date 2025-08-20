@@ -48,6 +48,7 @@ else
 endif
 
 BINARY_PATH=$(BIN_DIR)/$(BINARY_NAME)$(BINARY_EXT)
+INVENTOOL_PATH=$(BIN_DIR)/inventool$(BINARY_EXT)
 
 # Server configuration
 SERVER_ADDR=:3333
@@ -74,12 +75,18 @@ build: build-frontend build-backend
 .PHONY: build-backend
 build-backend:
 	$(call MKDIR,$(BIN_DIR))
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -tags with_frontend -ldflags "$(LDFLAGS)" -o ../$(BINARY_PATH) .
+	$(CD) $(BACKEND_DIR)/cmd/inventario && $(GO_CMD) build -tags with_frontend -ldflags "$(LDFLAGS)" -o ../../../$(BINARY_PATH) .
 
 .PHONY: build-backend-nofe
 build-backend-nofe:
 	$(call MKDIR,$(BIN_DIR))
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../$(BINARY_PATH) .
+	$(CD) $(BACKEND_DIR)/cmd/inventario && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../../../$(BINARY_PATH) .
+
+.PHONE: build-inventool
+build-inventool:
+	$(call MKDIR,$(BIN_DIR))
+	$(CD) $(BACKEND_DIR)/cmd/inventool && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../../../$(INVENTOOL_PATH) .
+
 
 # Build the frontend
 .PHONY: build-frontend

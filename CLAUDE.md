@@ -42,6 +42,7 @@ The system implements enterprise-grade multi-tenancy with:
 - `make build-frontend` - Build Vue.js frontend only  
 - `make build-backend` - Build Go backend with embedded frontend
 - `make build-backend-nofe` - Build Go backend without frontend
+- `make build-inventool` - Build InvenTool CLI tool
 
 ### Testing
 - `make test` - Run all tests (Go + frontend, excluding PostgreSQL)
@@ -62,7 +63,7 @@ The system implements enterprise-grade multi-tenancy with:
 - `make run-dev` - Run both servers concurrently
 
 ### Database Operations
-- `make seed-db` - Seed database with test data via API call
+- `curl http://localhost:3333/api/v1/seed` - Seed the database with test data
 - For PostgreSQL: Set POSTGRES_TEST_DSN environment variable for testing
 
 ## Project Structure
@@ -139,7 +140,7 @@ Support for multiple database backends via DSN:
 ## Testing Strategy
 
 ### Unit Tests
-- Table-driven tests using `frankban/quicktest`
+- Table-driven tests using `frankban/quicktest` aliased as `qt`
 - Comprehensive model validation testing
 - Registry pattern testing with mock implementations
 
@@ -211,6 +212,4 @@ Support for multiple database backends via DSN:
 - Health checks and proper signal handling
 
 ### Migration Strategy
-- Database migrations run automatically on startup
-- Supports rollback with `--rollback` flag
 - Dry-run mode for testing: `--dry-run`

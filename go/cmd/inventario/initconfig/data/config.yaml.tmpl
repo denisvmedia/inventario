@@ -1,0 +1,53 @@
+# Inventario Configuration File
+# This file contains default settings for the Inventario application.
+# You can modify these values to match your environment and preferences.
+#
+# Environment variables and command-line flags will override these settings.
+# Environment variable format: INVENTARIO_<FLAG_NAME> (e.g., INVENTARIO_ADDR)
+# (TODO: the above statement is not true, fix it)
+
+# Configuration keys match the command-line flag names exactly
+# This eliminates the need for manual mapping between config and flags
+
+# Database connection string supporting multiple backends:
+# • PostgreSQL (recommended - full feature support): "postgres://user:password@host:port/database?sslmode=disable"
+# • BoltDB (basic features only): "boltdb://path/to/database.db"
+# • In-memory (testing only): "memory://" (data lost on restart, useful for testing)
+#
+# PostgreSQL provides advanced features like:
+# - Full-text search with ranking
+# - JSONB operators for complex queries
+# - Advanced indexing (GIN, GiST, partial indexes)
+# - Similarity search and aggregations
+# Other databases use fallback implementations with reduced performance
+db-dsn: "{{.Database.DSN}}"
+
+run:
+  # Network address and port where the server will listen
+  # Format: "[host]:port" (e.g., ":8080", "localhost:3333", "0.0.0.0:8080")
+  # Use ":0" to let the system choose an available port
+  addr: "{{.Server.Addr}}"
+
+  # Location for uploaded files
+  # Supports local filesystem and cloud storage URLs
+  # Local examples:
+  #   - "file:///var/lib/inventario/uploads?create_dir=1"
+  #   - "file://./uploads?create_dir=1" (relative to working directory)
+  # The "create_dir=1" parameter creates the directory if it doesn't exist
+  upload-location: "{{.Server.UploadLocation}}"
+
+  # Maximum number of concurrent export processes
+  # Higher values allow more exports to run simultaneously but use more resources
+  max-concurrent-exports: {{.Workers.MaxConcurrentExports}}
+
+  # Maximum number of concurrent import processes
+  # Higher values allow more imports to run simultaneously but use more resources
+  max-concurrent-imports: {{.Workers.MaxConcurrentImports}}
+
+# NOTE: User interface settings (theme, debug info, date format) and system settings
+# (main currency) are stored in the database and configured through the web interface
+# at http://localhost:3333/settings - they are not configured through this file.
+#
+# The settings above correspond directly to the command-line flags supported by the
+# 'inventario run' command. For a complete list of supported flags, run:
+#   inventario run --help

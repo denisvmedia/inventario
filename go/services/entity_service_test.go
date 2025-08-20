@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"runtime"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -90,7 +91,12 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
-			uploadLocation := "file://" + tempDir + "?create_dir=1"
+			var uploadLocation string
+			if runtime.GOOS == "windows" {
+				uploadLocation = "file:///" + tempDir + "?create_dir=1"
+			} else {
+				uploadLocation = "file://" + tempDir + "?create_dir=1"
+			}
 
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
@@ -200,7 +206,12 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
-			uploadLocation := "file://" + tempDir + "?create_dir=1"
+			var uploadLocation string
+			if runtime.GOOS == "windows" {
+				uploadLocation = "file:///" + tempDir + "?create_dir=1"
+			} else {
+				uploadLocation = "file://" + tempDir + "?create_dir=1"
+			}
 
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
@@ -318,7 +329,12 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
-			uploadLocation := "file://" + tempDir + "?create_dir=1"
+			var uploadLocation string
+			if runtime.GOOS == "windows" {
+				uploadLocation = "file:///" + tempDir + "?create_dir=1"
+			} else {
+				uploadLocation = "file://" + tempDir + "?create_dir=1"
+			}
 
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
@@ -421,7 +437,12 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
-			uploadLocation := "file://" + tempDir + "?create_dir=1"
+			var uploadLocation string
+			if runtime.GOOS == "windows" {
+				uploadLocation = "file:///" + tempDir + "?create_dir=1"
+			} else {
+				uploadLocation = "file://" + tempDir + "?create_dir=1"
+			}
 
 			// Create registry set
 			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))

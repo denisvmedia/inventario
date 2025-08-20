@@ -15,7 +15,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
@@ -68,7 +68,10 @@ jobs:
         run: |
           cd go
           go mod download
-          go run main.go migrate up --db-dsn "${{ env.DB_URL }}"
+          cd ..
+          make build-inventool
+          bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.DB_URL }}"
+          bin/inventool db migrations up --db-dsn "${{ env.DB_URL }}"
 
       - name: Start application stack and run tests
         run: |
