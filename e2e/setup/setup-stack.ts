@@ -71,7 +71,7 @@ export async function startBackend(): Promise<void> {
 
   console.log('Executing: go run -tags with_frontend main.go run');
   const dbUrl = process.env.DB_URL ?? 'memory://';
-  backendProcess = spawn('go', ['run', '-tags', 'with_frontend', 'main.go', 'run', '--db-dsn', dbUrl], {
+  backendProcess = spawn('go', ['run', '-tags', 'with_frontend', 'cmd/inventario/main.go', 'run', '--db-dsn', dbUrl], {
     cwd: backendRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, PATH: process.env.PATH },
