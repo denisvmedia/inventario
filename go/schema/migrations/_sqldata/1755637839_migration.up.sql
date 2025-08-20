@@ -394,8 +394,8 @@ CREATE POLICY user_tenant_isolation ON users FOR ALL TO inventario_app
 -- Ensures users can only access and modify their own data
 DROP POLICY IF EXISTS user_user_isolation ON users;
 CREATE POLICY user_user_isolation ON users FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+    USING (id = get_current_user_id())
+    WITH CHECK (id = get_current_user_id());
 CREATE INDEX IF NOT EXISTS commodities_active_idx ON commodities (status, area_id) WHERE draft = false;
 CREATE INDEX IF NOT EXISTS commodities_draft_idx ON commodities (last_modified_date) WHERE draft = true;
 CREATE INDEX IF NOT EXISTS commodities_extra_serial_numbers_gin_idx ON commodities USING GIN (extra_serial_numbers);

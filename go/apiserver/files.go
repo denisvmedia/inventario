@@ -135,11 +135,14 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Extract tenant and user from authenticated request context
+	tenantID, userID := ExtractTenantUserFromRequest(r)
+
 	now := time.Now()
 	fileEntity := models.FileEntity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id", // Temporarily set default tenant and user IDs
-			UserID:   "test-user-id",   // TODO: Remove when proper tenant/user context is implemented
+			TenantID: tenantID,
+			UserID:   userID,
 		},
 		Title:            input.Data.Attributes.Title,
 		Description:      input.Data.Attributes.Description,
