@@ -31,17 +31,7 @@ func GetUserFromRequest(r *http.Request) *models.User {
 	return UserFromContext(r.Context())
 }
 
-// GetTenantIDFromContext extracts tenant ID from context
-// Returns empty string if no tenant context is available
-func GetTenantIDFromContext(ctx context.Context) string {
-	return TenantIDFromContext(ctx)
-}
 
-// GetUserIDFromContext extracts user ID from context
-// Returns empty string if no user context is available
-func GetUserIDFromContext(ctx context.Context) string {
-	return UserIDFromContext(ctx)
-}
 
 // SetDefaultTenantUserIDs sets default tenant and user IDs if they are empty
 // This is a temporary function to maintain backward compatibility
@@ -72,8 +62,8 @@ func ExtractTenantUserFromRequest(r *http.Request) (tenantID, userID string) {
 // Falls back to default IDs if context is not available (for backward compatibility)
 // TODO: Remove fallback when proper authentication is fully implemented
 func ExtractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
-	tenantID = GetTenantIDFromContext(ctx)
-	userID = GetUserIDFromContext(ctx)
+	tenantID = TenantIDFromContext(ctx)
+	userID = UserIDFromContext(ctx)
 
 	// Fallback to default IDs for backward compatibility
 	SetDefaultTenantUserIDs(&tenantID, &userID)

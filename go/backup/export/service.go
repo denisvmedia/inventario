@@ -22,10 +22,29 @@ import (
 // Falls back to default IDs if context is not available (for backward compatibility)
 // TODO: Remove fallback when proper authentication is fully implemented
 func extractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
-	// For now, return default IDs since we don't have access to apiserver context utilities here
-	// This maintains backward compatibility while the context system is being implemented
-	tenantID = "test-tenant-id"
-	userID = "test-user-id"
+	// Try to extract from context first
+	if ctx != nil {
+		// Check if context has tenant/user values (these would be set by middleware)
+		if tenantVal := ctx.Value("tenant_id"); tenantVal != nil {
+			if tid, ok := tenantVal.(string); ok && tid != "" {
+				tenantID = tid
+			}
+		}
+		if userVal := ctx.Value("user_id"); userVal != nil {
+			if uid, ok := userVal.(string); ok && uid != "" {
+				userID = uid
+			}
+		}
+	}
+
+	// Fallback to default IDs for backward compatibility
+	if tenantID == "" {
+		tenantID = "test-tenant-id"
+	}
+	if userID == "" {
+		userID = "test-user-id"
+	}
+
 	return tenantID, userID
 }
 
