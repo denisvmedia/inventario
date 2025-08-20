@@ -119,14 +119,15 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Temporarily set default tenant and user IDs while multi-tenancy is disabled
-	// TODO: Remove this when proper tenant/user context is implemented
+	// Extract tenant and user from authenticated request context
+	tenantID, userID := ExtractTenantUserFromRequest(r)
+
 	commodity := *input.Data.Attributes
 	if commodity.TenantID == "" {
-		commodity.TenantID = "test-tenant-id" // Use the same ID as our tests and seeding
+		commodity.TenantID = tenantID
 	}
 	if commodity.UserID == "" {
-		commodity.UserID = "test-user-id" // Use the same ID as our tests and seeding
+		commodity.UserID = userID
 	}
 
 	createdCommodity, err := api.registrySet.CommodityRegistry.Create(r.Context(), commodity)

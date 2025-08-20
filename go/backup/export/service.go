@@ -18,6 +18,34 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+// extractTenantUserFromContext extracts tenant and user IDs from context
+// Falls back to default IDs if context is not available (for backward compatibility)
+// TODO: Remove fallback when proper authentication is fully implemented
+func extractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
+	// Try to extract from context first
+	// Check if context has tenant/user values (these would be set by middleware)
+	if tenantVal := ctx.Value("tenant_id"); tenantVal != nil {
+		if tid, ok := tenantVal.(string); ok && tid != "" {
+			tenantID = tid
+		}
+	}
+	if userVal := ctx.Value("user_id"); userVal != nil {
+		if uid, ok := userVal.(string); ok && uid != "" {
+			userID = uid
+		}
+	}
+
+	// Fallback to default IDs for backward compatibility
+	if tenantID == "" {
+		tenantID = "test-tenant-id"
+	}
+	if userID == "" {
+		userID = "test-user-id"
+	}
+
+	return tenantID, userID
+}
+
 // ExportArgs contains arguments for export operations
 type ExportArgs struct {
 	IncludeFileData bool
@@ -127,13 +155,14 @@ func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *mo
 
 	export := models.NewExportFromUserInput(input)
 
-	// Temporarily set default tenant and user IDs while multi-tenancy is disabled
-	// TODO: Remove this when proper tenant/user context is implemented
+	// Extract tenant and user from context (fallback to defaults for backward compatibility)
+	tenantID, userID := extractTenantUserFromContext(ctx)
+
 	if export.TenantID == "" {
-		export.TenantID = "test-tenant-id" // Use the same ID as our tests and seeding
+		export.TenantID = tenantID
 	}
 	if export.UserID == "" {
-		export.UserID = "test-user-id" // Use the same ID as our tests and seeding
+		export.UserID = userID
 	}
 
 	// Enrich selected items with names from the database
@@ -229,12 +258,15 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 		filename = strings.TrimSuffix(filename, ext)
 	}
 
+	// Extract tenant and user from context (fallback to defaults for backward compatibility)
+	tenantID, userID := extractTenantUserFromContext(ctx)
+
 	// Create file entity
 	now := time.Now()
 	fileEntity := models.FileEntity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id", // Temporarily set default tenant and user IDs
-			UserID:   "test-user-id",   // TODO: Remove when proper tenant/user context is implemented
+			TenantID: tenantID,
+			UserID:   userID,
 		},
 		Title:            fmt.Sprintf("Export: %s", description),
 		Description:      fmt.Sprintf("Export file generated on %s", now.Format("2006-01-02 15:04:05")),
