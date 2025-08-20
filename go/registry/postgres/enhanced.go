@@ -488,3 +488,60 @@ func (r *EnhancedPostgreSQLCommodityRegistry) FindBySerialNumbers(ctx context.Co
 
 	return commodities, nil
 }
+
+// User-aware methods that delegate to base registry
+func (r *EnhancedPostgreSQLCommodityRegistry) SetUserContext(ctx context.Context, userID string) error {
+	if userAware, ok := r.base.(registry.UserAwareRegistry[models.Commodity]); ok {
+		return userAware.SetUserContext(ctx, userID)
+	}
+	return nil
+}
+
+func (r *EnhancedPostgreSQLCommodityRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	if userAware, ok := r.base.(registry.UserAwareRegistry[models.Commodity]); ok {
+		return userAware.WithUserContext(ctx, userID, fn)
+	}
+	return fn(ctx)
+}
+
+func (r *EnhancedPostgreSQLCommodityRegistry) CreateWithUser(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	if userAware, ok := r.base.(registry.UserAwareRegistry[models.Commodity]); ok {
+		return userAware.CreateWithUser(ctx, commodity)
+	}
+	return r.base.Create(ctx, commodity)
+}
+
+func (r *EnhancedPostgreSQLCommodityRegistry) GetWithUser(ctx context.Context, id string) (*models.Commodity, error) {
+	if userAware, ok := r.base.(registry.UserAwareRegistry[models.Commodity]); ok {
+		return userAware.GetWithUser(ctx, id)
+	}
+	return r.base.Get(ctx, id)
+}
+
+func (r *EnhancedPostgreSQLCommodityRegistry) ListWithUser(ctx context.Context) ([]*models.Commodity, error) {
+	if userAware, ok := r.base.(registry.UserAwareRegistry[models.Commodity]); ok {
+		return userAware.ListWithUser(ctx)
+	}
+	return r.base.List(ctx)
+}
+
+func (r *EnhancedPostgreSQLCommodityRegistry) UpdateWithUser(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	if userAware, ok := r.base.(registry.UserAwareRegistry[models.Commodity]); ok {
+		return userAware.UpdateWithUser(ctx, commodity)
+	}
+	return r.base.Update(ctx, commodity)
+}
+
+func (r *EnhancedPostgreSQLCommodityRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	if userAware, ok := r.base.(registry.UserAwareRegistry[models.Commodity]); ok {
+		return userAware.DeleteWithUser(ctx, id)
+	}
+	return r.base.Delete(ctx, id)
+}
+
+func (r *EnhancedPostgreSQLCommodityRegistry) CountWithUser(ctx context.Context) (int, error) {
+	if userAware, ok := r.base.(registry.UserAwareRegistry[models.Commodity]); ok {
+		return userAware.CountWithUser(ctx)
+	}
+	return r.base.Count(ctx)
+}

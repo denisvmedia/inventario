@@ -180,3 +180,36 @@ func (r *AreaRegistry) GetCommodities(_ context.Context, areaID string) ([]strin
 func (r *AreaRegistry) DeleteCommodity(_ context.Context, areaID, commodityID string) error {
 	return r.registry.DeleteChild(bucketNameCommodities, areaID, commodityID)
 }
+
+// User-aware methods that delegate to the embedded registry
+func (r *AreaRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return r.registry.SetUserContext(ctx, userID)
+}
+
+func (r *AreaRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return r.registry.WithUserContext(ctx, userID, fn)
+}
+
+func (r *AreaRegistry) CreateWithUser(ctx context.Context, area models.Area) (*models.Area, error) {
+	return r.registry.CreateWithUser(ctx, area)
+}
+
+func (r *AreaRegistry) GetWithUser(ctx context.Context, id string) (*models.Area, error) {
+	return r.registry.GetWithUser(ctx, id)
+}
+
+func (r *AreaRegistry) ListWithUser(ctx context.Context) ([]*models.Area, error) {
+	return r.registry.ListWithUser(ctx)
+}
+
+func (r *AreaRegistry) UpdateWithUser(ctx context.Context, area models.Area) (*models.Area, error) {
+	return r.registry.UpdateWithUser(ctx, area)
+}
+
+func (r *AreaRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return r.registry.DeleteWithUser(ctx, id)
+}
+
+func (r *AreaRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return r.registry.CountWithUser(ctx)
+}

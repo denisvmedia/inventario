@@ -100,3 +100,36 @@ func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
 func (r *ManualRegistry) Count(_ context.Context) (int, error) {
 	return r.registry.Count()
 }
+
+// User-aware methods that delegate to the embedded registry
+func (r *ManualRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return r.registry.SetUserContext(ctx, userID)
+}
+
+func (r *ManualRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return r.registry.WithUserContext(ctx, userID, fn)
+}
+
+func (r *ManualRegistry) CreateWithUser(ctx context.Context, manual models.Manual) (*models.Manual, error) {
+	return r.registry.CreateWithUser(ctx, manual)
+}
+
+func (r *ManualRegistry) GetWithUser(ctx context.Context, id string) (*models.Manual, error) {
+	return r.registry.GetWithUser(ctx, id)
+}
+
+func (r *ManualRegistry) ListWithUser(ctx context.Context) ([]*models.Manual, error) {
+	return r.registry.ListWithUser(ctx)
+}
+
+func (r *ManualRegistry) UpdateWithUser(ctx context.Context, manual models.Manual) (*models.Manual, error) {
+	return r.registry.UpdateWithUser(ctx, manual)
+}
+
+func (r *ManualRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return r.registry.DeleteWithUser(ctx, id)
+}
+
+func (r *ManualRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return r.registry.CountWithUser(ctx)
+}

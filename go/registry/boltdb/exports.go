@@ -159,3 +159,36 @@ func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 		func(dbx.TransactionOrBucket, *models.Export) error { return nil },
 	)
 }
+
+// User-aware methods that delegate to the embedded registry
+func (r *ExportRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return r.registry.SetUserContext(ctx, userID)
+}
+
+func (r *ExportRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return r.registry.WithUserContext(ctx, userID, fn)
+}
+
+func (r *ExportRegistry) CreateWithUser(ctx context.Context, export models.Export) (*models.Export, error) {
+	return r.registry.CreateWithUser(ctx, export)
+}
+
+func (r *ExportRegistry) GetWithUser(ctx context.Context, id string) (*models.Export, error) {
+	return r.registry.GetWithUser(ctx, id)
+}
+
+func (r *ExportRegistry) ListWithUser(ctx context.Context) ([]*models.Export, error) {
+	return r.registry.ListWithUser(ctx)
+}
+
+func (r *ExportRegistry) UpdateWithUser(ctx context.Context, export models.Export) (*models.Export, error) {
+	return r.registry.UpdateWithUser(ctx, export)
+}
+
+func (r *ExportRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return r.registry.DeleteWithUser(ctx, id)
+}
+
+func (r *ExportRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return r.registry.CountWithUser(ctx)
+}

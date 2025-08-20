@@ -154,3 +154,36 @@ func (r *RestoreStepRegistry) DeleteByRestoreOperation(ctx context.Context, rest
 
 	return nil
 }
+
+// User-aware methods that delegate to the embedded registry
+func (r *RestoreStepRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return r.registry.SetUserContext(ctx, userID)
+}
+
+func (r *RestoreStepRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return r.registry.WithUserContext(ctx, userID, fn)
+}
+
+func (r *RestoreStepRegistry) CreateWithUser(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
+	return r.registry.CreateWithUser(ctx, step)
+}
+
+func (r *RestoreStepRegistry) GetWithUser(ctx context.Context, id string) (*models.RestoreStep, error) {
+	return r.registry.GetWithUser(ctx, id)
+}
+
+func (r *RestoreStepRegistry) ListWithUser(ctx context.Context) ([]*models.RestoreStep, error) {
+	return r.registry.ListWithUser(ctx)
+}
+
+func (r *RestoreStepRegistry) UpdateWithUser(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
+	return r.registry.UpdateWithUser(ctx, step)
+}
+
+func (r *RestoreStepRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return r.registry.DeleteWithUser(ctx, id)
+}
+
+func (r *RestoreStepRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return r.registry.CountWithUser(ctx)
+}

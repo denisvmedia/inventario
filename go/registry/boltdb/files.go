@@ -223,3 +223,36 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 
 	return filtered, nil
 }
+
+// User-aware methods that delegate to the embedded registry
+func (r *FileRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return r.registry.SetUserContext(ctx, userID)
+}
+
+func (r *FileRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return r.registry.WithUserContext(ctx, userID, fn)
+}
+
+func (r *FileRegistry) CreateWithUser(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
+	return r.registry.CreateWithUser(ctx, file)
+}
+
+func (r *FileRegistry) GetWithUser(ctx context.Context, id string) (*models.FileEntity, error) {
+	return r.registry.GetWithUser(ctx, id)
+}
+
+func (r *FileRegistry) ListWithUser(ctx context.Context) ([]*models.FileEntity, error) {
+	return r.registry.ListWithUser(ctx)
+}
+
+func (r *FileRegistry) UpdateWithUser(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
+	return r.registry.UpdateWithUser(ctx, file)
+}
+
+func (r *FileRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return r.registry.DeleteWithUser(ctx, id)
+}
+
+func (r *FileRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return r.registry.CountWithUser(ctx)
+}

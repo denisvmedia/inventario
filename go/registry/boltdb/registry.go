@@ -1,12 +1,14 @@
 package boltdb
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/boltdb/dbx"
 )
@@ -298,4 +300,153 @@ func (r *Registry[T, P]) DeleteChild(childEntityBucketName, entityID, childID st
 
 		return nil
 	})
+}
+
+// User-aware methods that filter by user_id
+
+// SetUserContext is a no-op for BoltDB as it doesn't use database-level RLS
+func (r *Registry[T, P]) SetUserContext(ctx context.Context, userID string) error {
+	// BoltDB doesn't support database-level RLS, so this is a no-op
+	// User filtering is done at the application level
+	return nil
+}
+
+// WithUserContext executes a function with user context (no-op for BoltDB)
+func (r *Registry[T, P]) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	// BoltDB doesn't support database-level RLS, so just execute the function
+	return fn(ctx)
+}
+
+// CreateWithUser creates an entity with user context
+func (r *Registry[T, P]) CreateWithUser(ctx context.Context, m T) (P, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	result := P(&m)
+
+	// Set user_id on the entity if it's UserAware
+	if userAware, ok := any(result).(models.UserAware); ok {
+		userAware.SetUserID(userID)
+	}
+
+	// Use the regular Create method with empty hooks
+	return r.Create(m, func(tx dbx.TransactionOrBucket, p P) error { return nil }, func(tx dbx.TransactionOrBucket, p P) error { return nil })
+}
+
+// GetWithUser gets an entity with user context and validates ownership
+func (r *Registry[T, P]) GetWithUser(ctx context.Context, id string) (P, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Get the entity
+	result, err := r.Get(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the entity belongs to the user
+	if userAware, ok := any(result).(models.UserAware); ok {
+		if userAware.GetUserID() != userID {
+			return nil, errkit.WithStack(registry.ErrNotFound)
+		}
+	}
+
+	return result, nil
+}
+
+// ListWithUser lists entities with user context filtering
+func (r *Registry[T, P]) ListWithUser(ctx context.Context) ([]P, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Get all entities
+	allResults, err := r.List()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter by user_id
+	var filteredResults []P
+	for _, result := range allResults {
+		if userAware, ok := any(result).(models.UserAware); ok {
+			if userAware.GetUserID() == userID {
+				filteredResults = append(filteredResults, result)
+			}
+		} else {
+			// If entity is not UserAware, include it (for backward compatibility)
+			filteredResults = append(filteredResults, result)
+		}
+	}
+
+	return filteredResults, nil
+}
+
+// UpdateWithUser updates an entity with user context
+func (r *Registry[T, P]) UpdateWithUser(ctx context.Context, m T) (P, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	result := P(&m)
+
+	// Set user_id on the entity if it's UserAware
+	if userAware, ok := any(result).(models.UserAware); ok {
+		userAware.SetUserID(userID)
+	}
+
+	// Validate ownership before update
+	existing, err := r.GetWithUser(ctx, result.GetID())
+	if err != nil {
+		return nil, err
+	}
+	_ = existing // We just need to validate ownership
+
+	// Use the regular Update method with empty hooks
+	return r.Update(m, func(tx dbx.TransactionOrBucket, p P) error { return nil }, func(tx dbx.TransactionOrBucket, p P) error { return nil })
+}
+
+// DeleteWithUser deletes an entity with user context
+func (r *Registry[T, P]) DeleteWithUser(ctx context.Context, id string) error {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Validate ownership before delete
+	_, err := r.GetWithUser(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Use the regular Delete method with empty hooks
+	return r.Delete(id, func(tx dbx.TransactionOrBucket, p P) error { return nil }, func(tx dbx.TransactionOrBucket, p P) error { return nil })
+}
+
+// CountWithUser counts entities with user context filtering
+func (r *Registry[T, P]) CountWithUser(ctx context.Context) (int, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return 0, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Get filtered list and return count
+	filteredResults, err := r.ListWithUser(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(filteredResults), nil
 }
