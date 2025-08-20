@@ -23,10 +23,6 @@ func New(dbConfig *shared.DatabaseConfig) *cobra.Command {
 	cmd.AddCommand(up.New(dbConfig).Cmd())
 	cmd.AddCommand(list.New(dbConfig).Cmd())
 	cmd.AddCommand(generate.New(dbConfig).Cmd())
-	//cmd.AddCommand(down.New(dbConfig).Cmd())
-	//cmd.AddCommand(status.New(dbConfig).Cmd())
-	//cmd.AddCommand(reset.New(dbConfig).Cmd())
-	//cmd.AddCommand(drop.New(dbConfig).Cmd())
 
 	return cmd
 }

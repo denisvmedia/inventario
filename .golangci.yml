@@ -255,6 +255,9 @@ linters:
       - path: 'cmd/.*\.go$'
         linters:
           - forbidigo
+      - path: 'schema/.*\.go$'
+        linters:
+          - forbidigo
     paths:
       - 'drivertest/.*\.go$'
       - 'drivertest/escape/.*\.go$'

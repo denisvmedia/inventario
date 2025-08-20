@@ -38,21 +38,21 @@ func getPostgresDSNOrSkip(t *testing.T) string {
 	return dsn
 }
 
-func executeCommand(t *testing.T, cmd *cobra.Command, args ...string) (string, string, error) {
+func executeCommand(t *testing.T, cmd *cobra.Command, args ...string) (stdout string, stderr string, err error) {
 	t.Helper()
 
 	// Capture stdout and stderr
-	var stdout, stderr bytes.Buffer
-	cmd.SetOut(&stdout)
-	cmd.SetErr(&stderr)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.SetOut(&stdoutBuf)
+	cmd.SetErr(&stderrBuf)
 
 	// Set the arguments
 	cmd.SetArgs(args)
 
 	// Execute the command
-	err := cmd.Execute()
+	err = cmd.Execute()
 
-	return stdout.String(), stderr.String(), err
+	return stdoutBuf.String(), stderrBuf.String(), err
 }
 
 func createBootstrapCommand() *cobra.Command {

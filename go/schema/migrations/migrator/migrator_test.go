@@ -10,7 +10,6 @@ import (
 )
 
 func TestMigrator_parsePostgreSQLDSN(t *testing.T) {
-
 	tests := []struct {
 		name        string
 		dbURL       string

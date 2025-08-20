@@ -52,9 +52,7 @@ func ReadSection(sectionName string, target any) error {
 }
 
 func TryReadSection(sectionName string, target any) {
-	if err := ReadSection(sectionName, target); err != nil {
-		// ignore error, use defaults
-	}
+	_ = ReadSection(sectionName, target)
 }
 
 func ReadVirtualSection(sectionName string, target any) error {
@@ -79,7 +77,5 @@ func ReadVirtualSection(sectionName string, target any) error {
 }
 
 func TryReadVirtualSection(sectionName string, target any) {
-	if err := ReadVirtualSection(sectionName, target); err != nil {
-		// ignore error, use defaults
-	}
+	_ = ReadVirtualSection(sectionName, target)
 }

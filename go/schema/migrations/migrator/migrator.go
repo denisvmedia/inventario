@@ -83,7 +83,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	}
 
 	// Use file-based migrations from the provided filesystem
-	fmt.Println("Using file-based migrations...") //nolint:forbidigo // CLI output is OK
+	fmt.Println("Using file-based migrations...")
 
 	if args.DryRun {
 		m.logger.Info("Dry run completed successfully")
@@ -108,9 +108,9 @@ func (m *Migrator) MigrateDown(ctx context.Context, targetVersion int, dryRun bo
 // ResetDatabase drops all tables and recreates the schema from scratch
 func (m *Migrator) ResetDatabase(ctx context.Context, args Args, confirm bool) error {
 	if args.DryRun {
-		fmt.Println("=== DRY RUN MODE ===")                           //nolint:forbidigo // CLI output is OK
-		fmt.Println("No actual changes will be made to the database") //nolint:forbidigo // CLI output is OK
-		fmt.Println()                                                 //nolint:forbidigo // CLI output is OK
+		fmt.Println("=== DRY RUN MODE ===")
+		fmt.Println("No actual changes will be made to the database")
+		fmt.Println()
 	}
 
 	// First drop all tables
@@ -120,15 +120,15 @@ func (m *Migrator) ResetDatabase(ctx context.Context, args Args, confirm bool) e
 	}
 
 	if args.DryRun {
-		fmt.Println("After dropping tables, would apply all migrations...") //nolint:forbidigo // CLI output is OK
-		fmt.Println("✅ Dry run completed successfully!")                    //nolint:forbidigo // CLI output is OK
+		fmt.Println("After dropping tables, would apply all migrations...")
+		fmt.Println("✅ Dry run completed successfully!")
 		return nil
 	}
 
-	fmt.Println()                                          //nolint:forbidigo // CLI output is OK
-	fmt.Println("=== RECREATING SCHEMA ===")               //nolint:forbidigo // CLI output is OK
-	fmt.Println("Applying all migrations from scratch...") //nolint:forbidigo // CLI output is OK
-	fmt.Println()                                          //nolint:forbidigo // CLI output is OK
+	fmt.Println()
+	fmt.Println("=== RECREATING SCHEMA ===")
+	fmt.Println("Applying all migrations from scratch...")
+	fmt.Println()
 
 	// Then apply all migrations
 	err = m.MigrateUp(ctx, Args{
@@ -138,16 +138,16 @@ func (m *Migrator) ResetDatabase(ctx context.Context, args Args, confirm bool) e
 		return errkit.Wrap(err, "failed to recreate schema")
 	}
 
-	fmt.Println("✅ Database reset completed successfully!") //nolint:forbidigo // CLI output is OK
+	fmt.Println("✅ Database reset completed successfully!")
 	return nil
 }
 
 // DropTables drops all tables, indexes, and constraints
 func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) error { //nolint:revive // CLI flags are appropriate
 	if dryRun {
-		fmt.Println("=== DRY RUN MODE ===")                           //nolint:forbidigo // CLI output is OK
-		fmt.Println("No actual changes will be made to the database") //nolint:forbidigo // CLI output is OK
-		fmt.Println()                                                 //nolint:forbidigo // CLI output is OK
+		fmt.Println("=== DRY RUN MODE ===")
+		fmt.Println("No actual changes will be made to the database")
+		fmt.Println()
 	}
 
 	// Create direct database connection for drop operations
@@ -169,53 +169,53 @@ func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) er
 	}
 
 	if len(tables) == 0 {
-		fmt.Println("No tables found in database.") //nolint:forbidigo // CLI output is OK
+		fmt.Println("No tables found in database.")
 		return nil
 	}
 
-	fmt.Printf("Found %d tables to drop:\n", len(tables)) //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Found %d tables to drop:\n", len(tables))
 	for _, table := range tables {
-		fmt.Printf("  - %s\n", table) //nolint:forbidigo // CLI output is OK
+		fmt.Printf("  - %s\n", table)
 	}
-	fmt.Println() //nolint:forbidigo // CLI output is OK
+	fmt.Println()
 
 	// Confirmation prompt
 	if !confirm && !dryRun {
-		fmt.Print("⚠️  WARNING: This will DELETE ALL DATA and SCHEMA in the database!\n") //nolint:forbidigo // CLI output is OK
-		fmt.Print("Are you sure you want to continue? (type 'yes' to confirm): ")         //nolint:forbidigo // CLI output is OK
+		fmt.Print("⚠️  WARNING: This will DELETE ALL DATA and SCHEMA in the database!\n")
+		fmt.Print("Are you sure you want to continue? (type 'yes' to confirm): ")
 
 		var response string
 		fmt.Scanln(&response)
 
 		if response != "yes" {
-			fmt.Println("Operation cancelled.") //nolint:forbidigo // CLI output is OK
+			fmt.Println("Operation cancelled.")
 			return nil
 		}
-		fmt.Println() //nolint:forbidigo // CLI output is OK
+		fmt.Println()
 	}
 
 	if dryRun {
-		fmt.Println("Would drop all tables and their data...") //nolint:forbidigo // CLI output is OK
-		fmt.Println("✅ Dry run completed successfully!")       //nolint:forbidigo // CLI output is OK
+		fmt.Println("Would drop all tables and their data...")
+		fmt.Println("✅ Dry run completed successfully!")
 		return nil
 	}
 
 	// Drop all tables
-	fmt.Println("Dropping all tables...") //nolint:forbidigo // CLI output is OK
+	fmt.Println("Dropping all tables...")
 	err = m.dropAllTables(ctx, db, tables)
 	if err != nil {
 		return errkit.Wrap(err, "failed to drop tables")
 	}
 
-	fmt.Println("✅ All tables dropped successfully!") //nolint:forbidigo // CLI output is OK
+	fmt.Println("✅ All tables dropped successfully!")
 	return nil
 }
 
 func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) error { //nolint:revive // CLI flags are appropriate
 	if dryRun {
-		fmt.Println("=== DRY RUN MODE ===")                           //nolint:forbidigo // CLI output is OK
-		fmt.Println("No actual changes will be made to the database") //nolint:forbidigo // CLI output is OK
-		fmt.Println()                                                 //nolint:forbidigo // CLI output is OK
+		fmt.Println("=== DRY RUN MODE ===")
+		fmt.Println("No actual changes will be made to the database")
+		fmt.Println()
 	}
 
 	// Parse the database URL to extract database name and connection info
@@ -226,28 +226,28 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 
 	m.logger.Info("Preparing to drop database", "database", dbName, "dry_run", dryRun)
 
-	fmt.Printf("Target database: %s\n", dbName) //nolint:forbidigo // CLI output is OK
-	fmt.Println()                               //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Target database: %s\n", dbName)
+	fmt.Println()
 
 	// Confirmation prompt
 	if !confirm && !dryRun {
-		fmt.Print("⚠️  WARNING: This will COMPLETELY DELETE the entire database and ALL its data!\n") //nolint:forbidigo // CLI output is OK
-		fmt.Print("This operation cannot be undone!\n")                                               //nolint:forbidigo // CLI output is OK
-		fmt.Print("Are you sure you want to continue? (type 'yes' to confirm): ")                     //nolint:forbidigo // CLI output is OK
+		fmt.Print("⚠️  WARNING: This will COMPLETELY DELETE the entire database and ALL its data!\n")
+		fmt.Print("This operation cannot be undone!\n")
+		fmt.Print("Are you sure you want to continue? (type 'yes' to confirm): ")
 
 		var response string
 		fmt.Scanln(&response)
 
 		if response != "yes" {
-			fmt.Println("Operation cancelled.") //nolint:forbidigo // CLI output is OK
+			fmt.Println("Operation cancelled.")
 			return nil
 		}
-		fmt.Println() //nolint:forbidigo // CLI output is OK
+		fmt.Println()
 	}
 
 	if dryRun {
-		fmt.Printf("Would drop database: %s\n", dbName)  //nolint:forbidigo // CLI output is OK
-		fmt.Println("✅ Dry run completed successfully!") //nolint:forbidigo // CLI output is OK
+		fmt.Printf("Would drop database: %s\n", dbName)
+		fmt.Println("✅ Dry run completed successfully!")
 		return nil
 	}
 
@@ -264,7 +264,7 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 	}
 
 	// Terminate all connections to the target database
-	fmt.Printf("Terminating connections to database: %s\n", dbName) //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Terminating connections to database: %s\n", dbName)
 	terminateSQL := `
 		SELECT pg_terminate_backend(pid)
 		FROM pg_stat_activity
@@ -273,44 +273,44 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 	_, err = db.ExecContext(ctx, terminateSQL, dbName)
 	if err != nil {
 		// Don't fail if we can't terminate connections - the drop might still work
-		fmt.Printf("Warning: Failed to terminate connections: %v\n", err) //nolint:forbidigo // CLI output is OK
+		fmt.Printf("Warning: Failed to terminate connections: %v\n", err)
 	}
 
 	// Drop the database
-	fmt.Printf("Dropping database: %s\n", dbName) //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Dropping database: %s\n", dbName)
 	dropSQL := fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName)
 	_, err = db.ExecContext(ctx, dropSQL)
 	if err != nil {
 		return errkit.Wrap(err, fmt.Sprintf("failed to drop database %s", dbName))
 	}
 
-	fmt.Println("✅ Database dropped successfully!") //nolint:forbidigo // CLI output is OK
+	fmt.Println("✅ Database dropped successfully!")
 	return nil
 }
 
 // PrintMigrationStatus prints detailed migration status information
 func (m *Migrator) PrintMigrationStatus(ctx context.Context, verbose bool) error { //revive:disable:flag-parameter
-	fmt.Println("=== MIGRATION STATUS ===")                           //nolint:forbidigo // CLI output is OK
-	fmt.Printf("Database: %s\n", dbschema.FormatDatabaseURL(m.dbURL)) //nolint:forbidigo // CLI output is OK
-	fmt.Println("Schema source: File system")                         //nolint:forbidigo // CLI output is OK
-	fmt.Println()                                                     //nolint:forbidigo // CLI output is OK
+	fmt.Println("=== MIGRATION STATUS ===")
+	fmt.Printf("Database: %s\n", dbschema.FormatDatabaseURL(m.dbURL))
+	fmt.Println("Schema source: File system")
+	fmt.Println()
 
 	// Check if migration files exist
 	migrationsDir := filepath.Join(".", "registry", "ptah", "migrations", "source")
 	entries, err := os.ReadDir(migrationsDir)
 	if err != nil || len(entries) == 0 {
-		fmt.Println("Status: ⚠️  No migration files found")                          //nolint:forbidigo // CLI output is OK
-		fmt.Println("Use 'migrate generate --initial' to create initial migration.") //nolint:forbidigo // CLI output is OK
+		fmt.Println("Status: ⚠️  No migration files found")
+		fmt.Println("Use 'migrate generate --initial' to create initial migration.")
 		return nil
 	}
 
-	fmt.Printf("Status: ✅ Migration files found (%d files)\n", len(entries)) //nolint:forbidigo // CLI output is OK
+	fmt.Printf("Status: ✅ Migration files found (%d files)\n", len(entries))
 
 	if verbose {
-		fmt.Println("\nMigration files:") //nolint:forbidigo // CLI output is OK
+		fmt.Println("\nMigration files:")
 		for _, entry := range entries {
 			if !entry.IsDir() && filepath.Ext(entry.Name()) == ".sql" {
-				fmt.Printf("  - %s\n", entry.Name()) //nolint:forbidigo // CLI output is OK
+				fmt.Printf("  - %s\n", entry.Name())
 			}
 		}
 	}
@@ -352,7 +352,7 @@ func (m *Migrator) getAllTables(ctx context.Context, db *sql.DB) ([]string, erro
 func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []string) error {
 	// Drop all tables with CASCADE to handle foreign key constraints
 	for _, table := range tables {
-		fmt.Printf("Dropping table: %s\n", table) //nolint:forbidigo // CLI output is OK
+		fmt.Printf("Dropping table: %s\n", table)
 
 		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", table)
 		_, err := db.ExecContext(ctx, dropSQL)
@@ -362,7 +362,7 @@ func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []strin
 	}
 
 	// Also drop any remaining sequences that might be left over
-	fmt.Println("Cleaning up sequences...") //nolint:forbidigo // CLI output is OK
+	fmt.Println("Cleaning up sequences...")
 	cleanupSQL := `
 		DO $$
 		DECLARE
@@ -380,7 +380,7 @@ func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []strin
 	_, err := db.ExecContext(ctx, cleanupSQL)
 	if err != nil {
 		// Don't fail if sequence cleanup fails - it's not critical
-		fmt.Printf("Warning: Failed to clean up sequences: %v\n", err) //nolint:forbidigo // CLI output is OK
+		fmt.Printf("Warning: Failed to clean up sequences: %v\n", err)
 	}
 
 	return nil
