@@ -213,14 +213,16 @@ func ScanEntitiesWithUser[T any](ctx context.Context, db sqlx.ExtContext, table 
 		// Extract user ID from context
 		userID := registry.UserIDFromContext(ctx)
 		if userID == "" {
-			yield(*new(T), errkit.WithStack(registry.ErrUserContextRequired))
+			var zero T
+			yield(zero, errkit.WithStack(registry.ErrUserContextRequired))
 			return
 		}
 
 		// Set user context for RLS
 		err := SetUserContext(ctx, db, userID)
 		if err != nil {
-			yield(*new(T), err)
+			var zero T
+			yield(zero, err)
 			return
 		}
 
