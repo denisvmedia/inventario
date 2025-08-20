@@ -7,6 +7,14 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const (
+	// userIDKey is the context key for storing user ID
+	userIDKey contextKey = "userID"
+)
+
 var (
 	// ErrUserContextRequired is returned when user context is required but not found
 	ErrUserContextRequired = errors.New("user context required")
@@ -16,14 +24,18 @@ var (
 )
 
 // UserIDFromContext extracts the user ID from the context
-// This function looks for user ID in the context using the same pattern as apiserver
+// This function looks for user ID in the context using the typed key
 func UserIDFromContext(ctx context.Context) string {
-	// Try to get user ID from context using the same key pattern as apiserver
+	// Try to get user ID from context using the typed key
+	if userID, ok := ctx.Value(userIDKey).(string); ok && userID != "" {
+		return userID
+	}
+
+	// Fallback: try alternative key patterns that might be used by other parts of the system
 	if userID, ok := ctx.Value("userID").(string); ok && userID != "" {
 		return userID
 	}
 
-	// Fallback: try alternative key patterns that might be used
 	if userID, ok := ctx.Value("user_id").(string); ok && userID != "" {
 		return userID
 	}
@@ -58,7 +70,7 @@ func RequireUserID(ctx context.Context) (string, error) {
 // WithUserContext creates a new context with user ID
 // This is a helper function for testing and internal use
 func WithUserContext(ctx context.Context, userID string) context.Context {
-	return context.WithValue(ctx, "userID", userID)
+	return context.WithValue(ctx, userIDKey, userID)
 }
 
 // UserContextExecutor provides a helper for executing operations with user context
