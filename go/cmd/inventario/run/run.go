@@ -146,6 +146,8 @@ func (c *Command) runCommand() error {
 	params.EntityService = services.NewEntityService(registrySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 	params.StartTime = time.Now()
+	// TODO: Make JWT secret configurable via environment variable or config file
+	params.JWTSecret = []byte("inventario-jwt-secret-change-in-production-32-bytes-minimum")
 
 	err = validation.Validate(params)
 	if err != nil {

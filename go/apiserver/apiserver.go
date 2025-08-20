@@ -37,28 +37,18 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
-// createTenantUserAwareMiddlewares creates middleware stack with tenant and user context
-func createTenantUserAwareMiddlewares(registrySet *registry.Set) []func(http.Handler) http.Handler {
-	// Create simple resolvers with fallback to default IDs for backward compatibility
-	tenantResolver := NewSimpleTenantResolver("test-tenant-id")
-	userResolver := NewSimpleUserResolver("test-user-id")
-
+// createUserAwareMiddlewares creates middleware stack with user authentication
+func createUserAwareMiddlewares(jwtSecret []byte, userRegistry registry.UserRegistry) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
-		TenantAwareMiddleware(tenantResolver),
-		UserAwareMiddleware(userResolver),
+		JWTMiddleware(jwtSecret, userRegistry),
 	)
 }
 
-// createTenantUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
-func createTenantUserAwareMiddlewaresForUploads(registrySet *registry.Set) []func(http.Handler) http.Handler {
-	// Create simple resolvers with fallback to default IDs for backward compatibility
-	tenantResolver := NewSimpleTenantResolver("test-tenant-id")
-	userResolver := NewSimpleUserResolver("test-user-id")
-
-	// Only add tenant/user context, no content type restrictions for uploads
+// createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
+func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry) []func(http.Handler) http.Handler {
+	// Only add user authentication, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
-		TenantAwareMiddleware(tenantResolver),
-		UserAwareMiddleware(userResolver),
+		JWTMiddleware(jwtSecret, userRegistry),
 	}
 }
 
@@ -92,6 +82,7 @@ type Params struct {
 	UploadLocation string
 	DebugInfo      *debug.Info
 	StartTime      time.Time
+	JWTSecret      []byte // JWT secret for user authentication
 }
 
 func (p *Params) Validate() error {
@@ -109,6 +100,7 @@ func (p *Params) Validate() error {
 			_ = b.Close() // best effort
 			return nil
 		})),
+		validation.Field(&p.JWTSecret, validation.Required, validation.Length(32, 0)), // Require at least 32 bytes for security
 	)
 
 	return validation.ValidateStruct(p, fields...)
@@ -147,27 +139,29 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Create tenant and user aware middlewares
-		tenantUserMiddlewares := createTenantUserAwareMiddlewares(params.RegistrySet)
-		tenantUserUploadMiddlewares := createTenantUserAwareMiddlewaresForUploads(params.RegistrySet)
-
-		// Apply tenant/user context to main API routes
-		r.With(tenantUserMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
-		r.With(tenantUserMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
-		r.With(tenantUserMiddlewares...).Route("/commodities", Commodities(params))
-		r.With(defaultAPIMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
+		// Public routes (no authentication required)
+		r.Route("/auth", Auth(params.RegistrySet.UserRegistry, params.JWTSecret))
 		r.With(defaultAPIMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
-		r.With(tenantUserMiddlewares...).Route("/exports", Exports(params, restoreWorker))
-		r.With(tenantUserMiddlewares...).Route("/files", Files(params))
-		r.With(tenantUserMiddlewares...).Route("/search", Search(params.RegistrySet))
-
-		// Routes that don't need tenant/user context
 		r.Route("/currencies", Currencies())
+
+		// Create user aware middlewares for protected routes
+		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.RegistrySet.UserRegistry)
+		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.RegistrySet.UserRegistry)
+
+		// Protected routes (authentication required)
+		r.With(userMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
+		r.With(userMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
+		r.With(userMiddlewares...).Route("/commodities", Commodities(params))
+		r.With(userMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
+		r.With(userMiddlewares...).Route("/exports", Exports(params, restoreWorker))
+		r.With(userMiddlewares...).Route("/files", Files(params))
+		r.With(userMiddlewares...).Route("/search", Search(params.RegistrySet))
+		r.With(userMiddlewares...).Route("/seed", Seed(params.RegistrySet))
+		r.With(userMiddlewares...).Route("/commodities/values", Values(params.RegistrySet))
+		r.With(userMiddlewares...).Route("/debug", Debug(params))
+
 		// Uploads need special middleware without content type restrictions
-		r.With(tenantUserUploadMiddlewares...).Route("/uploads", Uploads(params))
-		r.Route("/seed", Seed(params.RegistrySet))
-		r.Route("/commodities/values", Values(params.RegistrySet))
-		r.Route("/debug", Debug(params))
+		r.With(userUploadMiddlewares...).Route("/uploads", Uploads(params))
 	})
 
 	// use Frontend as a root directory

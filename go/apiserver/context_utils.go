@@ -43,28 +43,54 @@ func SetDefaultTenantUserIDs(tenantID, userID *string) {
 	}
 }
 
-// ExtractTenantUserFromRequest extracts tenant and user IDs from request context
-// Falls back to default IDs if context is not available (for backward compatibility)
-// TODO: Remove fallback when proper authentication is fully implemented
+// ExtractUserFromRequest extracts user ID from request context
+// This function replaces ExtractTenantUserFromRequest for user-only authentication
+func ExtractUserFromRequest(r *http.Request) string {
+	user := GetUserFromRequest(r)
+	if user != nil {
+		return user.ID
+	}
+	return ""
+}
+
+// ExtractTenantUserFromRequest extracts user ID from request context for backward compatibility
+// This function is deprecated and will be removed in future versions
+// Use ExtractUserFromRequest instead
 func ExtractTenantUserFromRequest(r *http.Request) (tenantID, userID string) {
-	tenantID = GetTenantIDFromRequest(r)
-	userID = GetUserIDFromRequest(r)
+	user := GetUserFromRequest(r)
+	if user != nil {
+		// In user-only mode, we use the user's tenant_id for backward compatibility
+		// but the primary identifier is the user_id
+		return user.TenantID, user.ID
+	}
 
-	// Fallback to default IDs for backward compatibility
+	// Fallback to default IDs for backward compatibility during transition
 	SetDefaultTenantUserIDs(&tenantID, &userID)
-
 	return tenantID, userID
 }
 
-// ExtractTenantUserFromContext extracts tenant and user IDs from context
-// Falls back to default IDs if context is not available (for backward compatibility)
-// TODO: Remove fallback when proper authentication is fully implemented
+// ExtractUserFromContext extracts user ID from context
+// This function replaces ExtractTenantUserFromContext for user-only authentication
+func ExtractUserFromContext(ctx context.Context) string {
+	user := UserFromContext(ctx)
+	if user != nil {
+		return user.ID
+	}
+	return ""
+}
+
+// ExtractTenantUserFromContext extracts user ID from context for backward compatibility
+// This function is deprecated and will be removed in future versions
+// Use ExtractUserFromContext instead
 func ExtractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
-	tenantID = TenantIDFromContext(ctx)
-	userID = UserIDFromContext(ctx)
+	user := UserFromContext(ctx)
+	if user != nil {
+		// In user-only mode, we use the user's tenant_id for backward compatibility
+		// but the primary identifier is the user_id
+		return user.TenantID, user.ID
+	}
 
-	// Fallback to default IDs for backward compatibility
+	// Fallback to default IDs for backward compatibility during transition
 	SetDefaultTenantUserIDs(&tenantID, &userID)
-
 	return tenantID, userID
 }
