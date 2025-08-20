@@ -11,4 +11,3 @@ package main
 // @license.name MIT
 
 // @BasePath /api/v1
-func main() {}
