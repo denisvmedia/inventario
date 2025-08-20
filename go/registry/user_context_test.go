@@ -35,7 +35,7 @@ func TestUserIDFromContext(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			userID := registry.UserIDFromContext(tc.ctx)
 			c.Assert(userID, qt.Equals, tc.expected)
 		})
@@ -68,7 +68,7 @@ func TestValidateUserContext(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			err := registry.ValidateUserContext(tc.ctx)
 			if tc.expectError {
 				c.Assert(err, qt.IsNotNil)
@@ -110,7 +110,7 @@ func TestRequireUserID(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			
+
 			userID, err := registry.RequireUserID(tc.ctx)
 			if tc.expectError {
 				c.Assert(err, qt.IsNotNil)
@@ -127,28 +127,28 @@ func TestRequireUserID(t *testing.T) {
 func TestUserContextExecutor(t *testing.T) {
 	t.Run("execute with valid user ID", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		executor := registry.NewUserContextExecutor("user-123")
-		
+
 		var capturedUserID string
 		err := executor.Execute(context.Background(), func(ctx context.Context) error {
 			capturedUserID = registry.UserIDFromContext(ctx)
 			return nil
 		})
-		
+
 		c.Assert(err, qt.IsNil)
 		c.Assert(capturedUserID, qt.Equals, "user-123")
 	})
 
 	t.Run("execute with empty user ID", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		executor := registry.NewUserContextExecutor("")
-		
+
 		err := executor.Execute(context.Background(), func(ctx context.Context) error {
 			return nil
 		})
-		
+
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(err, qt.ErrorMatches, ".*invalid user context.*")
 	})
@@ -157,24 +157,24 @@ func TestUserContextExecutor(t *testing.T) {
 func TestExecuteWithUserID(t *testing.T) {
 	t.Run("execute with valid user ID", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		var capturedUserID string
 		err := registry.ExecuteWithUserID(context.Background(), "user-456", func(ctx context.Context) error {
 			capturedUserID = registry.UserIDFromContext(ctx)
 			return nil
 		})
-		
+
 		c.Assert(err, qt.IsNil)
 		c.Assert(capturedUserID, qt.Equals, "user-456")
 	})
 
 	t.Run("execute with empty user ID", func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		err := registry.ExecuteWithUserID(context.Background(), "", func(ctx context.Context) error {
 			return nil
 		})
-		
+
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(err, qt.ErrorMatches, ".*invalid user context.*")
 	})

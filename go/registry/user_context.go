@@ -10,7 +10,7 @@ import (
 var (
 	// ErrUserContextRequired is returned when user context is required but not found
 	ErrUserContextRequired = errors.New("user context required")
-	
+
 	// ErrInvalidUserContext is returned when user context is invalid
 	ErrInvalidUserContext = errors.New("invalid user context")
 )
@@ -22,12 +22,12 @@ func UserIDFromContext(ctx context.Context) string {
 	if userID, ok := ctx.Value("userID").(string); ok && userID != "" {
 		return userID
 	}
-	
+
 	// Fallback: try alternative key patterns that might be used
 	if userID, ok := ctx.Value("user_id").(string); ok && userID != "" {
 		return userID
 	}
-	
+
 	return ""
 }
 
@@ -37,10 +37,10 @@ func ValidateUserContext(ctx context.Context) error {
 	if userID == "" {
 		return errkit.WithStack(ErrUserContextRequired)
 	}
-	
+
 	// Additional validation can be added here if needed
 	// For example, checking if the user ID format is valid
-	
+
 	return nil
 }
 
@@ -51,7 +51,7 @@ func RequireUserID(ctx context.Context) (string, error) {
 	if userID == "" {
 		return "", errkit.WithStack(ErrUserContextRequired)
 	}
-	
+
 	return userID, nil
 }
 
