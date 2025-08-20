@@ -31,8 +31,6 @@ func GetUserFromRequest(r *http.Request) *models.User {
 	return UserFromContext(r.Context())
 }
 
-
-
 // SetDefaultTenantUserIDs sets default tenant and user IDs if they are empty
 // This is a temporary function to maintain backward compatibility
 // TODO: Remove this when proper tenant/user context is fully implemented
