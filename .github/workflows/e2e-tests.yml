@@ -68,6 +68,7 @@ jobs:
         run: |
           cd go
           go mod download
+          cd ..
           make build-inventool
           bin/inventool db migrations up --db-dsn "${{ env.DB_URL }}"
 
