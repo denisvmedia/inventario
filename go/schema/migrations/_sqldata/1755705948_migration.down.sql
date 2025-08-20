@@ -1,5 +1,5 @@
 -- Migration rollback
--- Generated on: 2025-08-20T17:49:08+02:00
+-- Generated on: 2025-08-20T18:05:48+02:00
 -- Direction: DOWN
 
 DROP INDEX IF EXISTS commodities_active_idx;
@@ -91,16 +91,16 @@ DROP POLICY IF EXISTS restore_step_user_isolation ON restore_steps;
 DROP POLICY IF EXISTS user_tenant_isolation ON users;
 -- Drop RLS policy user_user_isolation from table users
 DROP POLICY IF EXISTS user_user_isolation ON users;
--- NOTE: RLS policies were removed from table restore_steps - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table invoices - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table manuals - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table users - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table areas - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table commodities - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table exports - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table files - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table images - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table locations - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table restore_steps - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table areas - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table commodities - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table files - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table invoices - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table manuals - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table restore_operations - verify if RLS should be disabled --
 -- WARNING: This will delete all data!
 DROP TABLE IF EXISTS areas CASCADE;
