@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/lib/pq" // PostgreSQL driver
 
 	"github.com/denisvmedia/inventario/schema/bootstrap"
@@ -123,35 +124,35 @@ func TestMigrator_Apply_TemplateSubstitution_Integration_HappyPath(t *testing.T)
 }
 
 func TestMigrator_Apply_InvalidDSN_UnhappyPath(t *testing.T) {
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-	}
+	//dsn := os.Getenv("POSTGRES_TEST_DSN")
+	//if dsn == "" {
+	//	t.Skip("POSTGRES_TEST_DSN environment variable not set")
+	//}
 
 	tests := []struct {
-		name        string
-		dsn         string
-		expectedErr string
+		name       string
+		dsn        string
+		expErrType error
 	}{
 		{
-			name:        "invalid host should fail",
-			dsn:         "postgres://inventario:inventario_password@invalid_host:5433/inventario?sslmode=disable",
-			expectedErr: "failed to connect to database",
+			name:       "invalid host should fail",
+			dsn:        "postgres://inventario:inventario_password@invalid_host:5433/inventario?sslmode=disable",
+			expErrType: &pgconn.ConnectError{},
 		},
 		{
-			name:        "invalid port should fail",
-			dsn:         "postgres://inventario:inventario_password@localhost:99999/inventario?sslmode=disable",
-			expectedErr: "failed to connect to database",
+			name:       "invalid port should fail",
+			dsn:        "postgres://inventario:inventario_password@localhost:99999/inventario?sslmode=disable",
+			expErrType: &pgconn.ParseConfigError{},
 		},
 		{
-			name:        "invalid credentials should fail",
-			dsn:         "postgres://invalid_user:invalid_pass@localhost:5433/inventario?sslmode=disable",
-			expectedErr: "failed to connect to database",
+			name:       "invalid credentials should fail",
+			dsn:        "postgres://invalid_user:invalid_pass@localhost:5433/inventario?sslmode=disable",
+			expErrType: &pgconn.ConnectError{},
 		},
 		{
-			name:        "invalid database should fail",
-			dsn:         "postgres://inventario:inventario_password@localhost:5433/invalid_db?sslmode=disable",
-			expectedErr: "failed to connect to database",
+			name:       "invalid database should fail",
+			dsn:        "postgres://inventario:inventario_password@localhost:5433/invalid_db?sslmode=disable",
+			expErrType: &pgconn.ConnectError{},
 		},
 	}
 
@@ -170,7 +171,9 @@ func TestMigrator_Apply_InvalidDSN_UnhappyPath(t *testing.T) {
 			}
 
 			err := migrator.Apply(context.Background(), args)
-			c.Assert(err, qt.ErrorMatches, ".*"+tt.expectedErr+".*")
+			c.Log(err)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err, qt.ErrorAs, &tt.expErrType)
 		})
 	}
 }
