@@ -23,17 +23,15 @@ import (
 // TODO: Remove fallback when proper authentication is fully implemented
 func extractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
 	// Try to extract from context first
-	if ctx != nil {
-		// Check if context has tenant/user values (these would be set by middleware)
-		if tenantVal := ctx.Value("tenant_id"); tenantVal != nil {
-			if tid, ok := tenantVal.(string); ok && tid != "" {
-				tenantID = tid
-			}
+	// Check if context has tenant/user values (these would be set by middleware)
+	if tenantVal := ctx.Value("tenant_id"); tenantVal != nil {
+		if tid, ok := tenantVal.(string); ok && tid != "" {
+			tenantID = tid
 		}
-		if userVal := ctx.Value("user_id"); userVal != nil {
-			if uid, ok := userVal.(string); ok && uid != "" {
-				userID = uid
-			}
+	}
+	if userVal := ctx.Value("user_id"); userVal != nil {
+		if uid, ok := userVal.(string); ok && uid != "" {
+			userID = uid
 		}
 	}
 
