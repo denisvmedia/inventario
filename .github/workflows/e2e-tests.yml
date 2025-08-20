@@ -68,7 +68,8 @@ jobs:
         run: |
           cd go
           go mod download
-          go run main.go migrate up --db-dsn "${{ env.DB_URL }}"
+          make build-inventool
+          bin/inventool db migrations up --db-dsn "${{ env.DB_URL }}"
 
       - name: Start application stack and run tests
         run: |
