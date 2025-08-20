@@ -100,3 +100,36 @@ func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 func (r *InvoiceRegistry) Count(_ context.Context) (int, error) {
 	return r.registry.Count()
 }
+
+// User-aware methods that delegate to the embedded registry
+func (r *InvoiceRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return r.registry.SetUserContext(ctx, userID)
+}
+
+func (r *InvoiceRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return r.registry.WithUserContext(ctx, userID, fn)
+}
+
+func (r *InvoiceRegistry) CreateWithUser(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
+	return r.registry.CreateWithUser(ctx, invoice)
+}
+
+func (r *InvoiceRegistry) GetWithUser(ctx context.Context, id string) (*models.Invoice, error) {
+	return r.registry.GetWithUser(ctx, id)
+}
+
+func (r *InvoiceRegistry) ListWithUser(ctx context.Context) ([]*models.Invoice, error) {
+	return r.registry.ListWithUser(ctx)
+}
+
+func (r *InvoiceRegistry) UpdateWithUser(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
+	return r.registry.UpdateWithUser(ctx, invoice)
+}
+
+func (r *InvoiceRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return r.registry.DeleteWithUser(ctx, id)
+}
+
+func (r *InvoiceRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return r.registry.CountWithUser(ctx)
+}

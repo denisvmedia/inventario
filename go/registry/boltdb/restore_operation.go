@@ -197,3 +197,36 @@ func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID st
 
 	return operations, nil
 }
+
+// User-aware methods that delegate to the embedded registry
+func (r *RestoreOperationRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return r.registry.SetUserContext(ctx, userID)
+}
+
+func (r *RestoreOperationRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return r.registry.WithUserContext(ctx, userID, fn)
+}
+
+func (r *RestoreOperationRegistry) CreateWithUser(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
+	return r.registry.CreateWithUser(ctx, operation)
+}
+
+func (r *RestoreOperationRegistry) GetWithUser(ctx context.Context, id string) (*models.RestoreOperation, error) {
+	return r.registry.GetWithUser(ctx, id)
+}
+
+func (r *RestoreOperationRegistry) ListWithUser(ctx context.Context) ([]*models.RestoreOperation, error) {
+	return r.registry.ListWithUser(ctx)
+}
+
+func (r *RestoreOperationRegistry) UpdateWithUser(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
+	return r.registry.UpdateWithUser(ctx, operation)
+}
+
+func (r *RestoreOperationRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return r.registry.DeleteWithUser(ctx, id)
+}
+
+func (r *RestoreOperationRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return r.registry.CountWithUser(ctx)
+}

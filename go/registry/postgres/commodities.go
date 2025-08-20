@@ -29,6 +29,16 @@ func NewCommodityRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *Co
 	}
 }
 
+// SetUserContext sets the user context for RLS policies
+func (r *CommodityRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.dbx, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *CommodityRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.dbx, userID, fn)
+}
+
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Begin a transaction (atomic operation)
 	tx, err := r.dbx.Beginx()
@@ -515,4 +525,196 @@ func (r *CommodityRegistry) getArea(ctx context.Context, tx sqlx.ExtContext, are
 	}
 
 	return &area, nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates a commodity with user context
+func (r *CommodityRegistry) CreateWithUser(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the commodity
+	commodity.SetUserID(userID)
+
+	// Begin a transaction (atomic operation)
+	tx, err := r.dbx.Beginx()
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer func() {
+		err = errors.Join(err, RollbackOrCommit(tx, err))
+	}()
+
+	// Set user context for RLS
+	err = SetUserContext(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the area exists
+	var area models.Area
+	err = ScanEntityByField(ctx, tx, r.tableNames.Areas(), "id", commodity.AreaID, &area)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get area")
+	}
+
+	// Generate a new ID if one is not already provided
+	if commodity.GetID() == "" {
+		commodity.SetID(generateID())
+	}
+
+	err = InsertEntity(ctx, tx, r.tableNames.Commodities(), commodity)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to insert entity")
+	}
+
+	return &commodity, nil
+}
+
+// GetWithUser gets a commodity with user context
+func (r *CommodityRegistry) GetWithUser(ctx context.Context, id string) (*models.Commodity, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user context for RLS
+	err := SetUserContext(ctx, r.dbx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.get(ctx, r.dbx, id)
+}
+
+// ListWithUser lists commodities with user context
+func (r *CommodityRegistry) ListWithUser(ctx context.Context) ([]*models.Commodity, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user context for RLS
+	err := SetUserContext(ctx, r.dbx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var commodities []*models.Commodity
+
+	// Query the database for all commodities (atomic operation)
+	for commodity, err := range ScanEntities[models.Commodity](ctx, r.dbx, r.tableNames.Commodities()) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list commodities")
+		}
+		commodities = append(commodities, &commodity)
+	}
+
+	return commodities, nil
+}
+
+// UpdateWithUser updates a commodity with user context
+func (r *CommodityRegistry) UpdateWithUser(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the commodity
+	commodity.SetUserID(userID)
+
+	// Begin a transaction (atomic operation)
+	tx, err := r.dbx.Beginx()
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer func() {
+		err = errors.Join(err, RollbackOrCommit(tx, err))
+	}()
+
+	// Set user context for RLS
+	err = SetUserContext(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the commodity exists
+	_, err = r.get(ctx, tx, commodity.ID)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get commodity")
+	}
+
+	// Check if the area exists
+	_, err = r.getArea(ctx, tx, commodity.AreaID)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get area")
+	}
+
+	err = UpdateEntityByField(ctx, tx, r.tableNames.Commodities(), "id", commodity.ID, commodity)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update entity")
+	}
+
+	return &commodity, nil
+}
+
+// DeleteWithUser deletes a commodity with user context
+func (r *CommodityRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Begin a transaction (atomic operation)
+	tx, err := r.dbx.Beginx()
+	if err != nil {
+		return errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer func() {
+		err = errors.Join(err, RollbackOrCommit(tx, err))
+	}()
+
+	// Set user context for RLS
+	err = SetUserContext(ctx, tx, userID)
+	if err != nil {
+		return err
+	}
+
+	// Check if the commodity exists
+	_, err = r.get(ctx, tx, id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get commodity")
+	}
+
+	err = DeleteEntityByField(ctx, tx, r.tableNames.Commodities(), "id", id)
+	if err != nil {
+		return errkit.Wrap(err, "failed to delete entity")
+	}
+
+	return nil
+}
+
+// CountWithUser counts commodities with user context
+func (r *CommodityRegistry) CountWithUser(ctx context.Context) (int, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return 0, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user context for RLS
+	err := SetUserContext(ctx, r.dbx, userID)
+	if err != nil {
+		return 0, err
+	}
+
+	return CountEntities(ctx, r.dbx, r.tableNames.Commodities())
 }

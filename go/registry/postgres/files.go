@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -22,6 +23,16 @@ type FileRegistry struct {
 
 func NewFileRegistry(db *sqlx.DB) *FileRegistry {
 	return &FileRegistry{db: db}
+}
+
+// SetUserContext sets the user context for RLS policies
+func (r *FileRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.db, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *FileRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.db, userID, fn)
 }
 
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
@@ -463,4 +474,72 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 	}
 
 	return files, total, nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates a file with user context
+func (r *FileRegistry) CreateWithUser(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	file.SetUserID(userID)
+	if file.ID == "" {
+		file.SetID(generateID())
+	}
+	err := InsertEntityWithUser(ctx, r.db, "files", file)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create file")
+	}
+	return &file, nil
+}
+
+// GetWithUser gets a file with user context
+func (r *FileRegistry) GetWithUser(ctx context.Context, id string) (*models.FileEntity, error) {
+	var file models.FileEntity
+	err := ScanEntityByFieldWithUser(ctx, r.db, "files", "id", id, &file)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, errkit.WithStack(registry.ErrNotFound, "entity_type", "FileEntity", "entity_id", id)
+		}
+		return nil, errkit.Wrap(err, "failed to get file")
+	}
+	return &file, nil
+}
+
+// ListWithUser lists files with user context
+func (r *FileRegistry) ListWithUser(ctx context.Context) ([]*models.FileEntity, error) {
+	var files []*models.FileEntity
+	for file, err := range ScanEntitiesWithUser[models.FileEntity](ctx, r.db, "files") {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list files")
+		}
+		files = append(files, &file)
+	}
+	return files, nil
+}
+
+// UpdateWithUser updates a file with user context
+func (r *FileRegistry) UpdateWithUser(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+	file.SetUserID(userID)
+	err := UpdateEntityByFieldWithUser(ctx, r.db, "files", "id", file.ID, file)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update file")
+	}
+	return &file, nil
+}
+
+// DeleteWithUser deletes a file with user context
+func (r *FileRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return DeleteEntityByFieldWithUser(ctx, r.db, "files", "id", id)
+}
+
+// CountWithUser counts files with user context
+func (r *FileRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return CountEntitiesWithUser(ctx, r.db, "files")
 }

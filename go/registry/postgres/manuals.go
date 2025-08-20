@@ -29,6 +29,16 @@ func NewManualRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *Manua
 	}
 }
 
+// SetUserContext sets the user context for RLS policies
+func (r *ManualRegistry) SetUserContext(ctx context.Context, userID string) error {
+	return SetUserContext(ctx, r.dbx, userID)
+}
+
+// WithUserContext executes a function with user context set
+func (r *ManualRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
+	return WithUserContext(ctx, r.dbx, userID, fn)
+}
+
 func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
 	// Begin a transaction (atomic operation)
 	tx, err := r.dbx.Beginx()
@@ -161,4 +171,93 @@ func (r *ManualRegistry) getCommodity(ctx context.Context, tx sqlx.ExtContext, c
 	}
 
 	return &commodity, nil
+}
+
+// User-aware methods that automatically use user context from the request context
+
+// CreateWithUser creates a manual with user context
+func (r *ManualRegistry) CreateWithUser(ctx context.Context, manual models.Manual) (*models.Manual, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the manual
+	manual.SetUserID(userID)
+
+	// Generate a new ID if one is not already provided
+	if manual.GetID() == "" {
+		manual.SetID(generateID())
+	}
+
+	// Set user context for RLS and insert the manual
+	err := InsertEntityWithUser(ctx, r.dbx, r.tableNames.Manuals(), manual)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to insert entity")
+	}
+
+	return &manual, nil
+}
+
+// GetWithUser gets a manual with user context
+func (r *ManualRegistry) GetWithUser(ctx context.Context, id string) (*models.Manual, error) {
+	var manual models.Manual
+	err := ScanEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Manuals(), "id", id, &manual)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, errkit.WithStack(registry.ErrNotFound,
+				"entity_type", "Manual",
+				"entity_id", id,
+			)
+		}
+		return nil, errkit.Wrap(err, "failed to get entity")
+	}
+
+	return &manual, nil
+}
+
+// ListWithUser lists manuals with user context
+func (r *ManualRegistry) ListWithUser(ctx context.Context) ([]*models.Manual, error) {
+	var manuals []*models.Manual
+
+	// Query the database for all manuals with user context
+	for manual, err := range ScanEntitiesWithUser[models.Manual](ctx, r.dbx, r.tableNames.Manuals()) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list manuals")
+		}
+		manuals = append(manuals, &manual)
+	}
+
+	return manuals, nil
+}
+
+// UpdateWithUser updates a manual with user context
+func (r *ManualRegistry) UpdateWithUser(ctx context.Context, manual models.Manual) (*models.Manual, error) {
+	// Extract user ID from context
+	userID := registry.UserIDFromContext(ctx)
+	if userID == "" {
+		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+	}
+
+	// Set user_id on the manual
+	manual.SetUserID(userID)
+
+	// Update the manual with user context
+	err := UpdateEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Manuals(), "id", manual.ID, manual)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update entity")
+	}
+
+	return &manual, nil
+}
+
+// DeleteWithUser deletes a manual with user context
+func (r *ManualRegistry) DeleteWithUser(ctx context.Context, id string) error {
+	return DeleteEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Manuals(), "id", id)
+}
+
+// CountWithUser counts manuals with user context
+func (r *ManualRegistry) CountWithUser(ctx context.Context) (int, error) {
+	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Manuals())
 }
