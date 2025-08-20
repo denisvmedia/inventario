@@ -1,9 +1,11 @@
 package run
 
-import "github.com/denisvmedia/inventario/internal/defaults"
+import (
+	"github.com/denisvmedia/inventario/internal/defaults"
+)
 
 type Config struct {
-	Addr                 string `yaml:"addr" env:"ADDR" env-default:""`
+	Addr                 string `yaml:"addr" env:"ADDR" env-default:":3333"`
 	UploadLocation       string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
 	MaxConcurrentExports int    `yaml:"max_concurrent_exports" env:"MAX_CONCURRENT_EXPORTS" env-default:"0"`
 	MaxConcurrentImports int    `yaml:"max_concurrent_imports" env:"MAX_CONCURRENT_IMPORTS" env-default:"0"`

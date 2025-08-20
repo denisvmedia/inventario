@@ -2,6 +2,7 @@ package shared
 
 import (
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
 
@@ -36,13 +37,10 @@ func ReadSection(sectionName string, target any) error {
 
 	wrapper := reflect.New(wrapperType).Interface()
 
-	// text, err := cleanenv.GetDescription(wrapper, nil)
-	// if err == nil {
-	//	fmt.Println(text)
-	// }
-
 	if err := cleanenv.ReadConfig(configFile, wrapper); err != nil {
-		return cleanenv.ReadEnv(wrapper)
+		if err := cleanenv.ReadEnv(wrapper); err != nil {
+			slog.Error("Failed to read config", "error", err)
+		}
 	}
 
 	sectionValue := reflect.ValueOf(wrapper).Elem().Field(0)
@@ -61,13 +59,15 @@ func ReadVirtualSection(sectionName string, target any) error {
 		{
 			Name: "Section",
 			Type: sectionType,
-			Tag:  reflect.StructTag(fmt.Sprintf(`yaml:",inline" env-prefix:"%s_%s_"`, envPrefix, sectionName)),
+			Tag:  reflect.StructTag(fmt.Sprintf(`yaml:",inline" env-prefix:"%s_%s_"`, envPrefix, strings.ToUpper(sectionName))),
 		},
 	})
 
 	wrapper := reflect.New(wrapperType).Interface()
 	if err := cleanenv.ReadConfig(configFile, wrapper); err != nil {
-		return cleanenv.ReadEnv(wrapper)
+		if err = cleanenv.ReadEnv(wrapper); err != nil {
+			slog.Error("Failed to read config", "error", err)
+		}
 	}
 
 	sectionValue := reflect.ValueOf(wrapper).Elem().Field(0)

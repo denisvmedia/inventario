@@ -8,7 +8,7 @@ import (
 )
 
 type DatabaseConfig struct {
-	DBDSN string `yaml:"db_dsn" env:"DB_DSN" mapstructure:"db_dsn"`
+	DBDSN string `yaml:"db_dsn" env:"DB_DSN" mapstructure:"db_dsn" env-default:"memory://"`
 }
 
 func (d *DatabaseConfig) Validate() error {

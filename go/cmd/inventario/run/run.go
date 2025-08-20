@@ -11,7 +11,6 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/backup/export"
@@ -118,9 +117,6 @@ func (c *Command) runCommand() error {
 	bindAddr := c.config.Addr
 	dsn := c.dbConfig.DBDSN
 
-	if configFile := viper.ConfigFileUsed(); configFile != "" {
-		log.WithField("config_file", configFile).Debug("Configuration file loaded")
-	}
 	parsedDSN := must.Must(registry.Config(dsn).Parse())
 	if parsedDSN.User != nil {
 		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
