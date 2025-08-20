@@ -437,7 +437,6 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
-			// if ! windows
 			var uploadLocation string
 			if runtime.GOOS == "windows" {
 				uploadLocation = "file:///" + tempDir + "?create_dir=1"
