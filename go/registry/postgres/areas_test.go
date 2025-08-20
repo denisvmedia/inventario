@@ -16,14 +16,14 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 		{
 			name: "valid area with all fields",
 			area: models.Area{
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "test-tenant-id", "test-user-id"),
 				Name:                "Main Storage",
 			},
 		},
 		{
 			name: "valid area with minimal fields",
 			area: models.Area{
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area2", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area2", "test-tenant-id", "test-user-id"),
 				Name:                "Secondary Storage",
 			},
 		},
@@ -221,7 +221,7 @@ func TestAreaRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent area",
 			area: models.Area{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
+				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "test-tenant-id"),
 				Name:                "Test Area",
 				LocationID:          "some-location-id",
 			},

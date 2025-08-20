@@ -22,7 +22,7 @@ func TestImageRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".jpg",
 					MIMEType:     "image/jpeg",
 				},
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id", "test-tenant-id", "test-user-id"),
 			},
 		},
 		{
@@ -34,7 +34,7 @@ func TestImageRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".png",
 					MIMEType:     "image/png",
 				},
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id2", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id2", "test-tenant-id", "test-user-id"),
 			},
 		},
 	}
@@ -260,7 +260,7 @@ func TestImageRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent image",
 			image: models.Image{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
+				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "test-tenant-id"),
 				CommodityID:         "some-commodity-id",
 				File: &models.File{
 					Path:         "test-image",
