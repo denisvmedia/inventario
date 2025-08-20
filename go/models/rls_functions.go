@@ -8,7 +8,7 @@ package models
 // Database roles for multi-tenant access control
 type DatabaseRoles struct {
 	// Application role for RLS policies
-	//migrator:schema:role name="inventario_app" login="false" comment="Application role for Row-Level Security policies"
+	//xmigrator:schema:role name="inventario_app" login="false" comment="Application role for Row-Level Security policies"
 	_ int
 }
 

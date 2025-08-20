@@ -32,7 +32,7 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 				RegisteredDate:         models.ToPDate("2023-01-02"),
 				LastModifiedDate:       models.ToPDate("2023-01-03"),
 				Draft:                  false,
-				TenantAwareEntityID:    models.WithTenantUserAwareEntityID("commodity1", "default-tenant", "test-user-id"),
+				TenantAwareEntityID:    models.WithTenantUserAwareEntityID("commodity1", "test-tenant-id", "test-user-id"),
 			},
 		},
 		{
@@ -56,7 +56,7 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 				LastModifiedDate:       models.ToPDate("2023-01-03"),
 				Comments:               "Test comments",
 				Draft:                  false,
-				TenantAwareEntityID:    models.WithTenantUserAwareEntityID("commodity2", "default-tenant", "test-user-id"),
+				TenantAwareEntityID:    models.WithTenantUserAwareEntityID("commodity2", "test-tenant-id", "test-user-id"),
 			},
 		},
 		{
@@ -68,7 +68,7 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 				Count:               1,
 				Status:              models.CommodityStatusInUse,
 				Draft:               true,
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity3", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity3", "test-tenant-id", "test-user-id"),
 			},
 		},
 	}
@@ -352,7 +352,7 @@ func TestCommodityRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent commodity",
 			commodity: models.Commodity{
-				TenantAwareEntityID:    models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
+				TenantAwareEntityID:    models.WithTenantAwareEntityID("non-existent-id", "test-tenant-id"),
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,

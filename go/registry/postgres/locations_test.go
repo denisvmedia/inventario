@@ -22,7 +22,7 @@ func TestLocationRegistry_Create_HappyPath(t *testing.T) {
 			location: models.Location{
 				Name:                "Main Office",
 				Address:             "123 Business Street",
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-id", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-id", "test-tenant-id", "test-user-id"),
 			},
 		},
 		{
@@ -30,7 +30,7 @@ func TestLocationRegistry_Create_HappyPath(t *testing.T) {
 			location: models.Location{
 				Name:                "Warehouse",
 				Address:             "456 Storage Ave",
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-id2", "default-tenant", "test-user-id"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-id2", "test-tenant-id", "test-user-id"),
 			},
 		},
 	}
@@ -197,7 +197,7 @@ func TestLocationRegistry_Update_UnhappyPath(t *testing.T) {
 		{
 			name: "non-existent location",
 			location: models.Location{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "default-tenant"),
+				TenantAwareEntityID: models.WithTenantAwareEntityID("non-existent-id", "test-tenant-id"),
 				Name:                "Test Location",
 				Address:             "Test Address",
 			},

@@ -8,10 +8,11 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var featuresCmd = &cobra.Command{
-	Use:   "features",
-	Short: "Show database feature matrix",
-	Long: `Display a matrix showing which features are supported by each database backend.
+func New() *cobra.Command {
+	var featuresCmd = &cobra.Command{
+		Use:   "features",
+		Short: "Show database feature matrix",
+		Long: `Display a matrix showing which features are supported by each database backend.
 
 This command helps you understand the capabilities and limitations of different
 database backends supported by Inventario.
@@ -57,47 +58,46 @@ USAGE EXAMPLES:
   # Use with specific database to see what features are available
   inventario run --db-dsn="postgres://user:pass@localhost/db"
   inventario run --db-dsn="boltdb://./data.db"`,
-	RunE: featuresCommand,
-}
+		RunE: featuresCommand,
+	}
 
-func NewFeaturesCommand() *cobra.Command {
 	return featuresCmd
 }
 
 func featuresCommand(_ *cobra.Command, _ []string) error {
-	fmt.Println("Inventario Database Feature Matrix") //nolint:forbidigo // CLI output is OK
-	fmt.Println("==================================") //nolint:forbidigo // CLI output is OK
-	fmt.Println()                                     //nolint:forbidigo // CLI output is OK
+	fmt.Println("Inventario Database Feature Matrix")
+	fmt.Println("==================================")
+	fmt.Println()
 
 	// Print the feature matrix
 	registry.PrintFeatureMatrix()
 
-	fmt.Println()                                                             //nolint:forbidigo // CLI output is OK
-	fmt.Println("Legend:")                                                    //nolint:forbidigo // CLI output is OK
-	fmt.Println("  ✓ = Feature supported")                                    //nolint:forbidigo // CLI output is OK
-	fmt.Println("  ✗ = Feature not supported (fallback implementation used)") //nolint:forbidigo // CLI output is OK
-	fmt.Println()                                                             //nolint:forbidigo // CLI output is OK
+	fmt.Println()
+	fmt.Println("Legend:")
+	fmt.Println("  ✓ = Feature supported")
+	fmt.Println("  ✗ = Feature not supported (fallback implementation used)")
+	fmt.Println()
 
 	// Print detailed feature descriptions
-	fmt.Println("Feature Descriptions:") //nolint:forbidigo // CLI output is OK
-	fmt.Println("--------------------")  //nolint:forbidigo // CLI output is OK
+	fmt.Println("Feature Descriptions:")
+	fmt.Println("--------------------")
 
 	features := registry.GetFeatureMatrix()
 	for _, feature := range features {
-		fmt.Printf("%-18s - %s\n", feature.Feature, feature.Description) //nolint:forbidigo // CLI output is OK
+		fmt.Printf("%-18s - %s\n", feature.Feature, feature.Description)
 	}
 
-	fmt.Println()                                                                        //nolint:forbidigo // CLI output is OK
-	fmt.Println("Database Recommendations:")                                             //nolint:forbidigo // CLI output is OK
-	fmt.Println("-------------------------")                                             //nolint:forbidigo // CLI output is OK
-	fmt.Println("PostgreSQL: Best performance and full feature support (recommended)")   //nolint:forbidigo // CLI output is OK
-	fmt.Println("MySQL:      Good alternative with most features supported")             //nolint:forbidigo // CLI output is OK
-	fmt.Println("BoltDB:     Basic features only, suitable for single-user deployments") //nolint:forbidigo // CLI output is OK
-	fmt.Println("Memory:     Testing only, minimal features, data not persisted")        //nolint:forbidigo // CLI output is OK
+	fmt.Println()
+	fmt.Println("Database Recommendations:")
+	fmt.Println("-------------------------")
+	fmt.Println("PostgreSQL: Best performance and full feature support (recommended)")
+	fmt.Println("MySQL:      Good alternative with most features supported")
+	fmt.Println("BoltDB:     Basic features only, suitable for single-user deployments")
+	fmt.Println("Memory:     Testing only, minimal features, data not persisted")
 
-	fmt.Println()                                                                              //nolint:forbidigo // CLI output is OK
-	fmt.Println("For optimal performance and full feature support, use PostgreSQL:")           //nolint:forbidigo // CLI output is OK
-	fmt.Println("  inventario run --db-dsn=\"postgres://user:password@localhost/inventario\"") //nolint:forbidigo // CLI output is OK
+	fmt.Println()
+	fmt.Println("For optimal performance and full feature support, use PostgreSQL:")
+	fmt.Println("  inventario run --db-dsn=\"postgres://user:password@localhost/inventario\"")
 
 	return nil
 }

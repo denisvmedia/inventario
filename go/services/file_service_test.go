@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -20,7 +21,12 @@ func TestFileService_DeleteFileWithPhysical(t *testing.T) {
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	// Create test registry set
 	registrySet := &registry.Set{
@@ -83,7 +89,12 @@ func TestFileService_DeleteFileWithPhysical_FileNotFound(t *testing.T) {
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	// Create test registry set
 	registrySet := &registry.Set{
@@ -104,7 +115,12 @@ func TestFileService_DeletePhysicalFile(t *testing.T) {
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	// Create test registry set
 	registrySet := &registry.Set{
@@ -146,7 +162,12 @@ func TestFileService_DeletePhysicalFile_NonExistent(t *testing.T) {
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	// Create test registry set
 	registrySet := &registry.Set{
@@ -167,7 +188,12 @@ func TestFileService_DeleteLinkedFiles(t *testing.T) {
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	// Create test registry set
 	registrySet := &registry.Set{
@@ -239,7 +265,12 @@ func TestFileService_DeleteLinkedFiles_NoFiles(t *testing.T) {
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	// Create test registry set
 	registrySet := &registry.Set{
@@ -260,7 +291,12 @@ func TestFileService_ExportFileDeletion_Integration(t *testing.T) {
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	// Create test registry set
 	registrySet := &registry.Set{
