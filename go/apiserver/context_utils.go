@@ -61,10 +61,10 @@ func SetDefaultTenantUserIDs(tenantID, userID *string) {
 func ExtractTenantUserFromRequest(r *http.Request) (tenantID, userID string) {
 	tenantID = GetTenantIDFromRequest(r)
 	userID = GetUserIDFromRequest(r)
-	
+
 	// Fallback to default IDs for backward compatibility
 	SetDefaultTenantUserIDs(&tenantID, &userID)
-	
+
 	return tenantID, userID
 }
 
@@ -74,9 +74,9 @@ func ExtractTenantUserFromRequest(r *http.Request) (tenantID, userID string) {
 func ExtractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
 	tenantID = GetTenantIDFromContext(ctx)
 	userID = GetUserIDFromContext(ctx)
-	
+
 	// Fallback to default IDs for backward compatibility
 	SetDefaultTenantUserIDs(&tenantID, &userID)
-	
+
 	return tenantID, userID
 }
