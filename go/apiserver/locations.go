@@ -82,14 +82,15 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Temporarily set default tenant and user IDs while multi-tenancy is disabled
-	// TODO: Remove this when proper tenant/user context is implemented
+	// Extract tenant and user from authenticated request context
+	tenantID, userID := ExtractTenantUserFromRequest(r)
+
 	location := *input.Data.Attributes
 	if location.TenantID == "" {
-		location.TenantID = "test-tenant-id" // Use the same ID as our tests and seeding
+		location.TenantID = tenantID
 	}
 	if location.UserID == "" {
-		location.UserID = "test-user-id" // Use the same ID as our tests and seeding
+		location.UserID = userID
 	}
 
 	createdLocation, err := api.locationRegistry.Create(r.Context(), location)

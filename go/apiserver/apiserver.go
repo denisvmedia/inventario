@@ -37,6 +37,31 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
+// createTenantUserAwareMiddlewares creates middleware stack with tenant and user context
+func createTenantUserAwareMiddlewares(registrySet *registry.Set) []func(http.Handler) http.Handler {
+	// Create simple resolvers with fallback to default IDs for backward compatibility
+	tenantResolver := NewSimpleTenantResolver("test-tenant-id")
+	userResolver := NewSimpleUserResolver("test-user-id")
+
+	return append(defaultAPIMiddlewares,
+		TenantAwareMiddleware(tenantResolver),
+		UserAwareMiddleware(userResolver),
+	)
+}
+
+// createTenantUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
+func createTenantUserAwareMiddlewaresForUploads(registrySet *registry.Set) []func(http.Handler) http.Handler {
+	// Create simple resolvers with fallback to default IDs for backward compatibility
+	tenantResolver := NewSimpleTenantResolver("test-tenant-id")
+	userResolver := NewSimpleUserResolver("test-user-id")
+
+	// Only add tenant/user context, no content type restrictions for uploads
+	return []func(http.Handler) http.Handler{
+		TenantAwareMiddleware(tenantResolver),
+		UserAwareMiddleware(userResolver),
+	}
+}
+
 func defaultRequestContentType(contentType string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -122,16 +147,24 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.With(defaultAPIMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
-		r.With(defaultAPIMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
-		r.With(defaultAPIMiddlewares...).Route("/commodities", Commodities(params))
+		// Create tenant and user aware middlewares
+		tenantUserMiddlewares := createTenantUserAwareMiddlewares(params.RegistrySet)
+		tenantUserUploadMiddlewares := createTenantUserAwareMiddlewaresForUploads(params.RegistrySet)
+
+		// Apply tenant/user context to main API routes
+		r.With(tenantUserMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
+		r.With(tenantUserMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
+		r.With(tenantUserMiddlewares...).Route("/commodities", Commodities(params))
 		r.With(defaultAPIMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
 		r.With(defaultAPIMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
-		r.With(defaultAPIMiddlewares...).Route("/exports", Exports(params, restoreWorker))
-		r.With(defaultAPIMiddlewares...).Route("/files", Files(params))
-		r.With(defaultAPIMiddlewares...).Route("/search", Search(params.RegistrySet))
+		r.With(tenantUserMiddlewares...).Route("/exports", Exports(params, restoreWorker))
+		r.With(tenantUserMiddlewares...).Route("/files", Files(params))
+		r.With(tenantUserMiddlewares...).Route("/search", Search(params.RegistrySet))
+
+		// Routes that don't need tenant/user context
 		r.Route("/currencies", Currencies())
-		r.Route("/uploads", Uploads(params))
+		// Uploads need special middleware without content type restrictions
+		r.With(tenantUserUploadMiddlewares...).Route("/uploads", Uploads(params))
 		r.Route("/seed", Seed(params.RegistrySet))
 		r.Route("/commodities/values", Values(params.RegistrySet))
 		r.Route("/debug", Debug(params))

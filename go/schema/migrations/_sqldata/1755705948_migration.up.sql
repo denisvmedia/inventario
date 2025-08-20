@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2025-08-19T23:10:39+02:00
+-- Generated on: 2025-08-20T18:05:48+02:00
 -- Direction: UP
 
 -- Gets the current tenant ID from session for RLS policies
@@ -22,6 +22,11 @@ CREATE OR REPLACE FUNCTION set_user_context(user_id_param TEXT) RETURNS VOID AS 
 BEGIN PERFORM set_config('app.current_user_id', user_id_param, false); END;
 $$
 LANGUAGE plpgsql SECURITY DEFINER;
+-- POSTGRES TABLE: settings --
+CREATE TABLE settings (
+  name TEXT PRIMARY KEY NOT NULL,
+  value JSONB NOT NULL
+);
 -- POSTGRES TABLE: tenants --
 CREATE TABLE tenants (
   name TEXT NOT NULL,
@@ -32,11 +37,6 @@ CREATE TABLE tenants (
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
-);
--- POSTGRES TABLE: settings --
-CREATE TABLE settings (
-  name TEXT PRIMARY KEY NOT NULL,
-  value JSONB NOT NULL
 );
 -- POSTGRES TABLE: users --
 CREATE TABLE users (
@@ -161,6 +161,17 @@ CREATE TABLE restore_operations (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
+-- POSTGRES TABLE: images --
+CREATE TABLE images (
+  commodity_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL,
+  path TEXT NOT NULL,
+  original_path TEXT NOT NULL,
+  ext TEXT NOT NULL,
+  mime_type TEXT NOT NULL
+);
 -- POSTGRES TABLE: invoices --
 CREATE TABLE invoices (
   commodity_id TEXT NOT NULL,
@@ -174,17 +185,6 @@ CREATE TABLE invoices (
 );
 -- POSTGRES TABLE: manuals --
 CREATE TABLE manuals (
-  commodity_id TEXT NOT NULL,
-  tenant_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  id TEXT PRIMARY KEY NOT NULL,
-  path TEXT NOT NULL,
-  original_path TEXT NOT NULL,
-  ext TEXT NOT NULL,
-  mime_type TEXT NOT NULL
-);
--- POSTGRES TABLE: images --
-CREATE TABLE images (
   commodity_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -244,6 +244,12 @@ ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tena
 -- ALTER statements: --
 ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
+ALTER TABLE images ADD CONSTRAINT fk_image_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
+-- ALTER statements: --
+ALTER TABLE images ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE images ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- ALTER statements: --
 ALTER TABLE invoices ADD CONSTRAINT fk_invoice_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
 -- ALTER statements: --
 ALTER TABLE invoices ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
@@ -256,19 +262,21 @@ ALTER TABLE manuals ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFE
 -- ALTER statements: --
 ALTER TABLE manuals ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE images ADD CONSTRAINT fk_image_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
--- ALTER statements: --
-ALTER TABLE images ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
--- ALTER statements: --
-ALTER TABLE images ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- ALTER statements: --
 ALTER TABLE restore_steps ADD CONSTRAINT fk_restore_step_operation FOREIGN KEY (restore_operation_id) REFERENCES restore_operations(id);
 -- ALTER statements: --
 ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- Enable RLS for areas table
+ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for commodities table
+ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for exports table
 ALTER TABLE exports ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_operations table
+ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_steps table
+ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for images table
 ALTER TABLE images ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for invoices table
@@ -277,18 +285,10 @@ ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for manuals table
 ALTER TABLE manuals ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_steps table
-ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
--- Enable RLS for commodities table
-ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for files table
 ALTER TABLE files ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_operations table
-ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for users table
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
--- Enable RLS for areas table
-ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
 -- Ensures areas can only be accessed by their tenant
 DROP POLICY IF EXISTS area_tenant_isolation ON areas;
 CREATE POLICY area_tenant_isolation ON areas FOR ALL TO inventario_app
@@ -394,8 +394,8 @@ CREATE POLICY user_tenant_isolation ON users FOR ALL TO inventario_app
 -- Ensures users can only access and modify their own data
 DROP POLICY IF EXISTS user_user_isolation ON users;
 CREATE POLICY user_user_isolation ON users FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+    USING (id = get_current_user_id())
+    WITH CHECK (id = get_current_user_id());
 CREATE INDEX IF NOT EXISTS commodities_active_idx ON commodities (status, area_id) WHERE draft = false;
 CREATE INDEX IF NOT EXISTS commodities_draft_idx ON commodities (last_modified_date) WHERE draft = true;
 CREATE INDEX IF NOT EXISTS commodities_extra_serial_numbers_gin_idx ON commodities USING GIN (extra_serial_numbers);
