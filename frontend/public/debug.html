@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Authentication</title>
+</head>
+<body>
+    <h1>Debug Authentication Flow</h1>
+    
+    <div>
+        <h2>1. Login</h2>
+        <button onclick="testLogin()">Test Login</button>
+        <div id="loginResult"></div>
+    </div>
+    
+    <div>
+        <h2>2. Check Token Storage</h2>
+        <button onclick="checkToken()">Check Stored Token</button>
+        <div id="tokenResult"></div>
+    </div>
+    
+    <div>
+        <h2>3. Test API Call</h2>
+        <button onclick="testAPICall()">Test Protected API Call</button>
+        <div id="apiResult"></div>
+    </div>
+    
+    <div>
+        <h2>4. Test Settings Call</h2>
+        <button onclick="testSettings()">Test Settings API Call</button>
+        <div id="settingsResult"></div>
+    </div>
+
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('loginResult');
+            resultDiv.innerHTML = 'Testing login...';
+            
+            try {
+                const response = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@test-org.com',
+                        password: 'testpassword123'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Store token
+                    localStorage.setItem('inventario_token', data.token);
+                    localStorage.setItem('inventario_user', JSON.stringify(data.user));
+                    
+                    resultDiv.innerHTML = `
+                        <div style="color: green;">
+                            <strong>Login Success!</strong><br>
+                            Token: ${data.token.substring(0, 50)}...<br>
+                            User: ${JSON.stringify(data.user, null, 2)}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div style="color: red;">Login Failed: ${JSON.stringify(data)}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: red;">Login Error: ${error.message}</div>`;
+            }
+        }
+        
+        function checkToken() {
+            const resultDiv = document.getElementById('tokenResult');
+            const token = localStorage.getItem('inventario_token');
+            const user = localStorage.getItem('inventario_user');
+            
+            resultDiv.innerHTML = `
+                <div>
+                    <strong>Stored Token:</strong> ${token ? token.substring(0, 50) + '...' : 'None'}<br>
+                    <strong>Stored User:</strong> ${user || 'None'}
+                </div>
+            `;
+        }
+        
+        async function testAPICall() {
+            const resultDiv = document.getElementById('apiResult');
+            resultDiv.innerHTML = 'Testing API call...';
+            
+            const token = localStorage.getItem('inventario_token');
+            if (!token) {
+                resultDiv.innerHTML = '<div style="color: red;">No token found. Please login first.</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/v1/auth/me', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div style="color: green;">
+                            <strong>API Call Success!</strong><br>
+                            Response: ${JSON.stringify(data, null, 2)}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div style="color: red;">API Call Failed (${response.status}): ${JSON.stringify(data)}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: red;">API Call Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testSettings() {
+            const resultDiv = document.getElementById('settingsResult');
+            resultDiv.innerHTML = 'Testing settings call...';
+            
+            const token = localStorage.getItem('inventario_token');
+            if (!token) {
+                resultDiv.innerHTML = '<div style="color: red;">No token found. Please login first.</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/v1/settings', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div style="color: green;">
+                            <strong>Settings Call Success!</strong><br>
+                            Response: ${JSON.stringify(data, null, 2)}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div style="color: red;">Settings Call Failed (${response.status}): ${JSON.stringify(data)}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: red;">Settings Call Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

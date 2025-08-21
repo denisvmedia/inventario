@@ -18,8 +18,13 @@ api.interceptors.request.use(
   config => {
     // Add JWT token to requests if available
     const token = getAuthToken()
+    console.log('🔑 Token check for', config.url, ':', !!token, token ? `(${token.length} chars)` : '(no token)')
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+      console.log('✅ Authorization header added')
+    } else {
+      console.log('❌ No token available for request')
     }
 
     console.log('API Request URL:', config.url)

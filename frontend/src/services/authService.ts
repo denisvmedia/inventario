@@ -33,9 +33,14 @@ class AuthService {
     const response = await api.post('/api/v1/auth/login', credentials)
     const data = response.data
 
-    // Store token and user data
+    // Store token and user data immediately and synchronously
     this.setToken(data.token)
     this.setUser(data.user)
+
+    // Verify token was stored correctly
+    const storedToken = this.getToken()
+    console.log('Token stored successfully:', !!storedToken)
+    console.log('Token length:', storedToken?.length || 0)
 
     return data
   }
