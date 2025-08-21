@@ -85,7 +85,21 @@ class AuthService {
     // Use regular api for protected endpoints (they support vnd.api+json)
     const config = isBackgroundCheck ? {} : { headers: { 'X-Auth-Check': 'user-initiated' } }
     const response = await api.get('/api/v1/auth/me', config)
-    return response.data.user
+
+    // The API returns user data directly, not wrapped in a .user property
+    const userData = response.data
+    console.log('getCurrentUser - Raw API response:', userData)
+
+    // Map the API response to our User interface
+    const user: User = {
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role
+    }
+
+    console.log('getCurrentUser - Mapped user data:', user)
+    return user
   }
 
   /**
