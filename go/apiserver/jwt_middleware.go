@@ -15,16 +15,23 @@ import (
 func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, "Authorization header required", http.StatusUnauthorized)
-				return
-			}
+			var tokenString string
 
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-			if tokenString == authHeader {
-				http.Error(w, "Bearer token required", http.StatusUnauthorized)
-				return
+			// Try to get token from Authorization header first
+			authHeader := r.Header.Get("Authorization")
+			if authHeader != "" {
+				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+				if tokenString == authHeader {
+					http.Error(w, "Bearer token required", http.StatusUnauthorized)
+					return
+				}
+			} else {
+				// If no Authorization header, try to get token from query parameter
+				tokenString = r.URL.Query().Get("token")
+				if tokenString == "" {
+					http.Error(w, "Authorization header or token query parameter required", http.StatusUnauthorized)
+					return
+				}
 			}
 
 			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
@@ -74,6 +81,12 @@ func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(ht
 // RequireAuth is an alias for JWTMiddleware for backward compatibility
 func RequireAuth(jwtSecret []byte, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
 	return JWTMiddleware(jwtSecret, userRegistry)
+}
+
+// FileAccessMiddleware creates middleware specifically for file access that supports both
+// Authorization header and query parameter authentication for direct browser access
+func FileAccessMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
+	return JWTMiddleware(jwtSecret, userRegistry) // Use the updated JWTMiddleware that supports both methods
 }
 
 // RequireRole middleware ensures that the authenticated user has the specified role

@@ -145,7 +145,19 @@ const fileService = {
    */
   getDownloadUrl(file: FileEntity): string {
     const ext = file.ext.startsWith('.') ? file.ext.substring(1) : file.ext
-    return `${API_URL}/${file.id}.${ext}`
+    return this.getAuthenticatedFileUrl(`${API_URL}/${file.id}.${ext}`)
+  },
+
+  /**
+   * Add authentication token to file URL for direct browser access
+   */
+  getAuthenticatedFileUrl(baseUrl: string): string {
+    const token = localStorage.getItem('inventario_token')
+    if (token) {
+      const separator = baseUrl.includes('?') ? '&' : '?'
+      return `${baseUrl}${separator}token=${encodeURIComponent(token)}`
+    }
+    return baseUrl
   },
 
   /**
