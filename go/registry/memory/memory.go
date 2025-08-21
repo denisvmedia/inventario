@@ -23,6 +23,7 @@ func NewRegistrySet(_ registry.Config) (*registry.Set, error) {
 	s.ExportRegistry = NewExportRegistry()
 	s.RestoreStepRegistry = NewRestoreStepRegistry()
 	s.RestoreOperationRegistry = NewRestoreOperationRegistry(s.RestoreStepRegistry)
+	s.UserRegistry = NewUserRegistry()
 
 	return s, nil
 }
