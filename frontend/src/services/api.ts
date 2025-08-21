@@ -53,13 +53,30 @@ api.interceptors.response.use(
 
     // Handle 401 Unauthorized errors
     if (error.response?.status === 401) {
+      console.warn('401 Unauthorized - clearing auth and redirecting to login')
+
       // Clear stored auth data
       localStorage.removeItem('inventario_token')
       localStorage.removeItem('inventario_user')
 
+      // Clear auth store state if available
+      try {
+        // Use dynamic import without await since we're not in an async function
+        import('@/stores/authStore').then(({ useAuthStore }) => {
+          const authStore = useAuthStore()
+          authStore.user = null
+          authStore.isInitialized = false
+        }).catch(e => {
+          console.warn('Could not clear auth store:', e)
+        })
+      } catch (e) {
+        console.warn('Could not import auth store:', e)
+      }
+
       // Redirect to login page if not already there
       if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+        const currentPath = window.location.pathname
+        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
       }
     }
 

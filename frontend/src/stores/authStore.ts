@@ -7,6 +7,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const isInitialized = ref(false)
 
   // Getters
   const isAuthenticated = computed(() => !!user.value)
@@ -45,6 +46,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function initializeAuth(): Promise<void> {
+    // Prevent multiple simultaneous initializations
+    if (isLoading.value || isInitialized.value) {
+      console.log('Auth initialization already in progress or completed')
+      return
+    }
+
     isLoading.value = true
     error.value = null
 
@@ -58,16 +65,16 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = storedUser
         console.log('Auth state restored from localStorage:', storedUser.email)
 
-        // Optionally verify token in background (don't clear auth if this fails)
+        // Verify token in background without clearing auth on failure
         try {
           const freshUserData = await authService.getCurrentUser()
           user.value = freshUserData
           authService.setUser(freshUserData)
           console.log('Token verified and user data refreshed')
         } catch (verifyError) {
-          console.warn('Token verification failed, but keeping stored auth:', verifyError)
-          // Don't clear auth here - let the user continue with stored data
-          // The API interceptor will handle 401s and redirect to login if needed
+          console.warn('Token verification failed, keeping stored auth:', verifyError)
+          // Keep the stored auth data - API interceptor will handle 401s
+          // This prevents session loss due to temporary network issues
         }
       } else {
         console.log('No stored authentication found')
@@ -78,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = null
     } finally {
       isLoading.value = false
+      isInitialized.value = true
     }
   }
 
@@ -106,6 +114,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     isLoading,
     error,
+    isInitialized,
 
     // Getters
     isAuthenticated,

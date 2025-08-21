@@ -162,8 +162,18 @@ router.beforeEach(async (to, from) => {
   // Initialize auth store
   const authStore = useAuthStore()
 
-  // Initialize authentication if not already done and not currently loading
-  if (!authStore.isAuthenticated && authStore.user === null && !authStore.isLoading) {
+  // Wait for authentication initialization to complete if it's in progress
+  if (authStore.isLoading) {
+    console.log('Waiting for auth initialization to complete...')
+    // Wait for initialization to complete
+    while (authStore.isLoading) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+  }
+
+  // Only initialize if not already initialized
+  if (!authStore.isInitialized) {
+    console.log('Initializing authentication from router guard...')
     await authStore.initializeAuth()
   }
 

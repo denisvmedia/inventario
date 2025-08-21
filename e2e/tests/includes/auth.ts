@@ -115,19 +115,22 @@ export async function login(page: Page): Promise<void> {
  * Ensure the user is authenticated, login if necessary
  */
 export async function ensureAuthenticated(page: Page): Promise<void> {
+  // Wait for any ongoing authentication initialization
+  await page.waitForTimeout(500);
+
   // First check if we're already authenticated
   if (await isAuthenticated(page)) {
     console.log('✅ Already authenticated');
     return;
   }
-  
+
   // Check if we're on the login page
   if (await isLoginPage(page)) {
     console.log('🔐 On login page, performing login...');
     await login(page);
     return;
   }
-  
+
   // If we're neither authenticated nor on login page, navigate to login
   console.log('🔄 Navigating to login page...');
   await page.goto('/login');

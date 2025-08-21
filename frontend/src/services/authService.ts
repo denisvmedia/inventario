@@ -133,10 +133,13 @@ class AuthService {
 
   /**
    * Initialize authentication on app startup
+   * This method is more conservative and doesn't clear auth on verification failure
    */
   async initializeAuth(): Promise<User | null> {
     const token = this.getToken()
-    if (!token) {
+    const storedUser = this.getUser()
+
+    if (!token || !storedUser) {
       return null
     }
 
@@ -146,9 +149,10 @@ class AuthService {
       this.setUser(user)
       return user
     } catch (error) {
-      console.warn('Token validation failed:', error)
-      this.clearAuth()
-      return null
+      console.warn('Token validation failed during initialization:', error)
+      // Don't clear auth here - let the API interceptor handle 401s
+      // Return the stored user data to maintain session continuity
+      return storedUser
     }
   }
 }
