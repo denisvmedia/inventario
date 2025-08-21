@@ -121,7 +121,7 @@ defineExpose({
 .login-card {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 25px rgb(0 0 0 / 10%);
   padding: 2rem;
   width: 100%;
   max-width: 400px;
@@ -134,7 +134,7 @@ defineExpose({
 
 .login-header h1 {
   color: #333;
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.5rem;
   font-size: 2rem;
   font-weight: 600;
 }
@@ -174,7 +174,7 @@ defineExpose({
 .form-group input:focus {
   outline: none;
   border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 3px rgb(102 126 234 / 10%);
 }
 
 .form-group input:disabled {
@@ -203,13 +203,13 @@ defineExpose({
   transition: opacity 0.2s;
 }
 
-.login-button:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
 .login-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.login-button:hover:not(:disabled) {
+  opacity: 0.9;
 }
 
 .login-footer {
