@@ -143,6 +143,8 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.Route("/auth", Auth(params.RegistrySet.UserRegistry, params.JWTSecret))
 		r.With(defaultAPIMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
 		r.Route("/currencies", Currencies())
+		// Seed endpoint is public for e2e testing and development
+		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.RegistrySet))
 
 		// Create user aware middlewares for protected routes
 		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.RegistrySet.UserRegistry)
@@ -156,7 +158,6 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.With(userMiddlewares...).Route("/exports", Exports(params, restoreWorker))
 		r.With(userMiddlewares...).Route("/files", Files(params))
 		r.With(userMiddlewares...).Route("/search", Search(params.RegistrySet))
-		r.With(userMiddlewares...).Route("/seed", Seed(params.RegistrySet))
 		r.With(userMiddlewares...).Route("/commodities/values", Values(params.RegistrySet))
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
 
