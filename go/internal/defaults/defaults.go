@@ -10,6 +10,7 @@ import (
 type Server struct {
 	Addr           string
 	UploadLocation string
+	JWTSecret      string
 }
 
 // Database contains default values for database configuration
@@ -51,6 +52,7 @@ func New() Config {
 		Server: Server{
 			Addr:           ":3333",
 			UploadLocation: getFileURL("uploads"),
+			JWTSecret:      "", // Empty by default, will be generated if not provided
 		},
 		Database: Database{
 			DSN: "memory://",
@@ -87,4 +89,9 @@ func GetMaxConcurrentExports() int {
 // GetMaxConcurrentImports returns the default max concurrent imports
 func GetMaxConcurrentImports() int {
 	return defaultConfig.Workers.MaxConcurrentImports
+}
+
+// GetJWTSecret returns the default JWT secret
+func GetJWTSecret() string {
+	return defaultConfig.Server.JWTSecret
 }

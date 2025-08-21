@@ -112,6 +112,7 @@ func (c *Command) registerFlags() {
 	shared.RegisterLocalDatabaseFlags(c.Cmd(), &c.dbConfig)
 	flags.IntVar(&c.config.MaxConcurrentExports, "max-concurrent-exports", c.config.MaxConcurrentExports, "Maximum number of concurrent export processes")
 	flags.IntVar(&c.config.MaxConcurrentImports, "max-concurrent-imports", c.config.MaxConcurrentImports, "Maximum number of concurrent import processes")
+	flags.StringVar(&c.config.JWTSecret, "jwt-secret", c.config.JWTSecret, "JWT secret for authentication (minimum 32 characters, auto-generated if not provided)")
 }
 
 func (c *Command) runCommand() error {
@@ -149,8 +150,8 @@ func (c *Command) runCommand() error {
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 	params.StartTime = time.Now()
 
-	// Configure JWT secret from environment variable or generate a secure default
-	jwtSecret, err := getJWTSecret()
+	// Configure JWT secret from config/environment or generate a secure default
+	jwtSecret, err := getJWTSecret(c.config.JWTSecret)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to configure JWT secret")
 		return err
@@ -207,26 +208,26 @@ func (c *Command) runCommand() error {
 	return err
 }
 
-// getJWTSecret retrieves JWT secret from environment variable or generates a secure default
-func getJWTSecret() ([]byte, error) {
-	// Try to get JWT secret from environment variable
-	if secret := os.Getenv("INVENTARIO_JWT_SECRET"); secret != "" {
+// getJWTSecret retrieves JWT secret from config/environment or generates a secure default
+func getJWTSecret(configSecret string) ([]byte, error) {
+	// Use the secret from config (which includes environment variables via cleanenv)
+	if configSecret != "" {
 		// If provided as hex string, decode it
-		if decoded, err := hex.DecodeString(secret); err == nil && len(decoded) >= 32 {
-			log.Info("Using JWT secret from INVENTARIO_JWT_SECRET environment variable (hex decoded)")
+		if decoded, err := hex.DecodeString(configSecret); err == nil && len(decoded) >= 32 {
+			log.Info("Using JWT secret from configuration (hex decoded)")
 			return decoded, nil
 		}
 		// If provided as plain string and long enough, use it directly
-		if len(secret) >= 32 {
-			log.Info("Using JWT secret from INVENTARIO_JWT_SECRET environment variable")
-			return []byte(secret), nil
+		if len(configSecret) >= 32 {
+			log.Info("Using JWT secret from configuration")
+			return []byte(configSecret), nil
 		}
-		log.Warn("INVENTARIO_JWT_SECRET environment variable is too short (minimum 32 characters), generating random secret")
+		log.Warn("Configured JWT secret is too short (minimum 32 characters), generating random secret")
 	}
 
 	// Generate a secure random secret
-	log.Warn("No JWT secret configured via INVENTARIO_JWT_SECRET environment variable, generating random secret")
-	log.Warn("For production use, set INVENTARIO_JWT_SECRET environment variable with a secure 32+ byte secret")
+	log.Warn("No JWT secret configured, generating random secret")
+	log.Warn("For production use, set INVENTARIO_RUN_JWT_SECRET environment variable or jwt-secret in config file with a secure 32+ byte secret")
 
 	secret := make([]byte, 32)
 	_, err := rand.Read(secret)
@@ -235,7 +236,7 @@ func getJWTSecret() ([]byte, error) {
 	}
 
 	log.Infof("Generated random JWT secret (hex): %s", hex.EncodeToString(secret))
-	log.Info("Save this secret to INVENTARIO_JWT_SECRET environment variable for consistent authentication across restarts")
+	log.Info("Save this secret to INVENTARIO_RUN_JWT_SECRET environment variable or config file for consistent authentication across restarts")
 
 	return secret, nil
 }
