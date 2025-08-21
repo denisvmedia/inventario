@@ -139,11 +139,17 @@ const loadPDF = async () => {
       setTimeout(() => reject(new Error('PDF loading timeout')), 15000)
     })
 
-    // Load the PDF document
+    // Get authentication token for PDF loading
+    const authToken = localStorage.getItem('inventario_token')
+
+    // Load the PDF document with authentication headers
     const loadingTask = pdfjsLib.getDocument({
       url: props.url,
       cMapUrl: '/cmaps/',
       cMapPacked: true,
+      httpHeaders: authToken ? {
+        'Authorization': `Bearer ${authToken}`
+      } : {}
     })
 
     // Race between loading and timeout
