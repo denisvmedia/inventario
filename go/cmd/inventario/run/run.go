@@ -2,6 +2,8 @@ package run
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net/url"
 	"os"
 	"os/signal"
@@ -146,8 +148,14 @@ func (c *Command) runCommand() error {
 	params.EntityService = services.NewEntityService(registrySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 	params.StartTime = time.Now()
-	// TODO: Make JWT secret configurable via environment variable or config file
-	params.JWTSecret = []byte("inventario-jwt-secret-change-in-production-32-bytes-minimum")
+
+	// Configure JWT secret from environment variable or generate a secure default
+	jwtSecret, err := getJWTSecret()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to configure JWT secret")
+		return err
+	}
+	params.JWTSecret = jwtSecret
 
 	err = validation.Validate(params)
 	if err != nil {
@@ -197,4 +205,37 @@ func (c *Command) runCommand() error {
 	}
 
 	return err
+}
+
+// getJWTSecret retrieves JWT secret from environment variable or generates a secure default
+func getJWTSecret() ([]byte, error) {
+	// Try to get JWT secret from environment variable
+	if secret := os.Getenv("INVENTARIO_JWT_SECRET"); secret != "" {
+		// If provided as hex string, decode it
+		if decoded, err := hex.DecodeString(secret); err == nil && len(decoded) >= 32 {
+			log.Info("Using JWT secret from INVENTARIO_JWT_SECRET environment variable (hex decoded)")
+			return decoded, nil
+		}
+		// If provided as plain string and long enough, use it directly
+		if len(secret) >= 32 {
+			log.Info("Using JWT secret from INVENTARIO_JWT_SECRET environment variable")
+			return []byte(secret), nil
+		}
+		log.Warn("INVENTARIO_JWT_SECRET environment variable is too short (minimum 32 characters), generating random secret")
+	}
+
+	// Generate a secure random secret
+	log.Warn("No JWT secret configured via INVENTARIO_JWT_SECRET environment variable, generating random secret")
+	log.Warn("For production use, set INVENTARIO_JWT_SECRET environment variable with a secure 32+ byte secret")
+
+	secret := make([]byte, 32)
+	_, err := rand.Read(secret)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Infof("Generated random JWT secret (hex): %s", hex.EncodeToString(secret))
+	log.Info("Save this secret to INVENTARIO_JWT_SECRET environment variable for consistent authentication across restarts")
+
+	return secret, nil
 }

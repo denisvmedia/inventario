@@ -54,8 +54,7 @@ func ExtractUserFromRequest(r *http.Request) string {
 }
 
 // ExtractTenantUserFromRequest extracts user ID from request context for backward compatibility
-// This function is deprecated and will be removed in future versions
-// Use ExtractUserFromRequest instead
+// Deprecated: Use ExtractUserFromRequest instead
 func ExtractTenantUserFromRequest(r *http.Request) (tenantID, userID string) {
 	user := GetUserFromRequest(r)
 	if user != nil {
@@ -80,8 +79,7 @@ func ExtractUserFromContext(ctx context.Context) string {
 }
 
 // ExtractTenantUserFromContext extracts user ID from context for backward compatibility
-// This function is deprecated and will be removed in future versions
-// Use ExtractUserFromContext instead
+// Deprecated: Use ExtractUserFromContext instead
 func ExtractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
 	user := UserFromContext(ctx)
 	if user != nil {

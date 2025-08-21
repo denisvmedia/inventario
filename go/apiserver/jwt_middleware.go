@@ -95,7 +95,3 @@ func RequireRole(role models.UserRole) func(http.Handler) http.Handler {
 		})
 	}
 }
-
-
-
-

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	qt "github.com/frankban/quicktest"
+	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
