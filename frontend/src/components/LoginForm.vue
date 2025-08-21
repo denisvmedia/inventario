@@ -59,10 +59,11 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 // Form data
@@ -88,8 +89,12 @@ async function handleSubmit() {
       password: form.value.password
     })
 
-    // Redirect to home page after successful login
-    router.push('/')
+    // Handle redirect query parameter or default to home
+    const redirectTo = route.query.redirect as string || '/'
+    console.log('Login successful, redirecting to:', redirectTo)
+
+    // Use replace instead of push to avoid login page in history
+    await router.replace(redirectTo)
   } catch (error) {
     // Error is handled by the store
     console.error('Login failed:', error)
