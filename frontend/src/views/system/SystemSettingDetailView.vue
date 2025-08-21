@@ -161,7 +161,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
-import systemService from '@/services/systemService'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 import Select from 'primevue/select'

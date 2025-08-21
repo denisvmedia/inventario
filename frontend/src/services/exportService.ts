@@ -60,21 +60,12 @@ const exportService = {
 
   // Restore operations for exports
   getRestoreOperations(exportId: string) {
-    return axios.get(`${API_URL}/${exportId}/restores`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.get(`${API_URL}/${exportId}/restores`)
   },
 
   createRestore(exportId: string, data: any) {
     console.log('exportService: createRestore called with data:', JSON.stringify(data, null, 2))
-    return axios.post(`${API_URL}/${exportId}/restores`, data, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    }).then(response => {
+    return api.post(`${API_URL}/${exportId}/restores`, data).then(response => {
       console.log('exportService: createRestore success response:', response)
       return response
     }).catch(error => {
@@ -84,11 +75,7 @@ const exportService = {
   },
 
   getRestoreOperation(exportId: string, restoreId: string) {
-    return axios.get(`${API_URL}/${exportId}/restores/${restoreId}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.get(`${API_URL}/${exportId}/restores/${restoreId}`)
   },
 
   // Poll restore status until completion or failure
