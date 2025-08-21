@@ -8,9 +8,20 @@ const api = axios.create({
   }
 })
 
-// Add request interceptor for detailed debugging
+// Function to get token from localStorage
+function getAuthToken(): string | null {
+  return localStorage.getItem('inventario_token')
+}
+
+// Add request interceptor for authentication and debugging
 api.interceptors.request.use(
   config => {
+    // Add JWT token to requests if available
+    const token = getAuthToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+
     console.log('API Request URL:', config.url)
     console.log('API Request Method:', config.method?.toUpperCase())
     console.log('API Request Headers:', JSON.stringify(config.headers, null, 2))
@@ -23,7 +34,7 @@ api.interceptors.request.use(
   }
 )
 
-// Add response interceptor for detailed debugging
+// Add response interceptor for authentication and debugging
 api.interceptors.response.use(
   response => {
     console.log('API Response Status:', response.status)
@@ -34,6 +45,19 @@ api.interceptors.response.use(
   error => {
     console.error('API Response Error Status:', error.response?.status)
     console.error('API Response Error Data:', JSON.stringify(error.response?.data, null, 2))
+
+    // Handle 401 Unauthorized errors
+    if (error.response?.status === 401) {
+      // Clear stored auth data
+      localStorage.removeItem('inventario_token')
+      localStorage.removeItem('inventario_user')
+
+      // Redirect to login page if not already there
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+
     return Promise.reject(error)
   }
 )
