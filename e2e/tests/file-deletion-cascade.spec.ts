@@ -131,12 +131,20 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 5.5: VERIFY FILE ENTITIES EXIST BEFORE DELETION
     console.log(`Step ${step++}: Verifying file entities exist before deletion`);
 
+    // Get authentication token from localStorage for API requests
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+
     for (let i = 0; i < fileIds.length; i++) {
       const fileId = fileIds[i];
       console.log(`Verifying file entity ${i + 1} exists: ${fileId}`);
 
-      // Check via API
-      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`);
+      // Check via API with authentication
+      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/vnd.api+json'
+        }
+      });
       expect(apiResponse.status()).toBe(200);
 
       // Also check via UI - navigate to file detail page
@@ -170,12 +178,20 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 8: VERIFY FILE ENTITIES ARE DELETED FROM DATABASE
     console.log(`Step ${step++}: Verifying file entities are deleted from database`);
 
+    // Get authentication token for API requests
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+
     for (let i = 0; i < fileIds.length; i++) {
       const fileId = fileIds[i];
       console.log(`Testing file entity ${i + 1} deletion: ${fileId}`);
 
       // Check via API - should return 404
-      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`);
+      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/vnd.api+json'
+        }
+      });
       expect(apiResponse.status()).toBe(404);
       console.log(`File entity ${i + 1} API returns 404: ${apiResponse.status()}`);
 
@@ -246,8 +262,16 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 2.5: GET EXPORT FILE ENTITY ID
     console.log(`Step ${step++}: Getting export file entity ID`);
 
+    // Get authentication token for API requests
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+
     // Get export details via API to find the file_id
-    const exportResponse = await page.request.get(`/api/v1/exports/${exportId}`);
+    const exportResponse = await page.request.get(`/api/v1/exports/${exportId}`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Accept': 'application/vnd.api+json'
+      }
+    });
     expect(exportResponse.status()).toBe(200);
     const exportData = await exportResponse.json();
     const fileId = exportData.data.attributes.file_id;
@@ -255,7 +279,12 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // Verify the file entity exists before deletion
     if (fileId) {
-      const fileResponse = await page.request.get(`/api/v1/files/${fileId}`);
+      const fileResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/vnd.api+json'
+        }
+      });
       expect(fileResponse.status()).toBe(200);
       console.log(`Export file entity confirmed to exist: ${fileId}`);
 
@@ -288,8 +317,16 @@ test.describe('File Deletion Cascade Tests', () => {
     if (fileId) {
       console.log(`Testing export file entity deletion: ${fileId}`);
 
+      // Get authentication token for API requests
+      const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+
       // Check via API - should return 404
-      const fileApiResponse = await page.request.get(`/api/v1/files/${fileId}`);
+      const fileApiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/vnd.api+json'
+        }
+      });
       expect(fileApiResponse.status()).toBe(404);
       console.log(`Export file entity API returns 404: ${fileApiResponse.status()}`);
 
@@ -424,12 +461,20 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 6.5: VERIFY ALL FILE ENTITIES EXIST BEFORE DELETION
     console.log(`Step ${step++}: Verifying all file entities exist before deletion`);
 
+    // Get authentication token for API requests
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+
     for (let i = 0; i < allFileIds.length; i++) {
       const fileId = allFileIds[i];
       console.log(`Verifying file entity ${i + 1}/${allFileIds.length} exists: ${fileId}`);
 
-      // Check via API
-      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`);
+      // Check via API with authentication
+      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/vnd.api+json'
+        }
+      });
       expect(apiResponse.status()).toBe(200);
       console.log(`File entity ${i + 1} confirmed to exist`);
     }
@@ -458,12 +503,20 @@ test.describe('File Deletion Cascade Tests', () => {
     // STEP 9: VERIFY ALL FILE ENTITIES ARE DELETED FROM DATABASE
     console.log(`Step ${step++}: Verifying all file entities are deleted from database`);
 
+    // Get authentication token for API requests
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+
     for (let i = 0; i < allFileIds.length; i++) {
       const fileId = allFileIds[i];
       console.log(`Testing file entity ${i + 1}/${allFileIds.length} deletion: ${fileId}`);
 
       // Check via API - should return 404
-      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`);
+      const apiResponse = await page.request.get(`/api/v1/files/${fileId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/vnd.api+json'
+        }
+      });
       expect(apiResponse.status()).toBe(404);
       console.log(`File entity ${i + 1} API returns 404: ${apiResponse.status()}`);
 
