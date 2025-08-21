@@ -1,4 +1,14 @@
 import api from './api'
+import axios from 'axios'
+
+// Create a separate axios instance for auth endpoints with application/json
+const authApi = axios.create({
+  baseURL: '',  // Empty because we're using Vite's proxy
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+})
 
 export interface LoginRequest {
   email: string
@@ -30,7 +40,8 @@ class AuthService {
    * Login with email and password
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const response = await api.post('/api/v1/auth/login', credentials)
+    // Use authApi with application/json content type for auth endpoints
+    const response = await authApi.post('/api/v1/auth/login', credentials)
     const data = response.data
 
     // Store token and user data immediately and synchronously
@@ -50,7 +61,15 @@ class AuthService {
    */
   async logout(): Promise<void> {
     try {
-      await api.post('/api/v1/auth/logout')
+      // Add authorization header for logout
+      const token = this.getToken()
+      if (token) {
+        await authApi.post('/api/v1/auth/logout', {}, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+      }
     } catch (error) {
       console.warn('Logout API call failed:', error)
     } finally {
@@ -63,6 +82,7 @@ class AuthService {
    * Get current user from API
    */
   async getCurrentUser(): Promise<User> {
+    // Use regular api for protected endpoints (they support vnd.api+json)
     const response = await api.get('/api/v1/auth/me')
     return response.data.user
   }
