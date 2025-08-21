@@ -74,7 +74,15 @@ app.component('FontAwesomeIcon', FontAwesomeIcon)
 async function initializeApp() {
   console.log('Initializing authentication...')
   const authStore = useAuthStore()
+
+  // Initialize auth synchronously first (restore from localStorage)
   await authStore.initializeAuth()
+
+  console.log('Auth initialization complete, auth state:', {
+    isAuthenticated: authStore.isAuthenticated,
+    isInitialized: authStore.isInitialized,
+    user: authStore.user?.email || 'none'
+  })
 
   // Mount the app
   console.log('Mounting Vue app to #app element')

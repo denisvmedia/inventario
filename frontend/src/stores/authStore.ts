@@ -48,10 +48,14 @@ export const useAuthStore = defineStore('auth', () => {
   async function initializeAuth(): Promise<void> {
     // Prevent multiple simultaneous initializations
     if (isLoading.value || isInitialized.value) {
-      console.log('Auth initialization already in progress or completed')
+      console.log('Auth initialization already in progress or completed', {
+        isLoading: isLoading.value,
+        isInitialized: isInitialized.value
+      })
       return
     }
 
+    console.log('Starting auth initialization...')
     isLoading.value = true
     error.value = null
 
@@ -60,32 +64,45 @@ export const useAuthStore = defineStore('auth', () => {
       const storedUser = authService.getUser()
       const storedToken = authService.getToken()
 
+      console.log('Checking stored auth data:', {
+        hasToken: !!storedToken,
+        hasUser: !!storedUser,
+        tokenLength: storedToken?.length || 0,
+        userEmail: storedUser?.email || 'none'
+      })
+
       if (storedToken && storedUser) {
         // Restore user state immediately
         user.value = storedUser
-        console.log('Auth state restored from localStorage:', storedUser.email)
+        console.log('✅ Auth state restored from localStorage:', storedUser.email)
+        console.log('✅ isAuthenticated after restore:', !!user.value)
 
         // Verify token in background without clearing auth on failure
         try {
           const freshUserData = await authService.getCurrentUser(true) // Mark as background check
           user.value = freshUserData
           authService.setUser(freshUserData)
-          console.log('Token verified and user data refreshed')
+          console.log('✅ Token verified and user data refreshed')
         } catch (verifyError) {
-          console.warn('Token verification failed, keeping stored auth:', verifyError)
+          console.warn('⚠️ Token verification failed, keeping stored auth:', verifyError)
           // Keep the stored auth data - API interceptor will handle 401s
           // This prevents session loss due to temporary network issues
         }
       } else {
-        console.log('No stored authentication found')
+        console.log('❌ No stored authentication found')
         user.value = null
       }
     } catch (err: any) {
-      console.warn('Auth initialization error:', err)
+      console.warn('❌ Auth initialization error:', err)
       user.value = null
     } finally {
       isLoading.value = false
       isInitialized.value = true
+      console.log('✅ Auth initialization complete:', {
+        isAuthenticated: !!user.value,
+        isInitialized: isInitialized.value,
+        userEmail: user.value?.email || 'none'
+      })
     }
   }
 
