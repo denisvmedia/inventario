@@ -131,7 +131,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	// Now delete the commodity via API
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+createdCommodity.ID, nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
@@ -199,7 +199,7 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	// Delete the commodity via API
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+createdCommodity.ID, nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
@@ -225,7 +225,7 @@ func TestCommodityDeleteRecursive_NonExistent_Integration(t *testing.T) {
 	// Try to delete a non-existent commodity
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/non-existent-id", nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)

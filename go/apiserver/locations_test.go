@@ -18,18 +18,22 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
+// newParamsWithLocationRegistry creates test params with a specific location registry
+func newParamsWithLocationRegistry(locationRegistry registry.LocationRegistry) apiserver.Params {
+	params := newParams()
+	params.RegistrySet.LocationRegistry = locationRegistry
+	return params
+}
+
 func TestLocationsDelete(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.Params{
-		RegistrySet: &registry.Set{},
-	}
-	params.RegistrySet.LocationRegistry = newLocationRegistry()
+	params := newParamsWithLocationRegistry(newLocationRegistry())
 	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 
 	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+locations[0].ID, nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count(c.Context())) - 1
@@ -62,7 +66,7 @@ func TestLocationsCreate(t *testing.T) {
 
 	req, err := http.NewRequest("POST", "/api/v1/locations", buf)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 	params := apiserver.Params{
 		RegistrySet: &registry.Set{
@@ -100,7 +104,7 @@ func TestLocationsGet(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID, nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -125,16 +129,14 @@ func TestLocationsGet(t *testing.T) {
 func TestLocationsList(t *testing.T) {
 	c := qt.New(t)
 
-	params := apiserver.Params{
-		RegistrySet: &registry.Set{
-			LocationRegistry: newLocationRegistry(),
-		},
-	}
+	params := newParams()
+	// Override with specific location registry for this test
+	params.RegistrySet.LocationRegistry = newLocationRegistry()
 	expectedLocations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -179,7 +181,7 @@ func TestLocationsUpdate(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -205,7 +207,7 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -231,7 +233,7 @@ func TestLocationsGet_InvalidID(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/locations/"+invalidID, nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -267,7 +269,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -306,7 +308,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -341,7 +343,7 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+unknownID, updateBuf)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -364,7 +366,7 @@ func TestLocationsDelete_MissingLocation(t *testing.T) {
 
 	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+missingID, nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -435,7 +437,7 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, nestedUpdateBuf)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -473,7 +475,7 @@ func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
