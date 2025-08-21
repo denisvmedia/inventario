@@ -212,9 +212,6 @@ test.describe('File Deletion Cascade Tests', () => {
   test('should delete export files when export is deleted', async ({ page, recorder }) => {
     let step = 1;
 
-    // Get authentication token for API requests
-    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
-
     // STEP 1: CREATE LOCATION
     console.log(`Step ${step++}: Creating a new location`);
     await navigateTo(page, recorder, TO_LOCATIONS);
@@ -261,6 +258,9 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // STEP 2.5: GET EXPORT FILE ENTITY ID
     console.log(`Step ${step++}: Getting export file entity ID`);
+
+    // Get authentication token for API requests (after authentication is complete)
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
 
     // Get export details via API to find the file_id
     const exportResponse = await page.request.get(`/api/v1/exports/${exportId}`, {
@@ -348,9 +348,6 @@ test.describe('File Deletion Cascade Tests', () => {
 
   test('should delete multiple commodity files when commodity with many files is deleted', async ({ page, recorder }) => {
     let step = 1;
-
-    // Get authentication token for API requests
-    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
 
     // STEP 1: CREATE LOCATION
     console.log(`Step ${step++}: Creating a new location`);
@@ -457,6 +454,9 @@ test.describe('File Deletion Cascade Tests', () => {
 
     // STEP 6.5: VERIFY ALL FILE ENTITIES EXIST BEFORE DELETION
     console.log(`Step ${step++}: Verifying all file entities exist before deletion`);
+
+    // Get authentication token for API requests (after authentication is complete)
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
 
     for (let i = 0; i < allFileIds.length; i++) {
       const fileId = allFileIds[i];
