@@ -194,30 +194,34 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return nil
 	}
 
+	// Create a context with user ID for the export processing
+	// This is necessary because the background worker doesn't have user context
+	userCtx := registry.WithUserContext(ctx, export.UserID)
+
 	// Update status to in_progress
 	export.Status = models.ExportStatusInProgress
-	_, err = s.registrySet.ExportRegistry.Update(ctx, *export)
+	_, err = s.registrySet.ExportRegistry.Update(userCtx, *export)
 	if err != nil {
 		return errkit.Wrap(err, "failed to update export status")
 	}
 
-	// Generate the export and collect statistics
-	filePath, stats, err := s.generateExport(ctx, *export)
+	// Generate the export and collect statistics using user context
+	filePath, stats, err := s.generateExport(userCtx, *export)
 	if err != nil {
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
-		s.registrySet.ExportRegistry.Update(ctx, *export)
+		s.registrySet.ExportRegistry.Update(userCtx, *export)
 		return errkit.Wrap(err, "failed to generate export")
 	}
 
-	// Create file entity for the export
-	fileEntity, err := s.createExportFileEntity(ctx, export.ID, export.Description, filePath)
+	// Create file entity for the export using user context
+	fileEntity, err := s.createExportFileEntity(userCtx, export.ID, export.Description, filePath)
 	if err != nil {
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
-		s.registrySet.ExportRegistry.Update(ctx, *export)
+		s.registrySet.ExportRegistry.Update(userCtx, *export)
 		return errkit.Wrap(err, "failed to create export file entity")
 	}
 
@@ -230,19 +234,19 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	export.ManualCount = stats.ManualCount
 	export.BinaryDataSize = stats.BinaryDataSize
 
-	// Get file size
-	if fileSize, err := s.getFileSize(ctx, filePath); err == nil {
+	// Get file size using user context
+	if fileSize, err := s.getFileSize(userCtx, filePath); err == nil {
 		export.FileSize = fileSize
 	}
 
-	// Update status to completed
+	// Update status to completed using user context
 	export.Status = models.ExportStatusCompleted
 	export.FileID = &fileEntity.ID
 	export.FilePath = filePath // Keep for backward compatibility during migration
 	export.CompletedDate = models.PNow()
 	export.ErrorMessage = ""
 
-	_, err = s.registrySet.ExportRegistry.Update(ctx, *export)
+	_, err = s.registrySet.ExportRegistry.Update(userCtx, *export)
 	if err != nil {
 		return errkit.Wrap(err, "failed to update export completion")
 	}
