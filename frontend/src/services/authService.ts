@@ -81,9 +81,10 @@ class AuthService {
   /**
    * Get current user from API
    */
-  async getCurrentUser(): Promise<User> {
+  async getCurrentUser(isBackgroundCheck = false): Promise<User> {
     // Use regular api for protected endpoints (they support vnd.api+json)
-    const response = await api.get('/api/v1/auth/me')
+    const config = isBackgroundCheck ? {} : { headers: { 'X-Auth-Check': 'user-initiated' } }
+    const response = await api.get('/api/v1/auth/me', config)
     return response.data.user
   }
 
@@ -144,8 +145,8 @@ class AuthService {
     }
 
     try {
-      // Verify token is still valid by getting current user
-      const user = await this.getCurrentUser()
+      // Verify token is still valid by getting current user (background check)
+      const user = await this.getCurrentUser(true)
       this.setUser(user)
       return user
     } catch (error) {

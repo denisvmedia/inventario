@@ -67,7 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
 
         // Verify token in background without clearing auth on failure
         try {
-          const freshUserData = await authService.getCurrentUser()
+          const freshUserData = await authService.getCurrentUser(true) // Mark as background check
           user.value = freshUserData
           authService.setUser(freshUserData)
           console.log('Token verified and user data refreshed')

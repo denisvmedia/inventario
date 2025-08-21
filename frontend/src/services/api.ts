@@ -53,7 +53,20 @@ api.interceptors.response.use(
 
     // Handle 401 Unauthorized errors
     if (error.response?.status === 401) {
-      console.warn('401 Unauthorized - clearing auth and redirecting to login')
+      console.warn('401 Unauthorized - checking if this is during initialization')
+
+      // Don't clear auth if this is a background verification during initialization
+      // Only clear auth for user-initiated requests
+      const isInitializationRequest = error.config?.url?.includes('/auth/me') &&
+                                     error.config?.headers?.['X-Auth-Check'] !== 'user-initiated'
+
+      if (isInitializationRequest) {
+        console.warn('401 during background auth verification - not clearing stored auth')
+        // Let the auth store handle this gracefully
+        return Promise.reject(error)
+      }
+
+      console.warn('401 on user request - clearing auth and redirecting to login')
 
       // Clear stored auth data
       localStorage.removeItem('inventario_token')
