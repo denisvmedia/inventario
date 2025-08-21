@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './api'
 
 const API_URL = '/api/v1/files'
 
@@ -48,7 +48,7 @@ const fileService = {
    * Get list of files with optional filtering and pagination
    */
   getFiles(params: FileListParams = {}) {
-    return axios.get(API_URL, {
+    return api.get(API_URL, {
       params,
       headers: {
         'Accept': 'application/vnd.api+json'
@@ -61,11 +61,7 @@ const fileService = {
    */
   getFile(id: string) {
     console.log(`Fetching file with ID: ${id}`)
-    return axios.get(`${API_URL}/${id}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    }).then(response => {
+    return api.get(`${API_URL}/${id}`).then(response => {
       console.log('File fetch successful:', response.data)
       return response
     }).catch(error => {
@@ -81,7 +77,7 @@ const fileService = {
     const formData = new FormData()
     formData.append('file', file)
 
-    return axios.post('/api/v1/uploads/files', formData, {
+    return api.post('/api/v1/uploads/files', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -98,15 +94,10 @@ const fileService = {
    * Create a new file entity with metadata only
    */
   createFile(metadata: FileCreateData) {
-    return axios.post(API_URL, {
+    return api.post(API_URL, {
       data: {
         type: 'files',
         attributes: metadata
-      }
-    }, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
       }
     }).then(response => {
       console.log('File creation successful:', response.data)
@@ -121,16 +112,11 @@ const fileService = {
    * Update file metadata
    */
   updateFile(id: string, data: FileUpdateData) {
-    return axios.put(`${API_URL}/${id}`, {
+    return api.put(`${API_URL}/${id}`, {
       data: {
         id: id,
         type: 'files',
         attributes: data
-      }
-    }, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
       }
     }).then(response => {
       console.log('File update successful:', response.data)
@@ -145,11 +131,7 @@ const fileService = {
    * Delete a file
    */
   deleteFile(id: string) {
-    return axios.delete(`${API_URL}/${id}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    }).then(response => {
+    return api.delete(`${API_URL}/${id}`).then(response => {
       console.log('File deletion successful')
       return response
     }).catch(error => {

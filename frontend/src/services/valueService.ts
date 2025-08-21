@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './api'
 
 const API_URL = '/api/v1/commodities/values'
 
@@ -8,11 +8,7 @@ const valueService = {
    * @returns Promise with the response containing value data
    */
   getValues() {
-    return axios.get(API_URL, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.get(API_URL)
   }
 }
 
