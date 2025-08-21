@@ -162,8 +162,8 @@ router.beforeEach(async (to, from) => {
   // Initialize auth store
   const authStore = useAuthStore()
 
-  // Initialize authentication if not already done
-  if (!authStore.isAuthenticated && authStore.user === null) {
+  // Initialize authentication if not already done and not currently loading
+  if (!authStore.isAuthenticated && authStore.user === null && !authStore.isLoading) {
     await authStore.initializeAuth()
   }
 

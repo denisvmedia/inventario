@@ -49,8 +49,30 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
 
     try {
-      const userData = await authService.initializeAuth()
-      user.value = userData
+      // First, restore user data from localStorage immediately (synchronous)
+      const storedUser = authService.getUser()
+      const storedToken = authService.getToken()
+
+      if (storedToken && storedUser) {
+        // Restore user state immediately
+        user.value = storedUser
+        console.log('Auth state restored from localStorage:', storedUser.email)
+
+        // Optionally verify token in background (don't clear auth if this fails)
+        try {
+          const freshUserData = await authService.getCurrentUser()
+          user.value = freshUserData
+          authService.setUser(freshUserData)
+          console.log('Token verified and user data refreshed')
+        } catch (verifyError) {
+          console.warn('Token verification failed, but keeping stored auth:', verifyError)
+          // Don't clear auth here - let the user continue with stored data
+          // The API interceptor will handle 401s and redirect to login if needed
+        }
+      } else {
+        console.log('No stored authentication found')
+        user.value = null
+      }
     } catch (err: any) {
       console.warn('Auth initialization error:', err)
       user.value = null
@@ -84,13 +106,13 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     isLoading,
     error,
-    
+
     // Getters
     isAuthenticated,
     userRole,
     userName,
     userEmail,
-    
+
     // Actions
     login,
     logout,
