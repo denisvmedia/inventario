@@ -17,6 +17,8 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
+const testUserID = "test-user-123"
+
 func newTestRegistrySet() *registry.Set {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
@@ -30,6 +32,11 @@ func newTestRegistrySet() *registry.Set {
 		FileRegistry:      fileRegistry,
 	}
 	return registrySet
+}
+
+// newTestContext creates a context with test user ID for testing
+func newTestContext() context.Context {
+	return registry.WithUserContext(context.Background(), testUserID)
 }
 
 func TestNewExportService(t *testing.T) {
