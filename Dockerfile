@@ -49,8 +49,20 @@ COPY --from=frontend-builder /app/frontend/dist ../frontend/dist/
 # Stage 3: Production builder
 FROM go-base AS backend-builder
 
-# Build the application for production
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o inventario .
+# Set build arguments for version injection
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+# Build the application for production with proper tags and ldflags
+WORKDIR /app/go/cmd/inventario
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -tags with_frontend \
+    -ldflags "-X github.com/denisvmedia/inventario/internal/version.Version=${VERSION} \
+              -X github.com/denisvmedia/inventario/internal/version.Commit=${COMMIT} \
+              -X github.com/denisvmedia/inventario/internal/version.Date=${BUILD_DATE}" \
+    -a -installsuffix cgo \
+    -o inventario .
 
 # Stage 4: Test environment
 FROM go-base AS test-runner
@@ -86,7 +98,7 @@ RUN mkdir -p /app/uploads /app/data && \
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=backend-builder /app/go/inventario .
+COPY --from=backend-builder /app/go/cmd/inventario/inventario .
 
 # Change ownership
 RUN chown inventario:inventario inventario

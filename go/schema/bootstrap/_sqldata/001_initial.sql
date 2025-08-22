@@ -47,10 +47,23 @@ BEGIN
     END IF;
 END $$;
 
--- Grant schema usage role to the operational user
-GRANT inventario_app TO {{.Username}};
--- Grant migration role to the migration user
-GRANT inventario_migrator TO {{.UsernameForMigrations}};
+-- Grant schema usage role to the operational user (only if different from role name)
+DO $$
+BEGIN
+    IF '{{.Username}}' != 'inventario_app' THEN
+        GRANT inventario_app TO {{.Username}};
+        RAISE NOTICE 'Granted inventario_app role to {{.Username}}';
+    END IF;
+END $$;
+
+-- Grant migration role to the migration user (only if different from role name)
+DO $$
+BEGIN
+    IF '{{.UsernameForMigrations}}' != 'inventario_migrator' THEN
+        GRANT inventario_migrator TO {{.UsernameForMigrations}};
+        RAISE NOTICE 'Granted inventario_migrator role to {{.UsernameForMigrations}}';
+    END IF;
+END $$;
 
 -- Migration role gets schema privileges
 GRANT USAGE, CREATE ON SCHEMA public TO inventario_migrator;
