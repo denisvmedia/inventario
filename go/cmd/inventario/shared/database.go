@@ -17,7 +17,7 @@ func (d *DatabaseConfig) Validate() error {
 	}
 	// Validate that this is a PostgreSQL DSN
 	if !strings.HasPrefix(d.DBDSN, "postgres://") && !strings.HasPrefix(d.DBDSN, "postgresql://") {
-		return errors.New("config: bootstrap migrations only support PostgreSQL databases " + d.DBDSN)
+		return errors.New("config: bootstrap migrations only support PostgreSQL databases")
 	}
 	return nil
 }
