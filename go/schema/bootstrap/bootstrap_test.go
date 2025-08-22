@@ -70,12 +70,12 @@ func TestMigrator_Apply_DSNValidation_UnhappyPath(t *testing.T) {
 		{
 			name:        "non-PostgreSQL DSN should fail",
 			dsn:         "mysql://user:pass@localhost/db",
-			expectedErr: "bootstrap migrations only support PostgreSQL databases",
+			expectedErr: "migrator: bootstrap migrations only support PostgreSQL databases",
 		},
 		{
 			name:        "invalid protocol should fail",
 			dsn:         "invalid://user:pass@localhost/db",
-			expectedErr: "bootstrap migrations only support PostgreSQL databases",
+			expectedErr: "migrator: bootstrap migrations only support PostgreSQL databases",
 		},
 	}
 
