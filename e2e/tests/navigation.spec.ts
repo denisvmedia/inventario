@@ -9,16 +9,19 @@ test.describe('Application Navigation', () => {
   });
 
   test('should load the home page', async ({ page }) => {
+    // Navigate to home page with authentication (required since Phase 4)
+    await navigateWithAuth(page, '/');
+
     // Verify the home page loaded correctly
     await expect(page.locator('h1')).toContainText('Welcome to Inventario');
-    
+
     // Verify navigation elements are present
     await expect(page.locator('nav')).toBeVisible();
     await expect(page.locator('nav')).toContainText('Home');
     await expect(page.locator('nav')).toContainText('Locations');
     await expect(page.locator('nav')).toContainText('Commodities');
     await expect(page.locator('nav')).toContainText('System');
-    
+
     // Verify navigation cards are present
     await expect(page.locator('.navigation-cards')).toBeVisible();
     await expect(page.locator('.navigation-cards .card')).toHaveCount(4);
