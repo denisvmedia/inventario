@@ -95,22 +95,22 @@ services:
       INVENTARIO_MIGRATE_DATA_ADMIN_NAME: "System Administrator"
 
 # Optional: Override volume mount paths for production
-services:
-  postgres:
-    volumes:
-      # Override PostgreSQL data path
-      - /var/lib/inventario/postgres:/var/lib/postgresql/data
-      - ./init-scripts/01-create-users.sh:/docker-entrypoint-initdb.d/01-create-users.sh:ro
-
-  inventario-init-data:
-    volumes:
-      # Override init state path
-      - /var/lib/inventario/init-state:/app/state
-
-  inventario:
-    volumes:
-      # Override uploads path
-      - /var/lib/inventario/uploads:/app/uploads
+#services:
+#  postgres:
+#    volumes:
+#      # Override PostgreSQL data path
+#      - /var/lib/inventario/postgres:/var/lib/postgresql/data
+#      - ./init-scripts/01-create-users.sh:/docker-entrypoint-initdb.d/01-create-users.sh:ro
+#
+#  inventario-init-data:
+#    volumes:
+#      # Override init state path
+#      - /var/lib/inventario/init-state:/app/state
+#
+#  inventario:
+#    volumes:
+#      # Override uploads path
+#      - /var/lib/inventario/uploads:/app/uploads
 
 # Optional: Add external network for reverse proxy integration
 #networks:
