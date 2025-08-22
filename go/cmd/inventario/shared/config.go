@@ -26,12 +26,15 @@ func GetConfigFile() string {
 }
 
 func ReadSection(sectionName string, target any) error {
+	replacer := strings.NewReplacer(".", "_", "-", "_")
+	envPrefixFull := fmt.Sprintf("%s_%s_", envPrefix, strings.ToUpper(sectionName))
+	tag := fmt.Sprintf(`yaml:"%s" env-prefix:"%s"`, sectionName, replacer.Replace(envPrefixFull))
 	sectionType := reflect.TypeOf(target).Elem()
 	wrapperType := reflect.StructOf([]reflect.StructField{
 		{
 			Name: "Section",
 			Type: sectionType,
-			Tag:  reflect.StructTag(fmt.Sprintf(`yaml:"%s" env-prefix:"%s_%s_"`, sectionName, envPrefix, strings.ToUpper(sectionName))),
+			Tag:  reflect.StructTag(tag),
 		},
 	})
 
@@ -54,12 +57,15 @@ func TryReadSection(sectionName string, target any) {
 }
 
 func ReadVirtualSection(sectionName string, target any) error {
+	replacer := strings.NewReplacer(".", "_", "-", "_")
+	envPrefixFull := fmt.Sprintf("%s_%s_", envPrefix, strings.ToUpper(sectionName))
+	tag := fmt.Sprintf(`yaml:",inline" env-prefix:"%s"`, replacer.Replace(envPrefixFull))
 	sectionType := reflect.TypeOf(target).Elem()
 	wrapperType := reflect.StructOf([]reflect.StructField{
 		{
 			Name: "Section",
 			Type: sectionType,
-			Tag:  reflect.StructTag(fmt.Sprintf(`yaml:",inline" env-prefix:"%s_%s_"`, envPrefix, strings.ToUpper(sectionName))),
+			Tag:  reflect.StructTag(tag),
 		},
 	})
 

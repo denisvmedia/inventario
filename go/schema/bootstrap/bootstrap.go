@@ -50,7 +50,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 
 	// Validate that this is a PostgreSQL DSN
 	if !strings.HasPrefix(args.DSN, "postgres://") && !strings.HasPrefix(args.DSN, "postgresql://") {
-		return fmt.Errorf("bootstrap migrations only support PostgreSQL databases")
+		return fmt.Errorf("migrator: bootstrap migrations only support PostgreSQL databases")
 	}
 
 	// Get all SQL files from embedded filesystem
