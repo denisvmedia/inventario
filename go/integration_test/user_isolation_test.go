@@ -5,7 +5,6 @@ import (
 	"os"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
@@ -33,7 +32,7 @@ func setupTestDatabase(t *testing.T) (*registry.Set, func()) {
 }
 
 // createTestUser creates a test user with the given email and returns the created user
-func createTestUser(c *qt.C, registrySet *registry.Set, email string) *models.User {
+func createTestUser(t *testing.T, registrySet *registry.Set, email string) *models.User {
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "user-" + email},
@@ -46,11 +45,17 @@ func createTestUser(c *qt.C, registrySet *registry.Set, email string) *models.Us
 	}
 
 	err := user.SetPassword("testpassword123")
-	c.Assert(err, qt.IsNil)
+	if err != nil {
+		t.Fatalf("Failed to set password: %v", err)
+	}
 
 	created, err := registrySet.UserRegistry.Create(context.Background(), user)
-	c.Assert(err, qt.IsNil)
-	c.Assert(created, qt.IsNotNil)
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+	if created == nil {
+		t.Fatal("Created user is nil")
+	}
 
 	return created
 }

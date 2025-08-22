@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
@@ -15,14 +14,13 @@ import (
 
 // TestUserIsolation_ComprehensiveScenarios tests complex real-world scenarios
 func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
-	c := qt.New(t)
 	registrySet, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
 	// Create multiple users for complex scenarios
-	user1 := createTestUser(c, registrySet, "user1@comprehensive.com")
-	user2 := createTestUser(c, registrySet, "user2@comprehensive.com")
-	user3 := createTestUser(c, registrySet, "user3@comprehensive.com")
+	user1 := createTestUser(t, registrySet, "user1@comprehensive.com")
+	user2 := createTestUser(t, registrySet, "user2@comprehensive.com")
+	user3 := createTestUser(t, registrySet, "user3@comprehensive.com")
 
 	ctx1 := registry.WithUserContext(context.Background(), user1.ID)
 	ctx2 := registry.WithUserContext(context.Background(), user2.ID)
