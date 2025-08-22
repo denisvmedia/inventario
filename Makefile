@@ -173,7 +173,6 @@ test: test-go test-frontend
 test-e2e:
 	$(CD) e2e && npm install && npm run test
 
-
 # Seed the database
 .PHONY: seed-db
 seed-db:
