@@ -112,7 +112,7 @@ func TestExportServiceProcessExport_InvalidID(t *testing.T) {
 	registrySet := newTestRegistrySet()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Test with non-existent export ID
 	err := service.ProcessExport(ctx, "non-existent-id")
@@ -127,13 +127,14 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 	registrySet := newTestRegistrySet()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create a test export in the database
 	export := models.Export{
-		Type:            models.ExportTypeCommodities,
-		Status:          models.ExportStatusPending,
-		IncludeFileData: false,
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", testUserID),
+		Type:                models.ExportTypeCommodities,
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     false,
 	}
 
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
@@ -158,7 +159,7 @@ func TestStreamXMLExport(t *testing.T) {
 	registrySet := newTestRegistrySet()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Test different export types
 	testCases := []struct {
@@ -175,9 +176,10 @@ func TestStreamXMLExport(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			export := models.Export{
-				Type:            tc.exportType,
-				Status:          models.ExportStatusPending,
-				IncludeFileData: false,
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-"+tc.name, "test-tenant", testUserID),
+				Type:                tc.exportType,
+				Status:              models.ExportStatusPending,
+				IncludeFileData:     false,
 			}
 
 			var buf bytes.Buffer
@@ -201,12 +203,13 @@ func TestStreamXMLExport_InvalidType(t *testing.T) {
 	registrySet := newTestRegistrySet()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	export := models.Export{
-		Type:            "invalid_type",
-		Status:          models.ExportStatusPending,
-		IncludeFileData: false,
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-invalid", "test-tenant", testUserID),
+		Type:                "invalid_type",
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     false,
 	}
 
 	var buf bytes.Buffer
@@ -222,10 +225,10 @@ func TestGenerateExport(t *testing.T) {
 	registrySet := newTestRegistrySet()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	export := models.Export{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("test-export-123", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-123", "default-tenant", testUserID),
 		Type:                models.ExportTypeCommodities,
 		Status:              models.ExportStatusPending,
 		IncludeFileData:     false,
@@ -281,19 +284,19 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create test data
-	location := models.Location{TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"), Name: "Location 1", Address: "Address 1"}
+	location := models.Location{TenantAwareEntityID: models.WithTenantUserAwareEntityID("loc1", "default-tenant", testUserID), Name: "Location 1", Address: "Address 1"}
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 
-	area := models.Area{TenantAwareEntityID: models.WithTenantAwareEntityID("area1", "default-tenant"), Name: "Area 1", LocationID: createdLocation.ID}
+	area := models.Area{TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "default-tenant", testUserID), Name: "Area 1", LocationID: createdLocation.ID}
 	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("commodity1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity1", "default-tenant", testUserID),
 		Name:                "Test Commodity",
 		Type:                models.CommodityTypeElectronics,
 		AreaID:              createdArea.ID,
@@ -320,7 +323,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 
 	// Create test file models (they will automatically be linked to the commodity)
 	image := models.Image{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("img1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("img1", "default-tenant", testUserID),
 		CommodityID:         createdCommodity.ID,
 		File: &models.File{
 			Path:         "test-image",
@@ -333,7 +336,7 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	invoice := models.Invoice{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("inv1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("inv1", "default-tenant", testUserID),
 		CommodityID:         createdCommodity.ID,
 		File: &models.File{
 			Path:         "test-invoice",
@@ -413,19 +416,19 @@ func TestBase64FileDataVerification(t *testing.T) {
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	service := NewExportService(registrySet, uploadLocation)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create test data
-	location := models.Location{TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"), Name: "Location 1", Address: "Address 1"}
+	location := models.Location{TenantAwareEntityID: models.WithTenantUserAwareEntityID("loc1", "default-tenant", testUserID), Name: "Location 1", Address: "Address 1"}
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 
-	area := models.Area{TenantAwareEntityID: models.WithTenantAwareEntityID("area1", "default-tenant"), Name: "Area 1", LocationID: createdLocation.ID}
+	area := models.Area{TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "default-tenant", testUserID), Name: "Area 1", LocationID: createdLocation.ID}
 	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("commodity1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity1", "default-tenant", testUserID),
 		Name:                "Test Commodity",
 		Type:                models.CommodityTypeElectronics,
 		AreaID:              createdArea.ID,
@@ -463,7 +466,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 		switch tf.fileType {
 		case "image":
 			image := models.Image{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("img-"+tf.path, "default-tenant"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("img-"+tf.path, "default-tenant", testUserID),
 				CommodityID:         createdCommodity.ID,
 				File: &models.File{
 					Path:         "img-" + tf.path,
@@ -476,7 +479,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		case "invoice":
 			invoice := models.Invoice{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("inv-"+tf.path, "default-tenant"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("inv-"+tf.path, "default-tenant", testUserID),
 				CommodityID:         createdCommodity.ID,
 				File: &models.File{
 					Path:         "inv-" + tf.path,
@@ -489,7 +492,7 @@ func TestBase64FileDataVerification(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		case "manual":
 			manual := models.Manual{
-				TenantAwareEntityID: models.WithTenantAwareEntityID("man-"+tf.path, "default-tenant"),
+				TenantAwareEntityID: models.WithTenantUserAwareEntityID("man-"+tf.path, "default-tenant", testUserID),
 				CommodityID:         createdCommodity.ID,
 				File: &models.File{
 					Path:         "man-" + tf.path,
@@ -549,9 +552,10 @@ func TestBase64FileDataVerification(t *testing.T) {
 
 	// Test full export with file data and verify base64 encoding in XML
 	export := models.Export{
-		Type:            models.ExportTypeFullDatabase,
-		Status:          models.ExportStatusPending,
-		IncludeFileData: true,
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-base64", "test-tenant", testUserID),
+		Type:                models.ExportTypeFullDatabase,
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     true,
 	}
 
 	var buf bytes.Buffer
@@ -578,7 +582,7 @@ func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test data
-	ctx := context.Background()
+	ctx := newTestContext()
 	registrySet := createTestRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
@@ -591,10 +595,11 @@ func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 
 	// Create test export
 	testExport := &models.Export{
-		Type:            models.ExportTypeFullDatabase,
-		Status:          models.ExportStatusPending,
-		IncludeFileData: true,
-		Description:     "Test export",
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-stats", "test-tenant", testUserID),
+		Type:                models.ExportTypeFullDatabase,
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     true,
+		Description:         "Test export",
 	}
 
 	// Save export
@@ -627,7 +632,7 @@ func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 func TestExportService_ProcessExport_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
 
-	ctx := context.Background()
+	ctx := newTestContext()
 	registrySet := createTestRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
@@ -635,10 +640,11 @@ func TestExportService_ProcessExport_WithoutFileData(t *testing.T) {
 
 	// Create test export without file data
 	testExport := &models.Export{
-		Type:            models.ExportTypeFullDatabase,
-		Status:          models.ExportStatusPending,
-		IncludeFileData: false,
-		Description:     "Test export without files",
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-no-files", "test-tenant", testUserID),
+		Type:                models.ExportTypeFullDatabase,
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     false,
+		Description:         "Test export without files",
 	}
 
 	// Save export
@@ -670,7 +676,7 @@ func TestExportService_ProcessExport_WithoutFileData(t *testing.T) {
 func TestExportService_Base64SizeTracking(t *testing.T) {
 	c := qt.New(t)
 
-	ctx := context.Background()
+	ctx := newTestContext()
 	registrySet := createTestRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
@@ -683,10 +689,11 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 
 	// Create test export with file data
 	testExport := &models.Export{
-		Type:            models.ExportTypeCommodities,
-		Status:          models.ExportStatusPending,
-		IncludeFileData: true,
-		Description:     "Test base64 size tracking",
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-base64-size", "test-tenant", testUserID),
+		Type:                models.ExportTypeCommodities,
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     true,
+		Description:         "Test base64 size tracking",
 	}
 
 	// Save export
@@ -735,12 +742,12 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test locations
 	location1 := models.Location{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("loc1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("loc1", "default-tenant", testUserID),
 		Name:                "Test Location 1",
 		Address:             "123 Test St",
 	}
 	location2 := models.Location{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("loc2", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("loc2", "default-tenant", testUserID),
 		Name:                "Test Location 2",
 		Address:             "456 Test Ave",
 	}
@@ -752,17 +759,17 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test areas
 	area1 := models.Area{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("area1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "default-tenant", testUserID),
 		Name:                "Test Area 1",
 		LocationID:          savedLocation1.ID,
 	}
 	area2 := models.Area{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("area2", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("area2", "default-tenant", testUserID),
 		Name:                "Test Area 2",
 		LocationID:          savedLocation1.ID,
 	}
 	area3 := models.Area{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("area3", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("area3", "default-tenant", testUserID),
 		Name:                "Test Area 3",
 		LocationID:          savedLocation2.ID,
 	}
@@ -776,7 +783,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test commodities
 	commodity1 := models.Commodity{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("commodity1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity1", "default-tenant", testUserID),
 		Name:                "Test Commodity 1",
 		AreaID:              savedArea1.ID,
 		Count:               1,
@@ -784,7 +791,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		Status:              models.CommodityStatusInUse,
 	}
 	commodity2 := models.Commodity{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("commodity2", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity2", "default-tenant", testUserID),
 		Name:                "Test Commodity 2",
 		AreaID:              savedArea2.ID,
 		Count:               2,
@@ -799,7 +806,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test images
 	image1 := models.Image{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("image1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("image1", "default-tenant", testUserID),
 		CommodityID:         savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-image-1",
@@ -809,7 +816,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		},
 	}
 	image2 := models.Image{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("image2", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("image2", "default-tenant", testUserID),
 		CommodityID:         savedCommodity2.ID,
 		File: &models.File{
 			Path:         "test-image-2",
@@ -826,7 +833,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test invoice
 	invoice1 := models.Invoice{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("invoice1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("invoice1", "default-tenant", testUserID),
 		CommodityID:         savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-invoice-1",
@@ -841,7 +848,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	// Create test manual
 	manual1 := models.Manual{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("manual1", "default-tenant"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("manual1", "default-tenant", testUserID),
 		CommodityID:         savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-manual-1",
