@@ -1,5 +1,25 @@
 import axios from 'axios'
 
+// Navigation function that can be mocked in tests
+// eslint-disable-next-line no-unused-vars
+export let navigateToLogin: (currentPath: string) => void = (currentPath: string) => {
+  // Default implementation uses window.location
+  window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
+}
+
+// Set up router navigation after module loads to avoid circular dependency
+if (typeof window !== 'undefined') {
+  // Use dynamic import to avoid circular dependency
+  import('../router').then(({ default: router }) => {
+    // Update the exported function to use router
+    navigateToLogin = (currentPath: string) => {
+      router.push({ path: '/login', query: { redirect: currentPath } })
+    }
+  }).catch((error) => {
+    console.warn('Router import failed, using window.location fallback:', error)
+  })
+}
+
 const api = axios.create({
   baseURL: '',  // Empty because we're using Vite's proxy
   headers: {
@@ -88,8 +108,8 @@ api.interceptors.response.use(
 
       // Redirect to login page if not already there
       if (window.location.pathname !== '/login') {
-        const currentPath = window.location.pathname
-        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
+        const currentPath = window.location.pathname + window.location.search
+        navigateToLogin(currentPath)
       }
     }
 

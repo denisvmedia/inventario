@@ -6,7 +6,7 @@
         <p>Sign in to your account</p>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="login-form-content">
+      <form class="login-form-content" @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="email">Email</label>
           <input
