@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -62,8 +63,20 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 				TenantID: "test-tenant-id",
 				UserID:   user1.ID,
 			},
-			Name:   "User1 Product",
-			AreaID: &createdArea1.ID,
+			Name:                   "User1 Product",
+			ShortName:              "UP1",
+			Type:                   models.CommodityTypeElectronics,
+			Count:                  1,
+			OriginalPrice:          decimal.NewFromFloat(100.00),
+			OriginalPriceCurrency:  "USD",
+			ConvertedOriginalPrice: decimal.Zero,
+			CurrentPrice:           decimal.NewFromFloat(90.00),
+			Status:                 models.CommodityStatusInUse,
+			PurchaseDate:           models.ToPDate("2023-01-01"),
+			RegisteredDate:         models.ToPDate("2023-01-02"),
+			LastModifiedDate:       models.ToPDate("2023-01-03"),
+			Draft:                  false,
+			AreaID:                 createdArea1.ID,
 		}
 		createdCommodity1, err := registrySet.CommodityRegistry.CreateWithUser(ctx1, commodity1)
 		c.Assert(err, qt.IsNil)
@@ -122,19 +135,21 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		// Create files associated with the commodity
-		file1 := models.File{
+		file1 := models.FileEntity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: "comp-file-1"},
 				TenantID: "test-tenant-id",
 				UserID:   user1.ID,
 			},
-			OriginalPath: "/uploads/user1-file1.jpg",
-			Path:         "user1-file1",
-			Ext:          "jpg",
-			Type:         "image/jpeg",
-			Size:         1024,
-			EntityType:   "commodity",
-			EntityID:     createdCommodity.ID,
+			Title:       "User1 File",
+			Description: "A file associated with commodity",
+			Type:        models.FileTypeImage,
+			File: &models.File{
+				OriginalPath: "/uploads/user1-file1.jpg",
+				Path:         "user1-file1",
+				Ext:          ".jpg",
+				MIMEType:     "image/jpeg",
+			},
 		}
 		createdFile1, err := registrySet.FileRegistry.CreateWithUser(ctx1, file1)
 		c.Assert(err, qt.IsNil)
@@ -166,7 +181,19 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 					TenantID: "test-tenant-id",
 					UserID:   user1.ID,
 				},
-				Name: fmt.Sprintf("Export Test Commodity %d", i),
+				Name:                   fmt.Sprintf("Export Test Commodity %d", i),
+				ShortName:              fmt.Sprintf("ETC%d", i),
+				Type:                   models.CommodityTypeElectronics,
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+				RegisteredDate:         models.ToPDate("2023-01-02"),
+				LastModifiedDate:       models.ToPDate("2023-01-03"),
+				Draft:                  false,
 			}
 			_, err := registrySet.CommodityRegistry.CreateWithUser(ctx1, commodity)
 			c.Assert(err, qt.IsNil)
@@ -179,7 +206,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 				TenantID: "test-tenant-id",
 				UserID:   user1.ID,
 			},
-			Name:        "User1 Data Export",
+			Type:        models.ExportTypeFullDatabase,
 			Description: "Export of User1's data",
 			Status:      models.ExportStatusCompleted,
 		}
@@ -211,15 +238,26 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 				TenantID: "test-tenant-id",
 				UserID:   user1.ID,
 			},
-			Name:        "Original Name",
-			Description: "Original Description",
+			Name:                   "Original Name",
+			ShortName:              "ON",
+			Type:                   models.CommodityTypeElectronics,
+			Count:                  1,
+			OriginalPrice:          decimal.NewFromFloat(100.00),
+			OriginalPriceCurrency:  "USD",
+			ConvertedOriginalPrice: decimal.Zero,
+			CurrentPrice:           decimal.NewFromFloat(90.00),
+			Status:                 models.CommodityStatusInUse,
+			PurchaseDate:           models.ToPDate("2023-01-01"),
+			RegisteredDate:         models.ToPDate("2023-01-02"),
+			LastModifiedDate:       models.ToPDate("2023-01-03"),
+			Draft:                  false,
 		}
 		created1, err := registrySet.CommodityRegistry.CreateWithUser(ctx1, commodity1)
 		c.Assert(err, qt.IsNil)
 
 		// User2 tries to update User1's commodity
 		created1.Name = "Hacked Name"
-		created1.Description = "Hacked Description"
+		created1.ShortName = "HN"
 		_, err = registrySet.CommodityRegistry.UpdateWithUser(ctx2, *created1)
 		c.Assert(err, qt.IsNotNil)
 
@@ -232,7 +270,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		retrieved, err := registrySet.CommodityRegistry.GetWithUser(ctx1, created1.ID)
 		c.Assert(err, qt.IsNil)
 		c.Assert(retrieved.Name, qt.Equals, "Original Name")
-		c.Assert(retrieved.Description, qt.Equals, "Original Description")
+		c.Assert(retrieved.ShortName, qt.Equals, "ON")
 	})
 
 	t.Run("Bulk Operations Isolation", func(t *testing.T) {
@@ -247,7 +285,19 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 						TenantID: "test-tenant-id",
 						UserID:   []*models.User{user1, user2, user3}[userIndex].ID,
 					},
-					Name: fmt.Sprintf("User%d Commodity %d", userIndex+1, i),
+					Name:                   fmt.Sprintf("User%d Commodity %d", userIndex+1, i),
+					ShortName:              fmt.Sprintf("U%dC%d", userIndex+1, i),
+					Type:                   models.CommodityTypeElectronics,
+					Count:                  1,
+					OriginalPrice:          decimal.NewFromFloat(100.00),
+					OriginalPriceCurrency:  "USD",
+					ConvertedOriginalPrice: decimal.Zero,
+					CurrentPrice:           decimal.NewFromFloat(90.00),
+					Status:                 models.CommodityStatusInUse,
+					PurchaseDate:           models.ToPDate("2023-01-01"),
+					RegisteredDate:         models.ToPDate("2023-01-02"),
+					LastModifiedDate:       models.ToPDate("2023-01-03"),
+					Draft:                  false,
 				}
 				_, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
 				c.Assert(err, qt.IsNil)

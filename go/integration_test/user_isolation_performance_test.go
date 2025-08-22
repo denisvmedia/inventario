@@ -9,6 +9,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -23,10 +24,12 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 		return
 	}
 
-	registrySet, err := postgres.NewRegistrySet(dsn)
+	registrySetFunc, cleanup := postgres.NewPostgresRegistrySet()
+	registrySet, err := registrySetFunc(registry.Config(dsn))
 	if err != nil {
 		b.Fatalf("Failed to create registry set: %v", err)
 	}
+	defer cleanup()
 
 	// Create test users
 	users := make([]*models.User, 10)
@@ -69,7 +72,19 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 						TenantID: "test-tenant-id",
 						UserID:   user.ID,
 					},
-					Name: fmt.Sprintf("Benchmark Commodity %d", userIndex),
+					Name:                   fmt.Sprintf("Benchmark Commodity %d", userIndex),
+					ShortName:              fmt.Sprintf("BC%d", userIndex),
+					Type:                   models.CommodityTypeElectronics,
+					Count:                  1,
+					OriginalPrice:          decimal.NewFromFloat(100.00),
+					OriginalPriceCurrency:  "USD",
+					ConvertedOriginalPrice: decimal.Zero,
+					CurrentPrice:           decimal.NewFromFloat(90.00),
+					Status:                 models.CommodityStatusInUse,
+					PurchaseDate:           models.ToPDate("2023-01-01"),
+					RegisteredDate:         models.ToPDate("2023-01-02"),
+					LastModifiedDate:       models.ToPDate("2023-01-03"),
+					Draft:                  false,
 				}
 
 				created, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
@@ -151,7 +166,19 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 						TenantID: "test-tenant-id",
 						UserID:   u.ID,
 					},
-					Name: fmt.Sprintf("Load Test Commodity %d-%d", userIndex, j),
+					Name:                   fmt.Sprintf("Load Test Commodity %d-%d", userIndex, j),
+					ShortName:              fmt.Sprintf("LTC%d%d", userIndex, j),
+					Type:                   models.CommodityTypeElectronics,
+					Count:                  1,
+					OriginalPrice:          decimal.NewFromFloat(100.00),
+					OriginalPriceCurrency:  "USD",
+					ConvertedOriginalPrice: decimal.Zero,
+					CurrentPrice:           decimal.NewFromFloat(90.00),
+					Status:                 models.CommodityStatusInUse,
+					PurchaseDate:           models.ToPDate("2023-01-01"),
+					RegisteredDate:         models.ToPDate("2023-01-02"),
+					LastModifiedDate:       models.ToPDate("2023-01-03"),
+					Draft:                  false,
 				}
 
 				_, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
@@ -210,7 +237,19 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 			TenantID: "test-tenant-id",
 			UserID:   user.ID,
 		},
-		Name: "Security Test Commodity",
+		Name:                   "Security Test Commodity",
+		ShortName:              "STC",
+		Type:                   models.CommodityTypeElectronics,
+		Count:                  1,
+		OriginalPrice:          decimal.NewFromFloat(100.00),
+		OriginalPriceCurrency:  "USD",
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.NewFromFloat(90.00),
+		Status:                 models.CommodityStatusInUse,
+		PurchaseDate:           models.ToPDate("2023-01-01"),
+		RegisteredDate:         models.ToPDate("2023-01-02"),
+		LastModifiedDate:       models.ToPDate("2023-01-03"),
+		Draft:                  false,
 	}
 	created, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
 	c.Assert(err, qt.IsNil)
@@ -283,7 +322,19 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 				TenantID: "test-tenant-id",
 				UserID:   user.ID,
 			},
-			Name: fmt.Sprintf("Performance Test Commodity %d", i),
+			Name:                   fmt.Sprintf("Performance Test Commodity %d", i),
+			ShortName:              fmt.Sprintf("PTC%d", i),
+			Type:                   models.CommodityTypeElectronics,
+			Count:                  1,
+			OriginalPrice:          decimal.NewFromFloat(100.00),
+			OriginalPriceCurrency:  "USD",
+			ConvertedOriginalPrice: decimal.Zero,
+			CurrentPrice:           decimal.NewFromFloat(90.00),
+			Status:                 models.CommodityStatusInUse,
+			PurchaseDate:           models.ToPDate("2023-01-01"),
+			RegisteredDate:         models.ToPDate("2023-01-02"),
+			LastModifiedDate:       models.ToPDate("2023-01-03"),
+			Draft:                  false,
 		}
 		_, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
 		c.Assert(err, qt.IsNil)

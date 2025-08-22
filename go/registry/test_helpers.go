@@ -81,8 +81,8 @@ func AssertUserOwnership(c *qt.C, entity TestEntityWithUser, expectedUserID stri
 // AssertUserIsolation verifies that a list of entities all belong to the expected user
 func AssertUserIsolation(c *qt.C, entities []TestEntityWithUser, expectedUserID string) {
 	for i, entity := range entities {
-		c.Assert(entity.GetUserID(), qt.Equals, expectedUserID, 
-			qt.Commentf("Entity at index %d belongs to user %s, expected %s", 
+		c.Assert(entity.GetUserID(), qt.Equals, expectedUserID,
+			qt.Commentf("Entity at index %d belongs to user %s, expected %s",
 				i, entity.GetUserID(), expectedUserID))
 	}
 }
@@ -168,10 +168,10 @@ func (m *MockUserRegistry) Count(ctx context.Context) (int, error) {
 func TestUserIsolationPattern(t *testing.T, testName string, testFunc func(*qt.C, context.Context, context.Context, *models.User, *models.User)) {
 	t.Run(testName, func(t *testing.T) {
 		c := qt.New(t)
-		
+
 		// Create mock user registry
 		userRegistry := NewMockUserRegistry()
-		
+
 		// Create two test users
 		user1, err := userRegistry.Create(context.Background(), models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
@@ -183,7 +183,7 @@ func TestUserIsolationPattern(t *testing.T, testName string, testFunc func(*qt.C
 			Role:  models.UserRoleUser,
 		})
 		c.Assert(err, qt.IsNil)
-		
+
 		user2, err := userRegistry.Create(context.Background(), models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: "user-2"},
@@ -194,11 +194,11 @@ func TestUserIsolationPattern(t *testing.T, testName string, testFunc func(*qt.C
 			Role:  models.UserRoleUser,
 		})
 		c.Assert(err, qt.IsNil)
-		
+
 		// Create contexts for each user
 		ctx1 := WithUserContext(context.Background(), user1.ID)
 		ctx2 := WithUserContext(context.Background(), user2.ID)
-		
+
 		// Run the test function
 		testFunc(c, ctx1, ctx2, user1, user2)
 	})

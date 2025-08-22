@@ -15,8 +15,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services"
 )
 
 // setupTestAPIServer creates a test API server with authentication
@@ -27,10 +30,12 @@ func setupTestAPIServer(t *testing.T) (*httptest.Server, *models.User, *models.U
 		return nil, nil, nil, "", nil
 	}
 
-	registrySet, err := postgres.NewRegistrySet(dsn)
+	registrySetFunc, cleanup := postgres.NewPostgresRegistrySet()
+	registrySet, err := registrySetFunc(registry.Config(dsn))
 	if err != nil {
 		t.Fatalf("Failed to create registry set: %v", err)
 	}
+	defer cleanup()
 
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
@@ -77,11 +82,15 @@ func setupTestAPIServer(t *testing.T) (*httptest.Server, *models.User, *models.U
 
 	// Create API server
 	params := apiserver.Params{
-		RegistrySet: registrySet,
-		JWTSecret:   jwtSecret,
+		RegistrySet:    registrySet,
+		EntityService:  services.NewEntityService(registrySet, "file://uploads?memfs=1&create_dir=1"),
+		UploadLocation: "file://uploads?memfs=1&create_dir=1",
+		DebugInfo:      debug.NewInfo("postgres://test", "file://uploads?memfs=1&create_dir=1"),
+		StartTime:      time.Now(),
+		JWTSecret:      jwtSecret,
 	}
 
-	handler := apiserver.New(params)
+	handler := apiserver.APIServer(params, nil)
 	server := httptest.NewServer(handler)
 
 	cleanup := func() {
@@ -629,7 +638,6 @@ func TestAPIAuthentication(t *testing.T) {
 
 // TestAPIInvalidTokens tests API behavior with invalid JWT tokens
 func TestAPIInvalidTokens(t *testing.T) {
-	c := qt.New(t)
 	server, _, _, _, cleanup := setupTestAPIServer(t)
 	defer cleanup()
 
@@ -645,7 +653,6 @@ func TestAPIInvalidTokens(t *testing.T) {
 
 	for _, tokenTest := range invalidTokens {
 		t.Run(tokenTest.name, func(t *testing.T) {
-			c := qt.New(t)
 
 			req, err := http.NewRequest("GET", server.URL+"/api/v1/commodities", nil)
 			c.Assert(err, qt.IsNil)
@@ -656,8 +663,12 @@ func TestAPIInvalidTokens(t *testing.T) {
 
 			client := &http.Client{}
 			resp, err := client.Do(req)
-			c.Assert(err, qt.IsNil)
-			c.Assert(resp.StatusCode, qt.Equals, http.StatusUnauthorized)
+			if err != nil {
+				t.Fatalf("Request failed: %v", err)
+			}
+			if resp.StatusCode != http.StatusUnauthorized {
+				t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, resp.StatusCode)
+			}
 			resp.Body.Close()
 		})
 	}
@@ -665,16 +676,19 @@ func TestAPIInvalidTokens(t *testing.T) {
 
 // TestAPIDirectEntityAccess tests that users cannot access specific entities by ID
 func TestAPIDirectEntityAccess(t *testing.T) {
-	c := qt.New(t)
 	server, user1, user2, jwtSecret, cleanup := setupTestAPIServer(t)
 	defer cleanup()
 
 	// Generate tokens for both users
 	token1, err := generateJWTToken(user1, jwtSecret)
-	c.Assert(err, qt.IsNil)
+	if err != nil {
+		t.Fatalf("Failed to generate token for user1: %v", err)
+	}
 
 	token2, err := generateJWTToken(user2, jwtSecret)
-	c.Assert(err, qt.IsNil)
+	if err != nil {
+		t.Fatalf("Failed to generate token for user2: %v", err)
+	}
 
 	// User1 creates a commodity
 	commodityData := map[string]interface{}{
@@ -685,29 +699,47 @@ func TestAPIDirectEntityAccess(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	resp, err := makeAuthenticatedRequest("POST", server.URL+"/api/v1/commodities", jsonData, token1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(resp.StatusCode, qt.Equals, http.StatusCreated)
+	if err != nil {
+		t.Fatalf("Failed to create commodity: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
+	}
 
 	var createdCommodity map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&createdCommodity)
-	c.Assert(err, qt.IsNil)
+	if err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
 	commodityID := createdCommodity["id"].(string)
 	resp.Body.Close()
 
 	// User2 tries to access User1's commodity directly by ID
 	resp, err = makeAuthenticatedRequest("GET", server.URL+"/api/v1/commodities/"+commodityID, nil, token2)
-	c.Assert(err, qt.IsNil)
-	c.Assert(resp.StatusCode, qt.Equals, http.StatusNotFound)
+	if err != nil {
+		t.Fatalf("Failed to access commodity: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, resp.StatusCode)
+	}
 	resp.Body.Close()
 
 	// User1 can access their own commodity
 	resp, err = makeAuthenticatedRequest("GET", server.URL+"/api/v1/commodities/"+commodityID, nil, token1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(resp.StatusCode, qt.Equals, http.StatusOK)
+	if err != nil {
+		t.Fatalf("Failed to access own commodity: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
 
 	var retrievedCommodity map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&retrievedCommodity)
-	c.Assert(err, qt.IsNil)
-	c.Assert(retrievedCommodity["name"], qt.Equals, "User1 Private Commodity")
+	if err != nil {
+		t.Fatalf("Failed to decode commodity: %v", err)
+	}
+	if retrievedCommodity["name"] != "User1 Private Commodity" {
+		t.Errorf("Expected name 'User1 Private Commodity', got %v", retrievedCommodity["name"])
+	}
 	resp.Body.Close()
 }
