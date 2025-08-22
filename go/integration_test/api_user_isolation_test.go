@@ -30,12 +30,11 @@ func setupTestAPIServer(t *testing.T) (*httptest.Server, *models.User, *models.U
 		return nil, nil, nil, "", nil
 	}
 
-	registrySetFunc, cleanup := postgres.NewPostgresRegistrySet()
+	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
 	registrySet, err := registrySetFunc(registry.Config(dsn))
 	if err != nil {
 		t.Fatalf("Failed to create registry set: %v", err)
 	}
-	defer cleanup()
 
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
@@ -95,6 +94,9 @@ func setupTestAPIServer(t *testing.T) (*httptest.Server, *models.User, *models.U
 
 	cleanup := func() {
 		server.Close()
+		if cleanupFunc != nil {
+			cleanupFunc()
+		}
 	}
 
 	return server, createdUser1, createdUser2, string(jwtSecret), cleanup
@@ -212,10 +214,14 @@ func testCommoditiesAPIIsolation(c *qt.C, server *httptest.Server, user1, user2 
 func testCommoditiesAPICreation(c *qt.C, server *httptest.Server, user1, user2 *models.User, jwtSecret string) {
 	// Generate tokens for both users
 	token1, err := generateJWTToken(user1, jwtSecret)
-	c.Assert(err, qt.IsNil)
+	if err != nil {
+		c.Fatalf("Failed to generate token for user1: %v", err)
+	}
 
 	token2, err := generateJWTToken(user2, jwtSecret)
-	c.Assert(err, qt.IsNil)
+	if err != nil {
+		c.Fatalf("Failed to generate token for user2: %v", err)
+	}
 
 	// Both users create commodities
 	commodityData1 := map[string]interface{}{
@@ -234,37 +240,65 @@ func testCommoditiesAPICreation(c *qt.C, server *httptest.Server, user1, user2 *
 
 	// User1 creates commodity
 	resp, err := makeAuthenticatedRequest("POST", server.URL+"/api/v1/commodities", jsonData1, token1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(resp.StatusCode, qt.Equals, http.StatusCreated)
+	if err != nil {
+		c.Fatalf("Failed to create commodity for user1: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		c.Errorf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
+	}
 	resp.Body.Close()
 
 	// User2 creates commodity
 	resp, err = makeAuthenticatedRequest("POST", server.URL+"/api/v1/commodities", jsonData2, token2)
-	c.Assert(err, qt.IsNil)
-	c.Assert(resp.StatusCode, qt.Equals, http.StatusCreated)
+	if err != nil {
+		c.Fatalf("Failed to create commodity for user2: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		c.Errorf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
+	}
 	resp.Body.Close()
 
 	// Each user can only see their own commodity
 	resp, err = makeAuthenticatedRequest("GET", server.URL+"/api/v1/commodities", nil, token1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(resp.StatusCode, qt.Equals, http.StatusOK)
+	if err != nil {
+		c.Fatalf("Failed to list commodities for user1: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		c.Errorf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
 
 	var commodities1 []map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&commodities1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities1), qt.Equals, 1)
-	c.Assert(commodities1[0]["name"], qt.Equals, "User1 Commodity")
+	if err != nil {
+		c.Fatalf("Failed to decode commodities for user1: %v", err)
+	}
+	if len(commodities1) != 1 {
+		c.Errorf("Expected 1 commodity for user1, got %d", len(commodities1))
+	}
+	if commodities1[0]["name"] != "User1 Commodity" {
+		c.Errorf("Expected 'User1 Commodity', got %v", commodities1[0]["name"])
+	}
 	resp.Body.Close()
 
 	resp, err = makeAuthenticatedRequest("GET", server.URL+"/api/v1/commodities", nil, token2)
-	c.Assert(err, qt.IsNil)
-	c.Assert(resp.StatusCode, qt.Equals, http.StatusOK)
+	if err != nil {
+		c.Fatalf("Failed to list commodities for user2: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		c.Errorf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
 
 	var commodities2 []map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&commodities2)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities2), qt.Equals, 1)
-	c.Assert(commodities2[0]["name"], qt.Equals, "User2 Commodity")
+	if err != nil {
+		c.Fatalf("Failed to decode commodities for user2: %v", err)
+	}
+	if len(commodities2) != 1 {
+		c.Errorf("Expected 1 commodity for user2, got %d", len(commodities2))
+	}
+	if commodities2[0]["name"] != "User2 Commodity" {
+		c.Errorf("Expected 'User2 Commodity', got %v", commodities2[0]["name"])
+	}
 	resp.Body.Close()
 }
 
@@ -624,13 +658,19 @@ func TestAPIAuthentication(t *testing.T) {
 				req, err = http.NewRequest(endpoint.method, server.URL+endpoint.path, nil)
 			}
 
-			c.Assert(err, qt.IsNil)
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
+			}
 			req.Header.Set("Content-Type", "application/json")
 
 			client := &http.Client{}
 			resp, err := client.Do(req)
-			c.Assert(err, qt.IsNil)
-			c.Assert(resp.StatusCode, qt.Equals, http.StatusUnauthorized)
+			if err != nil {
+				t.Fatalf("Request failed: %v", err)
+			}
+			if resp.StatusCode != http.StatusUnauthorized {
+				t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, resp.StatusCode)
+			}
 			resp.Body.Close()
 		})
 	}
@@ -655,7 +695,9 @@ func TestAPIInvalidTokens(t *testing.T) {
 		t.Run(tokenTest.name, func(t *testing.T) {
 
 			req, err := http.NewRequest("GET", server.URL+"/api/v1/commodities", nil)
-			c.Assert(err, qt.IsNil)
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
+			}
 
 			if tokenTest.token != "" {
 				req.Header.Set("Authorization", "Bearer "+tokenTest.token)

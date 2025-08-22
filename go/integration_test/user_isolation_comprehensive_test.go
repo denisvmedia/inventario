@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -131,7 +130,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			},
 			Name: "Commodity with Files",
 		}
-		createdCommodity, err := registrySet.CommodityRegistry.CreateWithUser(ctx1, commodity)
+		_, err = registrySet.CommodityRegistry.CreateWithUser(ctx1, commodity)
 		c.Assert(err, qt.IsNil)
 
 		// Create files associated with the commodity
@@ -335,7 +334,7 @@ func TestUserIsolation_EdgeCases(t *testing.T) {
 	defer cleanup()
 
 	user := createTestUser(c, registrySet, "edge@example.com")
-	ctx := registry.WithUserContext(context.Background(), user.ID)
+	_ = registry.WithUserContext(context.Background(), user.ID)
 
 	t.Run("Empty User Context", func(t *testing.T) {
 		c := qt.New(t)
