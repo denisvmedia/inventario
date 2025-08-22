@@ -53,21 +53,6 @@ func ExtractUserFromRequest(r *http.Request) string {
 	return ""
 }
 
-// ExtractTenantUserFromRequest extracts user ID from request context for backward compatibility
-// Deprecated: Use ExtractUserFromRequest instead
-func ExtractTenantUserFromRequest(r *http.Request) (tenantID, userID string) {
-	user := GetUserFromRequest(r)
-	if user != nil {
-		// In user-only mode, we use the user's tenant_id for backward compatibility
-		// but the primary identifier is the user_id
-		return user.TenantID, user.ID
-	}
-
-	// Fallback to default IDs for backward compatibility during transition
-	SetDefaultTenantUserIDs(&tenantID, &userID)
-	return tenantID, userID
-}
-
 // ExtractUserFromContext extracts user ID from context
 // This function replaces ExtractTenantUserFromContext for user-only authentication
 func ExtractUserFromContext(ctx context.Context) string {
@@ -76,19 +61,4 @@ func ExtractUserFromContext(ctx context.Context) string {
 		return user.ID
 	}
 	return ""
-}
-
-// ExtractTenantUserFromContext extracts user ID from context for backward compatibility
-// Deprecated: Use ExtractUserFromContext instead
-func ExtractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
-	user := UserFromContext(ctx)
-	if user != nil {
-		// In user-only mode, we use the user's tenant_id for backward compatibility
-		// but the primary identifier is the user_id
-		return user.TenantID, user.ID
-	}
-
-	// Fallback to default IDs for backward compatibility during transition
-	SetDefaultTenantUserIDs(&tenantID, &userID)
-	return tenantID, userID
 }

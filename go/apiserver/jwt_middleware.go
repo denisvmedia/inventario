@@ -11,63 +11,103 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+// extractTokenFromRequest extracts JWT token from Authorization header or query parameter
+func extractTokenFromRequest(r *http.Request) (string, error) {
+	// Try to get token from Authorization header first
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader {
+			return "", fmt.Errorf("bearer token required")
+		}
+		return tokenString, nil
+	}
+
+	// If no Authorization header, try to get token from query parameter
+	tokenString := r.URL.Query().Get("token")
+	if tokenString == "" {
+		return "", fmt.Errorf("authorization header or token query parameter required")
+	}
+	return tokenString, nil
+}
+
+// validateJWTToken validates the JWT token and returns the claims
+func validateJWTToken(tokenString string, jwtSecret []byte) (jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jwtSecret, nil
+	})
+
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+
+	return claims, nil
+}
+
+// extractUserIDFromClaims extracts user ID from JWT claims
+func extractUserIDFromClaims(claims jwt.MapClaims) (string, error) {
+	userID, ok := claims["user_id"].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid user ID in token")
+	}
+	return userID, nil
+}
+
+// validateUser retrieves and validates the user from the registry
+func validateUser(r *http.Request, userID string, userRegistry registry.UserRegistry) (*models.User, error) {
+	user, err := userRegistry.Get(r.Context(), userID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	if !user.IsActive {
+		return nil, fmt.Errorf("user account disabled")
+	}
+
+	return user, nil
+}
+
 // JWTMiddleware creates middleware that validates JWT tokens and extracts user context
 func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var tokenString string
-
-			// Try to get token from Authorization header first
-			authHeader := r.Header.Get("Authorization")
-			if authHeader != "" {
-				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
-				if tokenString == authHeader {
-					http.Error(w, "Bearer token required", http.StatusUnauthorized)
-					return
-				}
-			} else {
-				// If no Authorization header, try to get token from query parameter
-				tokenString = r.URL.Query().Get("token")
-				if tokenString == "" {
-					http.Error(w, "Authorization header or token query parameter required", http.StatusUnauthorized)
-					return
-				}
-			}
-
-			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-				}
-				return jwtSecret, nil
-			})
-
-			if err != nil || !token.Valid {
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
-				return
-			}
-
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				http.Error(w, "Invalid token claims", http.StatusUnauthorized)
-				return
-			}
-
-			userID, ok := claims["user_id"].(string)
-			if !ok {
-				http.Error(w, "Invalid user ID in token", http.StatusUnauthorized)
-				return
-			}
-
-			// Get user from registry
-			user, err := userRegistry.Get(r.Context(), userID)
+			// Extract token from request
+			tokenString, err := extractTokenFromRequest(r)
 			if err != nil {
-				http.Error(w, "User not found", http.StatusUnauthorized)
+				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
 			}
 
-			// Check if user is active
-			if !user.IsActive {
-				http.Error(w, "User account disabled", http.StatusForbidden)
+			// Validate JWT token
+			claims, err := validateJWTToken(tokenString, jwtSecret)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
+
+			// Extract user ID from claims
+			userID, err := extractUserIDFromClaims(claims)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
+
+			// Validate user
+			user, err := validateUser(r, userID, userRegistry)
+			if err != nil {
+				if err.Error() == "user account disabled" {
+					http.Error(w, err.Error(), http.StatusForbidden)
+				} else {
+					http.Error(w, err.Error(), http.StatusUnauthorized)
+				}
 				return
 			}
 

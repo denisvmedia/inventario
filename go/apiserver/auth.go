@@ -13,6 +13,15 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+const (
+	// defaultTenantID is used as a fallback tenant ID during the transition to user-only authentication
+	// TODO: Remove this when user-only GetByEmail method is implemented
+	defaultTenantID = "test-tenant-id"
+
+	// jwtTokenExpiration defines how long JWT tokens remain valid
+	jwtTokenExpiration = 24 * time.Hour
+)
+
 type AuthAPI struct {
 	userRegistry registry.UserRegistry
 	jwtSecret    []byte
@@ -54,7 +63,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// Get user by email - for user-only mode, we use a default tenant ID
 	// Note: This uses the existing GetByEmail method with a default tenant ID
 	// In a future version, this should be replaced with a user-only GetByEmail method
-	user, err := api.userRegistry.GetByEmail(r.Context(), "test-tenant-id", req.Email)
+	user, err := api.userRegistry.GetByEmail(r.Context(), defaultTenantID, req.Email)
 	if err != nil {
 		log.WithError(err).WithField("email", req.Email).Warn("Failed login attempt: user not found")
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
@@ -76,7 +85,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate JWT token without tenant information
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := time.Now().Add(jwtTokenExpiration)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
 		"role":    user.Role,

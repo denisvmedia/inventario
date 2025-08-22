@@ -1,14 +1,4 @@
 import api from './api'
-import axios from 'axios'
-
-// Create a separate axios instance for auth endpoints with application/json
-const authApi = axios.create({
-  baseURL: '',  // Empty because we're using Vite's proxy
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json'
-  }
-})
 
 export interface LoginRequest {
   email: string
@@ -40,8 +30,13 @@ class AuthService {
    * Login with email and password
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    // Use authApi with application/json content type for auth endpoints
-    const response = await authApi.post('/api/v1/auth/login', credentials)
+    // Use main api instance with application/json content type for auth endpoints
+    const response = await api.post('/api/v1/auth/login', credentials, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
     const data = response.data
 
     // Store token and user data immediately and synchronously
@@ -61,11 +56,13 @@ class AuthService {
    */
   async logout(): Promise<void> {
     try {
-      // Add authorization header for logout
+      // Use main api instance with application/json content type for auth endpoints
       const token = this.getToken()
       if (token) {
-        await authApi.post('/api/v1/auth/logout', {}, {
+        await api.post('/api/v1/auth/logout', {}, {
           headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'Authorization': `Bearer ${token}`
           }
         })

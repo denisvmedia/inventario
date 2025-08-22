@@ -68,11 +68,11 @@ func TestJWTMiddleware(t *testing.T) {
 		return tokenString
 	}
 
-	tests := []struct {
-		name           string
-		setupRequest   func(*http.Request)
-		expectedStatus int
-		checkContext   func(t *testing.T, r *http.Request)
+	// Test successful authentication cases
+	successTests := []struct {
+		name         string
+		setupRequest func(*http.Request)
+		checkContext func(t *testing.T, r *http.Request)
 	}{
 		{
 			name: "valid token with active user",
@@ -80,7 +80,6 @@ func TestJWTMiddleware(t *testing.T) {
 				token := createToken("user-123")
 				req.Header.Set("Authorization", "Bearer "+token)
 			},
-			expectedStatus: http.StatusOK,
 			checkContext: func(t *testing.T, r *http.Request) {
 				c := qt.New(t)
 				user := apiserver.UserFromContext(r.Context())
@@ -89,6 +88,14 @@ func TestJWTMiddleware(t *testing.T) {
 				c.Assert(user.Email, qt.Equals, "test@example.com")
 			},
 		},
+	}
+
+	// Test authentication failure cases
+	failureTests := []struct {
+		name           string
+		setupRequest   func(*http.Request)
+		expectedStatus int
+	}{
 		{
 			name: "missing authorization header",
 			setupRequest: func(req *http.Request) {
@@ -169,14 +176,15 @@ func TestJWTMiddleware(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	// Test successful authentication cases
+	for _, tt := range successTests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
 			// Create middleware
 			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry)
 
-			// Create test handler that checks if user is in context
+			// Create test handler that captures the request
 			var capturedRequest *http.Request
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				capturedRequest = r
@@ -195,12 +203,39 @@ func TestJWTMiddleware(t *testing.T) {
 			wrappedHandler.ServeHTTP(resp, req)
 
 			// Check status code
-			c.Assert(resp.Code, qt.Equals, tt.expectedStatus)
+			c.Assert(resp.Code, qt.Equals, http.StatusOK)
 
-			// Run context checks if provided and request was successful
-			if tt.checkContext != nil && resp.Code == http.StatusOK {
-				tt.checkContext(t, capturedRequest)
-			}
+			// Check context (always run for success tests)
+			tt.checkContext(t, capturedRequest)
+		})
+	}
+
+	// Test authentication failure cases
+	for _, tt := range failureTests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			// Create middleware
+			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry)
+
+			// Create test handler
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+
+			// Wrap handler with middleware
+			wrappedHandler := middleware(handler)
+
+			// Create request
+			req := httptest.NewRequest("GET", "/test", nil)
+			tt.setupRequest(req)
+			resp := httptest.NewRecorder()
+
+			// Execute request
+			wrappedHandler.ServeHTTP(resp, req)
+
+			// Check status code
+			c.Assert(resp.Code, qt.Equals, tt.expectedStatus)
 		})
 	}
 }

@@ -82,15 +82,19 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Extract tenant and user from authenticated request context
-	tenantID, userID := ExtractTenantUserFromRequest(r)
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
 
 	location := *input.Data.Attributes
 	if location.TenantID == "" {
-		location.TenantID = tenantID
+		location.TenantID = user.TenantID
 	}
 	if location.UserID == "" {
-		location.UserID = userID
+		location.UserID = user.ID
 	}
 
 	createdLocation, err := api.locationRegistry.Create(r.Context(), location)
