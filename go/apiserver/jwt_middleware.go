@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
@@ -47,6 +48,15 @@ func validateJWTToken(tokenString string, jwtSecret []byte) (jwt.MapClaims, erro
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return nil, fmt.Errorf("invalid token claims")
+	}
+
+	// Explicitly validate expiration claim exists and is valid
+	if exp, ok := claims["exp"]; !ok {
+		return nil, fmt.Errorf("token missing expiration claim")
+	} else if expFloat, ok := exp.(float64); !ok {
+		return nil, fmt.Errorf("invalid expiration claim format")
+	} else if int64(expFloat) <= time.Now().Unix() {
+		return nil, fmt.Errorf("token expired")
 	}
 
 	return claims, nil
