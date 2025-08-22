@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"os"
 	"testing"
 	"time"
 
@@ -214,8 +215,12 @@ func TestDefaultSetupOptions(t *testing.T) {
 // setupTestDatabase creates a test database for testing
 // This function will skip the test if PostgreSQL test database is not available
 func setupTestDatabase(c *qt.C) *sql.DB {
-	// Try to connect to the test database used in integration tests
-	dsn := "postgres://inventario:inventario_password@localhost:5433/inventario?sslmode=disable"
+	// Use environment variable for database DSN
+	dsn := os.Getenv("POSTGRES_TEST_DSN")
+	if dsn == "" {
+		c.Skip("POSTGRES_TEST_DSN environment variable not set")
+	}
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		c.Skip("PostgreSQL test database not available:", err)

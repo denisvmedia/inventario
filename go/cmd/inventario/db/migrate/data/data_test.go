@@ -12,8 +12,9 @@ import (
 func TestNew(t *testing.T) {
 	c := qt.New(t)
 
+	// Use a dummy DSN for command creation test (no actual connection needed)
 	dbConfig := &shared.DatabaseConfig{
-		DBDSN: "postgres://test:test@localhost/test?sslmode=disable",
+		DBDSN: "postgres://dummy:dummy@localhost/dummy?sslmode=disable",
 	}
 
 	cmd := data.New(dbConfig)
