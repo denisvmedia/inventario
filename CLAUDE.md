@@ -80,7 +80,7 @@ The system implements enterprise-grade multi-tenancy with:
 - `/src/components` - Reusable Vue.js components with PrimeVue
 - `/src/views` - Page-level components with hierarchical navigation
 - `/src/stores` - Pinia stores for state management (including auth store)
-- `/src/services` - API communication services with tenant-aware headers
+- `/src/services` - API communication services with JWT authentication
 - `/src/types` - TypeScript type definitions
 
 ### End-to-End Tests (`/e2e`)
