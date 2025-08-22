@@ -1,30 +1,17 @@
 package data
 
-// Config holds configuration for data migration commands
+// Config holds configuration for initial dataset setup commands
 type Config struct {
 	// Default tenant configuration
-	DefaultTenantID   string `mapstructure:"default-tenant-id"`
-	DefaultTenantName string `mapstructure:"default-tenant-name"`
-	DefaultTenantSlug string `mapstructure:"default-tenant-slug"`
+	DefaultTenantID   string `yaml:"default_tenant_id" env:"DEFAULT_TENANT_ID" env-default:"default-tenant-id"`
+	DefaultTenantName string `yaml:"default_tenant_name" env:"DEFAULT_TENANT_NAME" env-default:"Default Organization"`
+	DefaultTenantSlug string `yaml:"default_tenant_slug" env:"DEFAULT_TENANT_SLUG" env-default:"default"`
 
 	// Admin user configuration
-	AdminEmail    string `mapstructure:"admin-email"`
-	AdminPassword string `mapstructure:"admin-password"`
-	AdminName     string `mapstructure:"admin-name"`
+	AdminEmail    string `yaml:"admin_email" env:"ADMIN_EMAIL" env-default:"admin@example.com"`
+	AdminPassword string `yaml:"admin_password" env:"ADMIN_PASSWORD" env-default:"admin123"`
+	AdminName     string `yaml:"admin_name" env:"ADMIN_NAME" env-default:"System Administrator"`
 
-	// Migration options
-	DryRun bool `mapstructure:"dry-run"`
-}
-
-// DefaultConfig returns default configuration for data migration
-func DefaultConfig() Config {
-	return Config{
-		DefaultTenantID:   "default-tenant-id",
-		DefaultTenantName: "Default Organization",
-		DefaultTenantSlug: "default",
-		AdminEmail:        "admin@example.com",
-		AdminPassword:     "admin123",
-		AdminName:         "System Administrator",
-		DryRun:            false,
-	}
+	// Setup options
+	DryRun bool `yaml:"dry_run" env:"DRY_RUN" env-default:"false"`
 }

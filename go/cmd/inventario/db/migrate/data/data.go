@@ -23,9 +23,10 @@ type Command struct {
 
 // New creates the initial dataset setup command
 func New(dbConfig *shared.DatabaseConfig) *Command {
-	c := &Command{
-		config: DefaultConfig(),
-	}
+	c := &Command{}
+
+	// Load default configuration from struct tags
+	shared.TryReadSection("migrate.data", &c.config)
 
 	c.Base = command.NewBase(&cobra.Command{
 		Use:   "data",
@@ -70,8 +71,6 @@ Examples:
 }
 
 func (c *Command) registerFlags() {
-	shared.TryReadSection("migrate.data", &c.config)
-
 	// Dry run flag
 	shared.RegisterDryRunFlag(c.Cmd(), &c.config.DryRun)
 
