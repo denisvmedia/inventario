@@ -167,7 +167,13 @@ func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *mo
 
 	// Enrich selected items with names from the database
 	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
-		if err := s.enrichSelectedItemsWithNames(ctx, &export); err != nil {
+		// Ensure we have user context for enriching selected items
+		userCtx := ctx
+		if userID := registry.UserIDFromContext(ctx); userID == "" && export.UserID != "" {
+			// If context doesn't have user ID but export does, create user context
+			userCtx = registry.WithUserContext(ctx, export.UserID)
+		}
+		if err := s.enrichSelectedItemsWithNames(userCtx, &export); err != nil {
 			return models.Export{}, errkit.Wrap(err, "failed to enrich selected items with names")
 		}
 	}
