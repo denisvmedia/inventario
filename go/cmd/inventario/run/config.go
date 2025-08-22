@@ -9,6 +9,7 @@ type Config struct {
 	UploadLocation       string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
 	MaxConcurrentExports int    `yaml:"max_concurrent_exports" env:"MAX_CONCURRENT_EXPORTS" env-default:"0"`
 	MaxConcurrentImports int    `yaml:"max_concurrent_imports" env:"MAX_CONCURRENT_IMPORTS" env-default:"0"`
+	JWTSecret            string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 }
 
 func (c *Config) setDefaults() {
@@ -23,5 +24,8 @@ func (c *Config) setDefaults() {
 	}
 	if c.MaxConcurrentImports == 0 {
 		c.MaxConcurrentImports = defaults.GetMaxConcurrentImports()
+	}
+	if c.JWTSecret == "" {
+		c.JWTSecret = defaults.GetJWTSecret()
 	}
 }

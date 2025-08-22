@@ -1,32 +1,18 @@
-import axios from 'axios'
+import api from './api'
 
 const API_URL = '/api/v1/settings'
 
 const settingsService = {
   getSettings() {
-    return axios.get(API_URL, {
-      headers: {
-        'Accept': 'application/json'
-      }
-    })
+    return api.get(API_URL)
   },
 
   updateSettings(settings: any) {
-    return axios.put(API_URL, settings, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    })
+    return api.put(API_URL, settings)
   },
 
   patchSetting(field: string, value: any) {
-    return axios.patch(`${API_URL}/${field}`, value, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    })
+    return api.patch(`${API_URL}/${field}`, value)
   },
 
   // Specific settings methods
@@ -71,11 +57,7 @@ const settingsService = {
   },
 
   getCurrencies() {
-    return axios.get('/api/v1/currencies', {
-      headers: {
-        'Accept': 'application/json'
-      }
-    })
+    return api.get('/api/v1/currencies')
   }
 }
 

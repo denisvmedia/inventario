@@ -18,6 +18,7 @@ func TestDefaults(t *testing.T) {
 	c.Assert(cfg.Server.Addr, qt.Equals, ":3333")
 	c.Assert(cfg.Server.UploadLocation, qt.Contains, "uploads?create_dir=1")
 	c.Assert(strings.HasPrefix(cfg.Server.UploadLocation, "file://"), qt.IsTrue)
+	c.Assert(cfg.Server.JWTSecret, qt.Equals, "") // Empty by default
 
 	// Test database defaults
 	c.Assert(cfg.Database.DSN, qt.Equals, "memory://")
@@ -35,6 +36,7 @@ func TestDefaultGetters(t *testing.T) {
 	c.Assert(defaults.GetDatabaseDSN(), qt.Equals, "memory://")
 	c.Assert(defaults.GetMaxConcurrentExports(), qt.Equals, 3)
 	c.Assert(defaults.GetMaxConcurrentImports(), qt.Equals, 1)
+	c.Assert(defaults.GetJWTSecret(), qt.Equals, "") // Empty by default
 
 	// Test upload location getter
 	uploadLocation := defaults.GetUploadLocation()
@@ -53,4 +55,5 @@ func TestDefaultsConsistency(t *testing.T) {
 	c.Assert(defaults.GetMaxConcurrentExports(), qt.Equals, cfg.Workers.MaxConcurrentExports)
 	c.Assert(defaults.GetMaxConcurrentImports(), qt.Equals, cfg.Workers.MaxConcurrentImports)
 	c.Assert(defaults.GetUploadLocation(), qt.Equals, cfg.Server.UploadLocation)
+	c.Assert(defaults.GetJWTSecret(), qt.Equals, cfg.Server.JWTSecret)
 }

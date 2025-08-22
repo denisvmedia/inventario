@@ -35,6 +35,7 @@ func TestAreasList(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/areas", nil)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -63,6 +64,7 @@ func TestAreasGet(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/areas/"+area.ID, nil)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -100,6 +102,7 @@ func TestAreaCreate(t *testing.T) {
 
 	req, err := http.NewRequest("POST", "/api/v1/areas", buf)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -124,6 +127,7 @@ func TestAreaCreate(t *testing.T) {
 
 	req, err = http.NewRequest("GET", "/api/v1/locations/"+location.ID, nil)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr = httptest.NewRecorder()
 
@@ -145,6 +149,7 @@ func TestAreaDelete(t *testing.T) {
 
 	req, err := http.NewRequest("DELETE", "/api/v1/areas/"+area.ID, nil)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -170,6 +175,7 @@ func TestAreaDelete_AreaHasCommodities(t *testing.T) {
 
 	req, err := http.NewRequest("DELETE", "/api/v1/areas/"+area.ID, nil)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -209,6 +215,7 @@ func TestAreaUpdate(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/areas/"+area.ID, buf)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -234,6 +241,7 @@ func TestAreaGet_InvalidID(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/areas/"+invalidID, nil)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -261,6 +269,7 @@ func TestAreaCreate_InvalidData(t *testing.T) {
 
 	req, err := http.NewRequest("POST", "/api/v1/areas", invalidBuf)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -280,6 +289,7 @@ func TestAreaDelete_MissingArea(t *testing.T) {
 
 	req, err := http.NewRequest("DELETE", "/api/v1/areas/"+missingID, nil)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -315,6 +325,7 @@ func TestAreaUpdate_WrongIDInRequestBody(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/areas/"+area.ID, buf)
 	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 

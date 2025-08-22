@@ -119,15 +119,19 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Extract tenant and user from authenticated request context
-	tenantID, userID := ExtractTenantUserFromRequest(r)
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
 
 	commodity := *input.Data.Attributes
 	if commodity.TenantID == "" {
-		commodity.TenantID = tenantID
+		commodity.TenantID = user.TenantID
 	}
 	if commodity.UserID == "" {
-		commodity.UserID = userID
+		commodity.UserID = user.ID
 	}
 
 	createdCommodity, err := api.registrySet.CommodityRegistry.Create(r.Context(), commodity)

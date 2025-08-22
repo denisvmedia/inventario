@@ -1,5 +1,6 @@
 import { test as base, expect } from '@playwright/test';
 import { TestRecorder } from '../utils/test-recorder.js';
+import { ensureAuthenticated } from '../tests/includes/auth.js';
 import waitOn from 'wait-on';
 
 // Define the type for our custom fixtures
@@ -20,7 +21,7 @@ async function checkSettingsRequired(page: any) {
 }
 
 /**
- * Custom fixture that ensures the application stack is running
+ * Custom fixture that ensures the application stack is running and user is authenticated
  */
 export const test = base.extend<AppFixtures>({
   // Setup the application stack before tests
@@ -34,13 +35,16 @@ export const test = base.extend<AppFixtures>({
     });
 
     // The stack should already be running via the e2e:stack command
-    // We just need to navigate to the base URL
+    // Navigate to the base URL and ensure authentication
     await page.goto('/');
+
+    // Ensure user is authenticated (will login if needed)
+    await ensureAuthenticated(page);
 
     // Check for "Settings Required" message and fail fast if found
     await checkSettingsRequired(page);
 
-    // Use the page with the application loaded
+    // Use the page with the application loaded and authenticated
     await use(page);
   },
 

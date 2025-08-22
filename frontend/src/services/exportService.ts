@@ -1,25 +1,16 @@
-import axios from 'axios'
+import api from './api'
 
 const API_URL = '/api/v1/exports'
 
 const exportService = {
   getExports(includeDeleted = false) {
     const params = includeDeleted ? { include_deleted: 'true' } : {}
-    return axios.get(API_URL, {
-      params,
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.get(API_URL, { params })
   },
 
   getExport(id: string) {
     console.log(`Fetching export with ID: ${id}`)
-    return axios.get(`${API_URL}/${id}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    }).then(response => {
+    return api.get(`${API_URL}/${id}`).then(response => {
       console.log('Export fetch successful:', response.data)
       return response
     }).catch(error => {
@@ -30,12 +21,7 @@ const exportService = {
 
   createExport(data: any) {
     console.log('exportService: createExport called with data:', JSON.stringify(data, null, 2))
-    return axios.post(API_URL, data, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    }).then(response => {
+    return api.post(API_URL, data).then(response => {
       console.log('exportService: createExport success response:', response)
       return response
     }).catch(error => {
@@ -45,24 +31,15 @@ const exportService = {
   },
 
   updateExport(id: string, data: any) {
-    return axios.patch(`${API_URL}/${id}`, data, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.patch(`${API_URL}/${id}`, data)
   },
 
   deleteExport(id: string) {
-    return axios.delete(`${API_URL}/${id}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.delete(`${API_URL}/${id}`)
   },
 
   downloadExport(id: string) {
-    return axios.get(`${API_URL}/${id}/download`, {
+    return api.get(`${API_URL}/${id}/download`, {
       responseType: 'blob',
       headers: {
         'Accept': 'application/xml'
@@ -72,12 +49,7 @@ const exportService = {
 
   importExport(data: any) {
     console.log('exportService: importExport called with data:', JSON.stringify(data, null, 2))
-    return axios.post(`${API_URL}/import`, data, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    }).then(response => {
+    return api.post(`${API_URL}/import`, data).then(response => {
       console.log('exportService: importExport success response:', response)
       return response
     }).catch(error => {
@@ -88,21 +60,12 @@ const exportService = {
 
   // Restore operations for exports
   getRestoreOperations(exportId: string) {
-    return axios.get(`${API_URL}/${exportId}/restores`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.get(`${API_URL}/${exportId}/restores`)
   },
 
   createRestore(exportId: string, data: any) {
     console.log('exportService: createRestore called with data:', JSON.stringify(data, null, 2))
-    return axios.post(`${API_URL}/${exportId}/restores`, data, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    }).then(response => {
+    return api.post(`${API_URL}/${exportId}/restores`, data).then(response => {
       console.log('exportService: createRestore success response:', response)
       return response
     }).catch(error => {
@@ -112,11 +75,7 @@ const exportService = {
   },
 
   getRestoreOperation(exportId: string, restoreId: string) {
-    return axios.get(`${API_URL}/${exportId}/restores/${restoreId}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.get(`${API_URL}/${exportId}/restores/${restoreId}`)
   },
 
   // Poll restore status until completion or failure

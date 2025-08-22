@@ -18,8 +18,8 @@ import (
 func TestDebugAPI(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry set
-	registrySet, err := memory.NewRegistrySet("")
+	// Create test registry set (not used directly, but needed for compilation)
+	_, err := memory.NewRegistrySet("")
 	c.Assert(err, qt.IsNil)
 
 	// Test cases for different configurations
@@ -58,11 +58,9 @@ func TestDebugAPI(t *testing.T) {
 			c := qt.New(t)
 
 			// Create API server with test parameters
-			params := apiserver.Params{
-				RegistrySet:    registrySet,
-				UploadLocation: tc.uploadLocation,
-				DebugInfo:      tc.debugInfo,
-			}
+			params := newParams()
+			params.UploadLocation = tc.uploadLocation
+			params.DebugInfo = tc.debugInfo
 
 			// Mock workers for testing
 			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -71,6 +69,7 @@ func TestDebugAPI(t *testing.T) {
 			// Create test request
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)
 			req = req.WithContext(context.Background())
+			addTestUserAuthHeader(req)
 			w := httptest.NewRecorder()
 
 			// Execute request
@@ -98,16 +97,14 @@ func TestDebugAPI(t *testing.T) {
 func TestDebugAPI_InvalidURLs(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry set
-	registrySet, err := memory.NewRegistrySet("")
+	// Create test registry set (not used directly, but needed for compilation)
+	_, err := memory.NewRegistrySet("")
 	c.Assert(err, qt.IsNil)
 
 	// Test with invalid URLs
-	params := apiserver.Params{
-		RegistrySet:    registrySet,
-		UploadLocation: "://invalid-url",
-		DebugInfo:      debug.NewInfo("://invalid-dsn", "://invalid-url"),
-	}
+	params := newParams()
+	params.UploadLocation = "://invalid-url"
+	params.DebugInfo = debug.NewInfo("://invalid-dsn", "://invalid-url")
 
 	// Mock workers for testing
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -116,6 +113,7 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)
 	req = req.WithContext(context.Background())
+	addTestUserAuthHeader(req)
 	w := httptest.NewRecorder()
 
 	// Execute request

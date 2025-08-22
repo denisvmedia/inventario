@@ -84,15 +84,19 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract tenant and user from authenticated request context
-	tenantID, userID := ExtractTenantUserFromRequest(r)
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
 
 	area := *input.Data.Attributes
 	if area.TenantID == "" {
-		area.TenantID = tenantID
+		area.TenantID = user.TenantID
 	}
 	if area.UserID == "" {
-		area.UserID = userID
+		area.UserID = user.ID
 	}
 
 	createdArea, err := api.areaRegistry.Create(r.Context(), area)

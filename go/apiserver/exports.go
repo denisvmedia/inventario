@@ -282,14 +282,18 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	// Create export record with pending status and source file path
 	importedExport := models.NewImportedExport(data.Data.Attributes.Description, data.Data.Attributes.SourceFilePath)
 
-	// Extract tenant and user from authenticated request context
-	tenantID, userID := ExtractTenantUserFromRequest(r)
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
 
 	if importedExport.TenantID == "" {
-		importedExport.TenantID = tenantID
+		importedExport.TenantID = user.TenantID
 	}
 	if importedExport.UserID == "" {
-		importedExport.UserID = userID
+		importedExport.UserID = user.ID
 	}
 
 	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), importedExport)

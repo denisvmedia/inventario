@@ -43,7 +43,7 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	// Test downloading the file
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+createdManual.ID+".pdf", nil)
 	c.Assert(err, qt.IsNil)
-
+	addTestUserAuthHeader(req)
 	rr := httptest.NewRecorder()
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	handler := apiserver.APIServer(params, mockRestoreWorker)

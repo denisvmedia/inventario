@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './api'
 
 const API_URL = '/api/v1'
 
@@ -14,46 +14,24 @@ interface AreaPayload {
 
 export default {
   getAreas() {
-    return axios.get(`${API_URL}/areas`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.get(`${API_URL}/areas`)
   },
 
   getArea(id: string) {
-    return axios.get(`${API_URL}/areas/${id}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.get(`${API_URL}/areas/${id}`)
   },
 
   createArea(area: AreaPayload) {
     console.log('Creating area with data:', JSON.stringify(area, null, 2))
     // Use the standard areas endpoint
-    return axios.post(`${API_URL}/areas`, area, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.post(`${API_URL}/areas`, area)
   },
 
   updateArea(id: string, area: AreaPayload) {
-    return axios.put(`${API_URL}/areas/${id}`, area, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.put(`${API_URL}/areas/${id}`, area)
   },
 
   deleteArea(id: string) {
-    return axios.delete(`${API_URL}/areas/${id}`, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    return api.delete(`${API_URL}/areas/${id}`)
   }
 }

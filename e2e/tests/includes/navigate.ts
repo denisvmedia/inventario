@@ -1,5 +1,6 @@
 import {Page} from "@playwright/test";
 import {checkSettingsRequired, navigateAndCheckSettings} from "./settings-check";
+import {ensureAuthenticated} from "./auth.js";
 
 export const TO_HOME = 'home';
 export const TO_LOCATIONS = 'locations';
@@ -26,6 +27,7 @@ export async function navigateTo(page: Page, recorder: any, to : TypeTo, from?: 
         case TO_LOCATIONS:
             switch (from) {
                 case FROM_COMMODITIES:
+                    await ensureAuthenticated(page);
                     await checkSettingsRequired(page);
                     // Navigate back to the location detail page
                     await page.click(`.breadcrumb-link:has-text("Back to Locations")`);
@@ -40,6 +42,7 @@ export async function navigateTo(page: Page, recorder: any, to : TypeTo, from?: 
         case TO_AREA_COMMODITIES:
             switch (from) {
                 case FROM_LOCATIONS_AREA:
+                    await ensureAuthenticated(page);
                     await checkSettingsRequired(page);
                     // source is the area name
                     await page.click(`.area-card:has-text("${source}")`);

@@ -1,5 +1,25 @@
 import axios from 'axios'
 
+// Navigation function that can be mocked in tests
+// eslint-disable-next-line no-unused-vars
+export let navigateToLogin: (currentPath: string) => void = (currentPath: string) => {
+  // Default implementation uses window.location
+  window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
+}
+
+// Set up router navigation after module loads to avoid circular dependency
+if (typeof window !== 'undefined') {
+  // Use dynamic import to avoid circular dependency
+  import('../router').then(({ default: router }) => {
+    // Update the exported function to use router
+    navigateToLogin = (currentPath: string) => {
+      router.push({ path: '/login', query: { redirect: currentPath } })
+    }
+  }).catch((error) => {
+    console.warn('Router import failed, using window.location fallback:', error)
+  })
+}
+
 const api = axios.create({
   baseURL: '',  // Empty because we're using Vite's proxy
   headers: {
@@ -8,9 +28,25 @@ const api = axios.create({
   }
 })
 
-// Add request interceptor for detailed debugging
+// Function to get token from localStorage
+function getAuthToken(): string | null {
+  return localStorage.getItem('inventario_token')
+}
+
+// Add request interceptor for authentication and debugging
 api.interceptors.request.use(
   config => {
+    // Add JWT token to requests if available
+    const token = getAuthToken()
+    console.log('🔑 Token check for', config.url, ':', !!token, token ? `(${token.length} chars)` : '(no token)')
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+      console.log('✅ Authorization header added')
+    } else {
+      console.log('❌ No token available for request')
+    }
+
     console.log('API Request URL:', config.url)
     console.log('API Request Method:', config.method?.toUpperCase())
     console.log('API Request Headers:', JSON.stringify(config.headers, null, 2))
@@ -23,7 +59,7 @@ api.interceptors.request.use(
   }
 )
 
-// Add response interceptor for detailed debugging
+// Add response interceptor for authentication and debugging
 api.interceptors.response.use(
   response => {
     console.log('API Response Status:', response.status)
@@ -34,6 +70,49 @@ api.interceptors.response.use(
   error => {
     console.error('API Response Error Status:', error.response?.status)
     console.error('API Response Error Data:', JSON.stringify(error.response?.data, null, 2))
+
+    // Handle 401 Unauthorized errors
+    if (error.response?.status === 401) {
+      console.warn('401 Unauthorized - checking if this is during initialization')
+
+      // Don't clear auth if this is a background verification during initialization
+      // Only clear auth for user-initiated requests
+      const isInitializationRequest = error.config?.url?.includes('/auth/me') &&
+                                     error.config?.headers?.['X-Auth-Check'] !== 'user-initiated'
+
+      if (isInitializationRequest) {
+        console.warn('401 during background auth verification - not clearing stored auth')
+        // Let the auth store handle this gracefully
+        return Promise.reject(error)
+      }
+
+      console.warn('401 on user request - clearing auth and redirecting to login')
+
+      // Clear stored auth data
+      localStorage.removeItem('inventario_token')
+      localStorage.removeItem('inventario_user')
+
+      // Clear auth store state if available
+      try {
+        // Use dynamic import without await since we're not in an async function
+        import('@/stores/authStore').then(({ useAuthStore }) => {
+          const authStore = useAuthStore()
+          authStore.user = null
+          authStore.isInitialized = false
+        }).catch(e => {
+          console.warn('Could not clear auth store:', e)
+        })
+      } catch (e) {
+        console.warn('Could not import auth store:', e)
+      }
+
+      // Redirect to login page if not already there
+      if (window.location.pathname !== '/login') {
+        const currentPath = window.location.pathname + window.location.search
+        navigateToLogin(currentPath)
+      }
+    }
+
     return Promise.reject(error)
   }
 )

@@ -50,7 +50,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import locationService from '@/services/locationService'
 
 const router = useRouter()
 const isSubmitting = ref(false)
@@ -110,13 +110,8 @@ const submitForm = async () => {
     console.log('Submitting with payload:', JSON.stringify(payload, null, 2))
     debugInfo.value = `Sending: ${JSON.stringify(payload, null, 2)}`
 
-    // Make a direct axios call
-    const response = await axios.post('/api/v1/locations', payload, {
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        'Accept': 'application/vnd.api+json'
-      }
-    })
+    // Use the location service which includes authentication
+    const response = await locationService.createLocation(payload)
 
     console.log('Success response:', response.data)
     debugInfo.value += `\n\nResponse: ${JSON.stringify(response.data, null, 2)}`

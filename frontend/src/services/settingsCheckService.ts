@@ -1,4 +1,4 @@
-import settingsService from './settingsService'
+import systemService from './systemService'
 
 /**
  * Service to check if settings are properly configured
@@ -10,9 +10,10 @@ const settingsCheckService = {
    */
   async hasSettings(): Promise<boolean> {
     try {
-      const response = await settingsService.getSettings()
-      const settings = response.data
-      
+      // Use the public system endpoint instead of protected settings endpoint
+      const response = await systemService.getSystemInfo()
+      const settings = response.data.settings
+
       // Check if essential settings are defined
       // We consider settings to exist if at least MainCurrency is set
       return !!settings.MainCurrency

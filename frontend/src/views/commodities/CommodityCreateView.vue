@@ -36,9 +36,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import axios from 'axios'
 import commodityService from '@/services/commodityService'
 import settingsService from '@/services/settingsService'
+import areaService from '@/services/areaService'
+import locationService from '@/services/locationService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import CommodityForm from '@/components/CommodityForm.vue'
@@ -149,18 +150,10 @@ onMounted(async () => {
     // (fetched in App.vue)
     await settingsStore.fetchMainCurrency()
 
-    // Fetch areas, locations, and currencies in parallel
+    // Fetch areas, locations, and currencies in parallel using authenticated services
     const [areasResponse, locationsResponse, currenciesResponse] = await Promise.all([
-      axios.get('/api/v1/areas', {
-        headers: {
-          'Accept': 'application/vnd.api+json'
-        }
-      }),
-      axios.get('/api/v1/locations', {
-        headers: {
-          'Accept': 'application/vnd.api+json'
-        }
-      }),
+      areaService.getAreas(),
+      locationService.getLocations(),
       settingsService.getCurrencies()
     ])
 

@@ -128,6 +128,7 @@ func TestUploads(t *testing.T) {
 			req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/"+tc.typ, bodyBuf)
 			c.Assert(err, qt.IsNil)
 			req.Header.Set("Content-Type", contentType)
+			addTestUserAuthHeader(req)
 
 			rr := httptest.NewRecorder()
 
@@ -199,6 +200,7 @@ func TestUploads_invalid_upload(t *testing.T) {
 			req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/"+tc.typ, bodyBuf)
 			c.Assert(err, qt.IsNil)
 			req.Header.Set("Content-Type", contentType)
+			addTestUserAuthHeader(req)
 
 			rr := httptest.NewRecorder()
 
@@ -246,6 +248,7 @@ func TestUploads_restores(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/uploads/restores", bodyBuf)
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 
@@ -300,6 +303,7 @@ func TestUploads_restores_invalid(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/uploads/restores", bodyBuf)
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 

@@ -1,14 +1,25 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
+import LoginView from '../views/LoginView.vue'
 import settingsCheckService from '../services/settingsCheckService'
+import { useAuthStore } from '../stores/authStore'
 
 // Define routes without using RouteRecordRaw type
 const routes = [
+  // Public routes
+  {
+    path: '/login',
+    name: 'login',
+    component: LoginView,
+    meta: { requiresAuth: false }
+  },
+  // Protected routes
   {
     path: '/',
     name: 'home',
-    component: HomeView
+    component: HomeView,
+    meta: { requiresAuth: true }
   },
   // Locations (now includes areas)
   {
@@ -141,14 +152,58 @@ routes.forEach(route => {
   console.log(`- ${route.path} (${route.name})`)
 })
 
-// Add navigation guards for debugging and settings check
+// Add navigation guards for authentication, debugging and settings check
 router.beforeEach(async (to, from) => {
   console.log(`Navigation: ${from.path} -> ${to.path}`)
   console.log('To:', to)
   console.log('From:', from)
   console.log('Matched routes:', to.matched.map(record => record.path))
 
-  // Skip settings check for system pages and print pages
+  // Initialize auth store
+  const authStore = useAuthStore()
+
+  console.log('Router guard - Auth state check:', {
+    isAuthenticated: authStore.isAuthenticated,
+    isInitialized: authStore.isInitialized,
+    isLoading: authStore.isLoading,
+    user: authStore.user?.email || 'none'
+  })
+
+  // Wait for authentication initialization to complete if it's in progress
+  if (authStore.isLoading) {
+    console.log('Waiting for auth initialization to complete...')
+    let attempts = 0
+    while (authStore.isLoading && attempts < 100) { // Max 5 seconds
+      await new Promise(resolve => setTimeout(resolve, 50))
+      attempts++
+    }
+    console.log('Auth loading wait complete after', attempts * 50, 'ms')
+  }
+
+  // Only initialize if not already initialized
+  if (!authStore.isInitialized) {
+    console.log('Initializing authentication from router guard...')
+    await authStore.initializeAuth()
+    console.log('Router guard auth initialization complete')
+  }
+
+  // Check if route requires authentication (default to true unless explicitly false)
+  const requiresAuth = to.meta.requiresAuth !== false
+
+  // If route requires auth and user is not authenticated, redirect to login
+  if (requiresAuth && !authStore.isAuthenticated) {
+    console.log('Authentication required, redirecting to login')
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  // If user is authenticated and trying to access login page, redirect to home
+  if (to.path === '/login' && authStore.isAuthenticated) {
+    console.log('Already authenticated, redirecting to home')
+    return { path: '/' }
+  }
+
+  // Skip settings check for login, system pages and print pages
+  const isLoginPage = to.path === '/login'
   const isSystemPage = to.path.startsWith('/system')
   const isPrintPage = to.path.includes('/print')
 
@@ -158,7 +213,7 @@ router.beforeEach(async (to, from) => {
     return true
   }
 
-  if (!isSystemPage && !isPrintPage) {
+  if (!isLoginPage && !isSystemPage && !isPrintPage) {
     // Check if settings exist
     const hasSettings = await settingsCheckService.hasSettings()
 
