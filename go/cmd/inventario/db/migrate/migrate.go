@@ -3,6 +3,7 @@ package migrate
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/data"
 	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/down"
 	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/list"
 	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/up"
@@ -20,6 +21,7 @@ This command provides comprehensive PostgreSQL migration capabilities including:
 - Apply pending migrations (up)
 - List available migration files (list)
 - Rollback migrations (down)
+- Setup initial dataset with tenant/user structure (data)
 - Check migration status
 - Dry run mode for safe testing
 
@@ -46,6 +48,9 @@ USAGE EXAMPLES:
   Preview migrations without applying:
     inventario migrate up --dry-run
 
+  Setup initial dataset with tenant/user structure:
+    inventario migrate data --dry-run
+
 CONFIGURATION:
 
   The command reads database configuration from:
@@ -69,6 +74,7 @@ MIGRATION SAFETY:
 	cmd.AddCommand(up.New(dbConfig).Cmd())
 	cmd.AddCommand(list.New(dbConfig).Cmd())
 	cmd.AddCommand(down.New(dbConfig).Cmd())
+	cmd.AddCommand(data.New(dbConfig).Cmd())
 
 	return cmd
 }

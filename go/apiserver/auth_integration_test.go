@@ -23,9 +23,9 @@ import (
 
 func setupTestDatabase(t *testing.T) (registry.RegistrySet, func()) {
 	// Use environment variable for database DSN
-	dsn := os.Getenv("INVENTARIO_TEST_DSN")
+	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
-		dsn = "postgres://inventario:inventario_password@localhost:5433/inventario?sslmode=disable"
+		t.Skip("POSTGRES_TEST_DSN environment variable not set")
 	}
 
 	registrySet, err := postgres.NewRegistrySet(dsn)
@@ -265,9 +265,10 @@ func TestAuthIntegration_DatabaseConnectivity(t *testing.T) {
 	c.Assert(err, qt.IsNotNil, qt.Commentf("Should fail with invalid DSN"))
 
 	// Test with valid DSN
-	dsn := os.Getenv("INVENTARIO_TEST_DSN")
+	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
-		dsn = "postgres://inventario:inventario_password@localhost:5433/inventario?sslmode=disable"
+		c.Skip("POSTGRES_TEST_DSN environment variable not set")
+		return
 	}
 
 	registrySet, err := postgres.NewRegistrySet(dsn)
