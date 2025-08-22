@@ -24,7 +24,7 @@
       <div class="success-content">
         <font-awesome-icon icon="check-circle" />
         <span>Settings updated successfully!</span>
-        <button @click="dismissSuccessMessage" class="dismiss-btn">
+        <button class="dismiss-btn" @click="dismissSuccessMessage">
           <font-awesome-icon icon="times" />
         </button>
       </div>

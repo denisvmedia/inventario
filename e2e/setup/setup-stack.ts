@@ -69,9 +69,8 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
-  console.log('Executing: go run -tags with_frontend cmd/inventario/main.go run');
-  const dbUrl = process.env.DB_URL ?? 'memory://';
-  backendProcess = spawn('go', ['run', '-tags', 'with_frontend', './cmd/inventario/...', 'run', '--db-dsn', dbUrl], {
+  console.log('Executing: go run -tags with_frontend ./cmd/inventario/... run');
+  backendProcess = spawn('go', ['run', '-tags', 'with_frontend', './cmd/inventario/...', 'run'], {
     cwd: backendRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, PATH: process.env.PATH },
@@ -150,7 +149,9 @@ export async function seedDatabase(): Promise<void> {
   await sleep(500);
 
   try {
+    // Seed the database (endpoint is public for e2e testing)
     const response = await axios.post('http://localhost:3333/api/v1/seed');
+
     if (response.status === 200) {
       console.log('Database seeded successfully');
     } else {

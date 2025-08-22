@@ -255,8 +255,16 @@ const getFileUrl = (file: any) => {
     }
   }
 
-  // Use generic file entity download URL
-  return `/api/v1/files/${file.id}.${ext}`
+  // Use generic file entity download URL with authentication
+  const baseUrl = `/api/v1/files/${file.id}.${ext}`
+
+  // Add JWT token as query parameter for direct browser access
+  const token = localStorage.getItem('inventario_token')
+  if (token) {
+    return `${baseUrl}?token=${encodeURIComponent(token)}`
+  }
+
+  return baseUrl
 }
 
 const getFileName = (file: any) => {

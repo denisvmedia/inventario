@@ -43,28 +43,22 @@ func SetDefaultTenantUserIDs(tenantID, userID *string) {
 	}
 }
 
-// ExtractTenantUserFromRequest extracts tenant and user IDs from request context
-// Falls back to default IDs if context is not available (for backward compatibility)
-// TODO: Remove fallback when proper authentication is fully implemented
-func ExtractTenantUserFromRequest(r *http.Request) (tenantID, userID string) {
-	tenantID = GetTenantIDFromRequest(r)
-	userID = GetUserIDFromRequest(r)
-
-	// Fallback to default IDs for backward compatibility
-	SetDefaultTenantUserIDs(&tenantID, &userID)
-
-	return tenantID, userID
+// ExtractUserFromRequest extracts user ID from request context
+// This function replaces ExtractTenantUserFromRequest for user-only authentication
+func ExtractUserFromRequest(r *http.Request) string {
+	user := GetUserFromRequest(r)
+	if user != nil {
+		return user.ID
+	}
+	return ""
 }
 
-// ExtractTenantUserFromContext extracts tenant and user IDs from context
-// Falls back to default IDs if context is not available (for backward compatibility)
-// TODO: Remove fallback when proper authentication is fully implemented
-func ExtractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
-	tenantID = TenantIDFromContext(ctx)
-	userID = UserIDFromContext(ctx)
-
-	// Fallback to default IDs for backward compatibility
-	SetDefaultTenantUserIDs(&tenantID, &userID)
-
-	return tenantID, userID
+// ExtractUserFromContext extracts user ID from context
+// This function replaces ExtractTenantUserFromContext for user-only authentication
+func ExtractUserFromContext(ctx context.Context) string {
+	user := UserFromContext(ctx)
+	if user != nil {
+		return user.ID
+	}
+	return ""
 }

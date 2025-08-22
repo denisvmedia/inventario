@@ -79,9 +79,17 @@ const props = defineProps({
 const emit = defineEmits(['delete', 'download', 'update', 'view-details', 'open-viewer'])
 
 const getFileUrl = (file: any) => {
-  // Use generic file entity download URL
+  // Use generic file entity download URL with authentication
   const ext = file.ext.startsWith('.') ? file.ext.substring(1) : file.ext
-  return `/api/v1/files/${file.id}.${ext}`
+  const baseUrl = `/api/v1/files/${file.id}.${ext}`
+
+  // Add JWT token as query parameter for direct browser access
+  const token = localStorage.getItem('inventario_token')
+  if (token) {
+    return `${baseUrl}?token=${encodeURIComponent(token)}`
+  }
+
+  return baseUrl
 }
 
 const getFileName = (file: any) => {

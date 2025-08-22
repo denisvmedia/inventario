@@ -58,10 +58,14 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
 
     console.log(`Download URL for ${fileType}: ${downloadUrl}`);
 
+    // Get authentication token for API requests
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
+
     // Verify the download URL is accessible by making a GET request with range header
     // This will only download the first byte to verify the file exists and is accessible
     const response = await page.request.get(downloadUrl, {
         headers: {
+            'Authorization': `Bearer ${authToken}`,
             'Range': 'bytes=0-0'
         }
     });

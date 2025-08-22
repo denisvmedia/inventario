@@ -46,6 +46,9 @@ app.config.errorHandler = (err, instance, info) => {
 const pinia = createPinia()
 app.use(pinia)
 
+// Initialize authentication store
+import { useAuthStore } from './stores/authStore'
+
 app.use(router)
 app.use(PrimeVue, {
   // unstyled: true,
@@ -67,8 +70,30 @@ app.component('Toast', Toast)
 // Register Font Awesome component globally
 app.component('FontAwesomeIcon', FontAwesomeIcon)
 
-// Mount the app
-console.log('Mounting Vue app to #app element')
-app.mount('#app')
+// Initialize authentication before mounting
+async function initializeApp() {
+  console.log('Initializing authentication...')
+  const authStore = useAuthStore()
 
-console.log('Vue app initialization complete')
+  // Initialize auth synchronously first (restore from localStorage)
+  await authStore.initializeAuth()
+
+  console.log('Auth initialization complete, auth state:', {
+    isAuthenticated: authStore.isAuthenticated,
+    isInitialized: authStore.isInitialized,
+    user: authStore.user?.email || 'none'
+  })
+
+  // Mount the app
+  console.log('Mounting Vue app to #app element')
+  app.mount('#app')
+
+  console.log('Vue app initialization complete')
+}
+
+// Start the app
+initializeApp().catch(error => {
+  console.error('Failed to initialize app:', error)
+  // Mount anyway to show error state
+  app.mount('#app')
+})

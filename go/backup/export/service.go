@@ -167,7 +167,13 @@ func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *mo
 
 	// Enrich selected items with names from the database
 	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
-		if err := s.enrichSelectedItemsWithNames(ctx, &export); err != nil {
+		// Ensure we have user context for enriching selected items
+		userCtx := ctx
+		if userID := registry.UserIDFromContext(ctx); userID == "" && export.UserID != "" {
+			// If context doesn't have user ID but export does, create user context
+			userCtx = registry.WithUserContext(ctx, export.UserID)
+		}
+		if err := s.enrichSelectedItemsWithNames(userCtx, &export); err != nil {
 			return models.Export{}, errkit.Wrap(err, "failed to enrich selected items with names")
 		}
 	}
@@ -194,30 +200,34 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return nil
 	}
 
+	// Create a context with user ID for the export processing
+	// This is necessary because the background worker doesn't have user context
+	userCtx := registry.WithUserContext(ctx, export.UserID)
+
 	// Update status to in_progress
 	export.Status = models.ExportStatusInProgress
-	_, err = s.registrySet.ExportRegistry.Update(ctx, *export)
+	_, err = s.registrySet.ExportRegistry.Update(userCtx, *export)
 	if err != nil {
 		return errkit.Wrap(err, "failed to update export status")
 	}
 
-	// Generate the export and collect statistics
-	filePath, stats, err := s.generateExport(ctx, *export)
+	// Generate the export and collect statistics using user context
+	filePath, stats, err := s.generateExport(userCtx, *export)
 	if err != nil {
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
-		s.registrySet.ExportRegistry.Update(ctx, *export)
+		s.registrySet.ExportRegistry.Update(userCtx, *export)
 		return errkit.Wrap(err, "failed to generate export")
 	}
 
-	// Create file entity for the export
-	fileEntity, err := s.createExportFileEntity(ctx, export.ID, export.Description, filePath)
+	// Create file entity for the export using user context
+	fileEntity, err := s.createExportFileEntity(userCtx, export.ID, export.Description, filePath)
 	if err != nil {
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
-		s.registrySet.ExportRegistry.Update(ctx, *export)
+		s.registrySet.ExportRegistry.Update(userCtx, *export)
 		return errkit.Wrap(err, "failed to create export file entity")
 	}
 
@@ -230,19 +240,19 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	export.ManualCount = stats.ManualCount
 	export.BinaryDataSize = stats.BinaryDataSize
 
-	// Get file size
-	if fileSize, err := s.getFileSize(ctx, filePath); err == nil {
+	// Get file size using user context
+	if fileSize, err := s.getFileSize(userCtx, filePath); err == nil {
 		export.FileSize = fileSize
 	}
 
-	// Update status to completed
+	// Update status to completed using user context
 	export.Status = models.ExportStatusCompleted
 	export.FileID = &fileEntity.ID
 	export.FilePath = filePath // Keep for backward compatibility during migration
 	export.CompletedDate = models.PNow()
 	export.ErrorMessage = ""
 
-	_, err = s.registrySet.ExportRegistry.Update(ctx, *export)
+	_, err = s.registrySet.ExportRegistry.Update(userCtx, *export)
 	if err != nil {
 		return errkit.Wrap(err, "failed to update export completion")
 	}
@@ -536,7 +546,7 @@ func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer
 
 // streamLocations streams locations to the writer and tracks statistics
 func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, stats *ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
-	locations, err := s.registrySet.LocationRegistry.List(ctx)
+	locations, err := s.registrySet.LocationRegistry.ListWithUser(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get locations")
 	}
@@ -577,7 +587,7 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, s
 
 // streamAreas streams areas to the writer and tracks statistics
 func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, stats *ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
-	areas, err := s.registrySet.AreaRegistry.List(ctx)
+	areas, err := s.registrySet.AreaRegistry.ListWithUser(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get areas")
 	}
@@ -618,7 +628,7 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, stats
 
 // streamCommodities streams commodities to the writer and tracks statistics
 func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, args ExportArgs, stats *ExportStats) error {
-	commodities, err := s.registrySet.CommodityRegistry.List(ctx)
+	commodities, err := s.registrySet.CommodityRegistry.ListWithUser(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodities")
 	}
@@ -709,7 +719,7 @@ func (s *ExportService) groupSelectedItemsByType(selectedItems []models.ExportSe
 // streamSelectedLocations streams location data to the XML encoder and tracks statistics
 func (s *ExportService) streamSelectedLocations(ctx context.Context, encoder *xml.Encoder, locationIDs []string, stats *ExportStats) error {
 	return s.streamEntitySection(ctx, encoder, "locations", locationIDs, stats, func(ctx context.Context, id string) (any, error) {
-		location, err := s.registrySet.LocationRegistry.Get(ctx, id)
+		location, err := s.registrySet.LocationRegistry.GetWithUser(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -725,7 +735,7 @@ func (s *ExportService) streamSelectedLocations(ctx context.Context, encoder *xm
 // streamSelectedAreas streams area data to the XML encoder and tracks statistics
 func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.Encoder, areaIDs []string, stats *ExportStats) error {
 	return s.streamEntitySection(ctx, encoder, "areas", areaIDs, stats, func(ctx context.Context, id string) (any, error) {
-		area, err := s.registrySet.AreaRegistry.Get(ctx, id)
+		area, err := s.registrySet.AreaRegistry.GetWithUser(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -780,7 +790,7 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 	}
 
 	for _, commodityID := range commodityIDs {
-		commodity, err := s.registrySet.CommodityRegistry.Get(ctx, commodityID)
+		commodity, err := s.registrySet.CommodityRegistry.GetWithUser(ctx, commodityID)
 		if err != nil {
 			continue // Skip items that can't be found
 		}
@@ -902,7 +912,7 @@ func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCo
 	}
 
 	for _, imageID := range imageIDs {
-		image, err := s.registrySet.ImageRegistry.Get(ctx, imageID)
+		image, err := s.registrySet.ImageRegistry.GetWithUser(ctx, imageID)
 		if err != nil {
 			continue // Skip images that can't be found
 		}
@@ -937,7 +947,7 @@ func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xml
 	}
 
 	for _, invoiceID := range invoiceIDs {
-		invoice, err := s.registrySet.InvoiceRegistry.Get(ctx, invoiceID)
+		invoice, err := s.registrySet.InvoiceRegistry.GetWithUser(ctx, invoiceID)
 		if err != nil {
 			continue // Skip invoices that can't be found
 		}
@@ -974,7 +984,7 @@ func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlC
 	}
 
 	for _, manualID := range manualIDs {
-		manual, err := s.registrySet.ManualRegistry.Get(ctx, manualID)
+		manual, err := s.registrySet.ManualRegistry.GetWithUser(ctx, manualID)
 		if err != nil {
 			continue // Skip manuals that can't be found
 		}
@@ -1108,11 +1118,11 @@ func (s *ExportService) streamFileCollectionDirectly(ctx context.Context, encode
 		// Get file based on registry type
 		switch r := reg.(type) {
 		case registry.ImageRegistry:
-			file, err = r.Get(ctx, fileID)
+			file, err = r.GetWithUser(ctx, fileID)
 		case registry.InvoiceRegistry:
-			file, err = r.Get(ctx, fileID)
+			file, err = r.GetWithUser(ctx, fileID)
 		case registry.ManualRegistry:
-			file, err = r.Get(ctx, fileID)
+			file, err = r.GetWithUser(ctx, fileID)
 		default:
 			continue
 		}
@@ -1583,7 +1593,7 @@ func (s *ExportService) enrichSelectedItemsWithNames(ctx context.Context, export
 
 		switch item.Type {
 		case models.ExportSelectedItemTypeLocation:
-			location, getErr := s.registrySet.LocationRegistry.Get(ctx, item.ID)
+			location, getErr := s.registrySet.LocationRegistry.GetWithUser(ctx, item.ID)
 			if getErr != nil {
 				// If item doesn't exist, use a fallback name
 				name = "[Deleted Location " + item.ID + "]"
@@ -1591,7 +1601,7 @@ func (s *ExportService) enrichSelectedItemsWithNames(ctx context.Context, export
 				name = location.Name
 			}
 		case models.ExportSelectedItemTypeArea:
-			area, getErr := s.registrySet.AreaRegistry.Get(ctx, item.ID)
+			area, getErr := s.registrySet.AreaRegistry.GetWithUser(ctx, item.ID)
 			if getErr != nil {
 				// If item doesn't exist, use a fallback name
 				name = "[Deleted Area " + item.ID + "]"
@@ -1600,7 +1610,7 @@ func (s *ExportService) enrichSelectedItemsWithNames(ctx context.Context, export
 				locationID = area.LocationID // Store the relationship
 			}
 		case models.ExportSelectedItemTypeCommodity:
-			commodity, getErr := s.registrySet.CommodityRegistry.Get(ctx, item.ID)
+			commodity, getErr := s.registrySet.CommodityRegistry.GetWithUser(ctx, item.ID)
 			if getErr != nil {
 				// If item doesn't exist, use a fallback name
 				name = "[Deleted Commodity " + item.ID + "]"

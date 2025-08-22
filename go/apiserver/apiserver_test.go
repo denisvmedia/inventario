@@ -3,11 +3,13 @@ package apiserver_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/textproto"
 	"strings"
 	"time"
 
 	"github.com/go-extras/go-kit/must"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 
@@ -20,6 +22,9 @@ import (
 )
 
 const uploadLocation = "file://uploads?memfs=1&create_dir=1"
+
+// Test JWT secret for authentication
+var testJWTSecret = []byte("test-jwt-secret-32-bytes-minimum-length")
 
 func newLocationRegistry() registry.LocationRegistry {
 	var locationsRegistry = memory.NewLocationRegistry()
@@ -221,6 +226,55 @@ func newSettingsRegistry() registry.SettingsRegistry {
 	return settingsRegistry
 }
 
+func newUserRegistry() registry.UserRegistry {
+	var userRegistry = memory.NewUserRegistry()
+
+	// Create a test user for authentication
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	testUser.SetPassword("password123")
+
+	_, err := userRegistry.Create(context.Background(), testUser)
+	must.Assert(err)
+
+	return userRegistry
+}
+
+// createTestJWTToken creates a JWT token for testing
+func createTestJWTToken(userID string, role models.UserRole) string {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"role":    string(role),
+		"exp":     time.Now().Add(24 * time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString(testJWTSecret)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create test JWT token: %v", err))
+	}
+
+	return tokenString
+}
+
+// addAuthHeader adds JWT authentication header to a request
+func addAuthHeader(req *http.Request, userID string, role models.UserRole) {
+	token := createTestJWTToken(userID, role)
+	req.Header.Set("Authorization", "Bearer "+token)
+}
+
+// addTestUserAuthHeader adds authentication header for the default test user
+func addTestUserAuthHeader(req *http.Request) {
+	addAuthHeader(req, "test-user-id", models.UserRoleUser)
+}
+
 func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commodityRegistry registry.CommodityRegistry) {
 	commodities := must.Must(commodityRegistry.List(context.Background()))
 	if len(commodities) == 0 {
@@ -347,6 +401,7 @@ func newParams() apiserver.Params {
 	params.RegistrySet.LocationRegistry = newLocationRegistry()
 	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
 	params.RegistrySet.SettingsRegistry = newSettingsRegistry()
+	params.RegistrySet.UserRegistry = newUserRegistry()
 
 	// Create FileRegistry and populate it with test data first
 	params.RegistrySet.FileRegistry = memory.NewFileRegistry()
@@ -358,6 +413,7 @@ func newParams() apiserver.Params {
 	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
 
 	params.UploadLocation = uploadLocation
+	params.JWTSecret = testJWTSecret
 
 	// Create EntityService
 	params.EntityService = services.NewEntityService(params.RegistrySet, params.UploadLocation)
@@ -372,7 +428,9 @@ func newParamsAreaRegistryOnly() apiserver.Params {
 	params.RegistrySet = &registry.Set{}
 	params.RegistrySet.LocationRegistry = newLocationRegistry()
 	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
+	params.RegistrySet.UserRegistry = newUserRegistry()
 	params.UploadLocation = uploadLocation
+	params.JWTSecret = testJWTSecret
 	return params
 }
 

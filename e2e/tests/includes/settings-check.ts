@@ -1,4 +1,5 @@
 import { Page } from '@playwright/test';
+import { navigateWithAuth } from './auth.js';
 
 /**
  * Check if the page shows "Settings Required" message and fail fast if found.
@@ -17,14 +18,14 @@ export async function checkSettingsRequired(page: Page): Promise<void> {
 }
 
 /**
- * Navigate to a URL and check for "Settings Required" message.
- * This is a convenience function that combines navigation with the settings check.
- * 
+ * Navigate to a URL with authentication and check for "Settings Required" message.
+ * This is a convenience function that combines navigation, authentication, and settings check.
+ *
  * @param page - The Playwright page object
  * @param url - The URL to navigate to
  * @throws Error if "Settings Required" message is found after navigation
  */
 export async function navigateAndCheckSettings(page: Page, url: string): Promise<void> {
-  await page.goto(url);
+  await navigateWithAuth(page, url);
   await checkSettingsRequired(page);
 }

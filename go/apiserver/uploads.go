@@ -68,15 +68,19 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		// Extract tenant and user from authenticated request context
-		tenantID, userID := ExtractTenantUserFromRequest(r)
+		// Extract user from authenticated request context
+		user := GetUserFromRequest(r)
+		if user == nil {
+			http.Error(w, "User context required", http.StatusInternalServerError)
+			return
+		}
 
 		// Create file entity instead of image
 		now := time.Now()
 		fileEntity := models.FileEntity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: tenantID,
-				UserID:   userID,
+				TenantID: user.TenantID,
+				UserID:   user.ID,
 			},
 			Title:            pathWithoutExt, // Use filename as title
 			Description:      "",
@@ -134,15 +138,19 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		// Extract tenant and user from authenticated request context
-		tenantID, userID := ExtractTenantUserFromRequest(r)
+		// Extract user from authenticated request context
+		user := GetUserFromRequest(r)
+		if user == nil {
+			http.Error(w, "User context required", http.StatusInternalServerError)
+			return
+		}
 
 		// Create file entity instead of manual
 		now := time.Now()
 		fileEntity := models.FileEntity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: tenantID,
-				UserID:   userID,
+				TenantID: user.TenantID,
+				UserID:   user.ID,
 			},
 			Title:            pathWithoutExt, // Use filename as title
 			Description:      "",
@@ -200,15 +208,19 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		// Extract tenant and user from authenticated request context
-		tenantID, userID := ExtractTenantUserFromRequest(r)
+		// Extract user from authenticated request context
+		user := GetUserFromRequest(r)
+		if user == nil {
+			http.Error(w, "User context required", http.StatusInternalServerError)
+			return
+		}
 
 		// Create file entity instead of invoice
 		now := time.Now()
 		fileEntity := models.FileEntity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: tenantID,
-				UserID:   userID,
+				TenantID: user.TenantID,
+				UserID:   user.ID,
 			},
 			Title:            pathWithoutExt, // Use filename as title
 			Description:      "",
@@ -280,15 +292,19 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 			fileType = models.FileTypeOther
 		}
 
-		// Extract tenant and user from authenticated request context
-		tenantID, userID := ExtractTenantUserFromRequest(r)
+		// Extract user from authenticated request context
+		user := GetUserFromRequest(r)
+		if user == nil {
+			http.Error(w, "User context required", http.StatusInternalServerError)
+			return
+		}
 
 		// Create file entity with auto-generated title from filename
 		now := time.Now()
 		fileEntity := models.FileEntity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: tenantID,
-				UserID:   userID,
+				TenantID: user.TenantID,
+				UserID:   user.ID,
 			},
 			Title:       pathWithoutExt, // Use filename as default title
 			Description: "",             // Empty description

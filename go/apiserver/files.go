@@ -135,14 +135,18 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract tenant and user from authenticated request context
-	tenantID, userID := ExtractTenantUserFromRequest(r)
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
 
 	now := time.Now()
 	fileEntity := models.FileEntity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   userID,
+			TenantID: user.TenantID,
+			UserID:   user.ID,
 		},
 		Title:            input.Data.Attributes.Title,
 		Description:      input.Data.Attributes.Description,
