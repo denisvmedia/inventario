@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
