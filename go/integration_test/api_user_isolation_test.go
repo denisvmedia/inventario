@@ -35,10 +35,10 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		t.Fatalf("Failed to create registry set: %v", err)
 	}
 
-	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	jwtSecretBytes := []byte("test-secret-32-bytes-minimum-length")
 
 	// Create test users
-	user1 := models.User{
+	user1Model := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "api-user-1"},
 			TenantID: "test-tenant-id",
@@ -48,12 +48,12 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
-	err = user1.SetPassword("testpassword123")
+	err = user1Model.SetPassword("testpassword123")
 	if err != nil {
 		t.Fatalf("Failed to set password: %v", err)
 	}
 
-	user2 := models.User{
+	user2Model := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "api-user-2"},
 			TenantID: "test-tenant-id",
@@ -63,17 +63,17 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
-	err = user2.SetPassword("testpassword123")
+	err = user2Model.SetPassword("testpassword123")
 	if err != nil {
 		t.Fatalf("Failed to set password: %v", err)
 	}
 
-	createdUser1, err := registrySet.UserRegistry.Create(context.Background(), user1)
+	createdUser1, err := registrySet.UserRegistry.Create(context.Background(), user1Model)
 	if err != nil {
 		t.Fatalf("Failed to create user1: %v", err)
 	}
 
-	createdUser2, err := registrySet.UserRegistry.Create(context.Background(), user2)
+	createdUser2, err := registrySet.UserRegistry.Create(context.Background(), user2Model)
 	if err != nil {
 		t.Fatalf("Failed to create user2: %v", err)
 	}
@@ -85,20 +85,20 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		UploadLocation: "file://uploads?memfs=1&create_dir=1",
 		DebugInfo:      debug.NewInfo("postgres://test", "file://uploads?memfs=1&create_dir=1"),
 		StartTime:      time.Now(),
-		JWTSecret:      jwtSecret,
+		JWTSecret:      jwtSecretBytes,
 	}
 
 	handler := apiserver.APIServer(params, nil)
-	server := httptest.NewServer(handler)
+	server = httptest.NewServer(handler)
 
-	cleanup := func() {
+	cleanup = func() {
 		server.Close()
 		if cleanupFunc != nil {
 			cleanupFunc()
 		}
 	}
 
-	return server, createdUser1, createdUser2, string(jwtSecret), cleanup
+	return server, createdUser1, createdUser2, string(jwtSecretBytes), cleanup
 }
 
 // generateJWTToken creates a JWT token for the given user
