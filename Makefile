@@ -173,55 +173,6 @@ test: test-go test-frontend
 test-e2e:
 	$(CD) e2e && npm install && npm run test
 
-# Run user isolation integration tests
-.PHONY: test-user-isolation
-test-user-isolation:
-	@echo "Running user isolation integration tests..."
-ifeq ($(OS),Windows_NT)
-	@if not defined POSTGRES_TEST_DSN ( \
-		echo ❌ POSTGRES_TEST_DSN environment variable is not set && \
-		echo    Example: set POSTGRES_TEST_DSN=postgres://user:password@localhost:5432/inventario_test?sslmode=disable && \
-		exit /b 1 \
-	)
-else
-	@if [ -z "$(POSTGRES_TEST_DSN)" ]; then \
-		echo "❌ POSTGRES_TEST_DSN environment variable is not set"; \
-		echo "   Example: export POSTGRES_TEST_DSN='postgres://user:password@localhost:5432/inventario_test?sslmode=disable'"; \
-		exit 1; \
-	fi
-endif
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -tags=integration -v ./integration_test/user_isolation_test.go
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -tags=integration -v ./integration_test/api_user_isolation_test.go
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -tags=integration -v ./integration_test/user_isolation_comprehensive_test.go
-
-# Run user isolation performance tests
-.PHONY: test-user-isolation-performance
-test-user-isolation-performance:
-	@echo "Running user isolation performance tests..."
-ifeq ($(OS),Windows_NT)
-	@if not defined POSTGRES_TEST_DSN ( \
-		echo ❌ POSTGRES_TEST_DSN environment variable is not set && \
-		echo    Example: set POSTGRES_TEST_DSN=postgres://user:password@localhost:5432/inventario_test?sslmode=disable && \
-		exit /b 1 \
-	)
-else
-	@if [ -z "$(POSTGRES_TEST_DSN)" ]; then \
-		echo "❌ POSTGRES_TEST_DSN environment variable is not set"; \
-		echo "   Example: export POSTGRES_TEST_DSN='postgres://user:password@localhost:5432/inventario_test?sslmode=disable'"; \
-		exit 1; \
-	fi
-endif
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -tags=integration -v ./integration_test/user_isolation_performance_test.go -bench=. -benchmem
-
-# Run user isolation E2E tests
-.PHONY: test-user-isolation-e2e
-test-user-isolation-e2e:
-	@echo "Running user isolation E2E tests..."
-	$(CD) e2e && npm install && npx playwright test tests/user-isolation.spec.ts
-
-# Run all user isolation tests
-.PHONY: test-user-isolation-all
-test-user-isolation-all: test-user-isolation test-user-isolation-e2e
 
 # Seed the database
 .PHONY: seed-db
@@ -349,10 +300,6 @@ ifeq ($(OS),Windows_NT)
 	@echo   test-go-all      - Run all Go tests including PostgreSQL
 	@echo   test-frontend    - Run frontend tests
 	@echo   test-e2e         - Run end-to-end tests
-	@echo   test-user-isolation - Run user isolation integration tests
-	@echo   test-user-isolation-performance - Run user isolation performance tests
-	@echo   test-user-isolation-e2e - Run user isolation E2E tests
-	@echo   test-user-isolation-all - Run all user isolation tests
 	@echo   seed-db          - Seed the database with test data
 	@echo   lint             - Run all linters
 	@echo   lint-go          - Lint Go code
@@ -393,10 +340,6 @@ else
 	@echo "  test-go-all      - Run all Go tests including PostgreSQL"
 	@echo "  test-frontend    - Run frontend tests"
 	@echo "  test-e2e         - Run end-to-end tests"
-	@echo "  test-user-isolation - Run user isolation integration tests"
-	@echo "  test-user-isolation-performance - Run user isolation performance tests"
-	@echo "  test-user-isolation-e2e - Run user isolation E2E tests"
-	@echo "  test-user-isolation-all - Run all user isolation tests"
 	@echo "  seed-db          - Seed the database with test data"
 	@echo "  lint             - Run all linters"
 	@echo "  lint-go          - Lint Go code"
