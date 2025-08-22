@@ -133,7 +133,7 @@ func (m *DataSetupManager) SetupInitialDataset(ctx context.Context, opts SetupOp
 }
 
 // printf writes formatted output to the writer
-func (m *DataSetupManager) printf(format string, args ...interface{}) {
+func (m *DataSetupManager) printf(format string, args ...any) {
 	if m.writer != nil {
 		fmt.Fprintf(m.writer, format, args...)
 	}

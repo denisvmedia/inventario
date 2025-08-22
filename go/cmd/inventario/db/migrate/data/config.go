@@ -6,12 +6,12 @@ type Config struct {
 	DefaultTenantID   string `mapstructure:"default-tenant-id"`
 	DefaultTenantName string `mapstructure:"default-tenant-name"`
 	DefaultTenantSlug string `mapstructure:"default-tenant-slug"`
-	
+
 	// Admin user configuration
 	AdminEmail    string `mapstructure:"admin-email"`
 	AdminPassword string `mapstructure:"admin-password"`
 	AdminName     string `mapstructure:"admin-name"`
-	
+
 	// Migration options
 	DryRun bool `mapstructure:"dry-run"`
 }
