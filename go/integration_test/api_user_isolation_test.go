@@ -22,7 +22,7 @@ import (
 )
 
 // setupTestAPIServer creates a test API server with authentication
-func setupTestAPIServer(t *testing.T) (*httptest.Server, *models.User, *models.User, string, func()) {
+func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.User, user2 *models.User, jwtSecret string, cleanup func()) {
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
 		t.Skip("POSTGRES_TEST_DSN environment variable not set")
@@ -152,7 +152,7 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	}
 
 	// User1 creates a commodity
-	commodityData := map[string]interface{}{
+	commodityData := map[string]any{
 		"name":        "User1 Commodity",
 		"description": "A commodity created by user1",
 	}
@@ -179,7 +179,7 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 		t.Errorf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
-	var commodities []map[string]interface{}
+	var commodities []map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&commodities)
 	if err != nil {
 		t.Fatalf("Failed to decode commodities: %v", err)
@@ -238,7 +238,7 @@ func TestAPIAuthentication(t *testing.T) {
 			var err error
 
 			if endpoint.method == "POST" {
-				testData := map[string]interface{}{"name": "Test"}
+				testData := map[string]any{"name": "Test"}
 				jsonData, _ := json.Marshal(testData)
 				req, err = http.NewRequest(endpoint.method, server.URL+endpoint.path, bytes.NewBuffer(jsonData))
 			} else {

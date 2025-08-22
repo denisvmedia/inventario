@@ -262,10 +262,11 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 // TestUserIsolation_EdgeCases tests edge cases and boundary conditions
 func TestUserIsolation_EdgeCases(t *testing.T) {
+	c := qt.New(t)
 	registrySet, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
-	user := createTestUser(t, registrySet, "edge@example.com")
+	user := createTestUser(c, registrySet, "edge@example.com")
 	_ = registry.WithUserContext(context.Background(), user.ID)
 
 	t.Run("Empty User Context", func(t *testing.T) {
