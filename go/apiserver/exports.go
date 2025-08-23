@@ -292,9 +292,6 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	if importedExport.TenantID == "" {
 		importedExport.TenantID = user.TenantID
 	}
-	if importedExport.UserID == "" {
-		importedExport.UserID = user.ID
-	}
 
 	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), importedExport)
 	if err != nil {

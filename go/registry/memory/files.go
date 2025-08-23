@@ -3,7 +3,9 @@ package memory
 import (
 	"context"
 	"strings"
+	"time"
 
+	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -156,4 +158,88 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 	}
 
 	return filtered, nil
+}
+
+// Enhanced methods with simplified in-memory implementations
+
+// FullTextSearch performs simple text search on files (simplified)
+func (r *FileRegistry) FullTextSearch(ctx context.Context, query string, fileType *models.FileType, options ...registry.SearchOption) ([]*models.FileEntity, error) {
+	// Use the existing search method as a simplified implementation
+	files, err := r.Search(ctx, query, fileType, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply options
+	opts := &registry.SearchOptions{Limit: len(files)}
+	for _, opt := range options {
+		opt(opts)
+	}
+
+	if opts.Offset > 0 && opts.Offset < len(files) {
+		files = files[opts.Offset:]
+	}
+	if opts.Limit > 0 && opts.Limit < len(files) {
+		files = files[:opts.Limit]
+	}
+
+	return files, nil
+}
+
+// FindByMimeType finds files by MIME types (simplified)
+func (r *FileRegistry) FindByMimeType(ctx context.Context, mimeTypes []string) ([]*models.FileEntity, error) {
+	allFiles, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*models.FileEntity
+	for _, file := range allFiles {
+		for _, mimeType := range mimeTypes {
+			if file.MIMEType == mimeType {
+				filtered = append(filtered, file)
+				break
+			}
+		}
+	}
+
+	return filtered, nil
+}
+
+// FindByDateRange finds files within a date range (simplified)
+func (r *FileRegistry) FindByDateRange(ctx context.Context, startDate, endDate string) ([]*models.FileEntity, error) {
+	allFiles, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	start, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return nil, errkit.Wrap(err, "invalid start date format")
+	}
+
+	end, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return nil, errkit.Wrap(err, "invalid end date format")
+	}
+
+	var filtered []*models.FileEntity
+	for _, file := range allFiles {
+		if !file.CreatedAt.IsZero() {
+			if (file.CreatedAt.Equal(start) || file.CreatedAt.After(start)) &&
+				(file.CreatedAt.Equal(end) || file.CreatedAt.Before(end)) {
+				filtered = append(filtered, file)
+			}
+		}
+	}
+
+	return filtered, nil
+}
+
+// FindLargeFiles finds files larger than the specified size (simplified)
+func (r *FileRegistry) FindLargeFiles(ctx context.Context, minSizeBytes int64) ([]*models.FileEntity, error) {
+	// Note: File size is not currently tracked in the FileEntity model
+	// This is a placeholder implementation that returns empty results
+	// In a full implementation, you would add a size field to the files table
+	return []*models.FileEntity{}, nil
 }

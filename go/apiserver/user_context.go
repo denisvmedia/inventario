@@ -1,20 +1,14 @@
 package apiserver
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/registry"
-)
-
-const (
-	userCtxKey ctxValueKey = "user"
-	userIDKey  ctxValueKey = "userID"
 )
 
 // UserResolver interface defines methods for resolving user from HTTP requests
@@ -70,36 +64,6 @@ func (j *JWTUserResolver) ResolveUser(r *http.Request) (string, error) {
 	return userID, nil
 }
 
-// UserFromContext retrieves the user from the request context
-func UserFromContext(ctx context.Context) *models.User {
-	user, ok := ctx.Value(userCtxKey).(*models.User)
-	if !ok {
-		return nil
-	}
-	return user
-}
-
-// UserIDFromContext retrieves the user ID from the request context
-func UserIDFromContext(ctx context.Context) string {
-	userID, ok := ctx.Value(userIDKey).(string)
-	if !ok {
-		return ""
-	}
-	return userID
-}
-
-// WithUser adds a user to the context
-func WithUser(ctx context.Context, user *models.User) context.Context {
-	ctx = context.WithValue(ctx, userCtxKey, user)
-	ctx = context.WithValue(ctx, userIDKey, user.ID)
-	return ctx
-}
-
-// WithUserID adds a user ID to the context
-func WithUserID(ctx context.Context, userID string) context.Context {
-	return context.WithValue(ctx, userIDKey, userID)
-}
-
 // UserMiddleware creates middleware that resolves and validates user context
 func UserMiddleware(resolver UserResolver, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -125,7 +89,7 @@ func UserMiddleware(resolver UserResolver, userRegistry registry.UserRegistry) f
 			}
 
 			// Add user to context
-			ctx := WithUser(r.Context(), user)
+			ctx := appctx.WithUser(r.Context(), user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -135,7 +99,7 @@ func UserMiddleware(resolver UserResolver, userRegistry registry.UserRegistry) f
 func RequireUser() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user := UserFromContext(r.Context())
+			user := appctx.UserFromContext(r.Context())
 			if user == nil {
 				http.Error(w, "User context required", http.StatusInternalServerError)
 				return
@@ -161,7 +125,7 @@ func UserAwareMiddleware(resolver UserResolver) func(http.Handler) http.Handler 
 			}
 
 			// Add user ID to context
-			ctx := WithUserID(r.Context(), userID)
+			ctx := appctx.WithUserID(r.Context(), userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

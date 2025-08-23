@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
@@ -717,4 +719,238 @@ func (r *CommodityRegistry) CountWithUser(ctx context.Context) (int, error) {
 	}
 
 	return CountEntities(ctx, r.dbx, r.tableNames.Commodities())
+}
+
+// Enhanced methods with PostgreSQL-specific implementations
+
+// SearchByTags searches commodities by tags using PostgreSQL JSONB operators
+func (r *CommodityRegistry) SearchByTags(ctx context.Context, tags []string, operator registry.TagOperator) ([]*models.Commodity, error) {
+	tagsJSON, err := json.Marshal(tags)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to marshal tags")
+	}
+
+	var sql string
+	switch operator {
+	case registry.TagOperatorAND:
+		sql = "SELECT * FROM " + r.tableNames.Commodities() + " WHERE tags @> $1"
+	case registry.TagOperatorOR:
+		sql = "SELECT * FROM " + r.tableNames.Commodities() + " WHERE tags && $1"
+	default:
+		return nil, fmt.Errorf("unsupported tag operator: %s", operator)
+	}
+
+	var commodities []*models.Commodity
+	err = r.dbx.SelectContext(ctx, &commodities, sql, tagsJSON)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to search by tags")
+	}
+
+	return commodities, nil
+}
+
+// FindSimilar finds similar commodities using PostgreSQL trigram similarity
+func (r *CommodityRegistry) FindSimilar(ctx context.Context, commodityID string, threshold float64) ([]*models.Commodity, error) {
+	sql := fmt.Sprintf(`
+		SELECT c.*, similarity(c.name, ref.name) as sim
+		FROM %s c, %s ref
+		WHERE ref.id = $1
+		AND c.id != $1
+		AND similarity(c.name, ref.name) > $2
+		ORDER BY sim DESC
+		LIMIT 10
+	`, r.tableNames.Commodities(), r.tableNames.Commodities())
+
+	var commodities []*models.Commodity
+	err := r.dbx.SelectContext(ctx, &commodities, sql, commodityID, threshold)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to find similar commodities")
+	}
+
+	return commodities, nil
+}
+
+// FullTextSearch performs PostgreSQL full-text search on commodities
+func (r *CommodityRegistry) FullTextSearch(ctx context.Context, query string, options ...registry.SearchOption) ([]*models.Commodity, error) {
+	opts := &registry.SearchOptions{Limit: 100, Offset: 0}
+	for _, opt := range options {
+		opt(opts)
+	}
+
+	sql := fmt.Sprintf(`
+		SELECT c.*, ts_rank(search_vector, plainto_tsquery($1)) as rank
+		FROM %s c
+		WHERE search_vector @@ plainto_tsquery($1)
+		ORDER BY rank DESC
+		LIMIT $2 OFFSET $3
+	`, r.tableNames.Commodities())
+
+	var commodities []*models.Commodity
+	err := r.dbx.SelectContext(ctx, &commodities, sql, query, opts.Limit, opts.Offset)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to execute full-text search")
+	}
+
+	return commodities, nil
+}
+
+// AggregateByArea aggregates commodities by area
+func (r *CommodityRegistry) AggregateByArea(ctx context.Context, groupBy []string) ([]registry.AggregationResult, error) {
+	sql := fmt.Sprintf(`
+		SELECT
+			area_id,
+			COUNT(*) as count,
+			AVG(COALESCE(converted_original_price, original_price)) as avg_price,
+			SUM(COALESCE(converted_original_price, original_price)) as total_price
+		FROM %s
+		WHERE draft = false
+		GROUP BY area_id
+		ORDER BY count DESC
+	`, r.tableNames.Commodities())
+
+	rows, err := r.dbx.QueryContext(ctx, sql)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to aggregate by area")
+	}
+	defer rows.Close()
+
+	var results []registry.AggregationResult
+	for rows.Next() {
+		var areaID string
+		var count int
+		var avgPrice, totalPrice *float64
+
+		err := rows.Scan(&areaID, &count, &avgPrice, &totalPrice)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to scan aggregation result")
+		}
+
+		result := registry.AggregationResult{
+			GroupBy: map[string]any{"area_id": areaID},
+			Count:   count,
+			Avg:     make(map[string]float64),
+			Sum:     make(map[string]float64),
+		}
+
+		if avgPrice != nil {
+			result.Avg["price"] = *avgPrice
+		}
+		if totalPrice != nil {
+			result.Sum["price"] = *totalPrice
+		}
+
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// CountByStatus counts commodities by status
+func (r *CommodityRegistry) CountByStatus(ctx context.Context) (map[string]int, error) {
+	sql := "SELECT status, COUNT(*) FROM " + r.tableNames.Commodities() + " GROUP BY status"
+
+	rows, err := r.dbx.QueryContext(ctx, sql)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to count by status")
+	}
+	defer rows.Close()
+
+	result := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var count int
+
+		err := rows.Scan(&status, &count)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to scan status count")
+		}
+
+		result[status] = count
+	}
+
+	return result, nil
+}
+
+// CountByType counts commodities by type
+func (r *CommodityRegistry) CountByType(ctx context.Context) (map[string]int, error) {
+	sql := "SELECT type, COUNT(*) FROM " + r.tableNames.Commodities() + " GROUP BY type"
+
+	rows, err := r.dbx.QueryContext(ctx, sql)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to count by type")
+	}
+	defer rows.Close()
+
+	result := make(map[string]int)
+	for rows.Next() {
+		var commodityType string
+		var count int
+
+		err := rows.Scan(&commodityType, &count)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to scan type count")
+		}
+
+		result[commodityType] = count
+	}
+
+	return result, nil
+}
+
+// FindByPriceRange finds commodities within a price range
+func (r *CommodityRegistry) FindByPriceRange(ctx context.Context, minPrice, maxPrice float64, currency string) ([]*models.Commodity, error) {
+	sql := fmt.Sprintf(`
+		SELECT * FROM %s
+		WHERE COALESCE(converted_original_price, original_price) BETWEEN $1 AND $2
+		AND (original_price_currency = $3 OR $3 = '')
+		ORDER BY COALESCE(converted_original_price, original_price)
+	`, r.tableNames.Commodities())
+
+	var commodities []*models.Commodity
+	err := r.dbx.SelectContext(ctx, &commodities, sql, minPrice, maxPrice, currency)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to find by price range")
+	}
+
+	return commodities, nil
+}
+
+// FindByDateRange finds commodities within a date range
+func (r *CommodityRegistry) FindByDateRange(ctx context.Context, startDate, endDate string) ([]*models.Commodity, error) {
+	sql := fmt.Sprintf(`
+		SELECT * FROM %s
+		WHERE purchase_date BETWEEN $1 AND $2
+		ORDER BY purchase_date DESC
+	`, r.tableNames.Commodities())
+
+	var commodities []*models.Commodity
+	err := r.dbx.SelectContext(ctx, &commodities, sql, startDate, endDate)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to find by date range")
+	}
+
+	return commodities, nil
+}
+
+// FindBySerialNumbers finds commodities by serial numbers
+func (r *CommodityRegistry) FindBySerialNumbers(ctx context.Context, serialNumbers []string) ([]*models.Commodity, error) {
+	serialJSON, err := json.Marshal(serialNumbers)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to marshal serial numbers")
+	}
+
+	sql := fmt.Sprintf(`
+		SELECT * FROM %s
+		WHERE serial_number = ANY($1::text[])
+		OR extra_serial_numbers ?| $1::text[]
+		ORDER BY name
+	`, r.tableNames.Commodities())
+
+	var commodities []*models.Commodity
+	err = r.dbx.SelectContext(ctx, &commodities, sql, serialJSON)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to find by serial numbers")
+	}
+
+	return commodities, nil
 }

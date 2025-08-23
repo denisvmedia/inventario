@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 
@@ -357,4 +359,52 @@ func (r *LocationRegistry) DeleteWithUser(ctx context.Context, id string) error 
 // CountWithUser counts locations with user context
 func (r *LocationRegistry) CountWithUser(ctx context.Context) (int, error) {
 	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Locations())
+}
+
+// Enhanced methods with PostgreSQL-specific implementations
+
+// GetAreaCount returns the number of areas in a location
+func (r *LocationRegistry) GetAreaCount(ctx context.Context, locationID string) (int, error) {
+	areas, err := r.GetAreas(ctx, locationID)
+	if err != nil {
+		return 0, err
+	}
+	return len(areas), nil
+}
+
+// GetTotalCommodityCount returns the total number of commodities across all areas in a location
+func (r *LocationRegistry) GetTotalCommodityCount(ctx context.Context, locationID string) (int, error) {
+	sql := fmt.Sprintf(`
+		SELECT COUNT(c.id)
+		FROM %s c
+		JOIN %s a ON c.area_id = a.id
+		WHERE a.location_id = $1
+		AND c.draft = false
+	`, r.tableNames.Commodities(), r.tableNames.Areas())
+
+	var count int
+	err := r.dbx.GetContext(ctx, &count, sql, locationID)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count commodities in location")
+	}
+
+	return count, nil
+}
+
+// SearchByName searches locations by name using PostgreSQL text search
+func (r *LocationRegistry) SearchByName(ctx context.Context, query string) ([]*models.Location, error) {
+	query = strings.ToLower(query)
+	sql := fmt.Sprintf(`
+		SELECT * FROM %s
+		WHERE LOWER(name) LIKE $1
+		ORDER BY name
+	`, r.tableNames.Locations())
+
+	var locations []*models.Location
+	err := r.dbx.SelectContext(ctx, &locations, sql, "%"+query+"%")
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to search locations by name")
+	}
+
+	return locations, nil
 }

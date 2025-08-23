@@ -59,9 +59,6 @@ USAGE EXAMPLES:
   Custom upload location:
     inventario run --upload-location="file:///var/lib/inventario/uploads?create_dir=1"
 
-  Local development with persistent database:
-    inventario run --db-dsn="boltdb://./inventario.db" --upload-location="file://./uploads?create_dir=1"
-
 FLAG DETAILS:
 
   --addr (default ":3333")
@@ -72,7 +69,6 @@ FLAG DETAILS:
   --db-dsn (default "memory://")
     Database connection string supporting multiple backends:
     • PostgreSQL: "postgres://user:password@host:port/database?sslmode=disable"
-    • BoltDB: "boltdb://path/to/database.db"
     • In-memory: "memory://" (data lost on restart, useful for testing)
 
   --upload-location (default "file://./uploads?create_dir=1")

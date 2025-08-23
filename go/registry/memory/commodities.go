@@ -2,7 +2,9 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -45,7 +47,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		return nil, errkit.Wrap(err, "failed to create commodity")
 	}
 
-	err = r.areaRegistry.AddCommodity(ctx, commodity.AreaID, newCommodity.ID)
+	err = r.areaRegistry.(*AreaRegistry).AddCommodity(ctx, commodity.AreaID, newCommodity.ID)
 
 	return newCommodity, err
 }
@@ -167,4 +169,316 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	}
 
 	return updatedCommodity, nil
+}
+
+// Enhanced methods with simplified in-memory implementations
+
+// SearchByTags searches commodities by tags using in-memory filtering
+func (r *CommodityRegistry) SearchByTags(ctx context.Context, tags []string, operator registry.TagOperator) ([]*models.Commodity, error) {
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*models.Commodity
+	for _, commodity := range commodities {
+		if r.matchesTags(commodity.Tags, tags, operator) {
+			filtered = append(filtered, commodity)
+		}
+	}
+
+	return filtered, nil
+}
+
+// matchesTags checks if commodity tags match the search criteria
+func (r *CommodityRegistry) matchesTags(commodityTags []string, searchTags []string, operator registry.TagOperator) bool {
+	if len(searchTags) == 0 {
+		return true
+	}
+
+	switch operator {
+	case registry.TagOperatorAND:
+		for _, searchTag := range searchTags {
+			found := false
+			for _, commodityTag := range commodityTags {
+				if strings.EqualFold(commodityTag, searchTag) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		return true
+	case registry.TagOperatorOR:
+		for _, searchTag := range searchTags {
+			for _, commodityTag := range commodityTags {
+				if strings.EqualFold(commodityTag, searchTag) {
+					return true
+				}
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
+// FindSimilar finds similar commodities using simple name comparison (simplified)
+func (r *CommodityRegistry) FindSimilar(ctx context.Context, commodityID string, threshold float64) ([]*models.Commodity, error) {
+	// Get the reference commodity
+	refCommodity, err := r.Get(ctx, commodityID)
+	if err != nil {
+		return nil, err
+	}
+
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var similar []*models.Commodity
+	refName := strings.ToLower(refCommodity.Name)
+
+	for _, commodity := range commodities {
+		if commodity.ID == commodityID {
+			continue
+		}
+
+		// Simple similarity check based on common words
+		commodityName := strings.ToLower(commodity.Name)
+		if r.calculateSimpleSimilarity(refName, commodityName) > threshold {
+			similar = append(similar, commodity)
+		}
+	}
+
+	return similar, nil
+}
+
+// calculateSimpleSimilarity calculates a simple similarity score between two strings
+func (r *CommodityRegistry) calculateSimpleSimilarity(s1, s2 string) float64 {
+	words1 := strings.Fields(s1)
+	words2 := strings.Fields(s2)
+
+	if len(words1) == 0 || len(words2) == 0 {
+		return 0.0
+	}
+
+	commonWords := 0
+	for _, word1 := range words1 {
+		for _, word2 := range words2 {
+			if word1 == word2 {
+				commonWords++
+				break
+			}
+		}
+	}
+
+	// Simple similarity score: common words / max words
+	maxWords := len(words1)
+	if len(words2) > maxWords {
+		maxWords = len(words2)
+	}
+
+	return float64(commonWords) / float64(maxWords)
+}
+
+// FullTextSearch performs simple text search on commodities (simplified)
+func (r *CommodityRegistry) FullTextSearch(ctx context.Context, query string, options ...registry.SearchOption) ([]*models.Commodity, error) {
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	query = strings.ToLower(query)
+	var filtered []*models.Commodity
+
+	for _, commodity := range commodities {
+		if strings.Contains(strings.ToLower(commodity.Name), query) ||
+			strings.Contains(strings.ToLower(commodity.ShortName), query) ||
+			strings.Contains(strings.ToLower(commodity.Comments), query) ||
+			strings.Contains(strings.ToLower(commodity.SerialNumber), query) {
+			filtered = append(filtered, commodity)
+		}
+	}
+
+	// Apply options
+	opts := &registry.SearchOptions{Limit: len(filtered)}
+	for _, opt := range options {
+		opt(opts)
+	}
+
+	if opts.Offset > 0 && opts.Offset < len(filtered) {
+		filtered = filtered[opts.Offset:]
+	}
+	if opts.Limit > 0 && opts.Limit < len(filtered) {
+		filtered = filtered[:opts.Limit]
+	}
+
+	return filtered, nil
+}
+
+// AggregateByArea aggregates commodities by area (simplified)
+func (r *CommodityRegistry) AggregateByArea(ctx context.Context, groupBy []string) ([]registry.AggregationResult, error) {
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	areaMap := make(map[string][]float64)
+	for _, commodity := range commodities {
+		if commodity.Draft {
+			continue
+		}
+		price, _ := commodity.OriginalPrice.Float64()
+		if !commodity.ConvertedOriginalPrice.IsZero() {
+			price, _ = commodity.ConvertedOriginalPrice.Float64()
+		}
+		areaMap[commodity.AreaID] = append(areaMap[commodity.AreaID], price)
+	}
+
+	var results []registry.AggregationResult
+	for areaID, prices := range areaMap {
+		count := len(prices)
+		var sum, avg float64
+		for _, price := range prices {
+			sum += price
+		}
+		if count > 0 {
+			avg = sum / float64(count)
+		}
+
+		result := registry.AggregationResult{
+			GroupBy: map[string]any{"area_id": areaID},
+			Count:   count,
+			Avg:     map[string]float64{"price": avg},
+			Sum:     map[string]float64{"price": sum},
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// CountByStatus counts commodities by status (simplified)
+func (r *CommodityRegistry) CountByStatus(ctx context.Context) (map[string]int, error) {
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]int)
+	for _, commodity := range commodities {
+		result[string(commodity.Status)]++
+	}
+
+	return result, nil
+}
+
+// CountByType counts commodities by type (simplified)
+func (r *CommodityRegistry) CountByType(ctx context.Context) (map[string]int, error) {
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]int)
+	for _, commodity := range commodities {
+		result[string(commodity.Type)]++
+	}
+
+	return result, nil
+}
+
+// FindByPriceRange finds commodities within a price range (simplified)
+func (r *CommodityRegistry) FindByPriceRange(ctx context.Context, minPrice, maxPrice float64, currency string) ([]*models.Commodity, error) {
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*models.Commodity
+	for _, commodity := range commodities {
+		price, _ := commodity.OriginalPrice.Float64()
+		if !commodity.ConvertedOriginalPrice.IsZero() {
+			price, _ = commodity.ConvertedOriginalPrice.Float64()
+		}
+
+		// Check currency if specified
+		if currency != "" && string(commodity.OriginalPriceCurrency) != currency {
+			continue
+		}
+
+		if price >= minPrice && price <= maxPrice {
+			filtered = append(filtered, commodity)
+		}
+	}
+
+	return filtered, nil
+}
+
+// FindByDateRange finds commodities within a date range (simplified)
+func (r *CommodityRegistry) FindByDateRange(ctx context.Context, startDate, endDate string) ([]*models.Commodity, error) {
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	start, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return nil, errkit.Wrap(err, "invalid start date format")
+	}
+
+	end, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return nil, errkit.Wrap(err, "invalid end date format")
+	}
+
+	var filtered []*models.Commodity
+	for _, commodity := range commodities {
+		if commodity.PurchaseDate != nil {
+			purchaseDate, err := time.Parse("2006-01-02", string(*commodity.PurchaseDate))
+			if err != nil {
+				continue
+			}
+			if (purchaseDate.Equal(start) || purchaseDate.After(start)) &&
+				(purchaseDate.Equal(end) || purchaseDate.Before(end)) {
+				filtered = append(filtered, commodity)
+			}
+		}
+	}
+
+	return filtered, nil
+}
+
+// FindBySerialNumbers finds commodities by serial numbers (simplified)
+func (r *CommodityRegistry) FindBySerialNumbers(ctx context.Context, serialNumbers []string) ([]*models.Commodity, error) {
+	commodities, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*models.Commodity
+	for _, commodity := range commodities {
+		// Check main serial number
+		for _, searchSerial := range serialNumbers {
+			if commodity.SerialNumber == searchSerial {
+				filtered = append(filtered, commodity)
+				break
+			}
+		}
+
+		// Check extra serial numbers
+		for _, extraSerial := range commodity.ExtraSerialNumbers {
+			for _, searchSerial := range serialNumbers {
+				if extraSerial == searchSerial {
+					filtered = append(filtered, commodity)
+					break
+				}
+			}
+		}
+	}
+
+	return filtered, nil
 }

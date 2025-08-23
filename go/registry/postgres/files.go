@@ -543,3 +543,84 @@ func (r *FileRegistry) DeleteWithUser(ctx context.Context, id string) error {
 func (r *FileRegistry) CountWithUser(ctx context.Context) (int, error) {
 	return CountEntitiesWithUser(ctx, r.db, "files")
 }
+
+// Enhanced methods with PostgreSQL-specific implementations
+
+// FullTextSearch performs full-text search on files (simplified implementation)
+func (r *FileRegistry) FullTextSearch(ctx context.Context, query string, fileType *models.FileType, options ...registry.SearchOption) ([]*models.FileEntity, error) {
+	// For now, use the existing search method as a simplified implementation
+	// In a full PostgreSQL implementation, this would use tsvector and tsquery
+	files, err := r.Search(ctx, query, fileType, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply options
+	opts := &registry.SearchOptions{Limit: len(files)}
+	for _, opt := range options {
+		opt(opts)
+	}
+
+	if opts.Offset > 0 && opts.Offset < len(files) {
+		files = files[opts.Offset:]
+	}
+	if opts.Limit > 0 && opts.Limit < len(files) {
+		files = files[:opts.Limit]
+	}
+
+	return files, nil
+}
+
+// FindByMimeType finds files by MIME types
+func (r *FileRegistry) FindByMimeType(ctx context.Context, mimeTypes []string) ([]*models.FileEntity, error) {
+	if len(mimeTypes) == 0 {
+		return []*models.FileEntity{}, nil
+	}
+
+	// Build placeholders for the IN clause
+	placeholders := make([]string, len(mimeTypes))
+	args := make([]any, len(mimeTypes))
+	for i, mimeType := range mimeTypes {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = mimeType
+	}
+
+	query := fmt.Sprintf(`
+		SELECT * FROM files
+		WHERE mime_type IN (%s)
+		ORDER BY created_at DESC
+	`, strings.Join(placeholders, ","))
+
+	var files []*models.FileEntity
+	err := r.db.SelectContext(ctx, &files, query, args...)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to find files by mime type")
+	}
+
+	return files, nil
+}
+
+// FindByDateRange finds files within a date range
+func (r *FileRegistry) FindByDateRange(ctx context.Context, startDate, endDate string) ([]*models.FileEntity, error) {
+	query := `
+		SELECT * FROM files
+		WHERE created_at BETWEEN $1 AND $2
+		ORDER BY created_at DESC
+	`
+
+	var files []*models.FileEntity
+	err := r.db.SelectContext(ctx, &files, query, startDate, endDate)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to find files by date range")
+	}
+
+	return files, nil
+}
+
+// FindLargeFiles finds files larger than the specified size (simplified implementation)
+func (r *FileRegistry) FindLargeFiles(ctx context.Context, minSizeBytes int64) ([]*models.FileEntity, error) {
+	// Note: File size is not currently tracked in the FileEntity model
+	// This is a placeholder implementation that returns empty results
+	// In a full implementation, you would add a size field to the files table
+	return []*models.FileEntity{}, nil
+}

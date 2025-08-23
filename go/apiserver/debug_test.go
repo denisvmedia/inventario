@@ -44,13 +44,6 @@ func TestDebugAPI(t *testing.T) {
 			expectedFileDriver: "s3",
 			expectedDBDriver:   "postgres",
 		},
-		{
-			name:               "boltdb database with azure storage",
-			uploadLocation:     "azblob://container/uploads",
-			debugInfo:          debug.NewInfo("boltdb:///path/to/db.bolt", "azblob://container/uploads"),
-			expectedFileDriver: "azblob",
-			expectedDBDriver:   "boltdb",
-		},
 	}
 
 	for _, tc := range testCases {

@@ -29,11 +29,6 @@ func NewInvoiceRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *Invo
 	}
 }
 
-// SetUserContext sets the user context for RLS policies
-func (r *InvoiceRegistry) SetUserContext(ctx context.Context, userID string) error {
-	return SetUserContext(ctx, r.dbx, userID)
-}
-
 // WithUserContext executes a function with user context set
 func (r *InvoiceRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
 	return WithUserContext(ctx, r.dbx, userID, fn)

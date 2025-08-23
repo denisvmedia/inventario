@@ -2,12 +2,19 @@ package seeddata
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"strings"
 
 	"github.com/go-extras/go-kit/ptr"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
 // createCommodityWithTenant is a helper function to create commodities with tenant and user IDs
@@ -19,9 +26,45 @@ func createCommodityWithTenant(registrySet *registry.Set, ctx context.Context, c
 	return registrySet.CommodityRegistry.Create(ctx, commodity)
 }
 
+// isPostgreSQLDSN checks if the given DSN is for PostgreSQL
+func isPostgreSQLDSN(dsn string) bool {
+	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
+}
+
 // SeedData seeds the database with example data.
 func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
 	ctx := context.Background()
+
+	// For PostgreSQL with RLS, create a separate database connection that doesn't use RLS
+	// This allows us to create users and other entities without RLS restrictions
+	// For other databases (memory), use the existing registry
+	if dbDSN := os.Getenv("INVENTARIO_RUN_DB_DSN"); dbDSN != "" && isPostgreSQLDSN(dbDSN) {
+		// Create a separate connection pool for seeding
+		pool, err := pgxpool.New(ctx, dbDSN)
+		if err != nil {
+			return fmt.Errorf("failed to create seed connection pool: %w", err)
+		}
+		defer pool.Close()
+
+		// Create sqlx DB wrapper from pgxpool (without RLS role setting)
+		sqlDB := stdlib.OpenDBFromPool(pool)
+		sqlxDB := sqlx.NewDb(sqlDB, "pgx")
+		defer sqlxDB.Close()
+
+		// CRITICAL: Reset to default role to bypass RLS for seeding
+		// This ensures we can create users without RLS restrictions
+		_, err = sqlxDB.ExecContext(ctx, "RESET ROLE")
+		if err != nil {
+			return fmt.Errorf("failed to reset database role for seeding: %w", err)
+		}
+
+		// Create a registry set using the non-RLS connection
+		seedRegistrySet := postgres.NewRegistrySet(sqlxDB)
+
+		// Use the seed registry for PostgreSQL operations
+		registrySet = seedRegistrySet
+	}
+	// For non-PostgreSQL databases, use the existing registrySet as-is
 
 	// Create or get test tenant that our tests expect
 	testTenant := models.Tenant{
@@ -44,8 +87,8 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		_ = existingTenant
 	}
 
-	// Create or get test user that our tests expect
-	testUser := models.User{
+	// Create or get test users that our tests expect
+	testUser1 := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
@@ -58,22 +101,54 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Set a password
-	err = testUser.SetPassword("testpassword123")
+	err = testUser1.SetPassword("testpassword123")
 	if err != nil {
 		return err
 	}
 
 	// Try to get existing user first, create if it doesn't exist
-	existingUser, err := registrySet.UserRegistry.Get(ctx, "test-user-id")
+	existingUser1, err := registrySet.UserRegistry.Get(ctx, "test-user-id")
 	if err != nil {
 		// User doesn't exist, create it
-		_, err = registrySet.UserRegistry.Create(ctx, testUser)
+		_, err = registrySet.UserRegistry.Create(ctx, testUser1)
 		if err != nil {
 			return err
 		}
 	} else {
 		// User exists, use it
-		_ = existingUser
+		_ = existingUser1
+	}
+
+	// Create second test user for user isolation testing
+	testUser2 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-2-id"},
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-2-id", // Self-reference
+		},
+		Email:    "user2@test-org.com",
+		Name:     "Test User 2",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+
+	// Set a password
+	err = testUser2.SetPassword("testpassword123")
+	if err != nil {
+		return err
+	}
+
+	// Always try to create user 2, ignore errors if it already exists
+	_, err = registrySet.UserRegistry.Create(ctx, testUser2)
+	if err != nil {
+		// If creation fails, try to get existing user
+		existingUser2, getErr := registrySet.UserRegistry.Get(ctx, "test-user-2-id")
+		if getErr != nil {
+			// Both create and get failed, this is a real error
+			return fmt.Errorf("failed to create or get test user 2: create_error=%v, get_error=%v", err, getErr)
+		}
+		// User exists, use it
+		_ = existingUser2
 	}
 
 	// Create default system configuration with CZK as main currency

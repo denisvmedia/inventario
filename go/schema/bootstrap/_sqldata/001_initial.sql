@@ -78,6 +78,22 @@ ALTER DEFAULT PRIVILEGES FOR ROLE inventario_migrator IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE inventario_migrator IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO inventario_app;
 
+-- Default privileges for objects created by the current user (whoever runs this bootstrap)
+-- This ensures that tables created during migrations get the correct permissions
+-- regardless of the actual database username
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO inventario_app;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO inventario_app;
+
+-- Grant permissions on all existing tables to inventario_app
+-- This is needed for any tables that already exist
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO inventario_app;
+
+-- Grant permissions on all sequences to inventario_app (for auto-increment columns)
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO inventario_app;
+
 ALTER DEFAULT PRIVILEGES FOR ROLE inventario_migrator IN SCHEMA public
     GRANT EXECUTE ON FUNCTIONS TO inventario_app;
 

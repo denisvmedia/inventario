@@ -146,9 +146,6 @@ services:
       # Persistent file storage for uploads (host mount for easy access)
       # TODO: Replace with MinIO object storage volumes when migrating from filesystem
       - ./data/uploads:/app/uploads
-    ports:
-      # Configurable port exposure (override in docker-compose.override.yaml)
-      - "${INVENTARIO_HOST_PORT:-3333}:3333"
     networks:
       - inventario-internal
     healthcheck:

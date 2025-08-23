@@ -93,11 +93,10 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 	if location.TenantID == "" {
 		location.TenantID = user.TenantID
 	}
-	if location.UserID == "" {
-		location.UserID = user.ID
-	}
 
-	createdLocation, err := api.locationRegistry.Create(r.Context(), location)
+	// Use CreateWithUser to ensure proper user context and validation
+	ctx := registry.WithUserContext(r.Context(), user.ID)
+	createdLocation, err := api.locationRegistry.CreateWithUser(ctx, location)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -138,7 +137,16 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := api.locationRegistry.Delete(r.Context(), location.ID)
+	// Get user from context
+	user := UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	// Use DeleteWithUser to ensure proper user context and validation
+	ctx := registry.WithUserContext(r.Context(), user.ID)
+	err := api.locationRegistry.DeleteWithUser(ctx, location.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -176,17 +184,23 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Get user from context
+	user := UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
 	// Preserve tenant_id and user_id from the existing location
 	// This ensures the foreign key constraints are satisfied during updates
 	updateData := *input.Data.Attributes
 	if updateData.TenantID == "" {
 		updateData.TenantID = location.TenantID
 	}
-	if updateData.UserID == "" {
-		updateData.UserID = location.UserID
-	}
 
-	newLocation, err := api.locationRegistry.Update(r.Context(), updateData)
+	// Use UpdateWithUser to ensure proper user context and validation
+	ctx := registry.WithUserContext(r.Context(), user.ID)
+	newLocation, err := api.locationRegistry.UpdateWithUser(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

@@ -100,10 +100,10 @@ func createRegistrySetFromPool(pool *pgxpool.Pool) *registry.Set {
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	sqlxDB := sqlx.NewDb(sqlDB, "pgx")
 
-	// Create enhanced PostgreSQL registry with the shared pool
-	enhancedRegistry := postgres.NewEnhancedPostgreSQLRegistry(pool, sqlxDB)
+	// Create PostgreSQL registry set
+	registrySet := postgres.NewRegistrySet(sqlxDB)
 
-	return enhancedRegistry.Set
+	return registrySet
 }
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -259,56 +259,6 @@ func createTestArea(c *qt.C, areaRegistry registry.AreaRegistry, locationID stri
 	c.Assert(createdArea, qt.IsNotNil)
 
 	return createdArea
-}
-
-// createTestTenant creates a test tenant for use in tests.
-func createTestTenant(c *qt.C, tenantRegistry registry.TenantRegistry) *models.Tenant { //nolint:unused // for future use
-	c.Helper()
-
-	ctx := c.Context()
-	tenant := models.Tenant{
-		Name:   "Test Tenant",
-		Slug:   "test-tenant",
-		Status: models.TenantStatusActive,
-	}
-
-	createdTenant, err := tenantRegistry.Create(ctx, tenant)
-	c.Assert(err, qt.IsNil)
-	c.Assert(createdTenant, qt.IsNotNil)
-
-	return createdTenant
-}
-
-// createTestUser creates a test user for use in tests.
-func createTestUser(c *qt.C, userRegistry registry.UserRegistry, tenantID string) *models.User { //nolint:unused // for future use
-	c.Helper()
-
-	ctx := c.Context()
-	user := models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: tenantID,
-			UserID:   "", // Will be set to the user's own ID after creation
-		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		Role:     models.UserRoleUser,
-		IsActive: true,
-	}
-
-	// Set a password
-	err := user.SetPassword("testpassword123")
-	c.Assert(err, qt.IsNil)
-
-	createdUser, err := userRegistry.Create(ctx, user)
-	c.Assert(err, qt.IsNil)
-	c.Assert(createdUser, qt.IsNotNil)
-
-	// Update the user to set user_id to its own ID (self-reference)
-	createdUser.UserID = createdUser.ID
-	updatedUser, err := userRegistry.Update(ctx, *createdUser)
-	c.Assert(err, qt.IsNil)
-
-	return updatedUser
 }
 
 // setupMainCurrency sets up the main currency for tests

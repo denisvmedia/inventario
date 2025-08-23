@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -37,18 +38,20 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
-// createUserAwareMiddlewares creates middleware stack with user authentication
-func createUserAwareMiddlewares(jwtSecret []byte, userRegistry registry.UserRegistry) []func(http.Handler) http.Handler {
+// createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
+func createUserAwareMiddlewares(jwtSecret []byte, userRegistry registry.UserRegistry, registrySet *registry.Set) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
 		JWTMiddleware(jwtSecret, userRegistry),
+		RLSContextMiddleware(registrySet),
 	)
 }
 
 // createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
-func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry) []func(http.Handler) http.Handler {
-	// Only add user authentication, no content type restrictions for uploads
+func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, registrySet *registry.Set) []func(http.Handler) http.Handler {
+	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
 		JWTMiddleware(jwtSecret, userRegistry),
+		RLSContextMiddleware(registrySet),
 	}
 }
 
@@ -147,8 +150,8 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.RegistrySet))
 
 		// Create user aware middlewares for protected routes
-		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.RegistrySet.UserRegistry)
-		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.RegistrySet.UserRegistry)
+		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.RegistrySet.UserRegistry, params.RegistrySet)
+		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.RegistrySet.UserRegistry, params.RegistrySet)
 
 		// Protected routes (authentication required)
 		r.With(userMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
@@ -169,4 +172,53 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	r.Handle("/*", FrontendHandler())
 
 	return r
+}
+
+// RLSContextMiddleware sets the user and tenant context for RLS policies
+func RLSContextMiddleware(registrySet *registry.Set) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Get user from context (set by JWTMiddleware)
+			user := UserFromContext(r.Context())
+			if user == nil {
+				http.Error(w, "User context required", http.StatusInternalServerError)
+				return
+			}
+
+			// Debug logging
+			slog.Info("RLS Middleware: Setting context for user", "user_id", user.ID, "email", user.Email)
+
+			// Set user context for RLS in all registries that support it
+			if userAware, ok := registrySet.LocationRegistry.(interface {
+				SetUserContext(context.Context, string) error
+			}); ok {
+				if err := userAware.SetUserContext(r.Context(), user.ID); err != nil {
+					http.Error(w, "Failed to set user context", http.StatusInternalServerError)
+					return
+				}
+			}
+
+			if err := registrySet.AreaRegistry.SetUserContext(r.Context(), user.ID); err != nil {
+				http.Error(w, "Failed to set user context", http.StatusInternalServerError)
+				return
+			}
+
+			if err := registrySet.CommodityRegistry.SetUserContext(r.Context(), user.ID); err != nil {
+				http.Error(w, "Failed to set user context", http.StatusInternalServerError)
+				return
+			}
+
+			if err := registrySet.ExportRegistry.SetUserContext(r.Context(), user.ID); err != nil {
+				http.Error(w, "Failed to set user context", http.StatusInternalServerError)
+				return
+			}
+
+			if err := registrySet.FileRegistry.SetUserContext(r.Context(), user.ID); err != nil {
+				http.Error(w, "Failed to set user context", http.StatusInternalServerError)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

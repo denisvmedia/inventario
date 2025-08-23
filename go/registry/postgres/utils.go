@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -11,44 +13,8 @@ import (
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/typekit"
-	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
-
-// generateID generates a new UUID string
-func generateID() string {
-	return uuid.New().String()
-}
-
-// SetUserContext sets the user context for RLS policies
-func SetUserContext(ctx context.Context, db sqlx.ExtContext, userID string) error {
-	if userID == "" {
-		return errkit.WithStack(registry.ErrUserContextRequired)
-	}
-
-	_, err := db.ExecContext(ctx, "SELECT set_user_context($1)", userID)
-	if err != nil {
-		return errkit.Wrap(err, "failed to set user context")
-	}
-
-	return nil
-}
-
-// WithUserContext executes a function with user context set for RLS
-func WithUserContext(ctx context.Context, db sqlx.ExtContext, userID string, fn func(context.Context) error) error {
-	if userID == "" {
-		return errkit.WithStack(registry.ErrUserContextRequired)
-	}
-
-	// Set user context
-	err := SetUserContext(ctx, db, userID)
-	if err != nil {
-		return err
-	}
-
-	// Execute the function
-	return fn(ctx)
-}
 
 func InsertEntity(ctx context.Context, db sqlx.ExtContext, table string, entity any) error {
 	var fields []string
@@ -73,29 +39,6 @@ func InsertEntity(ctx context.Context, db sqlx.ExtContext, table string, entity 
 	}
 
 	return nil
-}
-
-// InsertEntityWithUser inserts an entity with user context set
-func InsertEntityWithUser(ctx context.Context, db sqlx.ExtContext, table string, entity any) error {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return errkit.WithStack(registry.ErrUserContextRequired)
-	}
-
-	// Set user_id on entity if it's UserAware
-	if userAware, ok := entity.(models.UserAware); ok {
-		userAware.SetUserID(userID)
-	}
-
-	// Set user context for RLS
-	err := SetUserContext(ctx, db, userID)
-	if err != nil {
-		return err
-	}
-
-	// Insert the entity
-	return InsertEntity(ctx, db, table, entity)
 }
 
 func UpdateEntityByField(ctx context.Context, db sqlx.ExtContext, table, field, value string, entity any) error {
@@ -130,24 +73,6 @@ func UpdateEntityByField(ctx context.Context, db sqlx.ExtContext, table, field, 
 	return nil
 }
 
-// UpdateEntityByFieldWithUser updates an entity with user context set
-func UpdateEntityByFieldWithUser(ctx context.Context, db sqlx.ExtContext, table, field, value string, entity any) error {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return errkit.WithStack(registry.ErrUserContextRequired)
-	}
-
-	// Set user context for RLS
-	err := SetUserContext(ctx, db, userID)
-	if err != nil {
-		return err
-	}
-
-	// Update the entity
-	return UpdateEntityByField(ctx, db, table, field, value, entity)
-}
-
 func ScanEntityByField[T any, P *T](ctx context.Context, db sqlx.ExtContext, table, field, value string, entity P) error {
 	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = $1 LIMIT 1", table, field)
 
@@ -169,29 +94,91 @@ func ScanEntityByField[T any, P *T](ctx context.Context, db sqlx.ExtContext, tab
 	return nil
 }
 
-// ScanEntityByFieldWithUser scans an entity with user context set
-func ScanEntityByFieldWithUser[T any, P *T](ctx context.Context, db sqlx.ExtContext, table, field, value string, entity P) error {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
+func ScanEntityByFieldForUserID[T any, P *T](ctx context.Context, dbx *sqlx.DB, userID string, table TableName, field, value string, entity P) (err error) {
 	if userID == "" {
-		return errkit.WithStack(registry.ErrUserContextRequired)
+		return errkit.WithStack(ErrUserIDRequired)
 	}
 
-	// Set user context for RLS
-	err := SetUserContext(ctx, db, userID)
+	tx, err := dbx.Beginx()
+	if err != nil {
+		return errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer tx.Rollback()
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = $1 LIMIT 1", table, field)
+
+	rows, err := tx.QueryxContext(ctx, query, value)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return ErrNotFound
+	}
+
+	err = rows.StructScan(entity)
 	if err != nil {
 		return err
 	}
 
-	// Scan the entity
-	return ScanEntityByField(ctx, db, table, field, value, entity)
+	return nil
 }
 
-func ScanEntities[T any](ctx context.Context, db sqlx.ExtContext, table string) iter.Seq2[T, error] {
+func ScanEntities[T any](ctx context.Context, tx *sqlx.Tx, table TableName) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		query := fmt.Sprintf("SELECT * FROM %s", table)
 
-		rows, err := db.QueryxContext(ctx, query)
+		rows, err := tx.QueryxContext(ctx, query)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var entity T
+			err := rows.StructScan(&entity)
+			if !yield(entity, err) {
+				return
+			}
+		}
+	}
+}
+
+func ScanEntitiesForUserID[T any](ctx context.Context, dbx *sqlx.DB, userID string, table TableName) iter.Seq2[T, error] {
+	return func(yield func(T, error) bool) {
+		if userID == "" {
+			yield(nil, errkit.WithStack(ErrUserIDRequired))
+			return
+		}
+
+		tx, err := dbx.Beginx()
+		if err != nil {
+			yield(nil, errkit.Wrap(err, "failed to begin transaction"))
+			return
+		}
+		defer tx.Rollback()
+
+		err = errors.Join(setAppRole(ctx, tx), setUserContext(ctx, tx, userID))
+		if err != nil {
+			var zero T
+			yield(zero, err)
+			return
+		}
+
+		for entity, err := range ScanEntities[T](ctx, tx, table) {
+			if !yield(entity, err) {
+				return
+			}
+		}
+	}
+}
+
+func ScanEntitiesByField[T any](ctx context.Context, db sqlx.ExtContext, table, field, value string) iter.Seq2[T, error] {
+	return func(yield func(T, error) bool) {
+		query := fmt.Sprintf("SELECT * FROM %s WHERE %s = $1", table, field)
+
+		rows, err := db.QueryxContext(ctx, query, value)
 		if err != nil {
 			return // yield ничего не делает при ошибке
 		}
@@ -207,39 +194,23 @@ func ScanEntities[T any](ctx context.Context, db sqlx.ExtContext, table string) 
 	}
 }
 
-// ScanEntitiesWithUser scans entities with user context set
-func ScanEntitiesWithUser[T any](ctx context.Context, db sqlx.ExtContext, table string) iter.Seq2[T, error] {
+func ScanEntiiesByFieldForUserID[T any](ctx context.Context, dbx *sqlx.DB, userID string, table TableName, field, value string) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
-		// Extract user ID from context
-		userID := registry.UserIDFromContext(ctx)
 		if userID == "" {
-			var zero T
-			yield(zero, errkit.WithStack(registry.ErrUserContextRequired))
+			yield(nil, errkit.WithStack(ErrUserIDRequired))
 			return
 		}
 
-		// Set user context for RLS
-		err := SetUserContext(ctx, db, userID)
+		tx, err := dbx.Beginx()
 		if err != nil {
-			var zero T
-			yield(zero, err)
+			yield(nil, errkit.Wrap(err, "failed to begin transaction"))
 			return
 		}
+		defer tx.Rollback()
 
-		// Use the regular ScanEntities function
-		for entity, err := range ScanEntities[T](ctx, db, table) {
-			if !yield(entity, err) {
-				return
-			}
-		}
-	}
-}
-
-func ScanEntitiesByField[T any](ctx context.Context, db sqlx.ExtContext, table, field, value string) iter.Seq2[T, error] {
-	return func(yield func(T, error) bool) {
 		query := fmt.Sprintf("SELECT * FROM %s WHERE %s = $1", table, field)
 
-		rows, err := db.QueryxContext(ctx, query, value)
+		rows, err := tx.QueryxContext(ctx, query, value)
 		if err != nil {
 			return // yield ничего не делает при ошибке
 		}
@@ -315,4 +286,23 @@ func RollbackOrCommit(tx *sqlx.Tx, err error) error {
 		return tx.Rollback()
 	}
 	return tx.Commit()
+}
+
+func setRole(ctx context.Context, tx *sqlx.Tx, role string) error {
+	_, err := tx.ExecContext(ctx, "SET LOCAL ROLE = $1", role)
+	return errkit.Wrap(err, "failed to set role", "role", role)
+}
+
+func setAppRole(ctx context.Context, tx *sqlx.Tx) error {
+	return setRole(ctx, tx, "inventario_app")
+}
+
+func setUserContext(ctx context.Context, tx *sqlx.Tx, userID string) error {
+	_, err := tx.ExecContext(ctx, "SET LOCAL app.current_user_id = $1", userID)
+	return errkit.Wrap(err, "failed to set user context", "user_id", userID)
+}
+
+// generateID generates a new UUID string
+func generateID() string {
+	return uuid.New().String()
 }

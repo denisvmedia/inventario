@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 
 	"github.com/jmoiron/sqlx"
 
@@ -75,8 +76,16 @@ func (r *UserRegistry) Get(ctx context.Context, id string) (*models.User, error)
 		)
 	}
 
+	// For authentication operations, we need to bypass RLS
+	// Reset role to default to avoid RLS restrictions during user lookup
+	_, err := r.dbx.ExecContext(ctx, "RESET ROLE")
+	if err != nil {
+		// If RESET ROLE fails, continue anyway - might not be using PostgreSQL with RLS
+		slog.With("error", err).Warn("Failed to reset database role for user lookup")
+	}
+
 	var user models.User
-	err := ScanEntityByField(ctx, r.dbx, r.tableNames.Users(), "id", id, &user)
+	err = ScanEntityByField(ctx, r.dbx, r.tableNames.Users(), "id", id, &user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, errkit.WithStack(registry.ErrNotFound,
@@ -175,9 +184,17 @@ func (r *UserRegistry) GetByEmail(ctx context.Context, tenantID, email string) (
 		)
 	}
 
+	// For authentication operations, we need to bypass RLS
+	// Reset role to default to avoid RLS restrictions during user lookup
+	_, err := r.dbx.ExecContext(ctx, "RESET ROLE")
+	if err != nil {
+		// If RESET ROLE fails, continue anyway - might not be using PostgreSQL with RLS
+		slog.With("error", err).Warn("Failed to reset database role for user lookup")
+	}
+
 	var user models.User
 	query := `SELECT * FROM ` + r.tableNames.Users() + ` WHERE tenant_id = $1 AND email = $2`
-	err := r.dbx.GetContext(ctx, &user, query, tenantID, email)
+	err = r.dbx.GetContext(ctx, &user, query, tenantID, email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errkit.WithStack(registry.ErrNotFound,

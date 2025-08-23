@@ -38,35 +38,20 @@ type Registry[T any] interface {
 	Count(context.Context) (int, error)
 }
 
-// UserAwareRegistry extends the base registry with user context management
-type UserAwareRegistry[T any] interface {
-	Registry[T]
-
-	// SetUserContext sets the user context for subsequent operations
-	SetUserContext(ctx context.Context, userID string) error
-
-	// WithUserContext executes a function with user context set
-	WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error
-
-	// User-aware operations that automatically use user context from the request context
-	CreateWithUser(ctx context.Context, entity T) (*T, error)
-	GetWithUser(ctx context.Context, id string) (*T, error)
-	ListWithUser(ctx context.Context) ([]*T, error)
-	UpdateWithUser(ctx context.Context, entity T) (*T, error)
-	DeleteWithUser(ctx context.Context, id string) error
-	CountWithUser(ctx context.Context) (int, error)
+type UserAwareRegistry[T any, P Registry[T]] interface {
+	// WithCurrentUser returns a new registry with user context set
+	WithCurrentUser(ctx context.Context) (P, error)
 }
 
 type AreaRegistry interface {
-	UserAwareRegistry[models.Area]
+	Registry[models.Area]
+	UserAwareRegistry[models.Area, AreaRegistry]
 
-	AddCommodity(ctx context.Context, areaID, commodityID string) error
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
-	DeleteCommodity(ctx context.Context, areaID, commodityID string) error
 }
 
 type CommodityRegistry interface {
-	UserAwareRegistry[models.Commodity]
+	Registry[models.Commodity]
 
 	AddImage(ctx context.Context, commodityID, imageID string) error
 	GetImages(ctx context.Context, commodityID string) ([]string, error)
@@ -82,7 +67,7 @@ type CommodityRegistry interface {
 }
 
 type LocationRegistry interface {
-	UserAwareRegistry[models.Location]
+	Registry[models.Location]
 
 	AddArea(ctx context.Context, locationID, areaID string) error
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
@@ -90,15 +75,15 @@ type LocationRegistry interface {
 }
 
 type ImageRegistry interface {
-	UserAwareRegistry[models.Image]
+	Registry[models.Image]
 }
 
 type InvoiceRegistry interface {
-	UserAwareRegistry[models.Invoice]
+	Registry[models.Invoice]
 }
 
 type ManualRegistry interface {
-	UserAwareRegistry[models.Manual]
+	Registry[models.Manual]
 }
 
 type SettingsRegistry interface {
@@ -108,7 +93,7 @@ type SettingsRegistry interface {
 }
 
 type ExportRegistry interface {
-	UserAwareRegistry[models.Export]
+	Registry[models.Export]
 
 	// ListWithDeleted returns all exports including soft deleted ones
 	ListWithDeleted(ctx context.Context) ([]*models.Export, error)
@@ -121,7 +106,7 @@ type ExportRegistry interface {
 }
 
 type FileRegistry interface {
-	UserAwareRegistry[models.FileEntity]
+	Registry[models.FileEntity]
 
 	// ListByType returns files filtered by type
 	ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error)
@@ -140,14 +125,14 @@ type FileRegistry interface {
 }
 
 type RestoreOperationRegistry interface {
-	UserAwareRegistry[models.RestoreOperation]
+	Registry[models.RestoreOperation]
 
 	// ListByExport returns all restore operations for an export
 	ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error)
 }
 
 type RestoreStepRegistry interface {
-	UserAwareRegistry[models.RestoreStep]
+	Registry[models.RestoreStep]
 
 	// ListByRestoreOperation returns all restore steps for a restore operation
 	ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error)

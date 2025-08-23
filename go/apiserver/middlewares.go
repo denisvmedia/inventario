@@ -13,6 +13,7 @@ import (
 const (
 	locationCtxKey  ctxValueKey = "location"
 	commodityCtxKey ctxValueKey = "commodity"
+	areaCtxKey      ctxValueKey = "area"
 	entityIDKey     ctxValueKey = "entityID"
 )
 

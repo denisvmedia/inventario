@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/go-extras/go-kit/must"
@@ -74,4 +75,42 @@ func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID stri
 	r.areasLock.Unlock()
 
 	return nil
+}
+
+// Enhanced methods with simplified in-memory implementations
+
+// GetAreaCount returns the number of areas in a location (simplified)
+func (r *LocationRegistry) GetAreaCount(ctx context.Context, locationID string) (int, error) {
+	areas, err := r.GetAreas(ctx, locationID)
+	if err != nil {
+		return 0, err
+	}
+	return len(areas), nil
+}
+
+// GetTotalCommodityCount returns the total number of commodities across all areas in a location (simplified)
+func (r *LocationRegistry) GetTotalCommodityCount(ctx context.Context, locationID string) (int, error) {
+	// This is a simplified implementation that would require access to area and commodity data
+	// In a real implementation, this would need to be coordinated with the area and commodity registries
+	// For now, return 0 as a placeholder
+	return 0, nil
+}
+
+// SearchByName searches locations by name using simple text matching (simplified)
+func (r *LocationRegistry) SearchByName(ctx context.Context, query string) ([]*models.Location, error) {
+	locations, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	query = strings.ToLower(query)
+	var filtered []*models.Location
+
+	for _, location := range locations {
+		if strings.Contains(strings.ToLower(location.Name), query) {
+			filtered = append(filtered, location)
+		}
+	}
+
+	return filtered, nil
 }

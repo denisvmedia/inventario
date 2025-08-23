@@ -10,7 +10,7 @@ Inventario is a comprehensive personal inventory management system built with Go
 
 - **Backend**: Go 1.24+ with Chi router, PostgreSQL primary database with multi-database support
 - **Frontend**: Vue.js 3, TypeScript, PrimeVue UI components, Pinia state management
-- **Databases**: PostgreSQL (recommended), BoltDB (embedded), In-memory (testing)
+- **Databases**: PostgreSQL (recommended), In-memory (testing)
 - **File Storage**: Go Cloud Development Kit (local, S3, Azure Blob, Google Cloud)
 - **Schema Management**: Ptah migrations with Go struct annotations
 - **Multi-tenancy**: Row-Level Security (RLS) with application-level isolation
@@ -70,7 +70,7 @@ The system implements enterprise-grade multi-tenancy with:
 
 ### Backend (`/go`)
 - `/models` - Domain models with Ptah migration annotations, including multi-tenant entities (Tenant, User)
-- `/registry` - Repository pattern implementations (PostgreSQL, BoltDB, Memory)
+- `/registry` - Repository pattern implementations (PostgreSQL, Memory)
 - `/apiserver` - HTTP API handlers with Chi router, including tenant context middleware
 - `/services` - Business logic services (file management, entity operations)
 - `/internal` - Internal utilities (validation, error handling, logging)
@@ -126,7 +126,6 @@ Structured error handling with `errkit` package:
 ### Database Connection
 Support for multiple database backends via DSN:
 - `memory://` - In-memory (development/testing)
-- `boltdb://path/to/file.db` - Embedded database
 - `postgres://user:pass@host:port/db` - PostgreSQL (production)
 
 ### Multi-Tenant Configuration

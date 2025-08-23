@@ -130,11 +130,10 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 	if commodity.TenantID == "" {
 		commodity.TenantID = user.TenantID
 	}
-	if commodity.UserID == "" {
-		commodity.UserID = user.ID
-	}
 
-	createdCommodity, err := api.registrySet.CommodityRegistry.Create(r.Context(), commodity)
+	// Use CreateWithUser to ensure proper user context and validation
+	ctx := registry.WithUserContext(r.Context(), user.ID)
+	createdCommodity, err := api.registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -237,17 +236,23 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 
 	input.Data.Attributes.ID = input.Data.ID
 
+	// Get user from context
+	user := UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
 	// Preserve tenant_id and user_id from the existing commodity
 	// This ensures the foreign key constraints are satisfied during updates
 	updateData := *input.Data.Attributes
 	if updateData.TenantID == "" {
 		updateData.TenantID = commodity.TenantID
 	}
-	if updateData.UserID == "" {
-		updateData.UserID = commodity.UserID
-	}
 
-	updatedCommodity, err := api.registrySet.CommodityRegistry.Update(r.Context(), updateData)
+	// Use UpdateWithUser to ensure proper user context and validation
+	ctx := registry.WithUserContext(r.Context(), user.ID)
+	updatedCommodity, err := api.registrySet.CommodityRegistry.UpdateWithUser(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

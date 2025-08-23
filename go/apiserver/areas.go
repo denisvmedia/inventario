@@ -12,8 +12,6 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-const areaCtxKey ctxValueKey = "area"
-
 func areaFromContext(ctx context.Context) *models.Area {
 	area, ok := ctx.Value(areaCtxKey).(*models.Area)
 	if !ok {
@@ -35,7 +33,12 @@ type areasAPI struct {
 // @Success 200 {object} jsonapi.AreasResponse "OK"
 // @Router /areas [get].
 func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
-	areas, _ := api.areaRegistry.List(r.Context())
+	areaRegistry, err := api.areaRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+	areas, err := areaRegistry.List(r.Context())
 
 	if err := render.Render(w, r, jsonapi.NewAreasResponse(areas, len(areas))); err != nil {
 		internalServerError(w, r, err)
@@ -95,11 +98,10 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 	if area.TenantID == "" {
 		area.TenantID = user.TenantID
 	}
-	if area.UserID == "" {
-		area.UserID = user.ID
-	}
 
-	createdArea, err := api.areaRegistry.Create(r.Context(), area)
+	// Use CreateWithUser to ensure proper user context and validation
+	ctx := registry.WithUserContext(r.Context(), user.ID)
+	createdArea, err := api.areaRegistry.CreateWithUser(ctx, area)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -129,7 +131,16 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := api.areaRegistry.Delete(r.Context(), area.ID)
+	// Get user from context
+	user := UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	// Use DeleteWithUser to ensure proper user context and validation
+	ctx := registry.WithUserContext(r.Context(), user.ID)
+	err := api.areaRegistry.DeleteWithUser(ctx, area.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -168,17 +179,23 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get user from context
+	user := UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
 	// Preserve tenant_id and user_id from the existing area
 	// This ensures the foreign key constraints are satisfied during updates
 	updateData := *input.Data.Attributes
 	if updateData.TenantID == "" {
 		updateData.TenantID = area.TenantID
 	}
-	if updateData.UserID == "" {
-		updateData.UserID = area.UserID
-	}
 
-	newArea, err := api.areaRegistry.Update(r.Context(), updateData)
+	// Use UpdateWithUser to ensure proper user context and validation
+	ctx := registry.WithUserContext(r.Context(), user.ID)
+	newArea, err := api.areaRegistry.UpdateWithUser(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
