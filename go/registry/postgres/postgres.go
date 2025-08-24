@@ -4,10 +4,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -33,6 +35,27 @@ func NewRegistrySet(dbx *sqlx.DB) *registry.Set {
 	s.ExportRegistry = NewExportRegistry(dbx)
 	s.RestoreStepRegistry = NewRestoreStepRegistry(dbx)
 	s.RestoreOperationRegistry = NewRestoreOperationRegistry(dbx, s.RestoreStepRegistry)
+	s.TenantRegistry = NewTenantRegistry(dbx)
+	s.UserRegistry = NewUserRegistry(dbx)
+
+	return s
+}
+
+func NewRegistrySetWithUserID(dbx *sqlx.DB, userID string) *registry.Set {
+	ctx := appctx.WithUserID(context.Background(), userID)
+
+	s := &registry.Set{}
+	s.LocationRegistry = must.Must(NewLocationRegistry(dbx).WithCurrentUser(ctx))
+	s.AreaRegistry = must.Must(NewAreaRegistry(dbx).WithCurrentUser(ctx))
+	s.SettingsRegistry = must.Must(NewSettingsRegistry(dbx).WithCurrentUser(ctx))
+	s.FileRegistry = must.Must(NewFileRegistry(dbx).WithCurrentUser(ctx))
+	s.CommodityRegistry = must.Must(NewCommodityRegistry(dbx).WithCurrentUser(ctx))
+	s.ImageRegistry = must.Must(NewImageRegistry(dbx).WithCurrentUser(ctx))
+	s.InvoiceRegistry = must.Must(NewInvoiceRegistry(dbx).WithCurrentUser(ctx))
+	s.ManualRegistry = must.Must(NewManualRegistry(dbx).WithCurrentUser(ctx))
+	s.ExportRegistry = must.Must(NewExportRegistry(dbx).WithCurrentUser(ctx))
+	s.RestoreStepRegistry = must.Must(NewRestoreStepRegistry(dbx).WithCurrentUser(ctx))
+	s.RestoreOperationRegistry = must.Must(NewRestoreOperationRegistry(dbx, s.RestoreStepRegistry).WithCurrentUser(ctx))
 	s.TenantRegistry = NewTenantRegistry(dbx)
 	s.UserRegistry = NewUserRegistry(dbx)
 

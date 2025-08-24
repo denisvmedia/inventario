@@ -101,7 +101,7 @@ func createRegistrySetFromPool(pool *pgxpool.Pool) *registry.Set {
 	sqlxDB := sqlx.NewDb(sqlDB, "pgx")
 
 	// Create PostgreSQL registry set
-	registrySet := postgres.NewRegistrySet(sqlxDB)
+	registrySet := postgres.NewRegistrySetWithUserID(sqlxDB, "test-user-id")
 
 	return registrySet
 }
