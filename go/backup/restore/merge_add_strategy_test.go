@@ -1,34 +1,33 @@
 package restore_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Import blob drivers
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
@@ -171,18 +170,18 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 
 func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service

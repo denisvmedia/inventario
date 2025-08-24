@@ -11,21 +11,22 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
 var _ registry.AreaRegistry = (*AreaRegistry)(nil)
 
 type AreaRegistry struct {
 	dbx        *sqlx.DB
-	tableNames TableNames
+	tableNames store.TableNames
 	userID     string
 }
 
 func NewAreaRegistry(dbx *sqlx.DB) *AreaRegistry {
-	return NewAreaRegistryWithTableNames(dbx, DefaultTableNames)
+	return NewAreaRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *AreaRegistry {
+func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *AreaRegistry {
 	return &AreaRegistry{
 		dbx:        dbx,
 		tableNames: tableNames,
@@ -196,15 +197,15 @@ func (r *AreaRegistry) SearchByName(ctx context.Context, query string) ([]*model
 	return areas, nil
 }
 
-func (r *AreaRegistry) newSQLRegistry() *UserAwareSQLRegistry[models.Area] {
-	return NewUserAwareSQLRegistry[models.Area](r.dbx, r.userID, r.tableNames.Areas())
+func (r *AreaRegistry) newSQLRegistry() *store.RLSRepository[models.Area] {
+	return store.NewUserAwareSQLRegistry[models.Area](r.dbx, r.userID, r.tableNames.Areas())
 }
 
 func (r *AreaRegistry) get(ctx context.Context, id string) (*models.Area, error) {
 	var area models.Area
 	reg := r.newSQLRegistry()
 
-	err := reg.ScanOneByField(ctx, Pair("id", id), &area)
+	err := reg.ScanOneByField(ctx, store.Pair("id", id), &area)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get area")
 	}
@@ -215,8 +216,8 @@ func (r *AreaRegistry) get(ctx context.Context, id string) (*models.Area, error)
 func (r *AreaRegistry) getCommodities(ctx context.Context, tx *sqlx.Tx, areaID string) ([]string, error) {
 	var commodities []string
 
-	comReg := NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
-	for commodity, err := range comReg.ScanByField(ctx, Pair("area_id", areaID)) {
+	comReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
+	for commodity, err := range comReg.ScanByField(ctx, store.Pair("area_id", areaID)) {
 		if err != nil {
 			return nil, errkit.Wrap(err, "failed to list commodities")
 		}
@@ -228,8 +229,8 @@ func (r *AreaRegistry) getCommodities(ctx context.Context, tx *sqlx.Tx, areaID s
 
 func (r *AreaRegistry) getLocation(ctx context.Context, tx *sqlx.Tx, id string) (*models.Location, error) {
 	var location models.Location
-	txreg := NewTxRegistry[models.Location](tx, r.tableNames.Locations())
-	err := txreg.ScanOneByField(ctx, Pair("id", id), &location)
+	txreg := store.NewTxRegistry[models.Location](tx, r.tableNames.Locations())
+	err := txreg.ScanOneByField(ctx, store.Pair("id", id), &location)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get location")
 	}

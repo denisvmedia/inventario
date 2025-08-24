@@ -10,7 +10,6 @@ import (
 
 	"github.com/denisvmedia/inventario/backup/export"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
@@ -18,8 +17,8 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
@@ -89,8 +88,8 @@ func TestExportService_parseXMLMetadata_Errors(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
@@ -132,8 +131,8 @@ func TestExportService_parseXMLMetadata_LargeFile(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
@@ -190,8 +189,8 @@ func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()

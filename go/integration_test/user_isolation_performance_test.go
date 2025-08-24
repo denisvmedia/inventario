@@ -87,14 +87,24 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 					Draft:                  false,
 				}
 
-				created, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
+				userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+				if err != nil {
+					b.Errorf("Failed to create user-aware registry: %v", err)
+					continue
+				}
+				created, err := userAwareCommodityRegistry.Create(ctx, commodity)
 				if err != nil {
 					b.Errorf("Failed to create commodity: %v", err)
 					continue
 				}
 
 				// List commodities (should only see own)
-				commodities, err := registrySet.CommodityRegistry.ListWithUser(ctx)
+				userAwareCommodityRegistry, err = registrySet.CommodityRegistry.WithCurrentUser(ctx)
+				if err != nil {
+					b.Errorf("Failed to create user-aware registry: %v", err)
+					continue
+				}
+				commodities, err := userAwareCommodityRegistry.List(ctx)
 				if err != nil {
 					b.Errorf("Failed to list commodities: %v", err)
 					continue
@@ -108,7 +118,7 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 				}
 
 				// Clean up
-				err = registrySet.CommodityRegistry.DeleteWithUser(ctx, created.ID)
+				err = userAwareCommodityRegistry.Delete(ctx, created.ID)
 				if err != nil {
 					b.Errorf("Failed to delete commodity: %v", err)
 				}
@@ -158,6 +168,13 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 
 			ctx := registry.WithUserContext(context.Background(), u.ID)
 
+			// Create user-aware registry once for this user
+			userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+			if err != nil {
+				errors <- fmt.Errorf("user %d failed to create user-aware registry: %v", userIndex, err)
+				return
+			}
+
 			// Create multiple commodities per user
 			for j := 0; j < 10; j++ {
 				commodity := models.Commodity{
@@ -181,7 +198,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 					Draft:                  false,
 				}
 
-				_, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
+				_, err = userAwareCommodityRegistry.Create(ctx, commodity)
 				if err != nil {
 					errors <- fmt.Errorf("user %d failed to create commodity %d: %v", userIndex, j, err)
 					return
@@ -189,7 +206,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 			}
 
 			// List commodities and verify isolation
-			commodities, err := registrySet.CommodityRegistry.ListWithUser(ctx)
+			commodities, err := userAwareCommodityRegistry.List(ctx)
 			if err != nil {
 				errors <- fmt.Errorf("user %d failed to list commodities: %v", userIndex, err)
 				return
@@ -251,7 +268,9 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 		LastModifiedDate:       models.ToPDate("2023-01-03"),
 		Draft:                  false,
 	}
-	created, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
+	userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	created, err := userAwareCommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 
 	// Test various malicious user ID attempts
@@ -276,11 +295,16 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 			maliciousCtx := registry.WithUserContext(context.Background(), maliciousID)
 
 			// Try to access the legitimate user's commodity
-			_, err := registrySet.CommodityRegistry.GetWithUser(maliciousCtx, created.ID)
+			maliciousUserAwareRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(maliciousCtx)
+			if err != nil {
+				// If WithCurrentUser fails, that's expected for malicious contexts
+				return
+			}
+			_, err = maliciousUserAwareRegistry.Get(maliciousCtx, created.ID)
 			c.Assert(err, qt.IsNotNil) // Should fail
 
 			// Try to list commodities
-			commodities, err := registrySet.CommodityRegistry.ListWithUser(maliciousCtx)
+			commodities, err := maliciousUserAwareRegistry.List(maliciousCtx)
 			if err == nil {
 				// If no error, should return empty list
 				c.Assert(len(commodities), qt.Equals, 0)
@@ -288,17 +312,17 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 
 			// Try to update the commodity
 			created.Name = "Hacked Name"
-			_, err = registrySet.CommodityRegistry.UpdateWithUser(maliciousCtx, *created)
+			_, err = maliciousUserAwareRegistry.Update(maliciousCtx, *created)
 			c.Assert(err, qt.IsNotNil) // Should fail
 
 			// Try to delete the commodity
-			err = registrySet.CommodityRegistry.DeleteWithUser(maliciousCtx, created.ID)
+			err = maliciousUserAwareRegistry.Delete(maliciousCtx, created.ID)
 			c.Assert(err, qt.IsNotNil) // Should fail
 		})
 	}
 
 	// Verify the original commodity is still intact
-	retrieved, err := registrySet.CommodityRegistry.GetWithUser(ctx, created.ID)
+	retrieved, err := userAwareCommodityRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(retrieved.Name, qt.Equals, "Security Test Commodity")
 }
@@ -315,6 +339,9 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 
 	// Create many commodities
 	numCommodities := 1000
+	userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
 	for i := 0; i < numCommodities; i++ {
 		commodity := models.Commodity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
@@ -336,13 +363,13 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 			LastModifiedDate:       models.ToPDate("2023-01-03"),
 			Draft:                  false,
 		}
-		_, err := registrySet.CommodityRegistry.CreateWithUser(ctx, commodity)
+		_, err = userAwareCommodityRegistry.Create(ctx, commodity)
 		c.Assert(err, qt.IsNil)
 	}
 
 	// Measure list performance
 	start := time.Now()
-	commodities, err := registrySet.CommodityRegistry.ListWithUser(ctx)
+	commodities, err := userAwareCommodityRegistry.List(ctx)
 	duration := time.Since(start)
 
 	c.Assert(err, qt.IsNil)

@@ -24,6 +24,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			name: "delete commodity with files",
 			setupData: func(registrySet *registry.Set) (string, []string) {
 				ctx := context.Background()
+				ctx = registry.WithUserContext(ctx, "test-user-id")
 
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
@@ -67,6 +68,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			name: "delete commodity without files",
 			setupData: func(registrySet *registry.Set) (string, []string) {
 				ctx := context.Background()
+				ctx = registry.WithUserContext(ctx, "test-user-id")
 
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
@@ -99,8 +101,8 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			}
 
 			// Create registry set
-			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-			c.Assert(err, qt.IsNil)
+			registrySet := memory.NewRegistrySet()
+			c.Assert(registrySet, qt.IsNotNil)
 
 			// Create service
 			service := services.NewEntityService(registrySet, uploadLocation)
@@ -109,7 +111,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			commodityID, fileIDs := tt.setupData(registrySet)
 
 			// Execute deletion
-			err = service.DeleteCommodityRecursive(ctx, commodityID)
+			err := service.DeleteCommodityRecursive(ctx, commodityID)
 
 			if tt.expectError {
 				c.Assert(err, qt.IsNotNil)
@@ -141,6 +143,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			name: "delete area with commodities and files",
 			setupData: func(registrySet *registry.Set) (string, []string, []string) {
 				ctx := context.Background()
+				ctx = registry.WithUserContext(ctx, "test-user-id")
 
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
@@ -188,6 +191,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			name: "delete area without commodities",
 			setupData: func(registrySet *registry.Set) (string, []string, []string) {
 				ctx := context.Background()
+				ctx = registry.WithUserContext(ctx, "test-user-id")
 
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
@@ -214,8 +218,8 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			}
 
 			// Create registry set
-			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-			c.Assert(err, qt.IsNil)
+			registrySet := memory.NewRegistrySet()
+			c.Assert(registrySet, qt.IsNotNil)
 
 			// Create service
 			service := services.NewEntityService(registrySet, uploadLocation)
@@ -224,7 +228,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			areaID, commodityIDs, fileIDs := tt.setupData(registrySet)
 
 			// Execute deletion
-			err = service.DeleteAreaRecursive(ctx, areaID)
+			err := service.DeleteAreaRecursive(ctx, areaID)
 
 			if tt.expectError {
 				c.Assert(err, qt.IsNotNil)
@@ -262,6 +266,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 			name: "delete location with areas, commodities and files",
 			setupData: func(registrySet *registry.Set) (string, []string, []string, []string) {
 				ctx := context.Background()
+				ctx = registry.WithUserContext(ctx, "test-user-id")
 
 				// Create location
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
@@ -337,8 +342,8 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 			}
 
 			// Create registry set
-			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-			c.Assert(err, qt.IsNil)
+			registrySet := memory.NewRegistrySet()
+			c.Assert(registrySet, qt.IsNotNil)
 
 			// Create service
 			service := services.NewEntityService(registrySet, uploadLocation)
@@ -347,7 +352,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 			locationID, areaIDs, commodityIDs, fileIDs := tt.setupData(registrySet)
 
 			// Execute deletion
-			err = service.DeleteLocationRecursive(ctx, locationID)
+			err := service.DeleteLocationRecursive(ctx, locationID)
 
 			if tt.expectError {
 				c.Assert(err, qt.IsNotNil)
@@ -445,8 +450,8 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 			}
 
 			// Create registry set
-			registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-			c.Assert(err, qt.IsNil)
+			registrySet := memory.NewRegistrySet()
+			c.Assert(registrySet, qt.IsNotNil)
 
 			// Create service
 			service := services.NewEntityService(registrySet, uploadLocation)
@@ -455,7 +460,7 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 			exportID, fileID := tt.setupData(registrySet)
 
 			// Execute deletion
-			err = service.DeleteExportWithFile(ctx, exportID)
+			err := service.DeleteExportWithFile(ctx, exportID)
 
 			if tt.expectError {
 				c.Assert(err, qt.IsNotNil)

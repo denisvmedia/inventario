@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-extras/go-kit/must"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -18,6 +19,7 @@ type baseLocationRegistry = Registry[models.Location, *models.Location]
 type LocationRegistry struct {
 	*baseLocationRegistry
 
+	userID    string
 	areasLock sync.RWMutex
 	areas     models.LocationAreas
 }
@@ -27,6 +29,25 @@ func NewLocationRegistry() *LocationRegistry {
 		baseLocationRegistry: NewRegistry[models.Location, *models.Location](),
 		areas:                make(models.LocationAreas),
 	}
+}
+
+func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.LocationRegistry, error) {
+	userID, err := appctx.RequireUserIDFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+
+	// Create a new registry with the same data but different userID
+	tmp := &LocationRegistry{
+		baseLocationRegistry: r.baseLocationRegistry,
+		userID:               userID,
+		areas:                r.areas,
+	}
+
+	// Set the userID on the base registry
+	tmp.baseLocationRegistry.userID = userID
+
+	return tmp, nil
 }
 
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {

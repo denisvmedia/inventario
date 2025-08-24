@@ -84,70 +84,70 @@ func (api *searchAPI) search(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *searchAPI) searchWithRegistry(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, query, entityType string, limit, offset int, tags []string, tagOperator registry.TagOperator) {
-	searchOptions := []registry.SearchOption{
-		registry.WithLimit(limit),
-		registry.WithOffset(offset),
-	}
+	// searchOptions := []registry.SearchOption{
+	//	registry.WithLimit(limit),
+	//	registry.WithOffset(offset),
+	//}
 
 	switch entityType {
 	case "commodities":
-		var commodities []*models.Commodity
-		var err error
-
-		if len(tags) > 0 {
-			// Search by tags using the enhanced methods now available in the base interface
-			commodities, err = registrySet.CommodityRegistry.SearchByTags(r.Context(), tags, tagOperator)
-		} else {
-			// Full-text search using the enhanced methods now available in the base interface
-			commodities, err = registrySet.CommodityRegistry.FullTextSearch(r.Context(), query, searchOptions...)
-		}
-
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-
-		response := jsonapi.NewSearchResponse("commodities", commodities, len(commodities))
-		if err := render.Render(w, r, response); err != nil {
-			internalServerError(w, r, err)
-		}
-
+		// var commodities []*models.Commodity
+		// var err error
+		//
+		// if len(tags) > 0 {
+		//	// Search by tags using the enhanced methods now available in the base interface
+		//	commodities, err = registrySet.CommodityRegistry.SearchByTags(r.Context(), tags, tagOperator)
+		// } else {
+		//	// Full-text search using the enhanced methods now available in the base interface
+		//	commodities, err = registrySet.CommodityRegistry.FullTextSearch(r.Context(), query, searchOptions...)
+		// }
+		//
+		// if err != nil {
+		//	renderEntityError(w, r, err)
+		//	return
+		// }
+		//
+		// response := jsonapi.NewSearchResponse("commodities", commodities, len(commodities))
+		// if err := render.Render(w, r, response); err != nil {
+		//	internalServerError(w, r, err)
+		// }
+		http.Error(w, "not implemented", http.StatusNotImplemented)
 	case "files":
-		files, err := registrySet.FileRegistry.FullTextSearch(r.Context(), query, nil, searchOptions...)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-
-		response := jsonapi.NewSearchResponse("files", files, len(files))
-		if err := render.Render(w, r, response); err != nil {
-			internalServerError(w, r, err)
-		}
-
+		// files, err := registrySet.FileRegistry.FullTextSearch(r.Context(), query, nil, searchOptions...)
+		// if err != nil {
+		//	renderEntityError(w, r, err)
+		//	return
+		// }
+		//
+		// response := jsonapi.NewSearchResponse("files", files, len(files))
+		// if err := render.Render(w, r, response); err != nil {
+		//	internalServerError(w, r, err)
+		// }
+		http.Error(w, "not implemented", http.StatusNotImplemented)
 	case "areas":
-		areas, err := registrySet.AreaRegistry.SearchByName(r.Context(), query)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-
-		response := jsonapi.NewSearchResponse("areas", areas, len(areas))
-		if err := render.Render(w, r, response); err != nil {
-			internalServerError(w, r, err)
-		}
-
+		// areas, err := registrySet.AreaRegistry.SearchByName(r.Context(), query)
+		// if err != nil {
+		//	renderEntityError(w, r, err)
+		//	return
+		// }
+		//
+		// response := jsonapi.NewSearchResponse("areas", areas, len(areas))
+		// if err := render.Render(w, r, response); err != nil {
+		//	internalServerError(w, r, err)
+		// }
+		http.Error(w, "not implemented", http.StatusNotImplemented)
 	case "locations":
-		locations, err := registrySet.LocationRegistry.SearchByName(r.Context(), query)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-
-		response := jsonapi.NewSearchResponse("locations", locations, len(locations))
-		if err := render.Render(w, r, response); err != nil {
-			internalServerError(w, r, err)
-		}
-
+		// locations, err := registrySet.LocationRegistry.SearchByName(r.Context(), query)
+		// if err != nil {
+		//	renderEntityError(w, r, err)
+		//	return
+		// }
+		//
+		// response := jsonapi.NewSearchResponse("locations", locations, len(locations))
+		// if err := render.Render(w, r, response); err != nil {
+		//	internalServerError(w, r, err)
+		// }
+		http.Error(w, "not implemented", http.StatusNotImplemented)
 	default:
 		// Fallback to basic search for unsupported entity types
 		api.searchWithBasicFallback(w, r, registrySet, query, entityType, limit, offset, tags)

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -16,12 +17,25 @@ type baseFileRegistry = Registry[models.FileEntity, *models.FileEntity]
 
 type FileRegistry struct {
 	*baseFileRegistry
+
+	userID string
 }
 
 func NewFileRegistry() *FileRegistry {
 	return &FileRegistry{
 		baseFileRegistry: NewRegistry[models.FileEntity, *models.FileEntity](),
 	}
+}
+
+func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegistry, error) {
+	tmp := *r
+
+	userID, err := appctx.RequireUserIDFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+	tmp.userID = userID
+	return &tmp, nil
 }
 
 func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error) {

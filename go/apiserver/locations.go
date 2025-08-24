@@ -94,9 +94,14 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		location.TenantID = user.TenantID
 	}
 
-	// Use CreateWithUser to ensure proper user context and validation
-	ctx := registry.WithUserContext(r.Context(), user.ID)
-	createdLocation, err := api.locationRegistry.CreateWithUser(ctx, location)
+	// Use WithCurrentUser to ensure proper user context and validation
+	ctx := r.Context()
+	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	createdLocation, err := locationReg.Create(ctx, location)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -137,16 +142,14 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Get user from context
-	user := UserFromContext(r.Context())
-	if user == nil {
-		http.Error(w, "User context required", http.StatusInternalServerError)
+	// Use WithCurrentUser to ensure proper user context and validation
+	ctx := r.Context()
+	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
 		return
 	}
-
-	// Use DeleteWithUser to ensure proper user context and validation
-	ctx := registry.WithUserContext(r.Context(), user.ID)
-	err := api.locationRegistry.DeleteWithUser(ctx, location.ID)
+	err = locationReg.Delete(ctx, location.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -184,13 +187,6 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Get user from context
-	user := UserFromContext(r.Context())
-	if user == nil {
-		http.Error(w, "User context required", http.StatusInternalServerError)
-		return
-	}
-
 	// Preserve tenant_id and user_id from the existing location
 	// This ensures the foreign key constraints are satisfied during updates
 	updateData := *input.Data.Attributes
@@ -198,9 +194,14 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 		updateData.TenantID = location.TenantID
 	}
 
-	// Use UpdateWithUser to ensure proper user context and validation
-	ctx := registry.WithUserContext(r.Context(), user.ID)
-	newLocation, err := api.locationRegistry.UpdateWithUser(ctx, updateData)
+	// Use WithCurrentUser to ensure proper user context and validation
+	ctx := r.Context()
+	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	newLocation, err := locationReg.Update(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

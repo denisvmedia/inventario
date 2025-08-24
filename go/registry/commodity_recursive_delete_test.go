@@ -7,20 +7,19 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
 func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Create entity service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
@@ -164,11 +163,10 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 func TestEntityService_DeleteCommodityRecursive_NoFiles(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Create entity service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
@@ -218,13 +216,12 @@ func TestEntityService_DeleteCommodityRecursive_NonExistentCommodity(t *testing.
 	ctx := context.Background()
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Create entity service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Test recursive delete on non-existent commodity
-	err = entityService.DeleteCommodityRecursive(ctx, "non-existent-id")
+	err := entityService.DeleteCommodityRecursive(ctx, "non-existent-id")
 	c.Assert(err, qt.IsNotNil) // Should fail
 }

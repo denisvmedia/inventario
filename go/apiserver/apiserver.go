@@ -19,6 +19,7 @@ import (
 	_ "gocloud.dev/blob/memblob" // register memblob driver
 	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
@@ -179,44 +180,14 @@ func RLSContextMiddleware(registrySet *registry.Set) func(http.Handler) http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get user from context (set by JWTMiddleware)
-			user := UserFromContext(r.Context())
+			user := appctx.UserFromContext(r.Context())
 			if user == nil {
 				http.Error(w, "User context required", http.StatusInternalServerError)
 				return
 			}
 
-			// Debug logging
 			slog.Info("RLS Middleware: Setting context for user", "user_id", user.ID, "email", user.Email)
-
-			// Set user context for RLS in all registries that support it
-			if userAware, ok := registrySet.LocationRegistry.(interface {
-				SetUserContext(context.Context, string) error
-			}); ok {
-				if err := userAware.SetUserContext(r.Context(), user.ID); err != nil {
-					http.Error(w, "Failed to set user context", http.StatusInternalServerError)
-					return
-				}
-			}
-
-			if err := registrySet.AreaRegistry.SetUserContext(r.Context(), user.ID); err != nil {
-				http.Error(w, "Failed to set user context", http.StatusInternalServerError)
-				return
-			}
-
-			if err := registrySet.CommodityRegistry.SetUserContext(r.Context(), user.ID); err != nil {
-				http.Error(w, "Failed to set user context", http.StatusInternalServerError)
-				return
-			}
-
-			if err := registrySet.ExportRegistry.SetUserContext(r.Context(), user.ID); err != nil {
-				http.Error(w, "Failed to set user context", http.StatusInternalServerError)
-				return
-			}
-
-			if err := registrySet.FileRegistry.SetUserContext(r.Context(), user.ID); err != nil {
-				http.Error(w, "Failed to set user context", http.StatusInternalServerError)
-				return
-			}
+			r = r.WithContext(appctx.WithUser(r.Context(), user))
 
 			next.ServeHTTP(w, r)
 		})

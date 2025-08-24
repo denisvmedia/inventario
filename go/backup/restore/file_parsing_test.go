@@ -1,34 +1,33 @@
 package restore_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Import blob drivers
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_FileElementParsing(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with <file> elements (the correct structure)
@@ -137,18 +136,18 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 
 func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with <file> elements but disable file processing
@@ -227,18 +226,18 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 
 func TestRestoreService_PriceValidationFix(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with commodity that has original price in main currency but also has converted price
@@ -315,18 +314,18 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 
 func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with multiple entities to test for duplication
@@ -423,18 +422,18 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 
 func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUserID(c.Context(), "test-user-id")
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with multiple file types

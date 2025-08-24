@@ -8,109 +8,121 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
 var _ registry.ExportRegistry = (*ExportRegistry)(nil)
 
 type ExportRegistry struct {
 	dbx        *sqlx.DB
-	tableNames TableNames
+	tableNames store.TableNames
+	userID     string
 }
 
 func NewExportRegistry(dbx *sqlx.DB) *ExportRegistry {
-	return NewExportRegistryWithTableNames(dbx, DefaultTableNames)
+	return NewExportRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewExportRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *ExportRegistry {
+func NewExportRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *ExportRegistry {
 	return &ExportRegistry{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-// SetUserContext sets the user context for RLS policies
-func (r *ExportRegistry) SetUserContext(ctx context.Context, userID string) error {
-	return SetUserContext(ctx, r.dbx, userID)
-}
+func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRegistry, error) {
+	tmp := *r
 
-// WithUserContext executes a function with user context set
-func (r *ExportRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
-	return WithUserContext(ctx, r.dbx, userID, fn)
+	userID, err := appctx.RequireUserIDFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+	tmp.userID = userID
+	return &tmp, nil
 }
 
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to begin transaction")
+	// Generate a new ID if one is not already provided
+	if export.GetID() == "" {
+		export.SetID(generateID())
 	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
 
-	// Generate a new ID
-	export.SetID(generateID())
+	reg := r.newSQLRegistry()
 
-	// Insert the export
-	err = InsertEntity(ctx, tx, r.tableNames.Exports(), export)
+	err := reg.Create(ctx, export, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to insert export")
+		return nil, errkit.Wrap(err, "failed to create export")
 	}
 
 	return &export, nil
 }
 
 func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, error) {
-	var export models.Export
-	err := ScanEntityByField(ctx, r.dbx, r.tableNames.Exports(), "id", id, &export)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get export")
-	}
-
-	return &export, nil
+	return r.get(ctx, id)
 }
 
 func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
 	var exports []*models.Export
 
-	// Query the database for non-deleted exports only (atomic operation)
-	query := fmt.Sprintf("SELECT * FROM %s WHERE deleted_at IS NULL ORDER BY created_date DESC", r.tableNames.Exports())
-	rows, err := r.dbx.QueryxContext(ctx, query)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to query exports")
-	}
-	defer rows.Close()
+	reg := r.newSQLRegistry()
 
-	for rows.Next() {
-		var export models.Export
-		if err := rows.StructScan(&export); err != nil {
-			return nil, errkit.Wrap(err, "failed to scan export")
+	// Query the database for non-deleted exports only
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf("SELECT * FROM %s WHERE deleted_at IS NULL ORDER BY created_date DESC", r.tableNames.Exports())
+		rows, err := tx.QueryxContext(ctx, query)
+		if err != nil {
+			return errkit.Wrap(err, "failed to query exports")
 		}
-		exports = append(exports, &export)
-	}
+		defer rows.Close()
 
-	if err := rows.Err(); err != nil {
-		return nil, errkit.Wrap(err, "failed to iterate exports")
+		for rows.Next() {
+			var export models.Export
+			if err := rows.StructScan(&export); err != nil {
+				return errkit.Wrap(err, "failed to scan export")
+			}
+			exports = append(exports, &export)
+		}
+
+		if err := rows.Err(); err != nil {
+			return errkit.Wrap(err, "failed to iterate exports")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list exports")
 	}
 
 	return exports, nil
 }
 
-func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*models.Export, error) {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
+func (r *ExportRegistry) Count(ctx context.Context) (int, error) {
+	reg := r.newSQLRegistry()
 
-	// Update the export
-	err = UpdateEntityByField(ctx, tx, r.tableNames.Exports(), "id", export.ID, export)
+	var cnt int
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE deleted_at IS NULL", r.tableNames.Exports())
+		err := tx.GetContext(ctx, &cnt, query)
+		if err != nil {
+			return errkit.Wrap(err, "failed to count exports")
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count exports")
+	}
+
+	return cnt, nil
+}
+
+func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*models.Export, error) {
+	reg := r.newSQLRegistry()
+
+	err := reg.Update(ctx, export, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update export")
 	}
@@ -119,79 +131,71 @@ func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*mod
 }
 
 func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
-
-	// Get the export first to check if it has an associated file
-	var export models.Export
-	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND deleted_at IS NULL", r.tableNames.Exports())
-	err = tx.GetContext(ctx, &export, query, id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return errkit.Wrap(registry.ErrNotFound, "export not found or already deleted")
+	reg := r.newSQLRegistry()
+	err := reg.Delete(ctx, id, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Get the export first to check if it has an associated file
+		var export models.Export
+		query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND deleted_at IS NULL", r.tableNames.Exports())
+		err := tx.GetContext(ctx, &export, query, id)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errkit.Wrap(registry.ErrNotFound, "export not found or already deleted")
+			}
+			return errkit.Wrap(err, "failed to get export")
 		}
-		return errkit.Wrap(err, "failed to get export")
-	}
 
-	// Hard delete the export
-	deleteExportQuery := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Exports())
-	result, err := tx.ExecContext(ctx, deleteExportQuery, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete export")
-	}
+		// Hard delete the export
+		deleteExportQuery := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Exports())
+		result, err := tx.ExecContext(ctx, deleteExportQuery, id)
+		if err != nil {
+			return errkit.Wrap(err, "failed to delete export")
+		}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return errkit.Wrap(err, "failed to get rows affected")
-	}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return errkit.Wrap(err, "failed to get rows affected")
+		}
 
-	if rowsAffected == 0 {
-		return errkit.Wrap(registry.ErrNotFound, "export not found")
-	}
+		if rowsAffected == 0 {
+			return errkit.Wrap(registry.ErrNotFound, "export not found")
+		}
 
-	return nil
-}
+		return nil
+	})
 
-func (r *ExportRegistry) Count(ctx context.Context) (int, error) {
-	// Count only non-deleted exports
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE deleted_at IS NULL", r.tableNames.Exports())
-	var count int
-	err := r.dbx.GetContext(ctx, &count, query)
-	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count exports")
-	}
-
-	return count, nil
+	return err
 }
 
 // ListWithDeleted returns all exports including soft deleted ones
 func (r *ExportRegistry) ListWithDeleted(ctx context.Context) ([]*models.Export, error) {
 	var exports []*models.Export
 
-	// Query the database for all exports including deleted ones (atomic operation)
-	query := fmt.Sprintf("SELECT * FROM %s ORDER BY created_date DESC", r.tableNames.Exports())
-	rows, err := r.dbx.QueryxContext(ctx, query)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to query exports")
-	}
-	defer rows.Close()
+	reg := r.newSQLRegistry()
 
-	for rows.Next() {
-		var export models.Export
-		if err := rows.StructScan(&export); err != nil {
-			return nil, errkit.Wrap(err, "failed to scan export")
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf("SELECT * FROM %s ORDER BY created_date DESC", r.tableNames.Exports())
+		rows, err := tx.QueryxContext(ctx, query)
+		if err != nil {
+			return errkit.Wrap(err, "failed to query exports")
 		}
-		exports = append(exports, &export)
-	}
+		defer rows.Close()
 
-	if err := rows.Err(); err != nil {
-		return nil, errkit.Wrap(err, "failed to iterate exports")
+		for rows.Next() {
+			var export models.Export
+			if err := rows.StructScan(&export); err != nil {
+				return errkit.Wrap(err, "failed to scan export")
+			}
+			exports = append(exports, &export)
+		}
+
+		if err := rows.Err(); err != nil {
+			return errkit.Wrap(err, "failed to iterate exports")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list exports with deleted")
 	}
 
 	return exports, nil
@@ -201,24 +205,32 @@ func (r *ExportRegistry) ListWithDeleted(ctx context.Context) ([]*models.Export,
 func (r *ExportRegistry) ListDeleted(ctx context.Context) ([]*models.Export, error) {
 	var exports []*models.Export
 
-	// Query the database for deleted exports only (atomic operation)
-	query := fmt.Sprintf("SELECT * FROM %s WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC", r.tableNames.Exports())
-	rows, err := r.dbx.QueryxContext(ctx, query)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to query deleted exports")
-	}
-	defer rows.Close()
+	reg := r.newSQLRegistry()
 
-	for rows.Next() {
-		var export models.Export
-		if err := rows.StructScan(&export); err != nil {
-			return nil, errkit.Wrap(err, "failed to scan export")
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf("SELECT * FROM %s WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC", r.tableNames.Exports())
+		rows, err := tx.QueryxContext(ctx, query)
+		if err != nil {
+			return errkit.Wrap(err, "failed to query deleted exports")
 		}
-		exports = append(exports, &export)
-	}
+		defer rows.Close()
 
-	if err := rows.Err(); err != nil {
-		return nil, errkit.Wrap(err, "failed to iterate deleted exports")
+		for rows.Next() {
+			var export models.Export
+			if err := rows.StructScan(&export); err != nil {
+				return errkit.Wrap(err, "failed to scan export")
+			}
+			exports = append(exports, &export)
+		}
+
+		if err := rows.Err(); err != nil {
+			return errkit.Wrap(err, "failed to iterate deleted exports")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list deleted exports")
 	}
 
 	return exports, nil
@@ -226,88 +238,31 @@ func (r *ExportRegistry) ListDeleted(ctx context.Context) ([]*models.Export, err
 
 // HardDelete permanently deletes an export from the database
 func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
-
-	// Hard delete the export
-	err = DeleteEntityByField(ctx, tx, r.tableNames.Exports(), "id", id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to hard delete export")
-	}
-
-	return nil
-}
-
-// User-aware methods that automatically use user context from the request context
-
-// CreateWithUser creates an export with user context
-func (r *ExportRegistry) CreateWithUser(ctx context.Context, export models.Export) (*models.Export, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	export.SetUserID(userID)
-	if export.GetID() == "" {
-		export.SetID(generateID())
-	}
-	err := InsertEntityWithUser(ctx, r.dbx, r.tableNames.Exports(), export)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to insert entity")
-	}
-	return &export, nil
-}
-
-// GetWithUser gets an export with user context
-func (r *ExportRegistry) GetWithUser(ctx context.Context, id string) (*models.Export, error) {
-	var export models.Export
-	err := ScanEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Exports(), "id", id, &export)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, errkit.WithStack(registry.ErrNotFound, "entity_type", "Export", "entity_id", id)
-		}
-		return nil, errkit.Wrap(err, "failed to get entity")
-	}
-	return &export, nil
-}
-
-// ListWithUser lists exports with user context
-func (r *ExportRegistry) ListWithUser(ctx context.Context) ([]*models.Export, error) {
-	var exports []*models.Export
-	for export, err := range ScanEntitiesWithUser[models.Export](ctx, r.dbx, r.tableNames.Exports()) {
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		txreg := store.NewTxRegistry[models.Export](tx, r.tableNames.Exports())
+		err := txreg.DeleteByField(ctx, store.Pair("id", id))
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list exports")
+			return errkit.Wrap(err, "failed to hard delete export")
 		}
-		exports = append(exports, &export)
-	}
-	return exports, nil
+		return nil
+	})
+
+	return err
 }
 
-// UpdateWithUser updates an export with user context
-func (r *ExportRegistry) UpdateWithUser(ctx context.Context, export models.Export) (*models.Export, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	export.SetUserID(userID)
-	err := UpdateEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Exports(), "id", export.ID, export)
+func (r *ExportRegistry) newSQLRegistry() *store.RLSRepository[models.Export] {
+	return store.NewUserAwareSQLRegistry[models.Export](r.dbx, r.userID, r.tableNames.Exports())
+}
+
+func (r *ExportRegistry) get(ctx context.Context, id string) (*models.Export, error) {
+	var export models.Export
+	reg := r.newSQLRegistry()
+
+	err := reg.ScanOneByField(ctx, store.Pair("id", id), &export)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update entity")
+		return nil, errkit.Wrap(err, "failed to get export")
 	}
+
 	return &export, nil
-}
-
-// DeleteWithUser deletes an export with user context
-func (r *ExportRegistry) DeleteWithUser(ctx context.Context, id string) error {
-	return DeleteEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Exports(), "id", id)
-}
-
-// CountWithUser counts exports with user context
-func (r *ExportRegistry) CountWithUser(ctx context.Context) (int, error) {
-	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Exports())
 }

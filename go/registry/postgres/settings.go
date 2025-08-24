@@ -2,105 +2,126 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"github.com/jmoiron/sqlx"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
 var _ registry.SettingsRegistry = (*SettingsRegistry)(nil)
 
-type settingType struct {
-	Name  string          `db:"name"`
-	Value json.RawMessage `db:"value"`
-}
+// Use the actual Setting model instead of a separate type
+// This ensures consistency with the database schema
 
 type SettingsRegistry struct {
 	dbx        *sqlx.DB
-	tableNames TableNames
+	tableNames store.TableNames
+	userID     string
 }
 
 func NewSettingsRegistry(dbx *sqlx.DB) *SettingsRegistry {
-	return NewSettingsRegistryWithTableNames(dbx, DefaultTableNames)
+	return NewSettingsRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewSettingsRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *SettingsRegistry {
+func NewSettingsRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *SettingsRegistry {
 	return &SettingsRegistry{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
+func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.SettingsRegistry, error) {
+	tmp := *r
+
+	userID, err := appctx.RequireUserIDFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+	tmp.userID = userID
+	return &tmp, nil
+}
+
 func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, error) {
 	var settings models.SettingsObject
-	for setting, err := range ScanEntities[settingType](ctx, r.dbx, r.tableNames.Settings()) {
-		if err != nil {
-			return models.SettingsObject{}, errkit.Wrap(err, "failed to get settings")
-		}
-		var value any
-		err = json.Unmarshal(setting.Value, &value)
-		if err != nil {
-			return models.SettingsObject{}, errkit.Wrap(err, "failed to unmarshal setting value")
-		}
-		// Skip nil values - they shouldn't be set on the struct
-		if value != nil {
-			err = settings.Set(setting.Name, value)
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		txReg := store.NewTxRegistry[models.Setting](tx, r.tableNames.Settings())
+
+		for setting, err := range txReg.Scan(ctx) {
 			if err != nil {
-				return settings, errkit.Wrap(errkit.WithFields(err, "setting_name", setting.Name), "failed to set settings object value")
+				return errkit.Wrap(err, "failed to scan settings")
+			}
+			// Skip nil values - they shouldn't be set on the struct
+			if setting.Value != nil {
+				err = settings.Set(setting.Name, setting.Value)
+				if err != nil {
+					return errkit.Wrap(errkit.WithFields(err, "setting_name", setting.Name), "failed to set settings object value")
+				}
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return models.SettingsObject{}, errkit.Wrap(err, "failed to get settings")
 	}
 
 	return settings, nil
 }
 
 func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObject) error {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
-
 	settingsMap := settings.ToMap()
 
-	for settingName, settingValue := range settingsMap {
-		// Skip nil values - we don't want to store them in the database
-		if settingValue == nil {
-			continue
-		}
-		var sv settingType
-		err := ScanEntityByField(ctx, tx, r.tableNames.Settings(), "name", settingName, &sv)
-		if errors.Is(err, ErrNotFound) {
-			sv.Name = settingName
-			sv.Value, err = json.Marshal(settingValue)
-			if err != nil {
-				return errkit.Wrap(err, "failed to marshal setting value")
-			}
-			err = InsertEntity(ctx, tx, r.tableNames.Settings(), sv)
-			if err != nil {
-				return errkit.Wrap(err, "failed to insert setting")
-			}
-		} else {
-			sv.Name = settingName
-			sv.Value, err = json.Marshal(settingValue)
-			if err != nil {
-				return errkit.Wrap(err, "failed to marshal setting value")
-			}
-			err = UpdateEntityByField(ctx, tx, r.tableNames.Settings(), "name", settingName, sv)
-			if err != nil {
-				return errkit.Wrap(err, "failed to update setting")
-			}
-		}
-	}
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		txReg := store.NewTxRegistry[models.Setting](tx, r.tableNames.Settings())
 
-	return nil
+		for settingName, settingValue := range settingsMap {
+			// Skip nil values - we don't want to store them in the database
+			if settingValue == nil {
+				continue
+			}
+
+			var sv models.Setting
+			err := txReg.ScanOneByField(ctx, store.Pair("name", settingName), &sv)
+			isNotFound := errors.Is(err, store.ErrNotFound)
+			if err != nil && !isNotFound {
+				return errkit.Wrap(err, "failed to scan setting")
+			}
+
+			// Prepare the setting value
+			if isNotFound {
+				// Create new setting with ID
+				sv.SetID(generateID())
+				sv.SetUserID(r.userID)
+				// Note: tenant_id will be set by the RLS context
+			}
+			sv.Name = settingName
+			sv.Value = settingValue
+
+			if isNotFound {
+				// Insert new setting
+				err = txReg.Insert(ctx, sv)
+				if err != nil {
+					return errkit.Wrap(err, "failed to insert setting")
+				}
+			} else {
+				// Update existing setting
+				err = txReg.UpdateByField(ctx, store.Pair("name", settingName), sv)
+				if err != nil {
+					return errkit.Wrap(err, "failed to update setting")
+				}
+			}
+		}
+		return nil
+	})
+
+	return err
 }
 
 func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settingValue any) error {
@@ -111,38 +132,46 @@ func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settin
 		return errkit.Wrap(err, "invalid setting name")
 	}
 
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
+	reg := r.newSQLRegistry()
+	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		txReg := store.NewTxRegistry[models.Setting](tx, r.tableNames.Settings())
 
-	var sv settingType
-	err = ScanEntityByField(ctx, tx, r.tableNames.Settings(), "name", settingName, &sv)
-	if errors.Is(err, ErrNotFound) {
-		sv.Name = settingName
-		sv.Value, err = json.Marshal(settingValue)
-		if err != nil {
-			return errkit.Wrap(err, "failed to marshal setting value")
+		var sv models.Setting
+		err := txReg.ScanOneByField(ctx, store.Pair("name", settingName), &sv)
+		isNotFound := errors.Is(err, store.ErrNotFound)
+		if err != nil && !isNotFound {
+			return errkit.Wrap(err, "failed to scan setting")
 		}
-		err = InsertEntity(ctx, tx, r.tableNames.Settings(), sv)
-		if err != nil {
-			return errkit.Wrap(err, "failed to insert setting")
-		}
-	} else {
-		sv.Name = settingName
-		sv.Value, err = json.Marshal(settingValue)
-		if err != nil {
-			return errkit.Wrap(err, "failed to marshal setting value")
-		}
-		err = UpdateEntityByField(ctx, tx, r.tableNames.Settings(), "name", settingName, sv)
-		if err != nil {
-			return errkit.Wrap(err, "failed to update setting")
-		}
-	}
 
-	return nil
+		// Prepare the setting value
+		if isNotFound {
+			// Create new setting with ID
+			sv.SetID(generateID())
+			sv.SetUserID(r.userID)
+			// Note: tenant_id will be set by the RLS context
+		}
+		sv.Name = settingName
+		sv.Value = settingValue
+
+		if isNotFound {
+			// Insert new setting
+			err = txReg.Insert(ctx, sv)
+			if err != nil {
+				return errkit.Wrap(err, "failed to insert setting")
+			}
+		} else {
+			// Update existing setting
+			err = txReg.UpdateByField(ctx, store.Pair("name", settingName), sv)
+			if err != nil {
+				return errkit.Wrap(err, "failed to update setting")
+			}
+		}
+		return nil
+	})
+
+	return err
+}
+
+func (r *SettingsRegistry) newSQLRegistry() *store.RLSRepository[models.Setting] {
+	return store.NewUserAwareSQLRegistry[models.Setting](r.dbx, r.userID, r.tableNames.Settings())
 }

@@ -16,9 +16,21 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
+	// Add user context for user-aware entities
+	userID := "test-user-123"
+	ctx = registry.WithUserContext(ctx, userID)
+
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
+	registrySet := memory.NewRegistrySet()
+
+	// Make registries user-aware
+	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
+	registrySet.AreaRegistry = userAwareAreaRegistry
+
+	userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	registrySet.CommodityRegistry = userAwareCommodityRegistry
 
 	// Create entity service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
@@ -74,9 +86,21 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
+	// Add user context for user-aware entities
+	userID := "test-user-123"
+	ctx = registry.WithUserContext(ctx, userID)
+
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
+	registrySet := memory.NewRegistrySet()
+
+	// Make registries user-aware
+	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
+	registrySet.AreaRegistry = userAwareAreaRegistry
+
+	userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	registrySet.CommodityRegistry = userAwareCommodityRegistry
 
 	// Create entity service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")

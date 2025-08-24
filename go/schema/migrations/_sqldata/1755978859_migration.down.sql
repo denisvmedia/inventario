@@ -1,5 +1,5 @@
 -- Migration rollback
--- Generated on: 2025-08-20T18:05:48+02:00
+-- Generated on: 2025-08-23T21:54:19+02:00
 -- Direction: DOWN
 
 DROP INDEX IF EXISTS commodities_active_idx;
@@ -40,6 +40,10 @@ DROP INDEX IF EXISTS idx_restore_operations_tenant_status;
 DROP INDEX IF EXISTS idx_restore_steps_tenant_id;
 DROP INDEX IF EXISTS idx_restore_steps_tenant_operation;
 DROP INDEX IF EXISTS idx_restore_steps_tenant_result;
+DROP INDEX IF EXISTS idx_settings_tenant_id;
+DROP INDEX IF EXISTS idx_settings_tenant_user_name;
+DROP INDEX IF EXISTS idx_settings_user_id;
+DROP INDEX IF EXISTS settings_value_gin_idx;
 DROP INDEX IF EXISTS tenants_domain_idx;
 DROP INDEX IF EXISTS tenants_slug_idx;
 DROP INDEX IF EXISTS tenants_status_idx;
@@ -87,21 +91,24 @@ DROP POLICY IF EXISTS restore_operation_user_isolation ON restore_operations;
 DROP POLICY IF EXISTS restore_step_tenant_isolation ON restore_steps;
 -- Drop RLS policy restore_step_user_isolation from table restore_steps
 DROP POLICY IF EXISTS restore_step_user_isolation ON restore_steps;
+-- Drop RLS policy setting_tenant_isolation from table settings
+DROP POLICY IF EXISTS setting_tenant_isolation ON settings;
 -- Drop RLS policy user_tenant_isolation from table users
 DROP POLICY IF EXISTS user_tenant_isolation ON users;
 -- Drop RLS policy user_user_isolation from table users
 DROP POLICY IF EXISTS user_user_isolation ON users;
--- NOTE: RLS policies were removed from table users - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table exports - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table images - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table locations - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table restore_steps - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table invoices - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table users - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table areas - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table commodities - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table files - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table invoices - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table locations - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table manuals - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table restore_operations - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table restore_steps - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table settings - verify if RLS should be disabled --
 -- WARNING: This will delete all data!
 DROP TABLE IF EXISTS areas CASCADE;
 -- WARNING: This will delete all data!

@@ -93,23 +93,27 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		Draft:                  false,
 	}
 
-	created1, err := registrySet.CommodityRegistry.CreateWithUser(ctx1, commodity1)
+	userAwareCommodityRegistry1, err := registrySet.CommodityRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	created1, err := userAwareCommodityRegistry1.Create(ctx1, commodity1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
 	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's commodity
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	_, err = registrySet.CommodityRegistry.GetWithUser(ctx2, created1.ID)
+	userAwareCommodityRegistry2, err := registrySet.CommodityRegistry.WithCurrentUser(ctx2)
+	c.Assert(err, qt.IsNil)
+	_, err = userAwareCommodityRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Test: User2 cannot see User1's commodity in list
-	commodities2, err := registrySet.CommodityRegistry.ListWithUser(ctx2)
+	commodities2, err := userAwareCommodityRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(commodities2), qt.Equals, 0)
 
 	// Test: User1 can see their own commodity
-	commodities1, err := registrySet.CommodityRegistry.ListWithUser(ctx1)
+	commodities1, err := userAwareCommodityRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(commodities1), qt.Equals, 1)
 	c.Assert(commodities1[0].ID, qt.Equals, created1.ID)
@@ -137,23 +141,27 @@ func TestUserIsolation_Locations(t *testing.T) {
 		Address: "123 User1 Street",
 	}
 
-	created1, err := registrySet.LocationRegistry.CreateWithUser(ctx1, location1)
+	userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	created1, err := userAwareLocationRegistry1.Create(ctx1, location1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
 	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's location
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	_, err = registrySet.LocationRegistry.GetWithUser(ctx2, created1.ID)
+	userAwareLocationRegistry2, err := registrySet.LocationRegistry.WithCurrentUser(ctx2)
+	c.Assert(err, qt.IsNil)
+	_, err = userAwareLocationRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Test: User2 cannot see User1's location in list
-	locations2, err := registrySet.LocationRegistry.ListWithUser(ctx2)
+	locations2, err := userAwareLocationRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(locations2), qt.Equals, 0)
 
 	// Test: User1 can see their own location
-	locations1, err := registrySet.LocationRegistry.ListWithUser(ctx1)
+	locations1, err := userAwareLocationRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(locations1), qt.Equals, 1)
 	c.Assert(locations1[0].ID, qt.Equals, created1.ID)
@@ -188,23 +196,27 @@ func TestUserIsolation_Files(t *testing.T) {
 		},
 	}
 
-	created1, err := registrySet.FileRegistry.CreateWithUser(ctx1, file1)
+	userAwareFileRegistry1, err := registrySet.FileRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	created1, err := userAwareFileRegistry1.Create(ctx1, file1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
 	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's file
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	_, err = registrySet.FileRegistry.GetWithUser(ctx2, created1.ID)
+	userAwareFileRegistry2, err := registrySet.FileRegistry.WithCurrentUser(ctx2)
+	c.Assert(err, qt.IsNil)
+	_, err = userAwareFileRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Test: User2 cannot see User1's file in list
-	files2, err := registrySet.FileRegistry.ListWithUser(ctx2)
+	files2, err := userAwareFileRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(files2), qt.Equals, 0)
 
 	// Test: User1 can see their own file
-	files1, err := registrySet.FileRegistry.ListWithUser(ctx1)
+	files1, err := userAwareFileRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(files1), qt.Equals, 1)
 	c.Assert(files1[0].ID, qt.Equals, created1.ID)
@@ -233,23 +245,27 @@ func TestUserIsolation_Exports(t *testing.T) {
 		Status:      models.ExportStatusPending,
 	}
 
-	created1, err := registrySet.ExportRegistry.CreateWithUser(ctx1, export1)
+	userAwareExportRegistry1, err := registrySet.ExportRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	created1, err := userAwareExportRegistry1.Create(ctx1, export1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
 	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's export
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	_, err = registrySet.ExportRegistry.GetWithUser(ctx2, created1.ID)
+	userAwareExportRegistry2, err := registrySet.ExportRegistry.WithCurrentUser(ctx2)
+	c.Assert(err, qt.IsNil)
+	_, err = userAwareExportRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Test: User2 cannot see User1's export in list
-	exports2, err := registrySet.ExportRegistry.ListWithUser(ctx2)
+	exports2, err := userAwareExportRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(exports2), qt.Equals, 0)
 
 	// Test: User1 can see their own export
-	exports1, err := registrySet.ExportRegistry.ListWithUser(ctx1)
+	exports1, err := userAwareExportRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(exports1), qt.Equals, 1)
 	c.Assert(exports1[0].ID, qt.Equals, created1.ID)

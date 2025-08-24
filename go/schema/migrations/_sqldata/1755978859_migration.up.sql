@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2025-08-20T18:05:48+02:00
+-- Generated on: 2025-08-23T21:54:19+02:00
 -- Direction: UP
 
 -- Gets the current tenant ID from session for RLS policies
@@ -22,11 +22,6 @@ CREATE OR REPLACE FUNCTION set_user_context(user_id_param TEXT) RETURNS VOID AS 
 BEGIN PERFORM set_config('app.current_user_id', user_id_param, false); END;
 $$
 LANGUAGE plpgsql SECURITY DEFINER;
--- POSTGRES TABLE: settings --
-CREATE TABLE settings (
-  name TEXT PRIMARY KEY NOT NULL,
-  value JSONB NOT NULL
-);
 -- POSTGRES TABLE: tenants --
 CREATE TABLE tenants (
   name TEXT NOT NULL,
@@ -78,6 +73,14 @@ CREATE TABLE files (
   original_path TEXT NOT NULL,
   ext TEXT NOT NULL,
   mime_type TEXT NOT NULL
+);
+-- POSTGRES TABLE: settings --
+CREATE TABLE settings (
+  name TEXT NOT NULL,
+  value JSONB NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL
 );
 -- POSTGRES TABLE: areas --
 CREATE TABLE areas (
@@ -220,6 +223,10 @@ ALTER TABLE files ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERE
 -- ALTER statements: --
 ALTER TABLE files ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
+ALTER TABLE settings ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE settings ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- ALTER statements: --
 ALTER TABLE areas ADD CONSTRAINT fk_area_location FOREIGN KEY (location_id) REFERENCES locations(id);
 -- ALTER statements: --
 ALTER TABLE areas ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
@@ -267,28 +274,30 @@ ALTER TABLE restore_steps ADD CONSTRAINT fk_restore_step_operation FOREIGN KEY (
 ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- Enable RLS for areas table
-ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
--- Enable RLS for commodities table
-ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
--- Enable RLS for exports table
-ALTER TABLE exports ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_operations table
-ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_steps table
-ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for images table
 ALTER TABLE images ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for files table
+ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_operations table
+ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for invoices table
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for locations table
 ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for manuals table
 ALTER TABLE manuals ENABLE ROW LEVEL SECURITY;
--- Enable RLS for files table
-ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_steps table
+ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for settings table
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for users table
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for areas table
+ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for commodities table
+ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for exports table
+ALTER TABLE exports ENABLE ROW LEVEL SECURITY;
 -- Ensures areas can only be accessed by their tenant
 DROP POLICY IF EXISTS area_tenant_isolation ON areas;
 CREATE POLICY area_tenant_isolation ON areas FOR ALL TO inventario_app
@@ -387,6 +396,11 @@ DROP POLICY IF EXISTS restore_step_user_isolation ON restore_steps;
 CREATE POLICY restore_step_user_isolation ON restore_steps FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Ensures settings can only be accessed and modified by their tenant
+DROP POLICY IF EXISTS setting_tenant_isolation ON settings;
+CREATE POLICY setting_tenant_isolation ON settings FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id())
+    WITH CHECK (tenant_id = get_current_tenant_id());
 -- Ensures users can only access their tenant's data
 DROP POLICY IF EXISTS user_tenant_isolation ON users;
 CREATE POLICY user_tenant_isolation ON users FOR ALL TO inventario_app
@@ -434,6 +448,10 @@ CREATE INDEX IF NOT EXISTS idx_restore_operations_tenant_status ON restore_opera
 CREATE INDEX IF NOT EXISTS idx_restore_steps_tenant_id ON restore_steps (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_restore_steps_tenant_operation ON restore_steps (tenant_id, restore_operation_id);
 CREATE INDEX IF NOT EXISTS idx_restore_steps_tenant_result ON restore_steps (tenant_id, result);
+CREATE INDEX IF NOT EXISTS idx_settings_tenant_id ON settings (tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_settings_tenant_user_name ON settings (tenant_id, user_id, name);
+CREATE INDEX IF NOT EXISTS idx_settings_user_id ON settings (user_id);
+CREATE INDEX IF NOT EXISTS settings_value_gin_idx ON settings USING GIN (value);
 CREATE INDEX IF NOT EXISTS tenants_domain_idx ON tenants (domain);
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_slug_idx ON tenants (slug);
 CREATE INDEX IF NOT EXISTS tenants_status_idx ON tenants (status);

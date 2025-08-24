@@ -16,10 +16,7 @@ import (
 
 func newTestRegistrySet() *registry.Set {
 	// Use the proper NewRegistrySet function to ensure all dependencies are set up correctly
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	if err != nil {
-		panic(err)
-	}
+	registrySet := memory.NewRegistrySet()
 	return registrySet
 }
 

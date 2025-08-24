@@ -19,8 +19,8 @@ func TestDebugAPI(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry set (not used directly, but needed for compilation)
-	_, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Test cases for different configurations
 	testCases := []struct {
@@ -91,8 +91,8 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry set (not used directly, but needed for compilation)
-	_, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Test with invalid URLs
 	params := newParams()
@@ -117,7 +117,7 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 
 	// Parse response body
 	var debugInfo debug.InfoJSON
-	err = json.NewDecoder(w.Body).Decode(&debugInfo)
+	err := json.NewDecoder(w.Body).Decode(&debugInfo)
 	c.Assert(err, qt.IsNil)
 
 	// Should return "unknown" for invalid URLs

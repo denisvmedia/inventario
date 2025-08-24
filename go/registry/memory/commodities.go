@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -17,46 +18,69 @@ type baseCommodityRegistry = Registry[models.Commodity, *models.Commodity]
 type CommodityRegistry struct {
 	*baseCommodityRegistry
 
-	areaRegistry registry.AreaRegistry
+	userID       string
 	imagesLock   sync.RWMutex
 	images       models.CommodityImages
 	manualsLock  sync.RWMutex
 	manuals      models.CommodityManuals
 	invoicesLock sync.RWMutex
 	invoices     models.CommodityInvoices
+	areaRegistry *AreaRegistry // required dependency for relationship tracking
 }
 
-func NewCommodityRegistry(areaRegistry registry.AreaRegistry) *CommodityRegistry {
+func NewCommodityRegistry(areaRegistry *AreaRegistry) *CommodityRegistry {
 	return &CommodityRegistry{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
-		areaRegistry:          areaRegistry,
 		images:                make(models.CommodityImages),
 		manuals:               make(models.CommodityManuals),
 		invoices:              make(models.CommodityInvoices),
+		areaRegistry:          areaRegistry,
 	}
 }
 
-func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
-	_, err := r.areaRegistry.Get(ctx, commodity.AreaID)
+func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.CommodityRegistry, error) {
+	userID, err := appctx.RequireUserIDFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "area not found")
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
 
-	newCommodity, err := r.baseCommodityRegistry.Create(ctx, commodity)
+	// Create a new registry with the same data but different userID
+	tmp := &CommodityRegistry{
+		baseCommodityRegistry: r.baseCommodityRegistry,
+		userID:                userID,
+		images:                r.images,
+		manuals:               r.manuals,
+		invoices:              r.invoices,
+		areaRegistry:          r.areaRegistry,
+	}
+
+	// Set the userID on the base registry
+	tmp.baseCommodityRegistry.userID = userID
+
+	return tmp, nil
+}
+
+func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	// Use CreateWithUser to ensure user context is applied
+	newCommodity, err := r.baseCommodityRegistry.CreateWithUser(ctx, commodity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create commodity")
 	}
 
-	err = r.areaRegistry.(*AreaRegistry).AddCommodity(ctx, commodity.AreaID, newCommodity.ID)
+	// Add this commodity to its parent area's commodity list
+	_ = r.areaRegistry.AddCommodity(ctx, newCommodity.AreaID, newCommodity.GetID())
 
-	return newCommodity, err
+	return newCommodity, nil
 }
 
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
+	// Remove this commodity from its parent area's commodity list
 	commodity, err := r.baseCommodityRegistry.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodity")
 	}
+
+	_ = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
 
 	err = r.baseCommodityRegistry.Delete(ctx, id)
 	if err != nil {
@@ -162,10 +186,27 @@ func (r *CommodityRegistry) DeleteInvoice(_ context.Context, commodityID, invoic
 }
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	// Get the existing commodity to check if AreaID changed
+	var oldAreaID string
+	if existingCommodity, err := r.baseCommodityRegistry.Get(ctx, commodity.GetID()); err == nil {
+		oldAreaID = existingCommodity.AreaID
+	}
+
 	// Call the base registry's Update method
 	updatedCommodity, err := r.baseCommodityRegistry.Update(ctx, commodity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update commodity")
+	}
+
+	// Handle area registry tracking - area changed
+	if oldAreaID != "" && oldAreaID != updatedCommodity.AreaID {
+		// Remove from old area
+		_ = r.areaRegistry.DeleteCommodity(ctx, oldAreaID, updatedCommodity.GetID())
+		// Add to new area
+		_ = r.areaRegistry.AddCommodity(ctx, updatedCommodity.AreaID, updatedCommodity.GetID())
+	} else if oldAreaID == "" {
+		// This is a fallback case - add to area if not already tracked
+		_ = r.areaRegistry.AddCommodity(ctx, updatedCommodity.AreaID, updatedCommodity.GetID())
 	}
 
 	return updatedCommodity, nil

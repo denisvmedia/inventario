@@ -12,6 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
@@ -151,14 +152,38 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 		_ = existingUser2
 	}
 
-	// Create default system configuration with CZK as main currency
+	// Create default system configuration with CZK as main currency for the first test user
 	systemConfig := models.SettingsObject{
 		MainCurrency: ptr.To("CZK"),
 	}
 
-	err = registrySet.SettingsRegistry.Save(ctx, systemConfig)
+	// Set user context for settings (settings are per-user)
+	userCtx := appctx.WithUserID(ctx, "test-user-id")
+	userAwareSettingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(userCtx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create user-aware settings registry: %w", err)
+	}
+
+	err = userAwareSettingsRegistry.Save(userCtx, systemConfig)
+	if err != nil {
+		return fmt.Errorf("failed to save settings for test user: %w", err)
+	}
+
+	// Also create default settings for the second test user
+	userCtx2 := appctx.WithUserID(ctx, "test-user-2-id")
+	userAwareSettingsRegistry2, err := registrySet.SettingsRegistry.WithCurrentUser(userCtx2)
+	if err != nil {
+		return fmt.Errorf("failed to create user-aware settings registry for user 2: %w", err)
+	}
+
+	// User 2 gets EUR as main currency (different from user 1)
+	systemConfig2 := models.SettingsObject{
+		MainCurrency: ptr.To("EUR"),
+	}
+
+	err = userAwareSettingsRegistry2.Save(userCtx2, systemConfig2)
+	if err != nil {
+		return fmt.Errorf("failed to save settings for test user 2: %w", err)
 	}
 
 	// Create locations

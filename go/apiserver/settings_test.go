@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
@@ -19,8 +21,8 @@ func TestSettingsAPI(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a memory registry for testing
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySetWithUserID("test-user-id")
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Create a router with the settings endpoint
 	r := chi.NewRouter()
@@ -28,6 +30,7 @@ func TestSettingsAPI(t *testing.T) {
 
 	// Test GET /settings (empty settings)
 	req := httptest.NewRequest("GET", "/settings", nil)
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -35,7 +38,7 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(w.Header().Get("Content-Type"), qt.Equals, "application/json")
 
 	var emptySettings models.SettingsObject
-	err = json.Unmarshal(w.Body.Bytes(), &emptySettings)
+	err := json.Unmarshal(w.Body.Bytes(), &emptySettings)
 	c.Assert(err, qt.IsNil)
 	c.Assert(emptySettings, qt.DeepEquals, models.SettingsObject{})
 
@@ -50,6 +53,7 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PUT", "/settings", bytes.NewReader(settingsJSON))
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -63,6 +67,7 @@ func TestSettingsAPI(t *testing.T) {
 
 	// Test GET /settings after PUT
 	req = httptest.NewRequest("GET", "/settings", nil)
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -80,6 +85,7 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PATCH", "/settings/uiconfig.theme", bytes.NewReader(themeJSON))
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -94,6 +100,7 @@ func TestSettingsAPI(t *testing.T) {
 
 	// Test GET /settings after PATCH
 	req = httptest.NewRequest("GET", "/settings", nil)
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -111,8 +118,8 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a memory registry for testing
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Create a router with the settings endpoint
 	r := chi.NewRouter()
@@ -127,6 +134,7 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req := httptest.NewRequest("PUT", "/settings", bytes.NewReader(settingsJSON))
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -139,6 +147,7 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PUT", "/settings", bytes.NewReader(settingsJSON))
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -150,6 +159,7 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PATCH", "/settings/system.main_currency", bytes.NewReader(currencyJSON))
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -158,6 +168,7 @@ func TestMainCurrencyRestriction(t *testing.T) {
 
 	// Verify the main currency is still USD
 	req = httptest.NewRequest("GET", "/settings", nil)
+	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

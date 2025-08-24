@@ -8,12 +8,17 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
 func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
+
+	// Add user context for user-aware entities
+	userID := "test-user-123"
+	ctx = registry.WithUserContext(ctx, userID)
 
 	// Create registries
 	locationRegistry := memory.NewLocationRegistry()
@@ -91,6 +96,10 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
+
+	// Add user context for user-aware entities
+	userID := "test-user-123"
+	ctx = registry.WithUserContext(ctx, userID)
 
 	// Create registries
 	locationRegistry := memory.NewLocationRegistry()

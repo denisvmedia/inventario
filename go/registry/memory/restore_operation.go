@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -13,6 +14,8 @@ var _ registry.RestoreOperationRegistry = (*RestoreOperationRegistry)(nil)
 type RestoreOperationRegistry struct {
 	*Registry[models.RestoreOperation, *models.RestoreOperation]
 	restoreStepRegistry registry.RestoreStepRegistry
+
+	userID string
 }
 
 func NewRestoreOperationRegistry(restoreStepRegistry registry.RestoreStepRegistry) *RestoreOperationRegistry {
@@ -20,6 +23,17 @@ func NewRestoreOperationRegistry(restoreStepRegistry registry.RestoreStepRegistr
 		Registry:            NewRegistry[models.RestoreOperation, *models.RestoreOperation](),
 		restoreStepRegistry: restoreStepRegistry,
 	}
+}
+
+func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreOperationRegistry, error) {
+	tmp := *r
+
+	userID, err := appctx.RequireUserIDFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+	tmp.userID = userID
+	return &tmp, nil
 }
 
 func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error) {

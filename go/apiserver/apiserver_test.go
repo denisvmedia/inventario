@@ -14,6 +14,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -27,7 +28,9 @@ const uploadLocation = "file://uploads?memfs=1&create_dir=1"
 var testJWTSecret = []byte("test-jwt-secret-32-bytes-minimum-length")
 
 func newLocationRegistry() registry.LocationRegistry {
-	var locationsRegistry = memory.NewLocationRegistry()
+	var locationsRegistry registry.LocationRegistry = memory.NewLocationRegistry()
+	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	locationsRegistry = must.Must(locationsRegistry.WithCurrentUser(ctx))
 
 	must.Must(locationsRegistry.Create(context.Background(), models.Location{
 		Name:    "Location 1",
@@ -43,9 +46,10 @@ func newLocationRegistry() registry.LocationRegistry {
 }
 
 func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRegistry {
-	var areaRegistry = memory.NewAreaRegistry(locationRegistry)
-
-	locations := must.Must(locationRegistry.List(context.Background()))
+	var areaRegistry registry.AreaRegistry = memory.NewAreaRegistry(locationRegistry.(*memory.LocationRegistry))
+	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	areaRegistry = must.Must(areaRegistry.WithCurrentUser(ctx))
+	locations := must.Must(must.Must(locationRegistry.WithCurrentUser(ctx)).List(context.Background()))
 
 	must.Must(areaRegistry.Create(context.Background(), models.Area{
 		TenantAwareEntityID: models.WithTenantAwareEntityID("1", "default-tenant"),
@@ -63,7 +67,12 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 }
 
 func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+	var commodityRegistry registry.CommodityRegistry = memory.NewCommodityRegistry(areaRegistry.(*memory.AreaRegistry))
+	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	commodityRegistry = must.Must(commodityRegistry.WithCurrentUser(ctx))
+
+	areaRegistry = must.Must(areaRegistry.WithCurrentUser(ctx))
+	commodityRegistry = must.Must(commodityRegistry.WithCurrentUser(ctx))
 
 	areas := must.Must(areaRegistry.List(context.Background()))
 
@@ -93,9 +102,11 @@ func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.Commodity
 }
 
 func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.ImageRegistry {
-	var imageRegistry = memory.NewImageRegistry(commodityRegistry)
+	var imageRegistry = memory.NewImageRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	commodities := must.Must(commodityRegistry.List(context.Background()))
+	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	commodities := must.Must(commodityRegistry.List(ctx))
+	imgReg := must.Must(imageRegistry.WithCurrentUser(ctx))
 
 	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
 	defer b.Close()
@@ -104,7 +115,7 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 		panic(err)
 	}
 
-	must.Must(imageRegistry.Create(context.Background(), models.Image{
+	must.Must(imgReg.Create(ctx, models.Image{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "image1",     // Without extension
@@ -121,7 +132,7 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 		panic(err)
 	}
 
-	must.Must(imageRegistry.Create(context.Background(), models.Image{
+	must.Must(imgReg.Create(ctx, models.Image{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "image2",     // Without extension
@@ -131,13 +142,15 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 		},
 	}))
 
-	return imageRegistry
+	return imgReg
 }
 
 func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.InvoiceRegistry {
-	var invoiceRegistry = memory.NewInvoiceRegistry(commodityRegistry)
+	var invoiceRegistry = memory.NewInvoiceRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	commodities := must.Must(commodityRegistry.List(context.Background()))
+	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	commodities := must.Must(commodityRegistry.List(ctx))
+	invReg := must.Must(invoiceRegistry.WithCurrentUser(ctx))
 
 	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
 	defer b.Close()
@@ -146,7 +159,7 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 		panic(err)
 	}
 
-	must.Must(invoiceRegistry.Create(context.Background(), models.Invoice{
+	must.Must(invReg.Create(ctx, models.Invoice{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "invoice1",     // Without extension
@@ -163,7 +176,7 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 		panic(err)
 	}
 
-	must.Must(invoiceRegistry.Create(context.Background(), models.Invoice{
+	must.Must(invReg.Create(ctx, models.Invoice{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "invoice2",     // Without extension
@@ -173,13 +186,15 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 		},
 	}))
 
-	return invoiceRegistry
+	return invReg
 }
 
 func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.ManualRegistry {
-	var manualRegistry = memory.NewManualRegistry(commodityRegistry)
+	var manualRegistry = memory.NewManualRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	commodities := must.Must(commodityRegistry.List(context.Background()))
+	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	commodities := must.Must(commodityRegistry.List(ctx))
+	manReg := must.Must(manualRegistry.WithCurrentUser(ctx))
 
 	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
 	defer b.Close()
@@ -188,7 +203,7 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 		panic(err)
 	}
 
-	must.Must(manualRegistry.Create(context.Background(), models.Manual{
+	must.Must(manReg.Create(ctx, models.Manual{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "manual1",     // Without extension
@@ -205,7 +220,7 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 		panic(err)
 	}
 
-	must.Must(manualRegistry.Create(context.Background(), models.Manual{
+	must.Must(manReg.Create(ctx, models.Manual{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "manual2",     // Without extension
@@ -215,11 +230,13 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 		},
 	}))
 
-	return manualRegistry
+	return manReg
 }
 
 func newSettingsRegistry() registry.SettingsRegistry {
-	var settingsRegistry = memory.NewSettingsRegistry()
+	var settingsRegistry registry.SettingsRegistry = memory.NewSettingsRegistry()
+	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	settingsRegistry = must.Must(settingsRegistry.WithCurrentUser(ctx))
 
 	must.Assert(settingsRegistry.Patch(context.Background(), "system.main_currency", "USD"))
 
@@ -404,7 +421,8 @@ func newParams() apiserver.Params {
 	params.RegistrySet.UserRegistry = newUserRegistry()
 
 	// Create FileRegistry and populate it with test data first
-	params.RegistrySet.FileRegistry = memory.NewFileRegistry()
+	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	params.RegistrySet.FileRegistry = must.Must(memory.NewFileRegistry().WithCurrentUser(ctx))
 
 	// Create CommodityRegistry
 	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry)

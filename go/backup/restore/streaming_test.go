@@ -6,6 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
@@ -15,12 +16,12 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	ctx = appctx.WithUserID(ctx, "test-user-id")
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")
@@ -93,12 +94,12 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	ctx = appctx.WithUserID(ctx, "test-user-id")
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")

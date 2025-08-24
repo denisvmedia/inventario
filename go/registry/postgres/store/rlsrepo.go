@@ -1,9 +1,8 @@
-package postgres
+package store
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"iter"
 
 	"github.com/jmoiron/sqlx"
@@ -12,53 +11,32 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-type UserAwareSQLRegistry[T any] struct {
+type RLSRepository[T any] struct {
 	dbx    *sqlx.DB
 	userID string
 	table  TableName
 }
 
-type FieldValue struct {
-	Field string
-	Value any
-}
-
-func Pair(field string, value any) FieldValue {
-	return FieldValue{
-		Field: field,
-		Value: value,
-	}
-}
-
-func NewUserAwareSQLRegistry[T any](dbx *sqlx.DB, userID string, table TableName) *UserAwareSQLRegistry[T] {
-	return &UserAwareSQLRegistry[T]{
+func NewUserAwareSQLRegistry[T any](dbx *sqlx.DB, userID string, table TableName) *RLSRepository[T] {
+	return &RLSRepository[T]{
 		dbx:    dbx,
 		userID: userID,
 		table:  table,
 	}
 }
 
-func (r *UserAwareSQLRegistry[T]) ScanByField(ctx context.Context, field FieldValue) iter.Seq2[T, error] {
+func (r *RLSRepository[T]) ScanByField(ctx context.Context, field FieldValue) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		tx, err := r.beginTx(ctx)
 		if err != nil {
-			yield(nil, err)
+			var zero T
+			yield(zero, err)
 			return
 		}
 		defer tx.Rollback() // Read-only transaction, so rollback is safe
 
-		query := fmt.Sprintf("SELECT * FROM %s WHERE %s = $1", r.table, field.Field)
-
-		rows, err := r.dbx.QueryxContext(ctx, query, field.Value)
-		if err != nil {
-			yield(nil, err)
-			return
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var entity T
-			err := rows.StructScan(&entity)
+		txreg := NewTxRegistry[T](tx, r.table)
+		for entity, err := range txreg.ScanByField(ctx, field) {
 			if !yield(entity, err) {
 				return
 			}
@@ -66,7 +44,7 @@ func (r *UserAwareSQLRegistry[T]) ScanByField(ctx context.Context, field FieldVa
 	}
 }
 
-func (r *UserAwareSQLRegistry[T]) ScanOneByField(ctx context.Context, field FieldValue, entity *T) error {
+func (r *RLSRepository[T]) ScanOneByField(ctx context.Context, field FieldValue, entity *T) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -83,7 +61,7 @@ func (r *UserAwareSQLRegistry[T]) ScanOneByField(ctx context.Context, field Fiel
 	return nil
 }
 
-func (r *UserAwareSQLRegistry[T]) Scan(ctx context.Context) iter.Seq2[T, error] {
+func (r *RLSRepository[T]) Scan(ctx context.Context) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		tx, err := r.beginTx(ctx)
 		if err != nil {
@@ -93,19 +71,8 @@ func (r *UserAwareSQLRegistry[T]) Scan(ctx context.Context) iter.Seq2[T, error] 
 		}
 		defer tx.Rollback() // Read-only transaction, so rollback is safe
 
-		query := fmt.Sprintf("SELECT * FROM %s", r.table)
-
-		rows, err := tx.QueryxContext(ctx, query)
-		if err != nil {
-			var zero T
-			yield(zero, err)
-			return
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var entity T
-			err := rows.StructScan(&entity)
+		txreg := NewTxRegistry[T](tx, r.table)
+		for entity, err := range txreg.Scan(ctx) {
 			if !yield(entity, err) {
 				return
 			}
@@ -113,17 +80,15 @@ func (r *UserAwareSQLRegistry[T]) Scan(ctx context.Context) iter.Seq2[T, error] 
 	}
 }
 
-func (r *UserAwareSQLRegistry[T]) Count(ctx context.Context) (int, error) {
-	var count int
-
+func (r *RLSRepository[T]) Count(ctx context.Context) (int, error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback() // Read-only transaction, so rollback is safe
 
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", r.table)
-	err = r.dbx.QueryRowxContext(ctx, query).Scan(&count)
+	txreg := NewTxRegistry[T](tx, r.table)
+	count, err := txreg.Count(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -131,7 +96,7 @@ func (r *UserAwareSQLRegistry[T]) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (r *UserAwareSQLRegistry[T]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -156,7 +121,7 @@ func (r *UserAwareSQLRegistry[T]) Create(ctx context.Context, entity T, checkerF
 	return nil
 }
 
-func (r *UserAwareSQLRegistry[T]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) error {
+func (r *RLSRepository[T]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -191,7 +156,7 @@ func (r *UserAwareSQLRegistry[T]) Update(ctx context.Context, entity T, checkerF
 	return nil
 }
 
-func (r *UserAwareSQLRegistry[T]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -216,9 +181,7 @@ func (r *UserAwareSQLRegistry[T]) Delete(ctx context.Context, id string, checker
 		}
 	}
 
-	query := fmt.Sprintf("DELETE FROM %s WHERE %s = $1", r.table, field.Field)
-
-	_, err = tx.ExecContext(ctx, query, field.Value)
+	err = txreg.DeleteByField(ctx, field)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete entity")
 	}
@@ -226,7 +189,7 @@ func (r *UserAwareSQLRegistry[T]) Delete(ctx context.Context, id string, checker
 	return nil
 }
 
-func (r *UserAwareSQLRegistry[T]) DoWithEntity(ctx context.Context, entity T, operationFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T]) DoWithEntity(ctx context.Context, entity T, operationFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -255,7 +218,7 @@ func (r *UserAwareSQLRegistry[T]) DoWithEntity(ctx context.Context, entity T, op
 	return nil
 }
 
-func (r *UserAwareSQLRegistry[T]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) error {
+func (r *RLSRepository[T]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -283,7 +246,7 @@ func (r *UserAwareSQLRegistry[T]) DoWithEntityID(ctx context.Context, entityID s
 	return nil
 }
 
-func (r *UserAwareSQLRegistry[T]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -302,7 +265,7 @@ func (r *UserAwareSQLRegistry[T]) Do(ctx context.Context, operationFn func(conte
 	return nil
 }
 
-func (r *UserAwareSQLRegistry[T]) beginTx(ctx context.Context) (*sqlx.Tx, error) {
+func (r *RLSRepository[T]) beginTx(ctx context.Context) (*sqlx.Tx, error) {
 	if r.userID == "" {
 		return nil, ErrUserIDRequired
 	}
@@ -325,7 +288,7 @@ func (r *UserAwareSQLRegistry[T]) beginTx(ctx context.Context) (*sqlx.Tx, error)
 	return tx, nil
 }
 
-func (r *UserAwareSQLRegistry[T]) entityToIDAble(entity T) models.IDable {
+func (r *RLSRepository[T]) entityToIDAble(entity T) models.IDable {
 	var tmp any = entity
 	idable, ok := tmp.(models.IDable)
 	if !ok {

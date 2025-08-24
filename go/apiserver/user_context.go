@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -129,4 +131,24 @@ func UserAwareMiddleware(resolver UserResolver) func(http.Handler) http.Handler 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// UserFromContext is a wrapper around appctx.UserFromContext for convenience
+func UserFromContext(ctx context.Context) *models.User {
+	return appctx.UserFromContext(ctx)
+}
+
+// UserIDFromContext is a wrapper around appctx.UserIDFromContext for convenience
+func UserIDFromContext(ctx context.Context) string {
+	return appctx.UserIDFromContext(ctx)
+}
+
+// WithUser is a wrapper around appctx.WithUser for convenience
+func WithUser(ctx context.Context, user *models.User) context.Context {
+	return appctx.WithUser(ctx, user)
+}
+
+// WithUserID is a wrapper around appctx.WithUserID for convenience
+func WithUserID(ctx context.Context, userID string) context.Context {
+	return appctx.WithUserID(ctx, userID)
 }
