@@ -1,7 +1,6 @@
 package restore_test
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
@@ -17,14 +17,20 @@ import (
 )
 
 func TestRestoreService_RestoreFromXML(t *testing.T) {
-	ctx := validationctx.WithMainCurrency(context.Background(), "USD")
+	ctx := validationctx.WithMainCurrency(t.Context(), "USD")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	t.Run("restore XML with full replace strategy", func(t *testing.T) {
 		c := qt.New(t)
 
 		// Create fresh registry set for this test
-		testRegistrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		testRegistrySet := memory.NewRegistrySet()
+		c.Assert(testRegistrySet, qt.IsNotNil)
 		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
@@ -111,8 +117,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c := qt.New(t)
 
 		// Create fresh registry set for this test
-		testRegistrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		testRegistrySet := memory.NewRegistrySet()
 		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
@@ -169,8 +174,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c := qt.New(t)
 
 		// Create fresh registry set for this test
-		testRegistrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		testRegistrySet := memory.NewRegistrySet()
 		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
@@ -227,8 +231,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c := qt.New(t)
 
 		// Create fresh registry set for this test
-		testRegistrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		testRegistrySet := memory.NewRegistrySet()
 		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
 		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
@@ -265,8 +268,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c := qt.New(t)
 
 		// Create test registry set
-		registrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		registrySet := memory.NewRegistrySet()
 
 		// Create restore processor
 		entityService := services.NewEntityService(registrySet, "/tmp/test-uploads")
@@ -283,7 +285,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			DryRun:          false,
 		}
 
-		_, err = processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		_, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.ErrorMatches, ".*invalid restore strategy.*")
 	})
 }
@@ -292,12 +294,18 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")
@@ -364,8 +372,7 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries without setting main currency
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	entityService := services.NewEntityService(registrySet, "")
 	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
@@ -410,7 +417,12 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 		DryRun:          false,
 	}
 
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
@@ -435,12 +447,18 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")
@@ -570,12 +588,11 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")

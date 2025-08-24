@@ -2012,29 +2012,6 @@
                 }
             }
         },
-        "/search/capabilities": {
-            "get": {
-                "description": "Get information about what features are supported by the current database backend",
-                "consumes": [
-                    "application/vnd.api+json"
-                ],
-                "produces": [
-                    "application/vnd.api+json"
-                ],
-                "tags": [
-                    "search"
-                ],
-                "summary": "Get database capabilities",
-                "responses": {
-                    "200": {
-                        "description": "Database capabilities",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.CapabilitiesResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/seed": {
             "post": {
                 "description": "Seed the database with example data",
@@ -2320,28 +2297,6 @@
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.AreasMeta"
-                }
-            }
-        },
-        "jsonapi.CapabilitiesData": {
-            "type": "object",
-            "properties": {
-                "attributes": {
-                    "$ref": "#/definitions/registry.DatabaseCapabilities"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "jsonapi.CapabilitiesResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/jsonapi.CapabilitiesData"
                 }
             }
         },
@@ -3803,43 +3758,6 @@
                 },
                 "theme": {
                     "type": "string"
-                }
-            }
-        },
-        "registry.DatabaseCapabilities": {
-            "type": "object",
-            "properties": {
-                "advancedIndexing": {
-                    "description": "GIN, GiST, partial indexes",
-                    "type": "boolean"
-                },
-                "arrayOperations": {
-                    "description": "Array data types and operations",
-                    "type": "boolean"
-                },
-                "bulkOperations": {
-                    "description": "Efficient bulk insert/update",
-                    "type": "boolean"
-                },
-                "fullTextSearch": {
-                    "description": "PostgreSQL tsvector, MySQL FULLTEXT",
-                    "type": "boolean"
-                },
-                "jsonboperators": {
-                    "description": "PostgreSQL JSONB operators (@\u003e, ?, etc.)",
-                    "type": "boolean"
-                },
-                "storedProcedures": {
-                    "description": "Stored procedures/functions",
-                    "type": "boolean"
-                },
-                "transactions": {
-                    "description": "Transaction support",
-                    "type": "boolean"
-                },
-                "triggers": {
-                    "description": "Database triggers",
-                    "type": "boolean"
                 }
             }
         }

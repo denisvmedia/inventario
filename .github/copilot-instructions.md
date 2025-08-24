@@ -1,5 +1,5 @@
 This is a Go-based personal inventory management application with a Vue.js 3 + TypeScript frontend. It supports multiple
-database backends (memory, BoltDB, PostgreSQL) and is designed for tracking personal items, their locations, and
+database backends (memory, PostgreSQL) and is designed for tracking personal items, their locations, and
 associated metadata. Please follow these guidelines when contributing:
 
 ## Code Standards
@@ -21,7 +21,7 @@ associated metadata. Please follow these guidelines when contributing:
 
 ## Repository Structure
 - `go/`: Backend Go code and main application entry point
-  - `go/registry/`: Data storage implementations (memory, boltdb, postgres)
+  - `go/registry/`: Data storage implementations (memory, postgres)
   - `go/models/`: Data models and entity definitions
   - `go/apiserver/`: HTTP API server implementation
   - `go/internal/`: Internal packages (errkit, log, etc.)
@@ -68,7 +68,7 @@ associated metadata. Please follow these guidelines when contributing:
   ```
 
 ### Database Support
-- Support multiple backends: memory (default), BoltDB, PostgreSQL
+- Support multiple backends: memory (default), PostgreSQL
 - Use appropriate registry implementations in `go/registry/`
 - Test database-specific code with appropriate test suites
 - Squash SQL migrations, which belong to the same pull request, to have only 1 up and 1 down migration per PR

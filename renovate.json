@@ -68,7 +68,7 @@
     {
       "description": "Disallow major versions update for databases",
       "matchDatasources": ["docker", "github-actions"],
-      "matchPackageNames": ["postgres", "mysql", "mariadb"],
+      "matchPackageNames": ["postgres"],
       "matchUpdateTypes": ["major"],
       "enabled": false
     }

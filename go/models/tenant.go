@@ -77,7 +77,7 @@ type Tenant struct {
 	//migrator:schema:field name="slug" type="TEXT" not_null="true" unique="true"
 	Slug string `json:"slug" db:"slug"`
 	//migrator:schema:field name="domain" type="TEXT"
-	Domain string `json:"domain" db:"domain"`
+	Domain *string `json:"domain" db:"domain"`
 	//migrator:schema:field name="status" type="TEXT" not_null="true" default="active"
 	Status TenantStatus `json:"status" db:"status"`
 	//migrator:schema:field name="settings" type="JSONB"
@@ -120,7 +120,7 @@ func (t *Tenant) ValidateWithContext(ctx context.Context) error {
 	)
 
 	// Only validate domain length if it's not empty
-	if t.Domain != "" {
+	if t.Domain != nil && *t.Domain != "" {
 		fields = append(fields, validation.Field(&t.Domain, validation.Length(1, 255)))
 	}
 

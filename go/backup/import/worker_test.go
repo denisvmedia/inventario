@@ -49,6 +49,10 @@ func TestImportWorkerStartStop(t *testing.T) {
 	// Start the worker
 	worker.Start(ctx)
 
+	for worker.IsRunning() == false {
+		time.Sleep(1 * time.Microsecond)
+	}
+
 	// Give it a moment to start
 	time.Sleep(100 * time.Millisecond)
 

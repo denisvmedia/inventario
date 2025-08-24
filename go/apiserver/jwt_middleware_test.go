@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -82,7 +83,7 @@ func TestJWTMiddleware(t *testing.T) {
 			},
 			checkContext: func(t *testing.T, r *http.Request) {
 				c := qt.New(t)
-				user := apiserver.UserFromContext(r.Context())
+				user := appctx.UserFromContext(r.Context())
 				c.Assert(user, qt.IsNotNil)
 				c.Assert(user.ID, qt.Equals, "user-123")
 				c.Assert(user.Email, qt.Equals, "test@example.com")
@@ -354,7 +355,7 @@ func TestRequireRole(t *testing.T) {
 			// Create request with user context
 			req := httptest.NewRequest("GET", "/test", nil)
 			if tt.contextUser != nil {
-				ctx := apiserver.WithUser(req.Context(), tt.contextUser)
+				ctx := appctx.WithUser(req.Context(), tt.contextUser)
 				req = req.WithContext(ctx)
 			}
 			resp := httptest.NewRecorder()

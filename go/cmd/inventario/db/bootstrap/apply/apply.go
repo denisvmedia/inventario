@@ -77,7 +77,7 @@ func (c *Command) bootstrapApply(dbConfig *shared.DatabaseConfig) error {
 	}
 
 	// Create bootstrap migrator
-	migrator := bootstrap.New()
+	migrator := bootstrap.New().WithWriter(c.Cmd().OutOrStdout())
 
 	// Prepare arguments
 	args := bootstrap.ApplyArgs{

@@ -94,20 +94,6 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.AreasMeta'
     type: object
-  jsonapi.CapabilitiesData:
-    properties:
-      attributes:
-        $ref: '#/definitions/registry.DatabaseCapabilities'
-      id:
-        type: string
-      type:
-        type: string
-    type: object
-  jsonapi.CapabilitiesResponse:
-    properties:
-      data:
-        $ref: '#/definitions/jsonapi.CapabilitiesData'
-    type: object
   jsonapi.CommoditiesMeta:
     properties:
       commodities:
@@ -1139,33 +1125,6 @@ definitions:
         type: boolean
       theme:
         type: string
-    type: object
-  registry.DatabaseCapabilities:
-    properties:
-      advancedIndexing:
-        description: GIN, GiST, partial indexes
-        type: boolean
-      arrayOperations:
-        description: Array data types and operations
-        type: boolean
-      bulkOperations:
-        description: Efficient bulk insert/update
-        type: boolean
-      fullTextSearch:
-        description: PostgreSQL tsvector, MySQL FULLTEXT
-        type: boolean
-      jsonboperators:
-        description: PostgreSQL JSONB operators (@>, ?, etc.)
-        type: boolean
-      storedProcedures:
-        description: Stored procedures/functions
-        type: boolean
-      transactions:
-        description: Transaction support
-        type: boolean
-      triggers:
-        description: Database triggers
-        type: boolean
     type: object
 info:
   contact:
@@ -2508,22 +2467,6 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.SearchResponse'
       summary: Advanced search
-      tags:
-      - search
-  /search/capabilities:
-    get:
-      consumes:
-      - application/vnd.api+json
-      description: Get information about what features are supported by the current
-        database backend
-      produces:
-      - application/vnd.api+json
-      responses:
-        "200":
-          description: Database capabilities
-          schema:
-            $ref: '#/definitions/jsonapi.CapabilitiesResponse'
-      summary: Get database capabilities
       tags:
       - search
   /seed:

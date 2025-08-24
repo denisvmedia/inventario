@@ -19,6 +19,9 @@
           <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
           <router-link to="/system" :class="{ 'custom-active': isSystemActive }">System</router-link>
         </nav>
+        <div v-if="authStore.isAuthenticated" class="user-info">
+          <span class="user-display" data-testid="current-user">{{ authStore.userName || authStore.userEmail }}</span>
+        </div>
       </div>
     </header>
 
@@ -41,10 +44,12 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useAuthStore } from '@/stores/authStore'
 import Toast from 'primevue/toast'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()
+const authStore = useAuthStore()
 
 // Check if current route is a print route
 const isPrintRoute = computed(() => {
@@ -98,7 +103,7 @@ onMounted(async () => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 1rem;
-  justify-content: center;
+  justify-content: space-between;
 }
 
 .logo-container {
@@ -116,6 +121,21 @@ onMounted(async () => {
   }
 }
 
+.user-info {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.user-display {
+  color: white;
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+  background-color: rgb(255 255 255 / 10%);
+  border-radius: 4px;
+  border: 1px solid rgb(255 255 255 / 20%);
+}
+
 @media (width <= 768px) {
   .header-content {
     flex-direction: column;
@@ -129,6 +149,11 @@ onMounted(async () => {
 
   .logo {
     height: 35px;
+  }
+
+  .user-info {
+    margin-left: 0;
+    margin-top: 1rem;
   }
 }
 

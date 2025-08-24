@@ -13,8 +13,9 @@ import (
 )
 
 type Registry[T any, P registry.PIDable[T]] struct {
-	items *orderedmap.OrderedMap[string, P]
-	lock  sync.RWMutex
+	items  *orderedmap.OrderedMap[string, P]
+	lock   sync.RWMutex
+	userID string // For user-aware filtering
 }
 
 func NewRegistry[T any, P registry.PIDable[T]]() *Registry[T, P] {
@@ -23,7 +24,12 @@ func NewRegistry[T any, P registry.PIDable[T]]() *Registry[T, P] {
 	}
 }
 
-func (r *Registry[T, P]) Create(_ context.Context, item T) (P, error) {
+func (r *Registry[T, P]) Create(ctx context.Context, item T) (P, error) {
+	// If userID is set, use CreateWithUser to ensure user context is applied
+	if r.userID != "" {
+		return r.CreateWithUser(ctx, item)
+	}
+
 	iitem := P(&item)
 	// Generate a new ID if one is not already provided
 	if iitem.GetID() == "" {
@@ -44,6 +50,16 @@ func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
 	if !ok {
 		return nil, registry.ErrNotFound
 	}
+
+	// If userID is set, check if the entity belongs to the user
+	if r.userID != "" {
+		if userAware, ok := any(item).(models.UserAware); ok {
+			if userAware.GetUserID() != r.userID {
+				return nil, registry.ErrNotFound
+			}
+		}
+	}
+
 	vitem := *item
 	return &vitem, nil
 }
@@ -52,7 +68,18 @@ func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
 	items := make([]P, 0, r.items.Len())
 	r.lock.RLock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-		v := *pair.Value
+		item := pair.Value
+
+		// If userID is set, filter by user
+		if r.userID != "" {
+			if userAware, ok := any(item).(models.UserAware); ok {
+				if userAware.GetUserID() != r.userID {
+					continue
+				}
+			}
+		}
+
+		v := *item
 		items = append(items, &v)
 	}
 	r.lock.RUnlock()
@@ -65,25 +92,68 @@ func (r *Registry[T, P]) Update(_ context.Context, item T) (P, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	_, ok := r.items.Get(iitem.GetID())
+	existingItem, ok := r.items.Get(iitem.GetID())
 	if !ok {
 		return nil, registry.ErrNotFound
+	}
+
+	// If userID is set, check if the entity belongs to the user
+	if r.userID != "" {
+		if userAware, ok := any(existingItem).(models.UserAware); ok {
+			if userAware.GetUserID() != r.userID {
+				return nil, registry.ErrNotFound
+			}
+		}
 	}
 
 	r.items.Set(iitem.GetID(), iitem)
 	return &item, nil
 }
 
-func (r *Registry[_, _]) Delete(_ context.Context, id string) error {
+func (r *Registry[_, P]) Delete(_ context.Context, id string) error {
 	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// If userID is set (user-aware registry), check if the entity exists and belongs to the user
+	if r.userID != "" {
+		existingItem, ok := r.items.Get(id)
+		if !ok {
+			return registry.ErrNotFound
+		}
+
+		if userAware, ok := any(existingItem).(models.UserAware); ok {
+			if userAware.GetUserID() != r.userID {
+				return registry.ErrNotFound
+			}
+		}
+	}
+
+	// For non-user-aware registries, just delete (no error if item doesn't exist)
 	r.items.Delete(id)
-	r.lock.Unlock()
 	return nil
 }
 
-func (r *Registry[_, _]) Count(_ context.Context) (int, error) {
+func (r *Registry[_, P]) Count(_ context.Context) (int, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
+
+	// If userID is set, count only items belonging to the user
+	if r.userID != "" {
+		count := 0
+		for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+			item := pair.Value
+			if userAware, ok := any(item).(models.UserAware); ok {
+				if userAware.GetUserID() == r.userID {
+					count++
+				}
+			} else {
+				// Non-user-aware entities are counted for all users
+				count++
+			}
+		}
+		return count, nil
+	}
+
 	return r.items.Len(), nil
 }
 
@@ -104,10 +174,13 @@ func (r *Registry[T, P]) WithUserContext(ctx context.Context, userID string, fn 
 
 // CreateWithUser creates an entity with user context
 func (r *Registry[T, P]) CreateWithUser(ctx context.Context, item T) (P, error) {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
+	// Use registry's userID if available, otherwise extract from context
+	userID := r.userID
 	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+		userID = registry.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, errkit.WithStack(registry.ErrUserContextRequired)
+		}
 	}
 
 	iitem := P(&item)

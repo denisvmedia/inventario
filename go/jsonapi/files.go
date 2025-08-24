@@ -9,7 +9,6 @@ import (
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 // FileResponse is an object that holds file information.
@@ -294,35 +293,6 @@ func NewSearchResponse(entityType string, data any, total int) *SearchResponse {
 
 // Render renders the SearchResponse as an HTTP response
 func (*SearchResponse) Render(_w http.ResponseWriter, r *http.Request) error {
-	render.Status(r, http.StatusOK)
-	return nil
-}
-
-// CapabilitiesResponse represents database capabilities
-type CapabilitiesResponse struct {
-	Data CapabilitiesData `json:"data"`
-}
-
-// CapabilitiesData contains database capability information
-type CapabilitiesData struct {
-	ID         string                        `json:"id"`
-	Type       string                        `json:"type"`
-	Attributes registry.DatabaseCapabilities `json:"attributes"`
-}
-
-// NewCapabilitiesResponse creates a new capabilities response
-func NewCapabilitiesResponse(capabilities registry.DatabaseCapabilities) *CapabilitiesResponse {
-	return &CapabilitiesResponse{
-		Data: CapabilitiesData{
-			ID:         "capabilities",
-			Type:       "capabilities",
-			Attributes: capabilities,
-		},
-	}
-}
-
-// Render renders the CapabilitiesResponse as an HTTP response
-func (*CapabilitiesResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }

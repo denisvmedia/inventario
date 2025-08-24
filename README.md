@@ -29,7 +29,6 @@ Inventario is a Go application with a frontend built using web technologies. The
 Inventario supports multiple database backends:
 
 - **Memory**: In-memory database (default, data is lost when the application is restarted)
-- **BoltDB**: Embedded key-value store (data is persisted to disk)
 - **PostgreSQL**: Full-featured SQL database (recommended for production use)
 
 You can specify the database to use with the `--db-dsn` flag when running the application:
@@ -37,9 +36,6 @@ You can specify the database to use with the `--db-dsn` flag when running the ap
 ```bash
 # Memory database (default)
 ./inventario run --db-dsn memory://
-
-# BoltDB database
-./inventario run --db-dsn boltdb://path/to/data/inventario.db
 
 # PostgreSQL database
 ./inventario run --db-dsn postgres://username:password@localhost:5432/inventario

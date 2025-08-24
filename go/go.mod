@@ -30,11 +30,9 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/stokaro/ptah v0.0.0-20250819205839-43c042a66605
 	github.com/swaggo/http-swagger v1.3.4
-	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
-	go.etcd.io/bbolt v1.4.3
 	gocloud.dev v0.43.0
 	golang.org/x/crypto v0.41.0
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b

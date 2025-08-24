@@ -13,6 +13,7 @@ import (
 const (
 	locationCtxKey  ctxValueKey = "location"
 	commodityCtxKey ctxValueKey = "commodity"
+	areaCtxKey      ctxValueKey = "area"
 	entityIDKey     ctxValueKey = "entityID"
 )
 
@@ -44,7 +45,12 @@ func commodityCtx(commodityRegistry registry.CommodityRegistry) func(http.Handle
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			commodityID := chi.URLParam(r, "commodityID")
-			commodity, err := commodityRegistry.Get(r.Context(), commodityID)
+			comReg, err := commodityRegistry.WithCurrentUser(r.Context())
+			if err != nil {
+				renderEntityError(w, r, err)
+				return
+			}
+			commodity, err := comReg.Get(r.Context(), commodityID)
 			if err != nil {
 				renderEntityError(w, r, err)
 				return
@@ -60,7 +66,12 @@ func locationCtx(locationRegistry registry.LocationRegistry) func(http.Handler) 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			locationID := chi.URLParam(r, "locationID")
-			location, err := locationRegistry.Get(r.Context(), locationID)
+			locReg, err := locationRegistry.WithCurrentUser(r.Context())
+			if err != nil {
+				renderEntityError(w, r, err)
+				return
+			}
+			location, err := locReg.Get(r.Context(), locationID)
 			if err != nil {
 				renderEntityError(w, r, err)
 				return
@@ -74,8 +85,13 @@ func locationCtx(locationRegistry registry.LocationRegistry) func(http.Handler) 
 func areaCtx(areaRegistry registry.AreaRegistry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			areaReg, err := areaRegistry.WithCurrentUser(r.Context())
+			if err != nil {
+				renderEntityError(w, r, err)
+				return
+			}
 			areaID := chi.URLParam(r, "areaID")
-			area, err := areaRegistry.Get(r.Context(), areaID)
+			area, err := areaReg.Get(r.Context(), areaID)
 			if err != nil {
 				renderEntityError(w, r, err)
 				return

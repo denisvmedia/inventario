@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -143,7 +144,7 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 
 // handleGetCurrentUser returns the current authenticated user
 func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
-	user := UserFromContext(r.Context())
+	user := appctx.UserFromContext(r.Context())
 	if user == nil {
 		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return

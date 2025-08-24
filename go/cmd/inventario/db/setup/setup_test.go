@@ -105,12 +105,20 @@ func TestDataSetupManager_SetupInitialDataset_UpdateExistingUser(t *testing.T) {
 	db := setupTestDatabase(c)
 	defer db.Close()
 
-	// Create existing user without tenant_id
-	existingUserID := uuid.New().String()
+	// Create a temporary tenant first (since tenant_id is NOT NULL)
+	tempTenantID := "temp-tenant-" + uuid.New().String()
 	_, err := db.Exec(`
+		INSERT INTO tenants (id, name, slug, domain, status, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, NULL, 'active', '{}', $4, $5)`,
+		tempTenantID, "Temp Tenant", "temp-"+uuid.New().String(), time.Now(), time.Now())
+	c.Assert(err, qt.IsNil)
+
+	// Create existing user with temporary tenant_id (to simulate user that needs to be moved to default tenant)
+	existingUserID := uuid.New().String()
+	_, err = db.Exec(`
 		INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, '', '', $7, $8)`,
-		existingUserID, "existing@example.com", "hash", "Existing User", "user", true, time.Now(), time.Now())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $1, $8, $9)`,
+		existingUserID, "existing@example.com", "hash", "Existing User", "user", true, tempTenantID, time.Now(), time.Now())
 	c.Assert(err, qt.IsNil)
 
 	var buf bytes.Buffer
@@ -137,19 +145,49 @@ func TestDataSetupManager_SetupInitialDataset_AssignUserIDsToEntities(t *testing
 	db := setupTestDatabase(c)
 	defer db.Close()
 
-	// Create test data without user_id
-	locationID := uuid.New().String()
+	// Create a temporary tenant and user first (since tenant_id and user_id are NOT NULL with FK constraints)
+	tempTenantID := "temp-tenant-" + uuid.New().String()
 	_, err := db.Exec(`
+		INSERT INTO tenants (id, name, slug, domain, status, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, NULL, 'active', '{}', $4, $5)`,
+		tempTenantID, "Temp Tenant", "temp-"+uuid.New().String(), time.Now(), time.Now())
+	c.Assert(err, qt.IsNil)
+
+	tempUserID := uuid.New().String()
+	_, err = db.Exec(`
+		INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $1, $8, $9)`,
+		tempUserID, "temp@example.com", "hash", "Temp User", "user", true, tempTenantID, time.Now(), time.Now())
+	c.Assert(err, qt.IsNil)
+
+	// Create test data with temporary tenant/user first
+	locationID := uuid.New().String()
+	_, err = db.Exec(`
 		INSERT INTO locations (id, name, address, tenant_id, user_id)
-		VALUES ($1, $2, $3, '', '')`,
-		locationID, "Test Location", "123 Test St", "")
+		VALUES ($1, $2, $3, $4, $5)`,
+		locationID, "Test Location", "123 Test St", tempTenantID, tempUserID)
 	c.Assert(err, qt.IsNil)
 
 	areaID := uuid.New().String()
 	_, err = db.Exec(`
 		INSERT INTO areas (id, name, location_id, tenant_id, user_id)
-		VALUES ($1, $2, $3, '', '')`,
-		areaID, "Test Area", locationID, "")
+		VALUES ($1, $2, $3, $4, $5)`,
+		areaID, "Test Area", locationID, tempTenantID, tempUserID)
+	c.Assert(err, qt.IsNil)
+
+	// Now update them to have empty user_id to simulate entities that need user assignment
+	// We need to temporarily disable foreign key constraints for this
+	_, err = db.Exec(`SET session_replication_role = replica;`)
+	c.Assert(err, qt.IsNil)
+
+	_, err = db.Exec(`UPDATE locations SET user_id = '' WHERE id = $1`, locationID)
+	c.Assert(err, qt.IsNil)
+
+	_, err = db.Exec(`UPDATE areas SET user_id = '' WHERE id = $1`, areaID)
+	c.Assert(err, qt.IsNil)
+
+	// Re-enable foreign key constraints
+	_, err = db.Exec(`SET session_replication_role = DEFAULT;`)
 	c.Assert(err, qt.IsNil)
 
 	var buf bytes.Buffer
@@ -236,7 +274,7 @@ func setupTestDatabase(c *qt.C) *sql.DB {
 		DELETE FROM areas WHERE name LIKE 'Test%';
 		DELETE FROM locations WHERE name LIKE 'Test%';
 		DELETE FROM users WHERE email LIKE '%test%' OR email LIKE '%example.com';
-		DELETE FROM tenants WHERE slug LIKE 'test%' OR id = 'default-tenant-id';
+		DELETE FROM tenants WHERE slug LIKE 'test%' OR slug LIKE 'temp%' OR id = 'default-tenant-id' OR id LIKE 'temp-tenant-%';
 	`
 
 	_, err = db.Exec(cleanupSQL)

@@ -2,12 +2,15 @@ package integration_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
@@ -34,12 +37,14 @@ func setupTestDatabase(t *testing.T) (*registry.Set, func()) {
 
 // createTestUser creates a test user with the given email and returns the created user
 func createTestUser(c *qt.C, registrySet *registry.Set, email string) *models.User {
+	// Make email unique by adding timestamp to avoid conflicts between tests
+	uniqueEmail := fmt.Sprintf("%s-%d", email, time.Now().UnixNano())
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "user-" + email},
+			EntityID: models.EntityID{ID: "user-" + uniqueEmail},
 			TenantID: "test-tenant-id",
 		},
-		Email:    email,
+		Email:    uniqueEmail,
 		Name:     "Test User",
 		Role:     models.UserRoleUser,
 		IsActive: true,
@@ -57,7 +62,12 @@ func createTestUser(c *qt.C, registrySet *registry.Set, email string) *models.Us
 
 // withUserContext creates a context with the given user ID
 func withUserContext(ctx context.Context, userID string) context.Context {
-	return registry.WithUserContext(ctx, userID)
+	return appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 }
 
 // TestUserIsolation_Commodities tests that users cannot access each other's commodities
@@ -70,8 +80,37 @@ func TestUserIsolation_Commodities(t *testing.T) {
 	user1 := createTestUser(c, registrySet, "user1@example.com")
 	user2 := createTestUser(c, registrySet, "user2@example.com")
 
-	// Test: User1 creates a commodity
+	// Create location and area for user1's commodity
 	ctx1 := withUserContext(context.Background(), user1.ID)
+	location1 := models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "location-user1"},
+			TenantID: "test-tenant-id",
+			UserID:   user1.ID,
+		},
+		Name:    "User1 Location",
+		Address: "123 User1 Street",
+	}
+	userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	createdLocation1, err := userAwareLocationRegistry1.Create(ctx1, location1)
+	c.Assert(err, qt.IsNil)
+
+	area1 := models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "area-user1"},
+			TenantID: "test-tenant-id",
+			UserID:   user1.ID,
+		},
+		Name:       "User1 Area",
+		LocationID: createdLocation1.ID,
+	}
+	userAwareAreaRegistry1, err := registrySet.AreaRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	createdArea1, err := userAwareAreaRegistry1.Create(ctx1, area1)
+	c.Assert(err, qt.IsNil)
+
+	// Test: User1 creates a commodity
 	commodity1 := models.Commodity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "commodity-user1"},
@@ -80,6 +119,7 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		},
 		Name:                   "User1 Commodity",
 		ShortName:              "UC1",
+		AreaID:                 createdArea1.ID,
 		Type:                   models.CommodityTypeElectronics,
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
@@ -93,23 +133,27 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		Draft:                  false,
 	}
 
-	created1, err := registrySet.CommodityRegistry.CreateWithUser(ctx1, commodity1)
+	userAwareCommodityRegistry1, err := registrySet.CommodityRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	created1, err := userAwareCommodityRegistry1.Create(ctx1, commodity1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
 	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's commodity
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	_, err = registrySet.CommodityRegistry.GetWithUser(ctx2, created1.ID)
+	userAwareCommodityRegistry2, err := registrySet.CommodityRegistry.WithCurrentUser(ctx2)
+	c.Assert(err, qt.IsNil)
+	_, err = userAwareCommodityRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Test: User2 cannot see User1's commodity in list
-	commodities2, err := registrySet.CommodityRegistry.ListWithUser(ctx2)
+	commodities2, err := userAwareCommodityRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(commodities2), qt.Equals, 0)
 
 	// Test: User1 can see their own commodity
-	commodities1, err := registrySet.CommodityRegistry.ListWithUser(ctx1)
+	commodities1, err := userAwareCommodityRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(commodities1), qt.Equals, 1)
 	c.Assert(commodities1[0].ID, qt.Equals, created1.ID)
@@ -129,7 +173,6 @@ func TestUserIsolation_Locations(t *testing.T) {
 	ctx1 := withUserContext(context.Background(), user1.ID)
 	location1 := models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "location-user1"},
 			TenantID: "test-tenant-id",
 			UserID:   user1.ID,
 		},
@@ -137,23 +180,27 @@ func TestUserIsolation_Locations(t *testing.T) {
 		Address: "123 User1 Street",
 	}
 
-	created1, err := registrySet.LocationRegistry.CreateWithUser(ctx1, location1)
+	userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	created1, err := userAwareLocationRegistry1.Create(ctx1, location1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
 	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's location
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	_, err = registrySet.LocationRegistry.GetWithUser(ctx2, created1.ID)
+	userAwareLocationRegistry2, err := registrySet.LocationRegistry.WithCurrentUser(ctx2)
+	c.Assert(err, qt.IsNil)
+	_, err = userAwareLocationRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Test: User2 cannot see User1's location in list
-	locations2, err := registrySet.LocationRegistry.ListWithUser(ctx2)
+	locations2, err := userAwareLocationRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(locations2), qt.Equals, 0)
 
 	// Test: User1 can see their own location
-	locations1, err := registrySet.LocationRegistry.ListWithUser(ctx1)
+	locations1, err := userAwareLocationRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(locations1), qt.Equals, 1)
 	c.Assert(locations1[0].ID, qt.Equals, created1.ID)
@@ -188,23 +235,27 @@ func TestUserIsolation_Files(t *testing.T) {
 		},
 	}
 
-	created1, err := registrySet.FileRegistry.CreateWithUser(ctx1, file1)
+	userAwareFileRegistry1, err := registrySet.FileRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	created1, err := userAwareFileRegistry1.Create(ctx1, file1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
 	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's file
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	_, err = registrySet.FileRegistry.GetWithUser(ctx2, created1.ID)
+	userAwareFileRegistry2, err := registrySet.FileRegistry.WithCurrentUser(ctx2)
+	c.Assert(err, qt.IsNil)
+	_, err = userAwareFileRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Test: User2 cannot see User1's file in list
-	files2, err := registrySet.FileRegistry.ListWithUser(ctx2)
+	files2, err := userAwareFileRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(files2), qt.Equals, 0)
 
 	// Test: User1 can see their own file
-	files1, err := registrySet.FileRegistry.ListWithUser(ctx1)
+	files1, err := userAwareFileRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(files1), qt.Equals, 1)
 	c.Assert(files1[0].ID, qt.Equals, created1.ID)
@@ -233,23 +284,27 @@ func TestUserIsolation_Exports(t *testing.T) {
 		Status:      models.ExportStatusPending,
 	}
 
-	created1, err := registrySet.ExportRegistry.CreateWithUser(ctx1, export1)
+	userAwareExportRegistry1, err := registrySet.ExportRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	created1, err := userAwareExportRegistry1.Create(ctx1, export1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created1, qt.IsNotNil)
 	c.Assert(created1.GetUserID(), qt.Equals, user1.ID)
 
 	// Test: User2 cannot access User1's export
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	_, err = registrySet.ExportRegistry.GetWithUser(ctx2, created1.ID)
+	userAwareExportRegistry2, err := registrySet.ExportRegistry.WithCurrentUser(ctx2)
+	c.Assert(err, qt.IsNil)
+	_, err = userAwareExportRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Test: User2 cannot see User1's export in list
-	exports2, err := registrySet.ExportRegistry.ListWithUser(ctx2)
+	exports2, err := userAwareExportRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(exports2), qt.Equals, 0)
 
 	// Test: User1 can see their own export
-	exports1, err := registrySet.ExportRegistry.ListWithUser(ctx1)
+	exports1, err := userAwareExportRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(exports1), qt.Equals, 1)
 	c.Assert(exports1[0].ID, qt.Equals, created1.ID)

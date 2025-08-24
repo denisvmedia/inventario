@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 
 	"github.com/jmoiron/sqlx"
@@ -10,24 +9,79 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
 var _ registry.TenantRegistry = (*TenantRegistry)(nil)
 
 type TenantRegistry struct {
 	dbx        *sqlx.DB
-	tableNames TableNames
+	tableNames store.TableNames
 }
 
 func NewTenantRegistry(dbx *sqlx.DB) *TenantRegistry {
-	return NewTenantRegistryWithTableNames(dbx, DefaultTableNames)
+	return NewTenantRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewTenantRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *TenantRegistry {
+func NewTenantRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *TenantRegistry {
 	return &TenantRegistry{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+func (r *TenantRegistry) newSQLRegistry() *store.NonRLSRepository[models.Tenant] {
+	return store.NewSQLRegistry[models.Tenant](r.dbx, r.tableNames.Tenants())
+}
+
+func (r *TenantRegistry) Get(ctx context.Context, id string) (*models.Tenant, error) {
+	if id == "" {
+		return nil, errkit.WithStack(registry.ErrFieldRequired,
+			"field_name", "ID",
+		)
+	}
+
+	var tenant models.Tenant
+	reg := r.newSQLRegistry()
+	err := reg.ScanOneByField(ctx, store.Pair("id", id), &tenant)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, errkit.WithStack(registry.ErrNotFound,
+				"entity_type", "Tenant",
+				"entity_id", id,
+			)
+		}
+		return nil, errkit.Wrap(err, "failed to get entity")
+	}
+
+	return &tenant, nil
+}
+
+func (r *TenantRegistry) List(ctx context.Context) ([]*models.Tenant, error) {
+	var tenants []*models.Tenant
+
+	reg := r.newSQLRegistry()
+
+	// Query the database for all tenants (atomic operation)
+	for tenant, err := range reg.Scan(ctx) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list tenants")
+		}
+		tenants = append(tenants, &tenant)
+	}
+
+	return tenants, nil
+}
+
+func (r *TenantRegistry) Count(ctx context.Context) (int, error) {
+	reg := r.newSQLRegistry()
+
+	count, err := reg.Count(ctx)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count tenants")
+	}
+
+	return count, nil
 }
 
 func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {
@@ -48,49 +102,27 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		tenant.SetID(generateID())
 	}
 
-	// Insert the tenant into the database (atomic operation)
-	err := InsertEntity(ctx, r.dbx, r.tableNames.Tenants(), tenant)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to insert entity")
-	}
+	reg := r.newSQLRegistry()
 
-	return &tenant, nil
-}
-
-func (r *TenantRegistry) Get(ctx context.Context, id string) (*models.Tenant, error) {
-	if id == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "ID",
-		)
-	}
-
-	var tenant models.Tenant
-	err := ScanEntityByField(ctx, r.dbx, r.tableNames.Tenants(), "id", id, &tenant)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, errkit.WithStack(registry.ErrNotFound,
-				"entity_type", "Tenant",
-				"entity_id", id,
+	err := reg.Create(ctx, tenant, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Check if a tenant with the same slug already exists
+		var existingTenant models.Tenant
+		txReg := store.NewTxRegistry[models.Tenant](tx, r.tableNames.Tenants())
+		err := txReg.ScanOneByField(ctx, store.Pair("slug", tenant.Slug), &existingTenant)
+		if err == nil {
+			return errkit.WithStack(registry.ErrSlugAlreadyExists,
+				"slug", tenant.Slug,
 			)
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return errkit.Wrap(err, "failed to check for existing tenant")
 		}
-		return nil, errkit.Wrap(err, "failed to get entity")
+		return nil
+	})
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create tenant")
 	}
 
 	return &tenant, nil
-}
-
-func (r *TenantRegistry) List(ctx context.Context) ([]*models.Tenant, error) {
-	var tenants []*models.Tenant
-
-	// Query the database for all tenants (atomic operation)
-	for tenant, err := range ScanEntities[models.Tenant](ctx, r.dbx, r.tableNames.Tenants()) {
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list tenants")
-		}
-		tenants = append(tenants, &tenant)
-	}
-
-	return tenants, nil
 }
 
 func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {
@@ -112,9 +144,11 @@ func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*mod
 		)
 	}
 
-	err := UpdateEntityByField(ctx, r.dbx, r.tableNames.Tenants(), "id", tenant.GetID(), tenant)
+	reg := r.newSQLRegistry()
+
+	err := reg.Update(ctx, tenant, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update entity")
+		return nil, errkit.Wrap(err, "failed to update tenant")
 	}
 
 	return &tenant, nil
@@ -127,21 +161,14 @@ func (r *TenantRegistry) Delete(ctx context.Context, id string) error {
 		)
 	}
 
-	err := DeleteEntityByField(ctx, r.dbx, r.tableNames.Tenants(), "id", id)
+	reg := r.newSQLRegistry()
+
+	err := reg.Delete(ctx, id, nil)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete entity")
+		return errkit.Wrap(err, "failed to delete tenant")
 	}
 
 	return nil
-}
-
-func (r *TenantRegistry) Count(ctx context.Context) (int, error) {
-	count, err := CountEntities(ctx, r.dbx, r.tableNames.Tenants())
-	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count entities")
-	}
-
-	return count, nil
 }
 
 // GetBySlug returns a tenant by its slug
@@ -153,10 +180,11 @@ func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Te
 	}
 
 	var tenant models.Tenant
-	query := `SELECT * FROM ` + r.tableNames.Tenants() + ` WHERE slug = $1`
-	err := r.dbx.GetContext(ctx, &tenant, query, slug)
+	reg := r.newSQLRegistry()
+
+	err := reg.ScanOneByField(ctx, store.Pair("slug", slug), &tenant)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, store.ErrNotFound) {
 			return nil, errkit.WithStack(registry.ErrNotFound,
 				"entity_type", "Tenant",
 				"slug", slug,
@@ -177,10 +205,11 @@ func (r *TenantRegistry) GetByDomain(ctx context.Context, domain string) (*model
 	}
 
 	var tenant models.Tenant
-	query := `SELECT * FROM ` + r.tableNames.Tenants() + ` WHERE domain = $1`
-	err := r.dbx.GetContext(ctx, &tenant, query, domain)
+	reg := r.newSQLRegistry()
+
+	err := reg.ScanOneByField(ctx, store.Pair("domain", domain), &tenant)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, store.ErrNotFound) {
 			return nil, errkit.WithStack(registry.ErrNotFound,
 				"entity_type", "Tenant",
 				"domain", domain,

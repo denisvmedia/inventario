@@ -21,12 +21,12 @@ func setupValuesTestData(c *qt.C) *registry.Set {
 	c.Helper()
 
 	// Create a memory registry for testing
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySetWithUserID("test-user-id")
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set main currency to USD
 	mainCurrency := "USD"
-	err = registrySet.SettingsRegistry.Save(c.Context(), models.SettingsObject{
+	err := registrySet.SettingsRegistry.Save(c.Context(), models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	})
 	c.Assert(err, qt.IsNil)

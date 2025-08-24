@@ -5,6 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -42,21 +43,35 @@ func TestImageRegistry_Create_HappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
+			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
+			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
+			imageReg, err := registrySet.ImageRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
 			// Create test hierarchy
-			location := createTestLocation(c, registrySet.LocationRegistry)
-			area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+			location := createTestLocation(c, locationReg)
+			area := createTestArea(c, areaReg, location.ID)
 			commodity := createTestCommodity(c, registrySet, area.ID)
 
 			// Set commodity ID
 			tc.image.CommodityID = commodity.ID
 
 			// Create image
-			result, err := registrySet.ImageRegistry.Create(ctx, tc.image)
+			result, err := imageReg.Create(ctx, tc.image)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")
@@ -112,21 +127,35 @@ func TestImageRegistry_Create_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
+			imageReg, err := registrySet.ImageRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
 			// For valid commodity ID tests, create test hierarchy
 			if tc.image.CommodityID != "" && tc.image.CommodityID != "non-existent-commodity" {
-				location := createTestLocation(c, registrySet.LocationRegistry)
-				area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+				locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+				c.Assert(err, qt.IsNil)
+
+				areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+				c.Assert(err, qt.IsNil)
+
+				location := createTestLocation(c, locationReg)
+				area := createTestArea(c, areaReg, location.ID)
 				commodity := createTestCommodity(c, registrySet, area.ID)
 				tc.image.CommodityID = commodity.ID
 			}
 
 			// Attempt to create invalid image
-			result, err := registrySet.ImageRegistry.Create(ctx, tc.image)
+			result, err := imageReg.Create(ctx, tc.image)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -138,7 +167,12 @@ func TestImageRegistry_Get_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create test hierarchy and image
 	location := createTestLocation(c, registrySet.LocationRegistry)
@@ -193,7 +227,12 @@ func TestImageRegistry_List_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Initially should be empty
 	images, err := registrySet.ImageRegistry.List(ctx)
@@ -226,7 +265,12 @@ func TestImageRegistry_Update_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create test hierarchy and image
 	location := createTestLocation(c, registrySet.LocationRegistry)
@@ -275,7 +319,12 @@ func TestImageRegistry_Update_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
@@ -301,7 +350,12 @@ func TestImageRegistry_Delete_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create test hierarchy and image
 	location := createTestLocation(c, registrySet.LocationRegistry)
@@ -353,7 +407,12 @@ func TestImageRegistry_Count_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Initially should be 0
 	count, err := registrySet.ImageRegistry.Count(ctx)

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -76,21 +77,37 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
 			// Setup main currency
-			setupMainCurrency(c, registrySet.SettingsRegistry)
+			settingsReg, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+			setupMainCurrency(c, settingsReg)
+
+			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
+			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
+			commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
 
 			// Create test hierarchy
-			location := createTestLocation(c, registrySet.LocationRegistry)
-			area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+			location := createTestLocation(c, locationReg)
+			area := createTestArea(c, areaReg, location.GetID())
 			tc.commodity.AreaID = area.GetID()
 
 			// Create commodity
-			result, err := registrySet.CommodityRegistry.Create(ctx, tc.commodity)
+			result, err := commodityReg.Create(ctx, tc.commodity)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")
@@ -197,23 +214,39 @@ func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
 			// Setup main currency
-			setupMainCurrency(c, registrySet.SettingsRegistry)
+			settingsReg, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+			setupMainCurrency(c, settingsReg)
+
+			commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
 
 			// For valid area ID tests, create test hierarchy
 			if tc.commodity.AreaID != "" && tc.commodity.AreaID != "non-existent-area" {
-				location := createTestLocation(c, registrySet.LocationRegistry)
-				area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+				locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+				c.Assert(err, qt.IsNil)
+
+				areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+				c.Assert(err, qt.IsNil)
+
+				location := createTestLocation(c, locationReg)
+				area := createTestArea(c, areaReg, location.GetID())
 				tc.commodity.AreaID = area.GetID()
 			}
 
 			// Attempt to create invalid commodity
-			result, err := registrySet.CommodityRegistry.Create(ctx, tc.commodity)
+			result, err := commodityReg.Create(ctx, tc.commodity)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -225,15 +258,29 @@ func TestCommodityRegistry_Get_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy and commodity
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
 	created := createTestCommodity(c, registrySet, area.GetID())
 
 	// Get the commodity
-	result, err := registrySet.CommodityRegistry.Get(ctx, created.ID)
+	result, err := commodityReg.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.ID, qt.Equals, created.ID)
@@ -280,7 +327,12 @@ func TestCommodityRegistry_List_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Initially should be empty
 	commodities, err := registrySet.CommodityRegistry.List(ctx)
@@ -312,7 +364,12 @@ func TestCommodityRegistry_Update_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create test hierarchy and commodity
 	location := createTestLocation(c, registrySet.LocationRegistry)
@@ -389,7 +446,12 @@ func TestCommodityRegistry_Delete_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create test hierarchy and commodity
 	location := createTestLocation(c, registrySet.LocationRegistry)
@@ -440,7 +502,12 @@ func TestCommodityRegistry_Count_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Initially should be 0
 	count, err := registrySet.CommodityRegistry.Count(ctx)
@@ -532,60 +599,76 @@ func createTestInvoice(c *qt.C, registrySet *registry.Set, commodityID string) *
 
 // Image-related tests
 
-func TestCommodityRegistry_AddImage_HappyPath(t *testing.T) {
+func TestCommodityRegistry_GetImages_WithCreatedImage_HappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
-	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet, area.GetID())
-
-	// Create test image
-	image := createTestImage(c, registrySet, commodity.ID)
-
-	// Add image to commodity
-	err := registrySet.CommodityRegistry.AddImage(ctx, commodity.ID, image.ID)
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
-	// Verify the image is added
-	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	// Create test hierarchy
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
+
+	// Create test image (automatically linked via commodity_id)
+	image := createTestImage(c, registrySet, commodity.ID)
+
+	// Verify the image is automatically linked
+	images, err := commodityReg.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(images), qt.Equals, 1)
 	c.Assert(images[0], qt.Equals, image.ID)
 }
 
-func TestCommodityRegistry_AddImage_UnhappyPath(t *testing.T) {
+func TestCommodityRegistry_GetImages_WithInvalidCommodity_UnhappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	testCases := []struct {
 		name        string
 		commodityID string
-		imageID     string
 	}{
 		{
 			name:        "non-existent commodity",
 			commodityID: "non-existent-commodity",
-			imageID:     "some-image-id",
 		},
 		{
-			name:        "non-existent image",
-			commodityID: "some-commodity-id",
-			imageID:     "non-existent-image",
+			name:        "empty commodity ID",
+			commodityID: "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
-			err := registrySet.CommodityRegistry.AddImage(ctx, tc.commodityID, tc.imageID)
+			commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
+			images, err := commodityReg.GetImages(ctx, tc.commodityID)
 			c.Assert(err, qt.IsNotNil)
+			c.Assert(images, qt.IsNil)
 		})
 	}
 }
@@ -595,29 +678,38 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no images
-	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
+	images, err := commodityReg.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(images), qt.Equals, 0)
 
-	// Create and add images
+	// Create images (automatically linked via commodity_id)
 	image1 := createTestImage(c, registrySet, commodity.ID)
 	image2 := createTestImage(c, registrySet, commodity.ID)
 
-	err = registrySet.CommodityRegistry.AddImage(ctx, commodity.ID, image1.ID)
-	c.Assert(err, qt.IsNil)
-	err = registrySet.CommodityRegistry.AddImage(ctx, commodity.ID, image2.ID)
-	c.Assert(err, qt.IsNil)
-
 	// Should now have 2 images
-	images, err = registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
+	images, err = commodityReg.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(images), qt.Equals, 2)
 
@@ -630,192 +722,74 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 	c.Assert(imageIDs[image2.ID], qt.IsTrue)
 }
 
-func TestCommodityRegistry_GetImages_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	testCases := []struct {
-		name        string
-		commodityID string
-	}{
-		{
-			name:        "non-existent commodity",
-			commodityID: "non-existent-commodity",
-		},
-		{
-			name:        "empty commodity ID",
-			commodityID: "",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			ctx := c.Context()
-
-			images, err := registrySet.CommodityRegistry.GetImages(ctx, tc.commodityID)
-			c.Assert(err, qt.IsNotNil)
-			c.Assert(images, qt.IsNil)
-		})
-	}
-}
-
-func TestCommodityRegistry_DeleteImage_HappyPath(t *testing.T) {
+func TestCommodityRegistry_GetImages_EmptyCommodity_HappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	image := createTestImage(c, registrySet, commodity.ID)
 
-	// Add image to commodity
-	err := registrySet.CommodityRegistry.AddImage(ctx, commodity.ID, image.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Verify the image is added
-	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 1)
-
-	// Delete the image from commodity
-	err = registrySet.CommodityRegistry.DeleteImage(ctx, commodity.ID, image.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Verify the image is removed from commodity
-	images, err = registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
+	// Should have no images initially
+	images, err := commodityReg.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(images), qt.Equals, 0)
-
-	// Verify the image itself is deleted
-	result, err := registrySet.ImageRegistry.Get(ctx, image.ID)
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(result, qt.IsNil)
-}
-
-func TestCommodityRegistry_DeleteImage_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	testCases := []struct {
-		name        string
-		commodityID string
-		imageID     string
-	}{
-		{
-			name:        "non-existent commodity",
-			commodityID: "non-existent-commodity",
-			imageID:     "some-image-id",
-		},
-		{
-			name:        "non-existent image",
-			commodityID: "some-commodity-id",
-			imageID:     "non-existent-image",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			ctx := c.Context()
-
-			err := registrySet.CommodityRegistry.DeleteImage(ctx, tc.commodityID, tc.imageID)
-			c.Assert(err, qt.IsNotNil)
-		})
-	}
-}
-
-func TestCommodityRegistry_DeleteImage_ImageNotBelongsToCommodity_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	c := qt.New(t)
-	ctx := c.Context()
-
-	// Create test hierarchy and two commodities
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity1 := createTestCommodity(c, registrySet, area.GetID())
-	commodity2 := createTestCommodity(c, registrySet, area.GetID())
-	image := createTestImage(c, registrySet, commodity1.ID)
-
-	// Add image to commodity1
-	err := registrySet.CommodityRegistry.AddImage(ctx, commodity1.ID, image.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Try to delete the image from commodity2 - should fail
-	err = registrySet.CommodityRegistry.DeleteImage(ctx, commodity2.ID, image.ID)
-	c.Assert(err, qt.IsNotNil)
-
-	// Verify the image is still in commodity1
-	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity1.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 1)
-	c.Assert(images[0], qt.Equals, image.ID)
 }
 
 // Manual-related tests
 
-func TestCommodityRegistry_AddManual_HappyPath(t *testing.T) {
+func TestCommodityRegistry_GetManuals_WithCreatedManual_HappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
-	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet, area.GetID())
-
-	// Create test manual
-	manual := createTestManual(c, registrySet, commodity.ID)
-
-	// Add manual to commodity
-	err := registrySet.CommodityRegistry.AddManual(ctx, commodity.ID, manual.ID)
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
-	// Verify the manual is added
-	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	// Create test hierarchy
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
+
+	// Create test manual (automatically linked via commodity_id)
+	manual := createTestManual(c, registrySet, commodity.ID)
+
+	// Verify the manual is automatically linked
+	manuals, err := commodityReg.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(manuals), qt.Equals, 1)
 	c.Assert(manuals[0], qt.Equals, manual.ID)
-}
-
-func TestCommodityRegistry_AddManual_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	testCases := []struct {
-		name        string
-		commodityID string
-		manualID    string
-	}{
-		{
-			name:        "non-existent commodity",
-			commodityID: "non-existent-commodity",
-			manualID:    "some-manual-id",
-		},
-		{
-			name:        "non-existent manual",
-			commodityID: "some-commodity-id",
-			manualID:    "non-existent-manual",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			ctx := c.Context()
-
-			err := registrySet.CommodityRegistry.AddManual(ctx, tc.commodityID, tc.manualID)
-			c.Assert(err, qt.IsNotNil)
-		})
-	}
 }
 
 func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
@@ -823,29 +797,38 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no manuals
-	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
+	manuals, err := commodityReg.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(manuals), qt.Equals, 0)
 
-	// Create and add manuals
+	// Create manuals (automatically linked via commodity_id)
 	manual1 := createTestManual(c, registrySet, commodity.ID)
 	manual2 := createTestManual(c, registrySet, commodity.ID)
 
-	err = registrySet.CommodityRegistry.AddManual(ctx, commodity.ID, manual1.ID)
-	c.Assert(err, qt.IsNil)
-	err = registrySet.CommodityRegistry.AddManual(ctx, commodity.ID, manual2.ID)
-	c.Assert(err, qt.IsNil)
-
 	// Should now have 2 manuals
-	manuals, err = registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
+	manuals, err = commodityReg.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(manuals), qt.Equals, 2)
 
@@ -858,192 +841,74 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 	c.Assert(manualIDs[manual2.ID], qt.IsTrue)
 }
 
-func TestCommodityRegistry_GetManuals_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	testCases := []struct {
-		name        string
-		commodityID string
-	}{
-		{
-			name:        "non-existent commodity",
-			commodityID: "non-existent-commodity",
-		},
-		{
-			name:        "empty commodity ID",
-			commodityID: "",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			ctx := c.Context()
-
-			manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, tc.commodityID)
-			c.Assert(err, qt.IsNotNil)
-			c.Assert(manuals, qt.IsNil)
-		})
-	}
-}
-
-func TestCommodityRegistry_DeleteManual_HappyPath(t *testing.T) {
+func TestCommodityRegistry_GetManuals_EmptyCommodity_HappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	manual := createTestManual(c, registrySet, commodity.ID)
 
-	// Add manual to commodity
-	err := registrySet.CommodityRegistry.AddManual(ctx, commodity.ID, manual.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Verify the manual is added
-	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 1)
-
-	// Delete the manual from commodity
-	err = registrySet.CommodityRegistry.DeleteManual(ctx, commodity.ID, manual.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Verify the manual is removed from commodity
-	manuals, err = registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
+	// Should have no manuals initially
+	manuals, err := commodityReg.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(manuals), qt.Equals, 0)
-
-	// Verify the manual itself is deleted
-	result, err := registrySet.ManualRegistry.Get(ctx, manual.ID)
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(result, qt.IsNil)
-}
-
-func TestCommodityRegistry_DeleteManual_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	testCases := []struct {
-		name        string
-		commodityID string
-		manualID    string
-	}{
-		{
-			name:        "non-existent commodity",
-			commodityID: "non-existent-commodity",
-			manualID:    "some-manual-id",
-		},
-		{
-			name:        "non-existent manual",
-			commodityID: "some-commodity-id",
-			manualID:    "non-existent-manual",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			ctx := c.Context()
-
-			err := registrySet.CommodityRegistry.DeleteManual(ctx, tc.commodityID, tc.manualID)
-			c.Assert(err, qt.IsNotNil)
-		})
-	}
-}
-
-func TestCommodityRegistry_DeleteManual_ManualNotBelongsToCommodity_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	c := qt.New(t)
-	ctx := c.Context()
-
-	// Create test hierarchy and two commodities
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity1 := createTestCommodity(c, registrySet, area.GetID())
-	commodity2 := createTestCommodity(c, registrySet, area.GetID())
-	manual := createTestManual(c, registrySet, commodity1.ID)
-
-	// Add manual to commodity1
-	err := registrySet.CommodityRegistry.AddManual(ctx, commodity1.ID, manual.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Try to delete the manual from commodity2 - should fail
-	err = registrySet.CommodityRegistry.DeleteManual(ctx, commodity2.ID, manual.ID)
-	c.Assert(err, qt.IsNotNil)
-
-	// Verify the manual is still in commodity1
-	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity1.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 1)
-	c.Assert(manuals[0], qt.Equals, manual.ID)
 }
 
 // Invoice-related tests
 
-func TestCommodityRegistry_AddInvoice_HappyPath(t *testing.T) {
+func TestCommodityRegistry_GetInvoices_WithCreatedInvoice_HappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
-	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity := createTestCommodity(c, registrySet, area.GetID())
-
-	// Create test invoice
-	invoice := createTestInvoice(c, registrySet, commodity.ID)
-
-	// Add invoice to commodity
-	err := registrySet.CommodityRegistry.AddInvoice(ctx, commodity.ID, invoice.ID)
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
-	// Verify the invoice is added
-	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	// Create test hierarchy
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
+	commodity := createTestCommodity(c, registrySet, area.GetID())
+
+	// Create test invoice (automatically linked via commodity_id)
+	invoice := createTestInvoice(c, registrySet, commodity.ID)
+
+	// Verify the invoice is automatically linked
+	invoices, err := commodityReg.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(invoices), qt.Equals, 1)
 	c.Assert(invoices[0], qt.Equals, invoice.ID)
-}
-
-func TestCommodityRegistry_AddInvoice_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	testCases := []struct {
-		name        string
-		commodityID string
-		invoiceID   string
-	}{
-		{
-			name:        "non-existent commodity",
-			commodityID: "non-existent-commodity",
-			invoiceID:   "some-invoice-id",
-		},
-		{
-			name:        "non-existent invoice",
-			commodityID: "some-commodity-id",
-			invoiceID:   "non-existent-invoice",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			ctx := c.Context()
-
-			err := registrySet.CommodityRegistry.AddInvoice(ctx, tc.commodityID, tc.invoiceID)
-			c.Assert(err, qt.IsNotNil)
-		})
-	}
 }
 
 func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
@@ -1051,29 +916,38 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no invoices
-	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
+	invoices, err := commodityReg.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(invoices), qt.Equals, 0)
 
-	// Create and add invoices
+	// Create invoices (automatically linked via commodity_id)
 	invoice1 := createTestInvoice(c, registrySet, commodity.ID)
 	invoice2 := createTestInvoice(c, registrySet, commodity.ID)
 
-	err = registrySet.CommodityRegistry.AddInvoice(ctx, commodity.ID, invoice1.ID)
-	c.Assert(err, qt.IsNil)
-	err = registrySet.CommodityRegistry.AddInvoice(ctx, commodity.ID, invoice2.ID)
-	c.Assert(err, qt.IsNil)
-
 	// Should now have 2 invoices
-	invoices, err = registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
+	invoices, err = commodityReg.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(invoices), qt.Equals, 2)
 
@@ -1086,130 +960,34 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 	c.Assert(invoiceIDs[invoice2.ID], qt.IsTrue)
 }
 
-func TestCommodityRegistry_GetInvoices_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	testCases := []struct {
-		name        string
-		commodityID string
-	}{
-		{
-			name:        "non-existent commodity",
-			commodityID: "non-existent-commodity",
-		},
-		{
-			name:        "empty commodity ID",
-			commodityID: "",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			ctx := c.Context()
-
-			invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, tc.commodityID)
-			c.Assert(err, qt.IsNotNil)
-			c.Assert(invoices, qt.IsNil)
-		})
-	}
-}
-
-func TestCommodityRegistry_DeleteInvoice_HappyPath(t *testing.T) {
+func TestCommodityRegistry_GetInvoices_EmptyCommodity_HappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, locationReg)
+	area := createTestArea(c, areaReg, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
-	invoice := createTestInvoice(c, registrySet, commodity.ID)
 
-	// Add invoice to commodity
-	err := registrySet.CommodityRegistry.AddInvoice(ctx, commodity.ID, invoice.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Verify the invoice is added
-	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 1)
-
-	// Delete the invoice from commodity
-	err = registrySet.CommodityRegistry.DeleteInvoice(ctx, commodity.ID, invoice.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Verify the invoice is removed from commodity
-	invoices, err = registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
+	// Should have no invoices initially
+	invoices, err := commodityReg.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(invoices), qt.Equals, 0)
-
-	// Verify the invoice itself is deleted
-	result, err := registrySet.InvoiceRegistry.Get(ctx, invoice.ID)
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(result, qt.IsNil)
-}
-
-func TestCommodityRegistry_DeleteInvoice_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	testCases := []struct {
-		name        string
-		commodityID string
-		invoiceID   string
-	}{
-		{
-			name:        "non-existent commodity",
-			commodityID: "non-existent-commodity",
-			invoiceID:   "some-invoice-id",
-		},
-		{
-			name:        "non-existent invoice",
-			commodityID: "some-commodity-id",
-			invoiceID:   "non-existent-invoice",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			ctx := c.Context()
-
-			err := registrySet.CommodityRegistry.DeleteInvoice(ctx, tc.commodityID, tc.invoiceID)
-			c.Assert(err, qt.IsNotNil)
-		})
-	}
-}
-
-func TestCommodityRegistry_DeleteInvoice_InvoiceNotBelongsToCommodity_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
-	defer cleanup()
-
-	c := qt.New(t)
-	ctx := c.Context()
-
-	// Create test hierarchy and two commodities
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
-	commodity1 := createTestCommodity(c, registrySet, area.GetID())
-	commodity2 := createTestCommodity(c, registrySet, area.GetID())
-	invoice := createTestInvoice(c, registrySet, commodity1.ID)
-
-	// Add invoice to commodity1
-	err := registrySet.CommodityRegistry.AddInvoice(ctx, commodity1.ID, invoice.ID)
-	c.Assert(err, qt.IsNil)
-
-	// Try to delete the invoice from commodity2 - should fail
-	err = registrySet.CommodityRegistry.DeleteInvoice(ctx, commodity2.ID, invoice.ID)
-	c.Assert(err, qt.IsNotNil)
-
-	// Verify the invoice is still in commodity1
-	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity1.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 1)
-	c.Assert(invoices[0], qt.Equals, invoice.ID)
 }

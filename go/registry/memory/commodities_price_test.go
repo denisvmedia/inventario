@@ -1,19 +1,27 @@
 package memory_test
 
 import (
-	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
 func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+
+	// Add user context for user-aware entities
+	userID := "test-user-123"
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create registries
 	locationRegistry := memory.NewLocationRegistry()
@@ -90,8 +98,15 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 
 func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
 
+	// Add user context for user-aware entities
+	userID := "test-user-123"
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 	// Create registries
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)

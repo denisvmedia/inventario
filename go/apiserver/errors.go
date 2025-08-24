@@ -47,9 +47,21 @@ func NewInternalServerError(err error) jsonapi.Error {
 	}
 }
 
+func NewUnauthorizedError(err error) jsonapi.Error {
+	return jsonapi.Error{
+		Err:            err,
+		HTTPStatusCode: http.StatusUnauthorized,
+		StatusText:     "Unauthorized",
+	}
+}
+
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
 	log.WithError(err).Error("internal server error")
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+}
+
+func unauthorizedError(w http.ResponseWriter, r *http.Request, err error) error {
+	return render.Render(w, r, jsonapi.NewErrors(NewUnauthorizedError(err)))
 }
 
 func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error) error {

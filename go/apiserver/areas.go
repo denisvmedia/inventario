@@ -7,12 +7,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
-
-const areaCtxKey ctxValueKey = "area"
 
 func areaFromContext(ctx context.Context) *models.Area {
 	area, ok := ctx.Value(areaCtxKey).(*models.Area)
@@ -35,7 +34,16 @@ type areasAPI struct {
 // @Success 200 {object} jsonapi.AreasResponse "OK"
 // @Router /areas [get].
 func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
-	areas, _ := api.areaRegistry.List(r.Context())
+	areaRegistry, err := api.areaRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+	areas, err := areaRegistry.List(r.Context())
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
 
 	if err := render.Render(w, r, jsonapi.NewAreasResponse(areas, len(areas))); err != nil {
 		internalServerError(w, r, err)
@@ -52,7 +60,12 @@ func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Area ID"
 // @Success 200 {object} jsonapi.AreaResponse "OK"
 // @Router /areas/{id} [get].
-func (*areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	_, err := api.areaRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
 	area := areaFromContext(r.Context())
 	if area == nil {
 		unprocessableEntityError(w, r, nil)
@@ -95,11 +108,15 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 	if area.TenantID == "" {
 		area.TenantID = user.TenantID
 	}
-	if area.UserID == "" {
-		area.UserID = user.ID
-	}
 
-	createdArea, err := api.areaRegistry.Create(r.Context(), area)
+	// Use CreateWithUser to ensure proper user context and validation
+	ctx := appctx.WithUser(r.Context(), user)
+	areaReg, err := api.areaRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	createdArea, err := areaReg.Create(ctx, area)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -129,7 +146,14 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := api.areaRegistry.Delete(r.Context(), area.ID)
+	ctx := r.Context()
+	areaReg, err := api.areaRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	err = areaReg.Delete(ctx, area.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -174,11 +198,15 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 	if updateData.TenantID == "" {
 		updateData.TenantID = area.TenantID
 	}
-	if updateData.UserID == "" {
-		updateData.UserID = area.UserID
-	}
 
-	newArea, err := api.areaRegistry.Update(r.Context(), updateData)
+	// Use UpdateWithUser to ensure proper user context and validation
+	ctx := r.Context()
+	areaReg, err := api.areaRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	newArea, err := areaReg.Update(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

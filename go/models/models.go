@@ -129,6 +129,31 @@ func FileTypeFromMIME(mimeType string) FileType {
 	}
 }
 
+type StringSlice []string
+
+func (s *StringSlice) Scan(value any) error {
+	if value == nil {
+		*s = nil
+		return nil
+	}
+
+	switch v := value.(type) {
+	case []byte:
+		return json.Unmarshal(v, s)
+	case string:
+		return json.Unmarshal([]byte(v), s)
+	default:
+		return fmt.Errorf("cannot scan %T into StringSlice", value)
+	}
+}
+
+func (s *StringSlice) Value() (driver.Value, error) {
+	if s == nil {
+		return nil, nil
+	}
+	return json.Marshal(s)
+}
+
 // FileEntity represents a file entity in the system
 //
 // Enable RLS for multi-tenant isolation
@@ -155,7 +180,7 @@ type FileEntity struct {
 
 	// Tags are optional tags for categorization and search
 	//migrator:schema:field name="tags" type="JSONB"
-	Tags []string `json:"tags" db:"tags"`
+	Tags StringSlice `json:"tags" db:"tags"`
 
 	// LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files)
 	//migrator:schema:field name="linked_entity_type" type="TEXT"

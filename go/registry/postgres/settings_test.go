@@ -6,6 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -14,10 +15,20 @@ func TestSettingsRegistry_Get_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	// Get user-aware settings registry
+	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Test getting empty settings initially
-	settings, err := registrySet.SettingsRegistry.Get(ctx)
+	settings, err := settingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(settings.MainCurrency, qt.IsNil)
 	c.Assert(settings.Theme, qt.IsNil)
@@ -60,14 +71,24 @@ func TestSettingsRegistry_Save_HappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := context.Background()
+			ctx := c.Context()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
+
+			// Get user-aware settings registry
+			settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
 
 			// Save the settings
-			err := registrySet.SettingsRegistry.Save(ctx, tc.settings)
+			err = settingsRegistry.Save(ctx, tc.settings)
 			c.Assert(err, qt.IsNil)
 
 			// Retrieve and verify the settings
-			retrievedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+			retrievedSettings, err := settingsRegistry.Get(ctx)
 			c.Assert(err, qt.IsNil)
 
 			if tc.settings.MainCurrency != nil {
@@ -95,7 +116,17 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	// Get user-aware settings registry
+	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Save initial settings
 	initialSettings := models.SettingsObject{
@@ -104,7 +135,7 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 		ShowDebugInfo:     boolPtr(true),
 		DefaultDateFormat: stringPtr("2006-01-02"),
 	}
-	err := registrySet.SettingsRegistry.Save(ctx, initialSettings)
+	err = settingsRegistry.Save(ctx, initialSettings)
 	c.Assert(err, qt.IsNil)
 
 	// Update settings
@@ -114,11 +145,11 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 		ShowDebugInfo:     boolPtr(false),
 		DefaultDateFormat: stringPtr("02/01/2006"),
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, updatedSettings)
+	err = settingsRegistry.Save(ctx, updatedSettings)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the updated settings
-	retrievedSettings, err := registrySet.SettingsRegistry.Get(ctx)
+	retrievedSettings, err := settingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(*retrievedSettings.MainCurrency, qt.Equals, "EUR")
 	c.Assert(*retrievedSettings.Theme, qt.Equals, "light")

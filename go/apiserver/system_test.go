@@ -20,8 +20,8 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry set
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Create test parameters
 	startTime := time.Now().Add(-1 * time.Hour) // 1 hour ago
@@ -51,7 +51,7 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 
 	// Parse response
 	var systemInfo apiserver.SystemInfo
-	err = json.Unmarshal(w.Body.Bytes(), &systemInfo)
+	err := json.Unmarshal(w.Body.Bytes(), &systemInfo)
 	c.Assert(err, qt.IsNil)
 
 	// Verify system information
@@ -70,15 +70,15 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry set
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Add some test settings
 	testSettings := models.SettingsObject{
 		MainCurrency: ptr("USD"),
 		Theme:        ptr("dark"),
 	}
-	err = registrySet.SettingsRegistry.Save(c.Context(), testSettings)
+	err := registrySet.SettingsRegistry.Save(c.Context(), testSettings)
 	c.Assert(err, qt.IsNil)
 
 	// Create test parameters
