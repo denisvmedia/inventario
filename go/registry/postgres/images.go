@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -30,6 +31,10 @@ func NewImageRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+func (r *ImageRegistry) MustWithCurrentUser(ctx context.Context) registry.ImageRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *ImageRegistry) WithCurrentUser(ctx context.Context) (registry.ImageRegistry, error) {

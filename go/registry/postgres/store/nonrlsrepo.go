@@ -230,10 +230,12 @@ func (r *NonRLSRepository[T]) Do(ctx context.Context, operationFn func(context.C
 }
 
 func (r *NonRLSRepository[T]) entityToIDAble(entity T) models.IDable {
-	var tmp any = entity
-	idable, ok := tmp.(models.IDable)
+	idable, ok := (any(entity)).(models.IDable)
 	if !ok {
-		panic("entity is not IDable")
+		idable, ok = (any(&entity)).(models.IDable)
+		if !ok {
+			panic("entity is not IDable")
+		}
 	}
 	return idable
 }

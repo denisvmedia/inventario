@@ -34,6 +34,10 @@ func NewAreaRegistry(locationRegistry *LocationRegistry) *AreaRegistry {
 	}
 }
 
+func (r *AreaRegistry) MustWithCurrentUser(ctx context.Context) registry.AreaRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
+
 func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {

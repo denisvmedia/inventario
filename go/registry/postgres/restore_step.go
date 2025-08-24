@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -30,6 +31,10 @@ func NewRestoreStepRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNa
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+func (r *RestoreStepRegistry) MustWithCurrentUser(ctx context.Context) registry.RestoreStepRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *RestoreStepRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreStepRegistry, error) {

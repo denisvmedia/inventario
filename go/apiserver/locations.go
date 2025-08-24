@@ -23,7 +23,17 @@ type locationsAPI struct {
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
 // @Router /locations [get].
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
-	locations, _ := api.locationRegistry.List(r.Context())
+	locReg, err := api.locationRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
+	locations, err := locReg.List(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
 
 	if err := render.Render(w, r, jsonapi.NewLocationsResponse(locations, len(locations))); err != nil {
 		internalServerError(w, r, err)
@@ -41,13 +51,19 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.LocationResponse "OK"
 // @Router /locations/{id} [get].
 func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	locReg, err := api.locationRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	location := locationFromContext(r.Context())
 	if location == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(r.Context(), location.ID)
+	areas, err := locReg.GetAreas(r.Context(), location.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return

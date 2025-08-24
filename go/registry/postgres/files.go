@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -33,6 +34,10 @@ func NewFileRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *F
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+func (r *FileRegistry) MustWithCurrentUser(ctx context.Context) registry.FileRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegistry, error) {

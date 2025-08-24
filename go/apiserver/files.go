@@ -41,6 +41,12 @@ type filesAPI struct {
 // @Success 200 {object} jsonapi.FilesResponse "OK"
 // @Router /files [get].
 func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	// Parse query parameters
 	typeParam := r.URL.Query().Get("type")
 	searchParam := r.URL.Query().Get("search")
@@ -81,11 +87,10 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 
 	var files []*models.FileEntity
 	var total int
-	var err error
 
 	if searchParam != "" || len(tags) > 0 {
 		// Use search if search query or tags are provided
-		files, err = api.registrySet.FileRegistry.Search(r.Context(), searchParam, fileType, tags)
+		files, err = fileReg.Search(r.Context(), searchParam, fileType, tags)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -104,7 +109,7 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		files = files[start:end]
 	} else {
 		// Use paginated list for simple queries
-		files, total, err = api.registrySet.FileRegistry.ListPaginated(r.Context(), offset, limit, fileType)
+		files, total, err = fileReg.ListPaginated(r.Context(), offset, limit, fileType)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -129,6 +134,12 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Validation error"
 // @Router /files [post].
 func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	var input jsonapi.FileRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -165,7 +176,7 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	createdFile, err := api.registrySet.FileRegistry.Create(r.Context(), fileEntity)
+	createdFile, err := fileReg.Create(r.Context(), fileEntity)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -189,9 +200,15 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id} [get].
 func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	fileID := chi.URLParam(r, "fileID")
 
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), fileID)
+	file, err := fileReg.Get(r.Context(), fileID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -217,6 +234,12 @@ func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Validation error"
 // @Router /files/{id} [put].
 func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	fileID := chi.URLParam(r, "fileID")
 
 	var input jsonapi.FileUpdateRequest
@@ -269,7 +292,7 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		file.Type = models.FileTypeFromMIME(file.MIMEType)
 	}
 
-	updatedFile, err := api.registrySet.FileRegistry.Update(r.Context(), *file)
+	updatedFile, err := fileReg.Update(r.Context(), *file)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -293,10 +316,16 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id} [delete].
 func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
+	_, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	fileID := chi.URLParam(r, "fileID")
 
 	// Use file service to delete both physical file and database record
-	err := api.fileService.DeleteFileWithPhysical(r.Context(), fileID)
+	err = api.fileService.DeleteFileWithPhysical(r.Context(), fileID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -315,10 +344,16 @@ func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id}.{ext} [get].
 func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	fileID := chi.URLParam(r, "fileID")
 	ext := chi.URLParam(r, "fileExt")
 
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), fileID)
+	file, err := fileReg.Get(r.Context(), fileID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

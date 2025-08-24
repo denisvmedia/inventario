@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -33,6 +34,10 @@ func NewExportRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) 
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+func (r *ExportRegistry) MustWithCurrentUser(ctx context.Context) registry.ExportRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRegistry, error) {

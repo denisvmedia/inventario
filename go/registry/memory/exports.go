@@ -3,6 +3,8 @@ package memory
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -21,6 +23,10 @@ func NewExportRegistry() *ExportRegistry {
 	return &ExportRegistry{
 		Registry: NewRegistry[models.Export, *models.Export](),
 	}
+}
+
+func (r *ExportRegistry) MustWithCurrentUser(ctx context.Context) registry.ExportRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRegistry, error) {

@@ -42,6 +42,7 @@ type Registry[T any] interface {
 type UserAwareRegistry[T any, P Registry[T]] interface {
 	// WithCurrentUser returns a new registry with user context set
 	WithCurrentUser(ctx context.Context) (P, error)
+	MustWithCurrentUser(ctx context.Context) P
 }
 
 type AreaRegistry interface {
@@ -100,6 +101,7 @@ type SettingsRegistry interface {
 
 	// WithCurrentUser returns a new registry with user context set
 	WithCurrentUser(ctx context.Context) (SettingsRegistry, error)
+	MustWithCurrentUser(ctx context.Context) SettingsRegistry
 }
 
 type ExportRegistry interface {

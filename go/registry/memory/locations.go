@@ -31,6 +31,10 @@ func NewLocationRegistry() *LocationRegistry {
 	}
 }
 
+func (r *LocationRegistry) MustWithCurrentUser(ctx context.Context) registry.LocationRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
+
 func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.LocationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -25,6 +27,10 @@ func NewFileRegistry() *FileRegistry {
 	return &FileRegistry{
 		baseFileRegistry: NewRegistry[models.FileEntity, *models.FileEntity](),
 	}
+}
+
+func (r *FileRegistry) MustWithCurrentUser(ctx context.Context) registry.FileRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegistry, error) {

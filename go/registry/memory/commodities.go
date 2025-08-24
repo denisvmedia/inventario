@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -36,6 +38,10 @@ func NewCommodityRegistry(areaRegistry *AreaRegistry) *CommodityRegistry {
 		invoices:              make(models.CommodityInvoices),
 		areaRegistry:          areaRegistry,
 	}
+}
+
+func (r *CommodityRegistry) MustWithCurrentUser(ctx context.Context) registry.CommodityRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.CommodityRegistry, error) {

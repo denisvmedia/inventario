@@ -145,7 +145,6 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(params.RegistrySet.UserRegistry, params.JWTSecret))
-		r.With(defaultAPIMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
 		r.Route("/currencies", Currencies())
 		// Seed endpoint is public for e2e testing and development
 		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.RegistrySet))
@@ -155,6 +154,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.RegistrySet.UserRegistry, params.RegistrySet)
 
 		// Protected routes (authentication required)
+		r.With(userMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
 		r.With(userMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
 		r.With(userMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(userMiddlewares...).Route("/commodities", Commodities(params))

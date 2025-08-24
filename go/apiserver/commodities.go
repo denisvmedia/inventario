@@ -62,6 +62,12 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Router /commodities/{id} [get].
 func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	comReg, err := api.registrySet.CommodityRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
 		unprocessableEntityError(w, r, nil)
@@ -69,19 +75,19 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var imagesError string
-	images, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
+	images, err := comReg.GetImages(r.Context(), commodity.ID)
 	if err != nil {
 		imagesError = err.Error()
 	}
 
 	var manualsError string
-	manuals, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
+	manuals, err := comReg.GetManuals(r.Context(), commodity.ID)
 	if err != nil {
 		manualsError = err.Error()
 	}
 
 	var invoicesError string
-	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
+	invoices, err := comReg.GetInvoices(r.Context(), commodity.ID)
 	if err != nil {
 		invoicesError = err.Error()
 	}

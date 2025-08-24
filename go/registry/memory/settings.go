@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/typekit"
@@ -23,6 +25,10 @@ func NewSettingsRegistry() *SettingsRegistry {
 	return &SettingsRegistry{
 		settings: make(map[string]models.SettingsObject),
 	}
+}
+
+func (r *SettingsRegistry) MustWithCurrentUser(ctx context.Context) registry.SettingsRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.SettingsRegistry, error) {

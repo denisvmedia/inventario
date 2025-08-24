@@ -3,6 +3,8 @@ package memory
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -24,6 +26,10 @@ func NewInvoiceRegistry(commodityRegistry *CommodityRegistry) *InvoiceRegistry {
 		baseInvoiceRegistry: NewRegistry[models.Invoice, *models.Invoice](),
 		commodityRegistry:   commodityRegistry,
 	}
+}
+
+func (r *InvoiceRegistry) MustWithCurrentUser(ctx context.Context) registry.InvoiceRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *InvoiceRegistry) WithCurrentUser(ctx context.Context) (registry.InvoiceRegistry, error) {

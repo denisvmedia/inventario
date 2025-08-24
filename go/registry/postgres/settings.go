@@ -38,6 +38,10 @@ func NewSettingsRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames
 	}
 }
 
+func (r *SettingsRegistry) MustWithCurrentUser(ctx context.Context) registry.SettingsRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
+
 func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.SettingsRegistry, error) {
 	tmp := *r
 

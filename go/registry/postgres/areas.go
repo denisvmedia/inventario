@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -32,6 +33,10 @@ func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *A
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+func (r *AreaRegistry) MustWithCurrentUser(ctx context.Context) registry.AreaRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegistry, error) {

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -30,6 +31,10 @@ func NewManualRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) 
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+func (r *ManualRegistry) MustWithCurrentUser(ctx context.Context) registry.ManualRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *ManualRegistry) WithCurrentUser(ctx context.Context) (registry.ManualRegistry, error) {

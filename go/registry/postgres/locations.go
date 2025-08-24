@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -32,6 +33,10 @@ func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
+}
+
+func (r *LocationRegistry) MustWithCurrentUser(ctx context.Context) registry.LocationRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.LocationRegistry, error) {

@@ -3,6 +3,8 @@ package memory
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -24,6 +26,10 @@ func NewImageRegistry(commodityRegistry *CommodityRegistry) *ImageRegistry {
 		baseImageRegistry: NewRegistry[models.Image, *models.Image](),
 		commodityRegistry: commodityRegistry,
 	}
+}
+
+func (r *ImageRegistry) MustWithCurrentUser(ctx context.Context) registry.ImageRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
 func (r *ImageRegistry) WithCurrentUser(ctx context.Context) (registry.ImageRegistry, error) {

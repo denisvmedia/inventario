@@ -6,6 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -35,12 +36,12 @@ type Valuator struct {
 }
 
 // NewValuator creates a new Valuator instance.
-func NewValuator(registrySet *registry.Set) *Valuator {
+func NewValuator(registrySet *registry.Set, user *models.User) *Valuator {
 	return &Valuator{
-		CommodityRegistry: registrySet.CommodityRegistry,
-		AreaRegistry:      registrySet.AreaRegistry,
-		LocationRegistry:  registrySet.LocationRegistry,
-		SettingsRegistry:  registrySet.SettingsRegistry,
+		CommodityRegistry: registrySet.CommodityRegistry.MustWithCurrentUser(appctx.WithUser(context.Background(), user)),
+		AreaRegistry:      registrySet.AreaRegistry.MustWithCurrentUser(appctx.WithUser(context.Background(), user)),
+		LocationRegistry:  registrySet.LocationRegistry.MustWithCurrentUser(appctx.WithUser(context.Background(), user)),
+		SettingsRegistry:  registrySet.SettingsRegistry.MustWithCurrentUser(appctx.WithUser(context.Background(), user)),
 	}
 }
 

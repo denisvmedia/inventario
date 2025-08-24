@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/ptr"
 
 	"github.com/denisvmedia/inventario/models"
 )
@@ -57,7 +58,7 @@ func TestTenant_ValidateWithContext(t *testing.T) {
 			Name:   "Test Tenant",
 			Slug:   "test-tenant",
 			Status: models.TenantStatusActive,
-			Domain: "test.example.com",
+			Domain: ptr.To("test.example.com"),
 		}
 
 		err := tenant.ValidateWithContext(context.Background())
@@ -164,7 +165,7 @@ func TestTenant_ValidateWithContext(t *testing.T) {
 					Name:   "Test",
 					Slug:   "test",
 					Status: models.TenantStatusActive,
-					Domain: "this-is-a-very-long-domain-name-that-exceeds-the-maximum-allowed-length-of-255-characters-for-testing-purposes-and-should-fail-validation-because-it-is-way-too-long-for-a-domain-name-in-any-practical-scenario-that-we-might-encounter-in-real-world-usage-and-this-should-definitely-be-over-255-characters-now.example.com",
+					Domain: ptr.To("this-is-a-very-long-domain-name-that-exceeds-the-maximum-allowed-length-of-255-characters-for-testing-purposes-and-should-fail-validation-because-it-is-way-too-long-for-a-domain-name-in-any-practical-scenario-that-we-might-encounter-in-real-world-usage-and-this-should-definitely-be-over-255-characters-now.example.com"),
 				},
 				expectedErr: "the length must be between 1 and 255",
 			},
@@ -188,7 +189,7 @@ func TestTenant_MarshalJSON(t *testing.T) {
 			Name:   "Test Tenant",
 			Slug:   "test-tenant",
 			Status: models.TenantStatusActive,
-			Domain: "test.example.com",
+			Domain: ptr.To("test.example.com"),
 		}
 
 		data, err := tenant.MarshalJSON()
@@ -216,6 +217,7 @@ func TestTenant_UnmarshalJSON(t *testing.T) {
 		c.Assert(tenant.Name, qt.Equals, "Test Tenant")
 		c.Assert(tenant.Slug, qt.Equals, "test-tenant")
 		c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
-		c.Assert(tenant.Domain, qt.Equals, "test.example.com")
+		c.Assert(tenant.Domain, qt.IsNotNil)
+		c.Assert(*tenant.Domain, qt.Equals, "test.example.com")
 	})
 }

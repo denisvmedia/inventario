@@ -60,7 +60,12 @@ func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Area ID"
 // @Success 200 {object} jsonapi.AreaResponse "OK"
 // @Router /areas/{id} [get].
-func (*areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	_, err := api.areaRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
 	area := areaFromContext(r.Context())
 	if area == nil {
 		unprocessableEntityError(w, r, nil)
