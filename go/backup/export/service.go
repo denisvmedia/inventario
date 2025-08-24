@@ -13,6 +13,7 @@ import (
 
 	"gocloud.dev/blob"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -171,7 +172,12 @@ func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *mo
 		userCtx := ctx
 		if userID := registry.UserIDFromContext(ctx); userID == "" && export.UserID != "" {
 			// If context doesn't have user ID but export does, create user context
-			userCtx = registry.WithUserContext(ctx, export.UserID)
+			userCtx = appctx.WithUser(context.Background(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: export.UserID},
+					TenantID: export.TenantID,
+				},
+			})
 		}
 		if err := s.enrichSelectedItemsWithNames(userCtx, &export); err != nil {
 			return models.Export{}, errkit.Wrap(err, "failed to enrich selected items with names")
@@ -202,7 +208,12 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 
 	// Create a context with user ID for the export processing
 	// This is necessary because the background worker doesn't have user context
-	userCtx := registry.WithUserContext(ctx, export.UserID)
+	userCtx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: export.UserID},
+			TenantID: export.TenantID,
+		},
+	})
 
 	// Update status to in_progress
 	export.Status = models.ExportStatusInProgress

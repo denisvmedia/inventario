@@ -18,7 +18,12 @@ import (
 
 func TestRestoreService_RestoreFromXML(t *testing.T) {
 	ctx := validationctx.WithMainCurrency(t.Context(), "USD")
-	ctx = appctx.WithUserID(ctx, "test-user-id")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	t.Run("restore XML with full replace strategy", func(t *testing.T) {
 		c := qt.New(t)
@@ -293,7 +298,13 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	ctx = appctx.WithUserID(ctx, "test-user-id")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
 	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
@@ -406,8 +417,12 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 		DryRun:          false,
 	}
 
-	ctx := c.Context()
-	ctx = appctx.WithUserID(ctx, "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	stats, err := processor.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
@@ -436,7 +451,13 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	ctx = appctx.WithUserID(ctx, "test-user-id")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
 	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 

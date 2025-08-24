@@ -21,6 +21,7 @@ type ExportRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
 	userID     string
+	tenantID   string
 }
 
 func NewExportRegistry(dbx *sqlx.DB) *ExportRegistry {
@@ -37,11 +38,12 @@ func NewExportRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) 
 func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
 	return &tmp, nil
 }
 
@@ -49,6 +51,10 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 	// Generate a new ID if one is not already provided
 	if export.GetID() == "" {
 		export.SetID(generateID())
+	}
+
+	if export.CreatedDate == nil {
+		export.CreatedDate = models.PNow()
 	}
 
 	reg := r.newSQLRegistry()

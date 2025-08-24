@@ -18,6 +18,7 @@ type ManualRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
 	userID     string
+	tenantID   string
 }
 
 func NewManualRegistry(dbx *sqlx.DB) *ManualRegistry {
@@ -34,11 +35,12 @@ func NewManualRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) 
 func (r *ManualRegistry) WithCurrentUser(ctx context.Context) (registry.ManualRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
 	return &tmp, nil
 }
 

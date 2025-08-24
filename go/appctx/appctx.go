@@ -40,24 +40,10 @@ func WithUser(ctx context.Context, user *models.User) context.Context {
 	return ctx
 }
 
-// WithUserID adds a user ID to the context
-func WithUserID(ctx context.Context, userID string) context.Context {
-	return context.WithValue(ctx, userIDKey, userID)
-}
-
 // ValidateUserContext validates that a user context is present and valid
 func ValidateUserContext(ctx context.Context) error {
 	user := UserFromContext(ctx)
 	if user != nil {
-		return errkit.WithStack(ErrUserContextRequired)
-	}
-
-	return nil
-}
-
-func ValidateUserIDContext(ctx context.Context) error {
-	userID := UserIDFromContext(ctx)
-	if userID == "" {
 		return errkit.WithStack(ErrUserContextRequired)
 	}
 
@@ -71,13 +57,4 @@ func RequireUserFromContext(ctx context.Context) (*models.User, error) {
 	}
 
 	return user, nil
-}
-
-func RequireUserIDFromContext(ctx context.Context) (string, error) {
-	userID := UserIDFromContext(ctx)
-	if userID == "" {
-		return "", errkit.WithStack(ErrUserContextRequired)
-	}
-
-	return userID, nil
 }

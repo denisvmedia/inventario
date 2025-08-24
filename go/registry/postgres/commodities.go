@@ -18,6 +18,7 @@ type CommodityRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
 	userID     string
+	tenantID   string
 }
 
 func NewCommodityRegistry(dbx *sqlx.DB) *CommodityRegistry {
@@ -34,11 +35,12 @@ func NewCommodityRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableName
 func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.CommodityRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
 	return &tmp, nil
 }
 
@@ -50,6 +52,8 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// Generate a new ID if one is not already provided
 	if commodity.GetID() == "" {
 		commodity.SetID(generateID())
+		commodity.SetTenantID(r.tenantID)
+		commodity.SetUserID(r.userID)
 	}
 
 	reg := r.newSQLRegistry()

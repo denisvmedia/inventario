@@ -85,6 +85,8 @@ func (r *TxExecutor[T]) Insert(ctx context.Context, entity any) error {
 		strings.Join(placeholders, ", "),
 	)
 
+	// slog.Info("Inserting entity", "query", query, "params", must.Must(json.Marshal(params)))
+
 	_, err = sqlx.NamedExecContext(ctx, r.tx, query, params)
 	if err != nil {
 		return errkit.Wrap(err, "failed to insert entity")

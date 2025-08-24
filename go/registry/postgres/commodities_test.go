@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -76,7 +77,12 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
@@ -208,7 +214,12 @@ func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
@@ -247,7 +258,12 @@ func TestCommodityRegistry_Get_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -311,7 +327,12 @@ func TestCommodityRegistry_List_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Initially should be empty
 	commodities, err := registrySet.CommodityRegistry.List(ctx)
@@ -343,7 +364,12 @@ func TestCommodityRegistry_Update_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create test hierarchy and commodity
 	location := createTestLocation(c, registrySet.LocationRegistry)
@@ -420,7 +446,12 @@ func TestCommodityRegistry_Delete_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create test hierarchy and commodity
 	location := createTestLocation(c, registrySet.LocationRegistry)
@@ -471,7 +502,12 @@ func TestCommodityRegistry_Count_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Initially should be 0
 	count, err := registrySet.CommodityRegistry.Count(ctx)
@@ -568,7 +604,12 @@ func TestCommodityRegistry_GetImages_WithCreatedImage_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -615,7 +656,12 @@ func TestCommodityRegistry_GetImages_WithInvalidCommodity_UnhappyPath(t *testing
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := c.Context()
+			ctx := appctx.WithUser(c.Context(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -632,7 +678,12 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -676,7 +727,12 @@ func TestCommodityRegistry_GetImages_EmptyCommodity_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -705,7 +761,12 @@ func TestCommodityRegistry_GetManuals_WithCreatedManual_HappyPath(t *testing.T) 
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -736,7 +797,12 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -780,7 +846,12 @@ func TestCommodityRegistry_GetManuals_EmptyCommodity_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -809,7 +880,12 @@ func TestCommodityRegistry_GetInvoices_WithCreatedInvoice_HappyPath(t *testing.T
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -840,7 +916,12 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -884,7 +965,12 @@ func TestCommodityRegistry_GetInvoices_EmptyCommodity_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := c.Context()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)

@@ -6,6 +6,7 @@ import (
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -37,7 +38,11 @@ func NewRegistrySet() *registry.Set {
 }
 
 func NewRegistrySetWithUserID(userID string) *registry.Set {
-	ctx := appctx.WithUserID(context.Background(), userID)
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+		},
+	})
 
 	s := &registry.Set{}
 	s.LocationRegistry = must.Must(NewLocationRegistry().WithCurrentUser(ctx))

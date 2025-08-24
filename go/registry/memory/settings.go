@@ -26,15 +26,15 @@ func NewSettingsRegistry() *SettingsRegistry {
 }
 
 func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.SettingsRegistry, error) {
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
 
 	// Create a new registry with the same data but different userID
 	tmp := &SettingsRegistry{
 		settings: r.settings,
-		userID:   userID,
+		userID:   user.ID,
 	}
 
 	return tmp, nil

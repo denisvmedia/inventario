@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2025-08-23T21:54:19+02:00
+-- Generated on: 2025-08-24T13:52:43+02:00
 -- Direction: UP
 
 -- Gets the current tenant ID from session for RLS policies
@@ -47,10 +47,10 @@ CREATE TABLE users (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
--- POSTGRES TABLE: locations --
-CREATE TABLE locations (
+-- POSTGRES TABLE: settings --
+CREATE TABLE settings (
   name TEXT NOT NULL,
-  address TEXT NOT NULL,
+  value JSONB NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
@@ -74,18 +74,10 @@ CREATE TABLE files (
   ext TEXT NOT NULL,
   mime_type TEXT NOT NULL
 );
--- POSTGRES TABLE: settings --
-CREATE TABLE settings (
+-- POSTGRES TABLE: locations --
+CREATE TABLE locations (
   name TEXT NOT NULL,
-  value JSONB NOT NULL,
-  tenant_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  id TEXT PRIMARY KEY NOT NULL
-);
--- POSTGRES TABLE: areas --
-CREATE TABLE areas (
-  name TEXT NOT NULL,
-  location_id TEXT NOT NULL,
+  address TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
@@ -116,6 +108,36 @@ CREATE TABLE exports (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
+-- POSTGRES TABLE: areas --
+CREATE TABLE areas (
+  name TEXT NOT NULL,
+  location_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL
+);
+-- POSTGRES TABLE: restore_operations --
+CREATE TABLE restore_operations (
+  export_id TEXT NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL,
+  options JSONB NOT NULL,
+  created_date TIMESTAMP NOT NULL,
+  started_date TIMESTAMP,
+  completed_date TIMESTAMP,
+  error_message TEXT,
+  location_count INTEGER DEFAULT '0',
+  area_count INTEGER DEFAULT '0',
+  commodity_count INTEGER DEFAULT '0',
+  image_count INTEGER DEFAULT '0',
+  invoice_count INTEGER DEFAULT '0',
+  manual_count INTEGER DEFAULT '0',
+  binary_data_size BIGINT DEFAULT '0',
+  error_count INTEGER DEFAULT '0',
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL
+);
 -- POSTGRES TABLE: commodities --
 CREATE TABLE commodities (
   name TEXT NOT NULL,
@@ -142,24 +164,15 @@ CREATE TABLE commodities (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
--- POSTGRES TABLE: restore_operations --
-CREATE TABLE restore_operations (
-  export_id TEXT NOT NULL,
-  description TEXT NOT NULL,
-  status TEXT NOT NULL,
-  options JSONB NOT NULL,
+-- POSTGRES TABLE: restore_steps --
+CREATE TABLE restore_steps (
+  restore_operation_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  result TEXT NOT NULL,
+  duration BIGINT,
+  reason TEXT,
   created_date TIMESTAMP NOT NULL,
-  started_date TIMESTAMP,
-  completed_date TIMESTAMP,
-  error_message TEXT,
-  location_count INTEGER DEFAULT '0',
-  area_count INTEGER DEFAULT '0',
-  commodity_count INTEGER DEFAULT '0',
-  image_count INTEGER DEFAULT '0',
-  invoice_count INTEGER DEFAULT '0',
-  manual_count INTEGER DEFAULT '0',
-  binary_data_size BIGINT DEFAULT '0',
-  error_count INTEGER DEFAULT '0',
+  updated_date TIMESTAMP NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
@@ -197,41 +210,22 @@ CREATE TABLE manuals (
   ext TEXT NOT NULL,
   mime_type TEXT NOT NULL
 );
--- POSTGRES TABLE: restore_steps --
-CREATE TABLE restore_steps (
-  restore_operation_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  result TEXT NOT NULL,
-  duration BIGINT,
-  reason TEXT,
-  created_date TIMESTAMP NOT NULL,
-  updated_date TIMESTAMP NOT NULL,
-  tenant_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  id TEXT PRIMARY KEY NOT NULL
-);
 -- ALTER statements: --
 ALTER TABLE users ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE users ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE locations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+ALTER TABLE settings ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
-ALTER TABLE locations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE settings ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE files ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE files ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE settings ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+ALTER TABLE locations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
-ALTER TABLE settings ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- ALTER statements: --
-ALTER TABLE areas ADD CONSTRAINT fk_area_location FOREIGN KEY (location_id) REFERENCES locations(id);
--- ALTER statements: --
-ALTER TABLE areas ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
--- ALTER statements: --
-ALTER TABLE areas ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE locations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE exports ADD CONSTRAINT fk_export_file FOREIGN KEY (file_id) REFERENCES files(id);
 -- ALTER statements: --
@@ -239,17 +233,29 @@ ALTER TABLE exports ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFE
 -- ALTER statements: --
 ALTER TABLE exports ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE commodities ADD CONSTRAINT fk_commodity_area FOREIGN KEY (area_id) REFERENCES areas(id);
+ALTER TABLE areas ADD CONSTRAINT fk_area_location FOREIGN KEY (location_id) REFERENCES locations(id);
 -- ALTER statements: --
-ALTER TABLE commodities ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+ALTER TABLE areas ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
-ALTER TABLE commodities ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE areas ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE restore_operations ADD CONSTRAINT fk_restore_operation_export FOREIGN KEY (export_id) REFERENCES exports(id);
 -- ALTER statements: --
 ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- ALTER statements: --
+ALTER TABLE commodities ADD CONSTRAINT fk_commodity_area FOREIGN KEY (area_id) REFERENCES areas(id);
+-- ALTER statements: --
+ALTER TABLE commodities ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE commodities ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- ALTER statements: --
+ALTER TABLE restore_steps ADD CONSTRAINT fk_restore_step_operation FOREIGN KEY (restore_operation_id) REFERENCES restore_operations(id);
+-- ALTER statements: --
+ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE images ADD CONSTRAINT fk_image_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
 -- ALTER statements: --
@@ -268,34 +274,28 @@ ALTER TABLE manuals ADD CONSTRAINT fk_manual_commodity FOREIGN KEY (commodity_id
 ALTER TABLE manuals ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE manuals ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- ALTER statements: --
-ALTER TABLE restore_steps ADD CONSTRAINT fk_restore_step_operation FOREIGN KEY (restore_operation_id) REFERENCES restore_operations(id);
--- ALTER statements: --
-ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
--- ALTER statements: --
-ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- Enable RLS for images table
 ALTER TABLE images ENABLE ROW LEVEL SECURITY;
--- Enable RLS for files table
-ALTER TABLE files ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_operations table
-ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for invoices table
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for locations table
 ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
--- Enable RLS for manuals table
-ALTER TABLE manuals ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_steps table
-ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_operations table
+ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for settings table
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for users table
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
--- Enable RLS for areas table
-ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for commodities table
 ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for manuals table
+ALTER TABLE manuals ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for files table
+ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_steps table
+ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for areas table
+ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for exports table
 ALTER TABLE exports ENABLE ROW LEVEL SECURITY;
 -- Ensures areas can only be accessed by their tenant
@@ -396,11 +396,15 @@ DROP POLICY IF EXISTS restore_step_user_isolation ON restore_steps;
 CREATE POLICY restore_step_user_isolation ON restore_steps FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
--- Ensures settings can only be accessed and modified by their tenant
+-- Ensures settings can only be accessed by their tenant
 DROP POLICY IF EXISTS setting_tenant_isolation ON settings;
 CREATE POLICY setting_tenant_isolation ON settings FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
+    USING (tenant_id = get_current_tenant_id());
+-- Ensures settings can only be accessed and modified by their user
+DROP POLICY IF EXISTS setting_user_isolation ON settings;
+CREATE POLICY setting_user_isolation ON settings FOR ALL TO inventario_app
+    USING (user_id = get_current_user_id())
+    WITH CHECK (user_id = get_current_user_id());
 -- Ensures users can only access their tenant's data
 DROP POLICY IF EXISTS user_tenant_isolation ON users;
 CREATE POLICY user_tenant_isolation ON users FOR ALL TO inventario_app

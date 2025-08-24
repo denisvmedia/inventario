@@ -30,7 +30,12 @@ func TestSettingsAPI(t *testing.T) {
 
 	// Test GET /settings (empty settings)
 	req := httptest.NewRequest("GET", "/settings", nil)
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -53,7 +58,12 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PUT", "/settings", bytes.NewReader(settingsJSON))
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -67,7 +77,12 @@ func TestSettingsAPI(t *testing.T) {
 
 	// Test GET /settings after PUT
 	req = httptest.NewRequest("GET", "/settings", nil)
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -85,7 +100,12 @@ func TestSettingsAPI(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PATCH", "/settings/uiconfig.theme", bytes.NewReader(themeJSON))
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -100,7 +120,12 @@ func TestSettingsAPI(t *testing.T) {
 
 	// Test GET /settings after PATCH
 	req = httptest.NewRequest("GET", "/settings", nil)
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -134,7 +159,12 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req := httptest.NewRequest("PUT", "/settings", bytes.NewReader(settingsJSON))
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -147,7 +177,12 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PUT", "/settings", bytes.NewReader(settingsJSON))
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -159,7 +194,12 @@ func TestMainCurrencyRestriction(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	req = httptest.NewRequest("PATCH", "/settings/system.main_currency", bytes.NewReader(currencyJSON))
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -168,7 +208,12 @@ func TestMainCurrencyRestriction(t *testing.T) {
 
 	// Verify the main currency is still USD
 	req = httptest.NewRequest("GET", "/settings", nil)
-	req = req.WithContext(appctx.WithUserID(context.Background(), "test-user-id"))
+	req = req.WithContext(appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

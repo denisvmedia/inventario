@@ -18,6 +18,7 @@ type RestoreOperationRegistry struct {
 	dbx                 *sqlx.DB
 	tableNames          store.TableNames
 	userID              string
+	tenantID            string
 	restoreStepRegistry registry.RestoreStepRegistry
 }
 
@@ -36,11 +37,12 @@ func NewRestoreOperationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.Ta
 func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreOperationRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
 
 	// Also update the restore step registry with user context
 	userAwareStepRegistry, err := tmp.restoreStepRegistry.WithCurrentUser(ctx)

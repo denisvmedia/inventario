@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -22,6 +24,7 @@ type SettingsRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
 	userID     string
+	tenantID   string
 }
 
 func NewSettingsRegistry(dbx *sqlx.DB) *SettingsRegistry {
@@ -38,11 +41,12 @@ func NewSettingsRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames
 func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.SettingsRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
 	return &tmp, nil
 }
 
@@ -59,6 +63,20 @@ func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, erro
 			}
 			// Skip nil values - they shouldn't be set on the struct
 			if setting.Value != nil {
+				val, ok := setting.Value.([]byte)
+				if !ok {
+					return errors.New("failed to convert setting value to byte slice")
+				}
+
+				err := json.Unmarshal(val, &setting.Value)
+				if err != nil {
+					return errkit.Wrap(err, "failed to unmarshal setting value")
+				}
+
+				if setting.Value == nil {
+					continue
+				}
+
 				err = settings.Set(setting.Name, setting.Value)
 				if err != nil {
 					return errkit.Wrap(errkit.WithFields(err, "setting_name", setting.Name), "failed to set settings object value")
@@ -99,10 +117,10 @@ func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObj
 				// Create new setting with ID
 				sv.SetID(generateID())
 				sv.SetUserID(r.userID)
-				// Note: tenant_id will be set by the RLS context
+				sv.SetTenantID(r.tenantID)
 			}
 			sv.Name = settingName
-			sv.Value = settingValue
+			sv.Value = must.Must(json.Marshal(settingValue))
 
 			if isNotFound {
 				// Insert new setting
@@ -148,10 +166,10 @@ func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settin
 			// Create new setting with ID
 			sv.SetID(generateID())
 			sv.SetUserID(r.userID)
-			// Note: tenant_id will be set by the RLS context
+			sv.SetTenantID(r.tenantID)
 		}
 		sv.Name = settingName
-		sv.Value = settingValue
+		sv.Value = must.Must(json.Marshal(settingValue))
 
 		if isNotFound {
 			// Insert new setting

@@ -10,19 +10,25 @@
 -- IMPORTANT: Execute these statements with a privileged database user
 --
 
--- Check if operational user exists
+-- Create operational user if it doesn't exist
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '{{.Username}}') THEN
-        RAISE EXCEPTION 'User "{{.Username}}" does not exist';
+        CREATE USER {{.Username}} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
+        RAISE NOTICE 'Created user {{.Username}}';
+    ELSE
+        RAISE NOTICE 'User {{.Username}} already exists';
     END IF;
 END $$;
 
--- Check if migration user exists
+-- Create migration user if it doesn't exist
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '{{.UsernameForMigrations}}') THEN
-        RAISE EXCEPTION 'User "{{.UsernameForMigrations}}" does not exist';
+        CREATE USER {{.UsernameForMigrations}} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
+        RAISE NOTICE 'Created user {{.UsernameForMigrations}}';
+    ELSE
+        RAISE NOTICE 'User {{.UsernameForMigrations}} already exists';
     END IF;
 END $$;
 
@@ -105,3 +111,28 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO inventario_migrator;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO inventario_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO inventario_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO inventario_app;
+
+-- Create default tenant if it doesn't exist (idempotent)
+-- This must run after migrations create the tenants table
+DO $$
+BEGIN
+    -- Check if tenants table exists and if default tenant doesn't exist
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tenants' AND table_schema = 'public') THEN
+        IF NOT EXISTS (SELECT 1 FROM tenants WHERE id = 'test-tenant-id') THEN
+            INSERT INTO tenants (id, name, slug, status, created_at, updated_at)
+            VALUES (
+                'test-tenant-id',
+                'Test Organization',
+                'test-org',
+                'active',
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            );
+            RAISE NOTICE 'Created default tenant: Test Organization';
+        ELSE
+            RAISE NOTICE 'Default tenant already exists';
+        END IF;
+    ELSE
+        RAISE NOTICE 'Tenants table does not exist yet - skipping default tenant creation';
+    END IF;
+END $$;

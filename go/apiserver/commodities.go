@@ -38,7 +38,13 @@ type commoditiesAPI struct {
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
-	commodities, _ := api.registrySet.CommodityRegistry.List(r.Context())
+	commodityReg, err := api.registrySet.CommodityRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
+	commodities, _ := commodityReg.List(r.Context())
 
 	if err := render.Render(w, r, jsonapi.NewCommoditiesResponse(commodities, len(commodities))); err != nil {
 		internalServerError(w, r, err)
@@ -108,11 +114,12 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.CommodityRequest
 
-	r, err := requestWithMainCurrency(r, api.registrySet.SettingsRegistry)
+	rWithCurrency, err := requestWithMainCurrency(r, api.registrySet.SettingsRegistry)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
+	r = rWithCurrency
 
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -216,11 +223,12 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /commodities/{id} [put].
 func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Request) {
-	r, err := requestWithMainCurrency(r, api.registrySet.SettingsRegistry)
+	rWithCurrency, err := requestWithMainCurrency(r, api.registrySet.SettingsRegistry)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
+	r = rWithCurrency
 
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
@@ -1075,7 +1083,13 @@ func Commodities(params Params) func(r chi.Router) {
 }
 
 func requestWithMainCurrency(r *http.Request, settingsRegistry registry.SettingsRegistry) (*http.Request, error) {
-	settings, err := settingsRegistry.Get(r.Context())
+	// Get user-aware settings registry
+	userSettingsRegistry, err := settingsRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	settings, err := userSettingsRegistry.Get(r.Context())
 	if err != nil {
 		return nil, err
 	}

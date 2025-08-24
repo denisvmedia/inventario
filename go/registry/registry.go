@@ -245,11 +245,6 @@ func UserIDFromContext(ctx context.Context) string {
 	return appctx.UserIDFromContext(ctx)
 }
 
-// WithUserContext adds a user ID to the context
-func WithUserContext(ctx context.Context, userID string) context.Context {
-	return appctx.WithUserID(ctx, userID)
-}
-
 func (s *Set) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 

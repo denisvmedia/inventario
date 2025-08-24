@@ -30,11 +30,11 @@ func NewFileRegistry() *FileRegistry {
 func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
 	return &tmp, nil
 }
 

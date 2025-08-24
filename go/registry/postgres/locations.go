@@ -20,6 +20,7 @@ type LocationRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
 	userID     string
+	tenantID   string
 }
 
 func NewLocationRegistry(dbx *sqlx.DB) *LocationRegistry {
@@ -36,11 +37,12 @@ func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames
 func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.LocationRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
 	return &tmp, nil
 }
 

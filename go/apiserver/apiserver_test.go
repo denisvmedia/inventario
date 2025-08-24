@@ -29,7 +29,12 @@ var testJWTSecret = []byte("test-jwt-secret-32-bytes-minimum-length")
 
 func newLocationRegistry() registry.LocationRegistry {
 	var locationsRegistry registry.LocationRegistry = memory.NewLocationRegistry()
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	locationsRegistry = must.Must(locationsRegistry.WithCurrentUser(ctx))
 
 	must.Must(locationsRegistry.Create(context.Background(), models.Location{
@@ -47,7 +52,12 @@ func newLocationRegistry() registry.LocationRegistry {
 
 func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRegistry {
 	var areaRegistry registry.AreaRegistry = memory.NewAreaRegistry(locationRegistry.(*memory.LocationRegistry))
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	areaRegistry = must.Must(areaRegistry.WithCurrentUser(ctx))
 	locations := must.Must(must.Must(locationRegistry.WithCurrentUser(ctx)).List(context.Background()))
 
@@ -68,7 +78,12 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 
 func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
 	var commodityRegistry registry.CommodityRegistry = memory.NewCommodityRegistry(areaRegistry.(*memory.AreaRegistry))
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	commodityRegistry = must.Must(commodityRegistry.WithCurrentUser(ctx))
 
 	areaRegistry = must.Must(areaRegistry.WithCurrentUser(ctx))
@@ -104,7 +119,12 @@ func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.Commodity
 func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.ImageRegistry {
 	var imageRegistry = memory.NewImageRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	commodities := must.Must(commodityRegistry.List(ctx))
 	imgReg := must.Must(imageRegistry.WithCurrentUser(ctx))
 
@@ -148,7 +168,12 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.InvoiceRegistry {
 	var invoiceRegistry = memory.NewInvoiceRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	commodities := must.Must(commodityRegistry.List(ctx))
 	invReg := must.Must(invoiceRegistry.WithCurrentUser(ctx))
 
@@ -192,7 +217,12 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.ManualRegistry {
 	var manualRegistry = memory.NewManualRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	commodities := must.Must(commodityRegistry.List(ctx))
 	manReg := must.Must(manualRegistry.WithCurrentUser(ctx))
 
@@ -235,7 +265,12 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 
 func newSettingsRegistry() registry.SettingsRegistry {
 	var settingsRegistry registry.SettingsRegistry = memory.NewSettingsRegistry()
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	settingsRegistry = must.Must(settingsRegistry.WithCurrentUser(ctx))
 
 	must.Assert(settingsRegistry.Patch(context.Background(), "system.main_currency", "USD"))
@@ -421,7 +456,12 @@ func newParams() apiserver.Params {
 	params.RegistrySet.UserRegistry = newUserRegistry()
 
 	// Create FileRegistry and populate it with test data first
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	params.RegistrySet.FileRegistry = must.Must(memory.NewFileRegistry().WithCurrentUser(ctx))
 
 	// Create CommodityRegistry

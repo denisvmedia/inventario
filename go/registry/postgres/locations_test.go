@@ -6,6 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -39,6 +40,12 @@ func TestLocationRegistry_Create_HappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -74,6 +81,12 @@ func TestLocationRegistry_Create_UnhappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -91,6 +104,12 @@ func TestLocationRegistry_Get_HappyPath(t *testing.T) {
 
 	c := qt.New(t)
 	ctx := context.Background()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -129,6 +148,12 @@ func TestLocationRegistry_Get_UnhappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -146,6 +171,12 @@ func TestLocationRegistry_List_HappyPath(t *testing.T) {
 
 	c := qt.New(t)
 	ctx := context.Background()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -178,7 +209,13 @@ func TestLocationRegistry_Update_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -225,7 +262,13 @@ func TestLocationRegistry_Update_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := context.Background()
+			ctx := c.Context()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -242,7 +285,13 @@ func TestLocationRegistry_Delete_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -281,7 +330,13 @@ func TestLocationRegistry_Delete_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := context.Background()
+			ctx := c.Context()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -297,7 +352,13 @@ func TestLocationRegistry_Delete_WithAreas_UnhappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -331,7 +392,13 @@ func TestLocationRegistry_Count_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -356,7 +423,13 @@ func TestLocationRegistry_GetAreas_WithCreatedArea_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -396,7 +469,13 @@ func TestLocationRegistry_GetAreas_WithInvalidLocation_UnhappyPath(t *testing.T)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := context.Background()
+			ctx := c.Context()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -413,7 +492,13 @@ func TestLocationRegistry_GetAreas_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -452,7 +537,13 @@ func TestLocationRegistry_GetAreas_EmptyLocation_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)

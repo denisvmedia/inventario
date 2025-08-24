@@ -39,7 +39,7 @@ func NewCommodityRegistry(areaRegistry *AreaRegistry) *CommodityRegistry {
 }
 
 func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.CommodityRegistry, error) {
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
@@ -47,7 +47,7 @@ func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.Commo
 	// Create a new registry with the same data but different userID
 	tmp := &CommodityRegistry{
 		baseCommodityRegistry: r.baseCommodityRegistry,
-		userID:                userID,
+		userID:                user.ID,
 		images:                r.images,
 		manuals:               r.manuals,
 		invoices:              r.invoices,
@@ -55,7 +55,7 @@ func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.Commo
 	}
 
 	// Set the userID on the base registry
-	tmp.baseCommodityRegistry.userID = userID
+	tmp.baseCommodityRegistry.userID = user.ID
 
 	return tmp, nil
 }

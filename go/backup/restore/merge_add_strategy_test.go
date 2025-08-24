@@ -16,7 +16,12 @@ import (
 
 func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()
@@ -170,7 +175,12 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 
 func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()

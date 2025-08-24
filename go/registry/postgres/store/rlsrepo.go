@@ -49,9 +49,7 @@ func (r *RLSRepository[T]) ScanOneByField(ctx context.Context, field FieldValue,
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
 	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
+	defer tx.Rollback() // Read-only transaction, so rollback is safe
 
 	err = NewTxRegistry[T](tx, r.table).ScanOneByField(ctx, field, entity)
 	if err != nil {
@@ -277,22 +275,26 @@ func (r *RLSRepository[T]) beginTx(ctx context.Context) (*sqlx.Tx, error) {
 
 	err = setAppRole(ctx, tx)
 	if err != nil {
-		return tx, errkit.Wrap(err, "failed to set app role")
+		tx.Rollback()
+		return nil, errkit.Wrap(err, "failed to set app role")
 	}
 
 	err = setUserContext(ctx, tx, r.userID)
 	if err != nil {
-		return tx, errkit.Wrap(err, "failed to set user context")
+		tx.Rollback()
+		return nil, errkit.Wrap(err, "failed to set user context")
 	}
 
 	return tx, nil
 }
 
 func (r *RLSRepository[T]) entityToIDAble(entity T) models.IDable {
-	var tmp any = entity
-	idable, ok := tmp.(models.IDable)
+	idable, ok := (any(entity)).(models.IDable)
 	if !ok {
-		panic("entity is not IDable")
+		idable, ok = (any(&entity)).(models.IDable)
+		if !ok {
+			panic("entity is not IDable")
+		}
 	}
 	return idable
 }

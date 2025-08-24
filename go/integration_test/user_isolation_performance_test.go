@@ -11,6 +11,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
@@ -63,7 +64,7 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 			userIndex := 0
 			for pb.Next() {
 				user := users[userIndex%len(users)]
-				ctx := registry.WithUserContext(context.Background(), user.ID)
+				ctx := appctx.WithUser(context.Background(), user)
 
 				// Create commodity
 				commodity := models.Commodity{
@@ -166,7 +167,48 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 		go func(userIndex int, u *models.User) {
 			defer wg.Done()
 
-			ctx := registry.WithUserContext(context.Background(), u.ID)
+			ctx := appctx.WithUser(context.Background(), u)
+
+			// Create location and area for this user's commodities
+			location := models.Location{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: fmt.Sprintf("load-location-%d", userIndex)},
+					TenantID: "test-tenant-id",
+					UserID:   u.ID,
+				},
+				Name:    fmt.Sprintf("Load Test Location %d", userIndex),
+				Address: fmt.Sprintf("123 Load Street %d", userIndex),
+			}
+			userAwareLocationRegistry, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+			if err != nil {
+				errors <- fmt.Errorf("user %d failed to create location registry: %v", userIndex, err)
+				return
+			}
+			createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
+			if err != nil {
+				errors <- fmt.Errorf("user %d failed to create location: %v", userIndex, err)
+				return
+			}
+
+			area := models.Area{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: fmt.Sprintf("load-area-%d", userIndex)},
+					TenantID: "test-tenant-id",
+					UserID:   u.ID,
+				},
+				Name:       fmt.Sprintf("Load Test Area %d", userIndex),
+				LocationID: createdLocation.ID,
+			}
+			userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+			if err != nil {
+				errors <- fmt.Errorf("user %d failed to create area registry: %v", userIndex, err)
+				return
+			}
+			createdArea, err := userAwareAreaRegistry.Create(ctx, area)
+			if err != nil {
+				errors <- fmt.Errorf("user %d failed to create area: %v", userIndex, err)
+				return
+			}
 
 			// Create user-aware registry once for this user
 			userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
@@ -185,6 +227,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 					},
 					Name:                   fmt.Sprintf("Load Test Commodity %d-%d", userIndex, j),
 					ShortName:              fmt.Sprintf("LTC%d%d", userIndex, j),
+					AreaID:                 createdArea.ID,
 					Type:                   models.CommodityTypeElectronics,
 					Count:                  1,
 					OriginalPrice:          decimal.NewFromFloat(100.00),
@@ -245,7 +288,36 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 
 	// Create a legitimate user
 	user := createTestUser(c, registrySet, "legitimate@example.com")
-	ctx := registry.WithUserContext(context.Background(), user.ID)
+	ctx := appctx.WithUser(context.Background(), user)
+
+	// Create location and area for the commodity
+	location := models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "security-test-location"},
+			TenantID: "test-tenant-id",
+			UserID:   user.ID,
+		},
+		Name:    "Security Test Location",
+		Address: "123 Security Street",
+	}
+	userAwareLocationRegistry, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
+	c.Assert(err, qt.IsNil)
+
+	area := models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "security-test-area"},
+			TenantID: "test-tenant-id",
+			UserID:   user.ID,
+		},
+		Name:       "Security Test Area",
+		LocationID: createdLocation.ID,
+	}
+	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	createdArea, err := userAwareAreaRegistry.Create(ctx, area)
+	c.Assert(err, qt.IsNil)
 
 	// Create a commodity
 	commodity := models.Commodity{
@@ -256,6 +328,7 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 		},
 		Name:                   "Security Test Commodity",
 		ShortName:              "STC",
+		AreaID:                 createdArea.ID,
 		Type:                   models.CommodityTypeElectronics,
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
@@ -292,7 +365,12 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 	for _, maliciousID := range maliciousUserIDs {
 		t.Run(fmt.Sprintf("Malicious ID: %q", maliciousID), func(t *testing.T) {
 			c := qt.New(t)
-			maliciousCtx := registry.WithUserContext(context.Background(), maliciousID)
+			maliciousCtx := appctx.WithUser(context.Background(), &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: maliciousID},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			// Try to access the legitimate user's commodity
 			maliciousUserAwareRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(maliciousCtx)
@@ -335,7 +413,36 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 
 	// Create a user
 	user := createTestUser(c, registrySet, "perf@example.com")
-	ctx := registry.WithUserContext(context.Background(), user.ID)
+	ctx := appctx.WithUser(context.Background(), user)
+
+	// Create location and area for commodities
+	location := models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "perf-location"},
+			TenantID: "test-tenant-id",
+			UserID:   user.ID,
+		},
+		Name:    "Performance Test Location",
+		Address: "123 Performance Street",
+	}
+	userAwareLocationRegistry, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
+	c.Assert(err, qt.IsNil)
+
+	area := models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "perf-area"},
+			TenantID: "test-tenant-id",
+			UserID:   user.ID,
+		},
+		Name:       "Performance Test Area",
+		LocationID: createdLocation.ID,
+	}
+	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	createdArea, err := userAwareAreaRegistry.Create(ctx, area)
+	c.Assert(err, qt.IsNil)
 
 	// Create many commodities
 	numCommodities := 1000
@@ -351,6 +458,7 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 			},
 			Name:                   fmt.Sprintf("Performance Test Commodity %d", i),
 			ShortName:              fmt.Sprintf("PTC%d", i),
+			AreaID:                 createdArea.ID,
 			Type:                   models.CommodityTypeElectronics,
 			Count:                  1,
 			OriginalPrice:          decimal.NewFromFloat(100.00),

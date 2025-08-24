@@ -16,7 +16,12 @@ import (
 
 func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()
@@ -163,7 +168,12 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 func TestEntityService_DeleteCommodityRecursive_NoFiles(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()

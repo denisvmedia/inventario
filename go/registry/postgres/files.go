@@ -21,6 +21,7 @@ type FileRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
 	userID     string
+	tenantID   string
 }
 
 func NewFileRegistry(dbx *sqlx.DB) *FileRegistry {
@@ -37,11 +38,12 @@ func NewFileRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *F
 func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
 	return &tmp, nil
 }
 

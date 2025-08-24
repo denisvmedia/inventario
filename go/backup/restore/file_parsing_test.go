@@ -16,7 +16,12 @@ import (
 
 func TestRestoreService_FileElementParsing(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()
@@ -136,7 +141,12 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 
 func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()
@@ -226,7 +236,12 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 
 func TestRestoreService_PriceValidationFix(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()
@@ -314,7 +329,12 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 
 func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()
@@ -422,7 +442,12 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 
 func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUserID(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
 	registrySet := memory.NewRegistrySet()

@@ -29,7 +29,12 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a manual with the original path
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 	comReg, err := params.RegistrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 

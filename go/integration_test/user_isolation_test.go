@@ -2,12 +2,15 @@ package integration_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
@@ -34,12 +37,14 @@ func setupTestDatabase(t *testing.T) (*registry.Set, func()) {
 
 // createTestUser creates a test user with the given email and returns the created user
 func createTestUser(c *qt.C, registrySet *registry.Set, email string) *models.User {
+	// Make email unique by adding timestamp to avoid conflicts between tests
+	uniqueEmail := fmt.Sprintf("%s-%d", email, time.Now().UnixNano())
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "user-" + email},
+			EntityID: models.EntityID{ID: "user-" + uniqueEmail},
 			TenantID: "test-tenant-id",
 		},
-		Email:    email,
+		Email:    uniqueEmail,
 		Name:     "Test User",
 		Role:     models.UserRoleUser,
 		IsActive: true,
@@ -57,7 +62,12 @@ func createTestUser(c *qt.C, registrySet *registry.Set, email string) *models.Us
 
 // withUserContext creates a context with the given user ID
 func withUserContext(ctx context.Context, userID string) context.Context {
-	return registry.WithUserContext(ctx, userID)
+	return appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 }
 
 // TestUserIsolation_Commodities tests that users cannot access each other's commodities
@@ -70,8 +80,37 @@ func TestUserIsolation_Commodities(t *testing.T) {
 	user1 := createTestUser(c, registrySet, "user1@example.com")
 	user2 := createTestUser(c, registrySet, "user2@example.com")
 
-	// Test: User1 creates a commodity
+	// Create location and area for user1's commodity
 	ctx1 := withUserContext(context.Background(), user1.ID)
+	location1 := models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "location-user1"},
+			TenantID: "test-tenant-id",
+			UserID:   user1.ID,
+		},
+		Name:    "User1 Location",
+		Address: "123 User1 Street",
+	}
+	userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	createdLocation1, err := userAwareLocationRegistry1.Create(ctx1, location1)
+	c.Assert(err, qt.IsNil)
+
+	area1 := models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "area-user1"},
+			TenantID: "test-tenant-id",
+			UserID:   user1.ID,
+		},
+		Name:       "User1 Area",
+		LocationID: createdLocation1.ID,
+	}
+	userAwareAreaRegistry1, err := registrySet.AreaRegistry.WithCurrentUser(ctx1)
+	c.Assert(err, qt.IsNil)
+	createdArea1, err := userAwareAreaRegistry1.Create(ctx1, area1)
+	c.Assert(err, qt.IsNil)
+
+	// Test: User1 creates a commodity
 	commodity1 := models.Commodity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "commodity-user1"},
@@ -80,6 +119,7 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		},
 		Name:                   "User1 Commodity",
 		ShortName:              "UC1",
+		AreaID:                 createdArea1.ID,
 		Type:                   models.CommodityTypeElectronics,
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
@@ -133,7 +173,6 @@ func TestUserIsolation_Locations(t *testing.T) {
 	ctx1 := withUserContext(context.Background(), user1.ID)
 	location1 := models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "location-user1"},
 			TenantID: "test-tenant-id",
 			UserID:   user1.ID,
 		},

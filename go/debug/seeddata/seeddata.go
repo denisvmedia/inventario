@@ -158,7 +158,12 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Set user context for settings (settings are per-user)
-	userCtx := appctx.WithUserID(ctx, "test-user-id")
+	userCtx := appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 	userAwareSettingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(userCtx)
 	if err != nil {
 		return fmt.Errorf("failed to create user-aware settings registry: %w", err)
@@ -170,7 +175,12 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Also create default settings for the second test user
-	userCtx2 := appctx.WithUserID(ctx, "test-user-2-id")
+	userCtx2 := appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-2-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 	userAwareSettingsRegistry2, err := registrySet.SettingsRegistry.WithCurrentUser(userCtx2)
 	if err != nil {
 		return fmt.Errorf("failed to create user-aware settings registry for user 2: %w", err)

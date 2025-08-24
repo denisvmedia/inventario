@@ -35,7 +35,7 @@ func NewAreaRegistry(locationRegistry *LocationRegistry) *AreaRegistry {
 }
 
 func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegistry, error) {
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
@@ -43,13 +43,13 @@ func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegist
 	// Create a new registry with the same data but different userID
 	tmp := &AreaRegistry{
 		baseAreaRegistry: r.baseAreaRegistry,
-		userID:           userID,
+		userID:           user.ID,
 		commodities:      r.commodities,
 		locationRegistry: r.locationRegistry,
 	}
 
 	// Set the userID on the base registry
-	tmp.baseAreaRegistry.userID = userID
+	tmp.baseAreaRegistry.userID = user.ID
 
 	return tmp, nil
 }

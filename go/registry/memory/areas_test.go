@@ -1,11 +1,11 @@
 package memory_test
 
 import (
-	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -13,11 +13,15 @@ import (
 
 func TestMemoryAreaRegistry_Create(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
 
 	// Add user context for user-aware entities
 	userID := "test-user-123"
-	ctx = registry.WithUserContext(ctx, userID)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create a new instance of AreaRegistry
 	locationRegistry := memory.NewLocationRegistry()
@@ -47,11 +51,15 @@ func TestMemoryAreaRegistry_Create(t *testing.T) {
 
 func TestAreaRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
 
 	// Add user context for user-aware entities
 	userID := "test-user-123"
-	ctx = registry.WithUserContext(ctx, userID)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create a new instance of AreaRegistry
 	locationRegistry := memory.NewLocationRegistry()
@@ -75,11 +83,15 @@ func TestAreaRegistry_Create_Validation(t *testing.T) {
 
 func TestAreaRegistry_Commodities(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
 
 	// Add user context for user-aware entities
 	userID := "test-user-123"
-	ctx = registry.WithUserContext(ctx, userID)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create a new instance of AreaRegistry
 	locationRegistry := memory.NewLocationRegistry()
@@ -124,11 +136,15 @@ func TestAreaRegistry_Commodities(t *testing.T) {
 
 func TestAreaRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
 
 	// Add user context for user-aware entities
 	userID := "test-user-123"
-	ctx = registry.WithUserContext(ctx, userID)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create a new instance of AreaRegistry
 	locationRegistry := memory.NewLocationRegistry()

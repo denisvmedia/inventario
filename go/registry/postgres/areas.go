@@ -20,6 +20,7 @@ type AreaRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
 	userID     string
+	tenantID   string
 }
 
 func NewAreaRegistry(dbx *sqlx.DB) *AreaRegistry {
@@ -36,11 +37,12 @@ func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *A
 func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegistry, error) {
 	tmp := *r
 
-	userID, err := appctx.RequireUserIDFromContext(ctx)
+	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = userID
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
 	return &tmp, nil
 }
 
@@ -76,6 +78,10 @@ func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
+	if area.GetID() == "" {
+		area.SetID(generateID())
+	}
+
 	reg := r.newSQLRegistry()
 
 	err := reg.Create(ctx, area, func(ctx context.Context, tx *sqlx.Tx) error {

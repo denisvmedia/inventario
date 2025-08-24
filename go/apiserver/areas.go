@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -104,7 +105,7 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use CreateWithUser to ensure proper user context and validation
-	ctx := registry.WithUserContext(r.Context(), user.ID)
+	ctx := appctx.WithUser(r.Context(), user)
 	areaReg, err := api.areaRegistry.WithCurrentUser(ctx)
 	if err != nil {
 		internalServerError(w, r, err)

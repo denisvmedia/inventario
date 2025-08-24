@@ -15,7 +15,13 @@ func TestSettingsRegistry_Get_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Get user-aware settings registry
 	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
@@ -65,7 +71,13 @@ func TestSettingsRegistry_Save_HappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := appctx.WithUserID(context.Background(), "test-user-id")
+			ctx := c.Context()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			// Get user-aware settings registry
 			settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
@@ -104,7 +116,13 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := appctx.WithUserID(context.Background(), "test-user-id")
+	ctx := c.Context()
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Get user-aware settings registry
 	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)

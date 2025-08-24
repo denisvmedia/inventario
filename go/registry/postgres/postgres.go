@@ -11,6 +11,7 @@ import (
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -41,8 +42,13 @@ func NewRegistrySet(dbx *sqlx.DB) *registry.Set {
 	return s
 }
 
-func NewRegistrySetWithUserID(dbx *sqlx.DB, userID string) *registry.Set {
-	ctx := appctx.WithUserID(context.Background(), userID)
+func NewRegistrySetWithUserID(dbx *sqlx.DB, userID, tenantID string) *registry.Set {
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: tenantID,
+		},
+	})
 
 	s := &registry.Set{}
 	s.LocationRegistry = must.Must(NewLocationRegistry(dbx).WithCurrentUser(ctx))

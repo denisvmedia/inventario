@@ -6,6 +6,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/valuation"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -25,7 +26,12 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	// Create a memory registry for testing
 	registrySet := memory.NewRegistrySet()
 
-	ctx := registry.WithUserContext(c.Context(), "test-user-id")
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Set main currency
 	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{
