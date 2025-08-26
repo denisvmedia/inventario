@@ -141,6 +141,7 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 //migrator:schema:rls:enable table="exports" comment="Enable RLS for multi-tenant export isolation"
 //migrator:schema:rls:policy name="export_tenant_isolation" table="exports" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures exports can only be accessed and modified by their tenant"
 //migrator:schema:rls:policy name="export_user_isolation" table="exports" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures exports can only be accessed and modified by their user"
+//migrator:schema:rls:policy name="export_background_worker_access" table="exports" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all exports for processing"
 
 //migrator:schema:table name="exports"
 type Export struct {

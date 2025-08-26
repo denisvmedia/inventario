@@ -20,6 +20,7 @@ type RestoreStepRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewRestoreStepRegistry(dbx *sqlx.DB) *RestoreStepRegistry {
@@ -46,7 +47,16 @@ func (r *RestoreStepRegistry) WithCurrentUser(ctx context.Context) (registry.Res
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *RestoreStepRegistry) WithServiceAccount() registry.RestoreStepRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *RestoreStepRegistry) Get(ctx context.Context, id string) (*models.RestoreStep, error) {
@@ -129,6 +139,9 @@ func (r *RestoreStepRegistry) Delete(ctx context.Context, id string) error {
 }
 
 func (r *RestoreStepRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreStep] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.RestoreStep](r.dbx, r.tableNames.RestoreSteps())
+	}
 	return store.NewUserAwareSQLRegistry[models.RestoreStep](r.dbx, r.userID, r.tableNames.RestoreSteps())
 }
 

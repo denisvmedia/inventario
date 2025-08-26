@@ -43,6 +43,12 @@ func (r *ManualRegistry) WithCurrentUser(ctx context.Context) (registry.ManualRe
 	return &tmp, nil
 }
 
+func (r *ManualRegistry) WithServiceAccount() registry.ManualRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
 	// Use CreateWithUser to ensure user context is applied
 	newManual, err := r.baseManualRegistry.CreateWithUser(ctx, manual)

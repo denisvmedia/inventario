@@ -66,6 +66,12 @@ func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.Commo
 	return tmp, nil
 }
 
+func (r *CommodityRegistry) WithServiceAccount() registry.CommodityRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.baseCommodityRegistry.CreateWithUser(ctx, commodity)

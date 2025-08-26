@@ -25,6 +25,7 @@ type SettingsRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewSettingsRegistry(dbx *sqlx.DB) *SettingsRegistry {
@@ -51,7 +52,16 @@ func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.Settin
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *SettingsRegistry) WithServiceAccount() registry.SettingsRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, error) {
@@ -195,5 +205,8 @@ func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settin
 }
 
 func (r *SettingsRegistry) newSQLRegistry() *store.RLSRepository[models.Setting] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Setting](r.dbx, r.tableNames.Settings())
+	}
 	return store.NewUserAwareSQLRegistry[models.Setting](r.dbx, r.userID, r.tableNames.Settings())
 }

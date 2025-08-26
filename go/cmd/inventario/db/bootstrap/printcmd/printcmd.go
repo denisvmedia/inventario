@@ -55,24 +55,30 @@ appropriate privileges.`,
 
 func (c *Command) registerFlags() {
 	shared.TryReadSection("bootstrap", &c.config)
-	shared.RegisterBootstrapFlags(c.Cmd(), &c.config.Username, &c.config.UsernameForMigrations)
+	shared.RegisterBootstrapFlags(c.Cmd(), &c.config.Username, &c.config.UsernameForMigrations, &c.config.UsernameForBackgroundWorker)
 }
 
 // bootstrapPrint handles the bootstrap print subcommand
 func (c *Command) bootstrapPrint() error {
 	username := c.config.Username
 	usernameForMigrations := c.config.UsernameForMigrations
+	usernameForBackgroundWorker := c.config.UsernameForBackgroundWorker
 
 	// Default usernameForMigrations to username if not provided
 	if usernameForMigrations == "" {
 		usernameForMigrations = username
 	}
 
+	if usernameForBackgroundWorker == "" {
+		usernameForBackgroundWorker = username
+	}
+
 	// Create bootstrap migrator and print migrations
 	migrator := bootstrap.New()
 	templateData := bootstrap.TemplateData{
-		Username:              username,
-		UsernameForMigrations: usernameForMigrations,
+		Username:                    username,
+		UsernameForMigrations:       usernameForMigrations,
+		UsernameForBackgroundWorker: usernameForBackgroundWorker,
 	}
 
 	err := migrator.Print(templateData)

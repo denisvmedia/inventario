@@ -94,6 +94,7 @@ var (
 //migrator:schema:rls:enable table="commodities" comment="Enable RLS for multi-tenant commodity isolation"
 //migrator:schema:rls:policy name="commodity_tenant_isolation" table="commodities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures commodities can only be accessed and modified by their tenant"
 //migrator:schema:rls:policy name="commodity_user_isolation" table="commodities" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures commodities can only be accessed and modified by their user"
+//migrator:schema:rls:policy name="commodity_background_worker_access" table="commodities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodities for processing"
 
 //migrator:schema:table name="commodities"
 type Commodity struct {

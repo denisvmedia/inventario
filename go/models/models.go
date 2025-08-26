@@ -161,6 +161,7 @@ func (s *StringSlice) Value() (driver.Value, error) {
 //migrator:schema:rls:enable table="files" comment="Enable RLS for multi-tenant file isolation"
 //migrator:schema:rls:policy name="file_tenant_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures files can only be accessed and modified by their tenant"
 //migrator:schema:rls:policy name="file_user_isolation" table="files" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures files can only be accessed and modified by their user"
+//migrator:schema:rls:policy name="file_background_worker_access" table="files" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all files for processing"
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:embedded mode="inline"

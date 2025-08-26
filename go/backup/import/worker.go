@@ -121,7 +121,7 @@ func (w *ImportWorker) run(ctx context.Context) {
 
 // processPendingImports finds and processes pending import requests
 func (w *ImportWorker) processPendingImports(ctx context.Context) {
-	exports, err := w.registrySet.ExportRegistry.List(ctx)
+	exports, err := w.registrySet.ExportRegistry.WithServiceAccount().List(ctx)
 	if err != nil {
 		log.WithError(err).Error("Failed to get exports")
 		return

@@ -23,6 +23,7 @@ type ExportRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewExportRegistry(dbx *sqlx.DB) *ExportRegistry {
@@ -49,7 +50,16 @@ func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRe
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *ExportRegistry) WithServiceAccount() registry.ExportRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
@@ -263,6 +273,9 @@ func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 }
 
 func (r *ExportRegistry) newSQLRegistry() *store.RLSRepository[models.Export] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Export](r.dbx, r.tableNames.Exports())
+	}
 	return store.NewUserAwareSQLRegistry[models.Export](r.dbx, r.userID, r.tableNames.Exports())
 }
 

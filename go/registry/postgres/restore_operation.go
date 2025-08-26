@@ -20,6 +20,7 @@ type RestoreOperationRegistry struct {
 	tableNames          store.TableNames
 	userID              string
 	tenantID            string
+	service             bool
 	restoreStepRegistry registry.RestoreStepRegistry
 }
 
@@ -48,6 +49,7 @@ func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registr
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 
 	// Also update the restore step registry with user context
 	userAwareStepRegistry, err := tmp.restoreStepRegistry.WithCurrentUser(ctx)
@@ -57,6 +59,15 @@ func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registr
 	tmp.restoreStepRegistry = userAwareStepRegistry
 
 	return &tmp, nil
+}
+
+func (r *RestoreOperationRegistry) WithServiceAccount() registry.RestoreOperationRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	tmp.restoreStepRegistry = tmp.restoreStepRegistry.WithServiceAccount()
+	return &tmp
 }
 
 func (r *RestoreOperationRegistry) Get(ctx context.Context, id string) (*models.RestoreOperation, error) {
@@ -153,6 +164,9 @@ func (r *RestoreOperationRegistry) Delete(ctx context.Context, id string) error 
 }
 
 func (r *RestoreOperationRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreOperation] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.RestoreOperation](r.dbx, r.tableNames.RestoreOperations())
+	}
 	return store.NewUserAwareSQLRegistry[models.RestoreOperation](r.dbx, r.userID, r.tableNames.RestoreOperations())
 }
 

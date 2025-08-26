@@ -6,6 +6,8 @@
 --      - Operational database username
 --   UsernameForMigrations: {{.UsernameForMigrations}}
 --      - Database username for migrations
+--   UsernameForBackgroundWorker: {{.UsernameForBackgroundWorker}}
+--      - Database username for background worker
 --
 -- IMPORTANT: Execute these statements with a privileged database user
 --
@@ -32,6 +34,17 @@ BEGIN
     END IF;
 END $$;
 
+-- Create background worker user if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '{{.UsernameForBackgroundWorker}}') THEN
+        CREATE USER {{.UsernameForBackgroundWorker}} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
+        RAISE NOTICE 'Created user {{.UsernameForBackgroundWorker}}';
+    ELSE
+        RAISE NOTICE 'User {{.UsernameForBackgroundWorker}} already exists';
+    END IF;
+END $$;
+
 CREATE EXTENSION IF NOT EXISTS btree_gin;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
@@ -53,6 +66,15 @@ BEGIN
     END IF;
 END $$;
 
+-- Create migration role for schema changes
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'inventario_background_worker') THEN
+        CREATE ROLE inventario_background_worker WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
+        RAISE NOTICE 'Created role inventario_background_worker';
+    END IF;
+END $$;
+
 -- Grant schema usage role to the operational user (only if different from role name)
 DO $$
 BEGIN
@@ -71,11 +93,23 @@ BEGIN
     END IF;
 END $$;
 
--- Migration role gets schema privileges
-GRANT USAGE, CREATE ON SCHEMA public TO inventario_migrator;
+-- Grant migration role to the background worker user (only if different from role name)
+DO $$
+   BEGIN
+    IF '{{.UsernameForBackgroundWorker}}' != 'inventario_background_worker' THEN
+        GRANT inventario_background_worker TO {{.UsernameForBackgroundWorker}};
+        RAISE NOTICE 'Granted inventario_background_worker role to {{.UsernameForBackgroundWorker}}';
+    END IF;
+END $$;
 
 -- App role gets only usage
 GRANT USAGE ON SCHEMA public TO inventario_app;
+
+-- Migration role gets schema privileges
+GRANT USAGE, CREATE ON SCHEMA public TO inventario_migrator;
+
+-- Background worker role gets schema privileges
+GRANT USAGE ON SCHEMA public TO inventario_background_worker;
 
 -- Default privileges for objects created by migrator role
 ALTER DEFAULT PRIVILEGES FOR ROLE inventario_migrator IN SCHEMA public
@@ -103,6 +137,9 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO inventario_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE inventario_migrator IN SCHEMA public
     GRANT EXECUTE ON FUNCTIONS TO inventario_app;
 
+ALTER DEFAULT PRIVILEGES FOR ROLE inventario_background_worker IN SCHEMA public
+    GRANT EXECUTE ON FUNCTIONS TO inventario_app;
+
 -- Grant privileges on existing objects to both roles
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO inventario_migrator;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO inventario_migrator;
@@ -111,6 +148,12 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO inventario_migrator;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO inventario_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO inventario_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO inventario_app;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO inventario_background_worker;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO inventario_background_worker;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO inventario_background_worker;
+
+
 
 -- Create default tenant if it doesn't exist (idempotent)
 -- This must run after migrations create the tenants table

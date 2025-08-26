@@ -57,7 +57,7 @@ permissions to create extensions and manage roles.`,
 
 func (c *Command) registerFlags() {
 	shared.TryReadSection("bootstrap", &c.config)
-	shared.RegisterBootstrapFlags(c.Cmd(), &c.config.Username, &c.config.UsernameForMigrations)
+	shared.RegisterBootstrapFlags(c.Cmd(), &c.config.Username, &c.config.UsernameForMigrations, &c.config.UsernameForBackgroundWorker)
 	shared.RegisterDryRunFlag(c.Cmd(), &c.config.DryRun)
 }
 
@@ -69,11 +69,16 @@ func (c *Command) bootstrapApply(dbConfig *shared.DatabaseConfig) error {
 	dsn := dbConfig.DBDSN
 	username := c.config.Username
 	usernameForMigrations := c.config.UsernameForMigrations
+	usernameForBackgroundWorker := c.config.UsernameForBackgroundWorker
 	dryRun := c.config.DryRun
 
 	// Default usernameForMigrations to username if not provided
 	if usernameForMigrations == "" {
 		usernameForMigrations = username
+	}
+
+	if c.config.UsernameForBackgroundWorker == "" {
+		usernameForBackgroundWorker = username
 	}
 
 	// Create bootstrap migrator
@@ -83,8 +88,9 @@ func (c *Command) bootstrapApply(dbConfig *shared.DatabaseConfig) error {
 	args := bootstrap.ApplyArgs{
 		DSN: dsn,
 		Template: bootstrap.TemplateData{
-			Username:              username,
-			UsernameForMigrations: usernameForMigrations,
+			Username:                    username,
+			UsernameForMigrations:       usernameForMigrations,
+			UsernameForBackgroundWorker: usernameForBackgroundWorker,
 		},
 		DryRun: dryRun,
 	}

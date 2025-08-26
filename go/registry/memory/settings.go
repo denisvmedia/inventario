@@ -46,6 +46,12 @@ func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.Settin
 	return tmp, nil
 }
 
+func (r *SettingsRegistry) WithServiceAccount() registry.SettingsRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *SettingsRegistry) Get(_ context.Context) (models.SettingsObject, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()

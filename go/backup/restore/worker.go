@@ -113,7 +113,7 @@ func (w *RestoreWorker) run(ctx context.Context) {
 
 // processPendingRestores finds and processes pending restore requests
 func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
-	restoreOperations, err := w.registrySet.RestoreOperationRegistry.List(ctx)
+	restoreOperations, err := w.registrySet.RestoreOperationRegistry.WithServiceAccount().List(ctx)
 	if err != nil {
 		log.WithError(err).Error("Failed to get restore operations")
 		return
@@ -150,7 +150,7 @@ func (w *RestoreWorker) processRestore(ctx context.Context, restoreOperationID s
 
 // HasRunningRestores checks if there are any restore operations currently running or pending
 func (w *RestoreWorker) HasRunningRestores(ctx context.Context) (bool, error) {
-	restoreOperations, err := w.registrySet.RestoreOperationRegistry.List(ctx)
+	restoreOperations, err := w.registrySet.RestoreOperationRegistry.WithServiceAccount().List(ctx)
 	if err != nil {
 		return false, err
 	}

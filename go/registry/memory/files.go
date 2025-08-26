@@ -44,6 +44,12 @@ func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegist
 	return &tmp, nil
 }
 
+func (r *FileRegistry) WithServiceAccount() registry.FileRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error) {
 	allFiles, err := r.List(ctx)
 	if err != nil {

@@ -22,6 +22,7 @@ type LocationRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewLocationRegistry(dbx *sqlx.DB) *LocationRegistry {
@@ -48,7 +49,16 @@ func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.Locati
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *LocationRegistry) WithServiceAccount() registry.LocationRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *LocationRegistry) Get(ctx context.Context, id string) (*models.Location, error) {
@@ -155,6 +165,9 @@ func (r *LocationRegistry) GetAreas(ctx context.Context, locationID string) ([]s
 }
 
 func (r *LocationRegistry) newSQLRegistry() *store.RLSRepository[models.Location] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Location](r.dbx, r.tableNames.Locations())
+	}
 	return store.NewUserAwareSQLRegistry[models.Location](r.dbx, r.userID, r.tableNames.Locations())
 }
 

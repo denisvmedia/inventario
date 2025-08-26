@@ -111,7 +111,7 @@ func (w *ExportWorker) run(ctx context.Context) {
 
 // processPendingExports finds and processes pending export requests
 func (w *ExportWorker) processPendingExports(ctx context.Context) {
-	exports, err := w.registrySet.ExportRegistry.List(ctx)
+	exports, err := w.registrySet.ExportRegistry.WithServiceAccount().List(ctx)
 	if err != nil {
 		log.WithError(err).Error("Failed to get exports")
 		return

@@ -20,6 +20,7 @@ type ManualRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewManualRegistry(dbx *sqlx.DB) *ManualRegistry {
@@ -46,7 +47,16 @@ func (r *ManualRegistry) WithCurrentUser(ctx context.Context) (registry.ManualRe
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *ManualRegistry) WithServiceAccount() registry.ManualRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *ManualRegistry) Get(ctx context.Context, id string) (*models.Manual, error) {
@@ -133,6 +143,9 @@ func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
 }
 
 func (r *ManualRegistry) newSQLRegistry() *store.RLSRepository[models.Manual] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Manual](r.dbx, r.tableNames.Manuals())
+	}
 	return store.NewUserAwareSQLRegistry[models.Manual](r.dbx, r.userID, r.tableNames.Manuals())
 }
 

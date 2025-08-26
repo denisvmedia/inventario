@@ -7,7 +7,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/backup/restore/processor"
+	"github.com/denisvmedia/inventario/backup/restore/types"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
@@ -67,16 +68,16 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "mem://")
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
 
 	// Test restore with full replace strategy (this should now work with recursive delete)
-	options := restore.RestoreOptions{
-		Strategy: restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy: types.RestoreStrategyFullReplace,
 		DryRun:   false,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats, qt.IsNotNil)
 
@@ -146,11 +147,11 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "mem://")
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
 
 	// Test restore with full replace strategy
-	options := restore.RestoreOptions{
-		Strategy: restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy: types.RestoreStrategyFullReplace,
 		DryRun:   false,
 	}
 
@@ -165,7 +166,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 </backup>`
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats, qt.IsNotNil)
 

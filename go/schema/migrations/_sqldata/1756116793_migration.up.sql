@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2025-08-24T13:52:43+02:00
+-- Generated on: 2025-08-25T12:13:13+02:00
 -- Direction: UP
 
 -- Gets the current tenant ID from session for RLS policies
@@ -55,6 +55,14 @@ CREATE TABLE settings (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
+-- POSTGRES TABLE: locations --
+CREATE TABLE locations (
+  name TEXT NOT NULL,
+  address TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL
+);
 -- POSTGRES TABLE: files --
 CREATE TABLE files (
   title TEXT,
@@ -74,10 +82,10 @@ CREATE TABLE files (
   ext TEXT NOT NULL,
   mime_type TEXT NOT NULL
 );
--- POSTGRES TABLE: locations --
-CREATE TABLE locations (
+-- POSTGRES TABLE: areas --
+CREATE TABLE areas (
   name TEXT NOT NULL,
-  address TEXT NOT NULL,
+  location_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
@@ -108,36 +116,6 @@ CREATE TABLE exports (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
--- POSTGRES TABLE: areas --
-CREATE TABLE areas (
-  name TEXT NOT NULL,
-  location_id TEXT NOT NULL,
-  tenant_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  id TEXT PRIMARY KEY NOT NULL
-);
--- POSTGRES TABLE: restore_operations --
-CREATE TABLE restore_operations (
-  export_id TEXT NOT NULL,
-  description TEXT NOT NULL,
-  status TEXT NOT NULL,
-  options JSONB NOT NULL,
-  created_date TIMESTAMP NOT NULL,
-  started_date TIMESTAMP,
-  completed_date TIMESTAMP,
-  error_message TEXT,
-  location_count INTEGER DEFAULT '0',
-  area_count INTEGER DEFAULT '0',
-  commodity_count INTEGER DEFAULT '0',
-  image_count INTEGER DEFAULT '0',
-  invoice_count INTEGER DEFAULT '0',
-  manual_count INTEGER DEFAULT '0',
-  binary_data_size BIGINT DEFAULT '0',
-  error_count INTEGER DEFAULT '0',
-  tenant_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  id TEXT PRIMARY KEY NOT NULL
-);
 -- POSTGRES TABLE: commodities --
 CREATE TABLE commodities (
   name TEXT NOT NULL,
@@ -164,15 +142,24 @@ CREATE TABLE commodities (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
--- POSTGRES TABLE: restore_steps --
-CREATE TABLE restore_steps (
-  restore_operation_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  result TEXT NOT NULL,
-  duration BIGINT,
-  reason TEXT,
+-- POSTGRES TABLE: restore_operations --
+CREATE TABLE restore_operations (
+  export_id TEXT NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL,
+  options JSONB NOT NULL,
   created_date TIMESTAMP NOT NULL,
-  updated_date TIMESTAMP NOT NULL,
+  started_date TIMESTAMP,
+  completed_date TIMESTAMP,
+  error_message TEXT,
+  location_count INTEGER DEFAULT '0',
+  area_count INTEGER DEFAULT '0',
+  commodity_count INTEGER DEFAULT '0',
+  image_count INTEGER DEFAULT '0',
+  invoice_count INTEGER DEFAULT '0',
+  manual_count INTEGER DEFAULT '0',
+  binary_data_size BIGINT DEFAULT '0',
+  error_count INTEGER DEFAULT '0',
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
@@ -210,6 +197,19 @@ CREATE TABLE manuals (
   ext TEXT NOT NULL,
   mime_type TEXT NOT NULL
 );
+-- POSTGRES TABLE: restore_steps --
+CREATE TABLE restore_steps (
+  restore_operation_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  result TEXT NOT NULL,
+  duration BIGINT,
+  reason TEXT,
+  created_date TIMESTAMP NOT NULL,
+  updated_date TIMESTAMP NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL
+);
 -- ALTER statements: --
 ALTER TABLE users ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
@@ -219,19 +219,13 @@ ALTER TABLE settings ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REF
 -- ALTER statements: --
 ALTER TABLE settings ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE files ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
--- ALTER statements: --
-ALTER TABLE files ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- ALTER statements: --
 ALTER TABLE locations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE locations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE exports ADD CONSTRAINT fk_export_file FOREIGN KEY (file_id) REFERENCES files(id);
+ALTER TABLE files ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
-ALTER TABLE exports ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
--- ALTER statements: --
-ALTER TABLE exports ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE files ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE areas ADD CONSTRAINT fk_area_location FOREIGN KEY (location_id) REFERENCES locations(id);
 -- ALTER statements: --
@@ -239,11 +233,11 @@ ALTER TABLE areas ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERE
 -- ALTER statements: --
 ALTER TABLE areas ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE restore_operations ADD CONSTRAINT fk_restore_operation_export FOREIGN KEY (export_id) REFERENCES exports(id);
+ALTER TABLE exports ADD CONSTRAINT fk_export_file FOREIGN KEY (file_id) REFERENCES files(id);
 -- ALTER statements: --
-ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+ALTER TABLE exports ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
-ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE exports ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE commodities ADD CONSTRAINT fk_commodity_area FOREIGN KEY (area_id) REFERENCES areas(id);
 -- ALTER statements: --
@@ -251,11 +245,11 @@ ALTER TABLE commodities ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) 
 -- ALTER statements: --
 ALTER TABLE commodities ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE restore_steps ADD CONSTRAINT fk_restore_step_operation FOREIGN KEY (restore_operation_id) REFERENCES restore_operations(id);
+ALTER TABLE restore_operations ADD CONSTRAINT fk_restore_operation_export FOREIGN KEY (export_id) REFERENCES exports(id);
 -- ALTER statements: --
-ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
-ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE images ADD CONSTRAINT fk_image_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
 -- ALTER statements: --
@@ -274,30 +268,41 @@ ALTER TABLE manuals ADD CONSTRAINT fk_manual_commodity FOREIGN KEY (commodity_id
 ALTER TABLE manuals ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE manuals ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- Enable RLS for images table
-ALTER TABLE images ENABLE ROW LEVEL SECURITY;
--- Enable RLS for invoices table
-ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
--- Enable RLS for locations table
-ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_operations table
-ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
+-- ALTER statements: --
+ALTER TABLE restore_steps ADD CONSTRAINT fk_restore_step_operation FOREIGN KEY (restore_operation_id) REFERENCES restore_operations(id);
+-- ALTER statements: --
+ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- Enable RLS for settings table
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for users table
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
--- Enable RLS for commodities table
-ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
--- Enable RLS for manuals table
-ALTER TABLE manuals ENABLE ROW LEVEL SECURITY;
--- Enable RLS for files table
-ALTER TABLE files ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_steps table
-ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for areas table
 ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for exports table
 ALTER TABLE exports ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for images table
+ALTER TABLE images ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for invoices table
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for manuals table
+ALTER TABLE manuals ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_operations table
+ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for commodities table
+ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for locations table
+ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for files table
+ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_steps table
+ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
+-- Allows background workers to access all areas for processing
+DROP POLICY IF EXISTS area_background_worker_access ON areas;
+CREATE POLICY area_background_worker_access ON areas FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures areas can only be accessed by their tenant
 DROP POLICY IF EXISTS area_tenant_isolation ON areas;
 CREATE POLICY area_tenant_isolation ON areas FOR ALL TO inventario_app
@@ -307,6 +312,11 @@ DROP POLICY IF EXISTS area_user_isolation ON areas;
 CREATE POLICY area_user_isolation ON areas FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all commodities for processing
+DROP POLICY IF EXISTS commodity_background_worker_access ON commodities;
+CREATE POLICY commodity_background_worker_access ON commodities FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures commodities can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS commodity_tenant_isolation ON commodities;
 CREATE POLICY commodity_tenant_isolation ON commodities FOR ALL TO inventario_app
@@ -317,6 +327,11 @@ DROP POLICY IF EXISTS commodity_user_isolation ON commodities;
 CREATE POLICY commodity_user_isolation ON commodities FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all exports for processing
+DROP POLICY IF EXISTS export_background_worker_access ON exports;
+CREATE POLICY export_background_worker_access ON exports FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures exports can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS export_tenant_isolation ON exports;
 CREATE POLICY export_tenant_isolation ON exports FOR ALL TO inventario_app
@@ -327,6 +342,11 @@ DROP POLICY IF EXISTS export_user_isolation ON exports;
 CREATE POLICY export_user_isolation ON exports FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all files for processing
+DROP POLICY IF EXISTS file_background_worker_access ON files;
+CREATE POLICY file_background_worker_access ON files FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures files can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS file_tenant_isolation ON files;
 CREATE POLICY file_tenant_isolation ON files FOR ALL TO inventario_app
@@ -347,6 +367,11 @@ DROP POLICY IF EXISTS image_user_isolation ON images;
 CREATE POLICY image_user_isolation ON images FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all invoices for processing
+DROP POLICY IF EXISTS invoice_background_worker_access ON invoices;
+CREATE POLICY invoice_background_worker_access ON invoices FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures invoices can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS invoice_tenant_isolation ON invoices;
 CREATE POLICY invoice_tenant_isolation ON invoices FOR ALL TO inventario_app
@@ -357,6 +382,11 @@ DROP POLICY IF EXISTS invoice_user_isolation ON invoices;
 CREATE POLICY invoice_user_isolation ON invoices FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all locations for processing
+DROP POLICY IF EXISTS location_background_worker_access ON locations;
+CREATE POLICY location_background_worker_access ON locations FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures locations can only be accessed by their tenant
 DROP POLICY IF EXISTS location_tenant_isolation ON locations;
 CREATE POLICY location_tenant_isolation ON locations FOR ALL TO inventario_app
@@ -366,6 +396,11 @@ DROP POLICY IF EXISTS location_user_isolation ON locations;
 CREATE POLICY location_user_isolation ON locations FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all manuals for processing
+DROP POLICY IF EXISTS manual_background_worker_access ON manuals;
+CREATE POLICY manual_background_worker_access ON manuals FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures manuals can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS manual_tenant_isolation ON manuals;
 CREATE POLICY manual_tenant_isolation ON manuals FOR ALL TO inventario_app
@@ -376,6 +411,11 @@ DROP POLICY IF EXISTS manual_user_isolation ON manuals;
 CREATE POLICY manual_user_isolation ON manuals FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all restore operations for processing
+DROP POLICY IF EXISTS restore_operation_background_worker_access ON restore_operations;
+CREATE POLICY restore_operation_background_worker_access ON restore_operations FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures restore operations can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS restore_operation_tenant_isolation ON restore_operations;
 CREATE POLICY restore_operation_tenant_isolation ON restore_operations FOR ALL TO inventario_app
@@ -386,6 +426,11 @@ DROP POLICY IF EXISTS restore_operation_user_isolation ON restore_operations;
 CREATE POLICY restore_operation_user_isolation ON restore_operations FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all restore steps for processing
+DROP POLICY IF EXISTS restore_step_background_worker_access ON restore_steps;
+CREATE POLICY restore_step_background_worker_access ON restore_steps FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures restore steps can only be accessed and modified by their tenant
 DROP POLICY IF EXISTS restore_step_tenant_isolation ON restore_steps;
 CREATE POLICY restore_step_tenant_isolation ON restore_steps FOR ALL TO inventario_app
@@ -396,6 +441,11 @@ DROP POLICY IF EXISTS restore_step_user_isolation ON restore_steps;
 CREATE POLICY restore_step_user_isolation ON restore_steps FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all settings for processing
+DROP POLICY IF EXISTS setting_background_worker_access ON settings;
+CREATE POLICY setting_background_worker_access ON settings FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures settings can only be accessed by their tenant
 DROP POLICY IF EXISTS setting_tenant_isolation ON settings;
 CREATE POLICY setting_tenant_isolation ON settings FOR ALL TO inventario_app
@@ -405,6 +455,11 @@ DROP POLICY IF EXISTS setting_user_isolation ON settings;
 CREATE POLICY setting_user_isolation ON settings FOR ALL TO inventario_app
     USING (user_id = get_current_user_id())
     WITH CHECK (user_id = get_current_user_id());
+-- Allows background workers to access all users for processing
+DROP POLICY IF EXISTS user_background_worker_access ON users;
+CREATE POLICY user_background_worker_access ON users FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures users can only access their tenant's data
 DROP POLICY IF EXISTS user_tenant_isolation ON users;
 CREATE POLICY user_tenant_isolation ON users FOR ALL TO inventario_app

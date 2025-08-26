@@ -1,4 +1,4 @@
-package restore
+package types
 
 import (
 	"encoding/xml"
@@ -8,6 +8,68 @@ import (
 
 	"github.com/denisvmedia/inventario/models"
 )
+
+// RestoreOptions contains options for the restore operation
+type RestoreOptions struct {
+	Strategy        RestoreStrategy `json:"strategy"`
+	IncludeFileData bool            `json:"include_file_data"`
+	DryRun          bool            `json:"dry_run"`
+}
+
+// RestoreStrategy defines how to handle existing data during restore
+type RestoreStrategy string
+
+const (
+	// RestoreStrategyFullReplace wipes the current database and restores everything from backup
+	RestoreStrategyFullReplace RestoreStrategy = "full_replace"
+	// RestoreStrategyMergeAdd only adds data from backup that is missing in current DB
+	RestoreStrategyMergeAdd RestoreStrategy = "merge_add"
+	// RestoreStrategyMergeUpdate creates if missing, updates if exists, leaves other records untouched
+	RestoreStrategyMergeUpdate RestoreStrategy = "merge_update"
+)
+
+// RestoreStats tracks statistics during restore operation
+type RestoreStats struct {
+	LocationCount  int      `json:"location_count"`
+	AreaCount      int      `json:"area_count"`
+	CommodityCount int      `json:"commodity_count"`
+	ImageCount     int      `json:"image_count"`
+	InvoiceCount   int      `json:"invoice_count"`
+	ManualCount    int      `json:"manual_count"`
+	BinaryDataSize int64    `json:"binary_data_size"`
+	ErrorCount     int      `json:"error_count"`
+	Errors         []string `json:"errors"`
+	SkippedCount   int      `json:"skipped_count"`
+	UpdatedCount   int      `json:"updated_count"`
+	CreatedCount   int      `json:"created_count"`
+	DeletedCount   int      `json:"deleted_count"`
+}
+
+// IDMapping tracks the mapping from XML IDs to actual database IDs
+type IDMapping struct {
+	Locations   map[string]string // XML ID -> Database ID
+	Areas       map[string]string // XML ID -> Database ID
+	Commodities map[string]string // XML ID -> Database ID
+	Images      map[string]string // XML ID -> Database ID
+	Invoices    map[string]string // XML ID -> Database ID
+	Manuals     map[string]string // XML ID -> Database ID
+}
+
+// PendingFileData holds file data that needs to be processed after commodity creation
+type PendingFileData struct {
+	FileType string    // "image", "invoice", "manual"
+	XMLFiles []XMLFile // File data collected during parsing
+}
+
+// ExistingEntities tracks existing entities in the database
+type ExistingEntities struct {
+	Locations   map[string]*models.Location
+	Areas       map[string]*models.Area
+	Commodities map[string]*models.Commodity
+	Images      map[string]*models.Image   // XML ID -> Image
+	Invoices    map[string]*models.Invoice // XML ID -> Invoice
+	Manuals     map[string]*models.Manual  // XML ID -> Manual
+}
 
 // XMLInventory represents the root element of the XML export
 type XMLInventory struct {

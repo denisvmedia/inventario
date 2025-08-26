@@ -1,4 +1,4 @@
-package export_test
+package parser_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/backup/export"
+	"github.com/denisvmedia/inventario/backup/export/parser"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
@@ -19,7 +19,6 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 	// Create test registry
 	registrySet := memory.NewRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
-	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
 
@@ -72,7 +71,7 @@ func TestExportService_parseXMLMetadata(t *testing.T) {
 			c := qt.New(t)
 
 			reader := strings.NewReader(tt.xmlContent)
-			stats, exportType, err := service.ParseXMLMetadata(ctx, reader)
+			stats, exportType, err := parser.ParseXMLMetadata(ctx, reader)
 
 			c.Assert(err, qt.IsNil)
 			c.Assert(exportType, qt.Equals, tt.expectedType)
@@ -90,7 +89,6 @@ func TestExportService_parseXMLMetadata_Errors(t *testing.T) {
 	// Create test registry
 	registrySet := memory.NewRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
-	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
 
@@ -116,7 +114,7 @@ func TestExportService_parseXMLMetadata_Errors(t *testing.T) {
 			c := qt.New(t)
 
 			reader := strings.NewReader(tt.xmlContent)
-			_, _, err := service.ParseXMLMetadata(ctx, reader)
+			_, _, err := parser.ParseXMLMetadata(ctx, reader)
 
 			if tt.expectError {
 				c.Assert(err, qt.IsNotNil)
@@ -133,7 +131,6 @@ func TestExportService_parseXMLMetadata_LargeFile(t *testing.T) {
 	// Create test registry
 	registrySet := memory.NewRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
-	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
 
@@ -170,7 +167,7 @@ func TestExportService_parseXMLMetadata_LargeFile(t *testing.T) {
 </inventory>`, largeBase64Data, largeBase64Data, largeBase64Data)
 
 	reader := strings.NewReader(xmlContent)
-	stats, exportType, err := service.ParseXMLMetadata(ctx, reader)
+	stats, exportType, err := parser.ParseXMLMetadata(ctx, reader)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(exportType, qt.Equals, models.ExportTypeCommodities)
@@ -191,7 +188,6 @@ func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {
 	// Create test registry
 	registrySet := memory.NewRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
-	service := export.NewExportService(registrySet, "mem://test-bucket")
 
 	ctx := context.Background()
 
@@ -218,7 +214,7 @@ func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {
 </inventory>`
 
 	reader := strings.NewReader(xmlContent)
-	stats, exportType, err := service.ParseXMLMetadata(ctx, reader)
+	stats, exportType, err := parser.ParseXMLMetadata(ctx, reader)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(exportType, qt.Equals, models.ExportTypeCommodities)

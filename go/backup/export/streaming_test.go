@@ -8,6 +8,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/backup/export/types"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -34,7 +35,7 @@ func TestStreamCommodityDirectly(t *testing.T) {
 	encoder.Indent("", "  ")
 
 	args := ExportArgs{IncludeFileData: false}
-	stats := &ExportStats{}
+	stats := &types.ExportStats{}
 	err := service.streamCommodityDirectly(ctx, encoder, commodity, args, stats)
 	c.Assert(err, qt.IsNil)
 

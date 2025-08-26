@@ -11,6 +11,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/export"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -84,6 +85,12 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [get].
 func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
+	err := appctx.ValidateUserContext(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	exp := exportFromContext(r.Context())
 	if exp == nil {
 		unprocessableEntityError(w, r, nil)
@@ -107,6 +114,12 @@ func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Router /exports [post].
 func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
+	err := appctx.ValidateUserContext(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	var request jsonapi.ExportCreateRequest
 	if err := render.Bind(r, &request); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -139,6 +152,12 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [delete].
 func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
+	err := appctx.ValidateUserContext(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	exp := exportFromContext(r.Context())
 	if exp == nil {
 		unprocessableEntityError(w, r, nil)
@@ -146,7 +165,7 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use entity service to properly handle export and file deletion
-	err := api.entityService.DeleteExportWithFile(r.Context(), exp.ID)
+	err = api.entityService.DeleteExportWithFile(r.Context(), exp.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

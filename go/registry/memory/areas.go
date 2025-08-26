@@ -58,6 +58,12 @@ func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegist
 	return tmp, nil
 }
 
+func (r *AreaRegistry) WithServiceAccount() registry.AreaRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	// Use CreateWithUser to ensure user context is applied
 	newArea, err := r.baseAreaRegistry.CreateWithUser(ctx, area)

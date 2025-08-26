@@ -20,6 +20,7 @@ type ImageRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewImageRegistry(dbx *sqlx.DB) *ImageRegistry {
@@ -46,7 +47,16 @@ func (r *ImageRegistry) WithCurrentUser(ctx context.Context) (registry.ImageRegi
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *ImageRegistry) WithServiceAccount() registry.ImageRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *ImageRegistry) Get(ctx context.Context, id string) (*models.Image, error) {
@@ -133,6 +143,9 @@ func (r *ImageRegistry) Delete(ctx context.Context, id string) error {
 }
 
 func (r *ImageRegistry) newSQLRegistry() *store.RLSRepository[models.Image] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Image](r.dbx, r.tableNames.Images())
+	}
 	return store.NewUserAwareSQLRegistry[models.Image](r.dbx, r.userID, r.tableNames.Images())
 }
 

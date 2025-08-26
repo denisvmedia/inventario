@@ -42,6 +42,12 @@ func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registr
 	return &tmp, nil
 }
 
+func (r *RestoreOperationRegistry) WithServiceAccount() registry.RestoreOperationRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()

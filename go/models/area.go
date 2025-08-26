@@ -17,6 +17,7 @@ var (
 //migrator:schema:rls:enable table="areas" comment="Enable RLS for multi-tenant area isolation"
 //migrator:schema:rls:policy name="area_tenant_isolation" table="areas" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" comment="Ensures areas can only be accessed by their tenant"
 //migrator:schema:rls:policy name="area_user_isolation" table="areas" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures areas can only be accessed and modified by their user"
+//migrator:schema:rls:policy name="area_background_worker_access" table="areas" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all areas for processing"
 
 //migrator:schema:table name="areas"
 type Area struct {

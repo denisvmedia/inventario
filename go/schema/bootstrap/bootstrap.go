@@ -19,8 +19,9 @@ var bootstrapFS embed.FS
 
 // TemplateData holds the template variables for SQL migrations
 type TemplateData struct {
-	Username              string
-	UsernameForMigrations string
+	Username                    string
+	UsernameForMigrations       string
+	UsernameForBackgroundWorker string
 }
 
 // ApplyArgs contains arguments for applying bootstrap migrations

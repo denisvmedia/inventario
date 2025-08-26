@@ -22,6 +22,7 @@ type AreaRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewAreaRegistry(dbx *sqlx.DB) *AreaRegistry {
@@ -48,7 +49,16 @@ func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegist
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *AreaRegistry) WithServiceAccount() registry.AreaRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *AreaRegistry) Get(ctx context.Context, id string) (*models.Area, error) {
@@ -209,6 +219,9 @@ func (r *AreaRegistry) SearchByName(ctx context.Context, query string) ([]*model
 }
 
 func (r *AreaRegistry) newSQLRegistry() *store.RLSRepository[models.Area] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Area](r.dbx, r.tableNames.Areas())
+	}
 	return store.NewUserAwareSQLRegistry[models.Area](r.dbx, r.userID, r.tableNames.Areas())
 }
 

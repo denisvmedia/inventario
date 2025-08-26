@@ -40,6 +40,12 @@ func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRe
 	return &tmp, nil
 }
 
+func (r *ExportRegistry) WithServiceAccount() registry.ExportRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 // List returns only non-deleted exports
 func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
 	allExports, err := r.Registry.List(ctx)

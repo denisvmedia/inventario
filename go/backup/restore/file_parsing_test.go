@@ -7,7 +7,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/backup/restore/processor"
+	"github.com/denisvmedia/inventario/backup/restore/types"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Import blob drivers
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -80,17 +81,17 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 
 	// Create restore service with file:// blob storage for testing
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the basic data was restored correctly
@@ -205,17 +206,17 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing DISABLED
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: false, // Disable file processing
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the basic data was restored correctly
@@ -293,17 +294,17 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: false,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify no validation errors occurred
@@ -407,17 +408,17 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: false,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify no duplication occurred - exact counts should match XML
@@ -531,17 +532,17 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 
 	// Create restore service with file:// blob storage for testing
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify all data was restored correctly

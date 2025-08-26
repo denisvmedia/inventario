@@ -43,6 +43,12 @@ func (r *InvoiceRegistry) WithCurrentUser(ctx context.Context) (registry.Invoice
 	return &tmp, nil
 }
 
+func (r *InvoiceRegistry) WithServiceAccount() registry.InvoiceRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
 	// Use CreateWithUser to ensure user context is applied
 	newInvoice, err := r.baseInvoiceRegistry.CreateWithUser(ctx, invoice)

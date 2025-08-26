@@ -43,6 +43,12 @@ func (r *ImageRegistry) WithCurrentUser(ctx context.Context) (registry.ImageRegi
 	return &tmp, nil
 }
 
+func (r *ImageRegistry) WithServiceAccount() registry.ImageRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models.Image, error) {
 	// Use CreateWithUser to ensure user context is applied
 	newImage, err := r.baseImageRegistry.CreateWithUser(ctx, image)

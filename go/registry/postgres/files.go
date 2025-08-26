@@ -23,6 +23,7 @@ type FileRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewFileRegistry(dbx *sqlx.DB) *FileRegistry {
@@ -49,7 +50,16 @@ func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegist
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *FileRegistry) WithServiceAccount() registry.FileRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
@@ -117,6 +127,9 @@ func (r *FileRegistry) Delete(ctx context.Context, id string) error {
 }
 
 func (r *FileRegistry) newSQLRegistry() *store.RLSRepository[models.FileEntity] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.FileEntity](r.dbx, r.tableNames.Files())
+	}
 	return store.NewUserAwareSQLRegistry[models.FileEntity](r.dbx, r.userID, r.tableNames.Files())
 }
 

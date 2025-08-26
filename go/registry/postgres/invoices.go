@@ -20,6 +20,7 @@ type InvoiceRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewInvoiceRegistry(dbx *sqlx.DB) *InvoiceRegistry {
@@ -46,7 +47,16 @@ func (r *InvoiceRegistry) WithCurrentUser(ctx context.Context) (registry.Invoice
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *InvoiceRegistry) WithServiceAccount() registry.InvoiceRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *InvoiceRegistry) Get(ctx context.Context, id string) (*models.Invoice, error) {
@@ -133,6 +143,9 @@ func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 }
 
 func (r *InvoiceRegistry) newSQLRegistry() *store.RLSRepository[models.Invoice] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Invoice](r.dbx, r.tableNames.Invoices())
+	}
 	return store.NewUserAwareSQLRegistry[models.Invoice](r.dbx, r.userID, r.tableNames.Invoices())
 }
 

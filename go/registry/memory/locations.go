@@ -54,6 +54,12 @@ func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.Locati
 	return tmp, nil
 }
 
+func (r *LocationRegistry) WithServiceAccount() registry.LocationRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 	_, err := r.baseLocationRegistry.Get(ctx, id)
 	if err != nil {

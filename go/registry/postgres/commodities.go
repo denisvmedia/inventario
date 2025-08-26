@@ -20,6 +20,7 @@ type CommodityRegistry struct {
 	tableNames store.TableNames
 	userID     string
 	tenantID   string
+	service    bool
 }
 
 func NewCommodityRegistry(dbx *sqlx.DB) *CommodityRegistry {
@@ -46,7 +47,16 @@ func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.Commo
 	}
 	tmp.userID = user.ID
 	tmp.tenantID = user.TenantID
+	tmp.service = false
 	return &tmp, nil
+}
+
+func (r *CommodityRegistry) WithServiceAccount() registry.CommodityRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
 }
 
 func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodity, error) {
@@ -134,6 +144,9 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 }
 
 func (r *CommodityRegistry) newSQLRegistry() *store.RLSRepository[models.Commodity] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Commodity](r.dbx, r.tableNames.Commodities())
+	}
 	return store.NewUserAwareSQLRegistry[models.Commodity](r.dbx, r.userID, r.tableNames.Commodities())
 }
 

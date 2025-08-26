@@ -8,20 +8,29 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
-	"github.com/denisvmedia/inventario/models"
 )
 
 type RLSRepository[T any] struct {
-	dbx    *sqlx.DB
-	userID string
-	table  TableName
+	dbx     *sqlx.DB
+	userID  string
+	table   TableName
+	service bool
 }
 
 func NewUserAwareSQLRegistry[T any](dbx *sqlx.DB, userID string, table TableName) *RLSRepository[T] {
 	return &RLSRepository[T]{
-		dbx:    dbx,
-		userID: userID,
-		table:  table,
+		dbx:     dbx,
+		userID:  userID,
+		table:   table,
+		service: false,
+	}
+}
+
+func NewServiceSQLRegistry[T any](dbx *sqlx.DB, table TableName) *RLSRepository[T] {
+	return &RLSRepository[T]{
+		dbx:     dbx,
+		table:   table,
+		service: true,
 	}
 }
 
@@ -128,7 +137,7 @@ func (r *RLSRepository[T]) Update(ctx context.Context, entity T, checkerFn func(
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	idable := r.entityToIDAble(entity)
+	idable := entityToIDAble(entity)
 	field := Pair("id", idable.GetID())
 
 	// check if entity exists
@@ -196,7 +205,7 @@ func (r *RLSRepository[T]) DoWithEntity(ctx context.Context, entity T, operation
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	idable := r.entityToIDAble(entity)
+	idable := entityToIDAble(entity)
 	field := Pair("id", idable.GetID())
 
 	// check if entity exists
@@ -264,37 +273,8 @@ func (r *RLSRepository[T]) Do(ctx context.Context, operationFn func(context.Cont
 }
 
 func (r *RLSRepository[T]) beginTx(ctx context.Context) (*sqlx.Tx, error) {
-	if r.userID == "" {
-		return nil, ErrUserIDRequired
+	if r.service {
+		return beginServiceTx(ctx, r.dbx)
 	}
-
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to begin transaction")
-	}
-
-	err = setAppRole(ctx, tx)
-	if err != nil {
-		tx.Rollback()
-		return nil, errkit.Wrap(err, "failed to set app role")
-	}
-
-	err = setUserContext(ctx, tx, r.userID)
-	if err != nil {
-		tx.Rollback()
-		return nil, errkit.Wrap(err, "failed to set user context")
-	}
-
-	return tx, nil
-}
-
-func (r *RLSRepository[T]) entityToIDAble(entity T) models.IDable {
-	idable, ok := (any(entity)).(models.IDable)
-	if !ok {
-		idable, ok = (any(&entity)).(models.IDable)
-		if !ok {
-			panic("entity is not IDable")
-		}
-	}
-	return idable
+	return beginUserTx(ctx, r.dbx, r.userID)
 }

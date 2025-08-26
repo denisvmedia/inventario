@@ -8,7 +8,6 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
-	"github.com/denisvmedia/inventario/models"
 )
 
 // NonRLSRepository provides basic SQL operations without user context requirements
@@ -148,7 +147,7 @@ func (r *NonRLSRepository[T]) Update(ctx context.Context, entity T, checkerFn fu
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	idable := r.entityToIDAble(entity)
+	idable := entityToIDAble(entity)
 	field := Pair("id", idable.GetID())
 
 	// check if entity exists
@@ -227,15 +226,4 @@ func (r *NonRLSRepository[T]) Do(ctx context.Context, operationFn func(context.C
 	}
 
 	return nil
-}
-
-func (r *NonRLSRepository[T]) entityToIDAble(entity T) models.IDable {
-	idable, ok := (any(entity)).(models.IDable)
-	if !ok {
-		idable, ok = (any(&entity)).(models.IDable)
-		if !ok {
-			panic("entity is not IDable")
-		}
-	}
-	return idable
 }
