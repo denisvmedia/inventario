@@ -518,3 +518,28 @@ CREATE INDEX IF NOT EXISTS users_active_idx ON users (is_active);
 CREATE INDEX IF NOT EXISTS users_role_idx ON users (role);
 CREATE UNIQUE INDEX IF NOT EXISTS users_tenant_email_idx ON users (tenant_id, email);
 CREATE INDEX IF NOT EXISTS users_tenant_idx ON users (tenant_id);
+
+-- Create default tenant if it doesn't exist (idempotent)
+-- This must run after migrations create the tenants table
+DO $$
+BEGIN
+    -- Check if tenants table exists and if default tenant doesn't exist
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tenants' AND table_schema = 'public') THEN
+        IF NOT EXISTS (SELECT 1 FROM tenants WHERE id = 'test-tenant-id') THEN
+            INSERT INTO tenants (id, name, slug, status, created_at, updated_at)
+            VALUES (
+                'test-tenant-id',
+                'Test Organization',
+                'test-org',
+                'active',
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            );
+            RAISE NOTICE 'Created default tenant: Test Organization';
+        ELSE
+            RAISE NOTICE 'Default tenant already exists';
+        END IF;
+    ELSE
+        RAISE NOTICE 'Tenants table does not exist yet - skipping default tenant creation';
+    END IF;
+END $$;
