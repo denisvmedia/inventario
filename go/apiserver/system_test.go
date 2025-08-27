@@ -11,6 +11,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -23,6 +24,23 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	registrySet := memory.NewRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
+	_, err := registrySet.UserRegistry.Create(c.Context(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.TenantRegistry.Create(c.Context(), models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	})
+	c.Assert(err, qt.IsNil)
+
 	// Create test parameters
 	startTime := time.Now().Add(-1 * time.Hour) // 1 hour ago
 	params := apiserver.Params{
@@ -30,6 +48,7 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 		UploadLocation: "file:///tmp/uploads?create_dir=1",
 		DebugInfo:      debug.NewInfo("memory://", "file:///tmp/uploads?create_dir=1"),
 		StartTime:      startTime,
+		JWTSecret:      testJWTSecret,
 	}
 
 	// Create API server
@@ -38,6 +57,7 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest("GET", "/api/v1/system", nil)
 	req.Header.Set("Accept", "application/json")
+	addTestUserAuthHeader(req)
 
 	// Create response recorder
 	w := httptest.NewRecorder()
@@ -51,7 +71,7 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 
 	// Parse response
 	var systemInfo apiserver.SystemInfo
-	err := json.Unmarshal(w.Body.Bytes(), &systemInfo)
+	err = json.Unmarshal(w.Body.Bytes(), &systemInfo)
 	c.Assert(err, qt.IsNil)
 
 	// Verify system information
@@ -73,12 +93,36 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	registrySet := memory.NewRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
+	// Create test user
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	err := testUser.SetPassword("testpassword123")
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.UserRegistry.Create(c.Context(), testUser)
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.TenantRegistry.Create(c.Context(), models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	})
+
 	// Add some test settings
 	testSettings := models.SettingsObject{
 		MainCurrency: ptr("USD"),
 		Theme:        ptr("dark"),
 	}
-	err := registrySet.SettingsRegistry.Save(c.Context(), testSettings)
+
+	userCtx := appctx.WithUser(c.Context(), &testUser)
+	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(userCtx)
+	c.Assert(err, qt.IsNil)
+	err = settingsRegistry.Save(c.Context(), testSettings)
 	c.Assert(err, qt.IsNil)
 
 	// Create test parameters
@@ -88,6 +132,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 		UploadLocation: "s3://my-bucket/uploads?region=us-east-1",
 		DebugInfo:      debug.NewInfo("postgres://user:pass@localhost:5432/db", "s3://my-bucket/uploads?region=us-east-1"),
 		StartTime:      startTime,
+		JWTSecret:      testJWTSecret,
 	}
 
 	// Create API server
@@ -96,6 +141,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest("GET", "/api/v1/system", nil)
 	req.Header.Set("Accept", "application/json")
+	addTestUserAuthHeader(req)
 
 	// Create response recorder
 	w := httptest.NewRecorder()

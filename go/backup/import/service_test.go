@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/memblob"
 
@@ -18,6 +19,20 @@ import (
 func newTestRegistrySet() *registry.Set {
 	// Use the proper NewRegistrySet function to ensure all dependencies are set up correctly
 	registrySet := memory.NewRegistrySet()
+	must.Must(registrySet.UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}))
+	must.Must(registrySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant"},
+		Name:     "Test Tenant",
+	}))
 	return registrySet
 }
 
@@ -172,9 +187,10 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 
 	// Create a test export
 	export := models.Export{
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		Description: "Test import",
+		Type:                models.ExportTypeImported,
+		Status:              models.ExportStatusPending,
+		Description:         "Test import",
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", "test-user-id"),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -249,9 +265,10 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 
 	// Create a test export
 	export := models.Export{
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		Description: "Test import with files",
+		Type:                models.ExportTypeImported,
+		Status:              models.ExportStatusPending,
+		Description:         "Test import with files",
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", "test-user-id"),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -25,6 +26,23 @@ func newTestRegistrySet() *registry.Set {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
 	fileRegistry := memory.NewFileRegistry()
+	userRegistry := memory.NewUserRegistry()
+	tenantRegistry := memory.NewTenantRegistry()
+
+	must.Must(userRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: testUserID},
+			TenantID: "test-tenant",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}))
+	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant"},
+		Name:     "Test Tenant",
+	}))
 
 	registrySet := &registry.Set{
 		LocationRegistry:  locationRegistry,
@@ -32,6 +50,8 @@ func newTestRegistrySet() *registry.Set {
 		CommodityRegistry: memory.NewCommodityRegistry(areaRegistry),
 		ExportRegistry:    memory.NewExportRegistry(),
 		FileRegistry:      fileRegistry,
+		UserRegistry:      userRegistry,
+		TenantRegistry:    tenantRegistry,
 	}
 	return registrySet
 }
@@ -357,7 +377,13 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 
 	// Test with file data included
 	stats := &types.ExportStats{}
-	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: true}, stats)
+	export := models.Export{
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-123", "default-tenant", testUserID),
+		Type:                models.ExportTypeCommodities,
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     true,
+	}
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, export, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
@@ -387,9 +413,11 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	expectedInvoiceBase64 := base64.StdEncoding.EncodeToString(testInvoiceData)
 	c.Assert(xmlCommodity.Invoices[0].Data, qt.Equals, expectedInvoiceBase64)
 
+	export2 := export
+	export2.IncludeFileData = false
 	// Test without file data
 	stats = &types.ExportStats{}
-	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: false}, stats)
+	xmlCommodityNoData, err := service.convertCommodityToXML(ctx, createdCommodity, export2, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodityNoData.Images, qt.HasLen, 0)
 	c.Assert(xmlCommodityNoData.Invoices, qt.HasLen, 0)
@@ -409,6 +437,22 @@ func TestBase64FileDataVerification(t *testing.T) {
 	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
 	manualRegistry := memory.NewManualRegistry(commodityRegistry)
 	exportRegistry := memory.NewExportRegistry()
+	userRegistry := memory.NewUserRegistry()
+	tenantRegistry := memory.NewTenantRegistry()
+	must.Must(userRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: testUserID},
+			TenantID: "test-tenant",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}))
+	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant"},
+		Name:     "Test Tenant",
+	}))
 
 	registrySet := &registry.Set{
 		LocationRegistry:  locationRegistry,
@@ -419,6 +463,8 @@ func TestBase64FileDataVerification(t *testing.T) {
 		ManualRegistry:    manualRegistry,
 		ExportRegistry:    exportRegistry,
 		FileRegistry:      fileRegistry,
+		UserRegistry:      userRegistry,
+		TenantRegistry:    tenantRegistry,
 	}
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
@@ -517,7 +563,13 @@ func TestBase64FileDataVerification(t *testing.T) {
 
 	// Test with file data included
 	stats := &types.ExportStats{}
-	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, ExportArgs{IncludeFileData: true}, stats)
+	export := models.Export{
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-base64", "default-tenant", testUserID),
+		Type:                models.ExportTypeFullDatabase,
+		Status:              models.ExportStatusPending,
+		IncludeFileData:     true,
+	}
+	xmlCommodity, err := service.convertCommodityToXML(ctx, createdCommodity, export, stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(xmlCommodity.Images, qt.HasLen, 1)
 	c.Assert(xmlCommodity.Invoices, qt.HasLen, 1)
@@ -558,15 +610,11 @@ func TestBase64FileDataVerification(t *testing.T) {
 	}
 
 	// Test full export with file data and verify base64 encoding in XML
-	export := models.Export{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-base64", "test-tenant", testUserID),
-		Type:                models.ExportTypeFullDatabase,
-		Status:              models.ExportStatusPending,
-		IncludeFileData:     true,
-	}
+	export2 := export
+	export2.IncludeFileData = true
 
 	var buf bytes.Buffer
-	_, err = service.streamXMLExport(ctx, export, &buf)
+	_, err = service.streamXMLExport(ctx, export2, &buf)
 	c.Assert(err, qt.IsNil)
 
 	xmlContent := buf.String()
@@ -735,6 +783,22 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
 	manualRegistry := memory.NewManualRegistry(commodityRegistry)
 	exportRegistry := memory.NewExportRegistry()
+	userRegistry := memory.NewUserRegistry()
+	tenantRegistry := memory.NewTenantRegistry()
+	must.Must(userRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: testUserID},
+			TenantID: "test-tenant",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}))
+	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant"},
+		Name:     "Test Tenant",
+	}))
 
 	registrySet := &registry.Set{
 		LocationRegistry:  locationRegistry,
@@ -745,6 +809,8 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		ManualRegistry:    manualRegistry,
 		ExportRegistry:    exportRegistry,
 		FileRegistry:      fileRegistry,
+		UserRegistry:      userRegistry,
+		TenantRegistry:    tenantRegistry,
 	}
 
 	// Create test locations

@@ -58,6 +58,19 @@ func NewRegistrySetWithUserID(userID string) *registry.Set {
 	s.RestoreOperationRegistry = must.Must(NewRestoreOperationRegistry(s.RestoreStepRegistry).WithCurrentUser(ctx))
 	s.TenantRegistry = NewTenantRegistry()
 	s.UserRegistry = NewUserRegistry()
+	must.Must(s.UserRegistry.(*UserRegistry).Create(ctx, models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}))
+	must.Must(s.TenantRegistry.Create(ctx, models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant"},
+		Name:     "Test Tenant",
+	}))
 
 	return s
 }

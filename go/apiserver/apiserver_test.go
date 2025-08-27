@@ -292,10 +292,8 @@ func newUserRegistry() registry.UserRegistry {
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
-	testUser.SetPassword("password123")
-
-	_, err := userRegistry.Create(context.Background(), testUser)
-	must.Assert(err)
+	must.Assert(testUser.SetPassword("password123"))
+	must.Must(userRegistry.Create(context.Background(), testUser))
 
 	return userRegistry
 }

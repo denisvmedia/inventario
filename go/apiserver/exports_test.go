@@ -81,16 +81,28 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	// Create test registry
 	registrySet := &registry.Set{
 		ExportRegistry: memory.NewExportRegistry(),
+		UserRegistry:   newUserRegistry(),
+		TenantRegistry: memory.NewTenantRegistry(),
 	}
 
 	// Create test exports
 	export1 := models.Export{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "export1"},
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Type:        models.ExportTypeFullDatabase,
 		Description: "Active export",
 		Status:      models.ExportStatusCompleted,
 	}
 
 	export2 := models.Export{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "export2"},
+			TenantID: "test-tenant-id",
+			UserID:   "test-user-id",
+		},
 		Type:        models.ExportTypeLocations,
 		Description: "Export to be deleted",
 		Status:      models.ExportStatusCompleted,
@@ -115,10 +127,11 @@ func TestExportListExcludesDeleted(t *testing.T) {
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+	r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint
 	req := httptest.NewRequest("GET", "/exports", nil)
+	addTestUserAuthHeader(req)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -139,6 +152,8 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	// Create test registry
 	registrySet := &registry.Set{
 		ExportRegistry: memory.NewExportRegistry(),
+		UserRegistry:   newUserRegistry(),
+		TenantRegistry: memory.NewTenantRegistry(),
 	}
 
 	// Create test exports
@@ -173,10 +188,11 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+	r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint with include_deleted=true
 	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
+	addTestUserAuthHeader(req)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
