@@ -1571,7 +1571,15 @@ func (l *RestoreOperationProcessor) processCommodityData(
 }
 
 // processCommodity processes a single commodity with detailed logging
-func (l *RestoreOperationProcessor) processCommodity(ctx context.Context, decoder *xml.Decoder, startElement *xml.StartElement, stats *types.RestoreStats, existing *types.ExistingEntities, idMapping *types.IDMapping, options types.RestoreOptions) error {
+func (l *RestoreOperationProcessor) processCommodity(
+	ctx context.Context,
+	decoder *xml.Decoder,
+	startElement *xml.StartElement,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
 	var xmlCommodity types.XMLCommodity
 	var pendingFiles []types.PendingFileData // Collect file data to process after commodity creation
 

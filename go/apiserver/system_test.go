@@ -112,6 +112,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 		EntityID: models.EntityID{ID: "test-tenant-id"},
 		Name:     "Test Tenant",
 	})
+	c.Assert(err, qt.IsNil)
 
 	// Add some test settings
 	testSettings := models.SettingsObject{
