@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/go-extras/go-kit/must"
@@ -96,6 +97,8 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 	if area.GetID() == "" {
 		area.SetID(generateID())
 	}
+	area.SetTenantID(r.tenantID)
+	area.SetUserID(r.userID)
 
 	reg := r.newSQLRegistry()
 
@@ -218,11 +221,12 @@ func (r *AreaRegistry) SearchByName(ctx context.Context, query string) ([]*model
 	return areas, nil
 }
 
-func (r *AreaRegistry) newSQLRegistry() *store.RLSRepository[models.Area] {
+func (r *AreaRegistry) newSQLRegistry() *store.RLSRepository[models.Area, *models.Area] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.Area](r.dbx, r.tableNames.Areas())
 	}
-	return store.NewUserAwareSQLRegistry[models.Area](r.dbx, r.userID, r.tableNames.Areas())
+	slog.Info("Creating new user-aware SQL registry for areas", "userID", r.userID)
+	return store.NewUserAwareSQLRegistry[models.Area](r.dbx, r.userID, r.tenantID, r.tableNames.Areas())
 }
 
 func (r *AreaRegistry) get(ctx context.Context, id string) (*models.Area, error) {

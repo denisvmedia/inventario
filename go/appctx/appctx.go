@@ -43,7 +43,7 @@ func WithUser(ctx context.Context, user *models.User) context.Context {
 // ValidateUserContext validates that a user context is present and valid
 func ValidateUserContext(ctx context.Context) error {
 	user := UserFromContext(ctx)
-	if user != nil {
+	if user == nil {
 		return errkit.WithStack(ErrUserContextRequired)
 	}
 

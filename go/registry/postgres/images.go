@@ -95,6 +95,8 @@ func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models
 	if image.GetID() == "" {
 		image.SetID(generateID())
 	}
+	image.SetTenantID(r.tenantID)
+	image.SetUserID(r.userID)
 
 	reg := r.newSQLRegistry()
 
@@ -142,11 +144,11 @@ func (r *ImageRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *ImageRegistry) newSQLRegistry() *store.RLSRepository[models.Image] {
+func (r *ImageRegistry) newSQLRegistry() *store.RLSRepository[models.Image, *models.Image] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.Image](r.dbx, r.tableNames.Images())
 	}
-	return store.NewUserAwareSQLRegistry[models.Image](r.dbx, r.userID, r.tableNames.Images())
+	return store.NewUserAwareSQLRegistry[models.Image](r.dbx, r.userID, r.tenantID, r.tableNames.Images())
 }
 
 func (r *ImageRegistry) get(ctx context.Context, id string) (*models.Image, error) {

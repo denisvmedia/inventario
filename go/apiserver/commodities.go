@@ -324,8 +324,14 @@ func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	// Get file entities linked to this commodity with "images" meta
-	files, err := api.registrySet.FileRegistry.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "images")
+	files, err := fileReg.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "images")
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -365,8 +371,14 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	// Get file entities linked to this commodity with "invoices" meta
-	files, err := api.registrySet.FileRegistry.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "invoices")
+	files, err := fileReg.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "invoices")
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -406,8 +418,14 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	// Get file entities linked to this commodity with "manuals" meta
-	files, err := api.registrySet.FileRegistry.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "manuals")
+	files, err := fileReg.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "manuals")
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -449,10 +467,16 @@ func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	imageID := chi.URLParam(r, "imageID")
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), imageID)
+	file, err := fileReg.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -491,10 +515,16 @@ func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	invoiceID := chi.URLParam(r, "invoiceID")
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), invoiceID)
+	file, err := fileReg.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -533,10 +563,16 @@ func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	manualID := chi.URLParam(r, "manualID")
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), manualID)
+	file, err := fileReg.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -576,8 +612,14 @@ func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	imageReg, err := api.registrySet.ImageRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	imageID := chi.URLParam(r, "imageID")
-	image, err := api.registrySet.ImageRegistry.Get(r.Context(), imageID)
+	image, err := imageReg.Get(r.Context(), imageID)
 	if err != nil || image.CommodityID != commodity.ID {
 		http.NotFound(w, r)
 		return
@@ -630,8 +672,14 @@ func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	invoiceReg, err := api.registrySet.InvoiceRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	invoiceID := chi.URLParam(r, "invoiceID")
-	invoice, err := api.registrySet.InvoiceRegistry.Get(r.Context(), invoiceID)
+	invoice, err := invoiceReg.Get(r.Context(), invoiceID)
 	if err != nil || invoice.CommodityID != commodity.ID {
 		http.NotFound(w, r)
 		return
@@ -684,8 +732,14 @@ func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	manualReg, err := api.registrySet.ManualRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	manualID := chi.URLParam(r, "manualID")
-	manual, err := api.registrySet.ManualRegistry.Get(r.Context(), manualID)
+	manual, err := manualReg.Get(r.Context(), manualID)
 	if err != nil || manual.CommodityID != commodity.ID {
 		http.NotFound(w, r)
 		return
@@ -742,10 +796,16 @@ func (api *commoditiesAPI) getDownloadFile(ctx context.Context, originalPath str
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
 // @Router /commodities/{commodityID}/images/{imageID} [get].
 func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	imageID := chi.URLParam(r, "imageID")
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), imageID)
+	file, err := fileReg.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -784,10 +844,16 @@ func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) 
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
 // @Router /commodities/{commodityID}/invoices/{invoiceID} [get].
 func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	invoiceID := chi.URLParam(r, "invoiceID")
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), invoiceID)
+	file, err := fileReg.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -826,10 +892,16 @@ func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
 // @Router /commodities/{commodityID}/manuals/{manualID} [get].
 func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	manualID := chi.URLParam(r, "manualID")
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), manualID)
+	file, err := fileReg.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -869,6 +941,12 @@ func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
 // @Router /commodities/{commodityID}/images/{imageID} [put].
 func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	imageID := chi.URLParam(r, "imageID")
 
 	var input jsonapi.CommodityFileUpdateRequest
@@ -883,7 +961,7 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), imageID)
+	file, err := fileReg.Get(r.Context(), imageID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -899,7 +977,7 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 	file.UpdatedAt = time.Now()
 
-	updatedFile, err := api.registrySet.FileRegistry.Update(r.Context(), *file)
+	updatedFile, err := fileReg.Update(r.Context(), *file)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -933,6 +1011,12 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
 // @Router /commodities/{commodityID}/invoices/{invoiceID} [put].
 func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	invoiceID := chi.URLParam(r, "invoiceID")
 
 	var input jsonapi.CommodityFileUpdateRequest
@@ -947,7 +1031,7 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), invoiceID)
+	file, err := fileReg.Get(r.Context(), invoiceID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -963,7 +1047,7 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 	file.UpdatedAt = time.Now()
 
-	updatedFile, err := api.registrySet.FileRegistry.Update(r.Context(), *file)
+	updatedFile, err := fileReg.Update(r.Context(), *file)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -997,6 +1081,12 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
 // @Router /commodities/{commodityID}/manuals/{manualID} [put].
 func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	manualID := chi.URLParam(r, "manualID")
 
 	var input jsonapi.CommodityFileUpdateRequest
@@ -1011,7 +1101,7 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get the file entity
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), manualID)
+	file, err := fileReg.Get(r.Context(), manualID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -1027,7 +1117,7 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
 	file.UpdatedAt = time.Now()
 
-	updatedFile, err := api.registrySet.FileRegistry.Update(r.Context(), *file)
+	updatedFile, err := fileReg.Update(r.Context(), *file)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

@@ -8,7 +8,6 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
-	"github.com/denisvmedia/inventario/models"
 )
 
 func RollbackOrCommit(tx *sqlx.Tx, err error) error {
@@ -86,16 +85,4 @@ func beginServiceTx(ctx context.Context, dbx *sqlx.DB) (*sqlx.Tx, error) {
 	}
 
 	return tx, nil
-}
-
-func entityToIDAble[T any](entity T) models.IDable {
-	idable, ok := (any(entity)).(models.IDable)
-	if ok {
-		return idable
-	}
-	idable, ok = (any(&entity)).(models.IDable)
-	if ok {
-		return idable
-	}
-	panic("entity is not IDable")
 }

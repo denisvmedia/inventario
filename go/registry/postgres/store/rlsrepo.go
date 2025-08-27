@@ -10,31 +10,35 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 )
 
-type RLSRepository[T any] struct {
-	dbx     *sqlx.DB
-	userID  string
-	table   TableName
-	service bool
+type RLSRepository[T any, P ptrTenantUserAware[T]] struct {
+	dbx      *sqlx.DB
+	userID   string
+	tenantID string
+	table    TableName
+	service  bool
 }
 
-func NewUserAwareSQLRegistry[T any](dbx *sqlx.DB, userID string, table TableName) *RLSRepository[T] {
-	return &RLSRepository[T]{
-		dbx:     dbx,
-		userID:  userID,
-		table:   table,
-		service: false,
+func NewUserAwareSQLRegistry[T any, P ptrTenantUserAware[T]](dbx *sqlx.DB, userID, tenantID string, table TableName) *RLSRepository[T, P] {
+	// slog.Info("Creating new user aware SQL registry", "table", table, "userID", userID)
+	return &RLSRepository[T, P]{
+		dbx:      dbx,
+		userID:   userID,
+		tenantID: tenantID,
+		table:    table,
+		service:  false,
 	}
 }
 
-func NewServiceSQLRegistry[T any](dbx *sqlx.DB, table TableName) *RLSRepository[T] {
-	return &RLSRepository[T]{
+func NewServiceSQLRegistry[T any, P ptrTenantUserAware[T]](dbx *sqlx.DB, table TableName) *RLSRepository[T, P] {
+	// slog.Info("Creating new service SQL registry", "table", table)
+	return &RLSRepository[T, P]{
 		dbx:     dbx,
 		table:   table,
 		service: true,
 	}
 }
 
-func (r *RLSRepository[T]) ScanByField(ctx context.Context, field FieldValue) iter.Seq2[T, error] {
+func (r *RLSRepository[T, P]) ScanByField(ctx context.Context, field FieldValue) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		tx, err := r.beginTx(ctx)
 		if err != nil {
@@ -53,7 +57,7 @@ func (r *RLSRepository[T]) ScanByField(ctx context.Context, field FieldValue) it
 	}
 }
 
-func (r *RLSRepository[T]) ScanOneByField(ctx context.Context, field FieldValue, entity *T) error {
+func (r *RLSRepository[T, P]) ScanOneByField(ctx context.Context, field FieldValue, entity *T) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -68,7 +72,7 @@ func (r *RLSRepository[T]) ScanOneByField(ctx context.Context, field FieldValue,
 	return nil
 }
 
-func (r *RLSRepository[T]) Scan(ctx context.Context) iter.Seq2[T, error] {
+func (r *RLSRepository[T, P]) Scan(ctx context.Context) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		tx, err := r.beginTx(ctx)
 		if err != nil {
@@ -87,7 +91,7 @@ func (r *RLSRepository[T]) Scan(ctx context.Context) iter.Seq2[T, error] {
 	}
 }
 
-func (r *RLSRepository[T]) Count(ctx context.Context) (int, error) {
+func (r *RLSRepository[T, P]) Count(ctx context.Context) (int, error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return 0, err
@@ -103,7 +107,7 @@ func (r *RLSRepository[T]) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (r *RLSRepository[T]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -111,6 +115,9 @@ func (r *RLSRepository[T]) Create(ctx context.Context, entity T, checkerFn func(
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
+
+	P(&entity).SetUserID(r.userID)
+	P(&entity).SetTenantID(r.tenantID)
 
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
@@ -128,7 +135,7 @@ func (r *RLSRepository[T]) Create(ctx context.Context, entity T, checkerFn func(
 	return nil
 }
 
-func (r *RLSRepository[T]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) error {
+func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -137,12 +144,14 @@ func (r *RLSRepository[T]) Update(ctx context.Context, entity T, checkerFn func(
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	idable := entityToIDAble(entity)
-	field := Pair("id", idable.GetID())
+	P(&entity).SetUserID(r.userID)
+	P(&entity).SetTenantID(r.tenantID)
+
+	field := Pair("id", P(&entity).GetID())
 
 	// check if entity exists
 	var dbEntity T
-	err = NewTxRegistry[T](tx, r.table).ScanOneByField(ctx, Pair("id", idable.GetID()), &dbEntity)
+	err = NewTxRegistry[T](tx, r.table).ScanOneByField(ctx, field, &dbEntity)
 	if err != nil {
 		return errkit.Wrap(err, "failed to scan entity")
 	}
@@ -163,7 +172,7 @@ func (r *RLSRepository[T]) Update(ctx context.Context, entity T, checkerFn func(
 	return nil
 }
 
-func (r *RLSRepository[T]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -196,7 +205,7 @@ func (r *RLSRepository[T]) Delete(ctx context.Context, id string, checkerFn func
 	return nil
 }
 
-func (r *RLSRepository[T]) DoWithEntity(ctx context.Context, entity T, operationFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T, P]) DoWithEntity(ctx context.Context, entity T, operationFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -205,8 +214,7 @@ func (r *RLSRepository[T]) DoWithEntity(ctx context.Context, entity T, operation
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	idable := entityToIDAble(entity)
-	field := Pair("id", idable.GetID())
+	field := Pair("id", P(&entity).GetID())
 
 	// check if entity exists
 	var dbEntity T
@@ -225,7 +233,7 @@ func (r *RLSRepository[T]) DoWithEntity(ctx context.Context, entity T, operation
 	return nil
 }
 
-func (r *RLSRepository[T]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) error {
+func (r *RLSRepository[T, P]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -253,7 +261,7 @@ func (r *RLSRepository[T]) DoWithEntityID(ctx context.Context, entityID string, 
 	return nil
 }
 
-func (r *RLSRepository[T]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T, P]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to begin transaction")
@@ -272,7 +280,7 @@ func (r *RLSRepository[T]) Do(ctx context.Context, operationFn func(context.Cont
 	return nil
 }
 
-func (r *RLSRepository[T]) beginTx(ctx context.Context) (*sqlx.Tx, error) {
+func (r *RLSRepository[T, P]) beginTx(ctx context.Context) (*sqlx.Tx, error) {
 	if r.service {
 		return beginServiceTx(ctx, r.dbx)
 	}

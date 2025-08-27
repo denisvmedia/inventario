@@ -68,9 +68,9 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 		export.SetID(generateID())
 	}
 
-	if export.CreatedDate == nil {
-		export.CreatedDate = models.PNow()
-	}
+	export.SetTenantID(r.tenantID)
+	export.SetUserID(r.userID)
+	export.CreatedDate = models.PNow()
 
 	reg := r.newSQLRegistry()
 
@@ -272,11 +272,11 @@ func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *ExportRegistry) newSQLRegistry() *store.RLSRepository[models.Export] {
+func (r *ExportRegistry) newSQLRegistry() *store.RLSRepository[models.Export, *models.Export] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.Export](r.dbx, r.tableNames.Exports())
 	}
-	return store.NewUserAwareSQLRegistry[models.Export](r.dbx, r.userID, r.tableNames.Exports())
+	return store.NewUserAwareSQLRegistry[models.Export](r.dbx, r.userID, r.tenantID, r.tableNames.Exports())
 }
 
 func (r *ExportRegistry) get(ctx context.Context, id string) (*models.Export, error) {

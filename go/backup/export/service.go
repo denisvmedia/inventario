@@ -164,8 +164,13 @@ func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *mo
 		}
 	}
 
+	exportReg, err := s.registrySet.ExportRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return models.Export{}, errkit.Wrap(err, "failed to get export registry")
+	}
+
 	// Create the export
-	created, err := s.registrySet.ExportRegistry.WithServiceAccount().Create(ctx, export)
+	created, err := exportReg.Create(ctx, export)
 	if err != nil {
 		return models.Export{}, errkit.Wrap(err, "failed to create export")
 	}
@@ -186,9 +191,20 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return nil
 	}
 
+	user, err := s.registrySet.UserRegistry.Get(ctx, export.UserID)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get user")
+	}
+
+	ctx = appctx.WithUser(ctx, user)
+
 	// Update status to in_progress
 	export.Status = models.ExportStatusInProgress
-	_, err = s.registrySet.ExportRegistry.WithServiceAccount().Update(ctx, *export)
+	expReg, err := s.registrySet.ExportRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get export registry")
+	}
+	_, err = expReg.Update(ctx, *export)
 	if err != nil {
 		return errkit.Wrap(err, "failed to update export status")
 	}
@@ -199,8 +215,8 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
-		s.registrySet.ExportRegistry.WithServiceAccount().Update(ctx, *export)
-		return errkit.Wrap(err, "failed to generate export")
+		_, expErr := s.registrySet.ExportRegistry.WithServiceAccount().Update(ctx, *export)
+		return errkit.Wrap(errors.Join(err, expErr), "failed to generate export")
 	}
 
 	// Create file entity for the export using user context
@@ -209,8 +225,8 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
-		s.registrySet.ExportRegistry.WithServiceAccount().Update(ctx, *export)
-		return errkit.Wrap(err, "failed to create export file entity")
+		_, updateErr := s.registrySet.ExportRegistry.WithServiceAccount().Update(ctx, *export)
+		return errkit.Wrap(errors.Join(err, updateErr), "failed to create export file entity")
 	}
 
 	// Store statistics in export record
@@ -234,7 +250,12 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	export.CompletedDate = models.PNow()
 	export.ErrorMessage = ""
 
-	_, err = s.registrySet.ExportRegistry.WithServiceAccount().Update(ctx, *export)
+	userReg, err := s.registrySet.ExportRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get export registry")
+	}
+
+	_, err = userReg.Update(ctx, *export)
 	if err != nil {
 		return errkit.Wrap(err, "failed to update export completion")
 	}
@@ -277,8 +298,13 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 		},
 	}
 
+	fileReg, err := s.registrySet.FileRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get file registry")
+	}
+
 	// Create the file entity
-	created, err := s.registrySet.FileRegistry.Create(ctx, fileEntity)
+	created, err := fileReg.Create(ctx, fileEntity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create file entity")
 	}
@@ -1444,7 +1470,12 @@ func (s *ExportService) streamImagesDirectly(ctx context.Context, encoder *xml.E
 
 // streamInvoicesDirectly streams invoices directly to XML encoder and tracks statistics
 func (s *ExportService) streamInvoicesDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *types.ExportStats) error {
-	invoiceIDs, err := s.registrySet.CommodityRegistry.GetInvoices(ctx, commodityID)
+	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get commodity registry")
+	}
+
+	invoiceIDs, err := comReg.GetInvoices(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get invoices")
 	}
@@ -1454,7 +1485,12 @@ func (s *ExportService) streamInvoicesDirectly(ctx context.Context, encoder *xml
 
 // streamManualsDirectly streams manuals directly to XML encoder and tracks statistics
 func (s *ExportService) streamManualsDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *types.ExportStats) error {
-	manualIDs, err := s.registrySet.CommodityRegistry.GetManuals(ctx, commodityID)
+	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get commodity registry")
+	}
+
+	manualIDs, err := comReg.GetManuals(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get manuals")
 	}

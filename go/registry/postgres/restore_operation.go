@@ -125,6 +125,8 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 	if operation.Status == "" {
 		operation.Status = models.RestoreStatusPending
 	}
+	operation.SetTenantID(r.tenantID)
+	operation.SetUserID(r.userID)
 
 	reg := r.newSQLRegistry()
 
@@ -163,11 +165,11 @@ func (r *RestoreOperationRegistry) Delete(ctx context.Context, id string) error 
 	return err
 }
 
-func (r *RestoreOperationRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreOperation] {
+func (r *RestoreOperationRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreOperation, *models.RestoreOperation] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.RestoreOperation](r.dbx, r.tableNames.RestoreOperations())
 	}
-	return store.NewUserAwareSQLRegistry[models.RestoreOperation](r.dbx, r.userID, r.tableNames.RestoreOperations())
+	return store.NewUserAwareSQLRegistry[models.RestoreOperation](r.dbx, r.userID, r.tenantID, r.tableNames.RestoreOperations())
 }
 
 func (r *RestoreOperationRegistry) get(ctx context.Context, id string) (*models.RestoreOperation, error) {

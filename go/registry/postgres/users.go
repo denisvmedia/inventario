@@ -32,7 +32,7 @@ func NewUserRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *U
 	}
 }
 
-func (r *UserRegistry) newSQLRegistry() *store.NonRLSRepository[models.User] {
+func (r *UserRegistry) newSQLRegistry() *store.NonRLSRepository[models.User, *models.User] {
 	return store.NewSQLRegistry[models.User](r.dbx, r.tableNames.Users())
 }
 

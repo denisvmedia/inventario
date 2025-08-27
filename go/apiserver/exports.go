@@ -362,13 +362,19 @@ func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
 				return
 			}
 
-			export, err := registrySet.ExportRegistry.Get(r.Context(), exportID)
+			expReg, err := registrySet.ExportRegistry.WithCurrentUser(r.Context())
 			if err != nil {
 				renderEntityError(w, r, err)
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), exportCtxKey, export)
+			exp, err := expReg.Get(r.Context(), exportID)
+			if err != nil {
+				renderEntityError(w, r, err)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), exportCtxKey, exp)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

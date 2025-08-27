@@ -95,6 +95,8 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 	if invoice.GetID() == "" {
 		invoice.SetID(generateID())
 	}
+	invoice.SetTenantID(r.tenantID)
+	invoice.SetUserID(r.userID)
 
 	reg := r.newSQLRegistry()
 
@@ -142,11 +144,11 @@ func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *InvoiceRegistry) newSQLRegistry() *store.RLSRepository[models.Invoice] {
+func (r *InvoiceRegistry) newSQLRegistry() *store.RLSRepository[models.Invoice, *models.Invoice] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.Invoice](r.dbx, r.tableNames.Invoices())
 	}
-	return store.NewUserAwareSQLRegistry[models.Invoice](r.dbx, r.userID, r.tableNames.Invoices())
+	return store.NewUserAwareSQLRegistry[models.Invoice](r.dbx, r.userID, r.tenantID, r.tableNames.Invoices())
 }
 
 func (r *InvoiceRegistry) get(ctx context.Context, id string) (*models.Invoice, error) {

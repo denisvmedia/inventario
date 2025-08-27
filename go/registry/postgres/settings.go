@@ -204,9 +204,9 @@ func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settin
 	return err
 }
 
-func (r *SettingsRegistry) newSQLRegistry() *store.RLSRepository[models.Setting] {
+func (r *SettingsRegistry) newSQLRegistry() *store.RLSRepository[models.Setting, *models.Setting] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.Setting](r.dbx, r.tableNames.Settings())
 	}
-	return store.NewUserAwareSQLRegistry[models.Setting](r.dbx, r.userID, r.tableNames.Settings())
+	return store.NewUserAwareSQLRegistry[models.Setting](r.dbx, r.userID, r.tenantID, r.tableNames.Settings())
 }

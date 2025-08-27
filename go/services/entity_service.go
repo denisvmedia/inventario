@@ -31,14 +31,24 @@ func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string)
 		return errkit.Wrap(err, "failed to delete linked files")
 	}
 
+	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get commodity registry")
+	}
+
 	// Then delete the commodity itself
-	return s.registrySet.CommodityRegistry.Delete(ctx, id)
+	return comReg.Delete(ctx, id)
 }
 
 // DeleteAreaRecursive deletes an area and all its commodities recursively
 func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) error {
+	areaReg, err := s.registrySet.AreaRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get area registry")
+	}
+
 	// Check if area exists first - if it's already deleted, that's fine
-	_, err := s.registrySet.AreaRegistry.Get(ctx, id)
+	_, err = areaReg.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			// Area is already deleted, nothing to do
@@ -48,7 +58,7 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 	}
 
 	// Get all commodities in this area first
-	commodities, err := s.registrySet.AreaRegistry.GetCommodities(ctx, id)
+	commodities, err := areaReg.GetCommodities(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodities")
 	}
@@ -64,19 +74,24 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 	}
 
 	// Finally delete the area itself
-	return s.registrySet.AreaRegistry.Delete(ctx, id)
+	return areaReg.Delete(ctx, id)
 }
 
 // DeleteLocationRecursive deletes a location and all its areas and commodities recursively
 func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) error {
+	locReg, err := s.registrySet.LocationRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get location registry")
+	}
+
 	// Get the location to ensure it exists
-	_, err := s.registrySet.LocationRegistry.Get(ctx, id)
+	_, err = locReg.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get location")
 	}
 
 	// Get all areas in this location
-	areas, err := s.registrySet.LocationRegistry.GetAreas(ctx, id)
+	areas, err := locReg.GetAreas(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get areas")
 	}
@@ -86,19 +101,24 @@ func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) 
 		if err := s.DeleteAreaRecursive(ctx, areaID); err != nil {
 			// If the area is already deleted, that's fine - continue with others
 			if !errors.Is(err, registry.ErrNotFound) {
-				return errkit.Wrap(err, fmt.Sprintf("failed to delete area %s recursively", areaID))
+				return errkit.Wrap(err, "failed to delete area recursively", "areaID", areaID)
 			}
 		}
 	}
 
 	// Finally delete the location itself
-	return s.registrySet.LocationRegistry.Delete(ctx, id)
+	return locReg.Delete(ctx, id)
 }
 
 // DeleteExportWithFile deletes an export and its associated file
 func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) error {
+	expReg, err := s.registrySet.ExportRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get export registry")
+	}
+
 	// Get the export to check if it has a linked file
-	export, err := s.registrySet.ExportRegistry.Get(ctx, id)
+	export, err := expReg.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get export")
 	}
@@ -110,7 +130,7 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 	}
 
 	// Delete the export first to avoid foreign key constraint violation
-	err = s.registrySet.ExportRegistry.Delete(ctx, id)
+	err = expReg.Delete(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete export")
 	}

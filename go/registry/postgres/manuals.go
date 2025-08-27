@@ -95,6 +95,8 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 	if manual.GetID() == "" {
 		manual.SetID(generateID())
 	}
+	manual.SetTenantID(r.tenantID)
+	manual.SetUserID(r.userID)
 
 	reg := r.newSQLRegistry()
 
@@ -142,11 +144,11 @@ func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *ManualRegistry) newSQLRegistry() *store.RLSRepository[models.Manual] {
+func (r *ManualRegistry) newSQLRegistry() *store.RLSRepository[models.Manual, *models.Manual] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.Manual](r.dbx, r.tableNames.Manuals())
 	}
-	return store.NewUserAwareSQLRegistry[models.Manual](r.dbx, r.userID, r.tableNames.Manuals())
+	return store.NewUserAwareSQLRegistry[models.Manual](r.dbx, r.userID, r.tenantID, r.tableNames.Manuals())
 }
 
 func (r *ManualRegistry) get(ctx context.Context, id string) (*models.Manual, error) {

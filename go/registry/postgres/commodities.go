@@ -143,11 +143,11 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *CommodityRegistry) newSQLRegistry() *store.RLSRepository[models.Commodity] {
+func (r *CommodityRegistry) newSQLRegistry() *store.RLSRepository[models.Commodity, *models.Commodity] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.Commodity](r.dbx, r.tableNames.Commodities())
 	}
-	return store.NewUserAwareSQLRegistry[models.Commodity](r.dbx, r.userID, r.tableNames.Commodities())
+	return store.NewUserAwareSQLRegistry[models.Commodity](r.dbx, r.userID, r.tenantID, r.tableNames.Commodities())
 }
 
 func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodity, error) {

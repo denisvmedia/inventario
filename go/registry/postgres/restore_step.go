@@ -98,6 +98,8 @@ func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreSte
 	// Set timestamps
 	step.CreatedDate = models.PNow()
 	step.UpdatedDate = models.PNow()
+	step.SetTenantID(r.tenantID)
+	step.SetUserID(r.userID)
 
 	// Generate ID if not set
 	if step.ID == "" {
@@ -138,11 +140,11 @@ func (r *RestoreStepRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *RestoreStepRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreStep] {
+func (r *RestoreStepRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreStep, *models.RestoreStep] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.RestoreStep](r.dbx, r.tableNames.RestoreSteps())
 	}
-	return store.NewUserAwareSQLRegistry[models.RestoreStep](r.dbx, r.userID, r.tableNames.RestoreSteps())
+	return store.NewUserAwareSQLRegistry[models.RestoreStep](r.dbx, r.userID, r.tenantID, r.tableNames.RestoreSteps())
 }
 
 func (r *RestoreStepRegistry) get(ctx context.Context, id string) (*models.RestoreStep, error) {

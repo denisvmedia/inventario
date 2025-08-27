@@ -27,6 +27,12 @@ type exportRestoresAPI struct {
 // @Success 200 {object} jsonapi.RestoreOperationsResponse "OK"
 // @Router /exports/{id}/restores [get].
 func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.Request) {
+	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	exportID := chi.URLParam(r, "id")
 	if exportID == "" {
 		badRequest(w, r, ErrEntityNotFound)
@@ -34,13 +40,19 @@ func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.
 	}
 
 	// Verify export exists
-	_, err := api.registrySet.ExportRegistry.Get(r.Context(), exportID)
+	_, err = expReg.Get(r.Context(), exportID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	restoreOperations, err := api.registrySet.RestoreOperationRegistry.ListByExport(r.Context(), exportID)
+	restoreOpReg, err := api.registrySet.RestoreOperationRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	restoreOperations, err := restoreOpReg.ListByExport(r.Context(), exportID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -67,6 +79,24 @@ func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http
 	exportID := chi.URLParam(r, "id")
 	restoreID := chi.URLParam(r, "restoreId")
 
+	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	restoreOpReg, err := api.registrySet.RestoreOperationRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	stepReg, err := api.registrySet.RestoreStepRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	if exportID == "" {
 		badRequest(w, r, ErrEntityNotFound)
 		return
@@ -78,13 +108,13 @@ func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http
 	}
 
 	// Verify export exists
-	_, err := api.registrySet.ExportRegistry.Get(r.Context(), exportID)
+	_, err = expReg.Get(r.Context(), exportID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	restoreOperation, err := api.registrySet.RestoreOperationRegistry.Get(r.Context(), restoreID)
+	restoreOperation, err := restoreOpReg.Get(r.Context(), restoreID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -97,7 +127,7 @@ func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http
 	}
 
 	// Load steps for this restore operation
-	steps, err := api.registrySet.RestoreStepRegistry.ListByRestoreOperation(r.Context(), restoreID)
+	steps, err := stepReg.ListByRestoreOperation(r.Context(), restoreID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -134,10 +164,22 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 		return
 	}
 
+	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	// Verify export exists and is completed
-	export, err := api.registrySet.ExportRegistry.Get(r.Context(), exportID)
+	export, err := expReg.Get(r.Context(), exportID)
 	if err != nil {
 		renderEntityError(w, r, err)
+		return
+	}
+
+	restoreOpReg, err := api.registrySet.RestoreOperationRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
 		return
 	}
 
@@ -168,7 +210,7 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 	}
 
 	restoreOperation := models.NewRestoreOperationFromUserInput(data.Data.Attributes)
-	createdRestoreOperation, err := api.registrySet.RestoreOperationRegistry.Create(r.Context(), restoreOperation)
+	createdRestoreOperation, err := restoreOpReg.Create(r.Context(), restoreOperation)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -198,6 +240,18 @@ func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http
 	exportID := chi.URLParam(r, "id")
 	restoreID := chi.URLParam(r, "restoreId")
 
+	restoreOpReg, err := api.registrySet.RestoreOperationRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	if exportID == "" {
 		badRequest(w, r, ErrEntityNotFound)
 		return
@@ -209,14 +263,14 @@ func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http
 	}
 
 	// Verify export exists
-	_, err := api.registrySet.ExportRegistry.Get(r.Context(), exportID)
+	_, err = expReg.Get(r.Context(), exportID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	// Verify the restore operation exists and belongs to this export
-	restoreOperation, err := api.registrySet.RestoreOperationRegistry.Get(r.Context(), restoreID)
+	restoreOperation, err := restoreOpReg.Get(r.Context(), restoreID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -233,7 +287,7 @@ func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http
 		return
 	}
 
-	err = api.registrySet.RestoreOperationRegistry.Delete(r.Context(), restoreID)
+	err = restoreOpReg.Delete(r.Context(), restoreID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return

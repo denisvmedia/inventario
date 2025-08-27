@@ -98,6 +98,8 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 	if file.GetID() == "" {
 		file.SetID(generateID())
 	}
+	file.SetTenantID(r.tenantID)
+	file.SetUserID(r.userID)
 
 	reg := r.newSQLRegistry()
 
@@ -126,11 +128,11 @@ func (r *FileRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *FileRegistry) newSQLRegistry() *store.RLSRepository[models.FileEntity] {
+func (r *FileRegistry) newSQLRegistry() *store.RLSRepository[models.FileEntity, *models.FileEntity] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.FileEntity](r.dbx, r.tableNames.Files())
 	}
-	return store.NewUserAwareSQLRegistry[models.FileEntity](r.dbx, r.userID, r.tableNames.Files())
+	return store.NewUserAwareSQLRegistry[models.FileEntity](r.dbx, r.userID, r.tenantID, r.tableNames.Files())
 }
 
 func (r *FileRegistry) get(ctx context.Context, id string) (*models.FileEntity, error) {

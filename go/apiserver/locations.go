@@ -123,7 +123,7 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(r.Context(), createdLocation.ID)
+	areas, err := locationReg.GetAreas(ctx, createdLocation.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return

@@ -30,8 +30,8 @@ func NewTenantRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) 
 	}
 }
 
-func (r *TenantRegistry) newSQLRegistry() *store.NonRLSRepository[models.Tenant] {
-	return store.NewSQLRegistry[models.Tenant](r.dbx, r.tableNames.Tenants())
+func (r *TenantRegistry) newSQLRegistry() *store.NonRLSRepository[models.Tenant, *models.Tenant] {
+	return store.NewSQLRegistry[models.Tenant, *models.Tenant](r.dbx, r.tableNames.Tenants())
 }
 
 func (r *TenantRegistry) Get(ctx context.Context, id string) (*models.Tenant, error) {

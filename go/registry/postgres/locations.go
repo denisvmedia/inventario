@@ -103,6 +103,8 @@ func (r *LocationRegistry) Create(ctx context.Context, location models.Location)
 	if location.GetID() == "" {
 		location.SetID(generateID())
 	}
+	location.SetTenantID(r.tenantID)
+	location.SetUserID(r.userID)
 
 	reg := r.newSQLRegistry()
 
@@ -164,11 +166,11 @@ func (r *LocationRegistry) GetAreas(ctx context.Context, locationID string) ([]s
 	return areas, nil
 }
 
-func (r *LocationRegistry) newSQLRegistry() *store.RLSRepository[models.Location] {
+func (r *LocationRegistry) newSQLRegistry() *store.RLSRepository[models.Location, *models.Location] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.Location](r.dbx, r.tableNames.Locations())
 	}
-	return store.NewUserAwareSQLRegistry[models.Location](r.dbx, r.userID, r.tableNames.Locations())
+	return store.NewUserAwareSQLRegistry[models.Location](r.dbx, r.userID, r.tenantID, r.tableNames.Locations())
 }
 
 func (r *LocationRegistry) get(ctx context.Context, id string) (*models.Location, error) {
