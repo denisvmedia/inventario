@@ -7,6 +7,15 @@
     />
 
     <div v-if="loading" class="loading">Loading...</div>
+    <ResourceNotFound
+      v-else-if="is404Error"
+      resource-type="location"
+      :title="get404Title('location')"
+      :message="get404Message('location')"
+      go-back-text="Back to Locations"
+      @go-back="goBackToList"
+      @try-again="loadLocation"
+    />
     <div v-else-if="!location" class="not-found">Location not found</div>
     <div v-else>
       <div class="header">
@@ -89,29 +98,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
 import AreaForm from '@/components/AreaForm.vue'
 import Confirmation from "@/components/Confirmation.vue"
 import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
-import { useErrorState } from '@/utils/errorUtils'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+import { useErrorState, is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref<boolean>(true)
 const location = ref<any>(null)
 const areas = ref<any[]>([])
+const lastError = ref<any>(null) // Store the last error object for 404 detection
 
 // Error state management
 const { errors, handleError, removeError, cleanup } = useErrorState()
 
+// Error state computed properties
+const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
+
 // State for inline forms
 const showAreaForm = ref(false)
 
-onMounted(async () => {
+onMounted(() => {
+  loadLocation()
+})
+
+const loadLocation = async () => {
   const id = route.params.id as string
+  loading.value = true
+  lastError.value = null
 
   try {
     // Load location and areas in parallel
@@ -128,13 +148,24 @@ onMounted(async () => {
     )
 
     loading.value = false
-
-
   } catch (err: any) {
-    handleError(err, 'location', 'Failed to load location')
+    lastError.value = err
+    if (checkIs404Error(err)) {
+      // 404 errors will be handled by the ResourceNotFound component
+    } else {
+      handleError(err, 'location', 'Failed to load location')
+    }
     loading.value = false
   }
-})
+}
+
+const goBack = () => {
+  router.push('/locations')
+}
+
+const goBackToList = () => {
+  router.push('/locations')
+}
 
 
 

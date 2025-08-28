@@ -295,8 +295,20 @@ export async function createLocationAsUser(user: TestUser, locationName: string,
   // Wait for the location to be created and displayed
   await user.page.waitForSelector(`.location-card:has-text("${locationName}")`, { timeout: 10000 });
 
-  // Return a simple ID (we don't navigate to detail page for locations)
-  return locationName.replace(/\s+/g, '-').toLowerCase();
+  // Find the location card and click the edit button (with edit icon) to get the real ID from the URL
+  const locationCard = user.page.locator(`.location-card:has-text("${locationName}")`).first();
+  const editButton = locationCard.locator('button[title="Edit"]');
+  await editButton.click();
+
+  // Wait for the edit page to load and extract ID from URL
+  await user.page.waitForURL(/\/locations\/[0-9a-fA-F-]{36}\/edit/, { timeout: 10000 });
+  const editUrl = user.page.url();
+  const locationId = editUrl.split('/')[editUrl.split('/').length - 2]; // Get the ID part before '/edit'
+
+  // Navigate back to locations list
+  await user.page.goto('/locations');
+
+  return locationId;
 }
 
 /**
@@ -370,26 +382,9 @@ export async function attemptDirectAccess(user: TestUser, url: string, shouldSuc
   await user.page.waitForLoadState('networkidle', { timeout: 5000 });
 
   if (shouldSucceed) {
-    // Should not see "Not Found" or error messages
-    await expect(user.page.locator('text=Not Found')).not.toBeVisible();
-    await expect(user.page.locator('text=Error')).not.toBeVisible();
-    // Should see some content indicating successful access
-    const hasContent = await user.page.locator('h1, h2, .content').isVisible({ timeout: 2000 });
-    if (!hasContent) {
-      throw new Error(`User ${user.name} expected to access ${url} but no content found`);
-    }
+    await user.page.waitForSelector('.header')
   } else {
-    // Should see "Not Found", error message, or be redirected away
-    const hasNotFound = await user.page.locator('text=Not Found').isVisible({ timeout: 2000 });
-    const hasError = await user.page.locator('text=Error').isVisible({ timeout: 2000 });
-    const hasFailedToLoad = await user.page.locator('text=Failed to load').isVisible({ timeout: 2000 });
-    const has404Error = await user.page.locator('text=404').isVisible({ timeout: 2000 });
-    const urlId = url.split('/').pop() || '';
-    const isRedirected = !user.page.url().includes(urlId);
-
-    if (!hasNotFound && !hasError && !hasFailedToLoad && !has404Error && !isRedirected) {
-      throw new Error(`User ${user.name} was able to access ${url} when they should not have been able to`);
-    }
+    await user.page.waitForSelector('.resource-not-found')
   }
 }
 
