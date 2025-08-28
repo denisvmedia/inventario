@@ -58,8 +58,6 @@ func newTestRegistrySet() *registry.Set {
 	}
 }
 
-
-
 func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	c := qt.New(t)
 

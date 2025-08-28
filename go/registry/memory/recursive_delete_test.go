@@ -14,17 +14,27 @@ import (
 func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
+	// Create registry set with proper dependencies
+	registrySet := memory.NewRegistrySet()
+
+	// Create test user in the registry
 	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: userID},
 			TenantID: "test-tenant-id",
 		},
-	})
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	testUser.SetPassword("password123")
+	_, err := registrySet.UserRegistry.Create(c.Context(), testUser)
+	c.Assert(err, qt.IsNil)
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	// Add user context for user-aware entities
+	ctx := appctx.WithUser(c.Context(), &testUser)
 
 	// Make registries user-aware
 	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
@@ -39,15 +49,32 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity
-	location := models.Location{Name: "Test Location"}
+	location := models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   userID,
+		},
+		Name: "Test Location",
+	}
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 
-	area := models.Area{Name: "Test Area", LocationID: createdLocation.ID}
+	area := models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   userID,
+		},
+		Name:       "Test Area",
+		LocationID: createdLocation.ID,
+	}
 	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   userID,
+		},
 		Name:   "Test Commodity",
 		AreaID: createdArea.ID,
 	}
