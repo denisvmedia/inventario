@@ -26,6 +26,21 @@ func newTestRegistrySet() *registry.Set {
 	fileRegistry := memory.NewFileRegistry()
 	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
 	restoreStepRegistry := memory.NewRestoreStepRegistry()
+	userRegistry := memory.NewUserRegistry()
+
+	// Create a test user for authentication
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	testUser.SetPassword("password123")
+	userRegistry.Create(context.Background(), testUser)
 
 	return &registry.Set{
 		LocationRegistry:         locationRegistry,
@@ -39,8 +54,11 @@ func newTestRegistrySet() *registry.Set {
 		RestoreOperationRegistry: memory.NewRestoreOperationRegistry(restoreStepRegistry),
 		RestoreStepRegistry:      restoreStepRegistry,
 		FileRegistry:             fileRegistry,
+		UserRegistry:             userRegistry,
 	}
 }
+
+
 
 func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	c := qt.New(t)
@@ -57,11 +75,14 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	createdExport, err := registrySet.ExportRegistry.Create(context.Background(), export)
 	c.Assert(err, qt.IsNil)
 
-	// Set up router
+	// Set up router with authentication
 	r := chi.NewRouter()
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+
 	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
 	}
 
 	// Mock worker with no running restores
@@ -89,6 +110,7 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -112,11 +134,14 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	createdExport, err := registrySet.ExportRegistry.Create(context.Background(), export)
 	c.Assert(err, qt.IsNil)
 
-	// Set up router
+	// Set up router with authentication
 	r := chi.NewRouter()
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+
 	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
 	}
 
 	// Mock worker with running restore
@@ -144,6 +169,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -205,11 +231,14 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	_, err = registrySet.RestoreOperationRegistry.Create(context.Background(), pendingRestore)
 	c.Assert(err, qt.IsNil)
 
-	// Set up router
+	// Set up router with authentication
 	r := chi.NewRouter()
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+
 	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
 	}
 
 	// Use real restore worker (not mock) to test actual logic
@@ -239,6 +268,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -285,11 +315,14 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	createdExport, err := registrySet.ExportRegistry.Create(context.Background(), export)
 	c.Assert(err, qt.IsNil)
 
-	// Set up router
+	// Set up router with authentication
 	r := chi.NewRouter()
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+
 	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
 	}
 
 	// Mock worker with no running restores
@@ -317,6 +350,7 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)

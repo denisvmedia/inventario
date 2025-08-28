@@ -159,10 +159,6 @@ const loadLocation = async () => {
   }
 }
 
-const goBack = () => {
-  router.push('/locations')
-}
-
 const goBackToList = () => {
   router.push('/locations')
 }

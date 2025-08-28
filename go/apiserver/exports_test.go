@@ -27,10 +27,26 @@ func TestExportHardDelete(t *testing.T) {
 	// Create test registry
 	exportRegistry := memory.NewExportRegistry()
 	fileRegistry := memory.NewFileRegistry()
+	userRegistry := memory.NewUserRegistry()
+
+	// Create a test user for authentication
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	testUser.SetPassword("password123")
+	userRegistry.Create(context.Background(), testUser)
 
 	registrySet := &registry.Set{
 		ExportRegistry: exportRegistry,
 		FileRegistry:   fileRegistry,
+		UserRegistry:   userRegistry,
 	}
 
 	// Create test export
@@ -44,20 +60,23 @@ func TestExportHardDelete(t *testing.T) {
 	created, err := registrySet.ExportRegistry.Create(context.Background(), export)
 	c.Assert(err, qt.IsNil)
 
-	// Create router with export routes
+	// Create router with export routes and authentication
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
 
 	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
 		EntityService:  services.NewEntityService(registrySet, "memory://"),
+		JWTSecret:      testJWTSecret,
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test hard delete
 	req := httptest.NewRequest("DELETE", "/exports/"+created.ID, nil)
+	addTestUserAuthHeader(req)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -69,6 +88,7 @@ func TestExportHardDelete(t *testing.T) {
 
 	// Test that download is blocked for deleted export
 	req = httptest.NewRequest("GET", "/exports/"+created.ID+"/download", nil)
+	addTestUserAuthHeader(req)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -213,17 +233,36 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
+	userRegistry := memory.NewUserRegistry()
+
+	// Create a test user for authentication
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	testUser.SetPassword("password123")
+	userRegistry.Create(context.Background(), testUser)
+
 	registrySet := &registry.Set{
 		ExportRegistry: memory.NewExportRegistry(),
+		UserRegistry:   userRegistry,
 	}
 
-	// Create router with export routes
+	// Create router with export routes and authentication
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
 
 	params := apiserver.Params{
 		RegistrySet:    registrySet,
 		UploadLocation: "memory://",
+		JWTSecret:      testJWTSecret,
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
@@ -246,6 +285,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	// Test create endpoint
 	req := httptest.NewRequest("POST", "/exports", bytes.NewReader(payloadBytes))
 	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
