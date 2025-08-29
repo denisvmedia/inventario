@@ -12,7 +12,13 @@ const settingsService = {
   },
 
   patchSetting(field: string, value: any) {
-    return api.patch(`${API_URL}/${field}`, value)
+    // The backend expects a JSON value in the request body
+    // Override the default JSON API content type for this specific endpoint
+    return api.patch(`${API_URL}/${field}`, value, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
   },
 
   // Specific settings methods

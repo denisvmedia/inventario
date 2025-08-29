@@ -1,14 +1,22 @@
 <template>
   <div class="location-edit">
-    <div class="header">
-      <h1>Edit Location</h1>
-      <button class="btn btn-secondary" @click="goBack">Go Back</button>
-    </div>
-
     <div v-if="loading" class="loading">Loading...</div>
+    <ResourceNotFound
+      v-else-if="is404Error"
+      resource-type="location"
+      :title="get404Title('location')"
+      :message="get404Message('location')"
+      go-back-text="Back to Locations"
+      @go-back="goBackToList"
+      @try-again="loadLocation"
+    />
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!location" class="not-found">Location not found</div>
     <div v-else>
+      <div class="header">
+        <h1>Edit Location</h1>
+        <button class="btn btn-secondary" @click="goBack">Go Back</button>
+      </div>
       <form class="form" @submit.prevent="submitForm">
         <div class="form-group">
           <label for="name">Name</label>
@@ -50,9 +58,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import locationService from '@/services/locationService'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 
 const route = useRoute()
 const router = useRouter()
@@ -61,8 +71,12 @@ const id = route.params.id as string
 const location = ref<any>(null)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+const lastError = ref<any>(null) // Store the last error object for 404 detection
 const isSubmitting = ref<boolean>(false)
 const formError = ref<string | null>(null)
+
+// Error state computed properties
+const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
 
 const form = ref({
   name: '',
@@ -74,7 +88,11 @@ const errors = ref({
   address: ''
 })
 
-onMounted(async () => {
+const loadLocation = async () => {
+  loading.value = true
+  error.value = null
+  lastError.value = null
+
   try {
     const response = await locationService.getLocation(id)
     location.value = response.data.data
@@ -85,9 +103,18 @@ onMounted(async () => {
 
     loading.value = false
   } catch (err: any) {
-    error.value = 'Failed to load location: ' + (err.message || 'Unknown error')
+    lastError.value = err
     loading.value = false
+    if (checkIs404Error(err)) {
+      // 404 errors will be handled by the ResourceNotFound component
+    } else {
+      error.value = 'Failed to load location: ' + (err.message || 'Unknown error')
+    }
   }
+}
+
+onMounted(() => {
+  loadLocation()
 })
 
 const validateForm = () => {
@@ -162,6 +189,10 @@ const submitForm = async () => {
 
 const goBack = () => {
   router.go(-1)
+}
+
+const goBackToList = () => {
+  router.push('/locations')
 }
 </script>
 

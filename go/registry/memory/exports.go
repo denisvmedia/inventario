@@ -3,19 +3,47 @@ package memory
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
+
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
+var _ registry.ExportRegistry = (*ExportRegistry)(nil)
+
 type ExportRegistry struct {
 	*Registry[models.Export, *models.Export]
+
+	userID string
 }
 
-func NewExportRegistry() registry.ExportRegistry {
+func NewExportRegistry() *ExportRegistry {
 	return &ExportRegistry{
 		Registry: NewRegistry[models.Export, *models.Export](),
 	}
+}
+
+func (r *ExportRegistry) MustWithCurrentUser(ctx context.Context) registry.ExportRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
+
+func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRegistry, error) {
+	tmp := *r
+
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user from context")
+	}
+	tmp.userID = user.ID
+	return &tmp, nil
+}
+
+func (r *ExportRegistry) WithServiceAccount() registry.ExportRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
 }
 
 // List returns only non-deleted exports

@@ -96,25 +96,10 @@ export async function logoutUser(page: Page): Promise<void> {
 
 /**
  * Creates multiple test users for isolation testing
+ * @deprecated Use getTestUsers from user-isolation-auth.ts instead
  */
 export async function createTestUsers(page: Page, testName: string, count: number = 2): Promise<TestUser[]> {
-  const users: TestUser[] = [];
-  const timestamp = Date.now();
-  
-  for (let i = 1; i <= count; i++) {
-    const user: TestUser = {
-      email: `user${i}-${testName}-${timestamp}@test.com`,
-      password: 'password123',
-      name: `Test User ${i} for ${testName}`
-    };
-    
-    // Create the user account
-    await createUser(page, user.email, user.password, user.name);
-    
-    users.push(user);
-  }
-  
-  return users;
+  throw new Error('createTestUsers is deprecated. Use getTestUsers from user-isolation-auth.ts instead');
 }
 
 /**

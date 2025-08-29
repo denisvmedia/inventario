@@ -2,6 +2,7 @@ package export
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -18,7 +19,12 @@ func TestNewExportWorker(t *testing.T) {
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
@@ -37,7 +43,12 @@ func TestExportWorkerStartStop(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
@@ -75,7 +86,12 @@ func TestExportWorkerIsRunning(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
@@ -103,21 +119,34 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create some test exports
 	export1 := models.Export{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			UserID:   testUserID,
+			TenantID: "test-tenant",
+		},
 		Type:            models.ExportTypeCommodities,
 		Status:          models.ExportStatusPending,
 		IncludeFileData: false,
 	}
 
 	export2 := models.Export{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			UserID:   testUserID,
+			TenantID: "test-tenant",
+		},
 		Type:            models.ExportTypeLocations,
 		Status:          models.ExportStatusPending,
 		IncludeFileData: false,
@@ -153,15 +182,25 @@ func TestExportWorkerProcessExport(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create a test export
 	export := models.Export{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			UserID:   testUserID,
+			TenantID: "test-tenant",
+		},
 		Type:            models.ExportTypeCommodities,
 		Status:          models.ExportStatusPending,
 		IncludeFileData: false,
@@ -190,7 +229,12 @@ func TestExportWorkerConcurrentAccess(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
@@ -236,7 +280,12 @@ func TestExportWorkerContextCancellation(t *testing.T) {
 	registrySet := newTestRegistrySet()
 
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
@@ -264,7 +313,12 @@ func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 
@@ -294,15 +348,24 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
-	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
 
 	exportService := NewExportService(registrySet, uploadLocation)
 	worker := NewExportWorker(exportService, registrySet, 3)
 
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create a test export
 	export := models.Export{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			UserID:   testUserID,
+			TenantID: "test-tenant",
+		},
 		Type:        models.ExportTypeFullDatabase,
 		Description: "Test export for cleanup",
 		Status:      models.ExportStatusCompleted,

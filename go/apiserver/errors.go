@@ -2,12 +2,12 @@ package apiserver
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/render"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
-	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -47,9 +47,21 @@ func NewInternalServerError(err error) jsonapi.Error {
 	}
 }
 
+func NewUnauthorizedError(err error) jsonapi.Error {
+	return jsonapi.Error{
+		Err:            err,
+		HTTPStatusCode: http.StatusUnauthorized,
+		StatusText:     "Unauthorized",
+	}
+}
+
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
-	log.WithError(err).Error("internal server error")
+	slog.Error("internal server error", "error", err)
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
+}
+
+func unauthorizedError(w http.ResponseWriter, r *http.Request, err error) error {
+	return render.Render(w, r, jsonapi.NewErrors(NewUnauthorizedError(err)))
 }
 
 func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error) error {
@@ -65,7 +77,7 @@ func toJSONAPIError(err error) jsonapi.Error {
 	case errors.Is(err, registry.ErrMainCurrencyAlreadySet):
 		return NewUnprocessableEntityError(err)
 	default:
-		log.WithError(err).Error("internal server error")
+		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)
 	}
 }

@@ -3,28 +3,12 @@ package registry
 import (
 	"context"
 	"fmt"
-	"testing"
 	"time"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/models"
 )
-
-// TestUserContext provides a standard test user context for unit tests
-var TestUserContext = WithUserContext(context.Background(), "test-user-id")
-
-// TestUser provides a standard test user for unit tests
-var TestUser = &models.User{
-	TenantAwareEntityID: models.TenantAwareEntityID{
-		EntityID: models.EntityID{ID: "test-user-id"},
-		TenantID: "test-tenant-id",
-	},
-	Email:    "test@example.com",
-	Name:     "Test User",
-	Role:     models.UserRoleUser,
-	IsActive: true,
-}
 
 // CreateTestUser creates a test user in the given user registry
 func CreateTestUser(c *qt.C, userRegistry UserRegistry) *models.User {
@@ -49,18 +33,6 @@ func CreateTestUser(c *qt.C, userRegistry UserRegistry) *models.User {
 	return created
 }
 
-// CreateTestUserContext creates a test user and returns a context with that user
-func CreateTestUserContext(c *qt.C, userRegistry UserRegistry) (context.Context, *models.User) {
-	user := CreateTestUser(c, userRegistry)
-	ctx := WithUserContext(context.Background(), user.ID)
-	return ctx, user
-}
-
-// WithTestUser creates a context with a test user ID
-func WithTestUser(ctx context.Context) context.Context {
-	return WithUserContext(ctx, "test-user-id")
-}
-
 // generateID generates a simple unique ID for testing
 func generateID() string {
 	// Simple implementation for testing - in real code this would be more robust
@@ -71,20 +43,6 @@ func generateID() string {
 type TestEntityWithUser interface {
 	GetUserID() string
 	SetUserID(userID string)
-}
-
-// AssertUserOwnership verifies that an entity belongs to the expected user
-func AssertUserOwnership(c *qt.C, entity TestEntityWithUser, expectedUserID string) {
-	c.Assert(entity.GetUserID(), qt.Equals, expectedUserID)
-}
-
-// AssertUserIsolation verifies that a list of entities all belong to the expected user
-func AssertUserIsolation(c *qt.C, entities []TestEntityWithUser, expectedUserID string) {
-	for i, entity := range entities {
-		c.Assert(entity.GetUserID(), qt.Equals, expectedUserID,
-			qt.Commentf("Entity at index %d belongs to user %s, expected %s",
-				i, entity.GetUserID(), expectedUserID))
-	}
 }
 
 // TestRegistryWithUserIsolation provides a standard test pattern for registry user isolation
@@ -162,44 +120,4 @@ func (m *MockUserRegistry) GetByEmail(ctx context.Context, email string) (*model
 // Count implements UserRegistry.Count
 func (m *MockUserRegistry) Count(ctx context.Context) (int, error) {
 	return len(m.users), nil
-}
-
-// TestUserIsolationPattern provides a reusable test pattern for user isolation
-func TestUserIsolationPattern(t *testing.T, testName string, testFunc func(*qt.C, context.Context, context.Context, *models.User, *models.User)) {
-	t.Run(testName, func(t *testing.T) {
-		c := qt.New(t)
-
-		// Create mock user registry
-		userRegistry := NewMockUserRegistry()
-
-		// Create two test users
-		user1, err := userRegistry.Create(context.Background(), models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "user-1"},
-				TenantID: "test-tenant-id",
-			},
-			Email: "user1@test.com",
-			Name:  "User 1",
-			Role:  models.UserRoleUser,
-		})
-		c.Assert(err, qt.IsNil)
-
-		user2, err := userRegistry.Create(context.Background(), models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "user-2"},
-				TenantID: "test-tenant-id",
-			},
-			Email: "user2@test.com",
-			Name:  "User 2",
-			Role:  models.UserRoleUser,
-		})
-		c.Assert(err, qt.IsNil)
-
-		// Create contexts for each user
-		ctx1 := WithUserContext(context.Background(), user1.ID)
-		ctx2 := WithUserContext(context.Background(), user2.ID)
-
-		// Run the test function
-		testFunc(c, ctx1, ctx2, user1, user2)
-	})
 }

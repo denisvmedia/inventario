@@ -17,7 +17,7 @@ The Inventario system is composed of three main components:
 
 - **Backend**: Go 1.24+, Chi router, Swagger documentation
 - **Frontend**: Vue.js 3, TypeScript, PrimeVue UI components, Pinia state management
-- **Databases**: PostgreSQL (recommended), MySQL/MariaDB, BoltDB (embedded), In-memory
+- **Databases**: PostgreSQL (recommended), In-memory
 - **File Storage**: Go Cloud Development Kit (supports local, S3, Azure, GCS)
 
 ## Core Domain Concepts
@@ -133,8 +133,6 @@ The backend follows RESTful principles with JSON:API specification:
 The system supports multiple database backends through a registry pattern:
 
 - **PostgreSQL**: Full-featured production database with advanced features
-- **MySQL/MariaDB**: Alternative SQL database with full feature support
-- **BoltDB**: Embedded key-value store for single-user deployments
 - **Memory**: In-memory storage for testing and development
 
 #### Registry Pattern

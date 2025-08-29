@@ -2,10 +2,13 @@ package memory
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/go-extras/go-kit/must"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -17,15 +20,49 @@ type baseLocationRegistry = Registry[models.Location, *models.Location]
 type LocationRegistry struct {
 	*baseLocationRegistry
 
-	areasLock sync.RWMutex
+	userID    string
+	areasLock *sync.RWMutex
 	areas     models.LocationAreas
 }
 
 func NewLocationRegistry() *LocationRegistry {
 	return &LocationRegistry{
 		baseLocationRegistry: NewRegistry[models.Location, *models.Location](),
+		areasLock:            &sync.RWMutex{},
 		areas:                make(models.LocationAreas),
 	}
+}
+
+func (r *LocationRegistry) MustWithCurrentUser(ctx context.Context) registry.LocationRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
+
+func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.LocationRegistry, error) {
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user from context")
+	}
+
+	// Create a shallow copy of the registry
+	tmp := *r
+	tmp.userID = user.ID
+
+	// Create a new base registry with the same data but user-specific userID
+	// Avoid copying the mutex by creating a new instance
+	newBaseRegistry := &Registry[models.Location, *models.Location]{
+		items:  r.baseLocationRegistry.items, // Share the data map
+		lock:   r.baseLocationRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                      // Set user-specific userID
+	}
+	tmp.baseLocationRegistry = newBaseRegistry
+
+	return &tmp, nil
+}
+
+func (r *LocationRegistry) WithServiceAccount() registry.LocationRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
 }
 
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
@@ -65,13 +102,50 @@ func (r *LocationRegistry) GetAreas(_ context.Context, locationID string) ([]str
 
 func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID string) error {
 	r.areasLock.Lock()
-	for i, foundAreaID := range r.areas[locationID] {
-		if foundAreaID == areaID {
-			r.areas[locationID] = append(r.areas[locationID][:i], r.areas[locationID][i+1:]...)
-			break
-		}
-	}
+
+	r.areas[locationID] = slices.DeleteFunc(r.areas[locationID], func(id string) bool {
+		return id == areaID
+	})
+
 	r.areasLock.Unlock()
 
 	return nil
+}
+
+// Enhanced methods with simplified in-memory implementations
+
+// GetAreaCount returns the number of areas in a location (simplified)
+func (r *LocationRegistry) GetAreaCount(ctx context.Context, locationID string) (int, error) {
+	areas, err := r.GetAreas(ctx, locationID)
+	if err != nil {
+		return 0, err
+	}
+	return len(areas), nil
+}
+
+// GetTotalCommodityCount returns the total number of commodities across all areas in a location (simplified)
+func (r *LocationRegistry) GetTotalCommodityCount(ctx context.Context, locationID string) (int, error) {
+	// This is a simplified implementation that would require access to area and commodity data
+	// In a real implementation, this would need to be coordinated with the area and commodity registries
+	// For now, return 0 as a placeholder
+	return 0, nil
+}
+
+// SearchByName searches locations by name using simple text matching (simplified)
+func (r *LocationRegistry) SearchByName(ctx context.Context, query string) ([]*models.Location, error) {
+	locations, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	query = strings.ToLower(query)
+	var filtered []*models.Location
+
+	for _, location := range locations {
+		if strings.Contains(strings.ToLower(location.Name), query) {
+			filtered = append(filtered, location)
+		}
+	}
+
+	return filtered, nil
 }

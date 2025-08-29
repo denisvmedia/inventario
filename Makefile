@@ -58,8 +58,6 @@ DB_DSN=memory://
 # Database configuration examples
 # Memory database (default)
 # DB_DSN=memory://
-# BoltDB database
-# DB_DSN=boltdb://$(CURRENT_DIR)/data/inventario.db
 # PostgreSQL database
 # DB_DSN=postgres://postgres:password@localhost:5432/inventario
 

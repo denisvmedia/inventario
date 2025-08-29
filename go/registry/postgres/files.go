@@ -2,46 +2,108 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
 var _ registry.FileRegistry = (*FileRegistry)(nil)
 
 type FileRegistry struct {
-	db *sqlx.DB
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+	userID     string
+	tenantID   string
+	service    bool
 }
 
-func NewFileRegistry(db *sqlx.DB) *FileRegistry {
-	return &FileRegistry{db: db}
+func NewFileRegistry(dbx *sqlx.DB) *FileRegistry {
+	return NewFileRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-// SetUserContext sets the user context for RLS policies
-func (r *FileRegistry) SetUserContext(ctx context.Context, userID string) error {
-	return SetUserContext(ctx, r.db, userID)
+func NewFileRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *FileRegistry {
+	return &FileRegistry{
+		dbx:        dbx,
+		tableNames: tableNames,
+	}
 }
 
-// WithUserContext executes a function with user context set
-func (r *FileRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
-	return WithUserContext(ctx, r.db, userID, fn)
+func (r *FileRegistry) MustWithCurrentUser(ctx context.Context) registry.FileRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
+
+func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegistry, error) {
+	tmp := *r
+
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
+	tmp.service = false
+	return &tmp, nil
+}
+
+func (r *FileRegistry) WithServiceAccount() registry.FileRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
+}
+
+func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
+	return r.get(ctx, id)
+}
+
+func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
+	var files []*models.FileEntity
+
+	reg := r.newSQLRegistry()
+
+	// Query the database for all files (atomic operation)
+	for file, err := range reg.Scan(ctx) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list files")
+		}
+		files = append(files, &file)
+	}
+
+	return files, nil
+}
+
+func (r *FileRegistry) Count(ctx context.Context) (int, error) {
+	reg := r.newSQLRegistry()
+
+	cnt, err := reg.Count(ctx)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count files")
+	}
+
+	return cnt, nil
 }
 
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
-	if file.ID == "" {
+	// Generate a new ID if one is not already provided
+	if file.GetID() == "" {
 		file.SetID(generateID())
 	}
+	file.SetTenantID(r.tenantID)
+	file.SetUserID(r.userID)
 
-	// Use InsertEntity like other registries to automatically handle all db-tagged fields including tenant_id
-	err := InsertEntity(ctx, r.db, "files", file)
+	reg := r.newSQLRegistry()
+
+	err := reg.Create(ctx, file, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create file")
 	}
@@ -49,497 +111,251 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 	return &file, nil
 }
 
-func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
-	var file models.FileEntity
-	file.File = &models.File{}
-	var tagsJSON []byte
-
-	query := `
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
-		FROM files
-		WHERE id = $1`
-
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
-		&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
-		&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
-		&file.CreatedAt, &file.UpdatedAt,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, registry.ErrNotFound
-		}
-		return nil, errkit.Wrap(err, "failed to get file")
-	}
-
-	if len(tagsJSON) > 0 {
-		err = json.Unmarshal(tagsJSON, &file.Tags)
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to unmarshal tags")
-		}
-	}
-
-	return &file, nil
-}
-
-func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
-	query := `
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
-		FROM files
-		ORDER BY created_at DESC`
-
-	rows, err := r.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list files")
-	}
-	defer rows.Close()
-
-	var files []*models.FileEntity
-	for rows.Next() {
-		var file models.FileEntity
-		file.File = &models.File{}
-		var tagsJSON []byte
-
-		err := rows.Scan(
-			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
-			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
-			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
-			&file.CreatedAt, &file.UpdatedAt,
-		)
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to scan file")
-		}
-
-		if len(tagsJSON) > 0 {
-			err = json.Unmarshal(tagsJSON, &file.Tags)
-			if err != nil {
-				return nil, errkit.Wrap(err, "failed to unmarshal tags")
-			}
-		}
-
-		files = append(files, &file)
-	}
-
-	return files, nil
-}
-
-// ListByLinkedEntity returns files linked to a specific entity
-func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
-	query := `
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
-		FROM files
-		WHERE linked_entity_type = $1 AND linked_entity_id = $2
-		ORDER BY created_at DESC`
-
-	rows, err := r.db.QueryContext(ctx, query, entityType, entityID)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list files by linked entity")
-	}
-	defer rows.Close()
-
-	var files []*models.FileEntity
-	for rows.Next() {
-		var file models.FileEntity
-		file.File = &models.File{}
-		var tagsJSON []byte
-
-		err := rows.Scan(
-			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
-			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
-			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
-			&file.CreatedAt, &file.UpdatedAt,
-		)
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to scan file")
-		}
-
-		if len(tagsJSON) > 0 {
-			err = json.Unmarshal(tagsJSON, &file.Tags)
-			if err != nil {
-				return nil, errkit.Wrap(err, "failed to unmarshal tags")
-			}
-		}
-
-		files = append(files, &file)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, errkit.Wrap(err, "failed to iterate over files")
-	}
-
-	return files, nil
-}
-
-// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
-func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error) {
-	query := `
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
-		FROM files
-		WHERE linked_entity_type = $1 AND linked_entity_id = $2 AND linked_entity_meta = $3
-		ORDER BY created_at DESC`
-
-	rows, err := r.db.QueryContext(ctx, query, entityType, entityID, meta)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list files by linked entity and meta")
-	}
-	defer rows.Close()
-
-	var files []*models.FileEntity
-	for rows.Next() {
-		var file models.FileEntity
-		file.File = &models.File{}
-
-		var tagsJSON []byte
-
-		err := rows.Scan(
-			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
-			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
-			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
-			&file.CreatedAt, &file.UpdatedAt,
-		)
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to scan file")
-		}
-
-		if len(tagsJSON) > 0 {
-			err = json.Unmarshal(tagsJSON, &file.Tags)
-			if err != nil {
-				return nil, errkit.Wrap(err, "failed to unmarshal tags")
-			}
-		}
-
-		// Initialize File struct
-		files = append(files, &file)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, errkit.Wrap(err, "failed to iterate over files")
-	}
-
-	return files, nil
-}
-
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
-	tagsJSON, err := json.Marshal(file.Tags)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to marshal tags")
-	}
+	reg := r.newSQLRegistry()
 
-	query := `
-		UPDATE files
-		SET title = $2, description = $3, type = $4, tags = $5, path = $6, linked_entity_type = $7, linked_entity_id = $8, linked_entity_meta = $9, updated_at = $10
-		WHERE id = $1`
-
-	result, err := r.db.ExecContext(ctx, query,
-		file.ID, file.Title, file.Description, file.Type, tagsJSON, file.Path,
-		file.LinkedEntityType, file.LinkedEntityID, file.LinkedEntityMeta, file.UpdatedAt,
-	)
-
+	err := reg.Update(ctx, file, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update file")
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get rows affected")
-	}
-
-	if rowsAffected == 0 {
-		return nil, registry.ErrNotFound
 	}
 
 	return &file, nil
 }
 
 func (r *FileRegistry) Delete(ctx context.Context, id string) error {
-	query := `DELETE FROM files WHERE id = $1`
-
-	result, err := r.db.ExecContext(ctx, query, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete file")
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return errkit.Wrap(err, "failed to get rows affected")
-	}
-
-	if rowsAffected == 0 {
-		return registry.ErrNotFound
-	}
-
-	return nil
+	reg := r.newSQLRegistry()
+	err := reg.Delete(ctx, id, nil)
+	return err
 }
 
-func (r *FileRegistry) Count(ctx context.Context) (int, error) {
-	var count int
-	query := `SELECT COUNT(*) FROM files`
+func (r *FileRegistry) newSQLRegistry() *store.RLSRepository[models.FileEntity, *models.FileEntity] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.FileEntity](r.dbx, r.tableNames.Files())
+	}
+	return store.NewUserAwareSQLRegistry[models.FileEntity](r.dbx, r.userID, r.tenantID, r.tableNames.Files())
+}
 
-	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+func (r *FileRegistry) get(ctx context.Context, id string) (*models.FileEntity, error) {
+	var file models.FileEntity
+	reg := r.newSQLRegistry()
+
+	err := reg.ScanOneByField(ctx, store.Pair("id", id), &file)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count files")
+		return nil, errkit.Wrap(err, "failed to get file")
 	}
 
-	return count, nil
+	return &file, nil
 }
 
 func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error) {
-	query := `
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
-		FROM files
-		WHERE type = $1
-		ORDER BY created_at DESC`
-
-	rows, err := r.db.QueryContext(ctx, query, fileType)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list files by type")
-	}
-	defer rows.Close()
-
 	var files []*models.FileEntity
-	for rows.Next() {
-		var file models.FileEntity
-		file.File = &models.File{}
-		var tagsJSON []byte
 
-		err := rows.Scan(
-			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
-			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
-			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
-			&file.CreatedAt, &file.UpdatedAt,
-		)
+	reg := r.newSQLRegistry()
+	for file, err := range reg.ScanByField(ctx, store.Pair("type", fileType)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to scan file")
+			return nil, errkit.Wrap(err, "failed to list files by type")
 		}
-
-		if len(tagsJSON) > 0 {
-			err = json.Unmarshal(tagsJSON, &file.Tags)
-			if err != nil {
-				return nil, errkit.Wrap(err, "failed to unmarshal tags")
-			}
-		}
-
 		files = append(files, &file)
+	}
+
+	return files, nil
+}
+
+func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
+	var files []*models.FileEntity
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT * FROM %s
+			WHERE linked_entity_type = $1 AND linked_entity_id = $2
+			ORDER BY created_at DESC`, r.tableNames.Files())
+
+		rows, err := tx.QueryxContext(ctx, query, entityType, entityID)
+		if err != nil {
+			return errkit.Wrap(err, "failed to list files by linked entity")
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var file models.FileEntity
+			err := rows.StructScan(&file)
+			if err != nil {
+				return errkit.Wrap(err, "failed to scan file")
+			}
+			files = append(files, &file)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list files by linked entity")
+	}
+
+	return files, nil
+}
+
+func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error) {
+	var files []*models.FileEntity
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT * FROM %s
+			WHERE linked_entity_type = $1 AND linked_entity_id = $2 AND linked_entity_meta = $3
+			ORDER BY created_at DESC`, r.tableNames.Files())
+
+		rows, err := tx.QueryxContext(ctx, query, entityType, entityID, meta)
+		if err != nil {
+			return errkit.Wrap(err, "failed to list files by linked entity and meta")
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var file models.FileEntity
+			err := rows.StructScan(&file)
+			if err != nil {
+				return errkit.Wrap(err, "failed to scan file")
+			}
+			files = append(files, &file)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list files by linked entity and meta")
 	}
 
 	return files, nil
 }
 
 func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error) {
-	var conditions []string
-	var args []any
-	argIndex := 1
+	var files []*models.FileEntity
 
-	// Add type filter if specified
-	if fileType != nil {
-		conditions = append(conditions, fmt.Sprintf("type = $%d", argIndex))
-		args = append(args, *fileType)
-		argIndex++
-	}
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var conditions []string
+		var args []any
+		argIndex := 1
 
-	// Add tags filter if specified
-	if len(tags) > 0 {
-		conditions = append(conditions, fmt.Sprintf("tags @> $%d", argIndex))
-		tagsJSON, _ := json.Marshal(tags)
-		args = append(args, tagsJSON)
-		argIndex++
-	}
+		// Add type filter if specified
+		if fileType != nil {
+			conditions = append(conditions, fmt.Sprintf("type = $%d", argIndex))
+			args = append(args, *fileType)
+			argIndex++
+		}
 
-	// Add text search if specified
-	if query != "" {
-		searchCondition := fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d OR path ILIKE $%d OR original_path ILIKE $%d)", argIndex, argIndex+1, argIndex+2, argIndex+3)
-		conditions = append(conditions, searchCondition)
-		searchPattern := "%" + query + "%"
-		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
-		argIndex += 4
-	}
-	_ = argIndex // unused for now
+		// Add tags filter if specified
+		if len(tags) > 0 {
+			conditions = append(conditions, fmt.Sprintf("tags @> $%d", argIndex))
+			tagsJSON, _ := json.Marshal(tags)
+			args = append(args, tagsJSON)
+			argIndex++
+		}
 
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = "WHERE " + strings.Join(conditions, " AND ")
-	}
+		// Add text search if specified
+		if query != "" {
+			searchCondition := fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d OR path ILIKE $%d OR original_path ILIKE $%d)", argIndex, argIndex+1, argIndex+2, argIndex+3)
+			conditions = append(conditions, searchCondition)
+			searchPattern := "%" + query + "%"
+			args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
+		}
 
-	sqlQuery := fmt.Sprintf(`
-		SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
-		FROM files
-		%s
-		ORDER BY created_at DESC`, whereClause)
+		whereClause := ""
+		if len(conditions) > 0 {
+			whereClause = "WHERE " + strings.Join(conditions, " AND ")
+		}
 
-	rows, err := r.db.QueryContext(ctx, sqlQuery, args...)
+		sqlQuery := fmt.Sprintf(`
+			SELECT * FROM %s
+			%s
+			ORDER BY created_at DESC`, r.tableNames.Files(), whereClause)
+
+		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
+		if err != nil {
+			return errkit.Wrap(err, "failed to search files")
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var file models.FileEntity
+			err := rows.StructScan(&file)
+			if err != nil {
+				return errkit.Wrap(err, "failed to scan file")
+			}
+			files = append(files, &file)
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to search files")
-	}
-	defer rows.Close()
-
-	var files []*models.FileEntity
-	for rows.Next() {
-		var file models.FileEntity
-		file.File = &models.File{}
-		var tagsJSON []byte
-
-		err := rows.Scan(
-			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
-			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
-			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
-			&file.CreatedAt, &file.UpdatedAt,
-		)
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to scan file")
-		}
-
-		if len(tagsJSON) > 0 {
-			err = json.Unmarshal(tagsJSON, &file.Tags)
-			if err != nil {
-				return nil, errkit.Wrap(err, "failed to unmarshal tags")
-			}
-		}
-
-		files = append(files, &file)
 	}
 
 	return files, nil
 }
 
 func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error) {
-	// First get the total count
-	var countQuery string
-	var countArgs []any
-
-	if fileType != nil {
-		countQuery = `SELECT COUNT(*) FROM files WHERE type = $1`
-		countArgs = []any{*fileType}
-	} else {
-		countQuery = `SELECT COUNT(*) FROM files`
-	}
-
+	var files []*models.FileEntity
 	var total int
-	err := r.db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
-	if err != nil {
-		return nil, 0, errkit.Wrap(err, "failed to count files")
-	}
 
-	// Then get the paginated results
-	var dataQuery string
-	var dataArgs []any
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// First get the total count
+		var countQuery string
+		var countArgs []any
 
-	if fileType != nil {
-		dataQuery = `
-			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
-			FROM files
-			WHERE type = $1
-			ORDER BY created_at DESC
-			LIMIT $2 OFFSET $3`
-		dataArgs = []any{*fileType, limit, offset}
-	} else {
-		dataQuery = `
-			SELECT id, title, description, type, tags, path, original_path, ext, mime_type, linked_entity_type, linked_entity_id, linked_entity_meta, created_at, updated_at
-			FROM files
-			ORDER BY created_at DESC
-			LIMIT $1 OFFSET $2`
-		dataArgs = []any{limit, offset}
-	}
+		if fileType != nil {
+			countQuery = fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE type = $1`, r.tableNames.Files())
+			countArgs = []any{*fileType}
+		} else {
+			countQuery = fmt.Sprintf(`SELECT COUNT(*) FROM %s`, r.tableNames.Files())
+		}
 
-	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)
+		err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
+		if err != nil {
+			return errkit.Wrap(err, "failed to count files")
+		}
+
+		// Then get the paginated results
+		var dataQuery string
+		var dataArgs []any
+
+		if fileType != nil {
+			dataQuery = fmt.Sprintf(`
+				SELECT * FROM %s
+				WHERE type = $1
+				ORDER BY created_at DESC
+				LIMIT $2 OFFSET $3`, r.tableNames.Files())
+			dataArgs = []any{*fileType, limit, offset}
+		} else {
+			dataQuery = fmt.Sprintf(`
+				SELECT * FROM %s
+				ORDER BY created_at DESC
+				LIMIT $1 OFFSET $2`, r.tableNames.Files())
+			dataArgs = []any{limit, offset}
+		}
+
+		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
+		if err != nil {
+			return errkit.Wrap(err, "failed to list paginated files")
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var file models.FileEntity
+			err := rows.StructScan(&file)
+			if err != nil {
+				return errkit.Wrap(err, "failed to scan file")
+			}
+			files = append(files, &file)
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, 0, errkit.Wrap(err, "failed to list paginated files")
 	}
-	defer rows.Close()
-
-	var files []*models.FileEntity
-	for rows.Next() {
-		var file models.FileEntity
-		file.File = &models.File{}
-		var tagsJSON []byte
-
-		err := rows.Scan(
-			&file.ID, &file.Title, &file.Description, &file.Type, &tagsJSON,
-			&file.Path, &file.OriginalPath, &file.Ext, &file.MIMEType,
-			&file.LinkedEntityType, &file.LinkedEntityID, &file.LinkedEntityMeta,
-			&file.CreatedAt, &file.UpdatedAt,
-		)
-		if err != nil {
-			return nil, 0, errkit.Wrap(err, "failed to scan file")
-		}
-
-		if len(tagsJSON) > 0 {
-			err = json.Unmarshal(tagsJSON, &file.Tags)
-			if err != nil {
-				return nil, 0, errkit.Wrap(err, "failed to unmarshal tags")
-			}
-		}
-
-		files = append(files, &file)
-	}
 
 	return files, total, nil
-}
-
-// User-aware methods that automatically use user context from the request context
-
-// CreateWithUser creates a file with user context
-func (r *FileRegistry) CreateWithUser(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	file.SetUserID(userID)
-	if file.ID == "" {
-		file.SetID(generateID())
-	}
-	err := InsertEntityWithUser(ctx, r.db, "files", file)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create file")
-	}
-	return &file, nil
-}
-
-// GetWithUser gets a file with user context
-func (r *FileRegistry) GetWithUser(ctx context.Context, id string) (*models.FileEntity, error) {
-	var file models.FileEntity
-	err := ScanEntityByFieldWithUser(ctx, r.db, "files", "id", id, &file)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, errkit.WithStack(registry.ErrNotFound, "entity_type", "FileEntity", "entity_id", id)
-		}
-		return nil, errkit.Wrap(err, "failed to get file")
-	}
-	return &file, nil
-}
-
-// ListWithUser lists files with user context
-func (r *FileRegistry) ListWithUser(ctx context.Context) ([]*models.FileEntity, error) {
-	var files []*models.FileEntity
-	for file, err := range ScanEntitiesWithUser[models.FileEntity](ctx, r.db, "files") {
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list files")
-		}
-		files = append(files, &file)
-	}
-	return files, nil
-}
-
-// UpdateWithUser updates a file with user context
-func (r *FileRegistry) UpdateWithUser(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	file.SetUserID(userID)
-	err := UpdateEntityByFieldWithUser(ctx, r.db, "files", "id", file.ID, file)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update file")
-	}
-	return &file, nil
-}
-
-// DeleteWithUser deletes a file with user context
-func (r *FileRegistry) DeleteWithUser(ctx context.Context, id string) error {
-	return DeleteEntityByFieldWithUser(ctx, r.db, "files", "id", id)
-}
-
-// CountWithUser counts files with user context
-func (r *FileRegistry) CountWithUser(ctx context.Context) (int, error) {
-	return CountEntitiesWithUser(ctx, r.db, "files")
 }

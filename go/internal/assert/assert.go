@@ -1,12 +1,12 @@
 package assert
 
 import (
-	"github.com/denisvmedia/inventario/internal/log"
+	"log/slog"
 )
 
 func NoError(err error) {
 	if err != nil {
-		log.WithError(err).Error("unexpected error")
+		slog.Error("unexpected error", "error", err)
 		panic(err)
 	}
 }

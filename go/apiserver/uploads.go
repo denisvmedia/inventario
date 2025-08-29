@@ -61,19 +61,25 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		Type: "images",
 	}
 
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	fileReg, err := api.fileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	for _, f := range uploadedFiles {
 		// Get the extension from the MIME type
 		ext := mimekit.ExtensionByMime(f.MIMEType)
 		originalPath := f.FilePath
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
-
-		// Extract user from authenticated request context
-		user := GetUserFromRequest(r)
-		if user == nil {
-			http.Error(w, "User context required", http.StatusInternalServerError)
-			return
-		}
 
 		// Create file entity instead of image
 		now := time.Now()
@@ -99,7 +105,7 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 			},
 		}
 
-		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
+		createdFile, err := fileReg.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -131,19 +137,25 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		Type: "manuals",
 	}
 
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	fileReg, err := api.fileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	for _, f := range uploadedFiles {
 		// Get the extension from the MIME type
 		ext := mimekit.ExtensionByMime(f.MIMEType)
 		originalPath := f.FilePath
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
-
-		// Extract user from authenticated request context
-		user := GetUserFromRequest(r)
-		if user == nil {
-			http.Error(w, "User context required", http.StatusInternalServerError)
-			return
-		}
 
 		// Create file entity instead of manual
 		now := time.Now()
@@ -169,7 +181,7 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 			},
 		}
 
-		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
+		createdFile, err := fileReg.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -201,19 +213,25 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		Type: "invoices",
 	}
 
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	fileReg, err := api.fileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	for _, f := range uploadedFiles {
 		// Get the extension from the MIME type
 		ext := mimekit.ExtensionByMime(f.MIMEType)
 		originalPath := f.FilePath
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
-
-		// Extract user from authenticated request context
-		user := GetUserFromRequest(r)
-		if user == nil {
-			http.Error(w, "User context required", http.StatusInternalServerError)
-			return
-		}
 
 		// Create file entity instead of invoice
 		now := time.Now()
@@ -239,7 +257,7 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 			},
 		}
 
-		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
+		createdFile, err := fileReg.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -262,6 +280,19 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 	}
 
 	var createdFiles []models.FileEntity
+
+	// Extract user from authenticated request context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	fileReg, err := api.fileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
 
 	for _, f := range uploadedFiles {
 		// Get the extension from the MIME type
@@ -292,13 +323,6 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 			fileType = models.FileTypeOther
 		}
 
-		// Extract user from authenticated request context
-		user := GetUserFromRequest(r)
-		if user == nil {
-			http.Error(w, "User context required", http.StatusInternalServerError)
-			return
-		}
-
 		// Create file entity with auto-generated title from filename
 		now := time.Now()
 		fileEntity := models.FileEntity{
@@ -320,7 +344,7 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 			},
 		}
 
-		createdFile, err := api.fileRegistry.Create(r.Context(), fileEntity)
+		createdFile, err := fileReg.Create(r.Context(), fileEntity)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return

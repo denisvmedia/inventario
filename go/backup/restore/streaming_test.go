@@ -6,7 +6,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/backup/restore/processor"
+	"github.com/denisvmedia/inventario/backup/restore/types"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -15,16 +18,22 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
 
 	// Create XML with processing instructions and various token types that should be handled properly
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -63,14 +72,14 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 </inventory>`
 
 	reader := strings.NewReader(xmlContent)
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
 	}
 
 	// This should work without any "unexpected token type" errors
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("Expected no errors, but got: %v", stats.Errors))
 	c.Assert(stats.CommodityCount, qt.Equals, 1)
@@ -93,16 +102,22 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
 
 	// This test demonstrates that the streaming XML parsing works correctly
 	// without loading everything into memory
@@ -141,15 +156,15 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 </inventory>`
 
 	reader := strings.NewReader(xmlContent)
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
 	}
 
 	// Test the detailed logging restore process - we'll just test the regular restore for now
 	// since the detailed logging is tested through the background worker
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("Expected no errors, but got: %v", stats.Errors))
 	c.Assert(stats.CommodityCount, qt.Equals, 1)

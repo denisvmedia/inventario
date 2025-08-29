@@ -43,8 +43,9 @@ func TestMigrator_Apply_DatabaseConnection_HappyPath(t *testing.T) {
 	args := bootstrap.ApplyArgs{
 		DSN: dsn,
 		Template: bootstrap.TemplateData{
-			Username:              "inventario",
-			UsernameForMigrations: "inventario",
+			Username:                    "inventario",
+			UsernameForMigrations:       "inventario",
+			UsernameForBackgroundWorker: "inventario",
 		},
 		DryRun: false,
 	}
@@ -61,8 +62,9 @@ func TestMigrator_Apply_Idempotent_HappyPath(t *testing.T) {
 	args := bootstrap.ApplyArgs{
 		DSN: dsn,
 		Template: bootstrap.TemplateData{
-			Username:              "inventario",
-			UsernameForMigrations: "inventario",
+			Username:                    "inventario",
+			UsernameForMigrations:       "inventario",
+			UsernameForBackgroundWorker: "inventario",
 		},
 		DryRun: false,
 	}
@@ -88,8 +90,9 @@ func TestMigrator_Apply_TemplateSubstitution_Integration_HappyPath(t *testing.T)
 	args := bootstrap.ApplyArgs{
 		DSN: dsn,
 		Template: bootstrap.TemplateData{
-			Username:              "inventario",
-			UsernameForMigrations: "inventario",
+			Username:                    "inventario",
+			UsernameForMigrations:       "inventario",
+			UsernameForBackgroundWorker: "inventario",
 		},
 		DryRun: false,
 	}
@@ -186,8 +189,9 @@ func TestMigrator_Apply_DryRun_Integration_HappyPath(t *testing.T) {
 	args := bootstrap.ApplyArgs{
 		DSN: dsn,
 		Template: bootstrap.TemplateData{
-			Username:              "inventario",
-			UsernameForMigrations: "inventario",
+			Username:                    "inventario",
+			UsernameForMigrations:       "inventario",
+			UsernameForBackgroundWorker: "inventario",
 		},
 		DryRun: true,
 	}
@@ -210,8 +214,9 @@ func TestMigrator_Apply_TransactionRollback_UnhappyPath(t *testing.T) {
 	args := bootstrap.ApplyArgs{
 		DSN: limitedDSN,
 		Template: bootstrap.TemplateData{
-			Username:              "inventario",
-			UsernameForMigrations: "inventario",
+			Username:                    "inventario",
+			UsernameForMigrations:       "inventario",
+			UsernameForBackgroundWorker: "inventario",
 		},
 		DryRun: false,
 	}
@@ -234,8 +239,9 @@ func TestMigrator_Apply_ContextCancellation_UnhappyPath(t *testing.T) {
 	args := bootstrap.ApplyArgs{
 		DSN: dsn,
 		Template: bootstrap.TemplateData{
-			Username:              "inventario",
-			UsernameForMigrations: "inventario",
+			Username:                    "inventario",
+			UsernameForMigrations:       "inventario",
+			UsernameForBackgroundWorker: "inventario",
 		},
 		DryRun: false,
 	}

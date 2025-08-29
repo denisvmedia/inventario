@@ -1,39 +1,44 @@
 package restore_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/backup/restore/processor"
+	"github.com/denisvmedia/inventario/backup/restore/types"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Import blob drivers
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// First, create some initial data with files
 	initialXML := `<?xml version="1.0" encoding="UTF-8"?>
@@ -97,14 +102,14 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 </inventory>`
 
 	// First restore with full replace to create initial data
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader := strings.NewReader(initialXML)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0)
 
@@ -135,14 +140,14 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 
 	// Now try to restore the same data again using Merge & Add strategy
 	// This should NOT create duplicates
-	mergeAddOptions := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyMergeAdd,
+	mergeAddOptions := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyMergeAdd,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader2 := strings.NewReader(initialXML)
-	stats2, err := processor.RestoreFromXML(ctx, reader2, mergeAddOptions)
+	stats2, err := proc.RestoreFromXML(ctx, reader2, mergeAddOptions)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats2.ErrorCount, qt.Equals, 0)
 
@@ -171,23 +176,28 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 
 func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// First, create initial data with one file
 	initialXML := `<?xml version="1.0" encoding="UTF-8"?>
@@ -233,14 +243,14 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 </inventory>`
 
 	// First restore with full replace to create initial data
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader := strings.NewReader(initialXML)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0)
 	c.Assert(stats.ImageCount, qt.Equals, 1)
@@ -311,14 +321,14 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 </inventory>`
 
 	// Restore with Merge & Add strategy
-	mergeAddOptions := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyMergeAdd,
+	mergeAddOptions := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyMergeAdd,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader2 := strings.NewReader(xmlWithNewFiles)
-	stats2, err := processor.RestoreFromXML(ctx, reader2, mergeAddOptions)
+	stats2, err := proc.RestoreFromXML(ctx, reader2, mergeAddOptions)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats2.ErrorCount, qt.Equals, 0)
 

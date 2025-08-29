@@ -4,9 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,7 +26,6 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/internal/httpserver"
-	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -59,9 +62,6 @@ USAGE EXAMPLES:
   Custom upload location:
     inventario run --upload-location="file:///var/lib/inventario/uploads?create_dir=1"
 
-  Local development with persistent database:
-    inventario run --db-dsn="boltdb://./inventario.db" --upload-location="file://./uploads?create_dir=1"
-
 FLAG DETAILS:
 
   --addr (default ":3333")
@@ -72,7 +72,6 @@ FLAG DETAILS:
   --db-dsn (default "memory://")
     Database connection string supporting multiple backends:
     • PostgreSQL: "postgres://user:password@host:port/database?sslmode=disable"
-    • BoltDB: "boltdb://path/to/database.db"
     • In-memory: "memory://" (data lost on restart, useful for testing)
 
   --upload-location (default "file://./uploads?create_dir=1")
@@ -120,28 +119,34 @@ func (c *Command) runCommand() error {
 	bindAddr := c.config.Addr
 	dsn := c.dbConfig.DBDSN
 
+	// print out all environment variables that start with INVENTARIO_
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "INVENTARIO_") {
+			slog.Info("Environment variable", "name", e)
+		}
+	}
+
 	parsedDSN := must.Must(registry.Config(dsn).Parse())
 	if parsedDSN.User != nil {
 		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
 	}
 
-	log.WithFields(log.Fields{
-		"addr":   bindAddr,
-		"db-dsn": parsedDSN.String(),
-	}).Info("Starting server")
+	slog.Info("Starting server", "addr", bindAddr, "db-dsn", parsedDSN.String())
 
 	var params apiserver.Params
 
 	registrySetFn, ok := registry.GetRegistry(dsn)
 	if !ok {
-		log.WithField("dsn", dsn).Fatal("Unknown registry")
-		return nil
+		slog.Error("Unknown registry", "dsn", dsn)
+		return errors.New("unknown registry")
 	}
+
+	slog.Info("Selected database registry", "registry_type", fmt.Sprintf("%T", registrySetFn))
 
 	registrySet, err := registrySetFn(registry.Config(dsn))
 	if err != nil {
-		log.WithError(err).Fatal("Failed to setup registry")
-		return nil
+		slog.Error("Failed to setup registry", "error", err)
+		return err
 	}
 
 	params.RegistrySet = registrySet
@@ -153,14 +158,14 @@ func (c *Command) runCommand() error {
 	// Configure JWT secret from config/environment or generate a secure default
 	jwtSecret, err := getJWTSecret(c.config.JWTSecret)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to configure JWT secret")
+		slog.Error("Failed to configure JWT secret", "error", err)
 		return err
 	}
 	params.JWTSecret = jwtSecret
 
 	err = validation.Validate(params)
 	if err != nil {
-		log.WithError(err).Error("Invalid server parameters")
+		slog.Error("Invalid server parameters", "error", err)
 		return err
 	}
 
@@ -195,14 +200,14 @@ func (c *Command) runCommand() error {
 	select {
 	case <-sigCh:
 	case err := <-errCh:
-		log.WithError(err).Error("Failure during server startup")
+		slog.Error("Failure during server startup", "error", err)
 		return err
 	}
 
-	log.Info("Shutting down server")
+	slog.Info("Shutting down server")
 	err = srv.Shutdown()
 	if err != nil {
-		log.WithError(err).Error("Failure during server shutdown")
+		slog.Error("Failure during server shutdown", "error", err)
 	}
 
 	return err
@@ -214,20 +219,20 @@ func getJWTSecret(configSecret string) ([]byte, error) {
 	if configSecret != "" {
 		// If provided as hex string, decode it
 		if decoded, err := hex.DecodeString(configSecret); err == nil && len(decoded) >= 32 {
-			log.Info("Using JWT secret from configuration (hex decoded)")
+			slog.Info("Using JWT secret from configuration (hex decoded)")
 			return decoded, nil
 		}
 		// If provided as plain string and long enough, use it directly
 		if len(configSecret) >= 32 {
-			log.Info("Using JWT secret from configuration")
+			slog.Info("Using JWT secret from configuration")
 			return []byte(configSecret), nil
 		}
-		log.Warn("Configured JWT secret is too short (minimum 32 characters), generating random secret")
+		slog.Warn("Configured JWT secret is too short (minimum 32 characters), generating random secret")
 	}
 
 	// Generate a secure random secret
-	log.Warn("No JWT secret configured, generating random secret")
-	log.Warn("For production use, set INVENTARIO_RUN_JWT_SECRET environment variable or jwt-secret in config file with a secure 32+ byte secret")
+	slog.Warn("No JWT secret configured, generating random secret")
+	slog.Warn("For production use, set INVENTARIO_RUN_JWT_SECRET environment variable or jwt-secret in config file with a secure 32+ byte secret")
 
 	secret := make([]byte, 32)
 	_, err := rand.Read(secret)
@@ -235,8 +240,8 @@ func getJWTSecret(configSecret string) ([]byte, error) {
 		return nil, err
 	}
 
-	log.Infof("Generated random JWT secret (hex): %s", hex.EncodeToString(secret))
-	log.Info("Save this secret to INVENTARIO_RUN_JWT_SECRET environment variable or config file for consistent authentication across restarts")
+	slog.Info("Generated random JWT secret (hex)", "secret", hex.EncodeToString(secret))
+	slog.Info("Save this secret to INVENTARIO_RUN_JWT_SECRET environment variable or config file for consistent authentication across restarts")
 
 	return secret, nil
 }

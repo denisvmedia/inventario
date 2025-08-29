@@ -1,0 +1,166 @@
+# Production-ready Docker Compose configuration for Inventario
+# This file provides a complete production deployment setup with PostgreSQL database
+# and proper initialization/migration handling.
+
+services:
+  # PostgreSQL Database (Internal only - no host port exposure)
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-inventario}
+      POSTGRES_USER: ${POSTGRES_USER:-inventario}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventario_password}
+      # Additional PostgreSQL users for migrations (created via init script)
+      POSTGRES_MIGRATOR_USER: ${POSTGRES_MIGRATOR_USER:-inventario_migrator}
+      POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:-inventario_migrator_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+      # Ensure proper initialization
+      PGUSER: ${POSTGRES_USER:-inventario}
+
+    volumes:
+      # Persistent PostgreSQL data storage (host mount for easy access)
+      - ./data/postgres:/var/lib/postgresql/data
+      # Initialization script to create migration user
+      - ./init-scripts/01-create-users.sh:/docker-entrypoint-initdb.d/01-create-users.sh:ro
+    networks:
+      - inventario-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-inventario} -d $${POSTGRES_DB:-inventario}"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  # Database Bootstrap Service (runs on every startup - idempotent)
+  inventario-bootstrap:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Use the main database user for bootstrap (has necessary privileges in this setup)
+      INVENTARIO_DATABASE_DB_DSN: "postgres://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+      INVENTARIO_BOOTSTRAP_USERNAME: "${POSTGRES_USER:-inventario}"
+      INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS: "${POSTGRES_MIGRATOR_USER:-inventario_migrator}"
+    networks:
+      - inventario-internal
+    volumes:
+      - ./scripts/bootstrap.sh:/app/bootstrap.sh:ro
+    command: ["sh", "/app/bootstrap.sh"]
+
+  # Database Migration Service (runs on every startup)
+  inventario-migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    restart: "no"
+    depends_on:
+      inventario-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      INVENTARIO_DATABASE_DB_DSN: "postgres://${POSTGRES_MIGRATOR_USER:-inventario_migrator}:${POSTGRES_MIGRATOR_PASSWORD:-inventario_migrator_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+    networks:
+      - inventario-internal
+    volumes:
+      - ./scripts/migrate.sh:/app/migrate.sh:ro
+    command: ["sh", "/app/migrate.sh"]
+
+  # Initial Data Setup Service (runs only once using external state tracking)
+  inventario-init-data:
+    build:
+      context: ..
+      target: production
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    restart: "no"
+    depends_on:
+      inventario-migrate:
+        condition: service_completed_successfully
+    environment:
+      INVENTARIO_DATABASE_DB_DSN: "postgres://${POSTGRES_MIGRATOR_USER:-inventario_migrator}:${POSTGRES_MIGRATOR_PASSWORD:-inventario_migrator_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+      # Initial data configuration (override in docker-compose.override.yaml)
+      INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME: ${DEFAULT_TENANT_NAME:-Default Organization}
+      INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG: ${DEFAULT_TENANT_SLUG:-default}
+      INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      INVENTARIO_MIGRATE_DATA_ADMIN_NAME: ${ADMIN_NAME:-System Administrator}
+    volumes:
+      # Track initialization state to prevent re-running (host mount for easy access)
+      - ./data/init-state:/app/state
+      - ./scripts/init-data.sh:/app/init-data.sh:ro
+    networks:
+      - inventario-internal
+    command: ["sh", "/app/init-data.sh"]
+
+  # Main Inventario Application
+  inventario:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    restart: unless-stopped
+    depends_on:
+      inventario-init-data:
+        condition: service_completed_successfully
+    environment:
+      # Database configuration (operational user)
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+      
+      # Server configuration
+      INVENTARIO_ADDR: ":3333"
+      
+      # File storage configuration
+      # TODO: Migrate to MinIO object storage for better scalability and cloud-native deployment
+      INVENTARIO_UPLOAD_LOCATION: "file:///app/uploads?create_dir=1"
+      
+      # Security configuration
+      INVENTARIO_RUN_JWT_SECRET: ${JWT_SECRET:-}
+      
+      # Worker configuration
+      INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: ${MAX_CONCURRENT_EXPORTS:-3}
+      INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS: ${MAX_CONCURRENT_IMPORTS:-1}
+      
+      # System configuration
+      TZ: ${TZ:-UTC}
+    volumes:
+      # Persistent file storage for uploads (host mount for easy access)
+      # TODO: Replace with MinIO object storage volumes when migrating from filesystem
+      - ./data/uploads:/app/uploads
+    networks:
+      - inventario-internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# Host-mounted directories for persistent data storage
+# Data will be stored in ./data/ directory for easy access
+# Directories will be created automatically by Docker if they don't exist
+
+# Internal network for container communication
+networks:
+  inventario-internal:
+    driver: bridge
+    internal: false  # Allow outbound internet access for the application

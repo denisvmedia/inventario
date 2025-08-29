@@ -129,13 +129,38 @@ func FileTypeFromMIME(mimeType string) FileType {
 	}
 }
 
+type StringSlice []string
+
+func (s *StringSlice) Scan(value any) error {
+	if value == nil {
+		*s = nil
+		return nil
+	}
+
+	switch v := value.(type) {
+	case []byte:
+		return json.Unmarshal(v, s)
+	case string:
+		return json.Unmarshal([]byte(v), s)
+	default:
+		return fmt.Errorf("cannot scan %T into StringSlice", value)
+	}
+}
+
+func (s *StringSlice) Value() (driver.Value, error) {
+	if s == nil {
+		return nil, nil
+	}
+	return json.Marshal(s)
+}
+
 // FileEntity represents a file entity in the system
 //
 // Enable RLS for multi-tenant isolation
 //
 //migrator:schema:rls:enable table="files" comment="Enable RLS for multi-tenant file isolation"
-//migrator:schema:rls:policy name="file_tenant_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures files can only be accessed and modified by their tenant"
-//migrator:schema:rls:policy name="file_user_isolation" table="files" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures files can only be accessed and modified by their user"
+//migrator:schema:rls:policy name="file_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures files can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="file_background_worker_access" table="files" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all files for processing"
 //migrator:schema:table name="files"
 type FileEntity struct {
 	//migrator:embedded mode="inline"
@@ -155,7 +180,7 @@ type FileEntity struct {
 
 	// Tags are optional tags for categorization and search
 	//migrator:schema:field name="tags" type="JSONB"
-	Tags []string `json:"tags" db:"tags"`
+	Tags StringSlice `json:"tags" db:"tags"`
 
 	// LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files)
 	//migrator:schema:field name="linked_entity_type" type="TEXT"

@@ -26,12 +26,16 @@ func GetConfigFile() string {
 }
 
 func ReadSection(sectionName string, target any) error {
+	replacer := strings.NewReplacer(".", "_", "-", "_")
+	envPrefixFull := fmt.Sprintf("%s_%s_", envPrefix, strings.ToUpper(sectionName))
+	tag := fmt.Sprintf(`yaml:"%s" env-prefix:"%s"`, sectionName, replacer.Replace(envPrefixFull))
+	slog.Info("Reading section", "section", sectionName, "tag", tag)
 	sectionType := reflect.TypeOf(target).Elem()
 	wrapperType := reflect.StructOf([]reflect.StructField{
 		{
 			Name: "Section",
 			Type: sectionType,
-			Tag:  reflect.StructTag(fmt.Sprintf(`yaml:"%s" env-prefix:"%s_%s_"`, sectionName, envPrefix, strings.ToUpper(sectionName))),
+			Tag:  reflect.StructTag(tag),
 		},
 	})
 
@@ -54,12 +58,21 @@ func TryReadSection(sectionName string, target any) {
 }
 
 func ReadVirtualSection(sectionName string, target any) error {
+	replacer := strings.NewReplacer(".", "_", "-", "_")
+	var envPrefixFull string
+	if sectionName == "." || sectionName == "" {
+		envPrefixFull = envPrefix + "_"
+	} else {
+		envPrefixFull = fmt.Sprintf("%s_%s_", envPrefix, strings.ToUpper(sectionName))
+	}
+	tag := fmt.Sprintf(`yaml:",inline" env-prefix:"%s"`, replacer.Replace(envPrefixFull))
+	slog.Info("Reading virtual section", "section", sectionName, "tag", tag)
 	sectionType := reflect.TypeOf(target).Elem()
 	wrapperType := reflect.StructOf([]reflect.StructField{
 		{
 			Name: "Section",
 			Type: sectionType,
-			Tag:  reflect.StructTag(fmt.Sprintf(`yaml:",inline" env-prefix:"%s_%s_"`, envPrefix, strings.ToUpper(sectionName))),
+			Tag:  reflect.StructTag(tag),
 		},
 	})
 
@@ -67,7 +80,11 @@ func ReadVirtualSection(sectionName string, target any) error {
 	if err := cleanenv.ReadConfig(configFile, wrapper); err != nil {
 		if err = cleanenv.ReadEnv(wrapper); err != nil {
 			slog.Error("Failed to read config", "error", err)
+		} else {
+			slog.Info("Read config from environment variables")
 		}
+	} else {
+		slog.Info("Read config from file")
 	}
 
 	sectionValue := reflect.ValueOf(wrapper).Elem().Field(0)

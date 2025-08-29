@@ -21,12 +21,12 @@ func setupValuesTestData(c *qt.C) *registry.Set {
 	c.Helper()
 
 	// Create a memory registry for testing
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySetWithUserID("test-user-id")
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set main currency to USD
 	mainCurrency := "USD"
-	err = registrySet.SettingsRegistry.Save(c.Context(), models.SettingsObject{
+	err := registrySet.SettingsRegistry.Save(c.Context(), models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	})
 	c.Assert(err, qt.IsNil)
@@ -72,10 +72,11 @@ func TestValuesAPI_GetValues(t *testing.T) {
 
 	// Create a router with the values endpoint
 	r := chi.NewRouter()
-	r.Route("/values", apiserver.Values(registrySet))
+	r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/values", apiserver.Values(registrySet))
 
 	// Test GET /values
 	req := httptest.NewRequest("GET", "/values", nil)
+	addTestUserAuthHeader(req)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

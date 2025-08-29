@@ -5,6 +5,7 @@ import (
 
 	"github.com/jellydator/validation"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -38,77 +39,89 @@ type Registry[T any] interface {
 	Count(context.Context) (int, error)
 }
 
-// UserAwareRegistry extends the base registry with user context management
-type UserAwareRegistry[T any] interface {
-	Registry[T]
+type UserAwareRegistry[T any, P Registry[T]] interface {
+	// WithCurrentUser returns a new registry with user context set
+	WithCurrentUser(ctx context.Context) (P, error)
+	MustWithCurrentUser(ctx context.Context) P
+}
 
-	// SetUserContext sets the user context for subsequent operations
-	SetUserContext(ctx context.Context, userID string) error
-
-	// WithUserContext executes a function with user context set
-	WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error
-
-	// User-aware operations that automatically use user context from the request context
-	CreateWithUser(ctx context.Context, entity T) (*T, error)
-	GetWithUser(ctx context.Context, id string) (*T, error)
-	ListWithUser(ctx context.Context) ([]*T, error)
-	UpdateWithUser(ctx context.Context, entity T) (*T, error)
-	DeleteWithUser(ctx context.Context, id string) error
-	CountWithUser(ctx context.Context) (int, error)
+type ServiceAwareRegistry[T any, P Registry[T]] interface {
+	// WithServiceAccount returns a new registry with service account context
+	WithServiceAccount() P
 }
 
 type AreaRegistry interface {
-	UserAwareRegistry[models.Area]
+	Registry[models.Area]
+	UserAwareRegistry[models.Area, AreaRegistry]
+	ServiceAwareRegistry[models.Area, AreaRegistry]
 
-	AddCommodity(ctx context.Context, areaID, commodityID string) error
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
-	DeleteCommodity(ctx context.Context, areaID, commodityID string) error
 }
 
 type CommodityRegistry interface {
-	UserAwareRegistry[models.Commodity]
+	Registry[models.Commodity]
+	UserAwareRegistry[models.Commodity, CommodityRegistry]
+	ServiceAwareRegistry[models.Commodity, CommodityRegistry]
 
-	AddImage(ctx context.Context, commodityID, imageID string) error
 	GetImages(ctx context.Context, commodityID string) ([]string, error)
-	DeleteImage(ctx context.Context, commodityID, imageID string) error
-
-	AddManual(ctx context.Context, commodityID, manualID string) error
 	GetManuals(ctx context.Context, commodityID string) ([]string, error)
-	DeleteManual(ctx context.Context, commodityID, manualID string) error
-
-	AddInvoice(ctx context.Context, commodityID, invoiceID string) error
 	GetInvoices(ctx context.Context, commodityID string) ([]string, error)
-	DeleteInvoice(ctx context.Context, commodityID, invoiceID string) error
+
+	// Enhanced search methods
+	// SearchByTags(ctx context.Context, tags []string, operator TagOperator) ([]*models.Commodity, error)
+	// FullTextSearch(ctx context.Context, query string, options ...SearchOption) ([]*models.Commodity, error)
+	// FindSimilar(ctx context.Context, commodityID string, threshold float64) ([]*models.Commodity, error)
+	// AggregateByArea(ctx context.Context, groupBy []string) ([]AggregationResult, error)
+	// CountByStatus(ctx context.Context) (map[string]int, error)
+	// CountByType(ctx context.Context) (map[string]int, error)
+	// FindByPriceRange(ctx context.Context, minPrice, maxPrice float64, currency string) ([]*models.Commodity, error)
+	// FindByDateRange(ctx context.Context, startDate, endDate string) ([]*models.Commodity, error)
+	// FindBySerialNumbers(ctx context.Context, serialNumbers []string) ([]*models.Commodity, error)
 }
 
 type LocationRegistry interface {
-	UserAwareRegistry[models.Location]
+	Registry[models.Location]
+	UserAwareRegistry[models.Location, LocationRegistry]
+	ServiceAwareRegistry[models.Location, LocationRegistry]
 
-	AddArea(ctx context.Context, locationID, areaID string) error
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
-	DeleteArea(ctx context.Context, locationID, areaID string) error
 }
 
 type ImageRegistry interface {
-	UserAwareRegistry[models.Image]
+	Registry[models.Image]
+	UserAwareRegistry[models.Image, ImageRegistry]
+	ServiceAwareRegistry[models.Image, ImageRegistry]
 }
 
 type InvoiceRegistry interface {
-	UserAwareRegistry[models.Invoice]
+	Registry[models.Invoice]
+	UserAwareRegistry[models.Invoice, InvoiceRegistry]
+	ServiceAwareRegistry[models.Invoice, InvoiceRegistry]
 }
 
 type ManualRegistry interface {
-	UserAwareRegistry[models.Manual]
+	Registry[models.Manual]
+	UserAwareRegistry[models.Manual, ManualRegistry]
+	ServiceAwareRegistry[models.Manual, ManualRegistry]
 }
 
 type SettingsRegistry interface {
 	Get(ctx context.Context) (models.SettingsObject, error)
 	Save(context.Context, models.SettingsObject) error
 	Patch(ctx context.Context, configfield string, value any) error
+
+	// WithCurrentUser returns a new registry with user context set
+	WithCurrentUser(ctx context.Context) (SettingsRegistry, error)
+	MustWithCurrentUser(ctx context.Context) SettingsRegistry
+
+	// WithServiceAccount returns a new registry with service account context
+	WithServiceAccount() SettingsRegistry
 }
 
 type ExportRegistry interface {
-	UserAwareRegistry[models.Export]
+	Registry[models.Export]
+	UserAwareRegistry[models.Export, ExportRegistry]
+	ServiceAwareRegistry[models.Export, ExportRegistry]
 
 	// ListWithDeleted returns all exports including soft deleted ones
 	ListWithDeleted(ctx context.Context) ([]*models.Export, error)
@@ -121,7 +134,9 @@ type ExportRegistry interface {
 }
 
 type FileRegistry interface {
-	UserAwareRegistry[models.FileEntity]
+	Registry[models.FileEntity]
+	UserAwareRegistry[models.FileEntity, FileRegistry]
+	ServiceAwareRegistry[models.FileEntity, FileRegistry]
 
 	// ListByType returns files filtered by type
 	ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error)
@@ -135,19 +150,26 @@ type FileRegistry interface {
 	// Search returns files matching the search criteria
 	Search(ctx context.Context, query string, fileType *models.FileType, tags []string) ([]*models.FileEntity, error)
 
+	//// FullTextSearch performs enhanced text search on files
+	// FullTextSearch(ctx context.Context, query string, fileType *models.FileType, options ...SearchOption) ([]*models.FileEntity, error)
+
 	// ListPaginated returns paginated list of files
 	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error)
 }
 
 type RestoreOperationRegistry interface {
-	UserAwareRegistry[models.RestoreOperation]
+	Registry[models.RestoreOperation]
+	UserAwareRegistry[models.RestoreOperation, RestoreOperationRegistry]
+	ServiceAwareRegistry[models.RestoreOperation, RestoreOperationRegistry]
 
 	// ListByExport returns all restore operations for an export
 	ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error)
 }
 
 type RestoreStepRegistry interface {
-	UserAwareRegistry[models.RestoreStep]
+	Registry[models.RestoreStep]
+	UserAwareRegistry[models.RestoreStep, RestoreStepRegistry]
+	ServiceAwareRegistry[models.RestoreStep, RestoreStepRegistry]
 
 	// ListByRestoreOperation returns all restore steps for a restore operation
 	ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error)
@@ -193,6 +215,54 @@ type Set struct {
 	FileRegistry             FileRegistry
 	TenantRegistry           TenantRegistry
 	UserRegistry             UserRegistry
+}
+
+// Search-related types and functions
+
+// TagOperator defines how tags should be matched
+type TagOperator string
+
+const (
+	TagOperatorAND TagOperator = "AND"
+	TagOperatorOR  TagOperator = "OR"
+)
+
+// SearchOptions contains options for search operations
+type SearchOptions struct {
+	Limit  int
+	Offset int
+}
+
+// SearchOption is a function that modifies SearchOptions
+type SearchOption func(*SearchOptions)
+
+// WithLimit sets the limit for search results
+func WithLimit(limit int) SearchOption {
+	return func(opts *SearchOptions) {
+		opts.Limit = limit
+	}
+}
+
+// WithOffset sets the offset for search results
+func WithOffset(offset int) SearchOption {
+	return func(opts *SearchOptions) {
+		opts.Offset = offset
+	}
+}
+
+// AggregationResult represents the result of an aggregation query
+type AggregationResult struct {
+	GroupBy map[string]any     `json:"group_by"`
+	Count   int                `json:"count"`
+	Avg     map[string]float64 `json:"avg,omitempty"`
+	Sum     map[string]float64 `json:"sum,omitempty"`
+	Min     map[string]float64 `json:"min,omitempty"`
+	Max     map[string]float64 `json:"max,omitempty"`
+}
+
+// UserIDFromContext extracts the user ID from the context
+func UserIDFromContext(ctx context.Context) string {
+	return appctx.UserIDFromContext(ctx)
 }
 
 func (s *Set) ValidateWithContext(ctx context.Context) error {

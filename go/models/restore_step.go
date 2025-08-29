@@ -55,8 +55,8 @@ var (
 //
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="restore_steps" comment="Enable RLS for multi-tenant restore step isolation"
-//migrator:schema:rls:policy name="restore_step_tenant_isolation" table="restore_steps" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures restore steps can only be accessed and modified by their tenant"
-//migrator:schema:rls:policy name="restore_step_user_isolation" table="restore_steps" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures restore steps can only be accessed and modified by their user"
+//migrator:schema:rls:policy name="restore_step_isolation" table="restore_steps" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures restore steps can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="restore_step_background_worker_access" table="restore_steps" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all restore steps for processing"
 
 //migrator:schema:table name="restore_steps"
 type RestoreStep struct {

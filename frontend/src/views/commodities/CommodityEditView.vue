@@ -1,19 +1,27 @@
 <template>
   <div class="commodity-edit">
-    <div class="breadcrumb-nav">
-      <a href="#" class="breadcrumb-link" @click.prevent="goBack">
-        <font-awesome-icon icon="arrow-left" />
-        <span v-if="sourceIsArea && isDirectEdit">Back to Area</span>
-        <span v-else-if="isDirectEdit">Back to Commodities</span>
-        <span v-else>Back to Commodity</span>
-      </a>
-    </div>
-    <h1>Edit Commodity</h1>
-
     <div v-if="loading" class="loading">Loading...</div>
+    <ResourceNotFound
+      v-else-if="is404Error"
+      resource-type="commodity"
+      :title="get404Title('commodity')"
+      :message="get404Message('commodity')"
+      go-back-text="Back to Commodities"
+      @go-back="goBackToList"
+      @try-again="loadCommodity"
+    />
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!commodity" class="not-found">Commodity not found</div>
     <div v-else>
+      <div class="breadcrumb-nav">
+        <a href="#" class="breadcrumb-link" @click.prevent="goBack">
+          <font-awesome-icon icon="arrow-left" />
+          <span v-if="sourceIsArea && isDirectEdit">Back to Area</span>
+          <span v-else-if="isDirectEdit">Back to Commodities</span>
+          <span v-else>Back to Commodity</span>
+        </a>
+      </div>
+      <h1>Edit Commodity</h1>
       <CommodityForm
         ref="commodityForm"
         :initial-data="form"
@@ -47,6 +55,8 @@ import settingsService from '@/services/settingsService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import CommodityForm from '@/components/CommodityForm.vue'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 
 const route = useRoute()
 const router = useRouter()
@@ -64,9 +74,13 @@ const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+const lastError = ref<any>(null) // Store the last error object for 404 detection
 const isSubmitting = ref<boolean>(false)
 const formError = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
+
+// Error state computed properties
+const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
 
 
 const currencies = ref<any[]>([])
@@ -148,7 +162,11 @@ const errors = reactive({
   comments: ''
 })
 
-onMounted(async () => {
+const loadCommodity = async () => {
+  loading.value = true
+  error.value = null
+  lastError.value = null
+
   try {
     // Fetch main currency from the store
     await settingsStore.fetchMainCurrency()
@@ -210,10 +228,19 @@ onMounted(async () => {
 
     loading.value = false
   } catch (err: any) {
+    lastError.value = err
     console.error('Error loading commodity data:', err)
     loading.value = false
-    error.value = 'Failed to load commodity data: ' + (err.message || 'Unknown error')
+    if (checkIs404Error(err)) {
+      // 404 errors will be handled by the ResourceNotFound component
+    } else {
+      error.value = 'Failed to load commodity data: ' + (err.message || 'Unknown error')
+    }
   }
+}
+
+onMounted(() => {
+  loadCommodity()
 })
 
 const handleValidation = (isValid: boolean, validationErrors: any) => {
@@ -347,6 +374,10 @@ const goBack = () => {
       }
     })
   }
+}
+
+const goBackToList = () => {
+  router.push('/commodities')
 }
 </script>
 

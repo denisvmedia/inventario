@@ -23,7 +23,17 @@ type locationsAPI struct {
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
 // @Router /locations [get].
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
-	locations, _ := api.locationRegistry.List(r.Context())
+	locReg, err := api.locationRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
+	locations, err := locReg.List(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
 
 	if err := render.Render(w, r, jsonapi.NewLocationsResponse(locations, len(locations))); err != nil {
 		internalServerError(w, r, err)
@@ -41,13 +51,19 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.LocationResponse "OK"
 // @Router /locations/{id} [get].
 func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	locReg, err := api.locationRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	location := locationFromContext(r.Context())
 	if location == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(r.Context(), location.ID)
+	areas, err := locReg.GetAreas(r.Context(), location.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -93,17 +109,21 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 	if location.TenantID == "" {
 		location.TenantID = user.TenantID
 	}
-	if location.UserID == "" {
-		location.UserID = user.ID
-	}
 
-	createdLocation, err := api.locationRegistry.Create(r.Context(), location)
+	// Use WithCurrentUser to ensure proper user context and validation
+	ctx := r.Context()
+	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	createdLocation, err := locationReg.Create(ctx, location)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(r.Context(), createdLocation.ID)
+	areas, err := locationReg.GetAreas(ctx, createdLocation.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -138,7 +158,14 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := api.locationRegistry.Delete(r.Context(), location.ID)
+	// Use WithCurrentUser to ensure proper user context and validation
+	ctx := r.Context()
+	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	err = locationReg.Delete(ctx, location.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -182,11 +209,15 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 	if updateData.TenantID == "" {
 		updateData.TenantID = location.TenantID
 	}
-	if updateData.UserID == "" {
-		updateData.UserID = location.UserID
-	}
 
-	newLocation, err := api.locationRegistry.Update(r.Context(), updateData)
+	// Use WithCurrentUser to ensure proper user context and validation
+	ctx := r.Context()
+	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	newLocation, err := locationReg.Update(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

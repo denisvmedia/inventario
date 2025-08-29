@@ -1,18 +1,17 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/registry/boltdb"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
 func registerDBBackends() (cleanup func() error) {
 	// Register backends with the traditional registry system
-	boltdb.Register()
 	memory.Register()
 	postgresCleanup := postgres.Register()
 
@@ -42,9 +41,28 @@ func configPath() string {
 	return configFilePath
 }
 
+func setupSlog() {
+	var handler slog.Handler
+	if os.Getenv("INVENTARIO_LOG_FORMAT") == "json" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+		})
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+		})
+	}
+
+	slog.SetDefault(slog.New(handler))
+}
+
 func main() {
 	shared.SetEnvPrefix("INVENTARIO")
 	shared.SetConfigFile(configPath())
+
+	setupSlog()
+
+	slog.Info("Starting Inventario")
 
 	cleanup := registerDBBackends()
 	defer func() {

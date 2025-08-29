@@ -11,6 +11,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/export"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -45,16 +46,21 @@ type exportsAPI struct {
 // @Success 200 {object} jsonapi.ExportsResponse "OK"
 // @Router /exports [get].
 func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
+	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	// Check if we should include deleted exports
 	includeDeleted := r.URL.Query().Get("include_deleted") == "true"
 
 	var exports []*models.Export
-	var err error
 
 	if includeDeleted {
-		exports, err = api.registrySet.ExportRegistry.ListWithDeleted(r.Context())
+		exports, err = expReg.ListWithDeleted(r.Context())
 	} else {
-		exports, err = api.registrySet.ExportRegistry.List(r.Context())
+		exports, err = expReg.List(r.Context())
 	}
 
 	if err != nil {
@@ -79,6 +85,12 @@ func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [get].
 func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
+	err := appctx.ValidateUserContext(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	exp := exportFromContext(r.Context())
 	if exp == nil {
 		unprocessableEntityError(w, r, nil)
@@ -102,6 +114,12 @@ func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Router /exports [post].
 func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
+	err := appctx.ValidateUserContext(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	var request jsonapi.ExportCreateRequest
 	if err := render.Bind(r, &request); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -134,6 +152,12 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id} [delete].
 func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
+	err := appctx.ValidateUserContext(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	exp := exportFromContext(r.Context())
 	if exp == nil {
 		unprocessableEntityError(w, r, nil)
@@ -141,7 +165,7 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use entity service to properly handle export and file deletion
-	err := api.entityService.DeleteExportWithFile(r.Context(), exp.ID)
+	err = api.entityService.DeleteExportWithFile(r.Context(), exp.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -161,6 +185,12 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id}/download [get].
 func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
+	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	exp := exportFromContext(r.Context())
 	if exp == nil {
 		unprocessableEntityError(w, r, nil)
@@ -181,12 +211,11 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 
 	// Get the file entity for the export
 	var fileEntity *models.FileEntity
-	var err error
 
 	switch {
 	case exp.FileID != nil && *exp.FileID != "":
 		// Use new file entity system
-		fileEntity, err = api.registrySet.FileRegistry.Get(r.Context(), *exp.FileID)
+		fileEntity, err = fileReg.Get(r.Context(), *exp.FileID)
 		if err != nil {
 			internalServerError(w, r, err)
 			return
@@ -273,6 +302,12 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Router /exports/import [post].
 func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
+	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	var data jsonapi.ImportExportRequest
 	if err := render.Bind(r, &data); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -292,11 +327,8 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	if importedExport.TenantID == "" {
 		importedExport.TenantID = user.TenantID
 	}
-	if importedExport.UserID == "" {
-		importedExport.UserID = user.ID
-	}
 
-	createdExport, err := api.registrySet.ExportRegistry.Create(r.Context(), importedExport)
+	createdExport, err := expReg.Create(r.Context(), importedExport)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -330,13 +362,19 @@ func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
 				return
 			}
 
-			export, err := registrySet.ExportRegistry.Get(r.Context(), exportID)
+			expReg, err := registrySet.ExportRegistry.WithCurrentUser(r.Context())
 			if err != nil {
 				renderEntityError(w, r, err)
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), exportCtxKey, export)
+			exp, err := expReg.Get(r.Context(), exportID)
+			if err != nil {
+				renderEntityError(w, r, err)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), exportCtxKey, exp)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

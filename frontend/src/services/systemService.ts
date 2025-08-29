@@ -1,4 +1,4 @@
-import axios from 'axios'
+import api from './api'
 
 const API_URL = '/api/v1/system'
 
@@ -32,7 +32,7 @@ export interface SystemInfo {
 
 const systemService = {
   getSystemInfo(): Promise<{ data: SystemInfo }> {
-    return axios.get(API_URL, {
+    return api.get(API_URL, {
       headers: {
         'Accept': 'application/json'
       }

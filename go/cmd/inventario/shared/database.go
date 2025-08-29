@@ -17,17 +17,17 @@ func (d *DatabaseConfig) Validate() error {
 	}
 	// Validate that this is a PostgreSQL DSN
 	if !strings.HasPrefix(d.DBDSN, "postgres://") && !strings.HasPrefix(d.DBDSN, "postgresql://") {
-		return errors.New("bootstrap migrations only support PostgreSQL databases")
+		return errors.New("config: bootstrap migrations only support PostgreSQL databases")
 	}
 	return nil
 }
 
 func RegisterDatabaseFlags(cmd *cobra.Command, cfg *DatabaseConfig) {
-	TryReadVirtualSection("database", cfg)
+	TryReadVirtualSection(".", cfg)
 	cmd.PersistentFlags().StringVar(&cfg.DBDSN, "db-dsn", cfg.DBDSN, "Database DSN")
 }
 
 func RegisterLocalDatabaseFlags(cmd *cobra.Command, cfg *DatabaseConfig) {
-	TryReadVirtualSection("database", cfg)
+	TryReadVirtualSection(".", cfg)
 	cmd.Flags().StringVar(&cfg.DBDSN, "db-dsn", cfg.DBDSN, "Database DSN")
 }

@@ -54,6 +54,13 @@ type SystemInfo struct {
 // @Success 200 {object} SystemInfo "OK"
 // @Router /system [get]
 func (api *systemAPI) getSystemInfo(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	// Get user-aware settings registry
+	settingsRegistry, err := api.settingsRegistry.WithCurrentUser(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	// Get version information
 	buildInfo := version.Get()
 
@@ -68,7 +75,7 @@ func (api *systemAPI) getSystemInfo(w http.ResponseWriter, r *http.Request) { //
 	memoryUsageMB := float64(memStats.Alloc) / 1024 / 1024
 
 	// Get current settings
-	settings, err := api.settingsRegistry.Get(r.Context())
+	settings, err := settingsRegistry.Get(r.Context())
 	if err != nil {
 		// If settings can't be loaded, use empty settings but don't fail
 		settings = models.SettingsObject{}

@@ -2,33 +2,92 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
 var _ registry.RestoreStepRegistry = (*RestoreStepRegistry)(nil)
 
 type RestoreStepRegistry struct {
-	db *sqlx.DB
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+	userID     string
+	tenantID   string
+	service    bool
 }
 
-func NewRestoreStepRegistry(db *sqlx.DB) *RestoreStepRegistry {
-	return &RestoreStepRegistry{db: db}
+func NewRestoreStepRegistry(dbx *sqlx.DB) *RestoreStepRegistry {
+	return NewRestoreStepRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-// SetUserContext sets the user context for RLS policies
-func (r *RestoreStepRegistry) SetUserContext(ctx context.Context, userID string) error {
-	return SetUserContext(ctx, r.db, userID)
+func NewRestoreStepRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *RestoreStepRegistry {
+	return &RestoreStepRegistry{
+		dbx:        dbx,
+		tableNames: tableNames,
+	}
 }
 
-// WithUserContext executes a function with user context set
-func (r *RestoreStepRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
-	return WithUserContext(ctx, r.db, userID, fn)
+func (r *RestoreStepRegistry) MustWithCurrentUser(ctx context.Context) registry.RestoreStepRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
+
+func (r *RestoreStepRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreStepRegistry, error) {
+	tmp := *r
+
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
+	tmp.service = false
+	return &tmp, nil
+}
+
+func (r *RestoreStepRegistry) WithServiceAccount() registry.RestoreStepRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
+}
+
+func (r *RestoreStepRegistry) Get(ctx context.Context, id string) (*models.RestoreStep, error) {
+	return r.get(ctx, id)
+}
+
+func (r *RestoreStepRegistry) List(ctx context.Context) ([]*models.RestoreStep, error) {
+	var steps []*models.RestoreStep
+
+	reg := r.newSQLRegistry()
+
+	// Query the database for all restore steps (atomic operation)
+	for step, err := range reg.Scan(ctx) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list restore steps")
+		}
+		steps = append(steps, &step)
+	}
+
+	return steps, nil
+}
+
+func (r *RestoreStepRegistry) Count(ctx context.Context) (int, error) {
+	reg := r.newSQLRegistry()
+
+	cnt, err := reg.Count(ctx)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count restore steps")
+	}
+
+	return cnt, nil
 }
 
 func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
@@ -39,71 +98,22 @@ func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreSte
 	// Set timestamps
 	step.CreatedDate = models.PNow()
 	step.UpdatedDate = models.PNow()
+	step.SetTenantID(r.tenantID)
+	step.SetUserID(r.userID)
 
 	// Generate ID if not set
 	if step.ID == "" {
 		step.ID = generateID()
 	}
 
-	query := r.db.Rebind(`
-		INSERT INTO restore_steps (
-			id, restore_operation_id, name, result, duration, reason, created_date, updated_date
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	reg := r.newSQLRegistry()
 
-	_, err := r.db.ExecContext(ctx, query,
-		step.ID,
-		step.RestoreOperationID,
-		step.Name,
-		step.Result,
-		step.Duration,
-		step.Reason,
-		step.CreatedDate,
-		step.UpdatedDate,
-	)
-
+	err := reg.Create(ctx, step, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create restore step")
 	}
 
 	return &step, nil
-}
-
-func (r *RestoreStepRegistry) Get(ctx context.Context, id string) (*models.RestoreStep, error) {
-	query := r.db.Rebind(`
-		SELECT id, restore_operation_id, name, result, duration, reason, created_date, updated_date
-		FROM restore_steps
-		WHERE id = ?`)
-
-	var step models.RestoreStep
-	err := r.db.GetContext(ctx, &step, query, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, errkit.Wrap(registry.ErrNotFound, "restore step not found")
-		}
-		return nil, errkit.Wrap(err, "failed to get restore step")
-	}
-
-	return &step, nil
-}
-
-func (r *RestoreStepRegistry) List(ctx context.Context) ([]*models.RestoreStep, error) {
-	query := `
-		SELECT id, restore_operation_id, name, result, duration, reason, created_date, updated_date
-		FROM restore_steps 
-		ORDER BY created_date ASC`
-
-	var steps []models.RestoreStep
-	err := r.db.SelectContext(ctx, &steps, query)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list restore steps")
-	}
-
-	result := make([]*models.RestoreStep, len(steps))
-	for i := range steps {
-		result[i] = &steps[i]
-	}
-
-	return result, nil
 }
 
 func (r *RestoreStepRegistry) Update(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
@@ -114,170 +124,64 @@ func (r *RestoreStepRegistry) Update(ctx context.Context, step models.RestoreSte
 	// Update timestamp
 	step.UpdatedDate = models.PNow()
 
-	query := r.db.Rebind(`
-		UPDATE restore_steps
-		SET name = ?, result = ?, duration = ?, reason = ?, updated_date = ?
-		WHERE id = ?`)
+	reg := r.newSQLRegistry()
 
-	result, err := r.db.ExecContext(ctx, query,
-		step.Name,
-		step.Result,
-		step.Duration,
-		step.Reason,
-		step.UpdatedDate,
-		step.ID,
-	)
-
+	err := reg.Update(ctx, step, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update restore step")
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get rows affected")
-	}
-
-	if rowsAffected == 0 {
-		return nil, errkit.Wrap(registry.ErrNotFound, "restore step not found")
 	}
 
 	return &step, nil
 }
 
 func (r *RestoreStepRegistry) Delete(ctx context.Context, id string) error {
-	query := r.db.Rebind(`DELETE FROM restore_steps WHERE id = ?`)
-
-	result, err := r.db.ExecContext(ctx, query, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete restore step")
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return errkit.Wrap(err, "failed to get rows affected")
-	}
-
-	if rowsAffected == 0 {
-		return errkit.Wrap(registry.ErrNotFound, "restore step not found")
-	}
-
-	return nil
+	reg := r.newSQLRegistry()
+	err := reg.Delete(ctx, id, nil)
+	return err
 }
 
-func (r *RestoreStepRegistry) Count(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM restore_steps`
+func (r *RestoreStepRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreStep, *models.RestoreStep] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.RestoreStep](r.dbx, r.tableNames.RestoreSteps())
+	}
+	return store.NewUserAwareSQLRegistry[models.RestoreStep](r.dbx, r.userID, r.tenantID, r.tableNames.RestoreSteps())
+}
 
-	var count int
-	err := r.db.GetContext(ctx, &count, query)
+func (r *RestoreStepRegistry) get(ctx context.Context, id string) (*models.RestoreStep, error) {
+	var step models.RestoreStep
+	reg := r.newSQLRegistry()
+
+	err := reg.ScanOneByField(ctx, store.Pair("id", id), &step)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count restore steps")
+		return nil, errkit.Wrap(err, "failed to get restore step")
 	}
 
-	return count, nil
+	return &step, nil
 }
 
 func (r *RestoreStepRegistry) ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error) {
-	query := r.db.Rebind(`
-		SELECT id, restore_operation_id, name, result, duration, reason, created_date, updated_date
-		FROM restore_steps
-		WHERE restore_operation_id = ?
-		ORDER BY created_date ASC`)
+	var steps []*models.RestoreStep
 
-	var steps []models.RestoreStep
-	err := r.db.SelectContext(ctx, &steps, query, restoreOperationID)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list restore steps by operation")
+	reg := r.newSQLRegistry()
+	for step, err := range reg.ScanByField(ctx, store.Pair("restore_operation_id", restoreOperationID)) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list restore steps by operation")
+		}
+		steps = append(steps, &step)
 	}
 
-	result := make([]*models.RestoreStep, len(steps))
-	for i := range steps {
-		result[i] = &steps[i]
-	}
-
-	return result, nil
+	return steps, nil
 }
 
 func (r *RestoreStepRegistry) DeleteByRestoreOperation(ctx context.Context, restoreOperationID string) error {
-	query := r.db.Rebind(`DELETE FROM restore_steps WHERE restore_operation_id = ?`)
-
-	_, err := r.db.ExecContext(ctx, query, restoreOperationID)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete restore steps by operation")
-	}
-
-	return nil
-}
-
-// User-aware methods that automatically use user context from the request context
-
-// CreateWithUser creates a restore step with user context
-func (r *RestoreStepRegistry) CreateWithUser(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	step.SetUserID(userID)
-	return r.Create(ctx, step)
-}
-
-// GetWithUser gets a restore step with user context
-func (r *RestoreStepRegistry) GetWithUser(ctx context.Context, id string) (*models.RestoreStep, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	err := SetUserContext(ctx, r.db, userID)
-	if err != nil {
-		return nil, err
-	}
-	return r.Get(ctx, id)
-}
-
-// ListWithUser lists restore steps with user context
-func (r *RestoreStepRegistry) ListWithUser(ctx context.Context) ([]*models.RestoreStep, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	err := SetUserContext(ctx, r.db, userID)
-	if err != nil {
-		return nil, err
-	}
-	return r.List(ctx)
-}
-
-// UpdateWithUser updates a restore step with user context
-func (r *RestoreStepRegistry) UpdateWithUser(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	step.SetUserID(userID)
-	return r.Update(ctx, step)
-}
-
-// DeleteWithUser deletes a restore step with user context
-func (r *RestoreStepRegistry) DeleteWithUser(ctx context.Context, id string) error {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	err := SetUserContext(ctx, r.db, userID)
-	if err != nil {
-		return err
-	}
-	return r.Delete(ctx, id)
-}
-
-// CountWithUser counts restore steps with user context
-func (r *RestoreStepRegistry) CountWithUser(ctx context.Context) (int, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return 0, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	err := SetUserContext(ctx, r.db, userID)
-	if err != nil {
-		return 0, err
-	}
-	return r.Count(ctx)
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		txReg := store.NewTxRegistry[models.RestoreStep](tx, r.tableNames.RestoreSteps())
+		err := txReg.DeleteByField(ctx, store.Pair("restore_operation_id", restoreOperationID))
+		if err != nil {
+			return errkit.Wrap(err, "failed to delete restore steps by operation")
+		}
+		return nil
+	})
+	return err
 }

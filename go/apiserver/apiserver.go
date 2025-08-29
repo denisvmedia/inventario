@@ -2,6 +2,8 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	_ "gocloud.dev/blob/memblob" // register memblob driver
 	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
@@ -37,18 +40,20 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
-// createUserAwareMiddlewares creates middleware stack with user authentication
-func createUserAwareMiddlewares(jwtSecret []byte, userRegistry registry.UserRegistry) []func(http.Handler) http.Handler {
+// createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
+func createUserAwareMiddlewares(jwtSecret []byte, userRegistry registry.UserRegistry, registrySet *registry.Set) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
 		JWTMiddleware(jwtSecret, userRegistry),
+		RLSContextMiddleware(registrySet),
 	)
 }
 
 // createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
-func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry) []func(http.Handler) http.Handler {
-	// Only add user authentication, no content type restrictions for uploads
+func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, registrySet *registry.Set) []func(http.Handler) http.Handler {
+	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
 		JWTMiddleware(jwtSecret, userRegistry),
+		RLSContextMiddleware(registrySet),
 	}
 }
 
@@ -141,16 +146,16 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(params.RegistrySet.UserRegistry, params.JWTSecret))
-		r.With(defaultAPIMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
 		r.Route("/currencies", Currencies())
 		// Seed endpoint is public for e2e testing and development
 		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.RegistrySet))
 
 		// Create user aware middlewares for protected routes
-		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.RegistrySet.UserRegistry)
-		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.RegistrySet.UserRegistry)
+		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.RegistrySet.UserRegistry, params.RegistrySet)
+		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.RegistrySet.UserRegistry, params.RegistrySet)
 
 		// Protected routes (authentication required)
+		r.With(userMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
 		r.With(userMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
 		r.With(userMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
 		r.With(userMiddlewares...).Route("/commodities", Commodities(params))
@@ -169,4 +174,26 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	r.Handle("/*", FrontendHandler())
 
 	return r
+}
+
+// RLSContextMiddleware sets the user and tenant context for RLS policies
+func RLSContextMiddleware(registrySet *registry.Set) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Get user from context (set by JWTMiddleware)
+			user := appctx.UserFromContext(r.Context())
+			if user == nil {
+				http.Error(w, "User context required", http.StatusInternalServerError)
+				return
+			}
+
+			slog.Info("RLS Middleware: Setting context for user",
+				"user_id", user.ID,
+				"email", user.Email,
+				"commodity_registry_type", fmt.Sprintf("%T", registrySet.CommodityRegistry))
+			r = r.WithContext(appctx.WithUser(r.Context(), user))
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

@@ -1,18 +1,26 @@
 <template>
   <div class="area-edit">
-    <div class="breadcrumb-nav">
-      <a href="#" class="breadcrumb-link" @click.prevent="navigateToLocations">
-        <font-awesome-icon icon="arrow-left" /> Back to Locations
-      </a>
-    </div>
-    <div class="header">
-      <h1>Edit Area</h1>
-    </div>
-
     <div v-if="loading" class="loading">Loading...</div>
+    <ResourceNotFound
+      v-else-if="is404Error"
+      resource-type="area"
+      :title="get404Title('area')"
+      :message="get404Message('area')"
+      go-back-text="Back to Locations"
+      @go-back="goBackToList"
+      @try-again="loadArea"
+    />
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="!area" class="not-found">Area not found</div>
     <div v-else>
+      <div class="breadcrumb-nav">
+        <a href="#" class="breadcrumb-link" @click.prevent="navigateToLocations">
+          <font-awesome-icon icon="arrow-left" /> Back to Locations
+        </a>
+      </div>
+      <div class="header">
+        <h1>Edit Area</h1>
+      </div>
       <form class="form" @submit.prevent="submitForm">
         <div class="form-group">
           <label for="name">Name</label>
@@ -62,11 +70,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import areaService from '@/services/areaService'
 import locationService from '@/services/locationService'
 import Select from 'primevue/select'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 
 const route = useRoute()
 const router = useRouter()
@@ -76,9 +86,13 @@ const area = ref<any>(null)
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+const lastError = ref<any>(null) // Store the last error object for 404 detection
 const isSubmitting = ref<boolean>(false)
 const formError = ref<string | null>(null)
 const debugInfo = ref<string | null>(null)
+
+// Error state computed properties
+const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
 
 const form = reactive({
   name: '',
@@ -90,7 +104,11 @@ const errors = reactive({
   locationId: ''
 })
 
-onMounted(async () => {
+const loadArea = async () => {
+  loading.value = true
+  error.value = null
+  lastError.value = null
+
   try {
     // Load area and locations in parallel
     const [areaResponse, locationsResponse] = await Promise.all([
@@ -115,10 +133,19 @@ onMounted(async () => {
 
     loading.value = false
   } catch (err: any) {
+    lastError.value = err
     console.error('Error loading data:', err)
-    error.value = 'Failed to load area: ' + (err.message || 'Unknown error')
     loading.value = false
+    if (checkIs404Error(err)) {
+      // 404 errors will be handled by the ResourceNotFound component
+    } else {
+      error.value = 'Failed to load area: ' + (err.message || 'Unknown error')
+    }
   }
+}
+
+onMounted(() => {
+  loadArea()
 })
 
 const validateForm = () => {
@@ -227,6 +254,10 @@ const navigateToLocations = () => {
       locationId: form.locationId
     }
   })
+}
+
+const goBackToList = () => {
+  router.push('/locations')
 }
 
 // Navigation is handled by the onSubmit and onCancel functions

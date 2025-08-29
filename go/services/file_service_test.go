@@ -9,15 +9,26 @@ import (
 	qt "github.com/frankban/quicktest"
 	"gocloud.dev/blob"
 
+	"github.com/denisvmedia/inventario/appctx"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
+// newTestContext creates a context with test user for testing
+func newTestContext() context.Context {
+	return appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+}
+
 func TestFileService_DeleteFileWithPhysical(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
@@ -85,7 +96,7 @@ func TestFileService_DeleteFileWithPhysical(t *testing.T) {
 
 func TestFileService_DeleteFileWithPhysical_FileNotFound(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
@@ -111,7 +122,7 @@ func TestFileService_DeleteFileWithPhysical_FileNotFound(t *testing.T) {
 
 func TestFileService_DeletePhysicalFile(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
@@ -158,7 +169,7 @@ func TestFileService_DeletePhysicalFile(t *testing.T) {
 
 func TestFileService_DeletePhysicalFile_NonExistent(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
@@ -184,7 +195,7 @@ func TestFileService_DeletePhysicalFile_NonExistent(t *testing.T) {
 
 func TestFileService_DeleteLinkedFiles(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
@@ -261,7 +272,7 @@ func TestFileService_DeleteLinkedFiles(t *testing.T) {
 
 func TestFileService_DeleteLinkedFiles_NoFiles(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()
@@ -287,7 +298,7 @@ func TestFileService_DeleteLinkedFiles_NoFiles(t *testing.T) {
 
 func TestFileService_ExportFileDeletion_Integration(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := newTestContext()
 
 	// Create temporary directory for test files
 	tempDir := c.TempDir()

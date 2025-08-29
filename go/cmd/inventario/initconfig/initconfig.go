@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed" // Embed the config template file
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"text/template"
@@ -13,7 +14,6 @@ import (
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/internal/defaults"
-	"github.com/denisvmedia/inventario/internal/log"
 )
 
 //go:embed data/config.yaml.tmpl
@@ -101,7 +101,7 @@ func (c *Command) initConfigCommand() error {
 	// Create the inventario subdirectory
 	err := os.MkdirAll(configFileDir, 0o755)
 	if err != nil {
-		log.WithError(err).WithField("dir", configFileDir).Error("Failed to create config directory")
+		slog.Error("Failed to create config directory", "dir", configFileDir, "error", err)
 		return fmt.Errorf("failed to create config directory %s: %w", configFileDir, err)
 	}
 
@@ -109,24 +109,24 @@ func (c *Command) initConfigCommand() error {
 	_, err = os.Stat(configFilePath)
 	switch {
 	case err == nil:
-		log.WithField("path", configFilePath).Error("Configuration file already exists")
+		slog.Error("Configuration file already exists", "path", configFilePath)
 		return fmt.Errorf("configuration file already exists at %s", configFilePath)
 	case !os.IsNotExist(err):
-		log.WithError(err).WithField("path", configFilePath).Error("Failed to check config file existence")
+		slog.Error("Failed to check config file existence", "path", configFilePath, "error", err)
 		return fmt.Errorf("failed to check config file existence: %w", err)
 	}
 
 	// Generate the sample config content using shared defaults
 	sampleContent, err := c.generateSampleConfig()
 	if err != nil {
-		log.WithError(err).Error("Failed to generate sample config")
+		slog.Error("Failed to generate sample config", "error", err)
 		return fmt.Errorf("failed to generate sample config: %w", err)
 	}
 
 	// Write the sample config file
 	err = os.WriteFile(configFilePath, []byte(sampleContent), 0o600)
 	if err != nil {
-		log.WithError(err).WithField("path", configFilePath).Error("Failed to write config file")
+		slog.Error("Failed to write config file", "path", configFilePath, "error", err)
 		return fmt.Errorf("failed to write config file %s: %w", configFilePath, err)
 	}
 
