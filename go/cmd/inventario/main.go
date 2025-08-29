@@ -44,11 +44,11 @@ func configPath() string {
 func setupSlog() {
 	var handler slog.Handler
 	if os.Getenv("INVENTARIO_LOG_FORMAT") == "json" {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 			AddSource: true,
 		})
 	} else {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 			AddSource: true,
 		})
 	}

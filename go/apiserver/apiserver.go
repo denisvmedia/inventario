@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -186,7 +187,10 @@ func RLSContextMiddleware(registrySet *registry.Set) func(http.Handler) http.Han
 				return
 			}
 
-			slog.Info("RLS Middleware: Setting context for user", "user_id", user.ID, "email", user.Email)
+			slog.Info("RLS Middleware: Setting context for user",
+				"user_id", user.ID,
+				"email", user.Email,
+				"commodity_registry_type", fmt.Sprintf("%T", registrySet.CommodityRegistry))
 			r = r.WithContext(appctx.WithUser(r.Context(), user))
 
 			next.ServeHTTP(w, r)

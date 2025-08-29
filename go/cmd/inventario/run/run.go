@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -128,11 +129,20 @@ func (c *Command) runCommand() error {
 
 	var params apiserver.Params
 
+	// Add debug logging for database backend selection
+	log.WithFields(log.Fields{
+		"dsn": dsn,
+		"DB_DSN_env": os.Getenv("DB_DSN"),
+		"DB_URL_env": os.Getenv("DB_URL"),
+	}).Info("Database configuration debug")
+
 	registrySetFn, ok := registry.GetRegistry(dsn)
 	if !ok {
 		log.WithField("dsn", dsn).Fatal("Unknown registry")
 		return nil
 	}
+
+	log.WithField("registry_type", fmt.Sprintf("%T", registrySetFn)).Info("Selected database registry")
 
 	registrySet, err := registrySetFn(registry.Config(dsn))
 	if err != nil {

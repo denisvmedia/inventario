@@ -29,7 +29,7 @@ jobs:
           - 5432:5432
 
     env:
-      DB_URL: postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable
+      DB_DSN: postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable
       INVENTARIO_LOG_FORMAT: json
 
     steps:
@@ -78,8 +78,8 @@ jobs:
           go mod download
           cd ..
           make build-inventool
-          bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.DB_URL }}"
-          bin/inventool db migrations up --db-dsn "${{ env.DB_URL }}"
+          bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.DB_DSN }}"
+          bin/inventool db migrations up --db-dsn "${{ env.DB_DSN }}"
 
       - name: Start application stack and run fast-fail test
         run: |
