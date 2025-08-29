@@ -41,9 +41,10 @@ func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRe
 }
 
 func (r *ExportRegistry) WithServiceAccount() registry.ExportRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a shallow copy of the registry with no user filtering
+	tmp := *r
+	tmp.userID = "" // Clear userID to bypass user filtering
+	return &tmp
 }
 
 // List returns only non-deleted exports

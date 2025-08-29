@@ -44,9 +44,10 @@ func (r *ManualRegistry) WithCurrentUser(ctx context.Context) (registry.ManualRe
 }
 
 func (r *ManualRegistry) WithServiceAccount() registry.ManualRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a shallow copy of the registry with no user filtering
+	tmp := *r
+	tmp.userID = "" // Clear userID to bypass user filtering
+	return &tmp
 }
 
 func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
@@ -69,8 +70,8 @@ func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*mod
 		oldCommodityID = existingManual.CommodityID
 	}
 
-	// Call the base registry's Update method
-	updatedManual, err := r.baseManualRegistry.Update(ctx, manual)
+	// Call the base registry's UpdateWithUser method to ensure user context is preserved
+	updatedManual, err := r.baseManualRegistry.UpdateWithUser(ctx, manual)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update manual")
 	}
