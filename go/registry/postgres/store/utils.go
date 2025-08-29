@@ -47,7 +47,18 @@ func setUserContext(ctx context.Context, tx *sqlx.Tx, userID string) error {
 	return nil
 }
 
-func beginUserTx(ctx context.Context, dbx *sqlx.DB, userID string) (*sqlx.Tx, error) {
+func setTenantContext(ctx context.Context, tx *sqlx.Tx, tenantID string) error {
+	// Escape single quotes in tenantID for safety
+	escapedTenantID := strings.ReplaceAll(tenantID, "'", "''")
+	query := fmt.Sprintf("SET LOCAL app.current_tenant_id = '%s'", escapedTenantID)
+	_, err := tx.ExecContext(ctx, query)
+	if err != nil {
+		return errkit.Wrap(err, "failed to set tenant context", "tenant_id", tenantID)
+	}
+	return nil
+}
+
+func beginTxWithTenantAndUser(ctx context.Context, dbx *sqlx.DB, userID, tenantID string) (*sqlx.Tx, error) {
 	if userID == "" {
 		return nil, ErrUserIDRequired
 	}
@@ -61,6 +72,12 @@ func beginUserTx(ctx context.Context, dbx *sqlx.DB, userID string) (*sqlx.Tx, er
 	if err != nil {
 		tx.Rollback()
 		return nil, errkit.Wrap(err, "failed to set app role")
+	}
+
+	err = setTenantContext(ctx, tx, tenantID)
+	if err != nil {
+		tx.Rollback()
+		return nil, errkit.Wrap(err, "failed to set tenant context")
 	}
 
 	err = setUserContext(ctx, tx, userID)

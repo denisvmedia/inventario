@@ -107,6 +107,10 @@ func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, erro
 }
 
 func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObject) error {
+	if r.service {
+		return errors.New("service account cannot save settings")
+	}
+
 	settingsMap := settings.ToMap()
 
 	reg := r.newSQLRegistry()
@@ -120,7 +124,13 @@ func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObj
 			}
 
 			var sv models.Setting
-			err := txReg.ScanOneByField(ctx, store.Pair("name", settingName), &sv)
+			fields := []store.FieldValue{
+				store.Pair("name", settingName),
+				store.Pair("user_id", r.userID),
+				store.Pair("tenant_id", r.tenantID),
+			}
+
+			err := txReg.ScanOneByFields(ctx, fields, &sv)
 			isNotFound := errors.Is(err, store.ErrNotFound)
 			if err != nil && !isNotFound {
 				return errkit.Wrap(err, "failed to scan setting")

@@ -148,6 +148,37 @@ func (r *TxExecutor[T]) ScanOneByField(ctx context.Context, field FieldValue, en
 	return nil
 }
 
+func (r *TxExecutor[T]) ScanOneByFields(ctx context.Context, field []FieldValue, entity *T) error {
+	whereClause := ""
+	args := make([]any, len(field))
+	for i, f := range field {
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += fmt.Sprintf("%s = $%d", f.Field, i+1)
+		args[i] = f.Value
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s LIMIT 1", r.table, whereClause)
+
+	rows, err := r.tx.QueryxContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return ErrNotFound
+	}
+
+	err = rows.StructScan(entity)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *TxExecutor[T]) DeleteByField(ctx context.Context, field FieldValue) error {
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s = $1", r.table, field.Field)
 

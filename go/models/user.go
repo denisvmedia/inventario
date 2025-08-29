@@ -41,8 +41,7 @@ func (ur UserRole) Validate() error {
 
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="users" comment="Enable RLS for multi-tenant user isolation"
-//migrator:schema:rls:policy name="user_tenant_isolation" table="users" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" comment="Ensures users can only access their tenant's data"
-//migrator:schema:rls:policy name="user_user_isolation" table="users" for="ALL" to="inventario_app" using="id = get_current_user_id()" with_check="id = get_current_user_id()" comment="Ensures users can only access and modify their own data"
+//migrator:schema:rls:policy name="user_isolation" table="users" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures users can only access and modify their own data within their tenant with required contexts"
 //migrator:schema:rls:policy name="user_background_worker_access" table="users" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all users for processing"
 
 //migrator:schema:table name="users"

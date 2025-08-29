@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2025-08-25T12:13:13+02:00
+-- Generated on: 2025-08-29T00:20:42+02:00
 -- Direction: UP
 
 -- Gets the current tenant ID from session for RLS policies
@@ -47,14 +47,6 @@ CREATE TABLE users (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
--- POSTGRES TABLE: settings --
-CREATE TABLE settings (
-  name TEXT NOT NULL,
-  value JSONB NOT NULL,
-  tenant_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  id TEXT PRIMARY KEY NOT NULL
-);
 -- POSTGRES TABLE: locations --
 CREATE TABLE locations (
   name TEXT NOT NULL,
@@ -81,6 +73,14 @@ CREATE TABLE files (
   original_path TEXT NOT NULL,
   ext TEXT NOT NULL,
   mime_type TEXT NOT NULL
+);
+-- POSTGRES TABLE: settings --
+CREATE TABLE settings (
+  name TEXT NOT NULL,
+  value JSONB NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL
 );
 -- POSTGRES TABLE: areas --
 CREATE TABLE areas (
@@ -164,8 +164,8 @@ CREATE TABLE restore_operations (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
--- POSTGRES TABLE: images --
-CREATE TABLE images (
+-- POSTGRES TABLE: invoices --
+CREATE TABLE invoices (
   commodity_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -175,8 +175,8 @@ CREATE TABLE images (
   ext TEXT NOT NULL,
   mime_type TEXT NOT NULL
 );
--- POSTGRES TABLE: invoices --
-CREATE TABLE invoices (
+-- POSTGRES TABLE: images --
+CREATE TABLE images (
   commodity_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -215,10 +215,6 @@ ALTER TABLE users ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERE
 -- ALTER statements: --
 ALTER TABLE users ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE settings ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
--- ALTER statements: --
-ALTER TABLE settings ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- ALTER statements: --
 ALTER TABLE locations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE locations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
@@ -226,6 +222,10 @@ ALTER TABLE locations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERE
 ALTER TABLE files ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE files ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- ALTER statements: --
+ALTER TABLE settings ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE settings ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE areas ADD CONSTRAINT fk_area_location FOREIGN KEY (location_id) REFERENCES locations(id);
 -- ALTER statements: --
@@ -251,17 +251,17 @@ ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tena
 -- ALTER statements: --
 ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE images ADD CONSTRAINT fk_image_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
--- ALTER statements: --
-ALTER TABLE images ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
--- ALTER statements: --
-ALTER TABLE images ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- ALTER statements: --
 ALTER TABLE invoices ADD CONSTRAINT fk_invoice_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
 -- ALTER statements: --
 ALTER TABLE invoices ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE invoices ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- ALTER statements: --
+ALTER TABLE images ADD CONSTRAINT fk_image_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
+-- ALTER statements: --
+ALTER TABLE images ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE images ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE manuals ADD CONSTRAINT fk_manual_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
 -- ALTER statements: --
@@ -274,201 +274,145 @@ ALTER TABLE restore_steps ADD CONSTRAINT fk_restore_step_operation FOREIGN KEY (
 ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
--- Enable RLS for settings table
-ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
--- Enable RLS for users table
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for areas table
 ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for commodities table
+ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for exports table
 ALTER TABLE exports ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for locations table
+ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_operations table
+ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_steps table
+ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for images table
 ALTER TABLE images ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for invoices table
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for manuals table
 ALTER TABLE manuals ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_operations table
-ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
--- Enable RLS for commodities table
-ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
--- Enable RLS for locations table
-ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for files table
 ALTER TABLE files ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_steps table
-ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for settings table
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for users table
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 -- Allows background workers to access all areas for processing
 DROP POLICY IF EXISTS area_background_worker_access ON areas;
 CREATE POLICY area_background_worker_access ON areas FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures areas can only be accessed by their tenant
-DROP POLICY IF EXISTS area_tenant_isolation ON areas;
-CREATE POLICY area_tenant_isolation ON areas FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id());
--- Ensures areas can only be accessed and modified by their user
-DROP POLICY IF EXISTS area_user_isolation ON areas;
-CREATE POLICY area_user_isolation ON areas FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures areas can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS area_isolation ON areas;
+CREATE POLICY area_isolation ON areas FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all commodities for processing
 DROP POLICY IF EXISTS commodity_background_worker_access ON commodities;
 CREATE POLICY commodity_background_worker_access ON commodities FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures commodities can only be accessed and modified by their tenant
-DROP POLICY IF EXISTS commodity_tenant_isolation ON commodities;
-CREATE POLICY commodity_tenant_isolation ON commodities FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
--- Ensures commodities can only be accessed and modified by their user
-DROP POLICY IF EXISTS commodity_user_isolation ON commodities;
-CREATE POLICY commodity_user_isolation ON commodities FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures commodities can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS commodity_isolation ON commodities;
+CREATE POLICY commodity_isolation ON commodities FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all exports for processing
 DROP POLICY IF EXISTS export_background_worker_access ON exports;
 CREATE POLICY export_background_worker_access ON exports FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures exports can only be accessed and modified by their tenant
-DROP POLICY IF EXISTS export_tenant_isolation ON exports;
-CREATE POLICY export_tenant_isolation ON exports FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
--- Ensures exports can only be accessed and modified by their user
-DROP POLICY IF EXISTS export_user_isolation ON exports;
-CREATE POLICY export_user_isolation ON exports FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures exports can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS export_isolation ON exports;
+CREATE POLICY export_isolation ON exports FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all files for processing
 DROP POLICY IF EXISTS file_background_worker_access ON files;
 CREATE POLICY file_background_worker_access ON files FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures files can only be accessed and modified by their tenant
-DROP POLICY IF EXISTS file_tenant_isolation ON files;
-CREATE POLICY file_tenant_isolation ON files FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
--- Ensures files can only be accessed and modified by their user
-DROP POLICY IF EXISTS file_user_isolation ON files;
-CREATE POLICY file_user_isolation ON files FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
--- Ensures images can only be accessed and modified by their tenant
-DROP POLICY IF EXISTS image_tenant_isolation ON images;
-CREATE POLICY image_tenant_isolation ON images FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
--- Ensures images can only be accessed and modified by their user
-DROP POLICY IF EXISTS image_user_isolation ON images;
-CREATE POLICY image_user_isolation ON images FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures files can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS file_isolation ON files;
+CREATE POLICY file_isolation ON files FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
+-- Ensures images can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS image_isolation ON images;
+CREATE POLICY image_isolation ON images FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all invoices for processing
 DROP POLICY IF EXISTS invoice_background_worker_access ON invoices;
 CREATE POLICY invoice_background_worker_access ON invoices FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures invoices can only be accessed and modified by their tenant
-DROP POLICY IF EXISTS invoice_tenant_isolation ON invoices;
-CREATE POLICY invoice_tenant_isolation ON invoices FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
--- Ensures invoices can only be accessed and modified by their user
-DROP POLICY IF EXISTS invoice_user_isolation ON invoices;
-CREATE POLICY invoice_user_isolation ON invoices FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures invoices can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS invoice_isolation ON invoices;
+CREATE POLICY invoice_isolation ON invoices FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all locations for processing
 DROP POLICY IF EXISTS location_background_worker_access ON locations;
 CREATE POLICY location_background_worker_access ON locations FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures locations can only be accessed by their tenant
-DROP POLICY IF EXISTS location_tenant_isolation ON locations;
-CREATE POLICY location_tenant_isolation ON locations FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id());
--- Ensures locations can only be accessed and modified by their user
-DROP POLICY IF EXISTS location_user_isolation ON locations;
-CREATE POLICY location_user_isolation ON locations FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures locations can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS location_isolation ON locations;
+CREATE POLICY location_isolation ON locations FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all manuals for processing
 DROP POLICY IF EXISTS manual_background_worker_access ON manuals;
 CREATE POLICY manual_background_worker_access ON manuals FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures manuals can only be accessed and modified by their tenant
-DROP POLICY IF EXISTS manual_tenant_isolation ON manuals;
-CREATE POLICY manual_tenant_isolation ON manuals FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
--- Ensures manuals can only be accessed and modified by their user
-DROP POLICY IF EXISTS manual_user_isolation ON manuals;
-CREATE POLICY manual_user_isolation ON manuals FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures manuals can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS manual_isolation ON manuals;
+CREATE POLICY manual_isolation ON manuals FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all restore operations for processing
 DROP POLICY IF EXISTS restore_operation_background_worker_access ON restore_operations;
 CREATE POLICY restore_operation_background_worker_access ON restore_operations FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures restore operations can only be accessed and modified by their tenant
-DROP POLICY IF EXISTS restore_operation_tenant_isolation ON restore_operations;
-CREATE POLICY restore_operation_tenant_isolation ON restore_operations FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
--- Ensures restore operations can only be accessed and modified by their user
-DROP POLICY IF EXISTS restore_operation_user_isolation ON restore_operations;
-CREATE POLICY restore_operation_user_isolation ON restore_operations FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures restore operations can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS restore_operation_isolation ON restore_operations;
+CREATE POLICY restore_operation_isolation ON restore_operations FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all restore steps for processing
 DROP POLICY IF EXISTS restore_step_background_worker_access ON restore_steps;
 CREATE POLICY restore_step_background_worker_access ON restore_steps FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures restore steps can only be accessed and modified by their tenant
-DROP POLICY IF EXISTS restore_step_tenant_isolation ON restore_steps;
-CREATE POLICY restore_step_tenant_isolation ON restore_steps FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id())
-    WITH CHECK (tenant_id = get_current_tenant_id());
--- Ensures restore steps can only be accessed and modified by their user
-DROP POLICY IF EXISTS restore_step_user_isolation ON restore_steps;
-CREATE POLICY restore_step_user_isolation ON restore_steps FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures restore steps can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS restore_step_isolation ON restore_steps;
+CREATE POLICY restore_step_isolation ON restore_steps FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all settings for processing
 DROP POLICY IF EXISTS setting_background_worker_access ON settings;
 CREATE POLICY setting_background_worker_access ON settings FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures settings can only be accessed by their tenant
-DROP POLICY IF EXISTS setting_tenant_isolation ON settings;
-CREATE POLICY setting_tenant_isolation ON settings FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id());
--- Ensures settings can only be accessed and modified by their user
-DROP POLICY IF EXISTS setting_user_isolation ON settings;
-CREATE POLICY setting_user_isolation ON settings FOR ALL TO inventario_app
-    USING (user_id = get_current_user_id())
-    WITH CHECK (user_id = get_current_user_id());
+-- Ensures settings can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS setting_isolation ON settings;
+CREATE POLICY setting_isolation ON settings FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all users for processing
 DROP POLICY IF EXISTS user_background_worker_access ON users;
 CREATE POLICY user_background_worker_access ON users FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
--- Ensures users can only access their tenant's data
-DROP POLICY IF EXISTS user_tenant_isolation ON users;
-CREATE POLICY user_tenant_isolation ON users FOR ALL TO inventario_app
-    USING (tenant_id = get_current_tenant_id());
--- Ensures users can only access and modify their own data
-DROP POLICY IF EXISTS user_user_isolation ON users;
-CREATE POLICY user_user_isolation ON users FOR ALL TO inventario_app
-    USING (id = get_current_user_id())
-    WITH CHECK (id = get_current_user_id());
+-- Ensures users can only access and modify their own data within their tenant with required contexts
+DROP POLICY IF EXISTS user_isolation ON users;
+CREATE POLICY user_isolation ON users FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 CREATE INDEX IF NOT EXISTS commodities_active_idx ON commodities (status, area_id) WHERE draft = false;
 CREATE INDEX IF NOT EXISTS commodities_draft_idx ON commodities (last_modified_date) WHERE draft = true;
 CREATE INDEX IF NOT EXISTS commodities_extra_serial_numbers_gin_idx ON commodities USING GIN (extra_serial_numbers);

@@ -284,5 +284,5 @@ func (r *RLSRepository[T, P]) beginTx(ctx context.Context) (*sqlx.Tx, error) {
 	if r.service {
 		return beginServiceTx(ctx, r.dbx)
 	}
-	return beginUserTx(ctx, r.dbx, r.userID)
+	return beginTxWithTenantAndUser(ctx, r.dbx, r.userID, r.tenantID)
 }
