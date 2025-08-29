@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
@@ -15,7 +16,6 @@ import (
 	"github.com/denisvmedia/inventario/backup/restore/types"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/filekit"
-	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -811,7 +811,7 @@ func (l *RestoreOperationProcessor) createRestoreStep(
 	_, err := l.registrySet.RestoreStepRegistry.Create(ctx, step)
 	if err != nil {
 		// Log error but don't fail the restore operation
-		log.WithError(err).Error("Failed to create restore step")
+		slog.Error("Failed to create restore step", "error", err)
 	}
 }
 
@@ -833,7 +833,7 @@ func (l *RestoreOperationProcessor) updateRestoreStep(ctx context.Context, name 
 			_, err := l.registrySet.RestoreStepRegistry.Update(ctx, *step)
 			if err != nil {
 				// Log error but don't fail the restore operation
-				log.WithError(err).Error("Failed to update restore step")
+				slog.Error("Failed to update restore step", "error", err)
 			}
 			return
 		}

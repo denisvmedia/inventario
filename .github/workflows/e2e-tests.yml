@@ -29,7 +29,7 @@ jobs:
           - 5432:5432
 
     env:
-      DB_DSN: postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable
+      INVENTARIO_DB_DSN: postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable
       INVENTARIO_LOG_FORMAT: json
 
     steps:

@@ -2,12 +2,12 @@ package apiserver
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/render"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
-	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -56,7 +56,7 @@ func NewUnauthorizedError(err error) jsonapi.Error {
 }
 
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
-	log.WithError(err).Error("internal server error")
+	slog.Error("internal server error", "error", err)
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
 }
 
@@ -77,7 +77,7 @@ func toJSONAPIError(err error) jsonapi.Error {
 	case errors.Is(err, registry.ErrMainCurrencyAlreadySet):
 		return NewUnprocessableEntityError(err)
 	default:
-		log.WithError(err).Error("internal server error")
+		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)
 	}
 }

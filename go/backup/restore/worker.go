@@ -2,12 +2,12 @@ package restore
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -65,7 +65,7 @@ func (w *RestoreWorker) Start(ctx context.Context) {
 		w.run(ctx)
 	}()
 
-	log.Print("Restore worker started")
+	slog.Info("Restore worker started")
 }
 
 // Stop stops the restore worker
@@ -83,7 +83,7 @@ func (w *RestoreWorker) Stop() {
 
 	go func() {
 		w.wg.Wait()
-		log.Print("Restore worker stopped")
+		slog.Info("Restore worker stopped")
 	}()
 }
 
@@ -115,7 +115,7 @@ func (w *RestoreWorker) run(ctx context.Context) {
 func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 	restoreOperations, err := w.registrySet.RestoreOperationRegistry.WithServiceAccount().List(ctx)
 	if err != nil {
-		log.WithError(err).Error("Failed to get restore operations")
+		slog.Error("Failed to get restore operations", "error", err)
 		return
 	}
 
@@ -126,7 +126,7 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 
 		// Attempt to acquire a semaphore slot to limit concurrent goroutines
 		if !w.semaphore.TryAcquire(1) {
-			log.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
+			slog.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
 			return
 		}
 
@@ -139,13 +139,13 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 
 // processRestore processes a single restore request
 func (w *RestoreWorker) processRestore(ctx context.Context, restoreOperationID string) {
-	log.WithField("restore_operation_id", restoreOperationID).Info("Processing restore operation")
+	slog.Info("Processing restore operation", "restore_operation_id", restoreOperationID)
 
 	if err := w.restoreService.ProcessRestoreOperation(ctx, restoreOperationID, w.uploadLocation); err != nil {
-		log.WithError(err).WithField("restore_operation_id", restoreOperationID).Error("Failed to process restore operation")
+		slog.Error("Failed to process restore operation", "restore_operation_id", restoreOperationID, "error", err)
 		return
 	}
-	log.WithField("restore_operation_id", restoreOperationID).Info("Successfully processed restore operation")
+	slog.Info("Successfully processed restore operation", "restore_operation_id", restoreOperationID)
 }
 
 // HasRunningRestores checks if there are any restore operations currently running or pending

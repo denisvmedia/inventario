@@ -2,12 +2,12 @@ package importpkg
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/denisvmedia/inventario/internal/log"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -73,7 +73,7 @@ func (w *ImportWorker) Start(ctx context.Context) {
 		w.run(ctx)
 	}()
 
-	log.Print("Import worker started")
+	slog.Info("Import worker started")
 }
 
 // Stop stops the import worker
@@ -91,7 +91,7 @@ func (w *ImportWorker) Stop() {
 
 	go func() {
 		w.wg.Wait()
-		log.Print("Import worker stopped")
+		slog.Info("Import worker stopped")
 	}()
 }
 
@@ -123,7 +123,7 @@ func (w *ImportWorker) run(ctx context.Context) {
 func (w *ImportWorker) processPendingImports(ctx context.Context) {
 	exports, err := w.registrySet.ExportRegistry.WithServiceAccount().List(ctx)
 	if err != nil {
-		log.WithError(err).Error("Failed to get exports")
+		slog.Error("Failed to get exports", "error", err)
 		return
 	}
 
@@ -136,7 +136,7 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 
 		// Block until we can acquire a semaphore slot to limit concurrent goroutines
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
-			log.WithError(err).Error("Failed to acquire semaphore")
+			slog.Error("Failed to acquire semaphore", "error", err)
 			return
 		}
 
@@ -149,13 +149,13 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 
 // processImport processes a single import operation
 func (w *ImportWorker) processImport(ctx context.Context, exportID, sourceFilePath string) {
-	log.WithField("export_id", exportID).Info("Processing import")
+	slog.Info("Processing import", "export_id", exportID)
 
 	err := w.importService.ProcessImport(ctx, exportID, sourceFilePath)
 	if err != nil {
-		log.WithError(err).WithField("export_id", exportID).Error("Failed to process import")
+		slog.Error("Failed to process import", "export_id", exportID, "error", err)
 		return
 	}
 
-	log.WithField("export_id", exportID).Info("Import processed successfully")
+	slog.Info("Import processed successfully", "export_id", exportID)
 }
