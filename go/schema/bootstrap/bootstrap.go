@@ -4,7 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"log/slog"
+	"io"
 	"sort"
 	"strings"
 	"text/template"
@@ -19,8 +19,9 @@ var bootstrapFS embed.FS
 
 // TemplateData holds the template variables for SQL migrations
 type TemplateData struct {
-	Username              string
-	UsernameForMigrations string
+	Username                    string
+	UsernameForMigrations       string
+	UsernameForBackgroundWorker string
 }
 
 // ApplyArgs contains arguments for applying bootstrap migrations
@@ -32,14 +33,21 @@ type ApplyArgs struct {
 
 // Migrator handles bootstrap database migrations
 type Migrator struct {
-	logger *slog.Logger
+	w io.Writer
 }
 
 // New creates a new bootstrap migrator
 func New() *Migrator {
 	return &Migrator{
-		logger: slog.Default(),
+		w: io.Discard,
 	}
+}
+
+// WithWriter sets the output writer for logging
+func (m *Migrator) WithWriter(w io.Writer) *Migrator {
+	tmp := *m
+	tmp.w = w
+	return &tmp
 }
 
 // Apply executes all bootstrap migrations in alphabetical order
@@ -50,7 +58,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 
 	// Validate that this is a PostgreSQL DSN
 	if !strings.HasPrefix(args.DSN, "postgres://") && !strings.HasPrefix(args.DSN, "postgresql://") {
-		return fmt.Errorf("bootstrap migrations only support PostgreSQL databases")
+		return fmt.Errorf("migrator: bootstrap migrations only support PostgreSQL databases")
 	}
 
 	// Get all SQL files from embedded filesystem
@@ -60,11 +68,11 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 	}
 
 	if len(files) == 0 {
-		m.logger.Info("No bootstrap migration files found")
+		fmt.Fprintln(m.w, "No bootstrap migration files found")
 		return nil
 	}
 
-	m.logger.Info("Found bootstrap migration files", "count", len(files), "files", files)
+	fmt.Fprintf(m.w, "Found bootstrap migration files: %v\n", files)
 
 	if args.DryRun {
 		return m.dryRun(files, args.Template)
@@ -77,7 +85,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 	}
 	defer func() {
 		if closeErr := conn.Close(ctx); closeErr != nil {
-			m.logger.Error("Failed to close database connection", "error", closeErr)
+			fmt.Fprintf(m.w, "Failed to close database connection: %v\n", closeErr)
 		}
 	}()
 
@@ -88,7 +96,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 		}
 	}
 
-	m.logger.Info("✅ All bootstrap migrations applied successfully")
+	fmt.Fprintf(m.w, "✅ All bootstrap migrations applied successfully\n")
 	return nil
 }
 
@@ -114,11 +122,11 @@ func (m *Migrator) getSQLFiles() ([]string, error) {
 
 // dryRun shows what would be executed without actually running the migrations
 func (m *Migrator) dryRun(files []string, templateData TemplateData) error {
-	m.logger.Info("🔍 [DRY RUN] Bootstrap migrations preview")
-	m.logger.Info("📋 Template variables", "username", templateData.Username, "usernameForMigrations", templateData.UsernameForMigrations)
+	fmt.Fprintln(m.w, "🔍 [DRY RUN] Bootstrap migrations preview")
+	fmt.Fprintf(m.w, "📋 Template variables: %+v\n", templateData)
 
 	for i, filename := range files {
-		m.logger.Info(fmt.Sprintf("📄 [%d/%d] Would apply: %s", i+1, len(files), filename))
+		fmt.Fprintf(m.w, "📄 [%d/%d] Would apply: %s\n", i+1, len(files), filename)
 
 		// Read and process the file content
 		content, err := m.readAndProcessFile(filename, templateData)
@@ -133,24 +141,24 @@ func (m *Migrator) dryRun(files []string, templateData TemplateData) error {
 			previewLines = len(lines)
 		}
 
-		m.logger.Info("📝 Preview (first few lines):")
+		fmt.Fprintln(m.w, "📝 Preview (first few lines):")
 		for j := 0; j < previewLines; j++ {
 			if strings.TrimSpace(lines[j]) != "" {
-				m.logger.Info(fmt.Sprintf("    %s", lines[j]))
+				fmt.Fprintf(m.w, "    %s\n", lines[j])
 			}
 		}
 		if len(lines) > previewLines {
-			m.logger.Info(fmt.Sprintf("    ... (%d more lines)", len(lines)-previewLines))
+			fmt.Fprintf(m.w, "    ... (%d more lines)\n", len(lines)-previewLines)
 		}
 	}
 
-	m.logger.Info("✅ [DRY RUN] Preview completed successfully")
+	fmt.Fprintln(m.w, "✅ [DRY RUN] Preview completed successfully")
 	return nil
 }
 
 // applyMigrationFile applies a single migration file
 func (m *Migrator) applyMigrationFile(ctx context.Context, conn *pgx.Conn, filename string, templateData TemplateData) error {
-	m.logger.Info("📄 Applying migration file", "filename", filename)
+	fmt.Fprintln(m.w, "📄 Applying migration file", filename)
 
 	// Read and process the file content
 	content, err := m.readAndProcessFile(filename, templateData)
@@ -165,7 +173,7 @@ func (m *Migrator) applyMigrationFile(ctx context.Context, conn *pgx.Conn, filen
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && rollbackErr != pgx.ErrTxClosed {
-			m.logger.Error("Failed to rollback transaction", "error", rollbackErr)
+			fmt.Fprintf(m.w, "Failed to rollback transaction: %v\n", rollbackErr)
 		}
 	}()
 
@@ -180,7 +188,7 @@ func (m *Migrator) applyMigrationFile(ctx context.Context, conn *pgx.Conn, filen
 		return errkit.Wrap(err, "failed to commit transaction")
 	}
 
-	m.logger.Info("✅ Migration file applied successfully", "filename", filename)
+	fmt.Fprintln(m.w, "✅ Migration file applied successfully", filename)
 	return nil
 }
 
@@ -215,7 +223,7 @@ func (m *Migrator) Print(templateData TemplateData) error {
 	}
 
 	if len(files) == 0 {
-		m.logger.Info("No bootstrap migration files found")
+		fmt.Fprintln(m.w, "No bootstrap migration files found")
 		return nil
 	}
 

@@ -19,8 +19,8 @@ func TestDebugAPI(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry set (not used directly, but needed for compilation)
-	_, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Test cases for different configurations
 	testCases := []struct {
@@ -43,13 +43,6 @@ func TestDebugAPI(t *testing.T) {
 			debugInfo:          debug.NewInfo("postgres://user:pass@localhost:5432/db", "s3://my-bucket/uploads?region=us-east-1"),
 			expectedFileDriver: "s3",
 			expectedDBDriver:   "postgres",
-		},
-		{
-			name:               "boltdb database with azure storage",
-			uploadLocation:     "azblob://container/uploads",
-			debugInfo:          debug.NewInfo("boltdb:///path/to/db.bolt", "azblob://container/uploads"),
-			expectedFileDriver: "azblob",
-			expectedDBDriver:   "boltdb",
 		},
 	}
 
@@ -98,8 +91,8 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry set (not used directly, but needed for compilation)
-	_, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Test with invalid URLs
 	params := newParams()
@@ -124,7 +117,7 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 
 	// Parse response body
 	var debugInfo debug.InfoJSON
-	err = json.NewDecoder(w.Body).Decode(&debugInfo)
+	err := json.NewDecoder(w.Body).Decode(&debugInfo)
 	c.Assert(err, qt.IsNil)
 
 	// Should return "unknown" for invalid URLs

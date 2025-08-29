@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/app-fixture.js';
-import { checkSettingsRequired } from './includes/settings-check';
+import { checkSettingsRequired } from './includes/settings-check.js';
 import { navigateWithAuth } from './includes/auth.js';
 
 test.describe('Application Navigation', () => {

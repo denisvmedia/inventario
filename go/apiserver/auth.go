@@ -2,13 +2,14 @@ package apiserver
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/denisvmedia/inventario/internal/log"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -65,21 +66,21 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// In a future version, this should be replaced with a user-only GetByEmail method
 	user, err := api.userRegistry.GetByEmail(r.Context(), defaultTenantID, req.Email)
 	if err != nil {
-		log.WithError(err).WithField("email", req.Email).Warn("Failed login attempt: user not found")
+		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
 	// Check password
 	if !user.CheckPassword(req.Password) {
-		log.WithField("email", req.Email).WithField("user_id", user.ID).Warn("Failed login attempt: invalid password")
+		slog.Warn("Failed login attempt: invalid password", "email", req.Email, "user_id", user.ID)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
 	// Check if user is active
 	if !user.IsActive {
-		log.WithField("email", req.Email).WithField("user_id", user.ID).Warn("Failed login attempt: user account disabled")
+		slog.Warn("Failed login attempt: user account disabled", "email", req.Email, "user_id", user.ID)
 		http.Error(w, "User account disabled", http.StatusForbidden)
 		return
 	}
@@ -94,7 +95,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, err := token.SignedString(api.jwtSecret)
 	if err != nil {
-		log.WithError(err).WithField("user_id", user.ID).Error("Failed to generate JWT token")
+		slog.Error("Failed to generate JWT token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
@@ -104,7 +105,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	user.LastLoginAt = &now
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
 		// Log error but don't fail the login
-		log.WithError(err).WithField("user_id", user.ID).Error("Failed to update user last login time")
+		slog.Error("Failed to update user last login time", "user_id", user.ID, "error", err)
 	}
 
 	response := LoginResponse{
@@ -114,11 +115,11 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log successful login
-	log.WithField("email", user.Email).WithField("user_id", user.ID).WithField("role", user.Role).Info("Successful user login")
+	slog.Info("Successful user login", "email", user.Email, "user_id", user.ID, "role", user.Role)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.WithError(err).WithField("user_id", user.ID).Error("Failed to encode login response")
+		slog.Error("Failed to encode login response", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
@@ -143,7 +144,7 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 
 // handleGetCurrentUser returns the current authenticated user
 func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
-	user := UserFromContext(r.Context())
+	user := appctx.UserFromContext(r.Context())
 	if user == nil {
 		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return

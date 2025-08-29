@@ -7,6 +7,15 @@
     />
 
     <div v-if="loading" class="loading">Loading...</div>
+    <ResourceNotFound
+      v-else-if="is404Error"
+      resource-type="area"
+      :title="get404Title('area')"
+      :message="get404Message('area')"
+      go-back-text="Back to Locations"
+      @go-back="goBackToList"
+      @try-again="loadArea"
+    />
     <div v-else-if="!area" class="not-found">Area not found</div>
     <div v-else>
       <div class="breadcrumb-nav">
@@ -99,7 +108,8 @@ import { formatPrice, getDisplayPrice, getMainCurrency } from '@/services/curren
 import Confirmation from "@/components/Confirmation.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
 import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
-import { useErrorState } from '@/utils/errorUtils'
+import ResourceNotFound from '@/components/ResourceNotFound.vue'
+import { useErrorState, is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 
 const router = useRouter()
 const route = useRoute()
@@ -107,11 +117,15 @@ const area = ref<any>(null)
 const locations = ref<any[]>([])
 const commodities = ref<any[]>([])
 const loading = ref<boolean>(true)
+const lastError = ref<any>(null) // Store the last error object for 404 detection
 const locationName = ref<string | null>(null)
 const locationAddress = ref<string | null>(null)
 
 // Error state management
 const { errors, handleError, removeError, cleanup } = useErrorState()
+
+// Error state computed properties
+const is404Error = computed(() => lastError.value && checkIs404Error(lastError.value))
 
 
 // Area total value
@@ -136,8 +150,14 @@ const filteredCommodities = computed(() => {
   })
 })
 
-onMounted(async () => {
+onMounted(() => {
+  loadArea()
+})
+
+const loadArea = async () => {
   const id = route.params.id as string
+  loading.value = true
+  lastError.value = null
 
   try {
     // Main currency is now handled by the currency service
@@ -248,10 +268,15 @@ onMounted(async () => {
       })
     }
   } catch (err: any) {
-    handleError(err, 'area', 'Failed to load area')
+    lastError.value = err
+    if (checkIs404Error(err)) {
+      // 404 errors will be handled by the ResourceNotFound component
+    } else {
+      handleError(err, 'area', 'Failed to load area')
+    }
     loading.value = false
   }
-})
+}
 
 // Clean up timeout when component is unmounted
 onBeforeUnmount(() => {
@@ -334,6 +359,10 @@ const onConfirmDeleteCommodity = () => {
 const onCancelDeleteCommodity = () => {
   showDeleteCommodityDialog.value = false
   commodityToDelete.value = null
+}
+
+const goBackToList = () => {
+  router.push('/locations')
 }
 
 const navigateToLocations = () => {

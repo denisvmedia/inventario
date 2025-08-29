@@ -26,8 +26,13 @@ func NewFileService(registrySet *registry.Set, uploadLocation string) *FileServi
 
 // DeleteFileWithPhysical deletes a file entity and its associated physical file
 func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string) error {
+	fileReg, err := s.registrySet.FileRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get file registry")
+	}
+
 	// Get the file entity first
-	file, err := s.registrySet.FileRegistry.Get(ctx, fileID)
+	file, err := fileReg.Get(ctx, fileID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get file entity")
 	}
@@ -40,7 +45,7 @@ func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string)
 	}
 
 	// Delete the file entity from database
-	err = s.registrySet.FileRegistry.Delete(ctx, fileID)
+	err = fileReg.Delete(ctx, fileID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete file entity")
 	}
@@ -82,8 +87,13 @@ func (s *FileService) deletePhysicalFile(ctx context.Context, filePath string) e
 
 // DeleteLinkedFiles deletes all files linked to a specific entity
 func (s *FileService) DeleteLinkedFiles(ctx context.Context, entityType, entityID string) error {
+	fileReg, err := s.registrySet.FileRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get file registry")
+	}
+
 	// Get all linked files for this entity
-	files, err := s.registrySet.FileRegistry.ListByLinkedEntity(ctx, entityType, entityID)
+	files, err := fileReg.ListByLinkedEntity(ctx, entityType, entityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get linked files")
 	}

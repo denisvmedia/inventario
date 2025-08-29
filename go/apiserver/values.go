@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/valuation"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
@@ -24,8 +25,14 @@ type valuesAPI struct {
 // @Success 200 {object} jsonapi.ValueResponse "OK"
 // @Router /commodities/values [get]
 func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	user, err := appctx.RequireUserFromContext(r.Context())
+	if err != nil {
+		unauthorizedError(w, r, err)
+		return
+	}
+
 	// Create a valuator
-	valuator := valuation.NewValuator(api.registrySet)
+	valuator := valuation.NewValuator(api.registrySet, user)
 
 	// Calculate global total
 	globalTotal, err := valuator.CalculateGlobalTotalValue()

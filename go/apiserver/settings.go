@@ -23,8 +23,15 @@ type settingsAPI struct {
 // @Success 200 {object} models.SettingsObject "OK"
 // @Router /settings [get]
 func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
+	// Get user-aware settings registry
+	settingsRegistry, err := api.registry.WithCurrentUser(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	// Get current settings
-	settings, err := api.registry.Get(r.Context())
+	settings, err := settingsRegistry.Get(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -50,6 +57,13 @@ func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) { //
 // @Success 200 {object} models.SettingsObject "OK"
 // @Router /settings [put]
 func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry
+	settingsRegistry, err := api.registry.WithCurrentUser(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	// Decode the request body into a settings object
 	var settings models.SettingsObject
 	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
@@ -59,7 +73,7 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 
 	// Check if main currency is being changed
 	if settings.MainCurrency != nil {
-		currentSettings, err := api.registry.Get(r.Context())
+		currentSettings, err := settingsRegistry.Get(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -73,13 +87,13 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save the settings
-	if err := api.registry.Save(r.Context(), settings); err != nil {
+	if err := settingsRegistry.Save(r.Context(), settings); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Get the updated settings
-	updatedSettings, err := api.registry.Get(r.Context())
+	updatedSettings, err := settingsRegistry.Get(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -106,6 +120,13 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} models.SettingsObject "OK"
 // @Router /settings/{field} [patch]
 func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry
+	settingsRegistry, err := api.registry.WithCurrentUser(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	// Get the field path from the URL
 	field := chi.URLParam(r, "field")
 	if field == "" {
@@ -115,7 +136,7 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 
 	// Check if trying to update main currency
 	if field == "system.main_currency" {
-		currentSettings, err := api.registry.Get(r.Context())
+		currentSettings, err := settingsRegistry.Get(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -136,13 +157,13 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Patch the setting
-	if err := api.registry.Patch(r.Context(), field, value); err != nil {
+	if err := settingsRegistry.Patch(r.Context(), field, value); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Get the updated settings
-	updatedSettings, err := api.registry.Get(r.Context())
+	updatedSettings, err := settingsRegistry.Get(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

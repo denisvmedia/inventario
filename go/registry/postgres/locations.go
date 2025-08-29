@@ -2,41 +2,94 @@ package postgres
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"strings"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
 var _ registry.LocationRegistry = (*LocationRegistry)(nil)
 
 type LocationRegistry struct {
 	dbx        *sqlx.DB
-	tableNames TableNames
+	tableNames store.TableNames
+	userID     string
+	tenantID   string
+	service    bool
 }
 
 func NewLocationRegistry(dbx *sqlx.DB) *LocationRegistry {
-	return NewLocationRegistryWithTableNames(dbx, DefaultTableNames)
+	return NewLocationRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames TableNames) *LocationRegistry {
+func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *LocationRegistry {
 	return &LocationRegistry{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-// SetUserContext sets the user context for RLS policies
-func (r *LocationRegistry) SetUserContext(ctx context.Context, userID string) error {
-	return SetUserContext(ctx, r.dbx, userID)
+func (r *LocationRegistry) MustWithCurrentUser(ctx context.Context) registry.LocationRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
-// WithUserContext executes a function with user context set
-func (r *LocationRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
-	return WithUserContext(ctx, r.dbx, userID, fn)
+func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.LocationRegistry, error) {
+	tmp := *r
+
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
+	tmp.service = false
+	return &tmp, nil
+}
+
+func (r *LocationRegistry) WithServiceAccount() registry.LocationRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	return &tmp
+}
+
+func (r *LocationRegistry) Get(ctx context.Context, id string) (*models.Location, error) {
+	return r.get(ctx, id)
+}
+
+func (r *LocationRegistry) List(ctx context.Context) ([]*models.Location, error) {
+	var locations []*models.Location
+
+	reg := r.newSQLRegistry()
+
+	// Query the database for all locations (atomic operation)
+	for location, err := range reg.Scan(ctx) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list locations")
+		}
+		locations = append(locations, &location)
+	}
+
+	return locations, nil
+}
+
+func (r *LocationRegistry) Count(ctx context.Context) (int, error) {
+	reg := r.newSQLRegistry()
+
+	cnt, err := reg.Count(ctx)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count locations")
+	}
+
+	return cnt, nil
 }
 
 func (r *LocationRegistry) Create(ctx context.Context, location models.Location) (*models.Location, error) {
@@ -50,62 +103,29 @@ func (r *LocationRegistry) Create(ctx context.Context, location models.Location)
 	if location.GetID() == "" {
 		location.SetID(generateID())
 	}
+	location.SetTenantID(r.tenantID)
+	location.SetUserID(r.userID)
 
-	// Insert the location into the database (atomic operation)
-	err := InsertEntity(ctx, r.dbx, r.tableNames.Locations(), location)
+	reg := r.newSQLRegistry()
+
+	err := reg.Create(ctx, location, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to insert entity")
+		return nil, errkit.Wrap(err, "failed to create location")
 	}
 
 	return &location, nil
-}
-
-func (r *LocationRegistry) Get(ctx context.Context, id string) (*models.Location, error) {
-	// Query the database for the location (atomic operation)
-	return r.get(ctx, r.dbx, id)
-}
-
-func (r *LocationRegistry) get(ctx context.Context, tx sqlx.ExtContext, id string) (*models.Location, error) {
-	var location models.Location
-	err := ScanEntityByField(ctx, tx, r.tableNames.Locations(), "id", id, &location)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get location")
-	}
-
-	return &location, nil
-}
-
-func (r *LocationRegistry) List(ctx context.Context) ([]*models.Location, error) {
-	var locations []*models.Location
-
-	// Query the database for all locations (atomic operation)
-	for location, err := range ScanEntities[models.Location](ctx, r.dbx, r.tableNames.Locations()) {
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list locations")
-		}
-		locations = append(locations, &location)
-	}
-
-	return locations, nil
 }
 
 func (r *LocationRegistry) Update(ctx context.Context, location models.Location) (*models.Location, error) {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
-
-	// Check if the location exists
-	_, err = r.get(ctx, tx, location.ID)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get location")
+	if location.Name == "" {
+		return nil, errkit.WithStack(registry.ErrFieldRequired,
+			"field_name", "Name",
+		)
 	}
 
-	err = UpdateEntityByField(ctx, tx, r.tableNames.Locations(), "id", location.ID, location)
+	reg := r.newSQLRegistry()
+
+	err := reg.Update(ctx, location, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update location")
 	}
@@ -114,108 +134,62 @@ func (r *LocationRegistry) Update(ctx context.Context, location models.Location)
 }
 
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
-	// Begin a transaction (atomic operation)
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
-
-	// Check if the location exists
-	_, err = r.get(ctx, tx, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get location")
-	}
-
-	// Check if the location has areas
-	areas, err := r.getAreas(ctx, tx, id)
-	if err != nil {
-		return err
-	}
-	if len(areas) > 0 {
-		return errkit.Wrap(registry.ErrCannotDelete, "area has areas")
-	}
-
-	// Finally, delete the location
-	err = DeleteEntityByField(ctx, tx, r.tableNames.Locations(), "id", id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete location")
-	}
-
-	return nil
-}
-
-func (r *LocationRegistry) Count(ctx context.Context) (int, error) {
-	cnt, err := CountEntities(ctx, r.dbx, r.tableNames.Locations())
-	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count locations")
-	}
-
-	return cnt, nil
-}
-
-func (r *LocationRegistry) AddArea(ctx context.Context, locationID, areaID string) error {
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
-
-	// Check if the location exists
-	_, err = r.get(ctx, tx, locationID)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get location")
-	}
-
-	// Check if the area exists
-	var area models.Area
-	err = ScanEntityByField(ctx, tx, r.tableNames.Areas(), "id", areaID, &area)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get area")
-	}
-
-	// Check if the area is already in the location
-	if area.LocationID == locationID {
-		// already in location id
+	reg := r.newSQLRegistry()
+	err := reg.Delete(ctx, id, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Check if the location has areas
+		areas, err := r.getAreas(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if len(areas) > 0 {
+			return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
+		}
 		return nil
-	}
+	})
 
-	// Set the area's location ID and update it
-	area.LocationID = locationID
-	err = UpdateEntityByField(ctx, tx, r.tableNames.Areas(), "id", areaID, area)
-	if err != nil {
-		return errkit.Wrap(err, "failed to update area")
-	}
-
-	return nil
+	return err
 }
 
 func (r *LocationRegistry) GetAreas(ctx context.Context, locationID string) ([]string, error) {
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to begin transaction")
-	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
-
-	return r.getAreas(ctx, tx, locationID)
-}
-
-func (r *LocationRegistry) getAreas(ctx context.Context, tx sqlx.ExtContext, locationID string) ([]string, error) {
-	// Check if the location exists
-	_, err := r.get(ctx, tx, locationID)
-	if err != nil {
-		return nil, err
-	}
-
 	var areas []string
 
-	for area, err := range ScanEntitiesByField[models.Area](ctx, tx, r.tableNames.Areas(), "location_id", locationID) {
+	reg := r.newSQLRegistry()
+	err := reg.DoWithEntityID(ctx, locationID, func(ctx context.Context, tx *sqlx.Tx, _ models.Location) error {
+		var err error
+		areas, err = r.getAreas(ctx, tx, locationID)
+		return err
+	})
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to list areas")
+	}
+
+	return areas, nil
+}
+
+func (r *LocationRegistry) newSQLRegistry() *store.RLSRepository[models.Location, *models.Location] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.Location](r.dbx, r.tableNames.Locations())
+	}
+	return store.NewUserAwareSQLRegistry[models.Location](r.dbx, r.userID, r.tenantID, r.tableNames.Locations())
+}
+
+func (r *LocationRegistry) get(ctx context.Context, id string) (*models.Location, error) {
+	var location models.Location
+	reg := r.newSQLRegistry()
+
+	err := reg.ScanOneByField(ctx, store.Pair("id", id), &location)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get location")
+	}
+
+	return &location, nil
+}
+
+func (r *LocationRegistry) getAreas(ctx context.Context, tx *sqlx.Tx, locationID string) ([]string, error) {
+	var areas []string
+
+	areaReg := store.NewTxRegistry[models.Area](tx, r.tableNames.Areas())
+	for area, err := range areaReg.ScanByField(ctx, store.Pair("location_id", locationID)) {
 		if err != nil {
 			return nil, errkit.Wrap(err, "failed to list areas")
 		}
@@ -225,136 +199,63 @@ func (r *LocationRegistry) getAreas(ctx context.Context, tx sqlx.ExtContext, loc
 	return areas, nil
 }
 
-func (r *LocationRegistry) DeleteArea(ctx context.Context, locationID, areaID string) (err error) {
-	tx, err := r.dbx.Beginx()
+// GetAreaCount returns the number of areas in a location
+func (r *LocationRegistry) GetAreaCount(ctx context.Context, locationID string) (int, error) {
+	areas, err := r.GetAreas(ctx, locationID)
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return 0, err
 	}
-	defer func() {
-		err = errors.Join(err, RollbackOrCommit(tx, err))
-	}()
-
-	// Check if the location exists
-	_, err = r.get(ctx, tx, locationID)
-	if err != nil {
-		return err
-	}
-
-	var area models.Area
-	err = ScanEntityByField(ctx, tx, r.tableNames.Areas(), "id", areaID, &area)
-	if err != nil {
-		return errkit.Wrap(err, "failed to get area")
-	}
-
-	if area.LocationID != locationID {
-		return errkit.Wrap(registry.ErrNotFound, "area not found or does not belong to this location")
-	}
-
-	err = DeleteEntityByField(ctx, tx, r.tableNames.Areas(), "id", areaID)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete area")
-	}
-
-	return nil
+	return len(areas), nil
 }
 
-// User-aware methods that automatically use user context from the request context
+// GetTotalCommodityCount returns the total number of commodities across all areas in a location
+func (r *LocationRegistry) GetTotalCommodityCount(ctx context.Context, locationID string) (int, error) {
+	var totalCount int
 
-// CreateWithUser creates a location with user context
-func (r *LocationRegistry) CreateWithUser(ctx context.Context, location models.Location) (*models.Location, error) {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		sql := fmt.Sprintf(`
+			SELECT COUNT(c.id)
+			FROM %s c
+			JOIN %s a ON c.area_id = a.id
+			WHERE a.location_id = $1
+			AND c.draft = false
+		`, r.tableNames.Commodities(), r.tableNames.Areas())
 
-	// Set user_id on the location
-	location.SetUserID(userID)
-
-	if location.Name == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Name",
-		)
-	}
-
-	// Generate a new ID if one is not already provided
-	if location.GetID() == "" {
-		location.SetID(generateID())
-	}
-
-	// Set user context for RLS and insert the location
-	err := InsertEntityWithUser(ctx, r.dbx, r.tableNames.Locations(), location)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to insert entity")
-	}
-
-	return &location, nil
-}
-
-// GetWithUser gets a location with user context
-func (r *LocationRegistry) GetWithUser(ctx context.Context, id string) (*models.Location, error) {
-	var location models.Location
-	err := ScanEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Locations(), "id", id, &location)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, errkit.WithStack(registry.ErrNotFound,
-				"entity_type", "Location",
-				"entity_id", id,
-			)
+		err := tx.GetContext(ctx, &totalCount, sql, locationID)
+		if err != nil {
+			return errkit.Wrap(err, "failed to count commodities in location")
 		}
-		return nil, errkit.Wrap(err, "failed to get entity")
+		return nil
+	})
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count commodities")
 	}
 
-	return &location, nil
+	return totalCount, nil
 }
 
-// ListWithUser lists locations with user context
-func (r *LocationRegistry) ListWithUser(ctx context.Context) ([]*models.Location, error) {
+// SearchByName searches locations by name using PostgreSQL text search
+func (r *LocationRegistry) SearchByName(ctx context.Context, query string) ([]*models.Location, error) {
 	var locations []*models.Location
 
-	// Query the database for all locations with user context
-	for location, err := range ScanEntitiesWithUser[models.Location](ctx, r.dbx, r.tableNames.Locations()) {
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query = strings.ToLower(query)
+		sql := fmt.Sprintf(`
+			SELECT * FROM %s
+			WHERE LOWER(name) LIKE $1
+			ORDER BY name
+		`, r.tableNames.Locations())
+		err := tx.SelectContext(ctx, &locations, sql, "%"+query+"%")
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list locations")
+			return errkit.Wrap(err, "failed to search locations by name")
 		}
-		locations = append(locations, &location)
+		return nil
+	})
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to search locations")
 	}
 
 	return locations, nil
-}
-
-// UpdateWithUser updates a location with user context
-func (r *LocationRegistry) UpdateWithUser(ctx context.Context, location models.Location) (*models.Location, error) {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-
-	// Set user_id on the location
-	location.SetUserID(userID)
-
-	if location.Name == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Name",
-		)
-	}
-
-	// Update the location with user context
-	err := UpdateEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Locations(), "id", location.ID, location)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update entity")
-	}
-
-	return &location, nil
-}
-
-// DeleteWithUser deletes a location with user context
-func (r *LocationRegistry) DeleteWithUser(ctx context.Context, id string) error {
-	return DeleteEntityByFieldWithUser(ctx, r.dbx, r.tableNames.Locations(), "id", id)
-}
-
-// CountWithUser counts locations with user context
-func (r *LocationRegistry) CountWithUser(ctx context.Context) (int, error) {
-	return CountEntitiesWithUser(ctx, r.dbx, r.tableNames.Locations())
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -122,7 +123,7 @@ func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(ht
 			}
 
 			// Add user to context
-			ctx := WithUser(r.Context(), user)
+			ctx := appctx.WithUser(r.Context(), user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -143,7 +144,7 @@ func FileAccessMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) 
 func RequireRole(role models.UserRole) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user := UserFromContext(r.Context())
+			user := appctx.UserFromContext(r.Context())
 			if user == nil {
 				http.Error(w, "Authentication required", http.StatusUnauthorized)
 				return

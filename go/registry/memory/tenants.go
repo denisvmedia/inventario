@@ -45,7 +45,10 @@ func (r *TenantRegistry) GetByDomain(ctx context.Context, domain string) (*model
 	}
 
 	for _, tenant := range tenants {
-		if tenant.Domain == domain {
+		if tenant.Domain == nil {
+			continue
+		}
+		if *tenant.Domain == domain {
 			return tenant, nil
 		}
 	}

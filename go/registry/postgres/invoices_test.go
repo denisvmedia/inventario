@@ -5,6 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -43,20 +44,35 @@ func TestInvoiceRegistry_Create_HappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := c.Context()
+			ctx = appctx.WithUser(ctx, &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-user-id"},
+					TenantID: "test-tenant-id",
+				},
+			})
 
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
+			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
+			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
+			invoiceReg, err := registrySet.InvoiceRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
+
 			// Create test hierarchy
-			location := createTestLocation(c, registrySet.LocationRegistry)
-			area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+			location := createTestLocation(c, locationReg)
+			area := createTestArea(c, areaReg, location.ID)
 			commodity := createTestCommodity(c, registrySet, area.ID)
 
 			// Set commodity ID
 			tc.invoice.CommodityID = commodity.ID
 
 			// Create invoice
-			result, err := registrySet.InvoiceRegistry.Create(ctx, tc.invoice)
+			result, err := invoiceReg.Create(ctx, tc.invoice)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")

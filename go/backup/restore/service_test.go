@@ -1,7 +1,6 @@
 package restore_test
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +8,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/backup/restore/processor"
+	"github.com/denisvmedia/inventario/backup/restore/types"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -17,16 +18,22 @@ import (
 )
 
 func TestRestoreService_RestoreFromXML(t *testing.T) {
-	ctx := validationctx.WithMainCurrency(context.Background(), "USD")
+	ctx := validationctx.WithMainCurrency(t.Context(), "USD")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	t.Run("restore XML with full replace strategy", func(t *testing.T) {
 		c := qt.New(t)
 
 		// Create fresh registry set for this test
-		testRegistrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		testRegistrySet := memory.NewRegistrySet()
+		c.Assert(testRegistrySet, qt.IsNotNil)
 		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
-		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
@@ -59,13 +66,13 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 	</commodities>
 </inventory>`
 
-		options := restore.RestoreOptions{
-			Strategy:        restore.RestoreStrategyFullReplace,
+		options := types.RestoreOptions{
+			Strategy:        types.RestoreStrategyFullReplace,
 			IncludeFileData: false,
 			DryRun:          false,
 		}
 
-		stats, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		stats, err := proc.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.IsNil)
 		c.Assert(stats, qt.IsNotNil)
 
@@ -111,10 +118,9 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c := qt.New(t)
 
 		// Create fresh registry set for this test
-		testRegistrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		testRegistrySet := memory.NewRegistrySet()
 		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
-		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		// First, create some existing data
 		existingLocation := models.Location{
@@ -140,13 +146,13 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 	</locations>
 </inventory>`, createdLocation.ID)
 
-		options := restore.RestoreOptions{
-			Strategy:        restore.RestoreStrategyMergeAdd,
+		options := types.RestoreOptions{
+			Strategy:        types.RestoreStrategyMergeAdd,
 			IncludeFileData: false,
 			DryRun:          false,
 		}
 
-		stats, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		stats, err := proc.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.IsNil)
 		c.Assert(stats, qt.IsNotNil)
 		c.Assert(stats.LocationCount, qt.Equals, 1) // Only new location counted
@@ -169,10 +175,9 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c := qt.New(t)
 
 		// Create fresh registry set for this test
-		testRegistrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		testRegistrySet := memory.NewRegistrySet()
 		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
-		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		// First, create some existing data
 		existingLocation := models.Location{
@@ -197,13 +202,13 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 	</locations>
 </inventory>`, createdLocation.ID)
 
-		options := restore.RestoreOptions{
-			Strategy:        restore.RestoreStrategyMergeUpdate,
+		options := types.RestoreOptions{
+			Strategy:        types.RestoreStrategyMergeUpdate,
 			IncludeFileData: false,
 			DryRun:          false,
 		}
 
-		stats, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		stats, err := proc.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.IsNil)
 		c.Assert(stats, qt.IsNotNil)
 		c.Assert(stats.LocationCount, qt.Equals, 2) // Both locations processed
@@ -227,10 +232,9 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c := qt.New(t)
 
 		// Create fresh registry set for this test
-		testRegistrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		testRegistrySet := memory.NewRegistrySet()
 		entityService := services.NewEntityService(testRegistrySet, "/tmp/test-uploads")
-		processor := restore.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", testRegistrySet, entityService, "/tmp/test-uploads")
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
@@ -242,13 +246,13 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 	</locations>
 </inventory>`
 
-		options := restore.RestoreOptions{
-			Strategy:        restore.RestoreStrategyFullReplace,
+		options := types.RestoreOptions{
+			Strategy:        types.RestoreStrategyFullReplace,
 			IncludeFileData: false,
 			DryRun:          true, // Dry run mode
 		}
 
-		stats, err := processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		stats, err := proc.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.IsNil)
 		c.Assert(stats, qt.IsNotNil)
 		c.Assert(stats.LocationCount, qt.Equals, 1)
@@ -265,25 +269,24 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		c := qt.New(t)
 
 		// Create test registry set
-		registrySet, err := memory.NewRegistrySet("")
-		c.Assert(err, qt.IsNil)
+		registrySet := memory.NewRegistrySet()
 
 		// Create restore processor
 		entityService := services.NewEntityService(registrySet, "/tmp/test-uploads")
-		processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "/tmp/test-uploads")
-		c.Assert(processor, qt.IsNotNil)
+		proc := processor.NewRestoreOperationProcessor("test-op", registrySet, entityService, "/tmp/test-uploads")
+		c.Assert(proc, qt.IsNotNil)
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
 </inventory>`
 
-		options := restore.RestoreOptions{
+		options := types.RestoreOptions{
 			Strategy:        "invalid_strategy",
 			IncludeFileData: false,
 			DryRun:          false,
 		}
 
-		_, err = processor.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
+		_, err := proc.RestoreFromXML(ctx, strings.NewReader(xmlData), options)
 		c.Assert(err, qt.ErrorMatches, ".*invalid restore strategy.*")
 	})
 }
@@ -292,16 +295,22 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")
-	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with a commodity that has pricing information
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -337,13 +346,13 @@ func TestRestoreService_MainCurrencyValidation(t *testing.T) {
 </inventory>`
 
 	reader := strings.NewReader(xmlContent)
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
 	}
 
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0, qt.Commentf("Expected no errors, but got: %v", stats.Errors))
 	c.Assert(stats.CommodityCount, qt.Equals, 1)
@@ -364,11 +373,10 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries without setting main currency
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	entityService := services.NewEntityService(registrySet, "")
-	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with a commodity that has pricing information
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -404,14 +412,19 @@ func TestRestoreService_NoMainCurrencySet(t *testing.T) {
 </inventory>`
 
 	reader := strings.NewReader(xmlContent)
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
 	}
 
-	ctx := c.Context()
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Should have errors because main currency is not set
@@ -435,16 +448,22 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
+	ctx = appctx.WithUser(ctx, &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")
-	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Create XML with the same structure as sample_export.xml
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -513,13 +532,13 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 </inventory>`
 
 	reader := strings.NewReader(xmlContent)
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
 	}
 
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Debug: print errors if any
@@ -570,29 +589,28 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet, err := memory.NewRegistrySet("")
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
 
 	// Set up main currency in settings
 	ctx := c.Context()
-	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
+	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "CZK")
 	c.Assert(err, qt.IsNil)
 
 	entityService := services.NewEntityService(registrySet, "")
-	processor := restore.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op", registrySet, entityService, "")
 
 	// Read the actual sample XML file
 	xmlContent, err := os.ReadFile("testdata/sample_export.xml")
 	c.Assert(err, qt.IsNil)
 
 	reader := strings.NewReader(string(xmlContent))
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		IncludeFileData: false,
 		DryRun:          false,
 	}
 
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Debug: print errors if any

@@ -57,6 +57,36 @@ test.describe('Commodity Simple CRUD Operations', () => {
     urls: ['https://example.com/updated', 'https://example.com/documentation']
   };
 
+  // Fast-fail test to debug the specific issue
+  test('should update and immediately retrieve a commodity (fast-fail debug)', async ({ page, recorder }) => {
+    // STEP 1: CREATE LOCATION - First create a location
+    console.log('Step 1: Creating a new location');
+    await navigateTo(page, recorder, TO_LOCATIONS);
+    await createLocation(page, recorder, testLocation);
+
+    // STEP 2: CREATE AREA - Create a new area in-place in the location list view
+    console.log('Step 2: Creating a new area');
+    await createArea(page, recorder, testArea)
+
+    // STEP 3: CREATE COMMODITY - Create a new commodity
+    console.log('Step 3: Creating a new commodity');
+    await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
+    await verifyAreaHasCommodities(page, recorder);
+    await createCommodity(page, recorder, testCommodity);
+
+    // STEP 4: READ - Verify the commodity details
+    console.log('Step 4: Verifying the commodity details');
+    await verifyCommodityDetails(page, testCommodity);
+
+    // STEP 5: UPDATE - Edit the commodity
+    console.log('Step 5: Editing the commodity');
+    await editCommodity(page, recorder, updatedCommodity);
+
+    // STEP 6: READ - Verify the commodity details (this is where it fails in CI)
+    console.log('Step 6: Verifying updated commodity details');
+    await verifyCommodityDetails(page, updatedCommodity);
+  });
+
   test('should perform full CRUD operations on a commodity', async ({ page, recorder }) => {
     // STEP 1: CREATE LOCATION - First create a location
     console.log('Step 1: Creating a new location');

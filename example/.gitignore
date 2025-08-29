@@ -1,0 +1,13 @@
+# Ignore data directories (contains persistent application data)
+data/
+
+# Ignore override file (contains sensitive configuration)
+docker-compose.override.yaml
+
+# Ignore environment file (contains sensitive configuration)
+.env
+
+# Ignore backup files
+*.sql
+*.tar.gz
+backup-*

@@ -27,7 +27,7 @@ database backends and provides both CLI and web interfaces.
 
 FEATURES:
   • Web-based inventory management interface
-  • Support for multiple database backends (PostgreSQL, SQLite, BoltDB, in-memory)
+  • Support for multiple database backends (PostgreSQL, in-memory)
   • File upload and attachment management
   • Database migration and seeding capabilities
   • RESTful API with JSON responses

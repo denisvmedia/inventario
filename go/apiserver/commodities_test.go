@@ -66,6 +66,9 @@ func TestCommodityGet(t *testing.T) {
 	params := newParams()
 	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
+	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params).Images)
+	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
+	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params).Manuals)
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID, nil)
 	c.Assert(err, qt.IsNil)
@@ -79,10 +82,6 @@ func TestCommodityGet(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
-
-	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params).Images)
-	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
-	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params).Manuals)
 
 	c.Check(body, checkers.JSONPathEquals("$.data.type"), "commodities")
 	c.Check(body, checkers.JSONPathEquals("$.data.id"), commodity.ID)

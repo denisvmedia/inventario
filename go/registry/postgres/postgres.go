@@ -4,11 +4,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -20,9 +23,53 @@ func Register() (cleanup func() error) {
 	return cleanup
 }
 
+func NewRegistrySet(dbx *sqlx.DB) *registry.Set {
+	s := &registry.Set{}
+	s.LocationRegistry = NewLocationRegistry(dbx)
+	s.AreaRegistry = NewAreaRegistry(dbx)
+	s.SettingsRegistry = NewSettingsRegistry(dbx)
+	s.FileRegistry = NewFileRegistry(dbx)
+	s.CommodityRegistry = NewCommodityRegistry(dbx)
+	s.ImageRegistry = NewImageRegistry(dbx)
+	s.InvoiceRegistry = NewInvoiceRegistry(dbx)
+	s.ManualRegistry = NewManualRegistry(dbx)
+	s.ExportRegistry = NewExportRegistry(dbx)
+	s.RestoreStepRegistry = NewRestoreStepRegistry(dbx)
+	s.RestoreOperationRegistry = NewRestoreOperationRegistry(dbx, s.RestoreStepRegistry)
+	s.TenantRegistry = NewTenantRegistry(dbx)
+	s.UserRegistry = NewUserRegistry(dbx)
+
+	return s
+}
+
+func NewRegistrySetWithUserID(dbx *sqlx.DB, userID, tenantID string) *registry.Set {
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: tenantID,
+		},
+	})
+
+	s := &registry.Set{}
+	s.LocationRegistry = must.Must(NewLocationRegistry(dbx).WithCurrentUser(ctx))
+	s.AreaRegistry = must.Must(NewAreaRegistry(dbx).WithCurrentUser(ctx))
+	s.SettingsRegistry = must.Must(NewSettingsRegistry(dbx).WithCurrentUser(ctx))
+	s.FileRegistry = must.Must(NewFileRegistry(dbx).WithCurrentUser(ctx))
+	s.CommodityRegistry = must.Must(NewCommodityRegistry(dbx).WithCurrentUser(ctx))
+	s.ImageRegistry = must.Must(NewImageRegistry(dbx).WithCurrentUser(ctx))
+	s.InvoiceRegistry = must.Must(NewInvoiceRegistry(dbx).WithCurrentUser(ctx))
+	s.ManualRegistry = must.Must(NewManualRegistry(dbx).WithCurrentUser(ctx))
+	s.ExportRegistry = must.Must(NewExportRegistry(dbx).WithCurrentUser(ctx))
+	s.RestoreStepRegistry = must.Must(NewRestoreStepRegistry(dbx).WithCurrentUser(ctx))
+	s.RestoreOperationRegistry = must.Must(NewRestoreOperationRegistry(dbx, s.RestoreStepRegistry).WithCurrentUser(ctx))
+	s.TenantRegistry = NewTenantRegistry(dbx)
+	s.UserRegistry = NewUserRegistry(dbx)
+
+	return s
+}
+
 func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (registrySet *registry.Set, err error), cleanup func() error) {
-	doCleanup := func() error { return nil }
-	fn := func() error { return doCleanup() }
+	var doCleanup = func() error { return nil }
 
 	return func(c registry.Config) (registrySet *registry.Set, err error) {
 		parsed, err := c.Parse()
@@ -43,10 +90,10 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (registry
 		// Set some reasonable defaults if not specified
 		// Use smaller connection pools for testing to prevent exhaustion
 		if poolConfig.MaxConns == 0 {
-			poolConfig.MaxConns = 3 // Reduced from 10 for testing
+			poolConfig.MaxConns = 3
 		}
 		if poolConfig.MinConns == 0 {
-			poolConfig.MinConns = 1 // Reduced from 2 for testing
+			poolConfig.MinConns = 1
 		}
 		if poolConfig.MaxConnLifetime == 0 {
 			poolConfig.MaxConnLifetime = 1 * time.Hour
@@ -75,8 +122,8 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (registry
 		sqlDB := stdlib.OpenDBFromPool(pool)
 		sqlxDB := sqlx.NewDb(sqlDB, "pgx")
 
-		// Create enhanced PostgreSQL registry with advanced features
-		enhancedRegistry := NewEnhancedPostgreSQLRegistry(pool, sqlxDB)
+		// Create PostgreSQL registry set
+		registrySet = NewRegistrySet(sqlxDB)
 
 		doCleanup = func() error {
 			err := sqlxDB.Close()
@@ -84,12 +131,12 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (registry
 			return err
 		}
 
-		return enhancedRegistry.Set, nil
-	}, fn
+		return registrySet, nil
+	}, doCleanup
 }
 
 // checkSchemaInited checks if the database schema is up-to-date using Ptah
-func checkSchemaInited(pool *pgxpool.Pool) error {
+func checkSchemaInited(_ *pgxpool.Pool) error {
 	// For now, skip schema validation in PostgreSQL registry
 	// The schema validation should be handled by the application layer
 	// This allows tests to work with the new Ptah migration system

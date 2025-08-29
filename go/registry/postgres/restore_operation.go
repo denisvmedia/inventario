@@ -2,38 +2,110 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 
+	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
 var _ registry.RestoreOperationRegistry = (*RestoreOperationRegistry)(nil)
 
 type RestoreOperationRegistry struct {
-	db                  *sqlx.DB
+	dbx                 *sqlx.DB
+	tableNames          store.TableNames
+	userID              string
+	tenantID            string
+	service             bool
 	restoreStepRegistry registry.RestoreStepRegistry
 }
 
-func NewRestoreOperationRegistry(db *sqlx.DB, restoreStepRegistry registry.RestoreStepRegistry) *RestoreOperationRegistry {
+func NewRestoreOperationRegistry(dbx *sqlx.DB, restoreStepRegistry registry.RestoreStepRegistry) *RestoreOperationRegistry {
+	return NewRestoreOperationRegistryWithTableNames(dbx, store.DefaultTableNames, restoreStepRegistry)
+}
+
+func NewRestoreOperationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames, restoreStepRegistry registry.RestoreStepRegistry) *RestoreOperationRegistry {
 	return &RestoreOperationRegistry{
-		db:                  db,
+		dbx:                 dbx,
+		tableNames:          tableNames,
 		restoreStepRegistry: restoreStepRegistry,
 	}
 }
 
-// SetUserContext sets the user context for RLS policies
-func (r *RestoreOperationRegistry) SetUserContext(ctx context.Context, userID string) error {
-	return SetUserContext(ctx, r.db, userID)
+func (r *RestoreOperationRegistry) MustWithCurrentUser(ctx context.Context) registry.RestoreOperationRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
 }
 
-// WithUserContext executes a function with user context set
-func (r *RestoreOperationRegistry) WithUserContext(ctx context.Context, userID string, fn func(context.Context) error) error {
-	return WithUserContext(ctx, r.db, userID, fn)
+func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreOperationRegistry, error) {
+	tmp := *r
+
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user ID from context")
+	}
+	tmp.userID = user.ID
+	tmp.tenantID = user.TenantID
+	tmp.service = false
+
+	// Also update the restore step registry with user context
+	userAwareStepRegistry, err := tmp.restoreStepRegistry.WithCurrentUser(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to set user context on restore step registry")
+	}
+	tmp.restoreStepRegistry = userAwareStepRegistry
+
+	return &tmp, nil
+}
+
+func (r *RestoreOperationRegistry) WithServiceAccount() registry.RestoreOperationRegistry {
+	tmp := *r
+	tmp.userID = ""
+	tmp.tenantID = ""
+	tmp.service = true
+	tmp.restoreStepRegistry = tmp.restoreStepRegistry.WithServiceAccount()
+	return &tmp
+}
+
+func (r *RestoreOperationRegistry) Get(ctx context.Context, id string) (*models.RestoreOperation, error) {
+	return r.get(ctx, id)
+}
+
+func (r *RestoreOperationRegistry) List(ctx context.Context) ([]*models.RestoreOperation, error) {
+	var operations []*models.RestoreOperation
+
+	reg := r.newSQLRegistry()
+
+	// Query the database for all restore operations (atomic operation)
+	for operation, err := range reg.Scan(ctx) {
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to list restore operations")
+		}
+
+		// Load associated steps for each operation
+		err = r.loadSteps(ctx, &operation)
+		if err != nil {
+			return nil, errkit.Wrap(err, "failed to load steps for operation")
+		}
+
+		operations = append(operations, &operation)
+	}
+
+	return operations, nil
+}
+
+func (r *RestoreOperationRegistry) Count(ctx context.Context) (int, error) {
+	reg := r.newSQLRegistry()
+
+	cnt, err := reg.Count(ctx)
+	if err != nil {
+		return 0, errkit.Wrap(err, "failed to count restore operations")
+	}
+
+	return cnt, nil
 }
 
 func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
@@ -53,40 +125,12 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 	if operation.Status == "" {
 		operation.Status = models.RestoreStatusPending
 	}
+	operation.SetTenantID(r.tenantID)
+	operation.SetUserID(r.userID)
 
-	// Serialize options to JSON
-	optionsJSON, err := json.Marshal(operation.Options)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to marshal options")
-	}
+	reg := r.newSQLRegistry()
 
-	query := r.db.Rebind(`
-		INSERT INTO restore_operations (
-			id, export_id, description, status, options, created_date, started_date, 
-			completed_date, error_message, location_count, area_count, commodity_count,
-			image_count, invoice_count, manual_count, binary_data_size, error_count
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-
-	_, err = r.db.ExecContext(ctx, query,
-		operation.ID,
-		operation.ExportID,
-		operation.Description,
-		operation.Status,
-		string(optionsJSON),
-		operation.CreatedDate,
-		operation.StartedDate,
-		operation.CompletedDate,
-		operation.ErrorMessage,
-		operation.LocationCount,
-		operation.AreaCount,
-		operation.CommodityCount,
-		operation.ImageCount,
-		operation.InvoiceCount,
-		operation.ManualCount,
-		operation.BinaryDataSize,
-		operation.ErrorCount,
-	)
-
+	err := reg.Create(ctx, operation, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create restore operation")
 	}
@@ -94,52 +138,63 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 	return &operation, nil
 }
 
-func (r *RestoreOperationRegistry) Get(ctx context.Context, id string) (*models.RestoreOperation, error) {
-	query := r.db.Rebind(`
-		SELECT id, export_id, description, status, options, created_date, started_date,
-			   completed_date, error_message, location_count, area_count, commodity_count,
-			   image_count, invoice_count, manual_count, binary_data_size, error_count
-		FROM restore_operations 
-		WHERE id = ?`)
+func (r *RestoreOperationRegistry) Update(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
+	if err := operation.ValidateWithContext(ctx); err != nil {
+		return nil, errkit.Wrap(err, "validation failed")
+	}
 
-	var operation models.RestoreOperation
-	var optionsJSON string
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&operation.ID,
-		&operation.ExportID,
-		&operation.Description,
-		&operation.Status,
-		&optionsJSON,
-		&operation.CreatedDate,
-		&operation.StartedDate,
-		&operation.CompletedDate,
-		&operation.ErrorMessage,
-		&operation.LocationCount,
-		&operation.AreaCount,
-		&operation.CommodityCount,
-		&operation.ImageCount,
-		&operation.InvoiceCount,
-		&operation.ManualCount,
-		&operation.BinaryDataSize,
-		&operation.ErrorCount,
-	)
+	reg := r.newSQLRegistry()
 
+	err := reg.Update(ctx, operation, nil)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, errkit.Wrap(registry.ErrNotFound, "restore operation not found")
+		return nil, errkit.Wrap(err, "failed to update restore operation")
+	}
+
+	return &operation, nil
+}
+
+func (r *RestoreOperationRegistry) Delete(ctx context.Context, id string) error {
+	reg := r.newSQLRegistry()
+	err := reg.Delete(ctx, id, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Delete associated steps first (due to foreign key constraint)
+		if err := r.restoreStepRegistry.DeleteByRestoreOperation(ctx, id); err != nil {
+			return errkit.Wrap(err, "failed to delete restore steps")
 		}
+		return nil
+	})
+	return err
+}
+
+func (r *RestoreOperationRegistry) newSQLRegistry() *store.RLSRepository[models.RestoreOperation, *models.RestoreOperation] {
+	if r.service {
+		return store.NewServiceSQLRegistry[models.RestoreOperation](r.dbx, r.tableNames.RestoreOperations())
+	}
+	return store.NewUserAwareSQLRegistry[models.RestoreOperation](r.dbx, r.userID, r.tenantID, r.tableNames.RestoreOperations())
+}
+
+func (r *RestoreOperationRegistry) get(ctx context.Context, id string) (*models.RestoreOperation, error) {
+	var operation models.RestoreOperation
+	reg := r.newSQLRegistry()
+
+	err := reg.ScanOneByField(ctx, store.Pair("id", id), &operation)
+	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get restore operation")
 	}
 
-	// Deserialize options from JSON
-	if err := json.Unmarshal([]byte(optionsJSON), &operation.Options); err != nil {
-		return nil, errkit.Wrap(err, "failed to unmarshal options")
+	// Load associated steps
+	err = r.loadSteps(ctx, &operation)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to load steps")
 	}
 
+	return &operation, nil
+}
+
+func (r *RestoreOperationRegistry) loadSteps(ctx context.Context, operation *models.RestoreOperation) error {
 	// Load associated steps
 	steps, err := r.restoreStepRegistry.ListByRestoreOperation(ctx, operation.ID)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to load restore steps")
+		return errkit.Wrap(err, "failed to load restore steps")
 	}
 
 	// Convert to slice of values instead of pointers for JSON serialization
@@ -148,305 +203,26 @@ func (r *RestoreOperationRegistry) Get(ctx context.Context, id string) (*models.
 		operation.Steps[i] = *step
 	}
 
-	return &operation, nil
-}
-
-func (r *RestoreOperationRegistry) List(ctx context.Context) ([]*models.RestoreOperation, error) {
-	query := r.db.Rebind(`
-		SELECT id, export_id, description, status, options, created_date, started_date,
-			   completed_date, error_message, location_count, area_count, commodity_count,
-			   image_count, invoice_count, manual_count, binary_data_size, error_count
-		FROM restore_operations 
-		ORDER BY created_date DESC`)
-
-	rows, err := r.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to query restore operations")
-	}
-	defer rows.Close()
-
-	var operations []*models.RestoreOperation
-	for rows.Next() {
-		var operation models.RestoreOperation
-		var optionsJSON string
-		err := rows.Scan(
-			&operation.ID,
-			&operation.ExportID,
-			&operation.Description,
-			&operation.Status,
-			&optionsJSON,
-			&operation.CreatedDate,
-			&operation.StartedDate,
-			&operation.CompletedDate,
-			&operation.ErrorMessage,
-			&operation.LocationCount,
-			&operation.AreaCount,
-			&operation.CommodityCount,
-			&operation.ImageCount,
-			&operation.InvoiceCount,
-			&operation.ManualCount,
-			&operation.BinaryDataSize,
-			&operation.ErrorCount,
-		)
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to scan restore operation")
-		}
-
-		// Deserialize options from JSON
-		if err := json.Unmarshal([]byte(optionsJSON), &operation.Options); err != nil {
-			return nil, errkit.Wrap(err, "failed to unmarshal options")
-		}
-
-		// Load associated steps
-		steps, err := r.restoreStepRegistry.ListByRestoreOperation(ctx, operation.ID)
-		if err != nil {
-			return nil, errkit.Wrap(err, "failed to load restore steps")
-		}
-
-		// Convert to slice of values instead of pointers for JSON serialization
-		operation.Steps = make([]models.RestoreStep, len(steps))
-		for i, step := range steps {
-			operation.Steps[i] = *step
-		}
-
-		operations = append(operations, &operation)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, errkit.Wrap(err, "error iterating restore operations")
-	}
-
-	return operations, nil
-}
-
-func (r *RestoreOperationRegistry) Update(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
-	if err := operation.ValidateWithContext(ctx); err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
-	}
-
-	// Serialize options to JSON
-	optionsJSON, err := json.Marshal(operation.Options)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to marshal options")
-	}
-
-	query := r.db.Rebind(`
-		UPDATE restore_operations 
-		SET description = ?, status = ?, options = ?, started_date = ?, completed_date = ?,
-			error_message = ?, location_count = ?, area_count = ?, commodity_count = ?,
-			image_count = ?, invoice_count = ?, manual_count = ?, binary_data_size = ?, error_count = ?
-		WHERE id = ?`)
-
-	result, err := r.db.ExecContext(ctx, query,
-		operation.Description,
-		operation.Status,
-		string(optionsJSON),
-		operation.StartedDate,
-		operation.CompletedDate,
-		operation.ErrorMessage,
-		operation.LocationCount,
-		operation.AreaCount,
-		operation.CommodityCount,
-		operation.ImageCount,
-		operation.InvoiceCount,
-		operation.ManualCount,
-		operation.BinaryDataSize,
-		operation.ErrorCount,
-		operation.ID,
-	)
-
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update restore operation")
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get rows affected")
-	}
-
-	if rowsAffected == 0 {
-		return nil, errkit.Wrap(registry.ErrNotFound, "restore operation not found")
-	}
-
-	return &operation, nil
-}
-
-func (r *RestoreOperationRegistry) Delete(ctx context.Context, id string) error {
-	// Delete associated steps first (due to foreign key constraint)
-	if err := r.restoreStepRegistry.DeleteByRestoreOperation(ctx, id); err != nil {
-		return errkit.Wrap(err, "failed to delete restore steps")
-	}
-
-	query := r.db.Rebind(`DELETE FROM restore_operations WHERE id = ?`)
-
-	result, err := r.db.ExecContext(ctx, query, id)
-	if err != nil {
-		return errkit.Wrap(err, "failed to delete restore operation")
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return errkit.Wrap(err, "failed to get rows affected")
-	}
-
-	if rowsAffected == 0 {
-		return errkit.Wrap(registry.ErrNotFound, "restore operation not found")
-	}
-
 	return nil
 }
 
-func (r *RestoreOperationRegistry) Count(ctx context.Context) (int, error) {
-	query := `SELECT COUNT(*) FROM restore_operations`
-
-	var count int
-	err := r.db.GetContext(ctx, &count, query)
-	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count restore operations")
-	}
-
-	return count, nil
-}
-
 func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error) {
-	query := r.db.Rebind(`
-		SELECT id, export_id, description, status, options, created_date, started_date,
-			   completed_date, error_message, location_count, area_count, commodity_count,
-			   image_count, invoice_count, manual_count, binary_data_size, error_count
-		FROM restore_operations 
-		WHERE export_id = ?
-		ORDER BY created_date DESC`)
-
-	rows, err := r.db.QueryContext(ctx, query, exportID)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to query restore operations by export")
-	}
-	defer rows.Close()
-
 	var operations []*models.RestoreOperation
-	for rows.Next() {
-		var operation models.RestoreOperation
-		var optionsJSON string
-		err := rows.Scan(
-			&operation.ID,
-			&operation.ExportID,
-			&operation.Description,
-			&operation.Status,
-			&optionsJSON,
-			&operation.CreatedDate,
-			&operation.StartedDate,
-			&operation.CompletedDate,
-			&operation.ErrorMessage,
-			&operation.LocationCount,
-			&operation.AreaCount,
-			&operation.CommodityCount,
-			&operation.ImageCount,
-			&operation.InvoiceCount,
-			&operation.ManualCount,
-			&operation.BinaryDataSize,
-			&operation.ErrorCount,
-		)
+
+	reg := r.newSQLRegistry()
+	for operation, err := range reg.ScanByField(ctx, store.Pair("export_id", exportID)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to scan restore operation")
+			return nil, errkit.Wrap(err, "failed to list restore operations by export")
 		}
 
-		// Deserialize options from JSON
-		if err := json.Unmarshal([]byte(optionsJSON), &operation.Options); err != nil {
-			return nil, errkit.Wrap(err, "failed to unmarshal options")
-		}
-
-		// Load associated steps
-		steps, err := r.restoreStepRegistry.ListByRestoreOperation(ctx, operation.ID)
+		// Load associated steps for each operation
+		err = r.loadSteps(ctx, &operation)
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to load restore steps")
-		}
-
-		// Convert to slice of values instead of pointers for JSON serialization
-		operation.Steps = make([]models.RestoreStep, len(steps))
-		for i, step := range steps {
-			operation.Steps[i] = *step
+			return nil, errkit.Wrap(err, "failed to load steps for operation")
 		}
 
 		operations = append(operations, &operation)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, errkit.Wrap(err, "error iterating restore operations")
-	}
-
 	return operations, nil
-}
-
-// User-aware methods that automatically use user context from the request context
-
-// CreateWithUser creates a restore operation with user context
-func (r *RestoreOperationRegistry) CreateWithUser(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	operation.SetUserID(userID)
-	return r.Create(ctx, operation)
-}
-
-// GetWithUser gets a restore operation with user context
-func (r *RestoreOperationRegistry) GetWithUser(ctx context.Context, id string) (*models.RestoreOperation, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	err := SetUserContext(ctx, r.db, userID)
-	if err != nil {
-		return nil, err
-	}
-	return r.Get(ctx, id)
-}
-
-// ListWithUser lists restore operations with user context
-func (r *RestoreOperationRegistry) ListWithUser(ctx context.Context) ([]*models.RestoreOperation, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	err := SetUserContext(ctx, r.db, userID)
-	if err != nil {
-		return nil, err
-	}
-	return r.List(ctx)
-}
-
-// UpdateWithUser updates a restore operation with user context
-func (r *RestoreOperationRegistry) UpdateWithUser(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	operation.SetUserID(userID)
-	return r.Update(ctx, operation)
-}
-
-// DeleteWithUser deletes a restore operation with user context
-func (r *RestoreOperationRegistry) DeleteWithUser(ctx context.Context, id string) error {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	err := SetUserContext(ctx, r.db, userID)
-	if err != nil {
-		return err
-	}
-	return r.Delete(ctx, id)
-}
-
-// CountWithUser counts restore operations with user context
-func (r *RestoreOperationRegistry) CountWithUser(ctx context.Context) (int, error) {
-	userID := registry.UserIDFromContext(ctx)
-	if userID == "" {
-		return 0, errkit.WithStack(registry.ErrUserContextRequired)
-	}
-	err := SetUserContext(ctx, r.db, userID)
-	if err != nil {
-		return 0, err
-	}
-	return r.Count(ctx)
 }

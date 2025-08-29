@@ -3,6 +3,9 @@ package memory
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
+
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -13,6 +16,8 @@ var _ registry.RestoreOperationRegistry = (*RestoreOperationRegistry)(nil)
 type RestoreOperationRegistry struct {
 	*Registry[models.RestoreOperation, *models.RestoreOperation]
 	restoreStepRegistry registry.RestoreStepRegistry
+
+	userID string
 }
 
 func NewRestoreOperationRegistry(restoreStepRegistry registry.RestoreStepRegistry) *RestoreOperationRegistry {
@@ -20,6 +25,27 @@ func NewRestoreOperationRegistry(restoreStepRegistry registry.RestoreStepRegistr
 		Registry:            NewRegistry[models.RestoreOperation, *models.RestoreOperation](),
 		restoreStepRegistry: restoreStepRegistry,
 	}
+}
+
+func (r *RestoreOperationRegistry) MustWithCurrentUser(ctx context.Context) registry.RestoreOperationRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
+
+func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreOperationRegistry, error) {
+	tmp := *r
+
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user from context")
+	}
+	tmp.userID = user.ID
+	return &tmp, nil
+}
+
+func (r *RestoreOperationRegistry) WithServiceAccount() registry.RestoreOperationRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
 }
 
 func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error) {

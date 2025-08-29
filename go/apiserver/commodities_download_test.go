@@ -11,6 +11,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -28,7 +29,16 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a manual with the original path
-	commodity := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))[0]
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
+	comReg, err := params.RegistrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
+	commodity := must.Must(comReg.List(ctx))[0]
 	manual := models.Manual{
 		CommodityID: commodity.ID,
 		File: &models.File{
@@ -38,7 +48,10 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 			MIMEType:     "application/pdf",
 		},
 	}
-	createdManual := must.Must(params.RegistrySet.ManualRegistry.Create(context.Background(), manual))
+
+	manReg, err := params.RegistrySet.ManualRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	createdManual := must.Must(manReg.Create(ctx, manual))
 
 	// Test downloading the file
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+createdManual.ID+".pdf", nil)

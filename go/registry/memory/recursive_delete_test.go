@@ -1,38 +1,80 @@
 package memory_test
 
 import (
-	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
 func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
+	registrySet := memory.NewRegistrySet()
+
+	// Create test user in the registry
+	userID := "test-user-123"
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	testUser.SetPassword("password123")
+	_, err := registrySet.UserRegistry.Create(c.Context(), testUser)
 	c.Assert(err, qt.IsNil)
+
+	// Add user context for user-aware entities
+	ctx := appctx.WithUser(c.Context(), &testUser)
+
+	// Make registries user-aware
+	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	registrySet.AreaRegistry = userAwareAreaRegistry
+
+	userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	registrySet.CommodityRegistry = userAwareCommodityRegistry
 
 	// Create entity service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity
-	location := models.Location{Name: "Test Location"}
+	location := models.Location{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   userID,
+		},
+		Name: "Test Location",
+	}
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 
-	area := models.Area{Name: "Test Area", LocationID: createdLocation.ID}
+	area := models.Area{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   userID,
+		},
+		Name:       "Test Area",
+		LocationID: createdLocation.ID,
+	}
 	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			UserID:   userID,
+		},
 		Name:   "Test Commodity",
 		AreaID: createdArea.ID,
 	}
@@ -72,11 +114,27 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 
 func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+
+	// Add user context for user-aware entities
+	userID := "test-user-123"
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
+	registrySet := memory.NewRegistrySet()
+
+	// Make registries user-aware
+	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
+	registrySet.AreaRegistry = userAwareAreaRegistry
+
+	userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+	registrySet.CommodityRegistry = userAwareCommodityRegistry
 
 	// Create entity service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")

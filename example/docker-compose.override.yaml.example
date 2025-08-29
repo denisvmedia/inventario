@@ -1,0 +1,129 @@
+# Docker Compose Override Example for Inventario Production Deployment
+#
+# Copy this file to docker-compose.override.yaml and customize the values
+# for your specific production environment.
+#
+# Usage:
+#   cp docker-compose.override.yaml.example docker-compose.override.yaml
+#   # Edit docker-compose.override.yaml with your values
+#   docker-compose up -d --build
+#
+# IMPORTANT NOTES:
+# - All services use the same database DSN for consistency
+# - The default tenant ID is set to "test-tenant-id" to match the application code
+# - Environment variables for init-data use the INVENTARIO_MIGRATE_DATA_ prefix
+# - Make sure to change all "your-secure-*" placeholders with actual secure values
+
+services:
+  # Override Inventario application configuration
+  inventario:
+    environment:
+      # Database configuration
+      INVENTARIO_DATABASE_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
+
+      # REQUIRED: Set a secure JWT secret for production
+      # Generate with: openssl rand -hex 32
+      INVENTARIO_RUN_JWT_SECRET: "your-secure-32-byte-jwt-secret-here-replace-this-value"
+
+      # Optional: Customize worker limits based on your server capacity
+      MAX_CONCURRENT_EXPORTS: "5"
+      MAX_CONCURRENT_IMPORTS: "2"
+
+      # Optional: Set timezone for your location
+      TZ: "America/New_York"
+    
+    ports:
+      # Customize the host port where Inventario will be accessible
+      # Format: "host_port:container_port"
+      - "8080:3333"  # Access via http://localhost:8080
+    
+    # Optional: Add resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # Override PostgreSQL configuration for production
+  postgres:
+    environment:
+      # REQUIRED: Change default passwords for production
+      POSTGRES_PASSWORD: "your-secure-postgres-password-here"
+      POSTGRES_MIGRATOR_PASSWORD: "your-secure-migrator-password-here"
+
+      # Database configuration (must match inventario DSN)
+      POSTGRES_DB: "inventario_prod"
+      POSTGRES_USER: "inventario_user"
+      POSTGRES_MIGRATOR_USER: "inventario_migrator"
+    
+    # Optional: Add resource limits for PostgreSQL
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  # Override bootstrap and migrate services to use the same database configuration
+  inventario-bootstrap:
+    environment:
+      # Database configuration
+      INVENTARIO_DATABASE_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
+
+  inventario-migrate:
+    environment:
+      # Database configuration
+      INVENTARIO_DATABASE_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
+
+  # Override initial data setup configuration
+  inventario-init-data:
+    environment:
+      # Database configuration
+      INVENTARIO_DATABASE_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
+
+      # REQUIRED: Customize initial admin user and organization
+      INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_ID: "test-tenant-id"
+      INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME: "Your Company Name"
+      INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG: "your-company"
+      INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: "admin@yourcompany.com"
+      INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: "your-secure-admin-password"
+      INVENTARIO_MIGRATE_DATA_ADMIN_NAME: "System Administrator"
+
+# Optional: Override volume mount paths for production
+#services:
+#  postgres:
+#    volumes:
+#      # Override PostgreSQL data path
+#      - /var/lib/inventario/postgres:/var/lib/postgresql/data
+#      - ./init-scripts/01-create-users.sh:/docker-entrypoint-initdb.d/01-create-users.sh:ro
+#
+#  inventario-init-data:
+#    volumes:
+#      # Override init state path
+#      - /var/lib/inventario/init-state:/app/state
+#
+#  inventario:
+#    volumes:
+#      # Override uploads path
+#      - /var/lib/inventario/uploads:/app/uploads
+
+# Optional: Add external network for reverse proxy integration
+#networks:
+  # Uncomment if using external reverse proxy (nginx, traefik, etc.)
+  # external_proxy:
+  #   external: true
+  #   name: proxy_network
+
+# Optional: Add labels for monitoring and management
+# services:
+#   inventario:
+#     labels:
+#       - "traefik.enable=true"
+#       - "traefik.http.routers.inventario.rule=Host(`inventory.yourcompany.com`)"
+#       - "traefik.http.routers.inventario.tls=true"
+#       - "traefik.http.routers.inventario.tls.certresolver=letsencrypt"

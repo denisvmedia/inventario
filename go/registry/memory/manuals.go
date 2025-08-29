@@ -3,6 +3,9 @@ package memory
 import (
 	"context"
 
+	"github.com/go-extras/go-kit/must"
+
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -14,40 +17,86 @@ type baseManualRegistry = Registry[models.Manual, *models.Manual]
 type ManualRegistry struct {
 	*baseManualRegistry
 
-	commodityRegistry registry.CommodityRegistry
+	userID            string
+	commodityRegistry *CommodityRegistry // required dependency for relationship tracking
 }
 
-func NewManualRegistry(commodityRegistry registry.CommodityRegistry) *ManualRegistry {
+func NewManualRegistry(commodityRegistry *CommodityRegistry) *ManualRegistry {
 	return &ManualRegistry{
 		baseManualRegistry: NewRegistry[models.Manual, *models.Manual](),
 		commodityRegistry:  commodityRegistry,
 	}
 }
 
-func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
-	_, err := r.commodityRegistry.Get(ctx, manual.CommodityID)
-	if err != nil {
-		return nil, errkit.Wrap(err, "commodity not found")
-	}
+func (r *ManualRegistry) MustWithCurrentUser(ctx context.Context) registry.ManualRegistry {
+	return must.Must(r.WithCurrentUser(ctx))
+}
 
-	newManual, err := r.baseManualRegistry.Create(ctx, manual)
+func (r *ManualRegistry) WithCurrentUser(ctx context.Context) (registry.ManualRegistry, error) {
+	tmp := *r
+
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to get user from context")
+	}
+	tmp.userID = user.ID
+	return &tmp, nil
+}
+
+func (r *ManualRegistry) WithServiceAccount() registry.ManualRegistry {
+	// For memory registries, service account access is the same as regular access
+	// since memory registries don't enforce RLS restrictions
+	return r
+}
+
+func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
+	// Use CreateWithUser to ensure user context is applied
+	newManual, err := r.baseManualRegistry.CreateWithUser(ctx, manual)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create manual")
 	}
 
-	err = r.commodityRegistry.AddManual(ctx, manual.CommodityID, newManual.ID)
-	if err != nil {
-		return nil, errkit.Wrap(err, "failed to add manual to commodity")
-	}
+	// Add this manual to its parent commodity's manual list
+	_ = r.commodityRegistry.AddManual(ctx, newManual.CommodityID, newManual.GetID())
 
 	return newManual, nil
 }
 
+func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*models.Manual, error) {
+	// Get the existing manual to check if CommodityID changed
+	var oldCommodityID string
+	if existingManual, err := r.baseManualRegistry.Get(ctx, manual.GetID()); err == nil {
+		oldCommodityID = existingManual.CommodityID
+	}
+
+	// Call the base registry's Update method
+	updatedManual, err := r.baseManualRegistry.Update(ctx, manual)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update manual")
+	}
+
+	// Handle commodity registry tracking - commodity changed
+	if oldCommodityID != "" && oldCommodityID != updatedManual.CommodityID {
+		// Remove from old commodity
+		_ = r.commodityRegistry.DeleteManual(ctx, oldCommodityID, updatedManual.GetID())
+		// Add to new commodity
+		_ = r.commodityRegistry.AddManual(ctx, updatedManual.CommodityID, updatedManual.GetID())
+	} else if oldCommodityID == "" {
+		// This is a fallback case - add to commodity if not already tracked
+		_ = r.commodityRegistry.AddManual(ctx, updatedManual.CommodityID, updatedManual.GetID())
+	}
+
+	return updatedManual, nil
+}
+
 func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
+	// Remove this manual from its parent commodity's manual list
 	manual, err := r.baseManualRegistry.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get manual")
 	}
+
+	_ = r.commodityRegistry.DeleteManual(ctx, manual.CommodityID, id)
 
 	err = r.baseManualRegistry.Delete(ctx, id)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -14,7 +15,12 @@ import (
 
 func TestExportDeletionOrder(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create in-memory registries
 	registrySet := &registry.Set{
@@ -84,7 +90,12 @@ func TestExportDeletionOrder(t *testing.T) {
 
 func TestExportDeletionOrder_NoFile(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(context.Background(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	// Create in-memory registries
 	registrySet := &registry.Set{

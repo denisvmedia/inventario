@@ -13,8 +13,8 @@ var (
 
 // Enable RLS for multi-tenant isolation
 //migrator:schema:rls:enable table="images" comment="Enable RLS for multi-tenant image isolation"
-//migrator:schema:rls:policy name="image_tenant_isolation" table="images" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id()" with_check="tenant_id = get_current_tenant_id()" comment="Ensures images can only be accessed and modified by their tenant"
-//migrator:schema:rls:policy name="image_user_isolation" table="images" for="ALL" to="inventario_app" using="user_id = get_current_user_id()" with_check="user_id = get_current_user_id()" comment="Ensures images can only be accessed and modified by their user"
+//migrator:schema:rls:policy name="image_isolation" table="images" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures images can only be accessed and modified by their tenant and user with required contexts"
+//migrator:schema:rls:policy name="image_background_worker_access" table="images" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all invoices for processing"
 
 //migrator:schema:table name="images"
 type Image struct {

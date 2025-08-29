@@ -1,34 +1,39 @@
 package restore_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/backup/restore/processor"
+	"github.com/denisvmedia/inventario/backup/restore/types"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Import blob drivers
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
 func TestRestoreService_FileElementParsing(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with <file> elements (the correct structure)
@@ -76,17 +81,17 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 
 	// Create restore service with file:// blob storage for testing
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the basic data was restored correctly
@@ -137,18 +142,23 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 
 func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with <file> elements but disable file processing
@@ -196,17 +206,17 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing DISABLED
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: false, // Disable file processing
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the basic data was restored correctly
@@ -227,18 +237,23 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 
 func TestRestoreService_PriceValidationFix(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with commodity that has original price in main currency but also has converted price
@@ -279,17 +294,17 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: false,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify no validation errors occurred
@@ -315,18 +330,23 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 
 func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with multiple entities to test for duplication
@@ -388,17 +408,17 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: false,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify no duplication occurred - exact counts should match XML
@@ -423,18 +443,23 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 
 func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	})
 
 	// Create registry set with proper dependencies
-	registrySet, err := memory.NewRegistrySet(registry.Config("memory://"))
-	c.Assert(err, qt.IsNil)
+	registrySet := memory.NewRegistrySet()
+	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
 	mainCurrency := "USD"
 	settings := models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	}
-	err = registrySet.SettingsRegistry.Save(ctx, settings)
+	err := registrySet.SettingsRegistry.Save(ctx, settings)
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with multiple file types
@@ -507,17 +532,17 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 
 	// Create restore service with file:// blob storage for testing
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	processor := restore.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
-	options := restore.RestoreOptions{
-		Strategy:        restore.RestoreStrategyFullReplace,
+	options := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader := strings.NewReader(xmlData)
-	stats, err := processor.RestoreFromXML(ctx, reader, options)
+	stats, err := proc.RestoreFromXML(ctx, reader, options)
 	c.Assert(err, qt.IsNil)
 
 	// Verify all data was restored correctly
