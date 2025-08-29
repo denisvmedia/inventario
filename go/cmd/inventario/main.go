@@ -42,10 +42,18 @@ func configPath() string {
 }
 
 func setupSlog() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		AddSource: true,
-	}))
-	slog.SetDefault(logger)
+	var handler slog.Handler
+	if os.Getenv("INVENTARIO_LOG_FORMAT") == "json" {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+		})
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+		})
+	}
+
+	slog.SetDefault(slog.New(handler))
 }
 
 func main() {
@@ -53,6 +61,8 @@ func main() {
 	shared.SetConfigFile(configPath())
 
 	setupSlog()
+
+	slog.Info("Starting Inventario")
 
 	cleanup := registerDBBackends()
 	defer func() {

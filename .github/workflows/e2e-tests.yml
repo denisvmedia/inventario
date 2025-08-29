@@ -30,6 +30,7 @@ jobs:
 
     env:
       DB_URL: postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable
+      INVENTARIO_LOG_FORMAT: json
 
     steps:
       - name: Checkout code
