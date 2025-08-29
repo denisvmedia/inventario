@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
 	"github.com/go-extras/go-kit/must"
