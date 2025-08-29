@@ -78,8 +78,8 @@ jobs:
           go mod download
           cd ..
           make build-inventool
-          bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.DB_DSN }}"
-          bin/inventool db migrations up --db-dsn "${{ env.DB_DSN }}"
+          bin/inventool db bootstrap apply --username=postgres"
+          bin/inventool db migrations up"
 
       - name: Start application stack and run fast-fail test
         run: |
