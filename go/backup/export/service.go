@@ -20,32 +20,28 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-// extractTenantUserFromContext extracts tenant and user IDs from context
-// Falls back to default IDs if context is not available (for backward compatibility)
-// TODO: Remove fallback when proper authentication is fully implemented
-func extractTenantUserFromContext(ctx context.Context) (tenantID, userID string) {
-	// Try to extract from context first
-	// Check if context has tenant/user values (these would be set by middleware)
-	if tenantVal := ctx.Value("tenant_id"); tenantVal != nil {
-		if tid, ok := tenantVal.(string); ok && tid != "" {
-			tenantID = tid
-		}
-	}
-	if userVal := ctx.Value("user_id"); userVal != nil {
-		if uid, ok := userVal.(string); ok && uid != "" {
-			userID = uid
-		}
+// ExtractTenantUserFromContext extracts tenant and user IDs from context
+// Returns an error if context is missing required tenant/user information
+func ExtractTenantUserFromContext(ctx context.Context) (tenantID, userID string, err error) {
+	// Try to extract user from context using proper typed keys
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		return "", "", errors.New("user context is required but not found")
 	}
 
-	// Fallback to default IDs for backward compatibility
-	if tenantID == "" {
-		tenantID = "test-tenant-id"
-	}
+	// Extract user ID
+	userID = user.ID
 	if userID == "" {
-		userID = "test-user-id"
+		return "", "", errors.New("user ID is empty in context")
 	}
 
-	return tenantID, userID
+	// Extract tenant ID from user
+	tenantID = user.TenantID
+	if tenantID == "" {
+		return "", "", errors.New("tenant ID is empty in user context")
+	}
+
+	return tenantID, userID, nil
 }
 
 // ExportArgs contains arguments for export operations
@@ -146,8 +142,11 @@ func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *mo
 
 	export := models.NewExportFromUserInput(input)
 
-	// Extract tenant and user from context (fallback to defaults for backward compatibility)
-	tenantID, userID := extractTenantUserFromContext(ctx)
+	// Extract tenant and user from context
+	tenantID, userID, err := ExtractTenantUserFromContext(ctx)
+	if err != nil {
+		return models.Export{}, errkit.Wrap(err, "failed to extract tenant/user context")
+	}
 
 	if export.TenantID == "" {
 		export.TenantID = tenantID
@@ -271,8 +270,11 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 		filename = strings.TrimSuffix(filename, ext)
 	}
 
-	// Extract tenant and user from context (fallback to defaults for backward compatibility)
-	tenantID, userID := extractTenantUserFromContext(ctx)
+	// Extract tenant and user from context
+	tenantID, userID, err := ExtractTenantUserFromContext(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to extract tenant/user context")
+	}
 
 	// Create file entity
 	now := time.Now()

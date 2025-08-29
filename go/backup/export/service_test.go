@@ -22,6 +22,107 @@ import (
 
 const testUserID = "test-user-123"
 
+// TestExtractTenantUserFromContext tests the ExtractTenantUserFromContext function
+func TestExtractTenantUserFromContext(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupCtx    func() context.Context
+		expectError bool
+		errorMsg    string
+		tenantID    string
+		userID      string
+	}{
+		{
+			name: "valid context with user containing tenant ID",
+			setupCtx: func() context.Context {
+				ctx := context.Background()
+				user := &models.User{
+					TenantAwareEntityID: models.TenantAwareEntityID{
+						EntityID: models.EntityID{ID: "user-456"},
+						TenantID: "tenant-123",
+					},
+					Email: "test@example.com",
+				}
+				ctx = appctx.WithUser(ctx, user)
+				return ctx
+			},
+			expectError: false,
+			tenantID:    "tenant-123",
+			userID:      "user-456",
+		},
+		{
+			name: "user with empty tenant ID",
+			setupCtx: func() context.Context {
+				ctx := context.Background()
+				user := &models.User{
+					TenantAwareEntityID: models.TenantAwareEntityID{
+						EntityID: models.EntityID{ID: "user-456"},
+						TenantID: "", // Empty tenant ID
+					},
+					Email: "test@example.com",
+				}
+				ctx = appctx.WithUser(ctx, user)
+				return ctx
+			},
+			expectError: true,
+			errorMsg:    "tenant ID is empty in user context",
+		},
+		{
+			name: "user with empty user ID",
+			setupCtx: func() context.Context {
+				ctx := context.Background()
+				user := &models.User{
+					TenantAwareEntityID: models.TenantAwareEntityID{
+						EntityID: models.EntityID{ID: ""}, // Empty user ID
+						TenantID: "tenant-123",
+					},
+					Email: "test@example.com",
+				}
+				ctx = appctx.WithUser(ctx, user)
+				return ctx
+			},
+			expectError: true,
+			errorMsg:    "user ID is empty in context",
+		},
+		{
+			name: "missing user context",
+			setupCtx: func() context.Context {
+				return context.Background()
+			},
+			expectError: true,
+			errorMsg:    "user context is required but not found",
+		},
+		{
+			name: "empty context",
+			setupCtx: func() context.Context {
+				return context.Background()
+			},
+			expectError: true,
+			errorMsg:    "user context is required but not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx := tt.setupCtx()
+
+			tenantID, userID, err := ExtractTenantUserFromContext(ctx)
+
+			if tt.expectError {
+				c.Assert(err, qt.IsNotNil)
+				c.Assert(err.Error(), qt.Contains, tt.errorMsg)
+				c.Assert(tenantID, qt.Equals, "")
+				c.Assert(userID, qt.Equals, "")
+			} else {
+				c.Assert(err, qt.IsNil)
+				c.Assert(tenantID, qt.Equals, tt.tenantID)
+				c.Assert(userID, qt.Equals, tt.userID)
+			}
+		})
+	}
+}
+
 func newTestRegistrySet() *registry.Set {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
