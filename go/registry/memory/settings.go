@@ -47,9 +47,12 @@ func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.Settin
 }
 
 func (r *SettingsRegistry) WithServiceAccount() registry.SettingsRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a new registry with the same data but no user filtering
+	tmp := &SettingsRegistry{
+		settings: r.settings,
+		userID:   "", // Clear userID to bypass user filtering
+	}
+	return tmp
 }
 
 func (r *SettingsRegistry) Get(_ context.Context) (models.SettingsObject, error) {

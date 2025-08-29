@@ -60,9 +60,20 @@ func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.Locati
 }
 
 func (r *LocationRegistry) WithServiceAccount() registry.LocationRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a shallow copy of the registry
+	tmp := *r
+	tmp.userID = "" // Clear userID to bypass user filtering
+
+	// Create a new base registry with the same data but no user filtering
+	// Avoid copying the mutex by creating a new instance
+	newBaseRegistry := &Registry[models.Location, *models.Location]{
+		items:  r.baseLocationRegistry.items, // Share the data map
+		lock:   r.baseLocationRegistry.lock,  // Share the mutex pointer
+		userID: "",                           // No user filtering for service account
+	}
+	tmp.baseLocationRegistry = newBaseRegistry
+
+	return &tmp
 }
 
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {

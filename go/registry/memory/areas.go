@@ -63,9 +63,20 @@ func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegist
 }
 
 func (r *AreaRegistry) WithServiceAccount() registry.AreaRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a shallow copy of the registry
+	tmp := *r
+	tmp.userID = "" // Clear userID to bypass user filtering
+
+	// Create a new base registry with the same data but no user filtering
+	// Avoid copying the mutex by creating a new instance
+	newBaseRegistry := &Registry[models.Area, *models.Area]{
+		items:  r.baseAreaRegistry.items, // Share the data map
+		lock:   r.baseAreaRegistry.lock,  // Share the mutex pointer
+		userID: "",                       // No user filtering for service account
+	}
+	tmp.baseAreaRegistry = newBaseRegistry
+
+	return &tmp
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
@@ -88,8 +99,8 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 		oldLocationID = existingArea.LocationID
 	}
 
-	// Call the base registry's Update method
-	updatedArea, err := r.baseAreaRegistry.Update(ctx, area)
+	// Call the base registry's UpdateWithUser method to ensure user context is preserved
+	updatedArea, err := r.baseAreaRegistry.UpdateWithUser(ctx, area)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update area")
 	}

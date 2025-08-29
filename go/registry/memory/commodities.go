@@ -71,9 +71,20 @@ func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.Commo
 }
 
 func (r *CommodityRegistry) WithServiceAccount() registry.CommodityRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a shallow copy of the registry
+	tmp := *r
+	tmp.userID = "" // Clear userID to bypass user filtering
+
+	// Create a new base registry with the same data but no user filtering
+	// Avoid copying the mutex by creating a new instance
+	newBaseRegistry := &Registry[models.Commodity, *models.Commodity]{
+		items:  r.baseCommodityRegistry.items, // Share the data map
+		lock:   r.baseCommodityRegistry.lock,  // Share the mutex pointer
+		userID: "",                            // No user filtering for service account
+	}
+	tmp.baseCommodityRegistry = newBaseRegistry
+
+	return &tmp
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
@@ -205,8 +216,8 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		oldAreaID = existingCommodity.AreaID
 	}
 
-	// Call the base registry's Update method
-	updatedCommodity, err := r.baseCommodityRegistry.Update(ctx, commodity)
+	// Call the base registry's UpdateWithUser method to ensure user context is preserved
+	updatedCommodity, err := r.baseCommodityRegistry.UpdateWithUser(ctx, commodity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update commodity")
 	}

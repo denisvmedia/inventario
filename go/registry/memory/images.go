@@ -44,9 +44,10 @@ func (r *ImageRegistry) WithCurrentUser(ctx context.Context) (registry.ImageRegi
 }
 
 func (r *ImageRegistry) WithServiceAccount() registry.ImageRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a shallow copy of the registry with no user filtering
+	tmp := *r
+	tmp.userID = "" // Clear userID to bypass user filtering
+	return &tmp
 }
 
 func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models.Image, error) {
@@ -69,8 +70,8 @@ func (r *ImageRegistry) Update(ctx context.Context, image models.Image) (*models
 		oldCommodityID = existingImage.CommodityID
 	}
 
-	// Call the base registry's Update method
-	updatedImage, err := r.baseImageRegistry.Update(ctx, image)
+	// Call the base registry's UpdateWithUser method to ensure user context is preserved
+	updatedImage, err := r.baseImageRegistry.UpdateWithUser(ctx, image)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update image")
 	}
