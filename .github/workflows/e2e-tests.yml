@@ -73,7 +73,7 @@ jobs:
           bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.DB_URL }}"
           bin/inventool db migrations up --db-dsn "${{ env.DB_URL }}"
 
-      - name: Start application stack and run tests
+      - name: Start application stack and run fast-fail test
         run: |
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
@@ -81,7 +81,13 @@ jobs:
           # Wait for stack to be ready
           npx wait-on http://localhost:5173
 
-          # Run the tests
+          # Run the fast-fail test first to debug the specific issue
+          cd e2e && npx playwright test --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
+
+      - name: Run full test suite
+        if: success()
+        run: |
+          # Run the full test suite
           cd e2e && npm run test
 
       - name: Upload test results

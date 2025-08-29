@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
@@ -156,6 +158,13 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &commodity)
 	if err != nil {
+		// Add debug logging for RLS issues
+		slog.Warn("Commodity not found - possible RLS issue",
+			"commodity_id", id,
+			"user_id", r.userID,
+			"tenant_id", r.tenantID,
+			"service_mode", r.service,
+		)
 		return nil, errkit.Wrap(err, "failed to get commodity")
 	}
 

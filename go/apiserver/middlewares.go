@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -45,16 +46,26 @@ func commodityCtx(commodityRegistry registry.CommodityRegistry) func(http.Handle
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			commodityID := chi.URLParam(r, "commodityID")
+
+			// Add debug logging for CI debugging
+			slog.Info("CommodityCtx: Loading commodity", "commodity_id", commodityID, "method", r.Method, "path", r.URL.Path)
+
 			comReg, err := commodityRegistry.WithCurrentUser(r.Context())
 			if err != nil {
+				slog.Error("CommodityCtx: Failed to get user-aware registry", "error", err, "commodity_id", commodityID)
 				renderEntityError(w, r, err)
 				return
 			}
+
 			commodity, err := comReg.Get(r.Context(), commodityID)
 			if err != nil {
+				slog.Error("CommodityCtx: Failed to get commodity", "error", err, "commodity_id", commodityID, "method", r.Method)
 				renderEntityError(w, r, err)
 				return
 			}
+
+			slog.Info("CommodityCtx: Successfully loaded commodity", "commodity_id", commodityID, "commodity_name", commodity.Name)
+
 			ctx := context.WithValue(r.Context(), commodityCtxKey, commodity)
 			ctx = context.WithValue(ctx, entityIDKey, commodityID)
 			next.ServeHTTP(w, r.WithContext(ctx))
