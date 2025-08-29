@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -59,7 +60,7 @@ func commodityCtx(commodityRegistry registry.CommodityRegistry) func(http.Handle
 
 			commodity, err := comReg.Get(r.Context(), commodityID)
 			if err != nil {
-				slog.Error("CommodityCtx: Failed to get commodity", "error", err, "commodity_id", commodityID, "method", r.Method)
+				slog.Error("CommodityCtx: Failed to get commodity", "error", err, "commodity_id", commodityID, "method", r.Method, "comReg_type", fmt.Sprintf("%T", comReg))
 				renderEntityError(w, r, err)
 				return
 			}

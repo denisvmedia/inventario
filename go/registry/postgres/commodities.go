@@ -61,6 +61,7 @@ func (r *CommodityRegistry) WithServiceAccount() registry.CommodityRegistry {
 }
 
 func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodity, error) {
+	slog.Info("Getting commodity", "commodity_id", id, "user_id", r.userID, "tenant_id", r.tenantID, "service_mode", r.service)
 	return r.get(ctx, id)
 }
 
@@ -152,10 +153,10 @@ func (r *CommodityRegistry) newSQLRegistry() *store.RLSRepository[models.Commodi
 }
 
 func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodity, error) {
+	slog.Info("Getting commodity", "commodity_id", id, "user_id", r.userID, "tenant_id", r.tenantID, "service_mode", r.service)
+
 	var commodity models.Commodity
 	reg := r.newSQLRegistry()
-
-	slog.Info("Getting commodity", "commodity_id", id, "user_id", r.userID, "tenant_id", r.tenantID, "service_mode", r.service)
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &commodity)
 	if err != nil {

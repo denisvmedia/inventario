@@ -2,6 +2,8 @@ package memory
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
@@ -44,6 +46,9 @@ func (r *Registry[T, P]) Create(ctx context.Context, item T) (P, error) {
 }
 
 func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
+	var zero P
+	slog.Info("Getting item", "item_id", id, "user_id", r.userID, "item_type", fmt.Sprintf("%T", zero))
+
 	r.lock.RLock()
 	item, ok := r.items.Get(id)
 	r.lock.RUnlock()
