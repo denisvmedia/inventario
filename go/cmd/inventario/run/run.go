@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -117,6 +118,13 @@ func (c *Command) runCommand() error {
 	srv := &httpserver.APIServer{}
 	bindAddr := c.config.Addr
 	dsn := c.dbConfig.DBDSN
+
+	// print out all environment variables that start with INVENTARIO_
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "INVENTARIO_") {
+			slog.Info("Environment variable", "name", e)
+		}
+	}
 
 	parsedDSN := must.Must(registry.Config(dsn).Parse())
 	if parsedDSN.User != nil {
