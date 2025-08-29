@@ -10,7 +10,7 @@ require (
 	github.com/bojanz/currency v1.3.1
 	github.com/frankban/quicktest v1.14.6
 	github.com/gabriel-vasile/mimetype v1.4.9
-	github.com/go-chi/chi/v5 v5.2.2
+	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/render v1.0.3
 	github.com/go-extras/go-kit v1.2.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
@@ -25,7 +25,6 @@ require (
 	github.com/mrosales/emoji-go v1.1.0
 	github.com/rs/cors v1.11.1
 	github.com/shopspring/decimal v1.4.0
-	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.9.1
 	github.com/stokaro/ptah v0.0.0-20250819205839-43c042a66605
