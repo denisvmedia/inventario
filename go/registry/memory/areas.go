@@ -51,9 +51,13 @@ func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegist
 	tmp.userID = user.ID
 
 	// Create a new base registry with the same data but user-specific userID
-	newBaseRegistry := *r.baseAreaRegistry
-	newBaseRegistry.userID = user.ID
-	tmp.baseAreaRegistry = &newBaseRegistry
+	// Avoid copying the mutex by creating a new instance
+	newBaseRegistry := &Registry[models.Area, *models.Area]{
+		items:  r.baseAreaRegistry.items, // Share the data map
+		lock:   r.baseAreaRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                  // Set user-specific userID
+	}
+	tmp.baseAreaRegistry = newBaseRegistry
 
 	return &tmp, nil
 }

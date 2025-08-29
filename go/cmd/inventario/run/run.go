@@ -131,7 +131,7 @@ func (c *Command) runCommand() error {
 
 	// Add debug logging for database backend selection
 	log.WithFields(log.Fields{
-		"dsn": dsn,
+		"dsn":        dsn,
 		"DB_DSN_env": os.Getenv("DB_DSN"),
 		"DB_URL_env": os.Getenv("DB_URL"),
 	}).Info("Database configuration debug")

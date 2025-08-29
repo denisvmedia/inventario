@@ -16,13 +16,14 @@ import (
 
 type Registry[T any, P registry.PIDable[T]] struct {
 	items  *orderedmap.OrderedMap[string, P]
-	lock   sync.RWMutex
+	lock   *sync.RWMutex
 	userID string // For user-aware filtering
 }
 
 func NewRegistry[T any, P registry.PIDable[T]]() *Registry[T, P] {
 	return &Registry[T, P]{
 		items: orderedmap.New[string, P](),
+		lock:  &sync.RWMutex{},
 	}
 }
 

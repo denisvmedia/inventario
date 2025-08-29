@@ -59,9 +59,13 @@ func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.Commo
 	tmp.userID = user.ID
 
 	// Create a new base registry with the same data but user-specific userID
-	newBaseRegistry := *r.baseCommodityRegistry
-	newBaseRegistry.userID = user.ID
-	tmp.baseCommodityRegistry = &newBaseRegistry
+	// Avoid copying the mutex by creating a new instance
+	newBaseRegistry := &Registry[models.Commodity, *models.Commodity]{
+		items:  r.baseCommodityRegistry.items, // Share the data map
+		lock:   r.baseCommodityRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                       // Set user-specific userID
+	}
+	tmp.baseCommodityRegistry = newBaseRegistry
 
 	return &tmp, nil
 }
