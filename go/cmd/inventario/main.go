@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -40,9 +41,18 @@ func configPath() string {
 	return configFilePath
 }
 
+func setupSlog() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		AddSource: true,
+	}))
+	slog.SetDefault(logger)
+}
+
 func main() {
 	shared.SetEnvPrefix("INVENTARIO")
 	shared.SetConfigFile(configPath())
+
+	setupSlog()
 
 	cleanup := registerDBBackends()
 	defer func() {

@@ -155,6 +155,8 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 	var commodity models.Commodity
 	reg := r.newSQLRegistry()
 
+	slog.Info("Getting commodity", "commodity_id", id, "user_id", r.userID, "tenant_id", r.tenantID, "service_mode", r.service)
+
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &commodity)
 	if err != nil {
 		// Add debug logging for RLS issues

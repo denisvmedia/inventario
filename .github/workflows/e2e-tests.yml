@@ -60,6 +60,13 @@ jobs:
       - name: Install e2e dependencies
         run: cd e2e && npm ci
 
+      # Cache Playwright browsers
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('e2e/package-lock.json') }}
+
       # Install browsers with all system dependencies
       - name: Install Playwright browsers
         run: cd e2e && npx playwright install --with-deps
