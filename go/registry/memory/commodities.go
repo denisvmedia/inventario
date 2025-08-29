@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,11 +22,11 @@ type CommodityRegistry struct {
 	*baseCommodityRegistry
 
 	userID       string
-	imagesLock   sync.RWMutex
+	imagesLock   *sync.RWMutex
 	images       models.CommodityImages
-	manualsLock  sync.RWMutex
+	manualsLock  *sync.RWMutex
 	manuals      models.CommodityManuals
-	invoicesLock sync.RWMutex
+	invoicesLock *sync.RWMutex
 	invoices     models.CommodityInvoices
 	areaRegistry *AreaRegistry // required dependency for relationship tracking
 }
@@ -33,8 +34,11 @@ type CommodityRegistry struct {
 func NewCommodityRegistry(areaRegistry *AreaRegistry) *CommodityRegistry {
 	return &CommodityRegistry{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
+		imagesLock:            &sync.RWMutex{},
 		images:                make(models.CommodityImages),
+		manualsLock:           &sync.RWMutex{},
 		manuals:               make(models.CommodityManuals),
+		invoicesLock:          &sync.RWMutex{},
 		invoices:              make(models.CommodityInvoices),
 		areaRegistry:          areaRegistry,
 	}
@@ -50,20 +54,16 @@ func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.Commo
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
 
-	// Create a new registry with the same data but different userID
-	tmp := &CommodityRegistry{
-		baseCommodityRegistry: r.baseCommodityRegistry,
-		userID:                user.ID,
-		images:                r.images,
-		manuals:               r.manuals,
-		invoices:              r.invoices,
-		areaRegistry:          r.areaRegistry,
-	}
+	// Create a shallow copy of the registry
+	tmp := *r
+	tmp.userID = user.ID
 
-	// Set the userID on the base registry
-	tmp.baseCommodityRegistry.userID = user.ID
+	// Create a new base registry with the same data but user-specific userID
+	newBaseRegistry := *r.baseCommodityRegistry
+	newBaseRegistry.userID = user.ID
+	tmp.baseCommodityRegistry = &newBaseRegistry
 
-	return tmp, nil
+	return &tmp, nil
 }
 
 func (r *CommodityRegistry) WithServiceAccount() registry.CommodityRegistry {
@@ -126,12 +126,11 @@ func (r *CommodityRegistry) GetImages(_ context.Context, commodityID string) ([]
 
 func (r *CommodityRegistry) DeleteImage(_ context.Context, commodityID, imageID string) error {
 	r.imagesLock.Lock()
-	for i, foundImageID := range r.images[commodityID] {
-		if foundImageID == imageID {
-			r.images[commodityID] = append(r.images[commodityID][:i], r.images[commodityID][i+1:]...)
-			break
-		}
-	}
+
+	r.images[commodityID] = slices.DeleteFunc(r.images[commodityID], func(id string) bool {
+		return id == imageID
+	})
+
 	r.imagesLock.Unlock()
 
 	return nil
@@ -156,12 +155,11 @@ func (r *CommodityRegistry) GetManuals(_ context.Context, commodityID string) ([
 
 func (r *CommodityRegistry) DeleteManual(_ context.Context, commodityID, manualID string) error {
 	r.manualsLock.Lock()
-	for i, foundManualID := range r.manuals[commodityID] {
-		if foundManualID == manualID {
-			r.manuals[commodityID] = append(r.manuals[commodityID][:i], r.manuals[commodityID][i+1:]...)
-			break
-		}
-	}
+
+	r.manuals[commodityID] = slices.DeleteFunc(r.manuals[commodityID], func(id string) bool {
+		return id == manualID
+	})
+
 	r.manualsLock.Unlock()
 
 	return nil
@@ -186,12 +184,11 @@ func (r *CommodityRegistry) GetInvoices(_ context.Context, commodityID string) (
 
 func (r *CommodityRegistry) DeleteInvoice(_ context.Context, commodityID, invoiceID string) error {
 	r.invoicesLock.Lock()
-	for i, foundInvoiceID := range r.invoices[commodityID] {
-		if foundInvoiceID == invoiceID {
-			r.invoices[commodityID] = append(r.invoices[commodityID][:i], r.invoices[commodityID][i+1:]...)
-			break
-		}
-	}
+
+	r.invoices[commodityID] = slices.DeleteFunc(r.invoices[commodityID], func(id string) bool {
+		return id == invoiceID
+	})
+
 	r.invoicesLock.Unlock()
 
 	return nil
@@ -281,12 +278,12 @@ func (r *CommodityRegistry) matchesTags(commodityTags []string, searchTags []str
 // FindSimilar finds similar commodities using simple name comparison (simplified)
 func (r *CommodityRegistry) FindSimilar(ctx context.Context, commodityID string, threshold float64) ([]*models.Commodity, error) {
 	// Get the reference commodity
-	refCommodity, err := r.Get(ctx, commodityID)
+	refCommodity, err := r.baseCommodityRegistry.Get(ctx, commodityID)
 	if err != nil {
 		return nil, err
 	}
 
-	commodities, err := r.List(ctx)
+	commodities, err := r.baseCommodityRegistry.List(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 
@@ -20,13 +21,14 @@ type LocationRegistry struct {
 	*baseLocationRegistry
 
 	userID    string
-	areasLock sync.RWMutex
+	areasLock *sync.RWMutex
 	areas     models.LocationAreas
 }
 
 func NewLocationRegistry() *LocationRegistry {
 	return &LocationRegistry{
 		baseLocationRegistry: NewRegistry[models.Location, *models.Location](),
+		areasLock:            &sync.RWMutex{},
 		areas:                make(models.LocationAreas),
 	}
 }
@@ -41,17 +43,16 @@ func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.Locati
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
 
-	// Create a new registry with the same data but different userID
-	tmp := &LocationRegistry{
-		baseLocationRegistry: r.baseLocationRegistry,
-		userID:               user.ID,
-		areas:                r.areas,
-	}
+	// Create a shallow copy of the registry
+	tmp := *r
+	tmp.userID = user.ID
 
-	// Set the userID on the base registry
-	tmp.baseLocationRegistry.userID = user.ID
+	// Create a new base registry with the same data but user-specific userID
+	newBaseRegistry := *r.baseLocationRegistry
+	newBaseRegistry.userID = user.ID
+	tmp.baseLocationRegistry = &newBaseRegistry
 
-	return tmp, nil
+	return &tmp, nil
 }
 
 func (r *LocationRegistry) WithServiceAccount() registry.LocationRegistry {
@@ -97,12 +98,11 @@ func (r *LocationRegistry) GetAreas(_ context.Context, locationID string) ([]str
 
 func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID string) error {
 	r.areasLock.Lock()
-	for i, foundAreaID := range r.areas[locationID] {
-		if foundAreaID == areaID {
-			r.areas[locationID] = append(r.areas[locationID][:i], r.areas[locationID][i+1:]...)
-			break
-		}
-	}
+
+	r.areas[locationID] = slices.DeleteFunc(r.areas[locationID], func(id string) bool {
+		return id == areaID
+	})
+
 	r.areasLock.Unlock()
 
 	return nil

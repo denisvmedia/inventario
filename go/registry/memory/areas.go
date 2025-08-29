@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 
@@ -21,7 +22,7 @@ type AreaRegistry struct {
 	*baseAreaRegistry
 
 	userID           string
-	commoditiesLock  sync.RWMutex
+	commoditiesLock  *sync.RWMutex
 	commodities      models.AreaCommodities
 	locationRegistry *LocationRegistry // required dependency for relationship tracking
 }
@@ -29,6 +30,7 @@ type AreaRegistry struct {
 func NewAreaRegistry(locationRegistry *LocationRegistry) *AreaRegistry {
 	return &AreaRegistry{
 		baseAreaRegistry: NewRegistry[models.Area, *models.Area](),
+		commoditiesLock:  &sync.RWMutex{},
 		commodities:      make(models.AreaCommodities),
 		locationRegistry: locationRegistry,
 	}
@@ -44,18 +46,16 @@ func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegist
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
 
-	// Create a new registry with the same data but different userID
-	tmp := &AreaRegistry{
-		baseAreaRegistry: r.baseAreaRegistry,
-		userID:           user.ID,
-		commodities:      r.commodities,
-		locationRegistry: r.locationRegistry,
-	}
+	// Create a shallow copy of the registry
+	tmp := *r
+	tmp.userID = user.ID
 
-	// Set the userID on the base registry
-	tmp.baseAreaRegistry.userID = user.ID
+	// Create a new base registry with the same data but user-specific userID
+	newBaseRegistry := *r.baseAreaRegistry
+	newBaseRegistry.userID = user.ID
+	tmp.baseAreaRegistry = &newBaseRegistry
 
-	return tmp, nil
+	return &tmp, nil
 }
 
 func (r *AreaRegistry) WithServiceAccount() registry.AreaRegistry {
@@ -150,12 +150,11 @@ func (r *AreaRegistry) GetCommodities(_ context.Context, areaID string) ([]strin
 
 func (r *AreaRegistry) DeleteCommodity(_ context.Context, areaID, commodityID string) error {
 	r.commoditiesLock.Lock()
-	for i, foundCommodityID := range r.commodities[areaID] {
-		if foundCommodityID == commodityID {
-			r.commodities[areaID] = append(r.commodities[areaID][:i], r.commodities[areaID][i+1:]...)
-			break
-		}
-	}
+
+	r.commodities[areaID] = slices.DeleteFunc(r.commodities[areaID], func(id string) bool {
+		return id == commodityID
+	})
+
 	r.commoditiesLock.Unlock()
 
 	return nil
