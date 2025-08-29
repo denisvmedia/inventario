@@ -41,9 +41,10 @@ func (r *RestoreStepRegistry) WithCurrentUser(ctx context.Context) (registry.Res
 }
 
 func (r *RestoreStepRegistry) WithServiceAccount() registry.RestoreStepRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a shallow copy of the registry with no user filtering
+	tmp := *r
+	tmp.userID = "" // Clear userID to bypass user filtering
+	return &tmp
 }
 
 func (r *RestoreStepRegistry) ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error) {

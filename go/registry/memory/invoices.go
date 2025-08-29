@@ -44,9 +44,10 @@ func (r *InvoiceRegistry) WithCurrentUser(ctx context.Context) (registry.Invoice
 }
 
 func (r *InvoiceRegistry) WithServiceAccount() registry.InvoiceRegistry {
-	// For memory registries, service account access is the same as regular access
-	// since memory registries don't enforce RLS restrictions
-	return r
+	// Create a shallow copy of the registry with no user filtering
+	tmp := *r
+	tmp.userID = "" // Clear userID to bypass user filtering
+	return &tmp
 }
 
 func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
@@ -69,8 +70,8 @@ func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*
 		oldCommodityID = existingInvoice.CommodityID
 	}
 
-	// Call the base registry's Update method
-	updatedInvoice, err := r.baseInvoiceRegistry.Update(ctx, invoice)
+	// Call the base registry's UpdateWithUser method to ensure user context is preserved
+	updatedInvoice, err := r.baseInvoiceRegistry.UpdateWithUser(ctx, invoice)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update invoice")
 	}

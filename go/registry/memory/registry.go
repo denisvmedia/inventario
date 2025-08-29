@@ -210,10 +210,13 @@ func (r *Registry[T, P]) CreateWithUser(ctx context.Context, item T) (P, error) 
 
 // GetWithUser gets an entity with user context and validates ownership
 func (r *Registry[_, P]) GetWithUser(ctx context.Context, id string) (P, error) {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
+	// Use registry's userID if available, otherwise extract from context
+	userID := r.userID
 	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+		userID = registry.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, errkit.WithStack(registry.ErrUserContextRequired)
+		}
 	}
 
 	r.lock.RLock()
@@ -236,10 +239,13 @@ func (r *Registry[_, P]) GetWithUser(ctx context.Context, id string) (P, error) 
 
 // ListWithUser lists entities with user context filtering
 func (r *Registry[_, P]) ListWithUser(ctx context.Context) ([]P, error) {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
+	// Use registry's userID if available, otherwise extract from context
+	userID := r.userID
 	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+		userID = registry.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, errkit.WithStack(registry.ErrUserContextRequired)
+		}
 	}
 
 	var filteredItems []P
@@ -266,10 +272,13 @@ func (r *Registry[_, P]) ListWithUser(ctx context.Context) ([]P, error) {
 
 // UpdateWithUser updates an entity with user context
 func (r *Registry[T, P]) UpdateWithUser(ctx context.Context, item T) (P, error) {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
+	// Use registry's userID if available, otherwise extract from context
+	userID := r.userID
 	if userID == "" {
-		return nil, errkit.WithStack(registry.ErrUserContextRequired)
+		userID = registry.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, errkit.WithStack(registry.ErrUserContextRequired)
+		}
 	}
 
 	iitem := P(&item)
@@ -299,10 +308,13 @@ func (r *Registry[T, P]) UpdateWithUser(ctx context.Context, item T) (P, error) 
 
 // DeleteWithUser deletes an entity with user context
 func (r *Registry[_, _]) DeleteWithUser(ctx context.Context, id string) error {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
+	// Use registry's userID if available, otherwise extract from context
+	userID := r.userID
 	if userID == "" {
-		return errkit.WithStack(registry.ErrUserContextRequired)
+		userID = registry.UserIDFromContext(ctx)
+		if userID == "" {
+			return errkit.WithStack(registry.ErrUserContextRequired)
+		}
 	}
 
 	// Validate ownership before delete
@@ -319,10 +331,13 @@ func (r *Registry[_, _]) DeleteWithUser(ctx context.Context, id string) error {
 
 // CountWithUser counts entities with user context filtering
 func (r *Registry[_, _]) CountWithUser(ctx context.Context) (int, error) {
-	// Extract user ID from context
-	userID := registry.UserIDFromContext(ctx)
+	// Use registry's userID if available, otherwise extract from context
+	userID := r.userID
 	if userID == "" {
-		return 0, errkit.WithStack(registry.ErrUserContextRequired)
+		userID = registry.UserIDFromContext(ctx)
+		if userID == "" {
+			return 0, errkit.WithStack(registry.ErrUserContextRequired)
+		}
 	}
 
 	// Get filtered list and return count
