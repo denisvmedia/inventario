@@ -29,6 +29,7 @@ func ReadSection(sectionName string, target any) error {
 	replacer := strings.NewReplacer(".", "_", "-", "_")
 	envPrefixFull := fmt.Sprintf("%s_%s_", envPrefix, strings.ToUpper(sectionName))
 	tag := fmt.Sprintf(`yaml:"%s" env-prefix:"%s"`, sectionName, replacer.Replace(envPrefixFull))
+	slog.Info("Reading section", "section", sectionName, "tag", tag)
 	sectionType := reflect.TypeOf(target).Elem()
 	wrapperType := reflect.StructOf([]reflect.StructField{
 		{
@@ -60,6 +61,7 @@ func ReadVirtualSection(sectionName string, target any) error {
 	replacer := strings.NewReplacer(".", "_", "-", "_")
 	envPrefixFull := fmt.Sprintf("%s_%s_", envPrefix, strings.ToUpper(sectionName))
 	tag := fmt.Sprintf(`yaml:",inline" env-prefix:"%s"`, replacer.Replace(envPrefixFull))
+	slog.Info("Reading virtual section", "section", sectionName, "tag", tag)
 	sectionType := reflect.TypeOf(target).Elem()
 	wrapperType := reflect.StructOf([]reflect.StructField{
 		{
@@ -73,7 +75,11 @@ func ReadVirtualSection(sectionName string, target any) error {
 	if err := cleanenv.ReadConfig(configFile, wrapper); err != nil {
 		if err = cleanenv.ReadEnv(wrapper); err != nil {
 			slog.Error("Failed to read config", "error", err)
+		} else {
+			slog.Info("Read config from environment variables")
 		}
+	} else {
+		slog.Info("Read config from file")
 	}
 
 	sectionValue := reflect.ValueOf(wrapper).Elem().Field(0)
