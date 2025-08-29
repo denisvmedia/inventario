@@ -83,6 +83,8 @@ jobs:
 
       - name: Start application stack and run fast-fail test
         run: |
+          env
+          
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
 
