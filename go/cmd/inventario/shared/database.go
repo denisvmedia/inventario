@@ -23,11 +23,11 @@ func (d *DatabaseConfig) Validate() error {
 }
 
 func RegisterDatabaseFlags(cmd *cobra.Command, cfg *DatabaseConfig) {
-	TryReadVirtualSection("database", cfg)
+	TryReadVirtualSection(".", cfg)
 	cmd.PersistentFlags().StringVar(&cfg.DBDSN, "db-dsn", cfg.DBDSN, "Database DSN")
 }
 
 func RegisterLocalDatabaseFlags(cmd *cobra.Command, cfg *DatabaseConfig) {
-	TryReadVirtualSection("database", cfg)
+	TryReadVirtualSection(".", cfg)
 	cmd.Flags().StringVar(&cfg.DBDSN, "db-dsn", cfg.DBDSN, "Database DSN")
 }

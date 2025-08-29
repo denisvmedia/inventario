@@ -59,7 +59,12 @@ func TryReadSection(sectionName string, target any) {
 
 func ReadVirtualSection(sectionName string, target any) error {
 	replacer := strings.NewReplacer(".", "_", "-", "_")
-	envPrefixFull := fmt.Sprintf("%s_%s_", envPrefix, strings.ToUpper(sectionName))
+	var envPrefixFull string
+	if sectionName == "." || sectionName == "" {
+		envPrefixFull = envPrefix + "_"
+	} else {
+		envPrefixFull = fmt.Sprintf("%s_%s_", envPrefix, strings.ToUpper(sectionName))
+	}
 	tag := fmt.Sprintf(`yaml:",inline" env-prefix:"%s"`, replacer.Replace(envPrefixFull))
 	slog.Info("Reading virtual section", "section", sectionName, "tag", tag)
 	sectionType := reflect.TypeOf(target).Elem()
