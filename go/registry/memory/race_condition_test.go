@@ -46,7 +46,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 		// Create a commodity for user1
 		commodity := models.Commodity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "commodity-1"},
+				// ID will be generated server-side for security
 				TenantID: "tenant-1",
 				UserID:   user1.ID,
 			},
@@ -84,7 +84,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 		getReg, err := commodityRegistry.WithCurrentUser(ctx1)
 		c.Assert(err, qt.IsNil)
 
-		retrievedCommodity, err := getReg.Get(ctx1, commodity.ID)
+		retrievedCommodity, err := getReg.Get(ctx1, createdCommodity.ID)
 		c.Assert(err, qt.IsNil, qt.Commentf("This should not return 404 - the race condition bug"))
 		c.Assert(retrievedCommodity.Name, qt.Equals, "Updated Commodity")
 
@@ -100,7 +100,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 				return
 			}
 
-			_, err = comReg.Get(ctx2, commodity.ID)
+			_, err = comReg.Get(ctx2, createdCommodity.ID)
 			// We expect this to fail with "not found" for user2
 			if err != nil && err.Error() != "not found" {
 				errors <- err
@@ -120,7 +120,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 					return
 				}
 
-				retrievedCommodity, err := comReg.Get(ctx1, commodity.ID)
+				retrievedCommodity, err := comReg.Get(ctx1, createdCommodity.ID)
 				if err != nil {
 					errors <- err
 					return
@@ -162,7 +162,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 
 		location := models.Location{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "location-1"},
+				// ID will be generated server-side for security
 				TenantID: "tenant-1",
 				UserID:   user1.ID,
 			},
@@ -204,7 +204,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 					return
 				}
 
-				_, err = locReg.Get(ctx1, location.ID)
+				_, err = locReg.Get(ctx1, createdLocation.ID)
 				if err != nil {
 					errors <- err
 					return
@@ -245,7 +245,7 @@ func TestE2EScenarioSimulation(t *testing.T) {
 
 	commodity := models.Commodity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "commodity-1"},
+			// ID will be generated server-side for security
 			TenantID: "tenant-1",
 			UserID:   user.ID,
 		},
@@ -275,7 +275,7 @@ func TestE2EScenarioSimulation(t *testing.T) {
 	comReg3, err := commodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
-	finalCommodity, err := comReg3.Get(ctx, commodity.ID)
+	finalCommodity, err := comReg3.Get(ctx, createdCommodity.ID)
 	c.Assert(err, qt.IsNil, qt.Commentf("This should not return 404 - the race condition bug"))
 	c.Assert(finalCommodity.Name, qt.Equals, "Updated Commodity")
 }

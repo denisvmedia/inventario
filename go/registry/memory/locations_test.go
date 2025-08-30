@@ -87,7 +87,6 @@ func TestLocationRegistry_Delete(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Delete the location from the registry
-err:
 	r.Delete(ctx, createdLocation.GetID())
 	c.Assert(err, qt.IsNil)
 
