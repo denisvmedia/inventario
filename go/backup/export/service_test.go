@@ -20,7 +20,8 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-const testUserID = "test-user-123"
+// testUserID will be set dynamically when creating test user
+var testUserID string
 
 // TestExtractTenantUserFromContext tests the ExtractTenantUserFromContext function
 func TestExtractTenantUserFromContext(t *testing.T) {
@@ -130,9 +131,10 @@ func newTestRegistrySet() *registry.Set {
 	userRegistry := memory.NewUserRegistry()
 	tenantRegistry := memory.NewTenantRegistry()
 
-	must.Must(userRegistry.Create(context.Background(), models.User{
+	// Create user with server-generated ID and capture it
+	createdUser := must.Must(userRegistry.Create(context.Background(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: testUserID},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant",
 		},
 		Email:    "test@example.com",
@@ -140,6 +142,9 @@ func newTestRegistrySet() *registry.Set {
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}))
+	// Set the global testUserID to the generated ID
+	testUserID = createdUser.ID
+
 	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
 		EntityID: models.EntityID{ID: "test-tenant"},
 		Name:     "Test Tenant",
@@ -540,9 +545,10 @@ func TestBase64FileDataVerification(t *testing.T) {
 	exportRegistry := memory.NewExportRegistry()
 	userRegistry := memory.NewUserRegistry()
 	tenantRegistry := memory.NewTenantRegistry()
-	must.Must(userRegistry.Create(context.Background(), models.User{
+	// Create user with server-generated ID and capture it
+	createdUser := must.Must(userRegistry.Create(context.Background(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: testUserID},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant",
 		},
 		Email:    "test@example.com",
@@ -550,6 +556,8 @@ func TestBase64FileDataVerification(t *testing.T) {
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}))
+	// Set the global testUserID to the generated ID
+	testUserID = createdUser.ID
 	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
 		EntityID: models.EntityID{ID: "test-tenant"},
 		Name:     "Test Tenant",
@@ -875,20 +883,11 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 
 // createTestRegistrySetWithFiles creates a test registry set with sample data including files
 func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set {
-	// Create interconnected registries
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	imageRegistry := memory.NewImageRegistry(commodityRegistry)
-	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
-	manualRegistry := memory.NewManualRegistry(commodityRegistry)
-	exportRegistry := memory.NewExportRegistry()
+	// Create user first to get the user ID
 	userRegistry := memory.NewUserRegistry()
-	tenantRegistry := memory.NewTenantRegistry()
-	must.Must(userRegistry.Create(context.Background(), models.User{
+	createdUser := must.Must(userRegistry.Create(context.Background(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: testUserID},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant",
 		},
 		Email:    "test@example.com",
@@ -896,6 +895,23 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}))
+	// Set the global testUserID to the generated ID
+	testUserID = createdUser.ID
+
+	// Create user context for registry operations
+	userCtx := appctx.WithUser(context.Background(), createdUser)
+
+	// Create interconnected registries with user context
+	locationRegistry := must.Must(memory.NewLocationRegistry().WithCurrentUser(userCtx))
+	areaRegistry := must.Must(memory.NewAreaRegistry(locationRegistry.(*memory.LocationRegistry)).WithCurrentUser(userCtx))
+	fileRegistry := memory.NewFileRegistry()
+	commodityRegistry := must.Must(memory.NewCommodityRegistry(areaRegistry.(*memory.AreaRegistry)).WithCurrentUser(userCtx))
+	imageRegistry := must.Must(memory.NewImageRegistry(commodityRegistry.(*memory.CommodityRegistry)).WithCurrentUser(userCtx))
+	invoiceRegistry := must.Must(memory.NewInvoiceRegistry(commodityRegistry.(*memory.CommodityRegistry)).WithCurrentUser(userCtx))
+	manualRegistry := must.Must(memory.NewManualRegistry(commodityRegistry.(*memory.CommodityRegistry)).WithCurrentUser(userCtx))
+	exportRegistry := memory.NewExportRegistry()
+	tenantRegistry := memory.NewTenantRegistry()
+	// User already created above
 	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
 		EntityID: models.EntityID{ID: "test-tenant"},
 		Name:     "Test Tenant",
@@ -914,74 +930,98 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		TenantRegistry:    tenantRegistry,
 	}
 
-	// Create test locations
+	// Create test locations (IDs will be generated server-side for security)
 	location1 := models.Location{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("loc1", "default-tenant", testUserID),
-		Name:                "Test Location 1",
-		Address:             "123 Test St",
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		Name:    "Test Location 1",
+		Address: "123 Test St",
 	}
 	location2 := models.Location{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("loc2", "default-tenant", testUserID),
-		Name:                "Test Location 2",
-		Address:             "456 Test Ave",
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		Name:    "Test Location 2",
+		Address: "456 Test Ave",
 	}
 
-	savedLocation1, err := registrySet.LocationRegistry.Create(ctx, location1)
+	savedLocation1, err := registrySet.LocationRegistry.Create(userCtx, location1)
 	c.Assert(err, qt.IsNil)
-	savedLocation2, err := registrySet.LocationRegistry.Create(ctx, location2)
+	savedLocation2, err := registrySet.LocationRegistry.Create(userCtx, location2)
 	c.Assert(err, qt.IsNil)
 
-	// Create test areas
+	// Create test areas (IDs will be generated server-side for security)
 	area1 := models.Area{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "default-tenant", testUserID),
-		Name:                "Test Area 1",
-		LocationID:          savedLocation1.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		Name:       "Test Area 1",
+		LocationID: savedLocation1.ID,
 	}
 	area2 := models.Area{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("area2", "default-tenant", testUserID),
-		Name:                "Test Area 2",
-		LocationID:          savedLocation1.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		Name:       "Test Area 2",
+		LocationID: savedLocation1.ID,
 	}
 	area3 := models.Area{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("area3", "default-tenant", testUserID),
-		Name:                "Test Area 3",
-		LocationID:          savedLocation2.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		Name:       "Test Area 3",
+		LocationID: savedLocation2.ID,
 	}
 
-	savedArea1, err := registrySet.AreaRegistry.Create(ctx, area1)
+	savedArea1, err := registrySet.AreaRegistry.Create(userCtx, area1)
 	c.Assert(err, qt.IsNil)
-	savedArea2, err := registrySet.AreaRegistry.Create(ctx, area2)
+	savedArea2, err := registrySet.AreaRegistry.Create(userCtx, area2)
 	c.Assert(err, qt.IsNil)
-	_, err = registrySet.AreaRegistry.Create(ctx, area3)
+	_, err = registrySet.AreaRegistry.Create(userCtx, area3)
 	c.Assert(err, qt.IsNil)
 
-	// Create test commodities
+	// Create test commodities (IDs will be generated server-side for security)
 	commodity1 := models.Commodity{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity1", "default-tenant", testUserID),
-		Name:                "Test Commodity 1",
-		AreaID:              savedArea1.ID,
-		Count:               1,
-		Type:                models.CommodityTypeElectronics,
-		Status:              models.CommodityStatusInUse,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		Name:   "Test Commodity 1",
+		AreaID: savedArea1.ID,
+		Count:  1,
+		Type:   models.CommodityTypeElectronics,
+		Status: models.CommodityStatusInUse,
 	}
 	commodity2 := models.Commodity{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("commodity2", "default-tenant", testUserID),
-		Name:                "Test Commodity 2",
-		AreaID:              savedArea2.ID,
-		Count:               2,
-		Type:                models.CommodityTypeElectronics,
-		Status:              models.CommodityStatusInUse,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		Name:   "Test Commodity 2",
+		AreaID: savedArea2.ID,
+		Count:  2,
+		Type:   models.CommodityTypeElectronics,
+		Status: models.CommodityStatusInUse,
 	}
 
-	savedCommodity1, err := registrySet.CommodityRegistry.Create(ctx, commodity1)
+	savedCommodity1, err := registrySet.CommodityRegistry.Create(userCtx, commodity1)
 	c.Assert(err, qt.IsNil)
-	savedCommodity2, err := registrySet.CommodityRegistry.Create(ctx, commodity2)
+	savedCommodity2, err := registrySet.CommodityRegistry.Create(userCtx, commodity2)
 	c.Assert(err, qt.IsNil)
 
-	// Create test images
+	// Create test images (IDs will be generated server-side for security)
 	image1 := models.Image{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("image1", "default-tenant", testUserID),
-		CommodityID:         savedCommodity1.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		CommodityID: savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-image-1",
 			OriginalPath: "test-image-1.jpg",
@@ -990,8 +1030,11 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		},
 	}
 	image2 := models.Image{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("image2", "default-tenant", testUserID),
-		CommodityID:         savedCommodity2.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		CommodityID: savedCommodity2.ID,
 		File: &models.File{
 			Path:         "test-image-2",
 			OriginalPath: "test-image-2.png",
@@ -1000,15 +1043,18 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		},
 	}
 
-	_, err = registrySet.ImageRegistry.Create(ctx, image1)
+	_, err = registrySet.ImageRegistry.Create(userCtx, image1)
 	c.Assert(err, qt.IsNil)
-	_, err = registrySet.ImageRegistry.Create(ctx, image2)
+	_, err = registrySet.ImageRegistry.Create(userCtx, image2)
 	c.Assert(err, qt.IsNil)
 
-	// Create test invoice
+	// Create test invoice (ID will be generated server-side for security)
 	invoice1 := models.Invoice{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("invoice1", "default-tenant", testUserID),
-		CommodityID:         savedCommodity1.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		CommodityID: savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-invoice-1",
 			OriginalPath: "test-invoice-1.pdf",
@@ -1017,13 +1063,16 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		},
 	}
 
-	_, err = registrySet.InvoiceRegistry.Create(ctx, invoice1)
+	_, err = registrySet.InvoiceRegistry.Create(userCtx, invoice1)
 	c.Assert(err, qt.IsNil)
 
-	// Create test manual
+	// Create test manual (ID will be generated server-side for security)
 	manual1 := models.Manual{
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("manual1", "default-tenant", testUserID),
-		CommodityID:         savedCommodity1.ID,
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "default-tenant",
+			UserID:   testUserID,
+		},
+		CommodityID: savedCommodity1.ID,
 		File: &models.File{
 			Path:         "test-manual-1",
 			OriginalPath: "test-manual-1.pdf",
@@ -1032,7 +1081,7 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 		},
 	}
 
-	_, err = registrySet.ManualRegistry.Create(ctx, manual1)
+	_, err = registrySet.ManualRegistry.Create(userCtx, manual1)
 	c.Assert(err, qt.IsNil)
 
 	return registrySet

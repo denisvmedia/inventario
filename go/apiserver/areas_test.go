@@ -203,11 +203,10 @@ func TestAreaUpdate(t *testing.T) {
 		Data: &jsonapi.AreaData{
 			ID:   area.ID,
 			Type: "areas",
-			Attributes: &models.Area{
-				TenantAwareEntityID: models.WithTenantAwareEntityID(area.ID, "default-tenant"),
-				Name:                "Updated Area",
-				LocationID:          area.LocationID,
-			},
+			Attributes: models.WithID(area.ID, &models.Area{
+				Name:       "Updated Area",
+				LocationID: area.LocationID,
+			}),
 		},
 	}
 	data := must.Must(json.Marshal(obj))
@@ -215,6 +214,7 @@ func TestAreaUpdate(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/areas/"+area.ID, buf)
 	c.Assert(err, qt.IsNil)
+	req.Header.Set("Content-Type", "application/json")
 	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
@@ -223,6 +223,9 @@ func TestAreaUpdate(t *testing.T) {
 	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
 
+	if rr.Code != http.StatusOK {
+		c.Logf("Response body: %s", rr.Body.String())
+	}
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body := rr.Body.Bytes()
 

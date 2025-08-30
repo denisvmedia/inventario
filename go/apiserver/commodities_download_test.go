@@ -32,7 +32,7 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	ctx := appctx.WithUser(context.Background(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
+			EntityID: models.EntityID{ID: testUser.ID},
 		},
 	})
 	comReg, err := params.RegistrySet.CommodityRegistry.WithCurrentUser(ctx)

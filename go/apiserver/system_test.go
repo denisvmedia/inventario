@@ -96,7 +96,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	// Create test user
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant-id",
 		},
 		Email:    "test@example.com",
@@ -106,7 +106,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	}
 	err := testUser.SetPassword("testpassword123")
 	c.Assert(err, qt.IsNil)
-	_, err = registrySet.UserRegistry.Create(c.Context(), testUser)
+	createdUser, err := registrySet.UserRegistry.Create(c.Context(), testUser)
 	c.Assert(err, qt.IsNil)
 	_, err = registrySet.TenantRegistry.Create(c.Context(), models.Tenant{
 		EntityID: models.EntityID{ID: "test-tenant-id"},
@@ -120,7 +120,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 		Theme:        ptr("dark"),
 	}
 
-	userCtx := appctx.WithUser(c.Context(), &testUser)
+	userCtx := appctx.WithUser(c.Context(), createdUser)
 	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(userCtx)
 	c.Assert(err, qt.IsNil)
 	err = settingsRegistry.Save(c.Context(), testSettings)
@@ -142,7 +142,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest("GET", "/api/v1/system", nil)
 	req.Header.Set("Accept", "application/json")
-	addTestUserAuthHeader(req, testUser.ID)
+	addTestUserAuthHeader(req, createdUser.ID)
 
 	// Create response recorder
 	w := httptest.NewRecorder()

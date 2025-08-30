@@ -13,6 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/go-extras/go-kit/must"
+
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -32,7 +34,7 @@ func TestExportHardDelete(t *testing.T) {
 	// Create a test user for authentication
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant-id",
 		},
 		Email:    "test@example.com",
@@ -41,7 +43,7 @@ func TestExportHardDelete(t *testing.T) {
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
-	userRegistry.Create(context.Background(), testUser)
+	createdUser := must.Must(userRegistry.Create(context.Background(), testUser))
 
 	registrySet := &registry.Set{
 		ExportRegistry: exportRegistry,
@@ -76,7 +78,7 @@ func TestExportHardDelete(t *testing.T) {
 
 	// Test hard delete
 	req := httptest.NewRequest("DELETE", "/exports/"+created.ID, nil)
-	addTestUserAuthHeader(req, testUser.ID)
+	addTestUserAuthHeader(req, createdUser.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -88,7 +90,7 @@ func TestExportHardDelete(t *testing.T) {
 
 	// Test that download is blocked for deleted export
 	req = httptest.NewRequest("GET", "/exports/"+created.ID+"/download", nil)
-	addTestUserAuthHeader(req, testUser.ID)
+	addTestUserAuthHeader(req, createdUser.ID)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -111,7 +113,7 @@ func TestExportListExcludesDeleted(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "export1"},
 			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			UserID:   testUser.ID,
 		},
 		Type:        models.ExportTypeFullDatabase,
 		Description: "Active export",
@@ -122,7 +124,7 @@ func TestExportListExcludesDeleted(t *testing.T) {
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "export2"},
 			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			UserID:   testUser.ID,
 		},
 		Type:        models.ExportTypeLocations,
 		Description: "Export to be deleted",
@@ -240,7 +242,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	// Create a test user for authentication
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant-id",
 		},
 		Email:    "test@example.com",
@@ -249,7 +251,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
-	userRegistry.Create(context.Background(), testUser)
+	createdUser := must.Must(userRegistry.Create(context.Background(), testUser))
 
 	registrySet := &registry.Set{
 		ExportRegistry: memory.NewExportRegistry(),
@@ -287,7 +289,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	// Test create endpoint
 	req := httptest.NewRequest("POST", "/exports", bytes.NewReader(payloadBytes))
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req, testUser.ID)
+	addTestUserAuthHeader(req, createdUser.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

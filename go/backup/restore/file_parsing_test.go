@@ -135,9 +135,9 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 	c.Assert(strings.HasPrefix(image.Path, "test-image-original-"), qt.IsTrue, qt.Commentf("Path should start with original filename"))
 	c.Assert(strings.HasSuffix(image.Path, ".jpg"), qt.IsTrue, qt.Commentf("Path should end with extension"))
 
-	// The image should preserve the XML ID
-	c.Assert(image.ID, qt.Equals, "test-image-1")
+	// The image should have a server-generated UUID (not the XML ID for security)
 	c.Assert(image.ID, qt.Not(qt.Equals), "")
+	c.Assert(len(image.ID), qt.Equals, 36) // UUID format: 8-4-4-4-12 characters
 }
 
 func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {

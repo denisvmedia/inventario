@@ -16,12 +16,14 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func newTestRegistrySet() *registry.Set {
+func newTestRegistrySet() (*registry.Set, string) {
 	// Use the proper NewRegistrySet function to ensure all dependencies are set up correctly
 	registrySet := memory.NewRegistrySet()
-	must.Must(registrySet.UserRegistry.Create(context.Background(), models.User{
+
+	// Create user with server-generated ID and capture it
+	createdUser := must.Must(registrySet.UserRegistry.Create(context.Background(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant",
 		},
 		Email:    "test@example.com",
@@ -29,16 +31,18 @@ func newTestRegistrySet() *registry.Set {
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}))
+
 	must.Must(registrySet.TenantRegistry.Create(context.Background(), models.Tenant{
 		EntityID: models.EntityID{ID: "test-tenant"},
 		Name:     "Test Tenant",
 	}))
-	return registrySet
+
+	return registrySet, createdUser.ID
 }
 
 func TestNewImportService(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	registrySet, _ := newTestRegistrySet()
 	uploadLocation := "memory://test-bucket"
 
 	service := importpkg.NewImportService(registrySet, uploadLocation)
@@ -48,7 +52,7 @@ func TestNewImportService(t *testing.T) {
 
 func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	registrySet, _ := newTestRegistrySet()
 	uploadLocation := "mem://test-bucket"
 	service := importpkg.NewImportService(registrySet, uploadLocation)
 	ctx := context.Background()
@@ -60,7 +64,7 @@ func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 
 func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	registrySet, _ := newTestRegistrySet()
 	// Use invalid upload location to trigger blob bucket error
 	uploadLocation := "invalid://invalid-location"
 	service := importpkg.NewImportService(registrySet, uploadLocation)
@@ -88,7 +92,7 @@ func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 
 func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	registrySet, _ := newTestRegistrySet()
 	uploadLocation := "mem://test-bucket"
 	service := importpkg.NewImportService(registrySet, uploadLocation)
 	ctx := context.Background()
@@ -115,7 +119,7 @@ func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 
 func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	registrySet, _ := newTestRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
@@ -156,7 +160,7 @@ func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 
 func TestImportService_ProcessImport_Success(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	registrySet, testUserID := newTestRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
@@ -190,7 +194,7 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 		Type:                models.ExportTypeImported,
 		Status:              models.ExportStatusPending,
 		Description:         "Test import",
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", "test-user-id"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", testUserID),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -225,7 +229,7 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 
 func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	registrySet, testUserID := newTestRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
@@ -268,7 +272,7 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 		Type:                models.ExportTypeImported,
 		Status:              models.ExportStatusPending,
 		Description:         "Test import with files",
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", "test-user-id"),
+		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-export-1", "test-tenant", testUserID),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -288,7 +292,7 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 
 func TestImportService_ProcessImport_ExportRecordDeleted(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	registrySet, _ := newTestRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()

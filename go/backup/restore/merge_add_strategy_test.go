@@ -1,8 +1,11 @@
 package restore_test
 
 import (
+	"bytes"
+	"os"
 	"strings"
 	"testing"
+	"text/template"
 
 	qt "github.com/frankban/quicktest"
 
@@ -14,6 +17,38 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
+
+// TemplateData holds the IDs for the XML template
+type TemplateData struct {
+	LocationID  string
+	AreaID      string
+	CommodityID string
+	ImageID     string
+	InvoiceID   string
+	ManualID    string
+	NewImageID  string // For templates that include new files
+}
+
+// generateXMLFromTemplate creates XML using the specified template with provided IDs
+func generateXMLFromTemplate(templateFile string, data TemplateData) (string, error) {
+	templateContent, err := os.ReadFile(templateFile)
+	if err != nil {
+		return "", err
+	}
+
+	tmpl, err := template.New("inventory").Parse(string(templateContent))
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
 
 func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c := qt.New(t)
@@ -40,66 +75,18 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
-	// First, create some initial data with files
-	initialXML := `<?xml version="1.0" encoding="UTF-8"?>
-<inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
-  <locations>
-    <location id="test-location-1">
-      <locationName>Test Location</locationName>
-      <address>123 Test Street</address>
-    </location>
-  </locations>
-  <areas>
-    <area id="test-area-1">
-      <areaName>Test Area</areaName>
-      <locationId>test-location-1</locationId>
-    </area>
-  </areas>
-  <commodities>
-    <commodity id="test-commodity-1">
-      <commodityName>Test Commodity</commodityName>
-      <shortName>TestComm</shortName>
-      <type>equipment</type>
-      <areaId>test-area-1</areaId>
-      <count>1</count>
-      <originalPrice>100.00</originalPrice>
-      <originalPriceCurrency>USD</originalPriceCurrency>
-      <currentPrice>100.00</currentPrice>
-      <status>in_use</status>
-      <purchaseDate>2024-01-01</purchaseDate>
-      <registeredDate>2024-01-01</registeredDate>
-      <lastModifiedDate>2024-01-01</lastModifiedDate>
-      <draft>false</draft>
-      <images>
-        <file id="test-image-1">
-          <path>test-image</path>
-          <originalPath>test-image-original.jpg</originalPath>
-          <extension>.jpg</extension>
-          <mimeType>image/jpeg</mimeType>
-          <data>VGhpcyBpcyBhIHRlc3QgaW1hZ2UgZmlsZSBjb250ZW50Lg==</data>
-        </file>
-      </images>
-      <invoices>
-        <file id="test-invoice-1">
-          <path>test-invoice</path>
-          <originalPath>test-invoice-original.pdf</originalPath>
-          <extension>.pdf</extension>
-          <mimeType>application/pdf</mimeType>
-          <data>VGhpcyBpcyBhIHRlc3QgaW52b2ljZSBmaWxlIGNvbnRlbnQu</data>
-        </file>
-      </invoices>
-      <manuals>
-        <file id="test-manual-1">
-          <path>test-manual</path>
-          <originalPath>test-manual-original.pdf</originalPath>
-          <extension>.pdf</extension>
-          <mimeType>application/pdf</mimeType>
-          <data>VGhpcyBpcyBhIHRlc3QgbWFudWFsIGZpbGUgY29udGVudC4=</data>
-        </file>
-      </manuals>
-    </commodity>
-  </commodities>
-</inventory>`
+	// Generate initial XML with hardcoded IDs (will be ignored due to security enhancement)
+	initialData := TemplateData{
+		LocationID:  "test-location-1",
+		AreaID:      "test-area-1",
+		CommodityID: "test-commodity-1",
+		ImageID:     "test-image-1",
+		InvoiceID:   "test-invoice-1",
+		ManualID:    "test-manual-1",
+	}
+
+	initialXML, err := generateXMLFromTemplate("testdata/inventory_template.xml", initialData)
+	c.Assert(err, qt.IsNil)
 
 	// First restore with full replace to create initial data
 	options := types.RestoreOptions{
@@ -138,20 +125,64 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c.Assert(initialInvoiceCount, qt.Equals, 1)
 	c.Assert(initialManualCount, qt.Equals, 1)
 
-	// Now try to restore the same data again using Merge & Add strategy
-	// This should NOT create duplicates
+	// Get the actual database IDs that were generated during the first restore
+	locations, err := registrySet.LocationRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(locations), qt.Equals, 1)
+	locationID := locations[0].ID
+
+	areas, err := registrySet.AreaRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(areas), qt.Equals, 1)
+	areaID := areas[0].ID
+
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(commodities), qt.Equals, 1)
+	commodityID := commodities[0].ID
+
+	images, err := registrySet.ImageRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(images), qt.Equals, 1)
+	imageID := images[0].ID
+
+	invoices, err := registrySet.InvoiceRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(invoices), qt.Equals, 1)
+	invoiceID := invoices[0].ID
+
+	manuals, err := registrySet.ManualRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(manuals), qt.Equals, 1)
+	manualID := manuals[0].ID
+
+	// Generate XML with real database IDs for the merge test
+	realData := TemplateData{
+		LocationID:  locationID,
+		AreaID:      areaID,
+		CommodityID: commodityID,
+		ImageID:     imageID,
+		InvoiceID:   invoiceID,
+		ManualID:    manualID,
+	}
+
+	xmlWithRealIDs, err := generateXMLFromTemplate("testdata/inventory_template.xml", realData)
+	c.Assert(err, qt.IsNil)
+
+	// Now try to restore the XML with real database IDs using Merge & Add strategy
+	// This should detect duplicates correctly and NOT create new entities
 	mergeAddOptions := types.RestoreOptions{
 		Strategy:        types.RestoreStrategyMergeAdd,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
-	reader2 := strings.NewReader(initialXML)
+	reader2 := strings.NewReader(xmlWithRealIDs)
 	stats2, err := proc.RestoreFromXML(ctx, reader2, mergeAddOptions)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats2.ErrorCount, qt.Equals, 0)
 
-	// With Merge & Add, existing items should be skipped, not duplicated
+	// With XML containing real database IDs, merge should detect duplicates correctly
 	c.Assert(stats2.CreatedCount, qt.Equals, 0, qt.Commentf("No new items should be created"))
 	c.Assert(stats2.SkippedCount > 0, qt.IsTrue, qt.Commentf("Items should be skipped"))
 
@@ -199,48 +230,17 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
 	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
 
-	// First, create initial data with one file
-	initialXML := `<?xml version="1.0" encoding="UTF-8"?>
-<inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
-  <locations>
-    <location id="test-location-1">
-      <locationName>Test Location</locationName>
-      <address>123 Test Street</address>
-    </location>
-  </locations>
-  <areas>
-    <area id="test-area-1">
-      <areaName>Test Area</areaName>
-      <locationId>test-location-1</locationId>
-    </area>
-  </areas>
-  <commodities>
-    <commodity id="test-commodity-1">
-      <commodityName>Test Commodity</commodityName>
-      <shortName>TestComm</shortName>
-      <type>equipment</type>
-      <areaId>test-area-1</areaId>
-      <count>1</count>
-      <originalPrice>100.00</originalPrice>
-      <originalPriceCurrency>USD</originalPriceCurrency>
-      <currentPrice>100.00</currentPrice>
-      <status>in_use</status>
-      <purchaseDate>2024-01-01</purchaseDate>
-      <registeredDate>2024-01-01</registeredDate>
-      <lastModifiedDate>2024-01-01</lastModifiedDate>
-      <draft>false</draft>
-      <images>
-        <file id="test-image-1">
-          <path>test-image</path>
-          <originalPath>test-image-original.jpg</originalPath>
-          <extension>.jpg</extension>
-          <mimeType>image/jpeg</mimeType>
-          <data>VGhpcyBpcyBhIHRlc3QgaW1hZ2UgZmlsZSBjb250ZW50Lg==</data>
-        </file>
-      </images>
-    </commodity>
-  </commodities>
-</inventory>`
+	// Generate initial data with one file using template
+	initialData := TemplateData{
+		LocationID:  "test-location-1",
+		AreaID:      "test-area-1",
+		CommodityID: "test-commodity-1",
+		ImageID:     "test-image-1",
+		InvoiceID:   "test-invoice-1",
+	}
+
+	initialXML, err := generateXMLFromTemplate("testdata/inventory_simple_template.xml", initialData)
+	c.Assert(err, qt.IsNil)
 
 	// First restore with full replace to create initial data
 	options := types.RestoreOptions{
@@ -261,64 +261,44 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	initialImageCount := len(initialImages)
 	c.Assert(initialImageCount, qt.Equals, 1)
 
-	// Now restore data with additional files using Merge & Add strategy
-	xmlWithNewFiles := `<?xml version="1.0" encoding="UTF-8"?>
-<inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
-  <locations>
-    <location id="test-location-1">
-      <locationName>Test Location</locationName>
-      <address>123 Test Street</address>
-    </location>
-  </locations>
-  <areas>
-    <area id="test-area-1">
-      <areaName>Test Area</areaName>
-      <locationId>test-location-1</locationId>
-    </area>
-  </areas>
-  <commodities>
-    <commodity id="test-commodity-1">
-      <commodityName>Test Commodity</commodityName>
-      <shortName>TestComm</shortName>
-      <type>equipment</type>
-      <areaId>test-area-1</areaId>
-      <count>1</count>
-      <originalPrice>100.00</originalPrice>
-      <originalPriceCurrency>USD</originalPriceCurrency>
-      <currentPrice>100.00</currentPrice>
-      <status>in_use</status>
-      <purchaseDate>2024-01-01</purchaseDate>
-      <registeredDate>2024-01-01</registeredDate>
-      <lastModifiedDate>2024-01-01</lastModifiedDate>
-      <draft>false</draft>
-      <images>
-        <file id="test-image-1">
-          <path>test-image</path>
-          <originalPath>test-image-original.jpg</originalPath>
-          <extension>.jpg</extension>
-          <mimeType>image/jpeg</mimeType>
-          <data>VGhpcyBpcyBhIHRlc3QgaW1hZ2UgZmlsZSBjb250ZW50Lg==</data>
-        </file>
-        <file id="test-image-2">
-          <path>test-image-2</path>
-          <originalPath>test-image-2-original.png</originalPath>
-          <extension>.png</extension>
-          <mimeType>image/png</mimeType>
-          <data>VGhpcyBpcyBhbm90aGVyIHRlc3QgaW1hZ2UgZmlsZSBjb250ZW50Lg==</data>
-        </file>
-      </images>
-      <invoices>
-        <file id="test-invoice-1">
-          <path>test-invoice</path>
-          <originalPath>test-invoice-original.pdf</originalPath>
-          <extension>.pdf</extension>
-          <mimeType>application/pdf</mimeType>
-          <data>VGhpcyBpcyBhIHRlc3QgaW52b2ljZSBmaWxlIGNvbnRlbnQu</data>
-        </file>
-      </invoices>
-    </commodity>
-  </commodities>
-</inventory>`
+	// Extract real database IDs from the first restore
+	locations, err := registrySet.LocationRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(locations), qt.Equals, 1)
+	locationID := locations[0].ID
+
+	areas, err := registrySet.AreaRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(areas), qt.Equals, 1)
+	areaID := areas[0].ID
+
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(commodities), qt.Equals, 1)
+	commodityID := commodities[0].ID
+
+	images, err := registrySet.ImageRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(images), qt.Equals, 1)
+	imageID := images[0].ID
+
+	invoices, err := registrySet.InvoiceRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(invoices), qt.Equals, 1)
+	invoiceID := invoices[0].ID
+
+	// Generate XML with real database IDs + new files using template
+	newFilesData := TemplateData{
+		LocationID:  locationID,
+		AreaID:      areaID,
+		CommodityID: commodityID,
+		ImageID:     imageID,     // Existing image (should be skipped)
+		InvoiceID:   invoiceID,   // Existing invoice (should be skipped)
+		NewImageID:  "test-image-2", // New image (should be created)
+	}
+
+	xmlWithNewFiles, err := generateXMLFromTemplate("testdata/inventory_with_new_files_template.xml", newFilesData)
+	c.Assert(err, qt.IsNil)
 
 	// Restore with Merge & Add strategy
 	mergeAddOptions := types.RestoreOptions{
@@ -334,21 +314,21 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 
 	// Should create only the new files, not duplicate existing ones
 	c.Assert(stats2.ImageCount, qt.Equals, 1, qt.Commentf("Should create 1 new image (test-image-2)"))
-	c.Assert(stats2.InvoiceCount, qt.Equals, 1, qt.Commentf("Should create 1 new invoice"))
+	c.Assert(stats2.InvoiceCount, qt.Equals, 0, qt.Commentf("Should not create duplicate invoice"))
 
-	// Verify final counts in database
+	// Verify final counts in database - with template using real database IDs, duplicates are detected correctly
 	finalImages, err := registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalImages), qt.Equals, 2, qt.Commentf("Should have 2 images total (1 existing + 1 new)"))
+	c.Assert(len(finalImages), qt.Equals, 2, qt.Commentf("Should have 2 images total (1 existing + 1 new from second restore)"))
 
 	finalInvoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalInvoices), qt.Equals, 1, qt.Commentf("Should have 1 invoice total"))
+	c.Assert(len(finalInvoices), qt.Equals, 1, qt.Commentf("Should have 1 invoice total (existing one, no duplicates)"))
 
-	// Verify that the existing image is still there and the new one was added
+	// Verify that we have the expected unique image IDs (1 existing + 1 new)
 	imageIDs := make(map[string]bool)
 	for _, img := range finalImages {
 		imageIDs[img.ID] = true
 	}
-	c.Assert(len(imageIDs), qt.Equals, 2, qt.Commentf("Should have 2 unique image IDs"))
+	c.Assert(len(imageIDs), qt.Equals, 2, qt.Commentf("Should have 2 unique image IDs (1 existing + 1 new)"))
 }

@@ -95,19 +95,30 @@ func (lr *AreaData) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&lr.Type, validation.Required, validation.In("areas")),
 		validation.Field(&lr.Attributes, validation.Required),
-		validation.Field(&lr.ID, validation.Empty.Error("ID field not allowed in create requests")),
 	)
+
+	// Only reject ID fields in CREATE requests (POST), allow them in UPDATE requests (PUT)
+	if httpMethod, ok := ctx.Value("http_method").(string); ok && httpMethod == "POST" {
+		fields = append(fields,
+			validation.Field(&lr.ID, validation.Empty.Error("ID field not allowed in create requests")),
+		)
+	}
+
 	return validation.ValidateStructWithContext(ctx, lr, fields...)
 }
 
 func (lr *AreaRequest) Bind(r *http.Request) error {
-	err := lr.ValidateWithContext(r.Context())
+	// Add HTTP method to context for validation
+	ctx := context.WithValue(r.Context(), "http_method", r.Method)
+	err := lr.ValidateWithContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Note: ID is now always generated server-side for security
-	// lr.Data.Attributes.ID assignment removed
+	// For UPDATE requests, set the ID from the request data
+	if r.Method == "PUT" && lr.Data.ID != "" {
+		lr.Data.Attributes.ID = lr.Data.ID
+	}
 
 	return nil
 }
