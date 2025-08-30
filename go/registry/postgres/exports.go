@@ -63,13 +63,7 @@ func (r *ExportRegistry) WithServiceAccount() registry.ExportRegistry {
 }
 
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
-	// Generate a new ID if one is not already provided
-	if export.GetID() == "" {
-		export.SetID(generateID())
-	}
-
-	export.SetTenantID(r.tenantID)
-	export.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 	export.CreatedDate = models.PNow()
 
 	reg := r.newSQLRegistry()

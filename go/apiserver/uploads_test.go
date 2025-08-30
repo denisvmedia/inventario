@@ -18,7 +18,7 @@ import (
 )
 
 func TestUploads(t *testing.T) {
-	params := newParams()
+	params, testUser := newParams()
 
 	tcs := []struct {
 		typ            string
@@ -128,7 +128,7 @@ func TestUploads(t *testing.T) {
 			req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/"+tc.typ, bodyBuf)
 			c.Assert(err, qt.IsNil)
 			req.Header.Set("Content-Type", contentType)
-			addTestUserAuthHeader(req)
+			addTestUserAuthHeader(req, testUser.ID)
 
 			rr := httptest.NewRecorder()
 
@@ -168,7 +168,7 @@ func TestUploads_invalid_upload(t *testing.T) {
 		t.Run(tc.typ, func(t *testing.T) {
 			c := qt.New(t)
 
-			params := newParams()
+			params, testUser := newParams()
 
 			filePath := "testdata/invalid.txt"
 
@@ -200,7 +200,7 @@ func TestUploads_invalid_upload(t *testing.T) {
 			req, err := http.NewRequest("POST", "/api/v1/uploads/commodities/"+commodity.ID+"/"+tc.typ, bodyBuf)
 			c.Assert(err, qt.IsNil)
 			req.Header.Set("Content-Type", contentType)
-			addTestUserAuthHeader(req)
+			addTestUserAuthHeader(req, testUser.ID)
 
 			rr := httptest.NewRecorder()
 
@@ -217,7 +217,7 @@ func TestUploads_invalid_upload(t *testing.T) {
 func TestUploads_restores(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 
 	// Create a buffer to write the form data
 	bodyBuf := &bytes.Buffer{}
@@ -248,7 +248,7 @@ func TestUploads_restores(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/uploads/restores", bodyBuf)
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", contentType)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 
@@ -280,7 +280,7 @@ func TestUploads_restores(t *testing.T) {
 func TestUploads_restores_invalid(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 
 	// Create a buffer to write the form data
 	bodyBuf := &bytes.Buffer{}
@@ -303,7 +303,7 @@ func TestUploads_restores_invalid(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/uploads/restores", bodyBuf)
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", contentType)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 

@@ -91,12 +91,7 @@ func (r *ManualRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
-	// Generate a new ID if one is not already provided
-	if manual.GetID() == "" {
-		manual.SetID(generateID())
-	}
-	manual.SetTenantID(r.tenantID)
-	manual.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 

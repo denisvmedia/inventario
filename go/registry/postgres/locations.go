@@ -99,12 +99,7 @@ func (r *LocationRegistry) Create(ctx context.Context, location models.Location)
 		)
 	}
 
-	// Generate a new ID if one is not already provided
-	if location.GetID() == "" {
-		location.SetID(generateID())
-	}
-	location.SetTenantID(r.tenantID)
-	location.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 

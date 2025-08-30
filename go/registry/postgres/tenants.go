@@ -97,10 +97,7 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		)
 	}
 
-	// Generate a new ID if one is not already provided
-	if tenant.GetID() == "" {
-		tenant.SetID(generateID())
-	}
+	// ID is now set automatically by NonRLSRepository.Create
 
 	reg := r.newSQLRegistry()
 

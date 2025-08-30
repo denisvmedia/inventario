@@ -27,14 +27,19 @@ const uploadLocation = "file://uploads?memfs=1&create_dir=1"
 // Test JWT secret for authentication
 var testJWTSecret = []byte("test-jwt-secret-32-bytes-minimum-length")
 
-func newLocationRegistry() registry.LocationRegistry {
-	var locationsRegistry registry.LocationRegistry = memory.NewLocationRegistry()
-	ctx := appctx.WithUser(context.Background(), &models.User{
+// createTestUserContext creates a user context for testing with the given user ID
+func createTestUserContext(userID string) context.Context {
+	return appctx.WithUser(context.Background(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
+			EntityID: models.EntityID{ID: userID},
 		},
 	})
+}
+
+func newLocationRegistry(userID string) registry.LocationRegistry {
+	var locationsRegistry registry.LocationRegistry = memory.NewLocationRegistry()
+	ctx := createTestUserContext(userID)
 	locationsRegistry = must.Must(locationsRegistry.WithCurrentUser(ctx))
 
 	must.Must(locationsRegistry.Create(context.Background(), models.Location{
@@ -50,14 +55,9 @@ func newLocationRegistry() registry.LocationRegistry {
 	return locationsRegistry
 }
 
-func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRegistry {
+func newAreaRegistry(locationRegistry registry.LocationRegistry, userID string) registry.AreaRegistry {
 	var areaRegistry registry.AreaRegistry = memory.NewAreaRegistry(locationRegistry.(*memory.LocationRegistry))
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
-		},
-	})
+	ctx := createTestUserContext(userID)
 	areaRegistry = must.Must(areaRegistry.WithCurrentUser(ctx))
 	locations := must.Must(must.Must(locationRegistry.WithCurrentUser(ctx)).List(context.Background()))
 
@@ -76,14 +76,9 @@ func newAreaRegistry(locationRegistry registry.LocationRegistry) registry.AreaRe
 	return areaRegistry
 }
 
-func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.CommodityRegistry {
+func newCommodityRegistry(areaRegistry registry.AreaRegistry, userID string) registry.CommodityRegistry {
 	var commodityRegistry registry.CommodityRegistry = memory.NewCommodityRegistry(areaRegistry.(*memory.AreaRegistry))
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
-		},
-	})
+	ctx := createTestUserContext(userID)
 	commodityRegistry = must.Must(commodityRegistry.WithCurrentUser(ctx))
 
 	areaRegistry = must.Must(areaRegistry.WithCurrentUser(ctx))
@@ -116,15 +111,10 @@ func newCommodityRegistry(areaRegistry registry.AreaRegistry) registry.Commodity
 	return commodityRegistry
 }
 
-func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.ImageRegistry {
+func newImageRegistry(commodityRegistry registry.CommodityRegistry, userID string) registry.ImageRegistry {
 	var imageRegistry = memory.NewImageRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
-		},
-	})
+	ctx := createTestUserContext(userID)
 	commodities := must.Must(commodityRegistry.List(ctx))
 	imgReg := must.Must(imageRegistry.WithCurrentUser(ctx))
 
@@ -165,15 +155,10 @@ func newImageRegistry(commodityRegistry registry.CommodityRegistry) registry.Ima
 	return imgReg
 }
 
-func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.InvoiceRegistry {
+func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry, userID string) registry.InvoiceRegistry {
 	var invoiceRegistry = memory.NewInvoiceRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
-		},
-	})
+	ctx := createTestUserContext(userID)
 	commodities := must.Must(commodityRegistry.List(ctx))
 	invReg := must.Must(invoiceRegistry.WithCurrentUser(ctx))
 
@@ -214,15 +199,10 @@ func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry) registry.I
 	return invReg
 }
 
-func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.ManualRegistry {
+func newManualRegistry(commodityRegistry registry.CommodityRegistry, userID string) registry.ManualRegistry {
 	var manualRegistry = memory.NewManualRegistry(commodityRegistry.(*memory.CommodityRegistry))
 
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
-		},
-	})
+	ctx := createTestUserContext(userID)
 	commodities := must.Must(commodityRegistry.List(ctx))
 	manReg := must.Must(manualRegistry.WithCurrentUser(ctx))
 
@@ -263,14 +243,9 @@ func newManualRegistry(commodityRegistry registry.CommodityRegistry) registry.Ma
 	return manReg
 }
 
-func newSettingsRegistry() registry.SettingsRegistry {
+func newSettingsRegistry(userID string) registry.SettingsRegistry {
 	var settingsRegistry registry.SettingsRegistry = memory.NewSettingsRegistry()
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
-		},
-	})
+	ctx := createTestUserContext(userID)
 	settingsRegistry = must.Must(settingsRegistry.WithCurrentUser(ctx))
 
 	must.Assert(settingsRegistry.Patch(context.Background(), "system.main_currency", "USD"))
@@ -278,13 +253,13 @@ func newSettingsRegistry() registry.SettingsRegistry {
 	return settingsRegistry
 }
 
-func newUserRegistry() registry.UserRegistry {
+func newUserRegistryWithUser() (registry.UserRegistry, *models.User) {
 	var userRegistry = memory.NewUserRegistry()
 
 	// Create a test user for authentication
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant-id",
 		},
 		Email:    "test@example.com",
@@ -293,9 +268,9 @@ func newUserRegistry() registry.UserRegistry {
 		IsActive: true,
 	}
 	must.Assert(testUser.SetPassword("password123"))
-	must.Must(userRegistry.Create(context.Background(), testUser))
+	createdUser := must.Must(userRegistry.Create(context.Background(), testUser))
 
-	return userRegistry
+	return userRegistry, createdUser
 }
 
 // createTestJWTToken creates a JWT token for testing
@@ -320,9 +295,9 @@ func addAuthHeader(req *http.Request, userID string, role models.UserRole) {
 	req.Header.Set("Authorization", "Bearer "+token)
 }
 
-// addTestUserAuthHeader adds authentication header for the default test user
-func addTestUserAuthHeader(req *http.Request) {
-	addAuthHeader(req, "test-user-id", models.UserRoleUser)
+// addTestUserAuthHeader adds authentication header for the given user
+func addTestUserAuthHeader(req *http.Request, userID string) {
+	addAuthHeader(req, userID, models.UserRoleUser)
 }
 
 func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commodityRegistry registry.CommodityRegistry) {
@@ -445,28 +420,28 @@ func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commod
 	}))
 }
 
-func newParams() apiserver.Params {
+func newParams() (apiserver.Params, *models.User) {
 	var params apiserver.Params
 	params.RegistrySet = &registry.Set{}
-	params.RegistrySet.LocationRegistry = newLocationRegistry()
-	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
-	params.RegistrySet.SettingsRegistry = newSettingsRegistry()
-	params.RegistrySet.UserRegistry = newUserRegistry()
+
+	// Create user registry first to get the user ID
+	userRegistry, testUser := newUserRegistryWithUser()
+	params.RegistrySet.UserRegistry = userRegistry
+
+	// Now create other registries using the dynamic user ID
+	params.RegistrySet.LocationRegistry = newLocationRegistry(testUser.ID)
+	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry, testUser.ID)
+	params.RegistrySet.SettingsRegistry = newSettingsRegistry(testUser.ID)
 
 	// Create FileRegistry and populate it with test data first
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
-		},
-	})
+	ctx := createTestUserContext(testUser.ID)
 	params.RegistrySet.FileRegistry = must.Must(memory.NewFileRegistry().WithCurrentUser(ctx))
 
 	// Create CommodityRegistry
-	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry)
-	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry)
-	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry)
-	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry)
+	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry, testUser.ID)
+	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry, testUser.ID)
+	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry, testUser.ID)
+	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry, testUser.ID)
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
@@ -476,18 +451,22 @@ func newParams() apiserver.Params {
 
 	// Populate FileRegistry with test data using the same instance
 	populateFileRegistryWithTestData(params.RegistrySet.FileRegistry, params.RegistrySet.CommodityRegistry)
-	return params
+	return params, testUser
 }
 
-func newParamsAreaRegistryOnly() apiserver.Params {
+func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
 	var params apiserver.Params
 	params.RegistrySet = &registry.Set{}
-	params.RegistrySet.LocationRegistry = newLocationRegistry()
-	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
-	params.RegistrySet.UserRegistry = newUserRegistry()
+
+	// Create user registry first to get the user ID
+	userRegistry, testUser := newUserRegistryWithUser()
+	params.RegistrySet.UserRegistry = userRegistry
+
+	params.RegistrySet.LocationRegistry = newLocationRegistry(testUser.ID)
+	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry, testUser.ID)
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
-	return params
+	return params, testUser
 }
 
 // src: mime/multipart/writer.go

@@ -98,13 +98,8 @@ func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreSte
 	// Set timestamps
 	step.CreatedDate = models.PNow()
 	step.UpdatedDate = models.PNow()
-	step.SetTenantID(r.tenantID)
-	step.SetUserID(r.userID)
 
-	// Generate ID if not set
-	if step.ID == "" {
-		step.ID = generateID()
-	}
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 

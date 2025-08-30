@@ -17,11 +17,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func setupValuesTestData(c *qt.C) *registry.Set {
+func setupValuesTestData(c *qt.C) (*registry.Set, *models.User) {
 	c.Helper()
 
 	// Create a memory registry for testing
-	registrySet := memory.NewRegistrySetWithUserID("test-user-id")
+	userRegistry, testUser := newUserRegistryWithUser()
+	registrySet := memory.NewRegistrySetWithUserID(testUser.ID)
+	registrySet.UserRegistry = userRegistry
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set main currency to USD
@@ -61,14 +63,14 @@ func setupValuesTestData(c *qt.C) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	return registrySet
+	return registrySet, testUser
 }
 
 func TestValuesAPI_GetValues(t *testing.T) {
 	c := qt.New(t)
 
 	// Setup test data
-	registrySet := setupValuesTestData(c)
+	registrySet, testUser := setupValuesTestData(c)
 
 	// Create a router with the values endpoint
 	r := chi.NewRouter()
@@ -76,7 +78,7 @@ func TestValuesAPI_GetValues(t *testing.T) {
 
 	// Test GET /values
 	req := httptest.NewRequest("GET", "/values", nil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

@@ -244,17 +244,20 @@ func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity
 	})
 	c.Assert(err, qt.IsNil)
 
-	createdCommodity, err := r.Create(ctx, *models.WithID("commodity1", &models.Commodity{
+	createdCommodity, err := r.Create(ctx, models.Commodity{
 		AreaID:    area1.ID,
 		Name:      "commodity1",
 		ShortName: "commodity1",
 		Status:    models.CommodityStatusInUse,
 		Type:      models.CommodityTypeWhiteGoods,
 		Count:     1,
-	}))
+		// Note: ID will be generated server-side for security
+	})
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdCommodity, qt.Not(qt.IsNil))
-	c.Assert(createdCommodity.ID, qt.Equals, "commodity1")
+	// Verify that a valid UUID was generated (36 characters with hyphens)
+	c.Assert(createdCommodity.ID, qt.Not(qt.Equals), "")
+	c.Assert(len(createdCommodity.ID), qt.Equals, 36)
 	c.Assert(createdCommodity.Name, qt.Equals, "commodity1")
 	c.Assert(createdCommodity.AreaID, qt.Equals, area1.ID)
 

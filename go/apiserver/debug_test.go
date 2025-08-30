@@ -51,7 +51,7 @@ func TestDebugAPI(t *testing.T) {
 			c := qt.New(t)
 
 			// Create API server with test parameters
-			params := newParams()
+			params, testUser := newParams()
 			params.UploadLocation = tc.uploadLocation
 			params.DebugInfo = tc.debugInfo
 
@@ -62,7 +62,7 @@ func TestDebugAPI(t *testing.T) {
 			// Create test request
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)
 			req = req.WithContext(context.Background())
-			addTestUserAuthHeader(req)
+			addTestUserAuthHeader(req, testUser.ID)
 			w := httptest.NewRecorder()
 
 			// Execute request
@@ -95,7 +95,7 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Test with invalid URLs
-	params := newParams()
+	params, testUser := newParams()
 	params.UploadLocation = "://invalid-url"
 	params.DebugInfo = debug.NewInfo("://invalid-dsn", "://invalid-url")
 
@@ -106,7 +106,7 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)
 	req = req.WithContext(context.Background())
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	w := httptest.NewRecorder()
 
 	// Execute request

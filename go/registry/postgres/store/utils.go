@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -102,4 +103,9 @@ func beginServiceTx(ctx context.Context, dbx *sqlx.DB) (*sqlx.Tx, error) {
 	}
 
 	return tx, nil
+}
+
+// generateID generates a new UUID string
+func generateID() string {
+	return uuid.New().String()
 }

@@ -24,10 +24,10 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	registrySet := memory.NewRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
-	_, err := registrySet.UserRegistry.Create(c.Context(), models.User{
+	testUser, err := registrySet.UserRegistry.Create(c.Context(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
@@ -57,7 +57,7 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest("GET", "/api/v1/system", nil)
 	req.Header.Set("Accept", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	// Create response recorder
 	w := httptest.NewRecorder()
@@ -142,7 +142,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest("GET", "/api/v1/system", nil)
 	req.Header.Set("Accept", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	// Create response recorder
 	w := httptest.NewRecorder()

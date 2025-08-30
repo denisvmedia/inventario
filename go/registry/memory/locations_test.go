@@ -19,7 +19,11 @@ func TestLocationRegistry_Create(t *testing.T) {
 	r := memory.NewLocationRegistry()
 
 	// Create a test location
-	location := models.WithID("location1", &models.Location{})
+	location := &models.Location{
+		Name:    "Test Location",
+		Address: "123 Test Street",
+		// Note: ID will be generated server-side for security
+	}
 
 	// Create a new location in the registry
 	createdLocation, err := r.Create(ctx, *location)
@@ -79,10 +83,11 @@ func TestLocationRegistry_Delete(t *testing.T) {
 	location := models.WithID("location1", &models.Location{})
 
 	// Create a new location in the registry
-	createdLocation, _ := r.Create(ctx, *location)
+	createdLocation, err := r.Create(ctx, *location)
+	c.Assert(err, qt.IsNil)
 
 	// Delete the location from the registry
-	err := r.Delete(ctx, createdLocation.GetID())
+	r.Delete(ctx, createdLocation.GetID())
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the location is deleted

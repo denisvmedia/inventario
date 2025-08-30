@@ -126,6 +126,7 @@ func (cd *CommodityData) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&cd.Type, validation.Required, validation.In("commodities")),
 		validation.Field(&cd.Attributes, validation.Required),
+		validation.Field(&cd.ID, validation.Empty.Error("ID field not allowed in create requests")),
 	)
 	return validation.ValidateStructWithContext(ctx, cd, fields...)
 }

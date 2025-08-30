@@ -20,7 +20,7 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-func newTestRegistrySet() *registry.Set {
+func newTestRegistrySet() (*registry.Set, *models.User) {
 	locationRegistry := memory.NewLocationRegistry()
 	areaRegistry := memory.NewAreaRegistry(locationRegistry)
 	fileRegistry := memory.NewFileRegistry()
@@ -31,7 +31,7 @@ func newTestRegistrySet() *registry.Set {
 	// Create a test user for authentication
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant-id",
 		},
 		Email:    "test@example.com",
@@ -40,7 +40,7 @@ func newTestRegistrySet() *registry.Set {
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
-	userRegistry.Create(context.Background(), testUser)
+	createdUser, _ := userRegistry.Create(context.Background(), testUser)
 
 	return &registry.Set{
 		LocationRegistry:         locationRegistry,
@@ -55,13 +55,13 @@ func newTestRegistrySet() *registry.Set {
 		RestoreStepRegistry:      restoreStepRegistry,
 		FileRegistry:             fileRegistry,
 		UserRegistry:             userRegistry,
-	}
+	}, createdUser
 }
 
 func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
+	registrySet, testUser := newTestRegistrySet()
 
 	// Create an export first
 	export := models.Export{
@@ -108,7 +108,7 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -120,7 +120,7 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
+	registrySet, testUser := newTestRegistrySet()
 
 	// Create an export first
 	export := models.Export{
@@ -167,7 +167,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -202,7 +202,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
+	registrySet, testUser := newTestRegistrySet()
 
 	// Create an export first
 	export := models.Export{
@@ -266,7 +266,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -301,7 +301,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
+	registrySet, testUser := newTestRegistrySet()
 
 	// Create an export first
 	export := models.Export{
@@ -348,7 +348,7 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)

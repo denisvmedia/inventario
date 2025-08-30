@@ -55,10 +55,7 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 		)
 	}
 
-	// Generate a new ID if one is not already provided
-	if user.GetID() == "" {
-		user.SetID(generateID())
-	}
+	// ID is now set automatically by NonRLSRepository.Create
 
 	// If UserID is not set, set it to the user's own ID (self-reference)
 	if user.UserID == "" {
