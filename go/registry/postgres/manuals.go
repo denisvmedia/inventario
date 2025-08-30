@@ -91,10 +91,8 @@ func (r *ManualRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
-	// Generate a new ID if one is not already provided
-	if manual.GetID() == "" {
-		manual.SetID(generateID())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	manual.SetID(generateID())
 	manual.SetTenantID(r.tenantID)
 	manual.SetUserID(r.userID)
 

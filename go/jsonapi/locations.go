@@ -101,6 +101,7 @@ func (ld *LocationData) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&ld.Type, validation.Required, validation.In("locations")),
 		validation.Field(&ld.Attributes, validation.Required),
+		validation.Field(&ld.ID, validation.Empty.Error("ID field not allowed in create requests")),
 	)
 	return validation.ValidateStructWithContext(ctx, ld, fields...)
 }

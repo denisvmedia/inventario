@@ -19,7 +19,11 @@ func TestLocationRegistry_Create(t *testing.T) {
 	r := memory.NewLocationRegistry()
 
 	// Create a test location
-	location := models.WithID("location1", &models.Location{})
+	location := &models.Location{
+		Name:    "Test Location",
+		Address: "123 Test Street",
+		// Note: ID will be generated server-side for security
+	}
 
 	// Create a new location in the registry
 	createdLocation, err := r.Create(ctx, *location)

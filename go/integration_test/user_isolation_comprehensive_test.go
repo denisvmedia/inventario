@@ -130,13 +130,9 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 		// Create shared location and area for user1 that can be used across tests
 		location1 := models.Location{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "comp-location-1t2"},
-				TenantID: "test-tenant-id",
-				UserID:   user1.ID,
-			},
 			Name:    "User1 Warehouse",
 			Address: "123 User1 Street",
+			// Note: ID will be generated server-side for security
 		}
 		userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
 		c.Assert(err, qt.IsNil)
@@ -144,13 +140,9 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		area1 := models.Area{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "comp-area-1t2"},
-				TenantID: "test-tenant-id",
-				UserID:   user1.ID,
-			},
 			Name:       "User1 Storage Area",
 			LocationID: createdLocation1.ID,
+			// Note: ID will be generated server-side for security
 		}
 		userAwareAreaRegistry1, err := registrySet.AreaRegistry.WithCurrentUser(ctx1)
 		c.Assert(err, qt.IsNil)
@@ -159,11 +151,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 		// User1 creates entities
 		commodity1 := models.Commodity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "update-test-commodity"},
-				TenantID: "test-tenant-id",
-				UserID:   user1.ID,
-			},
+			// Note: ID will be generated server-side for security
 			Name:                   "Original Name",
 			ShortName:              "ON",
 			AreaID:                 createdArea1.ID,
@@ -219,13 +207,9 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 		// Create shared location and area for user1 that can be used across tests
 		location1 := models.Location{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "comp-location-1t3"},
-				TenantID: "test-tenant-id",
-				UserID:   user1.ID,
-			},
 			Name:    "User1 Warehouse",
 			Address: "123 User1 Street",
+			// Note: ID will be generated server-side for security
 		}
 		userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
 		c.Assert(err, qt.IsNil)
@@ -233,13 +217,9 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		area1 := models.Area{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "comp-area-1t3"},
-				TenantID: "test-tenant-id",
-				UserID:   user1.ID,
-			},
 			Name:       "User1 Storage Area",
 			LocationID: createdLocation1.ID,
+			// Note: ID will be generated server-side for security
 		}
 		userAwareAreaRegistry1, err := registrySet.AreaRegistry.WithCurrentUser(ctx1)
 		c.Assert(err, qt.IsNil)

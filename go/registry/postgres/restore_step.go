@@ -101,10 +101,8 @@ func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreSte
 	step.SetTenantID(r.tenantID)
 	step.SetUserID(r.userID)
 
-	// Generate ID if not set
-	if step.ID == "" {
-		step.ID = generateID()
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	step.ID = generateID()
 
 	reg := r.newSQLRegistry()
 

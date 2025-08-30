@@ -97,10 +97,8 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		)
 	}
 
-	// Generate a new ID if one is not already provided
-	if tenant.GetID() == "" {
-		tenant.SetID(generateID())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	tenant.SetID(generateID())
 
 	reg := r.newSQLRegistry()
 

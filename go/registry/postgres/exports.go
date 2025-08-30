@@ -63,10 +63,8 @@ func (r *ExportRegistry) WithServiceAccount() registry.ExportRegistry {
 }
 
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
-	// Generate a new ID if one is not already provided
-	if export.GetID() == "" {
-		export.SetID(generateID())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	export.SetID(generateID())
 
 	export.SetTenantID(r.tenantID)
 	export.SetUserID(r.userID)

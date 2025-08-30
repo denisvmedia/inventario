@@ -541,7 +541,7 @@ func createTestImage(c *qt.C, registrySet *registry.Set, commodityID string) *mo
 			Ext:          ".jpg",
 			MIMEType:     "image/jpeg",
 		},
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id-"+uuid.New().String(), "test-tenant-id", "test-user-id"),
+		// Note: ID will be generated server-side for security
 	}
 
 	createdImage, err := registrySet.ImageRegistry.Create(ctx, image)
@@ -564,7 +564,7 @@ func createTestManual(c *qt.C, registrySet *registry.Set, commodityID string) *m
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id-"+uuid.New().String(), "test-tenant-id", "test-user-id"),
+		// Note: ID will be generated server-side for security
 	}
 
 	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)

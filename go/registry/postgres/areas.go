@@ -94,9 +94,8 @@ func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
-	if area.GetID() == "" {
-		area.SetID(generateID())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	area.SetID(generateID())
 	area.SetTenantID(r.tenantID)
 	area.SetUserID(r.userID)
 

@@ -91,10 +91,8 @@ func (r *InvoiceRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
-	// Generate a new ID if one is not already provided
-	if invoice.GetID() == "" {
-		invoice.SetID(generateID())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	invoice.SetID(generateID())
 	invoice.SetTenantID(r.tenantID)
 	invoice.SetUserID(r.userID)
 

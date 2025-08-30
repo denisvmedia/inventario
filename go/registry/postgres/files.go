@@ -94,10 +94,8 @@ func (r *FileRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
-	// Generate a new ID if one is not already provided
-	if file.GetID() == "" {
-		file.SetID(generateID())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	file.SetID(generateID())
 	file.SetTenantID(r.tenantID)
 	file.SetUserID(r.userID)
 

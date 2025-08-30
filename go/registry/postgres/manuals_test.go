@@ -23,7 +23,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id", "test-tenant-id", "test-user-id"),
+				// Note: ID will be generated server-side for security
 			},
 		},
 		{

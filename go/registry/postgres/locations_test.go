@@ -21,17 +21,17 @@ func TestLocationRegistry_Create_HappyPath(t *testing.T) {
 		{
 			name: "valid location with all fields",
 			location: models.Location{
-				Name:                "Main Office",
-				Address:             "123 Business Street",
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-id", "test-tenant-id", "test-user-id"),
+				Name:    "Main Office",
+				Address: "123 Business Street",
+				// Note: ID will be generated server-side for security
 			},
 		},
 		{
 			name: "valid location with minimal fields",
 			location: models.Location{
-				Name:                "Warehouse",
-				Address:             "456 Storage Ave",
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-id2", "test-tenant-id", "test-user-id"),
+				Name:    "Warehouse",
+				Address: "456 Storage Ave",
+				// Note: ID will be generated server-side for security
 			},
 		},
 	}

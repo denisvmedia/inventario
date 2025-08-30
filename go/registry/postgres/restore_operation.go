@@ -116,10 +116,8 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 	// Set timestamps
 	operation.CreatedDate = models.PNow()
 
-	// Generate ID if not set
-	if operation.ID == "" {
-		operation.ID = generateID()
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	operation.ID = generateID()
 
 	// Set default status if not set
 	if operation.Status == "" {

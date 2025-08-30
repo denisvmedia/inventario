@@ -66,12 +66,10 @@ func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodi
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
-	// Generate a new ID if one is not already provided
-	if commodity.GetID() == "" {
-		commodity.SetID(generateID())
-		commodity.SetTenantID(r.tenantID)
-		commodity.SetUserID(r.userID)
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	commodity.SetID(generateID())
+	commodity.SetTenantID(r.tenantID)
+	commodity.SetUserID(r.userID)
 
 	reg := r.newSQLRegistry()
 

@@ -91,10 +91,8 @@ func (r *ImageRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models.Image, error) {
-	// Generate a new ID if one is not already provided
-	if image.GetID() == "" {
-		image.SetID(generateID())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	image.SetID(generateID())
 	image.SetTenantID(r.tenantID)
 	image.SetUserID(r.userID)
 

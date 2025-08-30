@@ -55,10 +55,8 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 		)
 	}
 
-	// Generate a new ID if one is not already provided
-	if user.GetID() == "" {
-		user.SetID(generateID())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	user.SetID(generateID())
 
 	// If UserID is not set, set it to the user's own ID (self-reference)
 	if user.UserID == "" {

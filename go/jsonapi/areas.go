@@ -95,6 +95,7 @@ func (lr *AreaData) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&lr.Type, validation.Required, validation.In("areas")),
 		validation.Field(&lr.Attributes, validation.Required),
+		validation.Field(&lr.ID, validation.Empty.Error("ID field not allowed in create requests")),
 	)
 	return validation.ValidateStructWithContext(ctx, lr, fields...)
 }
@@ -105,7 +106,8 @@ func (lr *AreaRequest) Bind(r *http.Request) error {
 		return err
 	}
 
-	lr.Data.Attributes.ID = lr.Data.ID
+	// Note: ID is now always generated server-side for security
+	// lr.Data.Attributes.ID assignment removed
 
 	return nil
 }

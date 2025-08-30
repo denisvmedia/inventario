@@ -17,15 +17,15 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 		{
 			name: "valid area with all fields",
 			area: models.Area{
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "test-tenant-id", "test-user-id"),
-				Name:                "Main Storage",
+				Name: "Main Storage",
+				// Note: ID will be generated server-side for security
 			},
 		},
 		{
 			name: "valid area with minimal fields",
 			area: models.Area{
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area2", "test-tenant-id", "test-user-id"),
-				Name:                "Secondary Storage",
+				Name: "Secondary Storage",
+				// Note: ID will be generated server-side for security
 			},
 		},
 	}
