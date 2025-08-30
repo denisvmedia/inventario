@@ -83,10 +83,12 @@ func TestLocationRegistry_Delete(t *testing.T) {
 	location := models.WithID("location1", &models.Location{})
 
 	// Create a new location in the registry
-	createdLocation, _ := r.Create(ctx, *location)
+	createdLocation, err := r.Create(ctx, *location)
+	c.Assert(err, qt.IsNil)
 
 	// Delete the location from the registry
-	err := r.Delete(ctx, createdLocation.GetID())
+err:
+	r.Delete(ctx, createdLocation.GetID())
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the location is deleted

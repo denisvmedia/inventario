@@ -20,7 +20,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	params := newParams()
+	params, testUser := newParams()
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 
 	// Create a commodity first
@@ -131,7 +131,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	// Now delete the commodity via API
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+createdCommodity.ID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
@@ -167,7 +167,7 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	params := newParams()
+	params, testUser := newParams()
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 
 	// Create a commodity without any files
@@ -199,7 +199,7 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	// Delete the commodity via API
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+createdCommodity.ID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)
@@ -219,13 +219,13 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 func TestCommodityDeleteRecursive_NonExistent_Integration(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 
 	// Try to delete a non-existent commodity
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/non-existent-id", nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 	handler := apiserver.APIServer(params, mockRestoreWorker)
 	handler.ServeHTTP(rr, req)

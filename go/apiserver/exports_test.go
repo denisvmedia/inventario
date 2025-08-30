@@ -76,7 +76,7 @@ func TestExportHardDelete(t *testing.T) {
 
 	// Test hard delete
 	req := httptest.NewRequest("DELETE", "/exports/"+created.ID, nil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -88,7 +88,7 @@ func TestExportHardDelete(t *testing.T) {
 
 	// Test that download is blocked for deleted export
 	req = httptest.NewRequest("GET", "/exports/"+created.ID+"/download", nil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -99,9 +99,10 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
+	userRegistry, testUser := newUserRegistryWithUser()
 	registrySet := &registry.Set{
 		ExportRegistry: memory.NewExportRegistry(),
-		UserRegistry:   newUserRegistry(),
+		UserRegistry:   userRegistry,
 		TenantRegistry: memory.NewTenantRegistry(),
 	}
 
@@ -151,7 +152,7 @@ func TestExportListExcludesDeleted(t *testing.T) {
 
 	// Test list endpoint
 	req := httptest.NewRequest("GET", "/exports", nil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -170,9 +171,10 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
+	userRegistry, testUser := newUserRegistryWithUser()
 	registrySet := &registry.Set{
 		ExportRegistry: memory.NewExportRegistry(),
-		UserRegistry:   newUserRegistry(),
+		UserRegistry:   userRegistry,
 		TenantRegistry: memory.NewTenantRegistry(),
 	}
 
@@ -212,7 +214,7 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 
 	// Test list endpoint with include_deleted=true
 	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -285,7 +287,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	// Test create endpoint
 	req := httptest.NewRequest("POST", "/exports", bytes.NewReader(payloadBytes))
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
