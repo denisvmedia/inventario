@@ -69,9 +69,13 @@ func TestLocationsCreate(t *testing.T) {
 
 	req, err := http.NewRequest("POST", "/api/v1/locations", buf)
 	c.Assert(err, qt.IsNil)
+
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
-	params := newParamsWithLocationRegistry(newLocationRegistry())
 	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count(c.Context())) + 1
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -93,8 +97,11 @@ func TestLocationsCreate(t *testing.T) {
 func TestLocationsGet(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
+	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry, testUser.ID)
 	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
@@ -127,7 +134,7 @@ func TestLocationsList(t *testing.T) {
 
 	params, testUser := newParams()
 	// Override with specific location registry for this test
-	params.RegistrySet.LocationRegistry = newLocationRegistry()
+	params.RegistrySet.LocationRegistry = newLocationRegistry(testUser.ID)
 	expectedLocations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
@@ -154,7 +161,10 @@ func TestLocationsList(t *testing.T) {
 func TestLocationsUpdate(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
@@ -191,7 +201,10 @@ func TestLocationsUpdate(t *testing.T) {
 func TestLocationsList_EmptyRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(memory.NewLocationRegistry()) // Empty registry
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(memory.NewLocationRegistry()) // Empty registry
+	params.RegistrySet.UserRegistry = userRegistry
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
 	c.Assert(err, qt.IsNil)
@@ -211,7 +224,10 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 func TestLocationsGet_InvalidID(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 
 	invalidID := "invalid-id"
 
@@ -230,7 +246,10 @@ func TestLocationsGet_InvalidID(t *testing.T) {
 func TestLocationsUpdate_PartialData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
@@ -264,7 +283,10 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 	anotherLocation := locations[1]
@@ -297,7 +319,10 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 
 	unknownID := "unknown-id"
 
@@ -328,7 +353,10 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 func TestLocationsDelete_MissingLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 
 	missingID := "missing-id"
 
@@ -347,7 +375,10 @@ func TestLocationsDelete_MissingLocation(t *testing.T) {
 func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 
 	// Construct a request body with an unexpected data structure
 	// For example, sending an array instead of an object
@@ -369,7 +400,10 @@ func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 func TestLocationsUpdate_WithNestedData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 
@@ -412,7 +446,10 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsWithLocationRegistry(newLocationRegistry(testUser.ID))
+	params.RegistrySet.UserRegistry = userRegistry
 	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
 	location := locations[0]
 

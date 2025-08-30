@@ -154,7 +154,7 @@ func TestSecurityIDRejection(t *testing.T) {
 			// Create request
 			req := httptest.NewRequest("POST", tc.endpoint, bytes.NewReader(requestBodyBytes))
 			req.Header.Set("Content-Type", "application/json")
-			addTestUserAuthHeader(req)
+			addTestUserAuthHeader(req, testUser.ID)
 
 			// Execute request
 			w := httptest.NewRecorder()
@@ -290,7 +290,7 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 			// Create request
 			req := httptest.NewRequest("POST", tc.endpoint, bytes.NewReader(requestBodyBytes))
 			req.Header.Set("Content-Type", "application/json")
-			addTestUserAuthHeader(req)
+			addTestUserAuthHeader(req, testUser.ID)
 
 			// Execute request
 			w := httptest.NewRecorder()
