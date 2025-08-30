@@ -116,6 +116,8 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	P(&entity).SetID(generateID())
 	P(&entity).SetUserID(r.userID)
 	P(&entity).SetTenantID(r.tenantID)
 

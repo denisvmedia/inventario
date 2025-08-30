@@ -94,10 +94,7 @@ func (r *FileRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
-	file.SetID(generateID())
-	file.SetTenantID(r.tenantID)
-	file.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 

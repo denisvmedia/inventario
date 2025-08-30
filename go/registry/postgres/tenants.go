@@ -97,8 +97,7 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		)
 	}
 
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
-	tenant.SetID(generateID())
+	// ID is now set automatically by NonRLSRepository.Create
 
 	reg := r.newSQLRegistry()
 

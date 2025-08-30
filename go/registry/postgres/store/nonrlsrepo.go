@@ -121,6 +121,9 @@ func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	P(&entity).SetID(generateID())
+
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
 		if err != nil {

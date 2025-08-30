@@ -116,8 +116,7 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 	// Set timestamps
 	operation.CreatedDate = models.PNow()
 
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
-	operation.ID = generateID()
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	// Set default status if not set
 	if operation.Status == "" {

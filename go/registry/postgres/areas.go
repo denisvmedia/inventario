@@ -94,10 +94,7 @@ func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
-	area.SetID(generateID())
-	area.SetTenantID(r.tenantID)
-	area.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 

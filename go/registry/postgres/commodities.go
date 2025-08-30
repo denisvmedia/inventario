@@ -66,10 +66,7 @@ func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodi
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
-	// Always generate a new server-side ID for security (ignore any user-provided ID)
-	commodity.SetID(generateID())
-	commodity.SetTenantID(r.tenantID)
-	commodity.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 
