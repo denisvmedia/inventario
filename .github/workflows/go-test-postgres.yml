@@ -62,10 +62,7 @@ jobs:
           # Connect as the superuser to create additional users and databases
           export PGPASSWORD=test_password
 
-          # Create the main test database for bootstrap tests (must be separate from other commands)
-          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            CREATE DATABASE inventario;
-          "
+          # Use the existing inventario_test database (no need to create a separate one)
 
           # Create the main application users that bootstrap migrations expect
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
@@ -77,8 +74,6 @@ jobs:
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             GRANT ALL PRIVILEGES ON DATABASE inventario_test TO inventario;
             GRANT ALL PRIVILEGES ON DATABASE inventario_test TO inventario_migrator;
-            GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario;
-            GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario_migrator;
           "
 
           # Grant superuser privileges to inventario_test user for bootstrap tests
@@ -91,11 +86,11 @@ jobs:
           # Grant minimal privileges (can connect but cannot create extensions)
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             CREATE USER limited_user WITH PASSWORD 'limited_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-            GRANT CONNECT ON DATABASE inventario TO limited_user;
+            GRANT CONNECT ON DATABASE inventario_test TO limited_user;
           "
 
-          # Connect to the inventario database and set up schema permissions
-          psql -h localhost -p 5432 -U inventario_test -d inventario -c "
+          # Set up schema permissions on the test database
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             -- Grant schema usage to main users
             GRANT ALL ON SCHEMA public TO inventario;
             GRANT ALL ON SCHEMA public TO inventario_migrator;
@@ -108,7 +103,7 @@ jobs:
 
       - name: Run database migrations
         env:
-          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario?sslmode=disable"
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
         run: |
           echo "Running database migrations..."
           go run ./cmd/inventario db bootstrap apply --db-dsn="$POSTGRES_TEST_DSN" --username="inventario" --username-for-migrations="inventario_migrator"
@@ -117,7 +112,7 @@ jobs:
 
       - name: Create test users and data
         env:
-          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario?sslmode=disable"
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
         run: |
           echo "Creating test users and data..."
 
@@ -125,14 +120,14 @@ jobs:
           export PGPASSWORD=test_password
 
           # Create test tenant first
-          psql -h localhost -p 5432 -U inventario_test -d inventario -c "
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             INSERT INTO tenants (id, name, slug, status, created_at, updated_at)
             VALUES ('test-tenant-id', 'Test Organization', 'test-org', 'active', NOW(), NOW())
             ON CONFLICT (id) DO NOTHING;
           "
 
           # Create test users with proper self-referencing user_id
-          psql -h localhost -p 5432 -U inventario_test -d inventario -c "
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             -- Create first test user
             INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
             VALUES (
@@ -168,7 +163,7 @@ jobs:
 
       - name: Run PostgreSQL registry tests
         env:
-          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario?sslmode=disable"
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
         run: go test -v -race ./registry/postgres/...
         working-directory: go
 
