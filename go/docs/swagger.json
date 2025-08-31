@@ -2839,10 +2839,10 @@
                 "name": {
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3102,10 +3102,10 @@
                 "name": {
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3179,7 +3179,7 @@
                         "type": "string"
                     }
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
                 "type": {
@@ -3188,7 +3188,7 @@
                 "urls": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3297,13 +3297,13 @@
                 "status": {
                     "$ref": "#/definitions/models.ExportStatus"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
                 "type": {
                     "$ref": "#/definitions/models.ExportType"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3429,7 +3429,7 @@
                         "type": "string"
                     }
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
                 "title": {
@@ -3448,7 +3448,7 @@
                     "description": "UpdatedAt is when the file was last updated",
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3497,10 +3497,10 @@
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3530,10 +3530,10 @@
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3550,10 +3550,10 @@
                 "name": {
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3583,10 +3583,10 @@
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3653,10 +3653,10 @@
                         "$ref": "#/definitions/models.RestoreStep"
                     }
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3716,13 +3716,13 @@
                 "result": {
                     "$ref": "#/definitions/models.RestoreStepResult"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
                 "updated_date": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }

@@ -2846,10 +2846,10 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3109,10 +3109,10 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3186,7 +3186,7 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
                 "type": {
@@ -3195,7 +3195,7 @@ const docTemplate = `{
                 "urls": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3304,13 +3304,13 @@ const docTemplate = `{
                 "status": {
                     "$ref": "#/definitions/models.ExportStatus"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
                 "type": {
                     "$ref": "#/definitions/models.ExportType"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3436,7 +3436,7 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
                 "title": {
@@ -3455,7 +3455,7 @@ const docTemplate = `{
                     "description": "UpdatedAt is when the file was last updated",
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3504,10 +3504,10 @@ const docTemplate = `{
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3537,10 +3537,10 @@ const docTemplate = `{
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3557,10 +3557,10 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3590,10 +3590,10 @@ const docTemplate = `{
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
                     "type": "string"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3660,10 +3660,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/models.RestoreStep"
                     }
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }
@@ -3723,13 +3723,13 @@ const docTemplate = `{
                 "result": {
                     "$ref": "#/definitions/models.RestoreStepResult"
                 },
-                "tenant_id": {
+                "tenantID": {
                     "type": "string"
                 },
                 "updated_date": {
                     "type": "string"
                 },
-                "user_id": {
+                "userID": {
                     "type": "string"
                 }
             }

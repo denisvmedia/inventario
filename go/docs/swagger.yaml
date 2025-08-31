@@ -453,9 +453,9 @@ definitions:
         type: string
       name:
         type: string
-      tenant_id:
+      tenantID:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   jsonapi.LocationData:
@@ -625,9 +625,9 @@ definitions:
         type: string
       name:
         type: string
-      tenant_id:
+      tenantID:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.Commodity:
@@ -676,13 +676,13 @@ definitions:
         items:
           type: string
         type: array
-      tenant_id:
+      tenantID:
         type: string
       type:
         $ref: '#/definitions/models.CommodityType'
       urls:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.CommodityStatus:
@@ -761,11 +761,11 @@ definitions:
         type: array
       status:
         $ref: '#/definitions/models.ExportStatus'
-      tenant_id:
+      tenantID:
         type: string
       type:
         $ref: '#/definitions/models.ExportType'
-      user_id:
+      userID:
         type: string
     type: object
   models.ExportSelectedItem:
@@ -871,7 +871,7 @@ definitions:
         items:
           type: string
         type: array
-      tenant_id:
+      tenantID:
         type: string
       title:
         description: Title is the user-defined title for the file
@@ -883,7 +883,7 @@ definitions:
       updated_at:
         description: UpdatedAt is when the file was last updated
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.FileType:
@@ -928,9 +928,9 @@ definitions:
           Path is the filename without extension. This is the only field that can be modified by the user.
           Example: "invoice-2023"
         type: string
-      tenant_id:
+      tenantID:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.Invoice:
@@ -959,9 +959,9 @@ definitions:
           Path is the filename without extension. This is the only field that can be modified by the user.
           Example: "invoice-2023"
         type: string
-      tenant_id:
+      tenantID:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.Location:
@@ -972,9 +972,9 @@ definitions:
         type: string
       name:
         type: string
-      tenant_id:
+      tenantID:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.Manual:
@@ -1003,9 +1003,9 @@ definitions:
           Path is the filename without extension. This is the only field that can be modified by the user.
           Example: "invoice-2023"
         type: string
-      tenant_id:
+      tenantID:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.RestoreOperation:
@@ -1050,9 +1050,9 @@ definitions:
         items:
           $ref: '#/definitions/models.RestoreStep'
         type: array
-      tenant_id:
+      tenantID:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.RestoreOptions:
@@ -1094,11 +1094,11 @@ definitions:
         type: string
       result:
         $ref: '#/definitions/models.RestoreStepResult'
-      tenant_id:
+      tenantID:
         type: string
       updated_date:
         type: string
-      user_id:
+      userID:
         type: string
     type: object
   models.RestoreStepResult:
