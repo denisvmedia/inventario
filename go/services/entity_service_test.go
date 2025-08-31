@@ -38,20 +38,12 @@ func generateTestID() string {
 func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupData   func(*registry.Set) (string, []string) // returns commodityID and fileIDs
+		setupData   func(context.Context, *registry.Set) (string, []string) // returns commodityID and fileIDs
 		expectError bool
 	}{
 		{
 			name: "delete commodity with files",
-			setupData: func(registrySet *registry.Set) (string, []string) {
-				ctx := context.Background()
-				ctx = appctx.WithUser(ctx, &models.User{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: "test-user-id"},
-						TenantID: "test-tenant-id",
-					},
-				})
-
+			setupData: func(ctx context.Context, registrySet *registry.Set) (string, []string) {
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 				area, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area", LocationID: location.ID})
@@ -92,15 +84,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 		},
 		{
 			name: "delete commodity without files",
-			setupData: func(registrySet *registry.Set) (string, []string) {
-				ctx := context.Background()
-				ctx = appctx.WithUser(ctx, &models.User{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: "test-user-id"},
-						TenantID: "test-tenant-id",
-					},
-				})
-
+			setupData: func(ctx context.Context, registrySet *registry.Set) (string, []string) {
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 				area, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area", LocationID: location.ID})
@@ -139,7 +123,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			service := services.NewEntityService(registrySet, uploadLocation)
 
 			// Setup test data
-			commodityID, fileIDs := tt.setupData(registrySet)
+			commodityID, fileIDs := tt.setupData(ctx, registrySet)
 
 			// Execute deletion
 			err := service.DeleteCommodityRecursive(ctx, commodityID)
@@ -167,20 +151,12 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupData   func(*registry.Set) (string, []string, []string) // returns areaID, commodityIDs, fileIDs
+		setupData   func(context.Context, *registry.Set) (string, []string, []string) // returns areaID, commodityIDs, fileIDs
 		expectError bool
 	}{
 		{
 			name: "delete area with commodities and files",
-			setupData: func(registrySet *registry.Set) (string, []string, []string) {
-				ctx := context.Background()
-				ctx = appctx.WithUser(ctx, &models.User{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: "test-user-id"},
-						TenantID: "test-tenant-id",
-					},
-				})
-
+			setupData: func(ctx context.Context, registrySet *registry.Set) (string, []string, []string) {
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 				area, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area", LocationID: location.ID})
@@ -225,15 +201,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 		},
 		{
 			name: "delete area without commodities",
-			setupData: func(registrySet *registry.Set) (string, []string, []string) {
-				ctx := context.Background()
-				ctx = appctx.WithUser(ctx, &models.User{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: "test-user-id"},
-						TenantID: "test-tenant-id",
-					},
-				})
-
+			setupData: func(ctx context.Context, registrySet *registry.Set) (string, []string, []string) {
 				// Create location and area
 				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 				area, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area", LocationID: location.ID})
@@ -266,7 +234,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			service := services.NewEntityService(registrySet, uploadLocation)
 
 			// Setup test data
-			areaID, commodityIDs, fileIDs := tt.setupData(registrySet)
+			areaID, commodityIDs, fileIDs := tt.setupData(ctx, registrySet)
 
 			// Execute deletion
 			err := service.DeleteAreaRecursive(ctx, areaID)
@@ -300,20 +268,12 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupData   func(*registry.Set) (string, []string, []string, []string) // returns locationID, areaIDs, commodityIDs, fileIDs
+		setupData   func(context.Context, *registry.Set) (string, []string, []string, []string) // returns locationID, areaIDs, commodityIDs, fileIDs
 		expectError bool
 	}{
 		{
 			name: "delete location with areas, commodities and files",
-			setupData: func(registrySet *registry.Set) (string, []string, []string, []string) {
-				ctx := context.Background()
-				ctx = appctx.WithUser(ctx, &models.User{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: "test-user-id"},
-						TenantID: "test-tenant-id",
-					},
-				})
-
+			setupData: func(ctx context.Context, registrySet *registry.Set) (string, []string, []string, []string) {
 				// Get user-aware registries
 				locReg, _ := registrySet.LocationRegistry.WithCurrentUser(ctx)
 				areaReg, _ := registrySet.AreaRegistry.WithCurrentUser(ctx)
@@ -367,15 +327,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 		},
 		{
 			name: "delete location without areas",
-			setupData: func(registrySet *registry.Set) (string, []string, []string, []string) {
-				ctx := context.Background()
-				ctx = appctx.WithUser(ctx, &models.User{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: "test-user-id"},
-						TenantID: "test-tenant-id",
-					},
-				})
-
+			setupData: func(ctx context.Context, registrySet *registry.Set) (string, []string, []string, []string) {
 				// Get user-aware registry
 				locReg, _ := registrySet.LocationRegistry.WithCurrentUser(ctx)
 
@@ -410,7 +362,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 			service := services.NewEntityService(registrySet, uploadLocation)
 
 			// Setup test data
-			locationID, areaIDs, commodityIDs, fileIDs := tt.setupData(registrySet)
+			locationID, areaIDs, commodityIDs, fileIDs := tt.setupData(ctx, registrySet)
 
 			// Execute deletion
 			err := service.DeleteLocationRecursive(ctx, locationID)
@@ -450,20 +402,12 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 func TestEntityService_DeleteExportWithFile(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupData   func(*registry.Set) (string, string) // returns exportID and fileID
+		setupData   func(context.Context, *registry.Set) (string, string) // returns exportID and fileID
 		expectError bool
 	}{
 		{
 			name: "delete export with file",
-			setupData: func(registrySet *registry.Set) (string, string) {
-				ctx := context.Background()
-				ctx = appctx.WithUser(ctx, &models.User{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: "test-user-id"},
-						TenantID: "test-tenant-id",
-					},
-				})
-
+			setupData: func(ctx context.Context, registrySet *registry.Set) (string, string) {
 				// Create file
 				file, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
 					LinkedEntityType: "export",
@@ -488,15 +432,7 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 		},
 		{
 			name: "delete export without file",
-			setupData: func(registrySet *registry.Set) (string, string) {
-				ctx := context.Background()
-				ctx = appctx.WithUser(ctx, &models.User{
-					TenantAwareEntityID: models.TenantAwareEntityID{
-						EntityID: models.EntityID{ID: "test-user-id"},
-						TenantID: "test-tenant-id",
-					},
-				})
-
+			setupData: func(ctx context.Context, registrySet *registry.Set) (string, string) {
 				// Create export without file
 				export, _ := registrySet.ExportRegistry.Create(ctx, models.Export{
 					Description: "Test Export",
@@ -530,7 +466,7 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 			service := services.NewEntityService(registrySet, uploadLocation)
 
 			// Setup test data
-			exportID, fileID := tt.setupData(registrySet)
+			exportID, fileID := tt.setupData(ctx, registrySet)
 
 			// Execute deletion
 			err := service.DeleteExportWithFile(ctx, exportID)
