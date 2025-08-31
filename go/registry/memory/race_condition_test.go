@@ -229,10 +229,13 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 func TestE2EScenarioSimulation(t *testing.T) {
 	c := qt.New(t)
 
+	// Create a test user with generated UUID
+	testUserID := "test-user-12345678-1234-1234-1234-123456789012"
 	user := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			EntityID: models.EntityID{ID: testUserID},
 			TenantID: "tenant-1",
+			UserID:   testUserID, // Self-reference
 		},
 		Email: "admin@test-org.com",
 		Name:  "Admin User",

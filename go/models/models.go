@@ -329,9 +329,9 @@ type TenantAwareEntityID struct {
 	//migrator:embedded mode="inline"
 	EntityID
 	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
-	TenantID string `db:"tenant_id" userinput:"false"`
+	TenantID string `json:"-" db:"tenant_id" userinput:"false"`
 	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_entity_user"
-	UserID string `db:"user_id" userinput:"false"`
+	UserID string `json:"-" db:"user_id" userinput:"false"`
 }
 
 func (i *TenantAwareEntityID) GetTenantID() string {

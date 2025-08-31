@@ -17,12 +17,22 @@ import (
 
 // newTestContext creates a context with test user for testing
 func newTestContext() context.Context {
-	return appctx.WithUser(context.Background(), &models.User{
+	// Create a test user with generated UUID
+	testUser := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			EntityID: models.EntityID{ID: "test-user-" + generateTestID()},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
+	// Set UserID to self-reference
+	testUser.UserID = testUser.ID
+
+	return appctx.WithUser(context.Background(), testUser)
+}
+
+// generateTestID generates a simple test ID
+func generateTestID() string {
+	return "12345678-1234-1234-1234-123456789012" // Fixed UUID for consistent testing
 }
 
 func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
