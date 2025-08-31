@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/backup/restore/security"
 	"github.com/denisvmedia/inventario/backup/restore/types"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/filekit"
@@ -28,14 +30,19 @@ type RestoreOperationProcessor struct {
 	registrySet        *registry.Set
 	entityService      *services.EntityService
 	uploadLocation     string
+	securityValidator  security.SecurityValidator
+	importSessionEntities map[string]bool // Track entities created in this session
 }
 
 func NewRestoreOperationProcessor(restoreOperationID string, registrySet *registry.Set, entityService *services.EntityService, uploadLocation string) *RestoreOperationProcessor {
+	logger := slog.Default()
 	return &RestoreOperationProcessor{
-		restoreOperationID: restoreOperationID,
-		registrySet:        registrySet,
-		entityService:      entityService,
-		uploadLocation:     uploadLocation,
+		restoreOperationID:    restoreOperationID,
+		registrySet:           registrySet,
+		entityService:         entityService,
+		uploadLocation:        uploadLocation,
+		securityValidator:     security.NewRestoreSecurityValidator(registrySet, logger),
+		importSessionEntities: make(map[string]bool),
 	}
 }
 
@@ -424,6 +431,31 @@ func (l *RestoreOperationProcessor) createImageRecord(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	// Security validation: Check if user can link files to this commodity
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+
+	// For merge strategies, validate commodity ownership before linking
+	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
+		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
+		if err != nil {
+			// If entity not found, upload file as orphaned (not linked to any commodity)
+			if strings.Contains(err.Error(), "entity not found") {
+				stats.ErrorCount++
+				stats.Errors = append(stats.Errors, fmt.Sprintf("Image %s uploaded as orphaned file: %v", originalXMLID, err))
+				// Set commodityID to empty to create orphaned file
+				commodityID = ""
+			} else {
+				// For other security violations, fail completely
+				stats.ErrorCount++
+				stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for image %s: %v", originalXMLID, err))
+				return err
+			}
+		}
+	}
+
 	// Apply strategy for images
 	existingImage := existing.Images[originalXMLID]
 	switch options.Strategy {
@@ -543,6 +575,31 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	// Security validation: Check if user can link files to this commodity
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+
+	// For merge strategies, validate commodity ownership before linking
+	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
+		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
+		if err != nil {
+			// If entity not found, upload file as orphaned (not linked to any commodity)
+			if strings.Contains(err.Error(), "entity not found") {
+				stats.ErrorCount++
+				stats.Errors = append(stats.Errors, fmt.Sprintf("Invoice %s uploaded as orphaned file: %v", originalXMLID, err))
+				// Set commodityID to empty to create orphaned file
+				commodityID = ""
+			} else {
+				// For other security violations, fail completely
+				stats.ErrorCount++
+				stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for invoice %s: %v", originalXMLID, err))
+				return err
+			}
+		}
+	}
+
 	// Apply strategy for invoices
 	existingInvoice := existing.Invoices[originalXMLID]
 	switch options.Strategy {
@@ -656,6 +713,31 @@ func (l *RestoreOperationProcessor) createManualRecord(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	// Security validation: Check if user can link files to this commodity
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+
+	// For merge strategies, validate commodity ownership before linking
+	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
+		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
+		if err != nil {
+			// If entity not found, upload file as orphaned (not linked to any commodity)
+			if strings.Contains(err.Error(), "entity not found") {
+				stats.ErrorCount++
+				stats.Errors = append(stats.Errors, fmt.Sprintf("Manual %s uploaded as orphaned file: %v", originalXMLID, err))
+				// Set commodityID to empty to create orphaned file
+				commodityID = ""
+			} else {
+				// For other security violations, fail completely
+				stats.ErrorCount++
+				stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for manual %s: %v", originalXMLID, err))
+				return err
+			}
+		}
+	}
+
 	// Apply strategy for manuals
 	existingManual := existing.Manuals[originalXMLID]
 	switch options.Strategy {
@@ -755,6 +837,14 @@ func (l *RestoreOperationProcessor) createManualRecord(
 	}
 
 	return nil
+}
+
+// trackCreatedEntity tracks entities created in this import session for security validation
+func (l *RestoreOperationProcessor) trackCreatedEntity(entityID string) {
+	if l.importSessionEntities == nil {
+		l.importSessionEntities = make(map[string]bool)
+	}
+	l.importSessionEntities[entityID] = true
 }
 
 // createFileRecord creates a file record in the appropriate registry with strategy support
@@ -1136,6 +1226,7 @@ func (l *RestoreOperationProcessor) processLocation(
 			// Track the newly created location and store ID mapping
 			existing.Locations[originalXMLID] = createdLocation
 			idMapping.Locations[originalXMLID] = createdLocation.ID
+			l.trackCreatedEntity(createdLocation.ID)
 		}
 		stats.CreatedCount++
 		stats.LocationCount++
@@ -1152,6 +1243,8 @@ func (l *RestoreOperationProcessor) processLocation(
 				// Track the newly created location and store ID mapping
 				existing.Locations[originalXMLID] = createdLocation
 				idMapping.Locations[originalXMLID] = createdLocation.ID
+				l.trackCreatedEntity(createdLocation.ID)
+				l.trackCreatedEntity(createdLocation.ID)
 			}
 			stats.CreatedCount++
 			stats.LocationCount++
@@ -1232,6 +1325,7 @@ func (l *RestoreOperationProcessor) applyStrategyForArea(
 			// Track the newly created area and store ID mapping
 			existing.Areas[originalXMLID] = createdArea
 			idMapping.Areas[originalXMLID] = createdArea.ID
+			l.trackCreatedEntity(createdArea.ID)
 		}
 		stats.CreatedCount++
 		stats.AreaCount++
@@ -1246,6 +1340,7 @@ func (l *RestoreOperationProcessor) applyStrategyForArea(
 				// Track the newly created area and store ID mapping
 				existing.Areas[originalXMLID] = createdArea
 				idMapping.Areas[originalXMLID] = createdArea.ID
+				l.trackCreatedEntity(createdArea.ID)
 			}
 			stats.CreatedCount++
 			stats.AreaCount++
@@ -1263,6 +1358,7 @@ func (l *RestoreOperationProcessor) applyStrategyForArea(
 				// Track the newly created area and store ID mapping
 				existing.Areas[originalXMLID] = createdArea
 				idMapping.Areas[originalXMLID] = createdArea.ID
+				l.trackCreatedEntity(createdArea.ID)
 			}
 			stats.CreatedCount++
 			stats.AreaCount++
@@ -1653,6 +1749,7 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodity(
 			// Track the newly created commodity and store ID mapping
 			existing.Commodities[originalXMLID] = createdCommodity
 			idMapping.Commodities[originalXMLID] = createdCommodity.ID
+			l.trackCreatedEntity(createdCommodity.ID)
 		}
 		stats.CreatedCount++
 		stats.CommodityCount++
@@ -1667,6 +1764,7 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodity(
 				// Track the newly created commodity and store ID mapping
 				existing.Commodities[originalXMLID] = createdCommodity
 				idMapping.Commodities[originalXMLID] = createdCommodity.ID
+				l.trackCreatedEntity(createdCommodity.ID)
 			}
 			stats.CreatedCount++
 			stats.CommodityCount++
@@ -1684,6 +1782,7 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodity(
 				// Track the newly created commodity and store ID mapping
 				existing.Commodities[originalXMLID] = createdCommodity
 				idMapping.Commodities[originalXMLID] = createdCommodity.ID
+				l.trackCreatedEntity(createdCommodity.ID)
 			}
 			stats.CreatedCount++
 			stats.CommodityCount++
@@ -1745,6 +1844,29 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 
 	if err := commodity.ValidateWithContext(ctx); err != nil {
 		return errkit.Wrap(err, "invalid commodity", "original_commodity_id", originalXMLID)
+	}
+
+	// Security validation: Check if user is trying to use an existing commodity ID that belongs to another user
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+
+	// For all strategies, check if the commodity ID already exists and belongs to another user
+	if existingCommodity := existing.Commodities[originalXMLID]; existingCommodity == nil {
+		// Check if commodity exists in database but not in our existing entities map
+		// Use service account registry to see all entities across users
+		serviceAccountRegistry := l.registrySet.CommodityRegistry.WithServiceAccount()
+		if existingDBCommodity, err := serviceAccountRegistry.Get(ctx, originalXMLID); err == nil {
+			if existingDBCommodity.UserID != currentUser.ID {
+				err := l.securityValidator.ValidateEntityOwnership(ctx, originalXMLID, currentUser.ID)
+				if err != nil {
+					stats.ErrorCount++
+					stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: %v", originalXMLID, err))
+					return err
+				}
+			}
+		}
 	}
 
 	// Apply strategy

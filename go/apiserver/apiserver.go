@@ -126,6 +126,10 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	// CORS middleware
 	r.Use(cors.AllowAll().Handler)
 
+	// SECURITY: Add tenant ID validation middleware FIRST (before any other processing)
+	r.Use(ValidateNoUserProvidedTenantID())
+	r.Use(RejectSpecificTenantHeaders())
+
 	// Set a timeout value on the request context (ctx), that will signal
 	// through ctx.Done() that the request has timed out and further
 	// processing should be stopped.

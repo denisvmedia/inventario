@@ -8,42 +8,61 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 )
 
-func TestHeaderTenantResolver_ResolveTenant(t *testing.T) {
+func TestJWTTenantResolver_ResolveTenant(t *testing.T) {
 	// Happy path tests
-	t.Run("resolve tenant from header", func(t *testing.T) {
+	t.Run("resolve tenant from authenticated user", func(t *testing.T) {
 		c := qt.New(t)
-		resolver := &apiserver.HeaderTenantResolver{}
+		resolver := &apiserver.JWTTenantResolver{}
 
+		// Create user with tenant ID
+		user := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "user-123"},
+				TenantID: "tenant-123",
+			},
+		}
+
+		// Add user to context
+		ctx := appctx.WithUser(context.Background(), user)
 		req := httptest.NewRequest("GET", "/", nil)
-		req.Header.Set("X-Tenant-ID", "tenant-123")
+		req = req.WithContext(ctx)
 
 		tenantID, err := resolver.ResolveTenant(req)
 		c.Assert(err, qt.IsNil)
 		c.Assert(tenantID, qt.Equals, "tenant-123")
 	})
 
-	// Unhappy path tests
-	t.Run("missing tenant header", func(t *testing.T) {
+	t.Run("fallback to default tenant", func(t *testing.T) {
 		c := qt.New(t)
-		resolver := &apiserver.HeaderTenantResolver{}
+		resolver := &apiserver.JWTTenantResolver{}
 
+		// Create user without tenant ID
+		user := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "user-123"},
+			},
+		}
+
+		// Add user to context
+		ctx := appctx.WithUser(context.Background(), user)
 		req := httptest.NewRequest("GET", "/", nil)
+		req = req.WithContext(ctx)
 
 		tenantID, err := resolver.ResolveTenant(req)
-		c.Assert(err, qt.IsNotNil)
-		c.Assert(tenantID, qt.Equals, "")
-		c.Assert(err, qt.Equals, apiserver.ErrTenantNotFound)
+		c.Assert(err, qt.IsNil)
+		c.Assert(tenantID, qt.Equals, "default-tenant")
 	})
 
-	t.Run("empty tenant header", func(t *testing.T) {
+	// Unhappy path tests
+	t.Run("no authenticated user", func(t *testing.T) {
 		c := qt.New(t)
-		resolver := &apiserver.HeaderTenantResolver{}
+		resolver := &apiserver.JWTTenantResolver{}
 
 		req := httptest.NewRequest("GET", "/", nil)
-		req.Header.Set("X-Tenant-ID", "")
 
 		tenantID, err := resolver.ResolveTenant(req)
 		c.Assert(err, qt.IsNotNil)

@@ -2,9 +2,11 @@ package apiserver
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -19,16 +21,25 @@ type TenantResolver interface {
 	ResolveTenant(r *http.Request) (string, error)
 }
 
-// HeaderTenantResolver resolves tenant from X-Tenant-ID header
-type HeaderTenantResolver struct{}
+// JWTTenantResolver resolves tenant from authenticated JWT token only
+type JWTTenantResolver struct{}
 
-// ResolveTenant extracts tenant ID from X-Tenant-ID header
-func (h *HeaderTenantResolver) ResolveTenant(r *http.Request) (string, error) {
-	tenantID := r.Header.Get("X-Tenant-ID")
-	if tenantID == "" {
+// ResolveTenant extracts tenant ID from authenticated user context only
+func (j *JWTTenantResolver) ResolveTenant(r *http.Request) (string, error) {
+	// Extract tenant from authenticated user context, never from user input
+	user := appctx.UserFromContext(r.Context())
+	if user == nil {
 		return "", ErrTenantNotFound
 	}
-	return tenantID, nil
+
+	// TODO: When multi-tenancy is fully implemented, get from user.TenantID
+	// For now, derive tenant from user context or use default
+	if user.TenantID != "" {
+		return user.TenantID, nil
+	}
+
+	// Fallback to default tenant during transition period
+	return "default-tenant", nil
 }
 
 // SubdomainTenantResolver resolves tenant from subdomain
@@ -98,13 +109,37 @@ func WithTenantID(ctx context.Context, tenantID string) context.Context {
 }
 
 // TenantMiddleware creates middleware that resolves and validates tenant context
+// This version includes security validation to ensure users can only access their own tenant
 func TenantMiddleware(resolver TenantResolver, tenantRegistry registry.TenantRegistry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Resolve tenant ID from request
+			// SECURITY: Get authenticated user first
+			user := appctx.UserFromContext(r.Context())
+			if user == nil {
+				http.Error(w, "Authentication required", http.StatusUnauthorized)
+				return
+			}
+
+			// Resolve tenant ID from authenticated context only (never from user input)
 			tenantID, err := resolver.ResolveTenant(r)
 			if err != nil {
 				http.Error(w, "Tenant not found", http.StatusBadRequest)
+				return
+			}
+
+			// SECURITY: Validate that the authenticated user belongs to this tenant
+			if user.TenantID != "" && user.TenantID != tenantID {
+				// Log security violation
+				slog.Error("Security violation: user attempted to access different tenant",
+					"user_id", user.ID,
+					"user_tenant", user.TenantID,
+					"requested_tenant", tenantID,
+					"user_agent", r.UserAgent(),
+					"remote_addr", r.RemoteAddr,
+					"method", r.Method,
+					"path", r.URL.Path,
+				)
+				http.Error(w, "Unauthorized: access denied", http.StatusForbidden)
 				return
 			}
 
