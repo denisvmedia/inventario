@@ -110,56 +110,7 @@ jobs:
           go run ./cmd/inventario db migrations up --db-dsn="$POSTGRES_TEST_DSN"
         working-directory: go
 
-      - name: Create test users and data
-        env:
-          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
-        run: |
-          echo "Creating test users and data..."
 
-          # Set the database context for RLS policies
-          export PGPASSWORD=test_password
-
-          # Create test tenant first
-          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            INSERT INTO tenants (id, name, slug, status, created_at, updated_at)
-            VALUES ('test-tenant-id', 'Test Organization', 'test-org', 'active', NOW(), NOW())
-            ON CONFLICT (id) DO NOTHING;
-          "
-
-          # Create test users with proper self-referencing user_id
-          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            -- Create first test user
-            INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
-            VALUES (
-              'test-user-12345678-1234-1234-1234-123456789012',
-              'admin@test-org.com',
-              '\$2a\$10\$dummy.hash.for.testing.purposes.only',
-              'Test Administrator',
-              'admin',
-              true,
-              'test-tenant-id',
-              'test-user-12345678-1234-1234-1234-123456789012',
-              NOW(),
-              NOW()
-            ) ON CONFLICT (email) DO NOTHING;
-
-            -- Create second test user
-            INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
-            VALUES (
-              'test-user-2-12345678-1234-1234-1234-123456789012',
-              'user2@test-org.com',
-              '\$2a\$10\$dummy.hash.for.testing.purposes.only',
-              'Test User 2',
-              'user',
-              true,
-              'test-tenant-id',
-              'test-user-2-12345678-1234-1234-1234-123456789012',
-              NOW(),
-              NOW()
-            ) ON CONFLICT (email) DO NOTHING;
-          "
-
-          echo "Test users and data created successfully"
 
       - name: Run PostgreSQL registry tests
         env:
@@ -170,9 +121,9 @@ jobs:
       - name: Run Bootstrap integration tests
         env:
           # Main DSN with superuser privileges for successful migration tests
-          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario?sslmode=disable"
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
           # Limited DSN for testing transaction rollback scenarios
-          POSTGRES_LIMITED_TEST_DSN: "postgres://limited_user:limited_password@localhost:5432/inventario?sslmode=disable"
+          POSTGRES_LIMITED_TEST_DSN: "postgres://limited_user:limited_password@localhost:5432/inventario_test?sslmode=disable"
         run: |
           echo "Running bootstrap integration tests..."
           echo "Main DSN: $POSTGRES_TEST_DSN"
