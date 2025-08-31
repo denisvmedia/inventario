@@ -77,6 +77,8 @@ jobs:
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             GRANT ALL PRIVILEGES ON DATABASE inventario_test TO inventario;
             GRANT ALL PRIVILEGES ON DATABASE inventario_test TO inventario_migrator;
+            GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario;
+            GRANT ALL PRIVILEGES ON DATABASE inventario TO inventario_migrator;
           "
 
           # Grant superuser privileges to inventario_test user for bootstrap tests
@@ -118,15 +120,19 @@ jobs:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario?sslmode=disable"
         run: |
           echo "Creating test users and data..."
+
+          # Set the database context for RLS policies
+          export PGPASSWORD=test_password
+
           # Create test tenant first
-          psql "$POSTGRES_TEST_DSN" -c "
+          psql -h localhost -p 5432 -U inventario_test -d inventario -c "
             INSERT INTO tenants (id, name, slug, status, created_at, updated_at)
             VALUES ('test-tenant-id', 'Test Organization', 'test-org', 'active', NOW(), NOW())
             ON CONFLICT (id) DO NOTHING;
           "
 
           # Create test users with proper self-referencing user_id
-          psql "$POSTGRES_TEST_DSN" -c "
+          psql -h localhost -p 5432 -U inventario_test -d inventario -c "
             -- Create first test user
             INSERT INTO users (id, email, password_hash, name, role, is_active, tenant_id, user_id, created_at, updated_at)
             VALUES (
