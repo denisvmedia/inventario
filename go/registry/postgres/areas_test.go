@@ -131,7 +131,8 @@ func TestAreaRegistry_Get_HappyPath(t *testing.T) {
 		},
 	})
 
-
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create a test location and area
 	location := createTestLocation(c, registrySet)
@@ -150,6 +151,17 @@ func TestAreaRegistry_Get_UnhappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
+
 	testCases := []struct {
 		name string
 		id   string
@@ -167,13 +179,6 @@ func TestAreaRegistry_Get_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := appctx.WithUser(c.Context(), &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "test-user-id"},
-					TenantID: "test-tenant-id",
-				},
-			})
-
 
 			result, err := areaReg.Get(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
@@ -194,7 +199,8 @@ func TestAreaRegistry_List_HappyPath(t *testing.T) {
 		},
 	})
 
-
+	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Initially should be empty
 	areas, err := areaReg.List(ctx)
