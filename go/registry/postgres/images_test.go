@@ -53,11 +53,7 @@ func TestImageRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			imageReg, err := registrySet.ImageRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -142,11 +138,7 @@ func TestImageRegistry_Create_UnhappyPath(t *testing.T) {
 
 			// For valid commodity ID tests, create test hierarchy
 			if tc.image.CommodityID != "" && tc.image.CommodityID != "non-existent-commodity" {
-				locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-				c.Assert(err, qt.IsNil)
 
-				areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-				c.Assert(err, qt.IsNil)
 
 				location := createTestLocation(c, registrySet)
 				area := createTestArea(c, registrySet, location.ID)

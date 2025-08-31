@@ -54,11 +54,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			c.Cleanup(cleanup)
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			manualReg, err := registrySet.ManualRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)

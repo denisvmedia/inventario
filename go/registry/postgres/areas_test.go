@@ -43,9 +43,6 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			c.Cleanup(cleanup)
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
 			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
 
@@ -104,14 +101,11 @@ func TestAreaRegistry_Create_UnhappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			// For the non-existent location test, we don't need to create a location
 			// For other tests, create a location if LocationID is not empty
 			if tc.area.LocationID != "" && tc.area.LocationID != "non-existent-location" {
-				locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-				c.Assert(err, qt.IsNil)
+
 				location := createTestLocation(c, registrySet)
 				tc.area.LocationID = location.GetID()
 			}
@@ -135,11 +129,7 @@ func TestAreaRegistry_Get_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Create a test location and area
 	location := createTestLocation(c, registrySet)
@@ -182,8 +172,6 @@ func TestAreaRegistry_Get_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			result, err := areaReg.Get(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
@@ -204,11 +192,7 @@ func TestAreaRegistry_List_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Initially should be empty
 	areas, err := areaReg.List(ctx)
@@ -246,11 +230,7 @@ func TestAreaRegistry_Update_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Create test location and area
 	location := createTestLocation(c, registrySet)
@@ -301,8 +281,6 @@ func TestAreaRegistry_Update_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			result, err := areaReg.Update(ctx, tc.area)
 			c.Assert(err, qt.IsNotNil)
@@ -324,11 +302,7 @@ func TestAreaRegistry_Delete_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Create test location and area
 	location := createTestLocation(c, registrySet)
@@ -372,8 +346,6 @@ func TestAreaRegistry_Delete_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			err = areaReg.Delete(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
@@ -393,11 +365,7 @@ func TestAreaRegistry_Delete_WithCommodities_UnhappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet)
@@ -431,11 +399,7 @@ func TestAreaRegistry_Count_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Initially should be 0
 	count, err := areaReg.Count(ctx)
@@ -466,11 +430,7 @@ func TestAreaRegistry_GetCommodities_WithCreatedCommodity_HappyPath(t *testing.T
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet)
@@ -513,8 +473,6 @@ func TestAreaRegistry_GetCommodities_WithInvalidArea_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			commodities, err := areaReg.GetCommodities(ctx, tc.areaID)
 			c.Assert(err, qt.IsNotNil)
@@ -535,11 +493,7 @@ func TestAreaRegistry_GetCommodities_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet)
@@ -580,11 +534,7 @@ func TestAreaRegistry_GetCommodities_EmptyArea_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
 	location := createTestLocation(c, registrySet)

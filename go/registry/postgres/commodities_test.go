@@ -92,11 +92,7 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 			setupMainCurrency(c, settingsReg)
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
@@ -234,11 +230,7 @@ func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
 
 			// For valid area ID tests, create test hierarchy
 			if tc.commodity.AreaID != "" && tc.commodity.AreaID != "non-existent-area" {
-				locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-				c.Assert(err, qt.IsNil)
 
-				areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-				c.Assert(err, qt.IsNil)
 
 				location := createTestLocation(c, registrySet)
 				area := createTestArea(c, registrySet, location.GetID())
@@ -265,11 +257,7 @@ func TestCommodityRegistry_Get_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -611,11 +599,7 @@ func TestCommodityRegistry_GetImages_WithCreatedImage_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -685,11 +669,7 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -734,11 +714,7 @@ func TestCommodityRegistry_GetImages_EmptyCommodity_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -768,11 +744,7 @@ func TestCommodityRegistry_GetManuals_WithCreatedManual_HappyPath(t *testing.T) 
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -804,11 +776,7 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -853,11 +821,7 @@ func TestCommodityRegistry_GetManuals_EmptyCommodity_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -887,11 +851,7 @@ func TestCommodityRegistry_GetInvoices_WithCreatedInvoice_HappyPath(t *testing.T
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -923,11 +883,7 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
@@ -972,11 +928,7 @@ func TestCommodityRegistry_GetInvoices_EmptyCommodity_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)

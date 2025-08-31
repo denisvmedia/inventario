@@ -54,11 +54,7 @@ func TestInvoiceRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
 
 			invoiceReg, err := registrySet.InvoiceRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
