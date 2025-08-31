@@ -50,7 +50,7 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			// Create a test location first
-			location := createTestLocation(c, locationReg)
+			location := createTestLocation(c, registrySet)
 			tc.area.LocationID = location.GetID()
 
 			// Create area

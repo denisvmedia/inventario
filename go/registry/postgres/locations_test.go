@@ -11,7 +11,7 @@ import (
 )
 
 func TestLocationRegistry_Create_HappyPath(t *testing.T) {
-	setup, cleanup := setupTestRegistrySet(t)
+	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	testCases := []struct {
@@ -40,9 +40,16 @@ func TestLocationRegistry_Create_HappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
-			ctx = appctx.WithUser(ctx, setup.TestUser)
+			// Get the first seeded user to use as the current user
+			users, err := registrySet.UserRegistry.List(ctx)
+			c.Assert(err, qt.IsNil)
+			c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
 
-			locationReg, err := setup.RegistrySet.LocationRegistry.WithCurrentUser(ctx)
+			// Use the first seeded user (should be the admin user created by seeddata)
+			seededUser := users[0]
+			ctx = appctx.WithUser(ctx, seededUser)
+
+			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
 
 			result, err := locationReg.Create(ctx, tc.location)
@@ -110,7 +117,7 @@ func TestLocationRegistry_Get_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a test location
-	created := createTestLocation(c, locationReg)
+	created := createTestLocation(c, registrySet)
 
 	// Get the location
 	result, err := locationReg.Get(ctx, created.ID)
@@ -182,8 +189,8 @@ func TestLocationRegistry_List_HappyPath(t *testing.T) {
 	c.Assert(len(locations), qt.Equals, 0)
 
 	// Create test locations
-	location1 := createTestLocation(c, locationReg)
-	location2 := createTestLocation(c, locationReg)
+	location1 := createTestLocation(c, registrySet)
+	location2 := createTestLocation(c, registrySet)
 
 	// List should now contain both locations
 	locations, err = locationReg.List(ctx)
@@ -216,7 +223,7 @@ func TestLocationRegistry_Update_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a test location
-	created := createTestLocation(c, locationReg)
+	created := createTestLocation(c, registrySet)
 
 	// Update the location
 	created.Name = "Updated Location"
@@ -292,7 +299,7 @@ func TestLocationRegistry_Delete_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a test location
-	created := createTestLocation(c, locationReg)
+	created := createTestLocation(c, registrySet)
 
 	// Delete the location
 	err = locationReg.Delete(ctx, created.ID)
@@ -362,10 +369,10 @@ func TestLocationRegistry_Delete_WithAreas_UnhappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a test location
-	location := createTestLocation(c, locationReg)
+	location := createTestLocation(c, registrySet)
 
 	// Create an area in the location (area is automatically linked via location_id)
-	area := createTestArea(c, areaReg, location.ID)
+	area := createTestArea(c, registrySet, location.ID)
 
 	// Try to delete the location - should fail because it has areas
 	err = locationReg.Delete(ctx, location.ID)
@@ -404,8 +411,8 @@ func TestLocationRegistry_Count_HappyPath(t *testing.T) {
 	c.Assert(count, qt.Equals, 0)
 
 	// Create test locations
-	createTestLocation(c, locationReg)
-	createTestLocation(c, locationReg)
+	createTestLocation(c, registrySet)
+	createTestLocation(c, registrySet)
 
 	// Count should now be 2
 	count, err = locationReg.Count(ctx)
@@ -433,8 +440,8 @@ func TestLocationRegistry_GetAreas_WithCreatedArea_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a test location and area
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 
 	// Verify the area is automatically linked to the location
 	areas, err := locationReg.GetAreas(ctx, location.ID)
@@ -502,7 +509,7 @@ func TestLocationRegistry_GetAreas_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a test location
-	location := createTestLocation(c, locationReg)
+	location := createTestLocation(c, registrySet)
 
 	// Initially should have no areas
 	areas, err := locationReg.GetAreas(ctx, location.ID)
@@ -510,8 +517,8 @@ func TestLocationRegistry_GetAreas_HappyPath(t *testing.T) {
 	c.Assert(len(areas), qt.Equals, 0)
 
 	// Create areas (they are automatically linked via location_id)
-	area1 := createTestArea(c, areaReg, location.ID)
-	area2 := createTestArea(c, areaReg, location.ID)
+	area1 := createTestArea(c, registrySet, location.ID)
+	area2 := createTestArea(c, registrySet, location.ID)
 
 	// Should now have 2 areas
 	areas, err = locationReg.GetAreas(ctx, location.ID)
@@ -544,7 +551,7 @@ func TestLocationRegistry_GetAreas_EmptyLocation_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a test location
-	location := createTestLocation(c, locationReg)
+	location := createTestLocation(c, registrySet)
 
 	// Should have no areas initially
 	areas, err := locationReg.GetAreas(ctx, location.ID)

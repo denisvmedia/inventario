@@ -180,20 +180,30 @@ func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) {
 }
 
 // createTestLocation creates a test location for use in tests.
-func createTestLocation(c *qt.C, locationRegistry registry.LocationRegistry) *models.Location {
+// This function requires that setupTestTenantAndUser has been called to seed test data.
+func createTestLocation(c *qt.C, registrySet *registry.Set) *models.Location {
 	c.Helper()
 
 	ctx := c.Context()
+
+	// Get the first seeded user to use for creating the location
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+
+	// Use the first seeded user (should be the admin user created by seeddata)
+	seededUser := users[0]
+
 	location := models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: seededUser.TenantID,
+			UserID:   seededUser.ID, // Use the actual generated user ID
 		},
 		Name:    "Test Location",
 		Address: "123 Test Street",
 	}
 
-	createdLocation, err := locationRegistry.Create(ctx, location)
+	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdLocation, qt.IsNotNil)
 
@@ -201,20 +211,29 @@ func createTestLocation(c *qt.C, locationRegistry registry.LocationRegistry) *mo
 }
 
 // createTestArea creates a test area for use in tests.
-func createTestArea(c *qt.C, areaRegistry registry.AreaRegistry, locationID string, testUser *models.User) *models.Area {
+func createTestArea(c *qt.C, registrySet *registry.Set, locationID string) *models.Area {
 	c.Helper()
 
 	ctx := c.Context()
+
+	// Get the first seeded user to use for creating the area
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+
+	// Use the first seeded user (should be the admin user created by seeddata)
+	seededUser := users[0]
+
 	area := models.Area{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: testUser.TenantID,
-			UserID:   testUser.ID,
+			TenantID: seededUser.TenantID,
+			UserID:   seededUser.ID, // Use the actual generated user ID
 		},
 		Name:       "Test Area",
 		LocationID: locationID,
 	}
 
-	createdArea, err := areaRegistry.Create(ctx, area)
+	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdArea, qt.IsNotNil)
 
@@ -233,7 +252,7 @@ func setupMainCurrency(c *qt.C, settingsRegistry registry.SettingsRegistry) {
 }
 
 // createTestCommodity creates a test commodity for use in tests.
-func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string, testUser *models.User) *models.Commodity {
+func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *models.Commodity {
 	c.Helper()
 
 	ctx := c.Context()
@@ -241,10 +260,18 @@ func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string, test
 	// Ensure main currency is set
 	setupMainCurrency(c, registrySet.SettingsRegistry)
 
+	// Get the first seeded user to use for creating the commodity
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+
+	// Use the first seeded user (should be the admin user created by seeddata)
+	seededUser := users[0]
+
 	commodity := models.Commodity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: testUser.TenantID,
-			UserID:   testUser.ID,
+			TenantID: seededUser.TenantID,
+			UserID:   seededUser.ID, // Use the actual generated user ID
 		},
 		Name:                   "Test Commodity",
 		ShortName:              "TC",

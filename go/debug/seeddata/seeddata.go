@@ -19,10 +19,10 @@ import (
 )
 
 // createCommodityWithTenant is a helper function to create commodities with tenant and user IDs
-func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, commodity models.Commodity, user *models.User) (*models.Commodity, error) {
-	// Set the tenant and user IDs from the actual user
-	commodity.TenantID = user.TenantID
-	commodity.UserID = user.ID
+func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, commodity models.Commodity) (*models.Commodity, error) {
+	// Set the tenant and user IDs (these will be updated to use generated IDs)
+	commodity.TenantID = "test-tenant-id"
+	commodity.UserID = "test-user-id"
 
 	return registrySet.CommodityRegistry.MustWithCurrentUser(ctx).Create(ctx, commodity)
 }
@@ -160,11 +160,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 
 	if user2 == nil {
 		// User doesn't exist, create it
-		createdUser2, err := registrySet.UserRegistry.Create(ctx, testUser2)
+		_, err := registrySet.UserRegistry.Create(ctx, testUser2)
 		if err != nil {
 			return fmt.Errorf("failed to create test user 2: %v", err)
 		}
-		user2 = createdUser2
 	}
 
 	// Create default system configuration with CZK as main currency for the first test user
