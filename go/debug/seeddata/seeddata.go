@@ -123,11 +123,10 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 
 	if existingUser1 == nil {
 		// User doesn't exist, create it
-		createdUser1, err := registrySet.UserRegistry.Create(ctx, testUser1)
+		_, err := registrySet.UserRegistry.Create(ctx, testUser1)
 		if err != nil {
 			return err
 		}
-		existingUser1 = createdUser1
 	}
 
 	// Create second test user for user isolation testing
