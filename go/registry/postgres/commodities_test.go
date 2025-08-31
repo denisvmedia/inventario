@@ -102,8 +102,8 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			// Create test hierarchy
-			location := createTestLocation(c, locationReg)
-			area := createTestArea(c, areaReg, location.GetID())
+			location := createTestLocation(c, registrySet)
+			area := createTestArea(c, registrySet, location.GetID())
 			tc.commodity.AreaID = area.GetID()
 
 			// Create commodity
@@ -240,8 +240,8 @@ func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
 				areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
 				c.Assert(err, qt.IsNil)
 
-				location := createTestLocation(c, locationReg)
-				area := createTestArea(c, areaReg, location.GetID())
+				location := createTestLocation(c, registrySet)
+				area := createTestArea(c, registrySet, location.GetID())
 				tc.commodity.AreaID = area.GetID()
 			}
 
@@ -275,8 +275,8 @@ func TestCommodityRegistry_Get_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy and commodity
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	created := createTestCommodity(c, registrySet, area.GetID())
 
 	// Get the commodity
@@ -340,8 +340,8 @@ func TestCommodityRegistry_List_HappyPath(t *testing.T) {
 	c.Assert(len(commodities), qt.Equals, 0)
 
 	// Create test hierarchy and commodities
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity1 := createTestCommodity(c, registrySet, area.GetID())
 	commodity2 := createTestCommodity(c, registrySet, area.GetID())
 
@@ -372,8 +372,8 @@ func TestCommodityRegistry_Update_HappyPath(t *testing.T) {
 	})
 
 	// Create test hierarchy and commodity
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	created := createTestCommodity(c, registrySet, area.GetID())
 
 	// Update the commodity
@@ -454,8 +454,8 @@ func TestCommodityRegistry_Delete_HappyPath(t *testing.T) {
 	})
 
 	// Create test hierarchy and commodity
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	created := createTestCommodity(c, registrySet, area.GetID())
 
 	// Delete the commodity
@@ -515,8 +515,8 @@ func TestCommodityRegistry_Count_HappyPath(t *testing.T) {
 	c.Assert(count, qt.Equals, 0)
 
 	// Create test hierarchy and commodities
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	createTestCommodity(c, registrySet, area.GetID())
 	createTestCommodity(c, registrySet, area.GetID())
 
@@ -621,8 +621,8 @@ func TestCommodityRegistry_GetImages_WithCreatedImage_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Create test image (automatically linked via commodity_id)
@@ -695,8 +695,8 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no images
@@ -744,8 +744,8 @@ func TestCommodityRegistry_GetImages_EmptyCommodity_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Should have no images initially
@@ -778,8 +778,8 @@ func TestCommodityRegistry_GetManuals_WithCreatedManual_HappyPath(t *testing.T) 
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Create test manual (automatically linked via commodity_id)
@@ -814,8 +814,8 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no manuals
@@ -863,8 +863,8 @@ func TestCommodityRegistry_GetManuals_EmptyCommodity_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Should have no manuals initially
@@ -897,8 +897,8 @@ func TestCommodityRegistry_GetInvoices_WithCreatedInvoice_HappyPath(t *testing.T
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Create test invoice (automatically linked via commodity_id)
@@ -933,8 +933,8 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no invoices
@@ -982,8 +982,8 @@ func TestCommodityRegistry_GetInvoices_EmptyCommodity_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Should have no invoices initially

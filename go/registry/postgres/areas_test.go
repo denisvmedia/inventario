@@ -112,7 +112,7 @@ func TestAreaRegistry_Create_UnhappyPath(t *testing.T) {
 			if tc.area.LocationID != "" && tc.area.LocationID != "non-existent-location" {
 				locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
 				c.Assert(err, qt.IsNil)
-				location := createTestLocation(c, locationReg)
+				location := createTestLocation(c, registrySet)
 				tc.area.LocationID = location.GetID()
 			}
 
@@ -142,8 +142,8 @@ func TestAreaRegistry_Get_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create a test location and area
-	location := createTestLocation(c, locationReg)
-	created := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	created := createTestArea(c, registrySet, location.ID)
 
 	// Get the area
 	result, err := areaReg.Get(ctx, created.ID)
@@ -216,9 +216,9 @@ func TestAreaRegistry_List_HappyPath(t *testing.T) {
 	c.Assert(len(areas), qt.Equals, 0)
 
 	// Create test location and areas
-	location := createTestLocation(c, locationReg)
-	area1 := createTestArea(c, areaReg, location.ID)
-	area2 := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area1 := createTestArea(c, registrySet, location.ID)
+	area2 := createTestArea(c, registrySet, location.ID)
 
 	// List should now contain both areas
 	areas, err = areaReg.List(ctx)
@@ -253,8 +253,8 @@ func TestAreaRegistry_Update_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test location and area
-	location := createTestLocation(c, locationReg)
-	created := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	created := createTestArea(c, registrySet, location.ID)
 
 	// Update the area
 	created.Name = "Updated Area"
@@ -331,8 +331,8 @@ func TestAreaRegistry_Delete_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test location and area
-	location := createTestLocation(c, locationReg)
-	created := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	created := createTestArea(c, registrySet, location.ID)
 
 	// Delete the area
 	err = areaReg.Delete(ctx, created.ID)
@@ -400,8 +400,8 @@ func TestAreaRegistry_Delete_WithCommodities_UnhappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 
 	// Commodity is automatically linked to area via area_id field
@@ -443,9 +443,9 @@ func TestAreaRegistry_Count_HappyPath(t *testing.T) {
 	c.Assert(count, qt.Equals, 0)
 
 	// Create test location and areas
-	location := createTestLocation(c, locationReg)
-	createTestArea(c, areaReg, location.ID)
-	createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	createTestArea(c, registrySet, location.ID)
+	createTestArea(c, registrySet, location.ID)
 
 	// Count should now be 2
 	count, err = areaReg.Count(ctx)
@@ -473,8 +473,8 @@ func TestAreaRegistry_GetCommodities_WithCreatedCommodity_HappyPath(t *testing.T
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 
 	// Commodity is automatically linked to area via area_id field
@@ -542,8 +542,8 @@ func TestAreaRegistry_GetCommodities_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 
 	// Initially should have no commodities
 	commodities, err := areaReg.GetCommodities(ctx, area.ID)
@@ -587,8 +587,8 @@ func TestAreaRegistry_GetCommodities_EmptyArea_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 
 	// Should have no commodities initially
 	commodities, err := areaReg.GetCommodities(ctx, area.ID)
