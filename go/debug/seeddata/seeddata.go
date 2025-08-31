@@ -19,10 +19,10 @@ import (
 )
 
 // createCommodityWithTenant is a helper function to create commodities with tenant and user IDs
-func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, commodity models.Commodity) (*models.Commodity, error) {
-	// Set the tenant and user IDs
-	commodity.TenantID = "test-tenant-id"
-	commodity.UserID = "test-user-id"
+func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, commodity models.Commodity, user *models.User) (*models.Commodity, error) {
+	// Set the tenant and user IDs from the actual user
+	commodity.TenantID = user.TenantID
+	commodity.UserID = user.ID
 
 	return registrySet.CommodityRegistry.MustWithCurrentUser(ctx).Create(ctx, commodity)
 }
@@ -108,7 +108,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Check if user with this email already exists
-	var existingUser1 *models.User
+	var user1 *models.User
 	users, err := registrySet.UserRegistry.List(ctx)
 	if err != nil {
 		return err
@@ -116,17 +116,18 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 
 	for _, user := range users {
 		if user.Email == testUser1.Email {
-			existingUser1 = user
+			user1 = user
 			break
 		}
 	}
 
-	if existingUser1 == nil {
+	if user1 == nil {
 		// User doesn't exist, create it
-		_, err := registrySet.UserRegistry.Create(ctx, testUser1)
+		createdUser1, err := registrySet.UserRegistry.Create(ctx, testUser1)
 		if err != nil {
 			return err
 		}
+		user1 = createdUser1
 	}
 
 	// Create second test user for user isolation testing
@@ -149,20 +150,21 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Check if user with this email already exists
-	var existingUser2 *models.User
+	var user2 *models.User
 	for _, user := range users {
 		if user.Email == testUser2.Email {
-			existingUser2 = user
+			user2 = user
 			break
 		}
 	}
 
-	if existingUser2 == nil {
+	if user2 == nil {
 		// User doesn't exist, create it
-		_, err = registrySet.UserRegistry.Create(ctx, testUser2)
+		createdUser2, err := registrySet.UserRegistry.Create(ctx, testUser2)
 		if err != nil {
 			return fmt.Errorf("failed to create test user 2: %v", err)
 		}
+		user2 = createdUser2
 	}
 
 	// Create default system configuration with CZK as main currency for the first test user
@@ -171,7 +173,7 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	}
 
 	// Set user context for settings (settings are per-user)
-	userCtx := appctx.WithUser(ctx, &testUser1)
+	userCtx := appctx.WithUser(ctx, user1)
 	userAwareSettingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(userCtx)
 	if err != nil {
 		return fmt.Errorf("failed to create user-aware settings registry: %w", err)
@@ -202,8 +204,8 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	// Create locations
 	home, err := registrySet.LocationRegistry.MustWithCurrentUser(userCtx).Create(ctx, models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: user1.TenantID,
+			UserID:   user1.ID,
 		},
 		Name:    "Home",
 		Address: "123 Main St, Anytown, USA",
@@ -214,8 +216,8 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 
 	office, err := registrySet.LocationRegistry.MustWithCurrentUser(userCtx).Create(ctx, models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: user1.TenantID,
+			UserID:   user1.ID,
 		},
 		Name:    "Office",
 		Address: "456 Business Ave, Worktown, USA",
@@ -226,8 +228,8 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 
 	storage, err := registrySet.LocationRegistry.MustWithCurrentUser(userCtx).Create(ctx, models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: user1.TenantID,
+			UserID:   user1.ID,
 		},
 		Name:    "Storage Unit",
 		Address: "789 Storage Blvd, Storeville, USA",
@@ -239,8 +241,8 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 	// Create areas for Home
 	livingRoom, err := registrySet.AreaRegistry.MustWithCurrentUser(userCtx).Create(ctx, models.Area{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: user1.TenantID,
+			UserID:   user1.ID,
 		},
 		Name:       "Living Room",
 		LocationID: home.ID,
@@ -251,8 +253,8 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 
 	kitchen, err := registrySet.AreaRegistry.MustWithCurrentUser(userCtx).Create(ctx, models.Area{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: user1.TenantID,
+			UserID:   user1.ID,
 		},
 		Name:       "Kitchen",
 		LocationID: home.ID,
@@ -263,8 +265,8 @@ func SeedData(registrySet *registry.Set) error { //nolint:funlen,gocyclo,gocogni
 
 	bedroom, err := registrySet.AreaRegistry.MustWithCurrentUser(userCtx).Create(ctx, models.Area{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: user1.TenantID,
+			UserID:   user1.ID,
 		},
 		Name:       "Bedroom",
 		LocationID: home.ID,

@@ -11,7 +11,7 @@ import (
 )
 
 func TestLocationRegistry_Create_HappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
+	setup, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
 
 	testCases := []struct {
@@ -40,14 +40,9 @@ func TestLocationRegistry_Create_HappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
-			ctx = appctx.WithUser(ctx, &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "test-user-id"},
-					TenantID: "test-tenant-id",
-				},
-			})
+			ctx = appctx.WithUser(ctx, setup.TestUser)
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+			locationReg, err := setup.RegistrySet.LocationRegistry.WithCurrentUser(ctx)
 			c.Assert(err, qt.IsNil)
 
 			result, err := locationReg.Create(ctx, tc.location)
