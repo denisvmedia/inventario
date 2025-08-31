@@ -101,6 +101,8 @@ func TestAreaRegistry_Create_UnhappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
+			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+			c.Assert(err, qt.IsNil)
 
 			// For the non-existent location test, we don't need to create a location
 			// For other tests, create a location if LocationID is not empty
