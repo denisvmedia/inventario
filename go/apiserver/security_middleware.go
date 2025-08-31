@@ -30,7 +30,7 @@ func ValidateNoUserProvidedTenantID() func(http.Handler) http.Handler {
 					return
 				}
 			}
-			
+
 			// 2. Check query parameters for tenant_id (case-insensitive)
 			for paramName, paramValues := range r.URL.Query() {
 				paramLower := strings.ToLower(paramName)
@@ -47,7 +47,7 @@ func ValidateNoUserProvidedTenantID() func(http.Handler) http.Handler {
 					return
 				}
 			}
-			
+
 			// 3. Check request body for tenant_id fields (for POST/PUT/PATCH requests)
 			if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" {
 				body, err := io.ReadAll(r.Body)
@@ -56,15 +56,15 @@ func ValidateNoUserProvidedTenantID() func(http.Handler) http.Handler {
 					http.Error(w, "Failed to read request body", http.StatusBadRequest)
 					return
 				}
-				
+
 				// Restore body for downstream handlers
 				r.Body = io.NopCloser(bytes.NewBuffer(body))
-				
+
 				// Check for tenant_id in request body (case-insensitive)
 				bodyLower := strings.ToLower(string(body))
-				if strings.Contains(bodyLower, "tenant_id") || 
-				   strings.Contains(bodyLower, "\"tenant\"") ||
-				   strings.Contains(bodyLower, "'tenant'") {
+				if strings.Contains(bodyLower, "tenant_id") ||
+					strings.Contains(bodyLower, "\"tenant\"") ||
+					strings.Contains(bodyLower, "'tenant'") {
 					slog.Error("Security violation: user-provided tenant ID in request body",
 						"content_type", r.Header.Get("Content-Type"),
 						"body_preview", truncateString(string(body), 200),
@@ -77,7 +77,7 @@ func ValidateNoUserProvidedTenantID() func(http.Handler) http.Handler {
 					return
 				}
 			}
-			
+
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -89,12 +89,12 @@ func RejectSpecificTenantHeaders() func(http.Handler) http.Handler {
 	forbiddenHeaders := []string{
 		"X-Tenant-ID",
 		"X-Tenant",
-		"Tenant-ID", 
+		"Tenant-ID",
 		"Tenant",
 		"X-Tenant-Context",
 		"Tenant-Context",
 	}
-	
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			for _, header := range forbiddenHeaders {
@@ -128,7 +128,7 @@ func LogSecurityAttempts() func(http.Handler) http.Handler {
 				"remote_addr", r.RemoteAddr,
 				"content_type", r.Header.Get("Content-Type"),
 			)
-			
+
 			next.ServeHTTP(w, r)
 		})
 	}

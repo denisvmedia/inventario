@@ -12,7 +12,6 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/apiserver"

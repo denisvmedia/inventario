@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -180,23 +179,68 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	return r
 }
 
-// RLSContextMiddleware sets the user and tenant context for RLS policies
+// RLSContextMiddleware validates user context for RLS security
+// This middleware ensures that user context is properly set and validates security requirements
+// The actual database RLS context is set at the transaction level in repository operations
 func RLSContextMiddleware(registrySet *registry.Set) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get user from context (set by JWTMiddleware)
 			user := appctx.UserFromContext(r.Context())
 			if user == nil {
-				http.Error(w, "User context required", http.StatusInternalServerError)
+				slog.Error("RLS Security Violation: No user context found",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+					"user_agent", r.UserAgent())
+				http.Error(w, "Authentication required", http.StatusUnauthorized)
 				return
 			}
 
-			slog.Info("RLS Middleware: Setting context for user",
-				"user_id", user.ID,
-				"email", user.Email,
-				"commodity_registry_type", fmt.Sprintf("%T", registrySet.CommodityRegistry))
-			r = r.WithContext(appctx.WithUser(r.Context(), user))
+			// Validate user has required fields for RLS
+			if user.ID == "" {
+				slog.Error("RLS Security Violation: User ID is empty",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"user_email", user.Email,
+					"remote_addr", r.RemoteAddr)
+				http.Error(w, "Invalid user context", http.StatusUnauthorized)
+				return
+			}
 
+			if user.TenantID == "" {
+				slog.Error("RLS Security Violation: Tenant ID is empty",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"user_id", user.ID,
+					"user_email", user.Email,
+					"remote_addr", r.RemoteAddr)
+				http.Error(w, "Invalid tenant context", http.StatusUnauthorized)
+				return
+			}
+
+			// Validate user is active
+			if !user.IsActive {
+				slog.Error("RLS Security Violation: Inactive user attempted access",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"user_id", user.ID,
+					"user_email", user.Email,
+					"remote_addr", r.RemoteAddr)
+				http.Error(w, "User account disabled", http.StatusForbidden)
+				return
+			}
+
+			// Log successful security validation for monitoring
+			slog.Debug("RLS Security: User context validated",
+				"user_id", user.ID,
+				"tenant_id", user.TenantID,
+				"user_email", user.Email,
+				"method", r.Method,
+				"path", r.URL.Path)
+
+			// Context is already set by JWTMiddleware, but ensure it's properly propagated
+			// The actual database RLS context will be set when repositories create transactions
 			next.ServeHTTP(w, r)
 		})
 	}

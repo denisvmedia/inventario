@@ -104,7 +104,7 @@ func (ld *LocationData) ValidateWithContext(ctx context.Context) error {
 	)
 
 	// Only reject ID fields in CREATE requests (POST), allow them in UPDATE requests (PUT)
-	if httpMethod, ok := ctx.Value("http_method").(string); ok && httpMethod == "POST" {
+	if httpMethod, ok := ctx.Value(httpMethodKey).(string); ok && httpMethod == "POST" {
 		fields = append(fields,
 			validation.Field(&ld.ID, validation.Empty.Error("ID field not allowed in create requests")),
 		)
@@ -115,7 +115,7 @@ func (ld *LocationData) ValidateWithContext(ctx context.Context) error {
 
 func (lr *LocationRequest) Bind(r *http.Request) error {
 	// Add HTTP method to context for validation
-	ctx := context.WithValue(r.Context(), "http_method", r.Method)
+	ctx := context.WithValue(r.Context(), httpMethodKey, r.Method)
 	err := lr.ValidateWithContext(ctx)
 	if err != nil {
 		return err

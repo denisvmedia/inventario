@@ -38,9 +38,10 @@ type commoditiesAPI struct {
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
-	commodityReg, err := api.registrySet.CommodityRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Use standardized security validation
+	commodityReg, secErr := GetUserAwareCommodityRegistry(r, api.registrySet.CommodityRegistry)
+	if secErr != nil {
+		HandleSecurityError(w, r, secErr)
 		return
 	}
 
@@ -132,10 +133,15 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Extract user from authenticated request context
-	user := GetUserFromRequest(r)
-	if user == nil {
-		http.Error(w, "User context required", http.StatusInternalServerError)
+	// Use standardized security validation
+	user, ok := RequireUserContext(w, r)
+	if !ok {
+		return // Error already handled by RequireUserContext
+	}
+
+	// Validate input
+	if secErr := ValidateInputSanitization(r, input.Data.Attributes); secErr != nil {
+		HandleSecurityError(w, r, secErr)
 		return
 	}
 
@@ -144,14 +150,13 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		commodity.TenantID = user.TenantID
 	}
 
-	// Use CreateWithUser to ensure proper user context and validation
-	ctx := r.Context()
-	commodityReg, err := api.registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
+	// Use standardized registry access
+	commodityReg, secErr := GetUserAwareCommodityRegistry(r, api.registrySet.CommodityRegistry)
+	if secErr != nil {
+		HandleSecurityError(w, r, secErr)
 		return
 	}
-	createdCommodity, err := commodityReg.Create(ctx, commodity)
+	createdCommodity, err := commodityReg.Create(r.Context(), commodity)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

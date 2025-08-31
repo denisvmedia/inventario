@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
@@ -26,11 +25,11 @@ import (
 
 // RestoreOperationProcessor wraps the restore service to provide detailed logging
 type RestoreOperationProcessor struct {
-	restoreOperationID string
-	registrySet        *registry.Set
-	entityService      *services.EntityService
-	uploadLocation     string
-	securityValidator  security.SecurityValidator
+	restoreOperationID    string
+	registrySet           *registry.Set
+	entityService         *services.EntityService
+	uploadLocation        string
+	securityValidator     security.SecurityValidator
 	importSessionEntities map[string]bool // Track entities created in this session
 }
 
@@ -421,6 +420,67 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	return nil
 }
 
+// validateCommodityOwnership validates that the user can link files to the specified commodity
+func (l *RestoreOperationProcessor) validateCommodityOwnership(
+	ctx context.Context,
+	commodityID, originalXMLID string,
+	stats *types.RestoreStats,
+	options types.RestoreOptions,
+	fileType string,
+) (string, error) {
+	// For merge strategies, validate commodity ownership before linking
+	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
+		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
+		if err != nil {
+			// If entity not found, upload file as orphaned (not linked to any commodity)
+			if errors.Is(err, registry.ErrNotFound) {
+				stats.ErrorCount++
+				stats.Errors = append(stats.Errors, fmt.Sprintf("%s %s uploaded as orphaned file: %v", fileType, originalXMLID, err))
+				// Return empty commodityID to create orphaned file
+				return "", nil
+			}
+			// For other security violations, fail completely
+			stats.ErrorCount++
+			stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for %s %s: %v", fileType, originalXMLID, err))
+			return "", err
+		}
+	}
+	return commodityID, nil
+}
+
+// validateCommodityOwnershipInDB validates that a commodity in the database belongs to the current user
+func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
+	ctx context.Context,
+	originalXMLID string,
+	currentUser *models.User,
+	existing *types.ExistingEntities,
+	stats *types.RestoreStats,
+) error {
+	existingCommodity := existing.Commodities[originalXMLID]
+	if existingCommodity != nil {
+		return nil // Already validated in existing entities
+	}
+
+	// Check if commodity exists in database but not in our existing entities map
+	// Use service account registry to see all entities across users
+	serviceAccountRegistry := l.registrySet.CommodityRegistry.WithServiceAccount()
+	existingDBCommodity, err := serviceAccountRegistry.Get(ctx, originalXMLID)
+	if err != nil {
+		return nil // Commodity doesn't exist in DB, which is fine
+	}
+
+	if existingDBCommodity.UserID != currentUser.ID {
+		err := l.securityValidator.ValidateEntityOwnership(ctx, originalXMLID, currentUser.ID)
+		if err != nil {
+			stats.ErrorCount++
+			stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: %v", originalXMLID, err))
+			return err
+		}
+	}
+
+	return nil
+}
+
 //nolint:dupl,gocognit // Similar but not the same as other create*Record functions (and is readable enough)
 func (l *RestoreOperationProcessor) createImageRecord(
 	ctx context.Context,
@@ -437,24 +497,12 @@ func (l *RestoreOperationProcessor) createImageRecord(
 		return security.ErrNoUserContext
 	}
 
-	// For merge strategies, validate commodity ownership before linking
-	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
-		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
-		if err != nil {
-			// If entity not found, upload file as orphaned (not linked to any commodity)
-			if strings.Contains(err.Error(), "entity not found") {
-				stats.ErrorCount++
-				stats.Errors = append(stats.Errors, fmt.Sprintf("Image %s uploaded as orphaned file: %v", originalXMLID, err))
-				// Set commodityID to empty to create orphaned file
-				commodityID = ""
-			} else {
-				// For other security violations, fail completely
-				stats.ErrorCount++
-				stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for image %s: %v", originalXMLID, err))
-				return err
-			}
-		}
+	// Validate commodity ownership and handle security violations
+	validatedCommodityID, err := l.validateCommodityOwnership(ctx, commodityID, originalXMLID, stats, options, "Image")
+	if err != nil {
+		return err
 	}
+	commodityID = validatedCommodityID
 
 	// Apply strategy for images
 	existingImage := existing.Images[originalXMLID]
@@ -581,24 +629,12 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 		return security.ErrNoUserContext
 	}
 
-	// For merge strategies, validate commodity ownership before linking
-	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
-		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
-		if err != nil {
-			// If entity not found, upload file as orphaned (not linked to any commodity)
-			if strings.Contains(err.Error(), "entity not found") {
-				stats.ErrorCount++
-				stats.Errors = append(stats.Errors, fmt.Sprintf("Invoice %s uploaded as orphaned file: %v", originalXMLID, err))
-				// Set commodityID to empty to create orphaned file
-				commodityID = ""
-			} else {
-				// For other security violations, fail completely
-				stats.ErrorCount++
-				stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for invoice %s: %v", originalXMLID, err))
-				return err
-			}
-		}
+	// Validate commodity ownership and handle security violations
+	validatedCommodityID, err := l.validateCommodityOwnership(ctx, commodityID, originalXMLID, stats, options, "Invoice")
+	if err != nil {
+		return err
 	}
+	commodityID = validatedCommodityID
 
 	// Apply strategy for invoices
 	existingInvoice := existing.Invoices[originalXMLID]
@@ -719,24 +755,12 @@ func (l *RestoreOperationProcessor) createManualRecord(
 		return security.ErrNoUserContext
 	}
 
-	// For merge strategies, validate commodity ownership before linking
-	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
-		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
-		if err != nil {
-			// If entity not found, upload file as orphaned (not linked to any commodity)
-			if strings.Contains(err.Error(), "entity not found") {
-				stats.ErrorCount++
-				stats.Errors = append(stats.Errors, fmt.Sprintf("Manual %s uploaded as orphaned file: %v", originalXMLID, err))
-				// Set commodityID to empty to create orphaned file
-				commodityID = ""
-			} else {
-				// For other security violations, fail completely
-				stats.ErrorCount++
-				stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for manual %s: %v", originalXMLID, err))
-				return err
-			}
-		}
+	// Validate commodity ownership and handle security violations
+	validatedCommodityID, err := l.validateCommodityOwnership(ctx, commodityID, originalXMLID, stats, options, "Manual")
+	if err != nil {
+		return err
 	}
+	commodityID = validatedCommodityID
 
 	// Apply strategy for manuals
 	existingManual := existing.Manuals[originalXMLID]
@@ -1853,20 +1877,9 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 	}
 
 	// For all strategies, check if the commodity ID already exists and belongs to another user
-	if existingCommodity := existing.Commodities[originalXMLID]; existingCommodity == nil {
-		// Check if commodity exists in database but not in our existing entities map
-		// Use service account registry to see all entities across users
-		serviceAccountRegistry := l.registrySet.CommodityRegistry.WithServiceAccount()
-		if existingDBCommodity, err := serviceAccountRegistry.Get(ctx, originalXMLID); err == nil {
-			if existingDBCommodity.UserID != currentUser.ID {
-				err := l.securityValidator.ValidateEntityOwnership(ctx, originalXMLID, currentUser.ID)
-				if err != nil {
-					stats.ErrorCount++
-					stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: %v", originalXMLID, err))
-					return err
-				}
-			}
-		}
+	err = l.validateCommodityOwnershipInDB(ctx, originalXMLID, currentUser, existing, stats)
+	if err != nil {
+		return err
 	}
 
 	// Apply strategy

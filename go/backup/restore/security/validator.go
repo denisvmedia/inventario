@@ -26,13 +26,13 @@ type SecurityValidator interface {
 
 // UnauthorizedAttempt represents details about an unauthorized access attempt
 type UnauthorizedAttempt struct {
-	UserID           string
-	TargetEntityID   string
-	EntityType       string
-	Operation        string
-	AttemptType      string
-	Timestamp        time.Time
-	RequestDetails   map[string]interface{}
+	UserID         string
+	TargetEntityID string
+	EntityType     string
+	Operation      string
+	AttemptType    string
+	Timestamp      time.Time
+	RequestDetails map[string]any
 }
 
 // RestoreSecurityValidator implements SecurityValidator for restore operations
