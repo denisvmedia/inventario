@@ -74,12 +74,6 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		t.Fatalf("Failed to set password: %v", err)
 	}
 
-	ctx := appctx.WithUser(context.Background(), &user1Model)
-	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
-	registrySet.ExportRegistry = must.Must(registrySet.ExportRegistry.WithCurrentUser(ctx))
-	registrySet.RestoreOperationRegistry = must.Must(registrySet.RestoreOperationRegistry.WithCurrentUser(ctx))
-	registrySet.RestoreStepRegistry = must.Must(registrySet.RestoreStepRegistry.WithCurrentUser(ctx))
-
 	user2ID := "api-user-2-" + timestamp
 	user2Model := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
@@ -109,8 +103,7 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 
 	// Create API server
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
-		EntityService:  services.NewEntityService(registrySet, "file://uploads?memfs=1&create_dir=1"),
+		EntityService:  services.NewEntityService(factorySet, "file://uploads?memfs=1&create_dir=1"),
 		UploadLocation: "file://uploads?memfs=1&create_dir=1",
 		DebugInfo:      debug.NewInfo("postgres://test", "file://uploads?memfs=1&create_dir=1"),
 		StartTime:      time.Now(),

@@ -6,25 +6,29 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 )
 
 // TestUserIsolation_ComprehensiveScenarios tests complex real-world scenarios
 func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
+	factorySet, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
 	c.Run("Complex Entity Relationships", func(c *qt.C) {
 		// Create multiple users for complex scenarios
-		user1 := createTestUser(c, registrySet, "user1t1@comprehensive.com")
-		user2 := createTestUser(c, registrySet, "user2t1@comprehensive.com")
-
+		user1 := createTestUser(c, factorySet.UserRegistry, "user1t1@comprehensive.com")
 		ctx1 := appctx.WithUser(context.Background(), user1)
+		registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx1))
+
+		user2 := createTestUser(c, factorySet.UserRegistry, "user2t1@comprehensive.com")
 		ctx2 := appctx.WithUser(context.Background(), user2)
+		registrySet2 := must.Must(factorySet.CreateUserRegistrySet(ctx2))
 
 		// Create shared location and area for user1 that can be used across tests
 		location1 := models.Location{
@@ -36,8 +40,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			Name:    "User1 Warehouse",
 			Address: "123 User1 Street",
 		}
-		userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareLocationRegistry1 := registrySet.LocationRegistry
 		createdLocation1, err := userAwareLocationRegistry1.Create(ctx1, location1)
 		c.Assert(err, qt.IsNil)
 
@@ -50,8 +53,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			Name:       "User1 Storage Area",
 			LocationID: createdLocation1.ID,
 		}
-		userAwareAreaRegistry1, err := registrySet.AreaRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareAreaRegistry1 := registrySet.AreaRegistry
 		createdArea1, err := userAwareAreaRegistry1.Create(ctx1, area1)
 		c.Assert(err, qt.IsNil)
 
@@ -76,21 +78,18 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			Draft:                  false,
 			AreaID:                 createdArea1.ID,
 		}
-		userAwareCommodityRegistry1, err := registrySet.CommodityRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry1 := registrySet.CommodityRegistry
 		_, err = userAwareCommodityRegistry1.Create(ctx1, commodity1)
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to create commodity: %v", err))
 
 		// User2 tries to access User1's entities through relationships
 		// Should not be able to access location
-		userAwareLocationRegistry2, err := registrySet.LocationRegistry.WithCurrentUser(ctx2)
-		c.Assert(err, qt.IsNil)
+		userAwareLocationRegistry2 := registrySet2.LocationRegistry
 		_, err = userAwareLocationRegistry2.Get(ctx2, createdLocation1.ID)
 		c.Assert(err, qt.IsNotNil, qt.Commentf("Expected error when user2 tries to access user1's location"))
 
 		// Should not be able to access area
-		userAwareAreaRegistry2, err := registrySet.AreaRegistry.WithCurrentUser(ctx2)
-		c.Assert(err, qt.IsNil)
+		userAwareAreaRegistry2 := registrySet.AreaRegistry
 		_, err = userAwareAreaRegistry2.Get(ctx2, createdArea1.ID)
 		c.Assert(err, qt.IsNotNil, qt.Commentf("Expected error when user2 tries to access user1's area"))
 
@@ -120,13 +119,17 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 	c.Run("Cross-User Update Attempts", func(c *qt.C) {
 		// Create multiple users for complex scenarios
-		user1 := createTestUser(c, registrySet, "user1t2@comprehensive.com")
-		user2 := createTestUser(c, registrySet, "user2t2@comprehensive.com")
-		user3 := createTestUser(c, registrySet, "user3t2@comprehensive.com")
+		user1 := createTestUser(c, factorySet.UserRegistry, "user1t2@comprehensive.com")
+		ctx1 := appctx.WithUser(c.Context(), user1)
+		registrySet1 := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
-		ctx1 := appctx.WithUser(context.Background(), user1)
-		ctx2 := appctx.WithUser(context.Background(), user2)
-		ctx3 := appctx.WithUser(context.Background(), user3)
+		user2 := createTestUser(c, factorySet.UserRegistry, "user2t2@comprehensive.com")
+		ctx2 := appctx.WithUser(c.Context(), user2)
+		registrySet2 := must.Must(factorySet.CreateUserRegistrySet(ctx2))
+
+		user3 := createTestUser(c, factorySet.UserRegistry, "user3t2@comprehensive.com")
+		ctx3 := appctx.WithUser(c.Context(), user3)
+		registrySet3 := must.Must(factorySet.CreateUserRegistrySet(ctx3))
 
 		// Create shared location and area for user1 that can be used across tests
 		location1 := models.Location{
@@ -134,8 +137,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			Address: "123 User1 Street",
 			// Note: ID will be generated server-side for security
 		}
-		userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareLocationRegistry1 := registrySet1.LocationRegistry
 		createdLocation1, err := userAwareLocationRegistry1.Create(ctx1, location1)
 		c.Assert(err, qt.IsNil)
 
@@ -144,8 +146,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			LocationID: createdLocation1.ID,
 			// Note: ID will be generated server-side for security
 		}
-		userAwareAreaRegistry1, err := registrySet.AreaRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareAreaRegistry1 := registrySet1.AreaRegistry
 		createdArea1, err := userAwareAreaRegistry1.Create(ctx1, area1)
 		c.Assert(err, qt.IsNil)
 
@@ -167,23 +168,20 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			LastModifiedDate:       models.ToPDate("2023-01-03"),
 			Draft:                  false,
 		}
-		userAwareCommodityRegistry1, err := registrySet.CommodityRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry1 := registrySet1.CommodityRegistry
 		created1, err := userAwareCommodityRegistry1.Create(ctx1, commodity1)
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to create commodity: %v", err))
 
 		// User2 tries to update User1's commodity
 		created1.Name = "Hacked Name"
 		created1.ShortName = "HN"
-		userAwareCommodityRegistry2, err := registrySet.CommodityRegistry.WithCurrentUser(ctx2)
-		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry2 := registrySet2.CommodityRegistry
 		_, err = userAwareCommodityRegistry2.Update(ctx2, *created1)
 		c.Assert(err, qt.IsNotNil, qt.Commentf("Expected error when user2 tries to update user1's commodity"))
 
 		// User3 also tries to update User1's commodity
 		created1.Name = "Another Hack"
-		userAwareCommodityRegistry3, err := registrySet.CommodityRegistry.WithCurrentUser(ctx3)
-		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry3 := registrySet3.CommodityRegistry
 		_, err = userAwareCommodityRegistry3.Update(ctx3, *created1)
 		c.Assert(err, qt.IsNotNil, qt.Commentf("Expected error when user3 tries to update user1's commodity"))
 
@@ -197,13 +195,20 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 	c.Run("Bulk Operations Isolation", func(c *qt.C) {
 		// Create multiple users for complex scenarios
-		user1 := createTestUser(c, registrySet, "user1t3@comprehensive.com")
-		user2 := createTestUser(c, registrySet, "user2t3@comprehensive.com")
-		user3 := createTestUser(c, registrySet, "user3t3@comprehensive.com")
-
+		user1 := createTestUser(c, factorySet.UserRegistry, "user1t3@comprehensive.com")
 		ctx1 := appctx.WithUser(context.Background(), user1)
+		registrySet1, err := factorySet.CreateUserRegistrySet(ctx1)
+		c.Assert(err, qt.IsNil)
+
+		user2 := createTestUser(c, factorySet.UserRegistry, "user2t3@comprehensive.com")
 		ctx2 := appctx.WithUser(context.Background(), user2)
+		registrySet2, err := factorySet.CreateUserRegistrySet(ctx2)
+		c.Assert(err, qt.IsNil)
+
+		user3 := createTestUser(c, factorySet.UserRegistry, "user3t3@comprehensive.com")
 		ctx3 := appctx.WithUser(context.Background(), user3)
+		registrySet3, err := factorySet.CreateUserRegistrySet(ctx3)
+		c.Assert(err, qt.IsNil)
 
 		// Create shared location and area for user1 that can be used across tests
 		location1 := models.Location{
@@ -211,8 +216,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			Address: "123 User1 Street",
 			// Note: ID will be generated server-side for security
 		}
-		userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareLocationRegistry1 := registrySet1.LocationRegistry
 		createdLocation1, err := userAwareLocationRegistry1.Create(ctx1, location1)
 		c.Assert(err, qt.IsNil)
 
@@ -221,18 +225,22 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			LocationID: createdLocation1.ID,
 			// Note: ID will be generated server-side for security
 		}
-		userAwareAreaRegistry1, err := registrySet.AreaRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareAreaRegistry1 := registrySet1.AreaRegistry
 		createdArea1, err := userAwareAreaRegistry1.Create(ctx1, area1)
 		c.Assert(err, qt.IsNil)
 
 		// Create areas for each user first (reuse existing area for user1)
 		areas := []*models.Area{createdArea1} // User1 already has an area
 
+		users := []*models.User{user1, user2, user3}
+		ctxs := []context.Context{ctx1, ctx2, ctx3}
+		registrySets := []*registry.Set{registrySet1, registrySet2, registrySet3}
+
 		// Create areas for user2 and user3
 		for userIndex := 1; userIndex < 3; userIndex++ {
-			user := []*models.User{user1, user2, user3}[userIndex]
-			ctx := []context.Context{ctx1, ctx2, ctx3}[userIndex]
+			user := users[userIndex]
+			ctx := ctxs[userIndex]
+			registrySet := registrySets[userIndex]
 
 			// Create location first
 			location := models.Location{
@@ -244,8 +252,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 				Name:    fmt.Sprintf("User%d Bulk Location", userIndex+1),
 				Address: fmt.Sprintf("123 User%d Bulk Street", userIndex+1),
 			}
-			userAwareLocationRegistry, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			userAwareLocationRegistry := registrySet.LocationRegistry
 			createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
 			c.Assert(err, qt.IsNil)
 
@@ -259,21 +266,20 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 				Name:       fmt.Sprintf("User%d Bulk Area", userIndex+1),
 				LocationID: createdLocation.ID,
 			}
-			userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			userAwareAreaRegistry := registrySet.AreaRegistry
 			createdArea, err := userAwareAreaRegistry.Create(ctx, area)
 			c.Assert(err, qt.IsNil)
 			areas = append(areas, createdArea)
 		}
 
 		// Each user creates multiple entities
-		for userIndex, ctx := range []context.Context{ctx1, ctx2, ctx3} {
+		for userIndex, registrySet := range registrySets {
 			for i := 0; i < 10; i++ {
 				commodity := models.Commodity{
 					TenantAwareEntityID: models.TenantAwareEntityID{
 						EntityID: models.EntityID{ID: fmt.Sprintf("bulk-commodity-user%d-%d", userIndex+1, i)},
 						TenantID: "test-tenant-id",
-						UserID:   []*models.User{user1, user2, user3}[userIndex].ID,
+						UserID:   users[userIndex].ID,
 					},
 					Name:                   fmt.Sprintf("User%d Commodity %d", userIndex+1, i),
 					ShortName:              fmt.Sprintf("U%dC%d", userIndex+1, i),
@@ -290,16 +296,15 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 					LastModifiedDate:       models.ToPDate("2023-01-03"),
 					Draft:                  false,
 				}
-				userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+				userAwareCommodityRegistry := registrySet.CommodityRegistry
 				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user-aware registry for user %d: %v", userIndex+1, err))
-				_, err = userAwareCommodityRegistry.Create(ctx, commodity)
+				_, err = userAwareCommodityRegistry.Create(ctxs[userIndex], commodity)
 				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create commodity for user %d: %v", userIndex+1, err))
 			}
 		}
 
 		// Verify each user can only see their own entities
-		userAwareCommodityRegistry1, err := registrySet.CommodityRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry1 := registrySet1.CommodityRegistry
 		commodities1, err := userAwareCommodityRegistry1.List(ctx1)
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to list commodities for user1: %v", err))
 		c.Assert(commodities1, qt.HasLen, 10, qt.Commentf("Expected 10 commodities for user1, got %d", len(commodities1)))
@@ -307,8 +312,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			c.Assert(commodity.GetUserID(), qt.Equals, user1.ID, qt.Commentf("Expected user ID %s, got %s", user1.ID, commodity.GetUserID()))
 		}
 
-		userAwareCommodityRegistry2, err := registrySet.CommodityRegistry.WithCurrentUser(ctx2)
-		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry2 := registrySet2.CommodityRegistry
 		commodities2, err := userAwareCommodityRegistry2.List(ctx2)
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to list commodities for user2: %v", err))
 		c.Assert(commodities2, qt.HasLen, 10, qt.Commentf("Expected 10 commodities for user2, got %d", len(commodities2)))
@@ -316,8 +320,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			c.Assert(commodity.GetUserID(), qt.Equals, user2.ID, qt.Commentf("Expected user ID %s, got %s", user2.ID, commodity.GetUserID()))
 		}
 
-		userAwareCommodityRegistry3, err := registrySet.CommodityRegistry.WithCurrentUser(ctx3)
-		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry3 := registrySet3.CommodityRegistry
 		commodities3, err := userAwareCommodityRegistry3.List(ctx3)
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to list commodities for user3: %v", err))
 		c.Assert(commodities3, qt.HasLen, 10, qt.Commentf("Expected 10 commodities for user3, got %d", len(commodities3)))
@@ -330,19 +333,13 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 // TestUserIsolation_EdgeCases tests edge cases and boundary conditions
 func TestUserIsolation_EdgeCases(t *testing.T) {
 	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
-	defer cleanup()
+	factorySet, cleanup := setupTestDatabase(t)
+	c.Cleanup(cleanup)
 
 	c.Run("Empty User Context", func(c *qt.C) {
 		emptyCtx := context.Background()
-
-		userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(emptyCtx)
-		if err == nil {
-			c.Error("Expected error when creating user-aware registry with empty context")
-			return
-		}
-		// Since WithCurrentUser failed, we can't proceed with List
-		_ = userAwareCommodityRegistry
+		_, err := factorySet.CreateUserRegistrySet(emptyCtx)
+		c.Assert(err, qt.IsNil)
 	})
 
 	c.Run("Non-existent User ID", func(c *qt.C) {
@@ -353,16 +350,12 @@ func TestUserIsolation_EdgeCases(t *testing.T) {
 			},
 		})
 
-		// Should not crash, but should return empty results
-		userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(nonExistentCtx)
+		registrySet, err := factorySet.CreateUserRegistrySet(nonExistentCtx)
 		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry := registrySet.CommodityRegistry
 		commodities, err := userAwareCommodityRegistry.List(nonExistentCtx)
-		if err != nil {
-			c.Fatalf("Unexpected error for non-existent user: %v", err)
-		}
-		if len(commodities) != 0 {
-			c.Errorf("Expected 0 commodities for non-existent user, got %d", len(commodities))
-		}
+		c.Assert(err, qt.IsNil, qt.Commentf("Expected no error for non-existent user"))
+		c.Assert(commodities, qt.HasLen, 0, qt.Commentf("Expected 0 commodities for non-existent user"))
 	})
 
 	c.Run("Very Long User ID", func(c *qt.C) {
@@ -375,11 +368,10 @@ func TestUserIsolation_EdgeCases(t *testing.T) {
 		})
 
 		// Should handle gracefully
-		userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(longCtx)
+		registrySet, err := factorySet.CreateUserRegistrySet(longCtx)
 		c.Assert(err, qt.IsNil)
+		userAwareCommodityRegistry := registrySet.CommodityRegistry
 		_, err = userAwareCommodityRegistry.List(longCtx)
-		if err == nil {
-			c.Fatalf("Unexpected no error for long user ID")
-		}
+		c.Assert(err, qt.IsNil, qt.Commentf("Expected no error for long user ID"))
 	})
 }

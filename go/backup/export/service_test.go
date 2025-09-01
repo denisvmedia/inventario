@@ -310,7 +310,8 @@ func TestStreamXMLExport(t *testing.T) {
 	tempDir := c.TempDir()
 
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
-	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
+	factorySet := newTestFactorySet()
+	service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	// Test different export types
@@ -353,7 +354,8 @@ func TestStreamXMLExport_InvalidType(t *testing.T) {
 	tempDir := c.TempDir()
 
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
-	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
+	factorySet := newTestFactorySet()
+	service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	export := models.Export{
@@ -374,7 +376,8 @@ func TestGenerateExport(t *testing.T) {
 	tempDir := c.TempDir()
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
+	factorySet := newTestFactorySet()
+	service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	export := models.Export{
@@ -709,7 +712,7 @@ func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 
 	// Create test data
 	ctx := newTestContext()
-	registrySet := createTestRegistrySetWithFiles(c, ctx)
+	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
@@ -717,7 +720,8 @@ func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 	err := createTestFilesInBlobStorage(ctx, uploadLocation)
 	c.Assert(err, qt.IsNil)
 
-	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
+	// Use the same factory set that was used to create the registrySet
+	service := NewExportService(factorySet, uploadLocation)
 
 	// Create test export
 	testExport := &models.Export{
@@ -759,10 +763,10 @@ func TestExportService_ProcessExport_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
 
 	ctx := newTestContext()
-	registrySet := createTestRegistrySetWithFiles(c, ctx)
+	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation)
 
 	// Create test export without file data
 	testExport := &models.Export{
@@ -803,7 +807,7 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 	c := qt.New(t)
 
 	ctx := newTestContext()
-	registrySet := createTestRegistrySetWithFiles(c, ctx)
+	factorySet, registrySet := createTestFactoryAndRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
@@ -811,7 +815,7 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 	err := createTestFilesInBlobStorage(ctx, uploadLocation)
 	c.Assert(err, qt.IsNil)
 
-	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation)
 
 	// Create test export with file data
 	testExport := &models.Export{
@@ -843,8 +847,8 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 	c.Assert(updatedExport.BinaryDataSize >= expectedMinSize, qt.IsTrue)
 }
 
-// createTestRegistrySetWithFiles creates a test registry set with sample data including files
-func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set {
+// createTestFactoryAndRegistrySetWithFiles creates a test factory set and registry set with sample data including files
+func createTestFactoryAndRegistrySetWithFiles(c *qt.C, ctx context.Context) (*registry.FactorySet, *registry.Set) {
 	// Create factory set
 	factorySet := newTestFactorySet()
 
@@ -855,6 +859,20 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 	// Create user-aware registry set
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(userCtx))
 
+	// Populate with test data (same as createTestRegistrySetWithFiles)
+	populateTestRegistrySetWithFiles(c, userCtx, registrySet)
+
+	return factorySet, registrySet
+}
+
+// createTestRegistrySetWithFiles creates a test registry set with sample data including files
+func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set {
+	_, registrySet := createTestFactoryAndRegistrySetWithFiles(c, ctx)
+	return registrySet
+}
+
+// populateTestRegistrySetWithFiles populates a registry set with test data
+func populateTestRegistrySetWithFiles(c *qt.C, userCtx context.Context, registrySet *registry.Set) {
 	// Create test locations (IDs will be generated server-side for security)
 	location1 := models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
@@ -1008,8 +1026,6 @@ func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set 
 
 	_, err = registrySet.ManualRegistry.Create(userCtx, manual1)
 	c.Assert(err, qt.IsNil)
-
-	return registrySet
 }
 
 // createTestFilesInBlobStorage creates actual test files in blob storage

@@ -49,13 +49,12 @@ func TestFileService_DeleteFileWithPhysical(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	// Create test registry set
-	registrySet := &registry.Set{
-		FileRegistry: memory.NewFileRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
+	registrySet, err := factorySet.CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create file service
-	service := NewFileService(registrySet, uploadLocation)
+	service := NewFileService(factorySet, uploadLocation)
 
 	// Create a test physical file
 	testFilePath := "test-file.txt"
@@ -117,13 +116,10 @@ func TestFileService_DeleteFileWithPhysical_FileNotFound(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	// Create test registry set
-	registrySet := &registry.Set{
-		FileRegistry: memory.NewFileRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
 
 	// Create file service
-	service := NewFileService(registrySet, uploadLocation)
+	service := NewFileService(factorySet, uploadLocation)
 
 	// Test deletion of non-existent file entity
 	err := service.DeleteFileWithPhysical(ctx, "non-existent-id")
@@ -144,12 +140,10 @@ func TestFileService_DeletePhysicalFile(t *testing.T) {
 	}
 
 	// Create test registry set
-	registrySet := &registry.Set{
-		FileRegistry: memory.NewFileRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
 
 	// Create file service
-	service := NewFileService(registrySet, uploadLocation)
+	service := NewFileService(factorySet, uploadLocation)
 
 	// Create a test physical file
 	testFilePath := "test-physical-file.txt"
@@ -191,12 +185,10 @@ func TestFileService_DeletePhysicalFile_NonExistent(t *testing.T) {
 	}
 
 	// Create test registry set
-	registrySet := &registry.Set{
-		FileRegistry: memory.NewFileRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
 
 	// Create file service
-	service := NewFileService(registrySet, uploadLocation)
+	service := NewFileService(factorySet, uploadLocation)
 
 	// Test deletion of non-existent physical file (should not error)
 	err := service.DeletePhysicalFile(ctx, "non-existent-file.txt")
@@ -217,12 +209,12 @@ func TestFileService_DeleteLinkedFiles(t *testing.T) {
 	}
 
 	// Create test registry set
-	registrySet := &registry.Set{
-		FileRegistry: memory.NewFileRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
+	registrySet, err := factorySet.CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create file service
-	service := NewFileService(registrySet, uploadLocation)
+	service := NewFileService(factorySet, uploadLocation)
 
 	// Create test physical files
 	b, err := blob.OpenBucket(ctx, uploadLocation)
@@ -294,12 +286,10 @@ func TestFileService_DeleteLinkedFiles_NoFiles(t *testing.T) {
 	}
 
 	// Create test registry set
-	registrySet := &registry.Set{
-		FileRegistry: memory.NewFileRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
 
 	// Create file service
-	service := NewFileService(registrySet, uploadLocation)
+	service := NewFileService(factorySet, uploadLocation)
 
 	// Test deletion of linked files when no files exist (should not error)
 	err := service.DeleteLinkedFiles(ctx, "commodity", "non-existent-id")
@@ -320,13 +310,12 @@ func TestFileService_ExportFileDeletion_Integration(t *testing.T) {
 	}
 
 	// Create test registry set
-	registrySet := &registry.Set{
-		FileRegistry:   memory.NewFileRegistry(),
-		ExportRegistry: memory.NewExportRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
+	registrySet, err := factorySet.CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
 
 	// Create file service
-	service := NewFileService(registrySet, uploadLocation)
+	service := NewFileService(factorySet, uploadLocation)
 
 	// Create a test physical file
 	testFilePath := "export-test-file.xml"

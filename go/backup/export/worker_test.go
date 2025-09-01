@@ -16,7 +16,6 @@ import (
 func TestNewExportWorker(t *testing.T) {
 	c := qt.New(t)
 	factorySet := newTestFactorySet()
-	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
@@ -28,7 +27,7 @@ func TestNewExportWorker(t *testing.T) {
 	}
 
 	exportService := NewExportService(factorySet, uploadLocation)
-	worker := NewExportWorker(exportService, registrySet, 3)
+	worker := NewExportWorker(exportService, factorySet, 3)
 
 	c.Assert(worker, qt.IsNotNil)
 	c.Assert(worker.exportService, qt.Equals, exportService)
@@ -40,9 +39,7 @@ func TestNewExportWorker(t *testing.T) {
 
 func TestExportWorkerStartStop(t *testing.T) {
 	c := qt.New(t)
-	factorySet := newTestFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-
-	// Create a temporary directory for exports
+	factorySet := newTestFactorySet()
 	tempDir := c.TempDir()
 	var uploadLocation string
 	if runtime.GOOS == "windows" {
@@ -52,7 +49,7 @@ func TestExportWorkerStartStop(t *testing.T) {
 	}
 
 	exportService := NewExportService(factorySet, uploadLocation)
-	worker := NewExportWorker(exportService, registrySet, 3)
+	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -83,9 +80,7 @@ func TestExportWorkerStartStop(t *testing.T) {
 
 func TestExportWorkerIsRunning(t *testing.T) {
 	c := qt.New(t)
-	factorySet := newTestFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-
-	// Create a temporary directory for exports
+	factorySet := newTestFactorySet()
 	tempDir := c.TempDir()
 	var uploadLocation string
 	if runtime.GOOS == "windows" {
@@ -95,7 +90,7 @@ func TestExportWorkerIsRunning(t *testing.T) {
 	}
 
 	exportService := NewExportService(factorySet, uploadLocation)
-	worker := NewExportWorker(exportService, registrySet, 3)
+	worker := NewExportWorker(exportService, factorySet, 3)
 
 	// Test initial state
 	c.Assert(worker.IsRunning(), qt.IsFalse, qt.Commentf("Worker should not be running initially"))
@@ -116,7 +111,8 @@ func TestExportWorkerIsRunning(t *testing.T) {
 
 func TestExportWorkerProcessPendingExports(t *testing.T) {
 	c := qt.New(t)
-	factorySet := newTestFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
+	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for exports
 	tempDir := c.TempDir()
@@ -128,7 +124,7 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 	}
 
 	exportService := NewExportService(factorySet, uploadLocation)
-	worker := NewExportWorker(exportService, registrySet, 3)
+	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx := newTestContext()
 
@@ -179,9 +175,8 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 
 func TestExportWorkerProcessExport(t *testing.T) {
 	c := qt.New(t)
-	factorySet := newTestFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-
-	// Create a temporary directory for exports
+	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	tempDir := c.TempDir()
 
 	var uploadLocation string
@@ -192,7 +187,7 @@ func TestExportWorkerProcessExport(t *testing.T) {
 	}
 
 	exportService := NewExportService(factorySet, uploadLocation)
-	worker := NewExportWorker(exportService, registrySet, 3)
+	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx := newTestContext()
 
@@ -227,7 +222,7 @@ func TestExportWorkerProcessExport(t *testing.T) {
 func TestExportWorkerConcurrentAccess(t *testing.T) {
 	c := qt.New(t)
 	// Test concurrent access to worker methods
-	factorySet := newTestFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
+	factorySet := newTestFactorySet()
 
 	tempDir := c.TempDir()
 	var uploadLocation string
@@ -238,7 +233,7 @@ func TestExportWorkerConcurrentAccess(t *testing.T) {
 	}
 
 	exportService := NewExportService(factorySet, uploadLocation)
-	worker := NewExportWorker(exportService, registrySet, 3)
+	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -278,7 +273,7 @@ func TestExportWorkerConcurrentAccess(t *testing.T) {
 func TestExportWorkerContextCancellation(t *testing.T) {
 	c := qt.New(t)
 	// Test that worker respects context cancellation
-	factorySet := newTestFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
+	factorySet := newTestFactorySet()
 
 	tempDir := c.TempDir()
 	var uploadLocation string
@@ -289,7 +284,7 @@ func TestExportWorkerContextCancellation(t *testing.T) {
 	}
 
 	exportService := NewExportService(factorySet, uploadLocation)
-	worker := NewExportWorker(exportService, registrySet, 3)
+	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -310,9 +305,7 @@ func TestExportWorkerContextCancellation(t *testing.T) {
 
 func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
 	c := qt.New(t)
-	factorySet := newTestFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-
-	// Create a temporary directory for exports
+	factorySet := newTestFactorySet()
 	tempDir := c.TempDir()
 	var uploadLocation string
 	if runtime.GOOS == "windows" {
@@ -324,8 +317,8 @@ func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
 	exportService := NewExportService(factorySet, uploadLocation)
 
 	// Test with different concurrent limits
-	worker1 := NewExportWorker(exportService, registrySet, 1)
-	worker2 := NewExportWorker(exportService, registrySet, 5)
+	worker1 := NewExportWorker(exportService, factorySet, 1)
+	worker2 := NewExportWorker(exportService, factorySet, 5)
 
 	// The semaphore capacity should match the configured limit
 	// We can't directly access the semaphore capacity, but we can verify
@@ -345,9 +338,8 @@ func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
 
 func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 	c := qt.New(t)
-	factorySet := newTestFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-
-	// Create a temporary directory for uploads
+	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	tempDir := c.TempDir()
 	var uploadLocation string
 	if runtime.GOOS == "windows" {
@@ -357,7 +349,7 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 	}
 
 	exportService := NewExportService(factorySet, uploadLocation)
-	worker := NewExportWorker(exportService, registrySet, 3)
+	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx := newTestContext()
 

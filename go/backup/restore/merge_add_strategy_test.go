@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/processor"
@@ -79,28 +80,32 @@ func generateXMLFromTemplate(templateFile string, data TemplateData) (string, er
 
 func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+	}
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(c.Context(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(c.Context(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings (required for commodity validation)
-	mainCurrency := "USD"
-	settings := models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	}
-	err := registrySet.SettingsRegistry.Save(ctx, settings)
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	operationID := "test-restore-operation"
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor(operationID, factorySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Generate initial XML with hardcoded IDs (will be ignored due to security enhancement)
 	initialData := TemplateData{
@@ -234,28 +239,32 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 
 func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+	}
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(c.Context(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(c.Context(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings (required for commodity validation)
-	mainCurrency := "USD"
-	settings := models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	}
-	err := registrySet.SettingsRegistry.Save(ctx, settings)
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	operationID := "test-restore-operation"
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor(operationID, factorySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Generate initial data with one file using template
 	initialData := TemplateData{
@@ -391,28 +400,6 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	// Create user-specific registry sets that share the same underlying data
 	user1Ctx := appctx.WithUser(ctx, createdUser1)
 	registrySet1 := must.Must(sharedFactorySet.CreateUserRegistrySet(user1Ctx))
-	registrySet1.AreaRegistry, err = sharedRegistrySet.AreaRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.CommodityRegistry, err = sharedRegistrySet.CommodityRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.ImageRegistry, err = sharedRegistrySet.ImageRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.InvoiceRegistry, err = sharedRegistrySet.InvoiceRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.ManualRegistry, err = sharedRegistrySet.ManualRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.SettingsRegistry, err = sharedRegistrySet.SettingsRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.ExportRegistry, err = sharedRegistrySet.ExportRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.RestoreOperationRegistry, err = sharedRegistrySet.RestoreOperationRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.RestoreStepRegistry, err = sharedRegistrySet.RestoreStepRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.FileRegistry, err = sharedRegistrySet.FileRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.UserRegistry = userRegistry
-	registrySet1.TenantRegistry = sharedRegistrySet.TenantRegistry
 
 	// Set main currency for user 1
 	mainCurrency := "USD"
@@ -440,14 +427,15 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	entityService1 := services.NewEntityService(sharedFactorySet, "file://./test_uploads?create_dir=true")
 	proc1 := processor.NewRestoreOperationProcessor("test-restore-op-user1", sharedFactorySet, entityService1, "file://./test_uploads?create_dir=true")
 
-	options := types.RestoreOptions{
+	// User 1 uses FullReplace to set up initial data
+	options1 := types.RestoreOptions{
 		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader1 := strings.NewReader(initialXML)
-	stats1, err := proc1.RestoreFromXML(user1Ctx, reader1, options)
+	stats1, err := proc1.RestoreFromXML(user1Ctx, reader1, options1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats1.ErrorCount, qt.Equals, 0)
 
@@ -459,31 +447,7 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 
 	// Create registry set for user 2 using the same shared data
 	user2Ctx := appctx.WithUser(ctx, createdUser2)
-	registrySet2 := &registry.Set{}
-	registrySet2.LocationRegistry, err = sharedRegistrySet.LocationRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.AreaRegistry, err = sharedRegistrySet.AreaRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.CommodityRegistry, err = sharedRegistrySet.CommodityRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.ImageRegistry, err = sharedRegistrySet.ImageRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.InvoiceRegistry, err = sharedRegistrySet.InvoiceRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.ManualRegistry, err = sharedRegistrySet.ManualRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.SettingsRegistry, err = sharedRegistrySet.SettingsRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.ExportRegistry, err = sharedRegistrySet.ExportRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.RestoreOperationRegistry, err = sharedRegistrySet.RestoreOperationRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.RestoreStepRegistry, err = sharedRegistrySet.RestoreStepRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.FileRegistry, err = sharedRegistrySet.FileRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.UserRegistry = userRegistry
-	registrySet2.TenantRegistry = sharedRegistrySet.TenantRegistry
+	registrySet2 := must.Must(sharedFactorySet.CreateUserRegistrySet(user2Ctx))
 
 	// Set main currency for user 2
 	err = registrySet2.SettingsRegistry.Save(user2Ctx, models.SettingsObject{
@@ -504,12 +468,19 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	maliciousXML, err := generateXMLFromTemplate("testdata/inventory_template.xml", maliciousData)
 	c.Assert(err, qt.IsNil)
 
-	// User 2 attempts the malicious import
-	entityService2 := services.NewEntityService(registrySet2, "file://./test_uploads?create_dir=true")
-	proc2 := processor.NewRestoreOperationProcessor("test-restore-op-user2", registrySet2, entityService2, "file://./test_uploads?create_dir=true")
+	// User 2 attempts the malicious import using MergeAdd strategy
+	entityService2 := services.NewEntityService(sharedFactorySet, "file://./test_uploads?create_dir=true")
+	proc2 := processor.NewRestoreOperationProcessor("test-restore-op-user2", sharedFactorySet, entityService2, "file://./test_uploads?create_dir=true")
+
+	// User 2 uses MergeAdd strategy (no data clearing)
+	options2 := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyMergeAdd,
+		DryRun:          false,
+		IncludeFileData: true,
+	}
 
 	reader2 := strings.NewReader(maliciousXML)
-	stats2, err := proc2.RestoreFromXML(user2Ctx, reader2, options)
+	stats2, err := proc2.RestoreFromXML(user2Ctx, reader2, options2)
 	c.Assert(err, qt.IsNil, qt.Commentf("Restore operation should complete even with security violations"))
 
 	// Should either fail completely or skip unauthorized entities
@@ -557,63 +528,15 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create shared registry set that both tenants will use for security validation
-	sharedTenantRegistrySet := memory.NewFactorySet().CreateServiceRegistrySet()
-	sharedTenantRegistrySet.UserRegistry = userRegistry
+	sharedTenantfactorySet := memory.NewFactorySet()
+	sharedTenantfactorySet.UserRegistry = userRegistry
 
 	// Create tenant-specific registry sets that share the same underlying data
 	tenant1Ctx := appctx.WithUser(ctx, createdUserTenant1)
-	registrySetTenant1 := &registry.Set{}
-	registrySetTenant1.LocationRegistry, err = sharedTenantRegistrySet.LocationRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.AreaRegistry, err = sharedTenantRegistrySet.AreaRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.CommodityRegistry, err = sharedTenantRegistrySet.CommodityRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.ImageRegistry, err = sharedTenantRegistrySet.ImageRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.InvoiceRegistry, err = sharedTenantRegistrySet.InvoiceRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.ManualRegistry, err = sharedTenantRegistrySet.ManualRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.SettingsRegistry, err = sharedTenantRegistrySet.SettingsRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.ExportRegistry, err = sharedTenantRegistrySet.ExportRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.RestoreOperationRegistry, err = sharedTenantRegistrySet.RestoreOperationRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.RestoreStepRegistry, err = sharedTenantRegistrySet.RestoreStepRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.FileRegistry, err = sharedTenantRegistrySet.FileRegistry.WithCurrentUser(tenant1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant1.UserRegistry = userRegistry
-	registrySetTenant1.TenantRegistry = sharedTenantRegistrySet.TenantRegistry
+	registrySetTenant1 := must.Must(sharedTenantfactorySet.CreateUserRegistrySet(tenant1Ctx))
 
 	tenant2Ctx := appctx.WithUser(ctx, createdUserTenant2)
-	registrySetTenant2 := &registry.Set{}
-	registrySetTenant2.LocationRegistry, err = sharedTenantRegistrySet.LocationRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.AreaRegistry, err = sharedTenantRegistrySet.AreaRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.CommodityRegistry, err = sharedTenantRegistrySet.CommodityRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.ImageRegistry, err = sharedTenantRegistrySet.ImageRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.InvoiceRegistry, err = sharedTenantRegistrySet.InvoiceRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.ManualRegistry, err = sharedTenantRegistrySet.ManualRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.SettingsRegistry, err = sharedTenantRegistrySet.SettingsRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.ExportRegistry, err = sharedTenantRegistrySet.ExportRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.RestoreOperationRegistry, err = sharedTenantRegistrySet.RestoreOperationRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.RestoreStepRegistry, err = sharedTenantRegistrySet.RestoreStepRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.FileRegistry, err = sharedTenantRegistrySet.FileRegistry.WithCurrentUser(tenant2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySetTenant2.UserRegistry = userRegistry
-	registrySetTenant2.TenantRegistry = sharedTenantRegistrySet.TenantRegistry
+	registrySetTenant2 := must.Must(sharedTenantfactorySet.CreateUserRegistrySet(tenant2Ctx))
 
 	// Set main currency for both tenants
 	mainCurrency := "USD"
@@ -641,17 +564,18 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	tenant1XML, err := generateXMLFromTemplate("testdata/inventory_template.xml", tenant1Data)
 	c.Assert(err, qt.IsNil)
 
-	entityServiceTenant1 := services.NewEntityService(registrySetTenant1, "file://./test_uploads?create_dir=true")
-	proc1 := processor.NewRestoreOperationProcessor("test-restore-op-tenant1", registrySetTenant1, entityServiceTenant1, "file://./test_uploads?create_dir=true")
+	entityServiceTenant1 := services.NewEntityService(sharedTenantfactorySet, "file://./test_uploads?create_dir=true")
+	proc1 := processor.NewRestoreOperationProcessor("test-restore-op-tenant1", sharedTenantfactorySet, entityServiceTenant1, "file://./test_uploads?create_dir=true")
 
-	options := types.RestoreOptions{
+	// Tenant 1 uses FullReplace to set up initial data
+	options1 := types.RestoreOptions{
 		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader1 := strings.NewReader(tenant1XML)
-	stats1, err := proc1.RestoreFromXML(tenant1Ctx, reader1, options)
+	stats1, err := proc1.RestoreFromXML(tenant1Ctx, reader1, options1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats1.ErrorCount, qt.Equals, 0)
 
@@ -674,11 +598,18 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	maliciousXML, err := generateXMLFromTemplate("testdata/inventory_template.xml", maliciousData)
 	c.Assert(err, qt.IsNil)
 
-	entityServiceTenant2 := services.NewEntityService(registrySetTenant2, "file://./test_uploads?create_dir=true")
-	proc2 := processor.NewRestoreOperationProcessor("test-restore-op-tenant2", registrySetTenant2, entityServiceTenant2, "file://./test_uploads?create_dir=true")
+	entityServiceTenant2 := services.NewEntityService(sharedTenantfactorySet, "file://./test_uploads?create_dir=true")
+	proc2 := processor.NewRestoreOperationProcessor("test-restore-op-tenant2", sharedTenantfactorySet, entityServiceTenant2, "file://./test_uploads?create_dir=true")
+
+	// Tenant 2 uses MergeAdd strategy (no data clearing)
+	options2 := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyMergeAdd,
+		DryRun:          false,
+		IncludeFileData: true,
+	}
 
 	reader2 := strings.NewReader(maliciousXML)
-	stats2, err := proc2.RestoreFromXML(tenant2Ctx, reader2, options)
+	stats2, err := proc2.RestoreFromXML(tenant2Ctx, reader2, options2)
 	c.Assert(err, qt.IsNil, qt.Commentf("Restore operation should complete even with cross-tenant violations"))
 
 	// Should fail or skip unauthorized cross-tenant access
@@ -711,9 +642,11 @@ func TestRestoreService_SecurityValidation_ValidUserManipulations(t *testing.T) 
 	userRegistry := memory.NewUserRegistry()
 	createdUser, err := userRegistry.Create(ctx, testUser)
 	c.Assert(err, qt.IsNil)
+	ctx = appctx.WithUser(ctx, createdUser)
 
-	registrySet := memory.NewRegistrySetWithUserID(createdUser.ID)
-	registrySet.UserRegistry = userRegistry
+	factorySet := memory.NewFactorySet()
+	factorySet.UserRegistry = userRegistry
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set main currency
 	mainCurrency := "USD"
@@ -737,8 +670,9 @@ func TestRestoreService_SecurityValidation_ValidUserManipulations(t *testing.T) 
 	initialXML, err := generateXMLFromTemplate("testdata/inventory_template.xml", initialData)
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op-valid", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	operationID := "test-restore-operation"
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor(operationID, factorySet, entityService, "file://./test_uploads?create_dir=true")
 
 	options := types.RestoreOptions{
 		Strategy:        types.RestoreStrategyFullReplace,
@@ -854,63 +788,15 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 	c.Assert(err, qt.IsNil)
 
 	// Create shared registry set that both users will use
-	sharedLoggingRegistrySet := memory.NewFactorySet().CreateServiceRegistrySet()
-	sharedLoggingRegistrySet.UserRegistry = userRegistry
+	sharedLoggingfactorySet := memory.NewFactorySet()
+	sharedLoggingfactorySet.UserRegistry = userRegistry
 
 	// Create user-specific registry sets that share the same underlying data
 	user1Ctx := appctx.WithUser(ctx, createdUser1)
-	registrySet1 := &registry.Set{}
-	registrySet1.LocationRegistry, err = sharedLoggingRegistrySet.LocationRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.AreaRegistry, err = sharedLoggingRegistrySet.AreaRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.CommodityRegistry, err = sharedLoggingRegistrySet.CommodityRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.ImageRegistry, err = sharedLoggingRegistrySet.ImageRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.InvoiceRegistry, err = sharedLoggingRegistrySet.InvoiceRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.ManualRegistry, err = sharedLoggingRegistrySet.ManualRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.SettingsRegistry, err = sharedLoggingRegistrySet.SettingsRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.ExportRegistry, err = sharedLoggingRegistrySet.ExportRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.RestoreOperationRegistry, err = sharedLoggingRegistrySet.RestoreOperationRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.RestoreStepRegistry, err = sharedLoggingRegistrySet.RestoreStepRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.FileRegistry, err = sharedLoggingRegistrySet.FileRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet1.UserRegistry = userRegistry
-	registrySet1.TenantRegistry = sharedLoggingRegistrySet.TenantRegistry
+	registrySet1 := must.Must(sharedLoggingfactorySet.CreateUserRegistrySet(user1Ctx))
 
 	user2Ctx := appctx.WithUser(ctx, createdUser2)
-	registrySet2 := &registry.Set{}
-	registrySet2.LocationRegistry, err = sharedLoggingRegistrySet.LocationRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.AreaRegistry, err = sharedLoggingRegistrySet.AreaRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.CommodityRegistry, err = sharedLoggingRegistrySet.CommodityRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.ImageRegistry, err = sharedLoggingRegistrySet.ImageRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.InvoiceRegistry, err = sharedLoggingRegistrySet.InvoiceRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.ManualRegistry, err = sharedLoggingRegistrySet.ManualRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.SettingsRegistry, err = sharedLoggingRegistrySet.SettingsRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.ExportRegistry, err = sharedLoggingRegistrySet.ExportRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.RestoreOperationRegistry, err = sharedLoggingRegistrySet.RestoreOperationRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.RestoreStepRegistry, err = sharedLoggingRegistrySet.RestoreStepRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.FileRegistry, err = sharedLoggingRegistrySet.FileRegistry.WithCurrentUser(user2Ctx)
-	c.Assert(err, qt.IsNil)
-	registrySet2.UserRegistry = userRegistry
-	registrySet2.TenantRegistry = sharedLoggingRegistrySet.TenantRegistry
+	registrySet2 := must.Must(sharedLoggingfactorySet.CreateUserRegistrySet(user2Ctx))
 
 	// Set main currency for both users
 	mainCurrency := "USD"
@@ -938,17 +824,18 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 	user1XML, err := generateXMLFromTemplate("testdata/inventory_template.xml", user1Data)
 	c.Assert(err, qt.IsNil)
 
-	entityService1 := services.NewEntityService(registrySet1, "file://./test_uploads?create_dir=true")
-	proc1 := processor.NewRestoreOperationProcessor("test-restore-op-log1", registrySet1, entityService1, "file://./test_uploads?create_dir=true")
+	entityService1 := services.NewEntityService(sharedLoggingfactorySet, "file://./test_uploads?create_dir=true")
+	proc1 := processor.NewRestoreOperationProcessor("test-restore-op-log1", sharedLoggingfactorySet, entityService1, "file://./test_uploads?create_dir=true")
 
-	options := types.RestoreOptions{
+	// User 1 uses FullReplace to set up initial data
+	options1 := types.RestoreOptions{
 		Strategy:        types.RestoreStrategyFullReplace,
 		DryRun:          false,
 		IncludeFileData: true,
 	}
 
 	reader1 := strings.NewReader(user1XML)
-	stats1, err := proc1.RestoreFromXML(user1Ctx, reader1, options)
+	stats1, err := proc1.RestoreFromXML(user1Ctx, reader1, options1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats1.ErrorCount, qt.Equals, 0)
 
@@ -997,8 +884,15 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 		},
 	}
 
-	entityService2 := services.NewEntityService(registrySet2, "file://./test_uploads?create_dir=true")
-	proc2 := processor.NewRestoreOperationProcessor("test-restore-op-log2", registrySet2, entityService2, "file://./test_uploads?create_dir=true")
+	entityService2 := services.NewEntityService(sharedLoggingfactorySet, "file://./test_uploads?create_dir=true")
+	proc2 := processor.NewRestoreOperationProcessor("test-restore-op-log2", sharedLoggingfactorySet, entityService2, "file://./test_uploads?create_dir=true")
+
+	// User 2 uses MergeAdd strategy (no data clearing)
+	options2 := types.RestoreOptions{
+		Strategy:        types.RestoreStrategyMergeAdd,
+		DryRun:          false,
+		IncludeFileData: true,
+	}
 
 	for _, attempt := range unauthorizedAttempts {
 		c.Run(attempt.name, func(c *qt.C) {
@@ -1006,73 +900,16 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 			var err error
 
 			if attempt.name == "non_existent_entity_access" {
-				// For non-existent entity test, create XML that creates valid entities but tries to link files to non-existent commodity
-				maliciousXML = fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
-  <locations>
-    <location id="%s">
-      <locationName>Test Location</locationName>
-      <address>123 Test Street</address>
-    </location>
-  </locations>
-  <areas>
-    <area id="%s">
-      <areaName>Test Area</areaName>
-      <locationId>%s</locationId>
-    </area>
-  </areas>
-  <commodities>
-    <commodity id="user2-valid-commodity">
-      <commodityName>Valid Commodity</commodityName>
-      <shortName>ValidComm</shortName>
-      <type>equipment</type>
-      <areaId>%s</areaId>
-      <count>1</count>
-      <originalPrice>100.00</originalPrice>
-      <originalPriceCurrency>USD</originalPriceCurrency>
-      <currentPrice>100.00</currentPrice>
-      <status>in_use</status>
-      <purchaseDate>2024-01-01</purchaseDate>
-      <registeredDate>2024-01-01</registeredDate>
-      <lastModifiedDate>2024-01-01</lastModifiedDate>
-      <draft>false</draft>
-      <images>
-        <file id="%s">
-          <path>test-image-malicious</path>
-          <originalPath>test-image-malicious.jpg</originalPath>
-          <extension>.jpg</extension>
-          <mimeType>image/jpeg</mimeType>
-          <data>VGhpcyBpcyBhIG1hbGljaW91cyBpbWFnZSBmaWxlIGNvbnRlbnQu</data>
-        </file>
-      </images>
-      <invoices>
-        <file id="%s">
-          <path>test-invoice-malicious</path>
-          <originalPath>test-invoice-malicious.pdf</originalPath>
-          <extension>.pdf</extension>
-          <mimeType>application/pdf</mimeType>
-          <data>VGhpcyBpcyBhIG1hbGljaW91cyBpbnZvaWNlIGZpbGUgY29udGVudC4=</data>
-        </file>
-      </invoices>
-      <manuals>
-        <file id="%s">
-          <path>test-manual-malicious</path>
-          <originalPath>test-manual-malicious.pdf</originalPath>
-          <extension>.pdf</extension>
-          <mimeType>application/pdf</mimeType>
-          <data>VGhpcyBpcyBhIG1hbGljaW91cyBtYW51YWwgZmlsZSBjb250ZW50Lg==</data>
-        </file>
-      </manuals>
-    </commodity>
-  </commodities>
-</inventory>`, attempt.data.LocationID, attempt.data.AreaID, attempt.data.LocationID, attempt.data.AreaID, attempt.data.ImageID, attempt.data.InvoiceID, attempt.data.ManualID)
+				// For non-existent entity test, use template for malicious XML
+				maliciousXML, err = generateXMLFromTemplate("testdata/malicious_non_existent_entity.xml", attempt.data)
+				c.Assert(err, qt.IsNil)
 			} else {
 				maliciousXML, err = generateXMLFromTemplate("testdata/inventory_template.xml", attempt.data)
 				c.Assert(err, qt.IsNil)
 			}
 
 			reader := strings.NewReader(maliciousXML)
-			stats, err := proc2.RestoreFromXML(user2Ctx, reader, options)
+			stats, err := proc2.RestoreFromXML(user2Ctx, reader, options2)
 			c.Assert(err, qt.IsNil)
 
 			// Should have errors for unauthorized attempts
@@ -1185,20 +1022,14 @@ func TestRestoreService_SecurityValidation_MaliciousFileOperations(t *testing.T)
 	c.Assert(err, qt.IsNil)
 
 	// Setup registry sets for both users
-	sharedRegistrySet := memory.NewFactorySet().CreateServiceRegistrySet()
-	sharedRegistrySet.UserRegistry = userRegistry
+	sharedfactorySet := memory.NewFactorySet()
+	sharedfactorySet.UserRegistry = userRegistry
 
-	registrySet1 := memory.NewFactorySet().CreateServiceRegistrySet()
-	registrySet1.UserRegistry = userRegistry
-	registrySet1.TenantRegistry = sharedRegistrySet.TenantRegistry
-
-	registrySet2 := memory.NewFactorySet().CreateServiceRegistrySet()
-	registrySet2.UserRegistry = userRegistry
-	registrySet2.TenantRegistry = sharedRegistrySet.TenantRegistry
-
-	// Create contexts
 	user1Ctx := appctx.WithUser(ctx, createdUser1)
+	registrySet1 := must.Must(sharedfactorySet.CreateUserRegistrySet(user1Ctx))
+
 	user2Ctx := appctx.WithUser(ctx, createdUser2)
+	registrySet2 := must.Must(sharedfactorySet.CreateUserRegistrySet(user2Ctx))
 
 	// Set main currency for both users
 	mainCurrency := "USD"
@@ -1213,23 +1044,20 @@ func TestRestoreService_SecurityValidation_MaliciousFileOperations(t *testing.T)
 	c.Assert(err, qt.IsNil)
 
 	// User 1 creates entities
-	user1LocationReg, err := registrySet1.LocationRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
+	user1LocationReg := registrySet1.LocationRegistry
 	user1Location, err := user1LocationReg.Create(user1Ctx, models.Location{
 		Name: "User 1 Location",
 	})
 	c.Assert(err, qt.IsNil)
 
-	user1AreaReg, err := registrySet1.AreaRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
+	user1AreaReg := registrySet1.AreaRegistry
 	user1Area, err := user1AreaReg.Create(user1Ctx, models.Area{
 		Name:       "User 1 Area",
 		LocationID: user1Location.ID,
 	})
 	c.Assert(err, qt.IsNil)
 
-	user1CommodityReg, err := registrySet1.CommodityRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
+	user1CommodityReg := registrySet1.CommodityRegistry
 	user1Commodity, err := user1CommodityReg.Create(user1Ctx, models.Commodity{
 		Name:   "User 1 Commodity",
 		AreaID: user1Area.ID,
@@ -1309,8 +1137,8 @@ func TestRestoreService_SecurityValidation_MaliciousFileOperations(t *testing.T)
 			c.Assert(err, qt.IsNil, qt.Commentf("Failed to load template %s", scenario.templateName))
 
 			// User 2 attempts malicious operation
-			entityService2 := services.NewEntityService(registrySet2, "file://./test_uploads?create_dir=true")
-			proc2 := processor.NewRestoreOperationProcessor("test-restore-malicious", registrySet2, entityService2, "file://./test_uploads?create_dir=true")
+			entityService2 := services.NewEntityService(sharedfactorySet, "file://./test_uploads?create_dir=true")
+			proc2 := processor.NewRestoreOperationProcessor("test-restore-malicious", sharedfactorySet, entityService2, "file://./test_uploads?create_dir=true")
 
 			options := types.RestoreOptions{
 				Strategy: types.RestoreStrategyMergeAdd,
@@ -1358,6 +1186,8 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 	var userContexts []context.Context
 	var registrySets []*registry.Set
 
+	factorySet := memory.NewFactorySet()
+
 	for i := 0; i < 3; i++ {
 		testUser := models.User{
 			Name:  fmt.Sprintf("Test User %d", i+1),
@@ -1369,31 +1199,44 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 		userCtx := appctx.WithUser(ctx, createdUser)
 		userContexts = append(userContexts, userCtx)
 
-		registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
+		registrySet := must.Must(factorySet.CreateUserRegistrySet(userCtx))
 		registrySet.UserRegistry = userRegistry
 		registrySets = append(registrySets, registrySet)
 
 		// Set main currency
-		mainCurrency := "USD"
-		err = registrySet.SettingsRegistry.Save(userCtx, models.SettingsObject{
-			MainCurrency: &mainCurrency,
-		})
+		err = registrySet.SettingsRegistry.Patch(userCtx, "system.main_currency", "USD")
 		c.Assert(err, qt.IsNil)
+
+		// Set up basic entities for each user (needed for image linking)
+		if i > 0 { // Skip user 0 as they already have entities set up below
+			userLocation, err := registrySet.LocationRegistry.Create(userCtx, models.Location{
+				Name: fmt.Sprintf("User %d Location", i),
+			})
+			c.Assert(err, qt.IsNil)
+
+			userArea, err := registrySet.AreaRegistry.Create(userCtx, models.Area{
+				Name:       fmt.Sprintf("User %d Area", i),
+				LocationID: userLocation.ID,
+			})
+			c.Assert(err, qt.IsNil)
+
+			_, err = registrySet.CommodityRegistry.Create(userCtx, models.Commodity{
+				Name:   fmt.Sprintf("User %d Commodity", i),
+				AreaID: userArea.ID,
+			})
+			c.Assert(err, qt.IsNil)
+		}
 	}
 
 	// User 0 creates a commodity
-	user0CommodityReg, err := registrySets[0].CommodityRegistry.WithCurrentUser(userContexts[0])
-	c.Assert(err, qt.IsNil)
-
-	user0LocationReg, err := registrySets[0].LocationRegistry.WithCurrentUser(userContexts[0])
-	c.Assert(err, qt.IsNil)
+	user0CommodityReg := registrySets[0].CommodityRegistry
+	user0LocationReg := registrySets[0].LocationRegistry
 	user0Location, err := user0LocationReg.Create(userContexts[0], models.Location{
 		Name: "User 0 Location",
 	})
 	c.Assert(err, qt.IsNil)
 
-	user0AreaReg, err := registrySets[0].AreaRegistry.WithCurrentUser(userContexts[0])
-	c.Assert(err, qt.IsNil)
+	user0AreaReg := registrySets[0].AreaRegistry
 	user0Area, err := user0AreaReg.Create(userContexts[0], models.Area{
 		Name:       "User 0 Area",
 		LocationID: user0Location.ID,
@@ -1464,10 +1307,12 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 						return
 					}
 
-					entityService := services.NewEntityService(registrySets[userIndex], "file://./test_uploads?create_dir=true")
+
+
+					entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
 					proc := processor.NewRestoreOperationProcessor(
 						fmt.Sprintf("concurrent-attack-%d", userIndex),
-						registrySets[userIndex],
+						factorySet,
 						entityService,
 						"file://./test_uploads?create_dir=true",
 					)
@@ -1496,7 +1341,6 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 				}
 				if results[i] != nil && results[i].ErrorCount > 0 {
 					totalErrors++
-					c.Logf("User %d got %d errors in results", i+1, results[i].ErrorCount)
 
 					// Check for security-related errors
 					for _, errorMsg := range results[i].Errors {
@@ -1520,7 +1364,6 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 				// 3. Skip the file operations entirely
 
 				// Check if any files were actually linked to the target commodity
-				filesLinkedToTarget := 0
 				totalFilesProcessed := 0
 				for i := 0; i < 2; i++ {
 					if results[i] != nil {
@@ -1542,11 +1385,11 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 				// 1. There were errors preventing the operation, OR
 				// 2. Files were orphaned (security system working), OR
 				// 3. No files were linked to the target commodity
-				securityWorking := totalErrors > 0 || securityViolations > 0 || filesLinkedToTarget == 0
+				securityWorking := totalErrors > 0 || securityViolations > 0
 
 				c.Assert(securityWorking, qt.IsTrue,
-					qt.Commentf("Concurrent cross-user access should be prevented. Total errors: %d, Security violations: %d, Files linked to target: %d",
-						totalErrors, securityViolations, filesLinkedToTarget))
+					qt.Commentf("Concurrent cross-user access should be prevented. Total errors: %d, Security violations: %d",
+						totalErrors, securityViolations))
 			}
 		})
 	}
@@ -1567,7 +1410,8 @@ func TestRestoreService_SecurityValidation_EdgeCases(t *testing.T) {
 	createdUser, err := userRegistry.Create(ctx, testUser)
 	c.Assert(err, qt.IsNil)
 
-	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
+	factorySet := memory.NewFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	registrySet.UserRegistry = userRegistry
 
 	userCtx := appctx.WithUser(ctx, createdUser)
@@ -1653,10 +1497,10 @@ func TestRestoreService_SecurityValidation_EdgeCases(t *testing.T) {
 			xmlContent, err := loadSecurityTemplate(edgeCase.templateName, edgeCase.templateData)
 			c.Assert(err, qt.IsNil, qt.Commentf("Failed to load template %s", edgeCase.templateName))
 
-			entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
+			entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
 			proc := processor.NewRestoreOperationProcessor(
 				"edge-case-test",
-				registrySet,
+				factorySet,
 				entityService,
 				"file://./test_uploads?create_dir=true",
 			)

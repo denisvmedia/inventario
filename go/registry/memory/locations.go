@@ -102,6 +102,16 @@ func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *LocationRegistry) Update(ctx context.Context, location models.Location) (*models.Location, error) {
+	// Call the base registry's UpdateWithUser method to ensure user context is preserved
+	updatedLocation, err := r.Registry.UpdateWithUser(ctx, location)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to update location")
+	}
+
+	return updatedLocation, nil
+}
+
 func (r *LocationRegistry) AddArea(_ context.Context, locationID, areaID string) error {
 	r.areasLock.Lock()
 	r.areas[locationID] = append(r.areas[locationID], areaID)

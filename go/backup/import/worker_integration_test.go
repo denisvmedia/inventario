@@ -23,6 +23,7 @@ func newTestFactorySet() *registry.FactorySet {
 func TestImportWorkerHandlesProcessingErrors(t *testing.T) {
 	c := qt.New(t)
 	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
@@ -64,6 +65,7 @@ func TestImportWorkerHandlesProcessingErrors(t *testing.T) {
 func TestImportWorkerProcessPendingImports(t *testing.T) {
 	c := qt.New(t)
 	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()

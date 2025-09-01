@@ -349,7 +349,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	entities.Manuals = make(map[string]*models.Manual)
 
 	// Load locations - index by ID (which should be the same as XML ID for imported entities)
-	locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
+	locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user location registry")
+	}
 	locations, err := locReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing locations")
@@ -359,7 +362,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load areas - index by ID (which should be the same as XML ID for imported entities)
-	areaReg := l.factorySet.AreaRegistryFactory.CreateServiceRegistry()
+	areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user area registry")
+	}
 	areas, err := areaReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing areas")
@@ -369,7 +375,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load commodities - index by ID (which should be the same as XML ID for imported entities)
-	comReg := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+	comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user commodity registry")
+	}
 	commodities, err := comReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing commodities")
@@ -379,7 +388,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load images - index by ID (which should be the same as XML ID for imported entities)
-	imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
+	imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user image registry")
+	}
 	images, err := imgReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing images")
@@ -389,7 +401,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load invoices - index by ID (which should be the same as XML ID for imported entities)
-	invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
+	invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user invoice registry")
+	}
 	invoices, err := invReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing invoices")
@@ -399,7 +414,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load manuals - index by ID (which should be the same as XML ID for imported entities)
-	manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
+	manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user manual registry")
+	}
 	manuals, err := manReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing manuals")
@@ -1084,7 +1102,11 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 	}
 
 	// Get main currency from settings and add it to context for commodity validation
-	settingsReg := l.factorySet.SettingsRegistryFactory.CreateServiceRegistry()
+	// Use user-aware settings registry to get user-specific settings
+	settingsReg, err := l.factorySet.SettingsRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return stats, errkit.Wrap(err, "failed to create user settings registry")
+	}
 	settings, err := settingsReg.Get(ctx)
 	if err != nil {
 		return stats, errkit.Wrap(err, "failed to get settings")
@@ -1246,7 +1268,10 @@ func (l *RestoreOperationProcessor) processLocation(
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
 		if !options.DryRun {
-			locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
+			locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errkit.Wrap(err, "failed to create user location registry")
+			}
 			createdLocation, err := locReg.Create(ctx, *location)
 			if err != nil {
 				l.updateRestoreStep(ctx,
@@ -1266,7 +1291,10 @@ func (l *RestoreOperationProcessor) processLocation(
 			break
 		}
 		if !options.DryRun {
-			locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
+			locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errkit.Wrap(err, "failed to create user location registry")
+			}
 			createdLocation, err := locReg.Create(ctx, *location)
 			if err != nil {
 				l.updateRestoreStep(ctx,
@@ -1284,7 +1312,10 @@ func (l *RestoreOperationProcessor) processLocation(
 		// Create if missing, update if exists
 		if existingLocation == nil {
 			if !options.DryRun {
-				locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
+				locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+				if err != nil {
+					return errkit.Wrap(err, "failed to create user location registry")
+				}
 				createdLocation, err := locReg.Create(ctx, *location)
 				if err != nil {
 					l.updateRestoreStep(ctx,
@@ -1295,14 +1326,16 @@ func (l *RestoreOperationProcessor) processLocation(
 				existing.Locations[originalXMLID] = createdLocation
 				idMapping.Locations[originalXMLID] = createdLocation.ID
 				l.trackCreatedEntity(createdLocation.ID)
-				l.trackCreatedEntity(createdLocation.ID)
 			}
 			stats.CreatedCount++
 			stats.LocationCount++
 			break
 		}
 		if !options.DryRun {
-			locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
+			locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errkit.Wrap(err, "failed to create user location registry")
+			}
 			updatedLocation, err := locReg.Update(ctx, *location)
 			if err != nil {
 				l.updateRestoreStep(ctx,
@@ -1370,7 +1403,10 @@ func (l *RestoreOperationProcessor) applyStrategyForArea(
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
 		if !options.DryRun {
-			areaReg := l.factorySet.AreaRegistryFactory.CreateServiceRegistry()
+			areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errkit.Wrap(err, "failed to create user area registry")
+			}
 			createdArea, err := areaReg.Create(ctx, *area)
 			if err != nil {
 				return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
@@ -1386,7 +1422,10 @@ func (l *RestoreOperationProcessor) applyStrategyForArea(
 		// Only create if doesn't exist
 		if existingArea == nil {
 			if !options.DryRun {
-				areaReg := l.factorySet.AreaRegistryFactory.CreateServiceRegistry()
+				areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+				if err != nil {
+					return errkit.Wrap(err, "failed to create user area registry")
+				}
 				createdArea, err := areaReg.Create(ctx, *area)
 				if err != nil {
 					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
@@ -1405,7 +1444,10 @@ func (l *RestoreOperationProcessor) applyStrategyForArea(
 		// Create if missing, update if exists
 		if existingArea == nil {
 			if !options.DryRun {
-				areaReg := l.factorySet.AreaRegistryFactory.CreateServiceRegistry()
+				areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+				if err != nil {
+					return errkit.Wrap(err, "failed to create user area registry")
+				}
 				createdArea, err := areaReg.Create(ctx, *area)
 				if err != nil {
 					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
@@ -1420,7 +1462,10 @@ func (l *RestoreOperationProcessor) applyStrategyForArea(
 			break
 		}
 		if !options.DryRun {
-			areaReg := l.factorySet.AreaRegistryFactory.CreateServiceRegistry()
+			areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errkit.Wrap(err, "failed to create user area registry")
+			}
 			updatedArea, err := areaReg.Update(ctx, *area)
 			if err != nil {
 				return errkit.Wrap(err, fmt.Sprintf("failed to update area %s", originalXMLID))
@@ -1798,7 +1843,10 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodity(
 	case types.RestoreStrategyFullReplace:
 		// Always create (database was cleared)
 		if !options.DryRun {
-			comReg := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+			comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errkit.Wrap(err, "failed to create user commodity registry")
+			}
 			createdCommodity, err := comReg.Create(ctx, *commodity)
 			if err != nil {
 				return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
@@ -1814,7 +1862,10 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodity(
 		// Only create if doesn't exist
 		if existingCommodity == nil {
 			if !options.DryRun {
-				comReg := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+				comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+				if err != nil {
+					return errkit.Wrap(err, "failed to create user commodity registry")
+				}
 				createdCommodity, err := comReg.Create(ctx, *commodity)
 				if err != nil {
 					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
@@ -1833,7 +1884,10 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodity(
 		// Create if missing, update if exists
 		if existingCommodity == nil {
 			if !options.DryRun {
-				comReg := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+				comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+				if err != nil {
+					return errkit.Wrap(err, "failed to create user commodity registry")
+				}
 				createdCommodity, err := comReg.Create(ctx, *commodity)
 				if err != nil {
 					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
@@ -1848,7 +1902,10 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodity(
 			return nil
 		}
 		if !options.DryRun {
-			comReg := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+			comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errkit.Wrap(err, "failed to create user commodity registry")
+			}
 			updatedCommodity, err := comReg.Update(ctx, *commodity)
 			if err != nil {
 				return errkit.Wrap(err, fmt.Sprintf("failed to update commodity %s", originalXMLID))

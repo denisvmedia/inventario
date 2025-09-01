@@ -16,12 +16,12 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func newTestRegistrySet() (*registry.Set, string) {
-	// Use the proper NewRegistrySet function to ensure all dependencies are set up correctly
-	registrySet := memory.NewRegistrySet()
+func newTestFactorySet() (*registry.FactorySet, string) {
+	// Use the proper NewFactorySet function to ensure all dependencies are set up correctly
+	factorySet := memory.NewFactorySet()
 
 	// Create user with server-generated ID and capture it
-	createdUser := must.Must(registrySet.UserRegistry.Create(context.Background(), models.User{
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			// ID will be generated server-side for security
 			TenantID: "test-tenant",
@@ -32,29 +32,29 @@ func newTestRegistrySet() (*registry.Set, string) {
 		IsActive: true,
 	}))
 
-	must.Must(registrySet.TenantRegistry.Create(context.Background(), models.Tenant{
+	must.Must(factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
 		EntityID: models.EntityID{ID: "test-tenant"},
 		Name:     "Test Tenant",
 	}))
 
-	return registrySet, createdUser.ID
+	return factorySet, createdUser.ID
 }
 
 func TestNewImportService(t *testing.T) {
 	c := qt.New(t)
-	registrySet, _ := newTestRegistrySet()
+	factorySet, _ := newTestFactorySet()
 	uploadLocation := "memory://test-bucket"
 
-	service := importpkg.NewImportService(registrySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation)
 
 	c.Assert(service, qt.IsNotNil)
 }
 
 func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 	c := qt.New(t)
-	registrySet, _ := newTestRegistrySet()
+	factorySet, _ := newTestFactorySet()
 	uploadLocation := "mem://test-bucket"
-	service := importpkg.NewImportService(registrySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation)
 	ctx := context.Background()
 
 	err := service.ProcessImport(ctx, "non-existent-id", "test-file.xml")
@@ -64,10 +64,11 @@ func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 
 func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 	c := qt.New(t)
-	registrySet, _ := newTestRegistrySet()
+	factorySet, _ := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	// Use invalid upload location to trigger blob bucket error
 	uploadLocation := "invalid://invalid-location"
-	service := importpkg.NewImportService(registrySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation)
 	ctx := context.Background()
 
 	// Create a test export
@@ -92,9 +93,10 @@ func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 
 func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 	c := qt.New(t)
-	registrySet, _ := newTestRegistrySet()
+	factorySet, _ := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	uploadLocation := "mem://test-bucket"
-	service := importpkg.NewImportService(registrySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation)
 	ctx := context.Background()
 
 	// Create a test export
@@ -119,13 +121,14 @@ func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 
 func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 	c := qt.New(t)
-	registrySet, _ := newTestRegistrySet()
+	factorySet, _ := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	service := importpkg.NewImportService(registrySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation)
 	ctx := context.Background()
 
 	// Create blob bucket and upload invalid XML
@@ -160,13 +163,14 @@ func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 
 func TestImportService_ProcessImport_Success(t *testing.T) {
 	c := qt.New(t)
-	registrySet, testUserID := newTestRegistrySet()
+	factorySet, testUserID := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	service := importpkg.NewImportService(registrySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation)
 	ctx := context.Background()
 
 	// Create blob bucket and upload valid XML
@@ -229,13 +233,14 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 
 func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 	c := qt.New(t)
-	registrySet, testUserID := newTestRegistrySet()
+	factorySet, testUserID := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	service := importpkg.NewImportService(registrySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation)
 	ctx := context.Background()
 
 	// Create blob bucket and upload XML with file data
@@ -292,13 +297,14 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 
 func TestImportService_ProcessImport_ExportRecordDeleted(t *testing.T) {
 	c := qt.New(t)
-	registrySet, _ := newTestRegistrySet()
+	factorySet, _ := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	service := importpkg.NewImportService(registrySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation)
 	ctx := context.Background()
 
 	// Create a test export

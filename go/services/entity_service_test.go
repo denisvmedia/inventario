@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
@@ -16,9 +17,9 @@ import (
 )
 
 // newTestContext creates a context with test user for testing
-func newTestContext() context.Context {
+func newTestContext(factorySet *registry.FactorySet) context.Context {
 	// Create a test user with generated UUID
-	testUser := &models.User{
+	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-" + generateTestID()},
 			TenantID: "test-tenant-id",
@@ -27,7 +28,11 @@ func newTestContext() context.Context {
 	// Set UserID to self-reference
 	testUser.UserID = testUser.ID
 
-	return appctx.WithUser(context.Background(), testUser)
+	// Register the user in the system
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u := must.Must(userReg.Create(context.Background(), testUser))
+
+	return appctx.WithUser(context.Background(), u)
 }
 
 // generateTestID generates a simple test ID
@@ -104,7 +109,6 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := newTestContext()
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
@@ -115,9 +119,10 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 				uploadLocation = "file://" + tempDir + "?create_dir=1"
 			}
 
-			// Create registry set
-			factorySet := memory.NewFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-			c.Assert(registrySet, qt.IsNotNil)
+			// Create factory set and user context
+			factorySet := memory.NewFactorySet()
+			ctx := newTestContext(factorySet)
+			registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 			// Create service
 			service := services.NewEntityService(factorySet, uploadLocation)
@@ -215,7 +220,6 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := newTestContext()
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
@@ -226,9 +230,10 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 				uploadLocation = "file://" + tempDir + "?create_dir=1"
 			}
 
-			// Create registry set
-			factorySet := memory.NewFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-			c.Assert(registrySet, qt.IsNotNil)
+			// Create factory set and user context
+			factorySet := memory.NewFactorySet()
+			ctx := newTestContext(factorySet)
+			registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 			// Create service
 			service := services.NewEntityService(factorySet, uploadLocation)
@@ -274,31 +279,25 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 		{
 			name: "delete location with areas, commodities and files",
 			setupData: func(ctx context.Context, registrySet *registry.Set) (string, []string, []string, []string) {
-				// Get user-aware registries
-				locReg, _ := registrySet.LocationRegistry.WithCurrentUser(ctx)
-				areaReg, _ := registrySet.AreaRegistry.WithCurrentUser(ctx)
-				comReg, _ := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-				fileReg, _ := registrySet.FileRegistry.WithCurrentUser(ctx)
-
 				// Create location
-				location, _ := locReg.Create(ctx, models.Location{Name: "Test Location"})
+				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 
 				// Create areas
-				area1, _ := areaReg.Create(ctx, models.Area{Name: "Test Area 1", LocationID: location.ID})
-				area2, _ := areaReg.Create(ctx, models.Area{Name: "Test Area 2", LocationID: location.ID})
+				area1, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area 1", LocationID: location.ID})
+				area2, _ := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Test Area 2", LocationID: location.ID})
 
 				// Create commodities
-				commodity1, _ := comReg.Create(ctx, models.Commodity{
+				commodity1, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity 1",
 					AreaID: area1.ID,
 				})
-				commodity2, _ := comReg.Create(ctx, models.Commodity{
+				commodity2, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity 2",
 					AreaID: area2.ID,
 				})
 
 				// Create linked files
-				file1, _ := fileReg.Create(ctx, models.FileEntity{
+				file1, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
 					LinkedEntityType: "commodity",
 					LinkedEntityID:   commodity1.ID,
 					LinkedEntityMeta: "images",
@@ -309,7 +308,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 						MIMEType:     "image/jpeg",
 					},
 				})
-				file2, _ := fileReg.Create(ctx, models.FileEntity{
+				file2, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
 					LinkedEntityType: "commodity",
 					LinkedEntityID:   commodity2.ID,
 					LinkedEntityMeta: "manuals",
@@ -328,11 +327,8 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 		{
 			name: "delete location without areas",
 			setupData: func(ctx context.Context, registrySet *registry.Set) (string, []string, []string, []string) {
-				// Get user-aware registry
-				locReg, _ := registrySet.LocationRegistry.WithCurrentUser(ctx)
-
 				// Create location without areas
-				location, _ := locReg.Create(ctx, models.Location{Name: "Test Location"})
+				location, _ := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Test Location"})
 
 				return location.ID, []string{}, []string{}, []string{}
 			},
@@ -343,7 +339,6 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := newTestContext()
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
@@ -354,9 +349,10 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 				uploadLocation = "file://" + tempDir + "?create_dir=1"
 			}
 
-			// Create registry set
-			factorySet := memory.NewFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-			c.Assert(registrySet, qt.IsNotNil)
+			// Create factory set and user context
+			factorySet := memory.NewFactorySet()
+			ctx := newTestContext(factorySet)
+			registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 			// Create service
 			service := services.NewEntityService(factorySet, uploadLocation)
@@ -447,7 +443,6 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := newTestContext()
 
 			// Create temporary directory for test files
 			tempDir := c.TempDir()
@@ -458,9 +453,10 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 				uploadLocation = "file://" + tempDir + "?create_dir=1"
 			}
 
-			// Create registry set
-			factorySet := memory.NewFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
-			c.Assert(registrySet, qt.IsNotNil)
+			// Create factory set and user context
+			factorySet := memory.NewFactorySet()
+			ctx := newTestContext(factorySet)
+			registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 			// Create service
 			service := services.NewEntityService(factorySet, uploadLocation)
