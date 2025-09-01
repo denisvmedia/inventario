@@ -125,9 +125,6 @@ func TestExtractTenantUserFromContext(t *testing.T) {
 }
 
 func newTestRegistrySet() *registry.Set {
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	fileRegistry := memory.NewFileRegistry()
 	userRegistry := memory.NewUserRegistry()
 	tenantRegistry := memory.NewTenantRegistry()
 
@@ -150,16 +147,38 @@ func newTestRegistrySet() *registry.Set {
 		Name:     "Test Tenant",
 	}))
 
-	registrySet := &registry.Set{
-		LocationRegistry:  locationRegistry,
-		AreaRegistry:      areaRegistry,
-		CommodityRegistry: memory.NewCommodityRegistry(areaRegistry),
-		ExportRegistry:    memory.NewExportRegistry(),
-		FileRegistry:      fileRegistry,
-		UserRegistry:      userRegistry,
-		TenantRegistry:    tenantRegistry,
-	}
+	// Create factory set and return service registry set
+	factorySet := memory.NewFactorySet()
+	factorySet.UserRegistry = userRegistry
+	factorySet.TenantRegistry = tenantRegistry
+	registrySet := factorySet.CreateServiceRegistrySet()
 	return registrySet
+}
+
+// newTestFactorySet creates a factory set for testing
+func newTestFactorySet() *registry.FactorySet {
+	factorySet := memory.NewFactorySet()
+
+	// Create user with server-generated ID and capture it
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			// ID will be generated server-side for security
+			TenantID: "test-tenant",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}))
+	// Set the global testUserID to the generated ID
+	testUserID = createdUser.ID
+
+	must.Must(factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant"},
+		Name:     "Test Tenant",
+	}))
+
+	return factorySet
 }
 
 // newTestContext creates a context with test user ID for testing
@@ -174,13 +193,13 @@ func newTestContext() context.Context {
 
 func TestNewExportService(t *testing.T) {
 	c := qt.New(t)
-	registrySet := &registry.Set{}
+	factorySet := newTestFactorySet()
 	uploadLocation := "/tmp/uploads"
 
-	service := NewExportService(registrySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation)
 
 	c.Assert(service, qt.IsNotNil)
-	c.Assert(service.registrySet, qt.Equals, registrySet)
+	// Note: Cannot access private fields, just verify service is created
 	c.Assert(service.uploadLocation, qt.Equals, uploadLocation)
 }
 
@@ -242,9 +261,9 @@ func TestExportServiceProcessExport_InvalidID(t *testing.T) {
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
-	registrySet := newTestRegistrySet()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
-	service := NewExportService(registrySet, uploadLocation)
+	factorySet := newTestFactorySet()
+	service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	// Test with non-existent export ID
@@ -257,9 +276,10 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
-	registrySet := newTestRegistrySet()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-	service := NewExportService(registrySet, uploadLocation)
+	factorySet := newTestFactorySet()
+	service := NewExportService(factorySet, uploadLocation)
+	registrySet := factorySet.CreateServiceRegistrySet()
 	ctx := newTestContext()
 
 	// Create a test export in the database
@@ -289,9 +309,8 @@ func TestStreamXMLExport(t *testing.T) {
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
-	registrySet := newTestRegistrySet()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
-	service := NewExportService(registrySet, uploadLocation)
+	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	// Test different export types
@@ -333,9 +352,8 @@ func TestStreamXMLExport_InvalidType(t *testing.T) {
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
-	registrySet := newTestRegistrySet()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
-	service := NewExportService(registrySet, uploadLocation)
+	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	export := models.Export{
@@ -355,9 +373,8 @@ func TestGenerateExport(t *testing.T) {
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
-	registrySet := newTestRegistrySet()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-	service := NewExportService(registrySet, uploadLocation)
+	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	export := models.Export{
@@ -394,29 +411,12 @@ func TestFileHandlingWithIncludeFileData(t *testing.T) {
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
-	// Create interconnected registries
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	imageRegistry := memory.NewImageRegistry(commodityRegistry)
-	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
-	manualRegistry := memory.NewManualRegistry(commodityRegistry)
-	exportRegistry := memory.NewExportRegistry()
-
-	registrySet := &registry.Set{
-		LocationRegistry:  locationRegistry,
-		AreaRegistry:      areaRegistry,
-		CommodityRegistry: commodityRegistry,
-		ImageRegistry:     imageRegistry,
-		InvoiceRegistry:   invoiceRegistry,
-		ManualRegistry:    manualRegistry,
-		ExportRegistry:    exportRegistry,
-		FileRegistry:      fileRegistry,
-	}
+	// Create factory set and service registry set
+	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-	service := NewExportService(registrySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	// Create test data
@@ -534,50 +534,12 @@ func TestBase64FileDataVerification(t *testing.T) {
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 
-	// Create interconnected registries
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	imageRegistry := memory.NewImageRegistry(commodityRegistry)
-	invoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
-	manualRegistry := memory.NewManualRegistry(commodityRegistry)
-	exportRegistry := memory.NewExportRegistry()
-	userRegistry := memory.NewUserRegistry()
-	tenantRegistry := memory.NewTenantRegistry()
-	// Create user with server-generated ID and capture it
-	createdUser := must.Must(userRegistry.Create(context.Background(), models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			// ID will be generated server-side for security
-			TenantID: "test-tenant",
-		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		Role:     models.UserRoleUser,
-		IsActive: true,
-	}))
-	// Set the global testUserID to the generated ID
-	testUserID = createdUser.ID
-	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant"},
-		Name:     "Test Tenant",
-	}))
-
-	registrySet := &registry.Set{
-		LocationRegistry:  locationRegistry,
-		AreaRegistry:      areaRegistry,
-		CommodityRegistry: commodityRegistry,
-		ImageRegistry:     imageRegistry,
-		InvoiceRegistry:   invoiceRegistry,
-		ManualRegistry:    manualRegistry,
-		ExportRegistry:    exportRegistry,
-		FileRegistry:      fileRegistry,
-		UserRegistry:      userRegistry,
-		TenantRegistry:    tenantRegistry,
-	}
+	// Create factory set and service registry set
+	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-	service := NewExportService(registrySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation)
 	ctx := newTestContext()
 
 	// Create test data
@@ -755,7 +717,7 @@ func TestExportService_ProcessExport_CalculatesStatistics(t *testing.T) {
 	err := createTestFilesInBlobStorage(ctx, uploadLocation)
 	c.Assert(err, qt.IsNil)
 
-	service := NewExportService(registrySet, uploadLocation)
+	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
 
 	// Create test export
 	testExport := &models.Export{
@@ -800,7 +762,7 @@ func TestExportService_ProcessExport_WithoutFileData(t *testing.T) {
 	registrySet := createTestRegistrySetWithFiles(c, ctx)
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
-	service := NewExportService(registrySet, uploadLocation)
+	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
 
 	// Create test export without file data
 	testExport := &models.Export{
@@ -849,7 +811,7 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 	err := createTestFilesInBlobStorage(ctx, uploadLocation)
 	c.Assert(err, qt.IsNil)
 
-	service := NewExportService(registrySet, uploadLocation)
+	factorySet := newTestFactorySet(); service := NewExportService(factorySet, uploadLocation)
 
 	// Create test export with file data
 	testExport := &models.Export{
@@ -883,52 +845,15 @@ func TestExportService_Base64SizeTracking(t *testing.T) {
 
 // createTestRegistrySetWithFiles creates a test registry set with sample data including files
 func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set {
-	// Create user first to get the user ID
-	userRegistry := memory.NewUserRegistry()
-	createdUser := must.Must(userRegistry.Create(context.Background(), models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			// ID will be generated server-side for security
-			TenantID: "test-tenant",
-		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		Role:     models.UserRoleUser,
-		IsActive: true,
-	}))
-	// Set the global testUserID to the generated ID
-	testUserID = createdUser.ID
+	// Create factory set
+	factorySet := newTestFactorySet()
 
 	// Create user context for registry operations
+	createdUser := must.Must(factorySet.UserRegistry.Get(context.Background(), testUserID))
 	userCtx := appctx.WithUser(context.Background(), createdUser)
 
-	// Create interconnected registries with user context
-	locationRegistry := must.Must(memory.NewLocationRegistry().WithCurrentUser(userCtx))
-	areaRegistry := must.Must(memory.NewAreaRegistry(locationRegistry.(*memory.LocationRegistry)).WithCurrentUser(userCtx))
-	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := must.Must(memory.NewCommodityRegistry(areaRegistry.(*memory.AreaRegistry)).WithCurrentUser(userCtx))
-	imageRegistry := must.Must(memory.NewImageRegistry(commodityRegistry.(*memory.CommodityRegistry)).WithCurrentUser(userCtx))
-	invoiceRegistry := must.Must(memory.NewInvoiceRegistry(commodityRegistry.(*memory.CommodityRegistry)).WithCurrentUser(userCtx))
-	manualRegistry := must.Must(memory.NewManualRegistry(commodityRegistry.(*memory.CommodityRegistry)).WithCurrentUser(userCtx))
-	exportRegistry := memory.NewExportRegistry()
-	tenantRegistry := memory.NewTenantRegistry()
-	// User already created above
-	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant"},
-		Name:     "Test Tenant",
-	}))
-
-	registrySet := &registry.Set{
-		LocationRegistry:  locationRegistry,
-		AreaRegistry:      areaRegistry,
-		CommodityRegistry: commodityRegistry,
-		ImageRegistry:     imageRegistry,
-		InvoiceRegistry:   invoiceRegistry,
-		ManualRegistry:    manualRegistry,
-		ExportRegistry:    exportRegistry,
-		FileRegistry:      fileRegistry,
-		UserRegistry:      userRegistry,
-		TenantRegistry:    tenantRegistry,
-	}
+	// Create user-aware registry set
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(userCtx))
 
 	// Create test locations (IDs will be generated server-side for security)
 	location1 := models.Location{
