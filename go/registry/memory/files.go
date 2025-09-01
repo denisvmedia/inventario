@@ -13,42 +13,64 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.FileRegistry = (*FileRegistry)(nil)
+// FileRegistryFactory creates FileRegistry instances with proper context
+type FileRegistryFactory struct {
+	baseFileRegistry *Registry[models.FileEntity, *models.FileEntity]
+}
 
-type baseFileRegistry = Registry[models.FileEntity, *models.FileEntity]
-
+// FileRegistry is a context-aware registry that can only be created through the factory
 type FileRegistry struct {
-	*baseFileRegistry
+	*Registry[models.FileEntity, *models.FileEntity]
 
 	userID string
 }
 
-func NewFileRegistry() *FileRegistry {
-	return &FileRegistry{
+var _ registry.FileRegistry = (*FileRegistry)(nil)
+var _ registry.FileRegistryFactory = (*FileRegistryFactory)(nil)
+
+func NewFileRegistry() *FileRegistryFactory {
+	return &FileRegistryFactory{
 		baseFileRegistry: NewRegistry[models.FileEntity, *models.FileEntity](),
 	}
 }
 
-func (r *FileRegistry) MustWithCurrentUser(ctx context.Context) registry.FileRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.FileRegistryFactory
+
+func (f *FileRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.FileRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegistry, error) {
-	tmp := *r
-
+func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = user.ID
-	return &tmp, nil
+
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.FileEntity, *models.FileEntity]{
+		items:  f.baseFileRegistry.items, // Share the data map
+		lock:   f.baseFileRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                  // Set user-specific userID
+	}
+
+	return &FileRegistry{
+		Registry: userRegistry,
+		userID:   user.ID,
+	}, nil
 }
 
-func (r *FileRegistry) WithServiceAccount() registry.FileRegistry {
-	// Create a shallow copy of the registry with no user filtering
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-	return &tmp
+func (f *FileRegistryFactory) CreateServiceRegistry() registry.FileRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.FileEntity, *models.FileEntity]{
+		items:  f.baseFileRegistry.items, // Share the data map
+		lock:   f.baseFileRegistry.lock,  // Share the mutex pointer
+		userID: "",                       // Clear userID to bypass user filtering
+	}
+
+	return &FileRegistry{
+		Registry: serviceRegistry,
+		userID:   "", // Clear userID to bypass user filtering
+	}
 }
 
 func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error) {

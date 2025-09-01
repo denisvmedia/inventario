@@ -18,9 +18,9 @@ import (
 func TestDebugAPI(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry set (not used directly, but needed for compilation)
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create test factory set (not used directly, but needed for compilation)
+	factorySet := memory.NewFactorySet()
+	c.Assert(factorySet, qt.IsNotNil)
 
 	// Test cases for different configurations
 	testCases := []struct {
@@ -90,9 +90,9 @@ func TestDebugAPI(t *testing.T) {
 func TestDebugAPI_InvalidURLs(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry set (not used directly, but needed for compilation)
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create test factory set (not used directly, but needed for compilation)
+	factorySet := memory.NewFactorySet()
+	c.Assert(factorySet, qt.IsNotNil)
 
 	// Test with invalid URLs
 	params, testUser := newParams()

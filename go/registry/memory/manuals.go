@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-extras/go-kit/must"
 
@@ -11,48 +12,92 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.ManualRegistry = (*ManualRegistry)(nil)
+// ManualRegistryFactory creates ManualRegistry instances with proper context
+type ManualRegistryFactory struct {
+	baseManualRegistry *Registry[models.Manual, *models.Manual]
+	commodityRegistry  *CommodityRegistryFactory // required dependency for relationship tracking
+}
 
-type baseManualRegistry = Registry[models.Manual, *models.Manual]
+// ManualRegistry is a context-aware registry that can only be created through the factory
 type ManualRegistry struct {
-	*baseManualRegistry
+	*Registry[models.Manual, *models.Manual]
 
 	userID            string
 	commodityRegistry *CommodityRegistry // required dependency for relationship tracking
 }
 
-func NewManualRegistry(commodityRegistry *CommodityRegistry) *ManualRegistry {
-	return &ManualRegistry{
+var _ registry.ManualRegistry = (*ManualRegistry)(nil)
+var _ registry.ManualRegistryFactory = (*ManualRegistryFactory)(nil)
+
+func NewManualRegistry(commodityRegistry *CommodityRegistryFactory) *ManualRegistryFactory {
+	return &ManualRegistryFactory{
 		baseManualRegistry: NewRegistry[models.Manual, *models.Manual](),
 		commodityRegistry:  commodityRegistry,
 	}
 }
 
-func (r *ManualRegistry) MustWithCurrentUser(ctx context.Context) registry.ManualRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.ManualRegistryFactory
+
+func (f *ManualRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.ManualRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *ManualRegistry) WithCurrentUser(ctx context.Context) (registry.ManualRegistry, error) {
-	tmp := *r
-
+func (f *ManualRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ManualRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = user.ID
-	return &tmp, nil
+
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.Manual, *models.Manual]{
+		items:  f.baseManualRegistry.items, // Share the data map
+		lock:   f.baseManualRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                    // Set user-specific userID
+	}
+
+	// Create user-aware commodity registry
+	commodityRegistryInterface, err := f.commodityRegistry.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create user commodity registry")
+	}
+
+	// Cast to concrete type for relationship management
+	commodityRegistry, ok := commodityRegistryInterface.(*CommodityRegistry)
+	if !ok {
+		return nil, errors.New("failed to cast commodity registry to concrete type")
+	}
+
+	return &ManualRegistry{
+		Registry:          userRegistry,
+		userID:            user.ID,
+		commodityRegistry: commodityRegistry,
+	}, nil
 }
 
-func (r *ManualRegistry) WithServiceAccount() registry.ManualRegistry {
-	// Create a shallow copy of the registry with no user filtering
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-	return &tmp
+func (f *ManualRegistryFactory) CreateServiceRegistry() registry.ManualRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.Manual, *models.Manual]{
+		items:  f.baseManualRegistry.items, // Share the data map
+		lock:   f.baseManualRegistry.lock,  // Share the mutex pointer
+		userID: "",                         // Clear userID to bypass user filtering
+	}
+
+	// Create service-aware commodity registry
+	commodityRegistryInterface := f.commodityRegistry.CreateServiceRegistry()
+
+	// Cast to concrete type for relationship management
+	commodityRegistry := commodityRegistryInterface.(*CommodityRegistry)
+
+	return &ManualRegistry{
+		Registry:          serviceRegistry,
+		userID:            "", // Clear userID to bypass user filtering
+		commodityRegistry: commodityRegistry,
+	}
 }
 
 func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
 	// Use CreateWithUser to ensure user context is applied
-	newManual, err := r.baseManualRegistry.CreateWithUser(ctx, manual)
+	newManual, err := r.Registry.CreateWithUser(ctx, manual)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create manual")
 	}
@@ -66,12 +111,12 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*models.Manual, error) {
 	// Get the existing manual to check if CommodityID changed
 	var oldCommodityID string
-	if existingManual, err := r.baseManualRegistry.Get(ctx, manual.GetID()); err == nil {
+	if existingManual, err := r.Registry.Get(ctx, manual.GetID()); err == nil {
 		oldCommodityID = existingManual.CommodityID
 	}
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
-	updatedManual, err := r.baseManualRegistry.UpdateWithUser(ctx, manual)
+	updatedManual, err := r.Registry.UpdateWithUser(ctx, manual)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update manual")
 	}
@@ -92,14 +137,14 @@ func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*mod
 
 func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this manual from its parent commodity's manual list
-	manual, err := r.baseManualRegistry.Get(ctx, id)
+	manual, err := r.Registry.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get manual")
 	}
 
 	_ = r.commodityRegistry.DeleteManual(ctx, manual.CommodityID, id)
 
-	err = r.baseManualRegistry.Delete(ctx, id)
+	err = r.Registry.Delete(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete manual")
 	}

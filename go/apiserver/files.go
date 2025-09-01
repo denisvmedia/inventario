@@ -22,7 +22,6 @@ import (
 )
 
 type filesAPI struct {
-	registrySet    *registry.Set
 	uploadLocation string
 	fileService    *services.FileService
 }
@@ -41,11 +40,14 @@ type filesAPI struct {
 // @Success 200 {object} jsonapi.FilesResponse "OK"
 // @Router /files [get].
 func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	// Parse query parameters
 	typeParam := r.URL.Query().Get("type")
@@ -87,6 +89,7 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 
 	var files []*models.FileEntity
 	var total int
+	var err error
 
 	if searchParam != "" || len(tags) > 0 {
 		// Use search if search query or tags are provided
@@ -134,11 +137,14 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Validation error"
 // @Router /files [post].
 func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	var input jsonapi.FileRequest
 	if err := render.Bind(r, &input); err != nil {
@@ -200,11 +206,14 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id} [get].
 func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	fileID := chi.URLParam(r, "fileID")
 
@@ -234,11 +243,14 @@ func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Validation error"
 // @Router /files/{id} [put].
 func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	fileID := chi.URLParam(r, "fileID")
 
@@ -253,7 +265,7 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := api.registrySet.FileRegistry.Get(r.Context(), fileID)
+	file, err := registrySet.FileRegistry.Get(r.Context(), fileID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -316,16 +328,10 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id} [delete].
 func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
-	_, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
-		return
-	}
-
 	fileID := chi.URLParam(r, "fileID")
 
 	// Use file service to delete both physical file and database record
-	err = api.fileService.DeleteFileWithPhysical(r.Context(), fileID)
+	err := api.fileService.DeleteFileWithPhysical(r.Context(), fileID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -344,11 +350,14 @@ func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id}.{ext} [get].
 func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	fileID := chi.URLParam(r, "fileID")
 	ext := chi.URLParam(r, "fileExt")
@@ -413,9 +422,8 @@ func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
 // Files sets up the files API routes.
 func Files(params Params) func(r chi.Router) {
 	api := &filesAPI{
-		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
-		fileService:    services.NewFileService(params.RegistrySet, params.UploadLocation),
+		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
 	}
 
 	return func(r chi.Router) {

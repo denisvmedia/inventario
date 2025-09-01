@@ -14,70 +14,78 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.LocationRegistry = (*LocationRegistry)(nil)
+// LocationRegistryFactory creates LocationRegistry instances with proper context
+type LocationRegistryFactory struct {
+	baseLocationRegistry *Registry[models.Location, *models.Location]
+	areasLock            *sync.RWMutex
+	areas                models.LocationAreas
+}
 
-type baseLocationRegistry = Registry[models.Location, *models.Location]
+// LocationRegistry is a context-aware registry that can only be created through the factory
 type LocationRegistry struct {
-	*baseLocationRegistry
+	*Registry[models.Location, *models.Location]
 
 	userID    string
 	areasLock *sync.RWMutex
 	areas     models.LocationAreas
 }
 
-func NewLocationRegistry() *LocationRegistry {
-	return &LocationRegistry{
+var _ registry.LocationRegistry = (*LocationRegistry)(nil)
+var _ registry.LocationRegistryFactory = (*LocationRegistryFactory)(nil)
+
+func NewLocationRegistry() *LocationRegistryFactory {
+	return &LocationRegistryFactory{
 		baseLocationRegistry: NewRegistry[models.Location, *models.Location](),
 		areasLock:            &sync.RWMutex{},
 		areas:                make(models.LocationAreas),
 	}
 }
 
-func (r *LocationRegistry) MustWithCurrentUser(ctx context.Context) registry.LocationRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.LocationRegistryFactory
+
+func (f *LocationRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.LocationRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.LocationRegistry, error) {
+func (f *LocationRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.LocationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
 
-	// Create a shallow copy of the registry
-	tmp := *r
-	tmp.userID = user.ID
-
-	// Create a new base registry with the same data but user-specific userID
-	// Avoid copying the mutex by creating a new instance
-	newBaseRegistry := &Registry[models.Location, *models.Location]{
-		items:  r.baseLocationRegistry.items, // Share the data map
-		lock:   r.baseLocationRegistry.lock,  // Share the mutex pointer
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.Location, *models.Location]{
+		items:  f.baseLocationRegistry.items, // Share the data map
+		lock:   f.baseLocationRegistry.lock,  // Share the mutex pointer
 		userID: user.ID,                      // Set user-specific userID
 	}
-	tmp.baseLocationRegistry = newBaseRegistry
 
-	return &tmp, nil
+	return &LocationRegistry{
+		Registry:  userRegistry,
+		userID:    user.ID,
+		areasLock: f.areasLock,
+		areas:     f.areas,
+	}, nil
 }
 
-func (r *LocationRegistry) WithServiceAccount() registry.LocationRegistry {
-	// Create a shallow copy of the registry
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-
-	// Create a new base registry with the same data but no user filtering
-	// Avoid copying the mutex by creating a new instance
-	newBaseRegistry := &Registry[models.Location, *models.Location]{
-		items:  r.baseLocationRegistry.items, // Share the data map
-		lock:   r.baseLocationRegistry.lock,  // Share the mutex pointer
-		userID: "",                           // No user filtering for service account
+func (f *LocationRegistryFactory) CreateServiceRegistry() registry.LocationRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.Location, *models.Location]{
+		items:  f.baseLocationRegistry.items, // Share the data map
+		lock:   f.baseLocationRegistry.lock,  // Share the mutex pointer
+		userID: "",                           // Clear userID to bypass user filtering
 	}
-	tmp.baseLocationRegistry = newBaseRegistry
 
-	return &tmp
+	return &LocationRegistry{
+		Registry:  serviceRegistry,
+		userID:    "", // Clear userID to bypass user filtering
+		areasLock: f.areasLock,
+		areas:     f.areas,
+	}
 }
 
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
-	_, err := r.baseLocationRegistry.Get(ctx, id)
+	_, err := r.Registry.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get location")
 	}
@@ -86,7 +94,7 @@ func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 		return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
 	}
 
-	err = r.baseLocationRegistry.Delete(ctx, id)
+	err = r.Registry.Delete(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete location")
 	}

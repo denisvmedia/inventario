@@ -36,12 +36,12 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	}
 
 	// Get the first area to link the commodity to
-	areas, err := params.RegistrySet.AreaRegistry.List(ctx)
+	areas, err := getRegistrySetFromParams(params, testUser.ID).AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Not(qt.Equals), 0)
 	commodity.AreaID = areas[0].ID
 
-	createdCommodity, err := params.RegistrySet.CommodityRegistry.Create(ctx, commodity)
+	createdCommodity, err := getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 
 	// Create test files linked to the commodity
@@ -65,7 +65,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 			MIMEType:     "image/jpeg",
 		},
 	}
-	createdImageFile, err := params.RegistrySet.FileRegistry.Create(ctx, imageFile)
+	createdImageFile, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.Create(ctx, imageFile)
 	c.Assert(err, qt.IsNil)
 
 	// Create a manual file
@@ -86,7 +86,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 			MIMEType:     "application/pdf",
 		},
 	}
-	createdManualFile, err := params.RegistrySet.FileRegistry.Create(ctx, manualFile)
+	createdManualFile, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.Create(ctx, manualFile)
 	c.Assert(err, qt.IsNil)
 
 	// Create an invoice file
@@ -107,24 +107,24 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 			MIMEType:     "application/pdf",
 		},
 	}
-	createdInvoiceFile, err := params.RegistrySet.FileRegistry.Create(ctx, invoiceFile)
+	createdInvoiceFile, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.Create(ctx, invoiceFile)
 	c.Assert(err, qt.IsNil)
 
 	// Verify all files exist and are linked to the commodity
-	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntity(ctx, "commodity", createdCommodity.ID)
+	files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntity(ctx, "commodity", createdCommodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(files, qt.HasLen, 3)
 
 	// Verify each file type exists
-	imageFiles, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(ctx, "commodity", createdCommodity.ID, "images")
+	imageFiles, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(ctx, "commodity", createdCommodity.ID, "images")
 	c.Assert(err, qt.IsNil)
 	c.Assert(imageFiles, qt.HasLen, 1)
 
-	manualFiles, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(ctx, "commodity", createdCommodity.ID, "manuals")
+	manualFiles, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(ctx, "commodity", createdCommodity.ID, "manuals")
 	c.Assert(err, qt.IsNil)
 	c.Assert(manualFiles, qt.HasLen, 1)
 
-	invoiceFiles, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(ctx, "commodity", createdCommodity.ID, "invoices")
+	invoiceFiles, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(ctx, "commodity", createdCommodity.ID, "invoices")
 	c.Assert(err, qt.IsNil)
 	c.Assert(invoiceFiles, qt.HasLen, 1)
 
@@ -140,26 +140,26 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	c.Check(rr.Code, qt.Equals, http.StatusNoContent)
 
 	// Verify commodity is deleted
-	_, err = params.RegistrySet.CommodityRegistry.Get(ctx, createdCommodity.ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, createdCommodity.ID)
 	c.Assert(err, qt.IsNotNil) // Should be deleted
 
 	// Verify all linked files are deleted
-	files, err = params.RegistrySet.FileRegistry.ListByLinkedEntity(ctx, "commodity", createdCommodity.ID)
+	files, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntity(ctx, "commodity", createdCommodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(files, qt.HasLen, 0)
 
 	// Verify individual files are deleted
-	_, err = params.RegistrySet.FileRegistry.Get(ctx, createdImageFile.ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, createdImageFile.ID)
 	c.Assert(err, qt.IsNotNil) // Should be deleted
 
-	_, err = params.RegistrySet.FileRegistry.Get(ctx, createdManualFile.ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, createdManualFile.ID)
 	c.Assert(err, qt.IsNotNil) // Should be deleted
 
-	_, err = params.RegistrySet.FileRegistry.Get(ctx, createdInvoiceFile.ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, createdInvoiceFile.ID)
 	c.Assert(err, qt.IsNotNil) // Should be deleted
 
 	// Verify area still exists (should not be affected)
-	_, err = params.RegistrySet.AreaRegistry.Get(ctx, areas[0].ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, areas[0].ID)
 	c.Assert(err, qt.IsNil) // Should still exist
 }
 
@@ -183,16 +183,16 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	}
 
 	// Get the first area to link the commodity to
-	areas, err := params.RegistrySet.AreaRegistry.List(ctx)
+	areas, err := getRegistrySetFromParams(params, testUser.ID).AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Not(qt.Equals), 0)
 	commodity.AreaID = areas[0].ID
 
-	createdCommodity, err := params.RegistrySet.CommodityRegistry.Create(ctx, commodity)
+	createdCommodity, err := getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 
 	// Verify no files are linked to the commodity
-	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntity(ctx, "commodity", createdCommodity.ID)
+	files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntity(ctx, "commodity", createdCommodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(files, qt.HasLen, 0)
 
@@ -208,11 +208,11 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	c.Check(rr.Code, qt.Equals, http.StatusNoContent)
 
 	// Verify commodity is deleted
-	_, err = params.RegistrySet.CommodityRegistry.Get(ctx, createdCommodity.ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, createdCommodity.ID)
 	c.Assert(err, qt.IsNotNil) // Should be deleted
 
 	// Verify area still exists (should not be affected)
-	_, err = params.RegistrySet.AreaRegistry.Get(ctx, areas[0].ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, areas[0].ID)
 	c.Assert(err, qt.IsNil) // Should still exist
 }
 

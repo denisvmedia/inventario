@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -15,11 +16,21 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
+// CommodityRegistryFactory creates CommodityRegistry instances with proper context
+type CommodityRegistryFactory struct {
+	baseCommodityRegistry *Registry[models.Commodity, *models.Commodity]
+	imagesLock            *sync.RWMutex
+	images                models.CommodityImages
+	manualsLock           *sync.RWMutex
+	manuals               models.CommodityManuals
+	invoicesLock          *sync.RWMutex
+	invoices              models.CommodityInvoices
+	areaRegistry          *AreaRegistryFactory // required dependency for relationship tracking
+}
 
-type baseCommodityRegistry = Registry[models.Commodity, *models.Commodity]
+// CommodityRegistry is a context-aware registry that can only be created through the factory
 type CommodityRegistry struct {
-	*baseCommodityRegistry
+	*Registry[models.Commodity, *models.Commodity]
 
 	userID       string
 	imagesLock   *sync.RWMutex
@@ -31,8 +42,11 @@ type CommodityRegistry struct {
 	areaRegistry *AreaRegistry // required dependency for relationship tracking
 }
 
-func NewCommodityRegistry(areaRegistry *AreaRegistry) *CommodityRegistry {
-	return &CommodityRegistry{
+var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
+var _ registry.CommodityRegistryFactory = (*CommodityRegistryFactory)(nil)
+
+func NewCommodityRegistry(areaRegistry *AreaRegistryFactory) *CommodityRegistryFactory {
+	return &CommodityRegistryFactory{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
 		imagesLock:            &sync.RWMutex{},
 		images:                make(models.CommodityImages),
@@ -44,52 +58,80 @@ func NewCommodityRegistry(areaRegistry *AreaRegistry) *CommodityRegistry {
 	}
 }
 
-func (r *CommodityRegistry) MustWithCurrentUser(ctx context.Context) registry.CommodityRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.CommodityRegistryFactory
+
+func (f *CommodityRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.CommodityRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.CommodityRegistry, error) {
+func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.CommodityRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
 
-	// Create a shallow copy of the registry
-	tmp := *r
-	tmp.userID = user.ID
-
-	// Create a new base registry with the same data but user-specific userID
-	// Avoid copying the mutex by creating a new instance
-	newBaseRegistry := &Registry[models.Commodity, *models.Commodity]{
-		items:  r.baseCommodityRegistry.items, // Share the data map
-		lock:   r.baseCommodityRegistry.lock,  // Share the mutex pointer
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.Commodity, *models.Commodity]{
+		items:  f.baseCommodityRegistry.items, // Share the data map
+		lock:   f.baseCommodityRegistry.lock,  // Share the mutex pointer
 		userID: user.ID,                       // Set user-specific userID
 	}
-	tmp.baseCommodityRegistry = newBaseRegistry
 
-	return &tmp, nil
+	// Create user-aware area registry
+	areaRegistryInterface, err := f.areaRegistry.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create user area registry")
+	}
+
+	// Cast to concrete type for relationship management
+	areaRegistry, ok := areaRegistryInterface.(*AreaRegistry)
+	if !ok {
+		return nil, errors.New("failed to cast area registry to concrete type")
+	}
+
+	return &CommodityRegistry{
+		Registry:     userRegistry,
+		userID:       user.ID,
+		imagesLock:   f.imagesLock,
+		images:       f.images,
+		manualsLock:  f.manualsLock,
+		manuals:      f.manuals,
+		invoicesLock: f.invoicesLock,
+		invoices:     f.invoices,
+		areaRegistry: areaRegistry,
+	}, nil
 }
 
-func (r *CommodityRegistry) WithServiceAccount() registry.CommodityRegistry {
-	// Create a shallow copy of the registry
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-
-	// Create a new base registry with the same data but no user filtering
-	// Avoid copying the mutex by creating a new instance
-	newBaseRegistry := &Registry[models.Commodity, *models.Commodity]{
-		items:  r.baseCommodityRegistry.items, // Share the data map
-		lock:   r.baseCommodityRegistry.lock,  // Share the mutex pointer
-		userID: "",                            // No user filtering for service account
+func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.Commodity, *models.Commodity]{
+		items:  f.baseCommodityRegistry.items, // Share the data map
+		lock:   f.baseCommodityRegistry.lock,  // Share the mutex pointer
+		userID: "",                            // Clear userID to bypass user filtering
 	}
-	tmp.baseCommodityRegistry = newBaseRegistry
 
-	return &tmp
+	// Create service-aware area registry
+	areaRegistryInterface := f.areaRegistry.CreateServiceRegistry()
+
+	// Cast to concrete type for relationship management
+	areaRegistry := areaRegistryInterface.(*AreaRegistry)
+
+	return &CommodityRegistry{
+		Registry:     serviceRegistry,
+		userID:       "", // Clear userID to bypass user filtering
+		imagesLock:   f.imagesLock,
+		images:       f.images,
+		manualsLock:  f.manualsLock,
+		manuals:      f.manuals,
+		invoicesLock: f.invoicesLock,
+		invoices:     f.invoices,
+		areaRegistry: areaRegistry,
+	}
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Use CreateWithUser to ensure user context is applied
-	newCommodity, err := r.baseCommodityRegistry.CreateWithUser(ctx, commodity)
+	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create commodity")
 	}
@@ -102,14 +144,14 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this commodity from its parent area's commodity list
-	commodity, err := r.baseCommodityRegistry.Get(ctx, id)
+	commodity, err := r.Registry.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodity")
 	}
 
 	_ = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
 
-	err = r.baseCommodityRegistry.Delete(ctx, id)
+	err = r.Registry.Delete(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete commodity")
 	}
@@ -212,12 +254,12 @@ func (r *CommodityRegistry) DeleteInvoice(_ context.Context, commodityID, invoic
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// Get the existing commodity to check if AreaID changed
 	var oldAreaID string
-	if existingCommodity, err := r.baseCommodityRegistry.Get(ctx, commodity.GetID()); err == nil {
+	if existingCommodity, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
 		oldAreaID = existingCommodity.AreaID
 	}
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
-	updatedCommodity, err := r.baseCommodityRegistry.UpdateWithUser(ctx, commodity)
+	updatedCommodity, err := r.Registry.UpdateWithUser(ctx, commodity)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update commodity")
 	}
@@ -293,12 +335,12 @@ func (r *CommodityRegistry) matchesTags(commodityTags []string, searchTags []str
 // FindSimilar finds similar commodities using simple name comparison (simplified)
 func (r *CommodityRegistry) FindSimilar(ctx context.Context, commodityID string, threshold float64) ([]*models.Commodity, error) {
 	// Get the reference commodity
-	refCommodity, err := r.baseCommodityRegistry.Get(ctx, commodityID)
+	refCommodity, err := r.Registry.Get(ctx, commodityID)
 	if err != nil {
 		return nil, err
 	}
 
-	commodities, err := r.baseCommodityRegistry.List(ctx)
+	commodities, err := r.Registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}

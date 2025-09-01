@@ -23,12 +23,15 @@ type settingsAPI struct {
 // @Success 200 {object} models.SettingsObject "OK"
 // @Router /settings [get]
 func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	// Get user-aware settings registry
-	settingsRegistry, err := api.registry.WithCurrentUser(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	// Get user-aware settings registry
+	settingsRegistry := registrySet.SettingsRegistry
 
 	// Get current settings
 	settings, err := settingsRegistry.Get(r.Context())
@@ -57,12 +60,15 @@ func (api *settingsAPI) getSettings(w http.ResponseWriter, r *http.Request) { //
 // @Success 200 {object} models.SettingsObject "OK"
 // @Router /settings [put]
 func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware settings registry
-	settingsRegistry, err := api.registry.WithCurrentUser(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	// Get user-aware settings registry
+	settingsRegistry := registrySet.SettingsRegistry
 
 	// Decode the request body into a settings object
 	var settings models.SettingsObject
@@ -120,12 +126,15 @@ func (api *settingsAPI) updateSettings(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} models.SettingsObject "OK"
 // @Router /settings/{field} [patch]
 func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware settings registry
-	settingsRegistry, err := api.registry.WithCurrentUser(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	// Get user-aware settings registry
+	settingsRegistry := registrySet.SettingsRegistry
 
 	// Get the field path from the URL
 	field := chi.URLParam(r, "field")

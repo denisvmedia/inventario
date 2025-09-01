@@ -14,8 +14,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
+// CommodityRegistryFactory creates CommodityRegistry instances with proper context
+type CommodityRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// CommodityRegistry is a context-aware registry that can only be created through the factory
 type CommodityRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -24,40 +29,49 @@ type CommodityRegistry struct {
 	service    bool
 }
 
-func NewCommodityRegistry(dbx *sqlx.DB) *CommodityRegistry {
+var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
+var _ registry.CommodityRegistryFactory = (*CommodityRegistryFactory)(nil)
+
+func NewCommodityRegistry(dbx *sqlx.DB) *CommodityRegistryFactory {
 	return NewCommodityRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewCommodityRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *CommodityRegistry {
-	return &CommodityRegistry{
+func NewCommodityRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *CommodityRegistryFactory {
+	return &CommodityRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *CommodityRegistry) MustWithCurrentUser(ctx context.Context) registry.CommodityRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.CommodityRegistryFactory
+
+func (f *CommodityRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.CommodityRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *CommodityRegistry) WithCurrentUser(ctx context.Context) (registry.CommodityRegistry, error) {
-	tmp := *r
-
+func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.CommodityRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &CommodityRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *CommodityRegistry) WithServiceAccount() registry.CommodityRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityRegistry {
+	return &CommodityRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodity, error) {

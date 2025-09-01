@@ -37,24 +37,24 @@ type UnauthorizedAttempt struct {
 
 // RestoreSecurityValidator implements SecurityValidator for restore operations
 type RestoreSecurityValidator struct {
-	registrySet *registry.Set
-	logger      *slog.Logger
+	factorySet *registry.FactorySet
+	logger     *slog.Logger
 }
 
 // NewRestoreSecurityValidator creates a new RestoreSecurityValidator
-func NewRestoreSecurityValidator(registrySet *registry.Set, logger *slog.Logger) *RestoreSecurityValidator {
+func NewRestoreSecurityValidator(factorySet *registry.FactorySet, logger *slog.Logger) *RestoreSecurityValidator {
 	return &RestoreSecurityValidator{
-		registrySet: registrySet,
-		logger:      logger,
+		factorySet: factorySet,
+		logger:     logger,
 	}
 }
 
 // ValidateEntityOwnership validates that the current user owns the specified entity
 func (v *RestoreSecurityValidator) ValidateEntityOwnership(ctx context.Context, entityID string, userID string) error {
 	// Use service account registries to bypass user filtering and see all entities
-	commodityRegistry := v.registrySet.CommodityRegistry.WithServiceAccount()
-	areaRegistry := v.registrySet.AreaRegistry.WithServiceAccount()
-	locationRegistry := v.registrySet.LocationRegistry.WithServiceAccount()
+	commodityRegistry := v.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+	areaRegistry := v.factorySet.AreaRegistryFactory.CreateServiceRegistry()
+	locationRegistry := v.factorySet.LocationRegistryFactory.CreateServiceRegistry()
 
 	// Check commodity ownership
 	if commodity, err := commodityRegistry.Get(ctx, entityID); err == nil {

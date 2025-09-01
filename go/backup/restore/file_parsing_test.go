@@ -25,7 +25,7 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
@@ -150,7 +150,7 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
@@ -245,7 +245,7 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
@@ -338,7 +338,7 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
@@ -451,7 +451,7 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)

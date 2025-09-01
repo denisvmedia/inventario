@@ -33,14 +33,14 @@ func TestUploads(t *testing.T) {
 			filePath:    "testdata/image.jpg",
 			expectedLength: func(c *qt.C, commodityID string) int {
 				// Get file entities linked to commodity with "images" meta
-				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "images")
+				files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "images")
 				c.Assert(err, qt.IsNil)
 				expectedLen := len(files) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
 				// Get file entities linked to this commodity with "images" meta
-				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "images")
+				files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "images")
 				c.Assert(err, qt.IsNil)
 				c.Assert(files, qt.HasLen, expectedLen)
 				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `image-\d+`)
@@ -55,14 +55,14 @@ func TestUploads(t *testing.T) {
 			filePath:    "testdata/manual.pdf",
 			expectedLength: func(c *qt.C, commodityID string) int {
 				// Get file entities linked to commodity with "manuals" meta
-				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "manuals")
+				files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "manuals")
 				c.Assert(err, qt.IsNil)
 				expectedLen := len(files) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
 				// Get file entities linked to this commodity with "manuals" meta
-				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "manuals")
+				files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "manuals")
 				c.Assert(err, qt.IsNil)
 				c.Assert(files, qt.HasLen, expectedLen)
 				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `manual-\d+`)
@@ -77,14 +77,14 @@ func TestUploads(t *testing.T) {
 			filePath:    "testdata/invoice.pdf",
 			expectedLength: func(c *qt.C, commodityID string) int {
 				// Get file entities linked to commodity with "invoices" meta
-				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "invoices")
+				files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodityID, "invoices")
 				c.Assert(err, qt.IsNil)
 				expectedLen := len(files) + 1
 				return expectedLen
 			},
 			checkResult: func(c *qt.C, expectedLen int, expectedCommodityID string) {
 				// Get file entities linked to this commodity with "invoices" meta
-				files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "invoices")
+				files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", expectedCommodityID, "invoices")
 				c.Assert(err, qt.IsNil)
 				c.Assert(files, qt.HasLen, expectedLen)
 				c.Assert(files[expectedLen-1].File.Path, qt.Matches, `invoice-\d+`)
@@ -99,7 +99,7 @@ func TestUploads(t *testing.T) {
 		t.Run(tc.typ, func(t *testing.T) {
 			c := qt.New(t)
 
-			expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+			expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 			commodity := expectedCommodities[0]
 			expectedLen := tc.expectedLength(c, commodity.ID)
 
@@ -172,7 +172,7 @@ func TestUploads_invalid_upload(t *testing.T) {
 
 			filePath := "testdata/invalid.txt"
 
-			expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+			expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 			commodity := expectedCommodities[0]
 
 			// Create a buffer to write the form data

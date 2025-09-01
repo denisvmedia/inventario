@@ -35,8 +35,8 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 			EntityID: models.EntityID{ID: testUser.ID},
 		},
 	})
-	comReg, err := params.RegistrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	registrySet := getRegistrySetFromParams(params, testUser.ID)
+	comReg := registrySet.CommodityRegistry
 
 	commodity := must.Must(comReg.List(ctx))[0]
 	manual := models.Manual{
@@ -49,8 +49,8 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 		},
 	}
 
-	manReg, err := params.RegistrySet.ManualRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	registrySet2 := getRegistrySetFromParams(params, testUser.ID)
+	manReg := registrySet2.ManualRegistry
 	createdManual := must.Must(manReg.Create(ctx, manual))
 
 	// Test downloading the file

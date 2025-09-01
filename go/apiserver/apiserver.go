@@ -34,25 +34,29 @@ type RestoreWorkerInterface interface {
 
 type ctxValueKey string
 
+const registrySetCtxKey ctxValueKey = "registrySet"
+
 var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	defaultRequestContentType("application/vnd.api+json"),
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
 // createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
-func createUserAwareMiddlewares(jwtSecret []byte, userRegistry registry.UserRegistry, registrySet *registry.Set) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
-		JWTMiddleware(jwtSecret, userRegistry),
-		RLSContextMiddleware(registrySet),
+		JWTMiddleware(jwtSecret, factorySet.UserRegistry),
+		RLSContextMiddleware(factorySet),
+		RegistrySetMiddleware(factorySet),
 	)
 }
 
 // createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
-func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, registrySet *registry.Set) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet) []func(http.Handler) http.Handler {
 	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
 		JWTMiddleware(jwtSecret, userRegistry),
-		RLSContextMiddleware(registrySet),
+		RLSContextMiddleware(factorySet),
+		RegistrySetMiddleware(factorySet),
 	}
 }
 
@@ -81,7 +85,7 @@ func paginate(next http.Handler) http.Handler {
 }
 
 type Params struct {
-	RegistrySet    *registry.Set
+	FactorySet     *registry.FactorySet
 	EntityService  *services.EntityService
 	UploadLocation string
 	DebugInfo      *debug.Info
@@ -93,7 +97,7 @@ func (p *Params) Validate() error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&p.RegistrySet, validation.Required),
+		validation.Field(&p.FactorySet, validation.Required),
 		validation.Field(&p.EntityService, validation.Required),
 		validation.Field(&p.UploadLocation, validation.Required, validation.By(func(_value any) error {
 			ctx := context.Background()
@@ -148,25 +152,31 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes (no authentication required)
-		r.Route("/auth", Auth(params.RegistrySet.UserRegistry, params.JWTSecret))
+		r.Route("/auth", Auth(params.FactorySet.UserRegistry, params.JWTSecret))
 		r.Route("/currencies", Currencies())
 		// Seed endpoint is public for e2e testing and development
-		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.RegistrySet))
+		// Seed uses a service registry set since it's a privileged operation in dev/test
+		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet))
 
 		// Create user aware middlewares for protected routes
-		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.RegistrySet.UserRegistry, params.RegistrySet)
-		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.RegistrySet.UserRegistry, params.RegistrySet)
+		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet)
+		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet)
 
 		// Protected routes (authentication required)
-		r.With(userMiddlewares...).Route("/system", System(params.RegistrySet.SettingsRegistry, params.DebugInfo, params.StartTime))
-		r.With(userMiddlewares...).Route("/locations", Locations(params.RegistrySet.LocationRegistry))
-		r.With(userMiddlewares...).Route("/areas", Areas(params.RegistrySet.AreaRegistry))
+		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context
+		// System requires a settings registry
+		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
+		locReg := params.FactorySet.LocationRegistryFactory.CreateServiceRegistry()
+		r.With(userMiddlewares...).Route("/locations", Locations(locReg))
+		areaReg := params.FactorySet.AreaRegistryFactory.CreateServiceRegistry()
+		r.With(userMiddlewares...).Route("/areas", Areas(areaReg))
 		r.With(userMiddlewares...).Route("/commodities", Commodities(params))
-		r.With(userMiddlewares...).Route("/settings", Settings(params.RegistrySet.SettingsRegistry))
+		userSettingsReg := params.FactorySet.SettingsRegistryFactory.CreateServiceRegistry()
+		r.With(userMiddlewares...).Route("/settings", Settings(userSettingsReg))
 		r.With(userMiddlewares...).Route("/exports", Exports(params, restoreWorker))
 		r.With(userMiddlewares...).Route("/files", Files(params))
-		r.With(userMiddlewares...).Route("/search", Search(params.RegistrySet))
-		r.With(userMiddlewares...).Route("/commodities/values", Values(params.RegistrySet))
+		r.With(userMiddlewares...).Route("/search", Search(params.EntityService))
+		r.With(userMiddlewares...).Route("/commodities/values", Values())
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
 
 		// Uploads need special middleware without content type restrictions
@@ -182,7 +192,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 // RLSContextMiddleware validates user context for RLS security
 // This middleware ensures that user context is properly set and validates security requirements
 // The actual database RLS context is set at the transaction level in repository operations
-func RLSContextMiddleware(registrySet *registry.Set) func(http.Handler) http.Handler {
+func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get user from context (set by JWTMiddleware)
@@ -244,4 +254,31 @@ func RLSContextMiddleware(registrySet *registry.Set) func(http.Handler) http.Han
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// RegistrySetMiddleware creates a user-aware registry set and adds it to the context
+func RegistrySetMiddleware(factorySet *registry.FactorySet) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Create user-aware registry set from factory set
+			registrySet, err := factorySet.CreateUserRegistrySet(r.Context())
+			if err != nil {
+				slog.Error("Failed to create user registry set", "error", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			// Add registry set to context for route handlers
+			ctx := context.WithValue(r.Context(), registrySetCtxKey, registrySet)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// RegistrySetFromContext extracts the registry set from the context
+func RegistrySetFromContext(ctx context.Context) *registry.Set {
+	if registrySet, ok := ctx.Value(registrySetCtxKey).(*registry.Set); ok {
+		return registrySet
+	}
+	return nil
 }

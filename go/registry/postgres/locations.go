@@ -15,8 +15,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.LocationRegistry = (*LocationRegistry)(nil)
+// LocationRegistryFactory creates LocationRegistry instances with proper context
+type LocationRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// LocationRegistry is a context-aware registry that can only be created through the factory
 type LocationRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -25,40 +30,49 @@ type LocationRegistry struct {
 	service    bool
 }
 
-func NewLocationRegistry(dbx *sqlx.DB) *LocationRegistry {
+var _ registry.LocationRegistry = (*LocationRegistry)(nil)
+var _ registry.LocationRegistryFactory = (*LocationRegistryFactory)(nil)
+
+func NewLocationRegistry(dbx *sqlx.DB) *LocationRegistryFactory {
 	return NewLocationRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *LocationRegistry {
-	return &LocationRegistry{
+func NewLocationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *LocationRegistryFactory {
+	return &LocationRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *LocationRegistry) MustWithCurrentUser(ctx context.Context) registry.LocationRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.LocationRegistryFactory
+
+func (f *LocationRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.LocationRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *LocationRegistry) WithCurrentUser(ctx context.Context) (registry.LocationRegistry, error) {
-	tmp := *r
-
+func (f *LocationRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.LocationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &LocationRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *LocationRegistry) WithServiceAccount() registry.LocationRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *LocationRegistryFactory) CreateServiceRegistry() registry.LocationRegistry {
+	return &LocationRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *LocationRegistry) Get(ctx context.Context, id string) (*models.Location, error) {

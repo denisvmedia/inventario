@@ -35,9 +35,9 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 	}
 
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
-	registrySet, err := registrySetFunc(registry.Config(dsn))
+	factorySet, err := registrySetFunc(registry.Config(dsn))
 	if err != nil {
-		t.Fatalf("Failed to create registry set: %v", err)
+		t.Fatalf("Failed to create factory set: %v", err)
 	}
 
 	jwtSecretBytes := []byte("test-secret-32-bytes-minimum-length")
@@ -75,14 +75,7 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 	}
 
 	ctx := appctx.WithUser(context.Background(), &user1Model)
-	registrySet.SettingsRegistry = must.Must(registrySet.SettingsRegistry.WithCurrentUser(ctx))
-	registrySet.FileRegistry = must.Must(registrySet.FileRegistry.WithCurrentUser(ctx))
-	registrySet.ImageRegistry = must.Must(registrySet.ImageRegistry.WithCurrentUser(ctx))
-	registrySet.InvoiceRegistry = must.Must(registrySet.InvoiceRegistry.WithCurrentUser(ctx))
-	registrySet.ManualRegistry = must.Must(registrySet.ManualRegistry.WithCurrentUser(ctx))
-	registrySet.CommodityRegistry = must.Must(registrySet.CommodityRegistry.WithCurrentUser(ctx))
-	registrySet.AreaRegistry = must.Must(registrySet.AreaRegistry.WithCurrentUser(ctx))
-	registrySet.LocationRegistry = must.Must(registrySet.LocationRegistry.WithCurrentUser(ctx))
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 	registrySet.ExportRegistry = must.Must(registrySet.ExportRegistry.WithCurrentUser(ctx))
 	registrySet.RestoreOperationRegistry = must.Must(registrySet.RestoreOperationRegistry.WithCurrentUser(ctx))
 	registrySet.RestoreStepRegistry = must.Must(registrySet.RestoreStepRegistry.WithCurrentUser(ctx))

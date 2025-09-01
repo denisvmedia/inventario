@@ -11,40 +11,64 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.RestoreStepRegistry = (*RestoreStepRegistry)(nil)
+// RestoreStepRegistryFactory creates RestoreStepRegistry instances with proper context
+type RestoreStepRegistryFactory struct {
+	baseRestoreStepRegistry *Registry[models.RestoreStep, *models.RestoreStep]
+}
 
+// RestoreStepRegistry is a context-aware registry that can only be created through the factory
 type RestoreStepRegistry struct {
 	*Registry[models.RestoreStep, *models.RestoreStep]
 
 	userID string
 }
 
-func NewRestoreStepRegistry() *RestoreStepRegistry {
-	return &RestoreStepRegistry{
-		Registry: NewRegistry[models.RestoreStep, *models.RestoreStep](),
+var _ registry.RestoreStepRegistry = (*RestoreStepRegistry)(nil)
+var _ registry.RestoreStepRegistryFactory = (*RestoreStepRegistryFactory)(nil)
+
+func NewRestoreStepRegistry() *RestoreStepRegistryFactory {
+	return &RestoreStepRegistryFactory{
+		baseRestoreStepRegistry: NewRegistry[models.RestoreStep, *models.RestoreStep](),
 	}
 }
 
-func (r *RestoreStepRegistry) MustWithCurrentUser(ctx context.Context) registry.RestoreStepRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.RestoreStepRegistryFactory
+
+func (f *RestoreStepRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.RestoreStepRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *RestoreStepRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreStepRegistry, error) {
-	tmp := *r
-
+func (f *RestoreStepRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.RestoreStepRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = user.ID
-	return &tmp, nil
+
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.RestoreStep, *models.RestoreStep]{
+		items:  f.baseRestoreStepRegistry.items, // Share the data map
+		lock:   f.baseRestoreStepRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                         // Set user-specific userID
+	}
+
+	return &RestoreStepRegistry{
+		Registry: userRegistry,
+		userID:   user.ID,
+	}, nil
 }
 
-func (r *RestoreStepRegistry) WithServiceAccount() registry.RestoreStepRegistry {
-	// Create a shallow copy of the registry with no user filtering
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-	return &tmp
+func (f *RestoreStepRegistryFactory) CreateServiceRegistry() registry.RestoreStepRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.RestoreStep, *models.RestoreStep]{
+		items:  f.baseRestoreStepRegistry.items, // Share the data map
+		lock:   f.baseRestoreStepRegistry.lock,  // Share the mutex pointer
+		userID: "",                              // Clear userID to bypass user filtering
+	}
+
+	return &RestoreStepRegistry{
+		Registry: serviceRegistry,
+		userID:   "", // Clear userID to bypass user filtering
+	}
 }
 
 func (r *RestoreStepRegistry) ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error) {

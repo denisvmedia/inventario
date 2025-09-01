@@ -13,8 +13,14 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.RestoreOperationRegistry = (*RestoreOperationRegistry)(nil)
+// RestoreOperationRegistryFactory creates RestoreOperationRegistry instances with proper context
+type RestoreOperationRegistryFactory struct {
+	dbx                 *sqlx.DB
+	tableNames          store.TableNames
+	restoreStepRegistry *RestoreStepRegistryFactory
+}
 
+// RestoreOperationRegistry is a context-aware registry that can only be created through the factory
 type RestoreOperationRegistry struct {
 	dbx                 *sqlx.DB
 	tableNames          store.TableNames
@@ -24,50 +30,61 @@ type RestoreOperationRegistry struct {
 	restoreStepRegistry registry.RestoreStepRegistry
 }
 
-func NewRestoreOperationRegistry(dbx *sqlx.DB, restoreStepRegistry registry.RestoreStepRegistry) *RestoreOperationRegistry {
+var _ registry.RestoreOperationRegistry = (*RestoreOperationRegistry)(nil)
+var _ registry.RestoreOperationRegistryFactory = (*RestoreOperationRegistryFactory)(nil)
+
+func NewRestoreOperationRegistry(dbx *sqlx.DB, restoreStepRegistry *RestoreStepRegistryFactory) *RestoreOperationRegistryFactory {
 	return NewRestoreOperationRegistryWithTableNames(dbx, store.DefaultTableNames, restoreStepRegistry)
 }
 
-func NewRestoreOperationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames, restoreStepRegistry registry.RestoreStepRegistry) *RestoreOperationRegistry {
-	return &RestoreOperationRegistry{
+func NewRestoreOperationRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames, restoreStepRegistry *RestoreStepRegistryFactory) *RestoreOperationRegistryFactory {
+	return &RestoreOperationRegistryFactory{
 		dbx:                 dbx,
 		tableNames:          tableNames,
 		restoreStepRegistry: restoreStepRegistry,
 	}
 }
 
-func (r *RestoreOperationRegistry) MustWithCurrentUser(ctx context.Context) registry.RestoreOperationRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.RestoreOperationRegistryFactory
+
+func (f *RestoreOperationRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.RestoreOperationRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreOperationRegistry, error) {
-	tmp := *r
-
+func (f *RestoreOperationRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.RestoreOperationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
 
-	// Also update the restore step registry with user context
-	userAwareStepRegistry, err := tmp.restoreStepRegistry.WithCurrentUser(ctx)
+	// Create user-aware restore step registry
+	userAwareStepRegistry, err := f.restoreStepRegistry.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to set user context on restore step registry")
 	}
-	tmp.restoreStepRegistry = userAwareStepRegistry
 
-	return &tmp, nil
+	return &RestoreOperationRegistry{
+		dbx:                 f.dbx,
+		tableNames:          f.tableNames,
+		restoreStepRegistry: userAwareStepRegistry,
+		userID:              user.ID,
+		tenantID:            user.TenantID,
+		service:             false,
+	}, nil
 }
 
-func (r *RestoreOperationRegistry) WithServiceAccount() registry.RestoreOperationRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	tmp.restoreStepRegistry = tmp.restoreStepRegistry.WithServiceAccount()
-	return &tmp
+func (f *RestoreOperationRegistryFactory) CreateServiceRegistry() registry.RestoreOperationRegistry {
+	// Create service-aware restore step registry
+	serviceStepRegistry := f.restoreStepRegistry.CreateServiceRegistry()
+
+	return &RestoreOperationRegistry{
+		dbx:                 f.dbx,
+		tableNames:          f.tableNames,
+		restoreStepRegistry: serviceStepRegistry,
+		userID:              "",
+		tenantID:            "",
+		service:             true,
+	}
 }
 
 func (r *RestoreOperationRegistry) Get(ctx context.Context, id string) (*models.RestoreOperation, error) {

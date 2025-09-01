@@ -16,8 +16,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.FileRegistry = (*FileRegistry)(nil)
+// FileRegistryFactory creates FileRegistry instances with proper context
+type FileRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// FileRegistry is a context-aware registry that can only be created through the factory
 type FileRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -26,40 +31,49 @@ type FileRegistry struct {
 	service    bool
 }
 
-func NewFileRegistry(dbx *sqlx.DB) *FileRegistry {
+var _ registry.FileRegistry = (*FileRegistry)(nil)
+var _ registry.FileRegistryFactory = (*FileRegistryFactory)(nil)
+
+func NewFileRegistry(dbx *sqlx.DB) *FileRegistryFactory {
 	return NewFileRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewFileRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *FileRegistry {
-	return &FileRegistry{
+func NewFileRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *FileRegistryFactory {
+	return &FileRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *FileRegistry) MustWithCurrentUser(ctx context.Context) registry.FileRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.FileRegistryFactory
+
+func (f *FileRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.FileRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *FileRegistry) WithCurrentUser(ctx context.Context) (registry.FileRegistry, error) {
-	tmp := *r
-
+func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &FileRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *FileRegistry) WithServiceAccount() registry.FileRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *FileRegistryFactory) CreateServiceRegistry() registry.FileRegistry {
+	return &FileRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {

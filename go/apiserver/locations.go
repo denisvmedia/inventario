@@ -23,11 +23,7 @@ type locationsAPI struct {
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
 // @Router /locations [get].
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
-	locReg, err := api.locationRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
-		return
-	}
+	locReg := api.locationRegistry
 
 	locations, err := locReg.List(r.Context())
 	if err != nil {
@@ -51,11 +47,7 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.LocationResponse "OK"
 // @Router /locations/{id} [get].
 func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	locReg, err := api.locationRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
-		return
-	}
+	locReg := api.locationRegistry
 
 	location := locationFromContext(r.Context())
 	if location == nil {
@@ -112,11 +104,7 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 
 	// Use WithCurrentUser to ensure proper user context and validation
 	ctx := r.Context()
-	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	locationReg := api.locationRegistry
 	createdLocation, err := locationReg.Create(ctx, location)
 	if err != nil {
 		renderEntityError(w, r, err)
@@ -160,12 +148,8 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 
 	// Use WithCurrentUser to ensure proper user context and validation
 	ctx := r.Context()
-	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-	err = locationReg.Delete(ctx, location.ID)
+	locationReg := api.locationRegistry
+	err := locationReg.Delete(ctx, location.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -212,11 +196,7 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 
 	// Use WithCurrentUser to ensure proper user context and validation
 	ctx := r.Context()
-	locationReg, err := api.locationRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	locationReg := api.locationRegistry
 	newLocation, err := locationReg.Update(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)

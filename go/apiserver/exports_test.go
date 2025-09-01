@@ -15,6 +15,7 @@ import (
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -25,10 +26,8 @@ import (
 func TestExportHardDelete(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry
-	exportRegistry := memory.NewExportRegistry()
-	fileRegistry := memory.NewFileRegistry()
-	userRegistry := memory.NewUserRegistry()
+	// Create factory set
+	factorySet := memory.NewFactorySet()
 
 	// Create a test user for authentication
 	testUser := models.User{
@@ -42,13 +41,11 @@ func TestExportHardDelete(t *testing.T) {
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
-	createdUser := must.Must(userRegistry.Create(context.Background(), testUser))
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
 
-	registrySet := &registry.Set{
-		ExportRegistry: exportRegistry,
-		FileRegistry:   fileRegistry,
-		UserRegistry:   userRegistry,
-	}
+	// Create user context and get user-aware registry set
+	ctx := appctx.WithUser(context.Background(), createdUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create test export
 	export := models.Export{
@@ -64,12 +61,12 @@ func TestExportHardDelete(t *testing.T) {
 	// Create router with export routes and authentication
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
 
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "memory://",
-		EntityService:  services.NewEntityService(registrySet, "memory://"),
+		EntityService:  services.NewEntityService(factorySet, "memory://"),
 		JWTSecret:      testJWTSecret,
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -99,13 +96,14 @@ func TestExportHardDelete(t *testing.T) {
 func TestExportListExcludesDeleted(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry
+	// Create factory set and test user
 	userRegistry, testUser := newUserRegistryWithUser()
-	registrySet := &registry.Set{
-		ExportRegistry: memory.NewExportRegistry(),
-		UserRegistry:   userRegistry,
-		TenantRegistry: memory.NewTenantRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
+	factorySet.UserRegistry = userRegistry
+
+	// Create user context and get user-aware registry set
+	ctx := appctx.WithUser(context.Background(), testUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create test exports
 	export1 := models.Export{
@@ -145,11 +143,11 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint
 	req := httptest.NewRequest("GET", "/exports", nil)
@@ -171,13 +169,14 @@ func TestExportListExcludesDeleted(t *testing.T) {
 func TestExportListWithDeletedParameter(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry
+	// Create factory set and test user
 	userRegistry, testUser := newUserRegistryWithUser()
-	registrySet := &registry.Set{
-		ExportRegistry: memory.NewExportRegistry(),
-		UserRegistry:   userRegistry,
-		TenantRegistry: memory.NewTenantRegistry(),
-	}
+	factorySet := memory.NewFactorySet()
+	factorySet.UserRegistry = userRegistry
+
+	// Create user context and get user-aware registry set
+	ctx := appctx.WithUser(context.Background(), testUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create test exports
 	export1 := models.Export{
@@ -207,11 +206,11 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint with include_deleted=true
 	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
@@ -235,8 +234,8 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry
-	userRegistry := memory.NewUserRegistry()
+	// Create factory set
+	factorySet := memory.NewFactorySet()
 
 	// Create a test user for authentication
 	testUser := models.User{
@@ -250,20 +249,18 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
-	createdUser := must.Must(userRegistry.Create(context.Background(), testUser))
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
 
-	registrySet := &registry.Set{
-		ExportRegistry: memory.NewExportRegistry(),
-		UserRegistry:   userRegistry,
-	}
+	// Create user context (registrySet not needed for this test)
+	_ = appctx.WithUser(context.Background(), createdUser)
 
 	// Create router with export routes and authentication
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
 
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "memory://",
 		JWTSecret:      testJWTSecret,
 	}

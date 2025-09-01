@@ -22,7 +22,6 @@ func areaFromContext(ctx context.Context) *models.Area {
 }
 
 type areasAPI struct {
-	areaRegistry registry.AreaRegistry
 }
 
 // listAreas lists all areas.
@@ -34,11 +33,14 @@ type areasAPI struct {
 // @Success 200 {object} jsonapi.AreasResponse "OK"
 // @Router /areas [get].
 func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
-	areaRegistry, err := api.areaRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	areaRegistry := registrySet.AreaRegistry
 	areas, err := areaRegistry.List(r.Context())
 	if err != nil {
 		renderEntityError(w, r, err)
@@ -61,11 +63,6 @@ func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.AreaResponse "OK"
 // @Router /areas/{id} [get].
 func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	_, err := api.areaRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
-		return
-	}
 	area := areaFromContext(r.Context())
 	if area == nil {
 		unprocessableEntityError(w, r, nil)
@@ -91,6 +88,13 @@ func (api *areasAPI) getArea(w http.ResponseWriter, r *http.Request) { //revive:
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /areas [post].
 func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	var input jsonapi.AreaRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -111,11 +115,7 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 
 	// Use CreateWithUser to ensure proper user context and validation
 	ctx := appctx.WithUser(r.Context(), user)
-	areaReg, err := api.areaRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	areaReg := registrySet.AreaRegistry
 	createdArea, err := areaReg.Create(ctx, area)
 	if err != nil {
 		renderEntityError(w, r, err)
@@ -140,6 +140,13 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Area not found"
 // @Router /areas/{id} [delete].
 func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	area := areaFromContext(r.Context())
 	if area == nil {
 		unprocessableEntityError(w, r, nil)
@@ -147,13 +154,9 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	areaReg, err := api.areaRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	areaReg := registrySet.AreaRegistry
 
-	err = areaReg.Delete(ctx, area.ID)
+	err := areaReg.Delete(ctx, area.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -199,13 +202,16 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 		updateData.TenantID = area.TenantID
 	}
 
-	// Use UpdateWithUser to ensure proper user context and validation
-	ctx := r.Context()
-	areaReg, err := api.areaRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	// Use UpdateWithUser to ensure proper user context and validation
+	ctx := r.Context()
+	areaReg := registrySet.AreaRegistry
 	newArea, err := areaReg.Update(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
@@ -220,9 +226,7 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 }
 
 func Areas(areaRegistry registry.AreaRegistry) func(r chi.Router) {
-	api := &areasAPI{
-		areaRegistry: areaRegistry,
-	}
+	api := &areasAPI{}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listAreas) // GET /areas
 		r.Route("/{areaID}", func(r chi.Router) {

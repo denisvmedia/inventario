@@ -116,11 +116,11 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 			}
 
 			// Create registry set
-			registrySet := memory.NewRegistrySet()
+			factorySet := memory.NewFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
 			c.Assert(registrySet, qt.IsNotNil)
 
 			// Create service
-			service := services.NewEntityService(registrySet, uploadLocation)
+			service := services.NewEntityService(factorySet, uploadLocation)
 
 			// Setup test data
 			commodityID, fileIDs := tt.setupData(ctx, registrySet)
@@ -227,11 +227,11 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 			}
 
 			// Create registry set
-			registrySet := memory.NewRegistrySet()
+			factorySet := memory.NewFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
 			c.Assert(registrySet, qt.IsNotNil)
 
 			// Create service
-			service := services.NewEntityService(registrySet, uploadLocation)
+			service := services.NewEntityService(factorySet, uploadLocation)
 
 			// Setup test data
 			areaID, commodityIDs, fileIDs := tt.setupData(ctx, registrySet)
@@ -355,11 +355,11 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 			}
 
 			// Create registry set
-			registrySet := memory.NewRegistrySet()
+			factorySet := memory.NewFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
 			c.Assert(registrySet, qt.IsNotNil)
 
 			// Create service
-			service := services.NewEntityService(registrySet, uploadLocation)
+			service := services.NewEntityService(factorySet, uploadLocation)
 
 			// Setup test data
 			locationID, areaIDs, commodityIDs, fileIDs := tt.setupData(ctx, registrySet)
@@ -459,11 +459,11 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 			}
 
 			// Create registry set
-			registrySet := memory.NewRegistrySet()
+			factorySet := memory.NewFactorySet(); registrySet := factorySet.CreateServiceRegistrySet()
 			c.Assert(registrySet, qt.IsNotNil)
 
 			// Create service
-			service := services.NewEntityService(registrySet, uploadLocation)
+			service := services.NewEntityService(factorySet, uploadLocation)
 
 			// Setup test data
 			exportID, fileID := tt.setupData(ctx, registrySet)

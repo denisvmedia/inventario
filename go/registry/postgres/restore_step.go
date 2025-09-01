@@ -13,8 +13,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.RestoreStepRegistry = (*RestoreStepRegistry)(nil)
+// RestoreStepRegistryFactory creates RestoreStepRegistry instances with proper context
+type RestoreStepRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// RestoreStepRegistry is a context-aware registry that can only be created through the factory
 type RestoreStepRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -23,40 +28,49 @@ type RestoreStepRegistry struct {
 	service    bool
 }
 
-func NewRestoreStepRegistry(dbx *sqlx.DB) *RestoreStepRegistry {
+var _ registry.RestoreStepRegistry = (*RestoreStepRegistry)(nil)
+var _ registry.RestoreStepRegistryFactory = (*RestoreStepRegistryFactory)(nil)
+
+func NewRestoreStepRegistry(dbx *sqlx.DB) *RestoreStepRegistryFactory {
 	return NewRestoreStepRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewRestoreStepRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *RestoreStepRegistry {
-	return &RestoreStepRegistry{
+func NewRestoreStepRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *RestoreStepRegistryFactory {
+	return &RestoreStepRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *RestoreStepRegistry) MustWithCurrentUser(ctx context.Context) registry.RestoreStepRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.RestoreStepRegistryFactory
+
+func (f *RestoreStepRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.RestoreStepRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *RestoreStepRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreStepRegistry, error) {
-	tmp := *r
-
+func (f *RestoreStepRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.RestoreStepRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &RestoreStepRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *RestoreStepRegistry) WithServiceAccount() registry.RestoreStepRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *RestoreStepRegistryFactory) CreateServiceRegistry() registry.RestoreStepRegistry {
+	return &RestoreStepRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *RestoreStepRegistry) Get(ctx context.Context, id string) (*models.RestoreStep, error) {

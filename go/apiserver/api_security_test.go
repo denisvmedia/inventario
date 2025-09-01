@@ -24,7 +24,6 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 	c := qt.New(t)
 
 	// Setup test environment
-	registrySet := memory.NewRegistrySet()
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
 	// Create two test users
@@ -52,15 +51,20 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 	}
 	user2.SetPassword("password123")
 
+	userRegistry := memory.NewUserRegistry()
+
 	// Add users to registry
-	_, err := registrySet.UserRegistry.Create(context.Background(), *user1)
+	u1, err := userRegistry.Create(context.Background(), *user1)
 	c.Assert(err, qt.IsNil)
-	_, err = registrySet.UserRegistry.Create(context.Background(), *user2)
+	u2, err := userRegistry.Create(context.Background(), *user2)
 	c.Assert(err, qt.IsNil)
 
 	// User 1 creates a commodity
-	user1Ctx := appctx.WithUser(context.Background(), user1)
-	user1CommodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(user1Ctx)
+	user1Ctx := appctx.WithUser(context.Background(), u1)
+	factorySet := memory.NewFactorySet()
+	registrySet, err := factorySet.CreateUserRegistrySet(user1Ctx)
+	c.Assert(err, qt.IsNil)
+	user1CommodityReg := registrySet.CommodityRegistry
 	c.Assert(err, qt.IsNil)
 
 	commodity := models.Commodity{
@@ -71,8 +75,8 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 
 	// Create JWT token for user 2
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": user2.ID,
-		"role":    string(user2.Role),
+		"user_id": u2.ID,
+		"role":    string(u2.Role),
 		"exp":     time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, err := token.SignedString(jwtSecret)
@@ -80,14 +84,13 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 
 	// Setup API server
 	params := Params{
-		RegistrySet:    registrySet,
 		JWTSecret:      jwtSecret,
 		UploadLocation: "file://./test_uploads?create_dir=true",
-		EntityService:  services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true"),
+		EntityService:  services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true"),
 	}
 
 	r := chi.NewRouter()
-	userMiddlewares := createUserAwareMiddlewaresForUploads(jwtSecret, registrySet.UserRegistry, registrySet)
+	userMiddlewares := createUserAwareMiddlewaresForUploads(jwtSecret, registrySet.UserRegistry, factorySet)
 	r.With(userMiddlewares...).Route("/uploads", Uploads(params))
 
 	// User 2 attempts to upload file to User 1's commodity (SECURITY VIOLATION)
@@ -118,7 +121,7 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 	c := qt.New(t)
 
 	// Setup test environment
-	registrySet := memory.NewRegistrySet()
+	factorySet := memory.NewFactorySet()
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
 	// Create users in different tenants
@@ -146,15 +149,20 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 	}
 	userTenant2.SetPassword("password123")
 
+	// registrySet := factorySet.CreateUserRegistrySet()
+	userRegistry := factorySet.UserRegistry
+
 	// Add users to registry
-	_, err := registrySet.UserRegistry.Create(context.Background(), *userTenant1)
+	u1, err := userRegistry.Create(context.Background(), *userTenant1)
 	c.Assert(err, qt.IsNil)
-	_, err = registrySet.UserRegistry.Create(context.Background(), *userTenant2)
+	u2, err := userRegistry.Create(context.Background(), *userTenant2)
 	c.Assert(err, qt.IsNil)
 
 	// Tenant 1 user creates an export
-	tenant1Ctx := appctx.WithUser(context.Background(), userTenant1)
-	tenant1ExportReg, err := registrySet.ExportRegistry.WithCurrentUser(tenant1Ctx)
+	tenant1Ctx := appctx.WithUser(context.Background(), u1)
+	registrySet1, err := factorySet.CreateUserRegistrySet(tenant1Ctx)
+	c.Assert(err, qt.IsNil)
+	tenant1ExportReg := registrySet1.ExportRegistry
 	c.Assert(err, qt.IsNil)
 
 	export := models.Export{
@@ -166,8 +174,8 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 
 	// Create JWT token for tenant 2 user
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": userTenant2.ID,
-		"role":    string(userTenant2.Role),
+		"user_id": u2.ID,
+		"role":    string(u2.Role),
 		"exp":     time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, err := token.SignedString(jwtSecret)
@@ -175,14 +183,13 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 
 	// Setup API server
 	params := Params{
-		RegistrySet:    registrySet,
 		JWTSecret:      jwtSecret,
 		UploadLocation: "file://./test_uploads?create_dir=true",
-		EntityService:  services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true"),
+		EntityService:  services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true"),
 	}
 
 	r := chi.NewRouter()
-	userMiddlewares := createUserAwareMiddlewares(jwtSecret, registrySet.UserRegistry, registrySet)
+	userMiddlewares := createUserAwareMiddlewares(jwtSecret, factorySet)
 	r.With(userMiddlewares...).Route("/exports", Exports(params, nil))
 
 	// Tenant 2 user attempts to access Tenant 1's export (SECURITY VIOLATION)
@@ -268,16 +275,16 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 			c := qt.New(t)
 
 			// Setup test environment
-			registrySet := memory.NewRegistrySet()
 			jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
 			// Setup user
 			user := tt.setupUser()
 			user.SetPassword("password123")
+			factorySet := memory.NewFactorySet()
 
 			// Add user to registry (even inactive users might be in the registry)
 			if user.ID != "" {
-				_, err := registrySet.UserRegistry.Create(context.Background(), *user)
+				_, err := factorySet.UserRegistry.Create(context.Background(), *user)
 				c.Assert(err, qt.IsNil)
 			}
 
@@ -292,7 +299,7 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 
 			// Setup API server with RLS middleware
 			r := chi.NewRouter()
-			userMiddlewares := createUserAwareMiddlewares(jwtSecret, registrySet.UserRegistry, registrySet)
+			userMiddlewares := createUserAwareMiddlewares(jwtSecret, factorySet)
 			r.With(userMiddlewares...).Get("/test", func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			})

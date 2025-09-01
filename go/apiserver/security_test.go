@@ -15,6 +15,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
@@ -24,8 +25,8 @@ import (
 func TestSecurityIDRejection(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test user first to get the generated ID
-	userRegistry := memory.NewUserRegistry()
+	// Create factory set and test user
+	factorySet := memory.NewFactorySet()
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			// ID will be generated server-side for security
@@ -38,12 +39,12 @@ func TestSecurityIDRejection(t *testing.T) {
 	}
 	err := testUser.SetPassword("testpassword123")
 	c.Assert(err, qt.IsNil)
-	createdUser, err := userRegistry.Create(context.Background(), testUser)
+	createdUser, err := factorySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
 
-	// Create test registry set with the generated user ID
-	registrySet := memory.NewRegistrySetWithUserID(createdUser.ID)
-	registrySet.UserRegistry = userRegistry
+	// Create user context and get user-aware registry set
+	ctx := appctx.WithUser(context.Background(), createdUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set main currency to avoid "main currency not set" errors
@@ -147,16 +148,18 @@ func TestSecurityIDRejection(t *testing.T) {
 			r.Use(render.SetContentType(render.ContentTypeJSON))
 
 			params := apiserver.Params{
-				RegistrySet:    registrySet,
+				FactorySet:     factorySet,
 				UploadLocation: "memory://",
 				JWTSecret:      testJWTSecret,
 			}
 
 			// Add authentication middleware and routes
-			r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/commodities", apiserver.Commodities(params))
-			r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/areas", apiserver.Areas(registrySet.AreaRegistry))
-			r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/locations", apiserver.Locations(registrySet.LocationRegistry))
-			r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/files", apiserver.Files(params))
+			areaReg := factorySet.AreaRegistryFactory.CreateServiceRegistry()
+			locReg := factorySet.LocationRegistryFactory.CreateServiceRegistry()
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/commodities", apiserver.Commodities(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/areas", apiserver.Areas(areaReg))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/locations", apiserver.Locations(locReg))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/files", apiserver.Files(params))
 
 			// Serialize request body
 			requestBodyBytes, err := json.Marshal(tc.requestBody)
@@ -192,8 +195,8 @@ func TestSecurityIDRejection(t *testing.T) {
 func TestSecurityServerGeneratedIDs(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test user first to get the generated ID
-	userRegistry := memory.NewUserRegistry()
+	// Create factory set and test user
+	factorySet := memory.NewFactorySet()
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			// ID will be generated server-side for security
@@ -206,12 +209,12 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 	}
 	err := testUser.SetPassword("testpassword123")
 	c.Assert(err, qt.IsNil)
-	createdUser, err := userRegistry.Create(context.Background(), testUser)
+	createdUser, err := factorySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
 
-	// Create test registry set with the generated user ID
-	registrySet := memory.NewRegistrySetWithUserID(createdUser.ID)
-	registrySet.UserRegistry = userRegistry
+	// Create user context and get user-aware registry set
+	ctx := appctx.WithUser(context.Background(), createdUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set main currency to avoid "main currency not set" errors
@@ -299,15 +302,17 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 			r.Use(render.SetContentType(render.ContentTypeJSON))
 
 			params := apiserver.Params{
-				RegistrySet:    registrySet,
+				FactorySet:     factorySet,
 				UploadLocation: "memory://",
 				JWTSecret:      testJWTSecret,
 			}
 
 			// Add authentication middleware and routes
-			r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/commodities", apiserver.Commodities(params))
-			r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/areas", apiserver.Areas(registrySet.AreaRegistry))
-			r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/locations", apiserver.Locations(registrySet.LocationRegistry))
+			areaReg := factorySet.AreaRegistryFactory.CreateServiceRegistry()
+			locReg := factorySet.LocationRegistryFactory.CreateServiceRegistry()
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/commodities", apiserver.Commodities(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/areas", apiserver.Areas(areaReg))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/locations", apiserver.Locations(locReg))
 
 			// Serialize request body
 			requestBodyBytes, err := json.Marshal(tc.requestBody)

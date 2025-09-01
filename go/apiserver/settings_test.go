@@ -142,13 +142,14 @@ func TestSettingsAPI(t *testing.T) {
 func TestMainCurrencyRestriction(t *testing.T) {
 	c := qt.New(t)
 
-	// Create a memory registry for testing
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create a memory factory set for testing
+	factorySet := memory.NewFactorySet()
+	c.Assert(factorySet, qt.IsNotNil)
 
 	// Create a router with the settings endpoint
+	settingsReg := factorySet.SettingsRegistryFactory.CreateServiceRegistry()
 	r := chi.NewRouter()
-	r.Route("/settings", apiserver.Settings(registrySet.SettingsRegistry))
+	r.Route("/settings", apiserver.Settings(settingsReg))
 
 	// First, set the main currency to USD
 	currency := "USD"

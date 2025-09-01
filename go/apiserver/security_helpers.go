@@ -7,7 +7,6 @@ import (
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 // SecurityError represents different types of security violations
@@ -32,16 +31,6 @@ var (
 		Type:    "user_account_disabled",
 		Message: "User account disabled",
 		Code:    http.StatusForbidden,
-	}
-	ErrInsufficientPermissions = SecurityError{
-		Type:    "insufficient_permissions",
-		Message: "Insufficient permissions for this operation",
-		Code:    http.StatusForbidden,
-	}
-	ErrResourceNotFound = SecurityError{
-		Type:    "resource_not_found",
-		Message: "Resource not found",
-		Code:    http.StatusNotFound,
 	}
 )
 
@@ -71,91 +60,6 @@ func ValidateUserContext(r *http.Request) (*models.User, *SecurityError) {
 	}
 
 	return user, nil
-}
-
-// GetUserAwareCommodityRegistry returns a user-aware commodity registry
-func GetUserAwareCommodityRegistry(r *http.Request, baseRegistry registry.CommodityRegistry) (registry.CommodityRegistry, *SecurityError) {
-	// Validate user context first
-	_, secErr := ValidateUserContext(r)
-	if secErr != nil {
-		return nil, secErr
-	}
-
-	userReg, err := baseRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		logSecurityViolation(r, "registry_context_error", "Failed to create user-aware commodity registry")
-		return nil, &ErrUserContextInvalid
-	}
-
-	return userReg, nil
-}
-
-// GetUserAwareAreaRegistry returns a user-aware area registry
-func GetUserAwareAreaRegistry(r *http.Request, baseRegistry registry.AreaRegistry) (registry.AreaRegistry, *SecurityError) {
-	// Validate user context first
-	_, secErr := ValidateUserContext(r)
-	if secErr != nil {
-		return nil, secErr
-	}
-
-	userReg, err := baseRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		logSecurityViolation(r, "registry_context_error", "Failed to create user-aware area registry")
-		return nil, &ErrUserContextInvalid
-	}
-
-	return userReg, nil
-}
-
-// GetUserAwareLocationRegistry returns a user-aware location registry
-func GetUserAwareLocationRegistry(r *http.Request, baseRegistry registry.LocationRegistry) (registry.LocationRegistry, *SecurityError) {
-	// Validate user context first
-	_, secErr := ValidateUserContext(r)
-	if secErr != nil {
-		return nil, secErr
-	}
-
-	userReg, err := baseRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		logSecurityViolation(r, "registry_context_error", "Failed to create user-aware location registry")
-		return nil, &ErrUserContextInvalid
-	}
-
-	return userReg, nil
-}
-
-// GetUserAwareFileRegistry returns a user-aware file registry
-func GetUserAwareFileRegistry(r *http.Request, baseRegistry registry.FileRegistry) (registry.FileRegistry, *SecurityError) {
-	// Validate user context first
-	_, secErr := ValidateUserContext(r)
-	if secErr != nil {
-		return nil, secErr
-	}
-
-	userReg, err := baseRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		logSecurityViolation(r, "registry_context_error", "Failed to create user-aware file registry")
-		return nil, &ErrUserContextInvalid
-	}
-
-	return userReg, nil
-}
-
-// GetUserAwareExportRegistry returns a user-aware export registry
-func GetUserAwareExportRegistry(r *http.Request, baseRegistry registry.ExportRegistry) (registry.ExportRegistry, *SecurityError) {
-	// Validate user context first
-	_, secErr := ValidateUserContext(r)
-	if secErr != nil {
-		return nil, secErr
-	}
-
-	userReg, err := baseRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		logSecurityViolation(r, "registry_context_error", "Failed to create user-aware export registry")
-		return nil, &ErrUserContextInvalid
-	}
-
-	return userReg, nil
 }
 
 // HandleSecurityError renders a security error with consistent format and logging

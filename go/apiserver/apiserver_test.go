@@ -37,220 +37,10 @@ func createTestUserContext(userID string) context.Context {
 	})
 }
 
-func newLocationRegistry(userID string) registry.LocationRegistry {
-	var locationsRegistry registry.LocationRegistry = memory.NewLocationRegistry()
+// getRegistrySetFromParams creates a user-aware registry set from params and user ID
+func getRegistrySetFromParams(params apiserver.Params, userID string) *registry.Set {
 	ctx := createTestUserContext(userID)
-	locationsRegistry = must.Must(locationsRegistry.WithCurrentUser(ctx))
-
-	must.Must(locationsRegistry.Create(context.Background(), models.Location{
-		Name:    "Location 1",
-		Address: "Address 1",
-	}))
-
-	must.Must(locationsRegistry.Create(context.Background(), models.Location{
-		Name:    "Location 2",
-		Address: "Address 2",
-	}))
-
-	return locationsRegistry
-}
-
-func newAreaRegistry(locationRegistry registry.LocationRegistry, userID string) registry.AreaRegistry {
-	var areaRegistry registry.AreaRegistry = memory.NewAreaRegistry(locationRegistry.(*memory.LocationRegistry))
-	ctx := createTestUserContext(userID)
-	areaRegistry = must.Must(areaRegistry.WithCurrentUser(ctx))
-	locations := must.Must(must.Must(locationRegistry.WithCurrentUser(ctx)).List(context.Background()))
-
-	must.Must(areaRegistry.Create(context.Background(), models.Area{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("1", "default-tenant"),
-		Name:                "Area 1",
-		LocationID:          locations[0].ID,
-	}))
-
-	must.Must(areaRegistry.Create(context.Background(), models.Area{
-		TenantAwareEntityID: models.WithTenantAwareEntityID("2", "default-tenant"),
-		Name:                "Area 2",
-		LocationID:          locations[0].ID,
-	}))
-
-	return areaRegistry
-}
-
-func newCommodityRegistry(areaRegistry registry.AreaRegistry, userID string) registry.CommodityRegistry {
-	var commodityRegistry registry.CommodityRegistry = memory.NewCommodityRegistry(areaRegistry.(*memory.AreaRegistry))
-	ctx := createTestUserContext(userID)
-	commodityRegistry = must.Must(commodityRegistry.WithCurrentUser(ctx))
-
-	areaRegistry = must.Must(areaRegistry.WithCurrentUser(ctx))
-	commodityRegistry = must.Must(commodityRegistry.WithCurrentUser(ctx))
-
-	areas := must.Must(areaRegistry.List(context.Background()))
-
-	must.Must(commodityRegistry.Create(context.Background(), models.Commodity{
-		Name:                  "Commodity 1",
-		ShortName:             "C1",
-		AreaID:                areas[0].ID,
-		Type:                  models.CommodityTypeFurniture,
-		Status:                models.CommodityStatusInUse,
-		Count:                 10,
-		OriginalPrice:         must.Must(decimal.NewFromString("2000.00")),
-		OriginalPriceCurrency: models.Currency("USD"),
-	}))
-
-	must.Must(commodityRegistry.Create(context.Background(), models.Commodity{
-		Name:                  "Commodity 2",
-		ShortName:             "C2",
-		AreaID:                areas[0].ID,
-		Status:                models.CommodityStatusInUse,
-		Type:                  models.CommodityTypeElectronics,
-		Count:                 5,
-		OriginalPrice:         must.Must(decimal.NewFromString("1500.00")),
-		OriginalPriceCurrency: models.Currency("USD"),
-	}))
-
-	return commodityRegistry
-}
-
-func newImageRegistry(commodityRegistry registry.CommodityRegistry, userID string) registry.ImageRegistry {
-	var imageRegistry = memory.NewImageRegistry(commodityRegistry.(*memory.CommodityRegistry))
-
-	ctx := createTestUserContext(userID)
-	commodities := must.Must(commodityRegistry.List(ctx))
-	imgReg := must.Must(imageRegistry.WithCurrentUser(ctx))
-
-	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err := b.WriteAll(context.TODO(), "image1.jpg", []byte("image1"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(imgReg.Create(ctx, models.Image{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "image1",     // Without extension
-			OriginalPath: "image1.jpg", // This is the actual file name in storage
-			Ext:          ".jpg",
-			MIMEType:     "image/jpeg",
-		},
-	}))
-
-	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err = b.WriteAll(context.TODO(), "image2.jpg", []byte("image2"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(imgReg.Create(ctx, models.Image{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "image2",     // Without extension
-			OriginalPath: "image2.jpg", // This is the actual file name in storage
-			Ext:          ".jpg",
-			MIMEType:     "image/jpeg",
-		},
-	}))
-
-	return imgReg
-}
-
-func newInvoiceRegistry(commodityRegistry registry.CommodityRegistry, userID string) registry.InvoiceRegistry {
-	var invoiceRegistry = memory.NewInvoiceRegistry(commodityRegistry.(*memory.CommodityRegistry))
-
-	ctx := createTestUserContext(userID)
-	commodities := must.Must(commodityRegistry.List(ctx))
-	invReg := must.Must(invoiceRegistry.WithCurrentUser(ctx))
-
-	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err := b.WriteAll(context.TODO(), "invoice1.pdf", []byte("invoice1"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(invReg.Create(ctx, models.Invoice{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "invoice1",     // Without extension
-			OriginalPath: "invoice1.pdf", // This is the actual file name in storage
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-
-	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err = b.WriteAll(context.TODO(), "invoice2.pdf", []byte("invoice2"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(invReg.Create(ctx, models.Invoice{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "invoice2",     // Without extension
-			OriginalPath: "invoice2.pdf", // This is the actual file name in storage
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-
-	return invReg
-}
-
-func newManualRegistry(commodityRegistry registry.CommodityRegistry, userID string) registry.ManualRegistry {
-	var manualRegistry = memory.NewManualRegistry(commodityRegistry.(*memory.CommodityRegistry))
-
-	ctx := createTestUserContext(userID)
-	commodities := must.Must(commodityRegistry.List(ctx))
-	manReg := must.Must(manualRegistry.WithCurrentUser(ctx))
-
-	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err := b.WriteAll(context.TODO(), "manual1.pdf", []byte("manual1"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(manReg.Create(ctx, models.Manual{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "manual1",     // Without extension
-			OriginalPath: "manual1.pdf", // This is the actual file name in storage
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-
-	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
-	defer b.Close()
-	err = b.WriteAll(context.TODO(), "manual2.pdf", []byte("manual2"), nil)
-	if err != nil {
-		panic(err)
-	}
-
-	must.Must(manReg.Create(ctx, models.Manual{
-		CommodityID: commodities[0].ID,
-		File: &models.File{
-			Path:         "manual2",     // Without extension
-			OriginalPath: "manual2.pdf", // This is the actual file name in storage
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
-		},
-	}))
-
-	return manReg
-}
-
-func newSettingsRegistry(userID string) registry.SettingsRegistry {
-	var settingsRegistry registry.SettingsRegistry = memory.NewSettingsRegistry()
-	ctx := createTestUserContext(userID)
-	settingsRegistry = must.Must(settingsRegistry.WithCurrentUser(ctx))
-
-	must.Assert(settingsRegistry.Patch(context.Background(), "system.main_currency", "USD"))
-
-	return settingsRegistry
+	return must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 }
 
 func newUserRegistryWithUser() (registry.UserRegistry, *models.User) {
@@ -298,6 +88,178 @@ func addAuthHeader(req *http.Request, userID string, role models.UserRole) {
 // addTestUserAuthHeader adds authentication header for the given user
 func addTestUserAuthHeader(req *http.Request, userID string) {
 	addAuthHeader(req, userID, models.UserRoleUser)
+}
+
+func populateLocationTestData(locationRegistry registry.LocationRegistry) {
+	must.Must(locationRegistry.Create(context.Background(), models.Location{
+		Name:    "Location 1",
+		Address: "Address 1",
+	}))
+
+	must.Must(locationRegistry.Create(context.Background(), models.Location{
+		Name:    "Location 2",
+		Address: "Address 2",
+	}))
+}
+
+func populateAreaTestData(areaRegistry registry.AreaRegistry, locationRegistry registry.LocationRegistry) {
+	locations := must.Must(locationRegistry.List(context.Background()))
+
+	must.Must(areaRegistry.Create(context.Background(), models.Area{
+		TenantAwareEntityID: models.WithTenantAwareEntityID("1", "default-tenant"),
+		Name:                "Area 1",
+		LocationID:          locations[0].ID,
+	}))
+
+	must.Must(areaRegistry.Create(context.Background(), models.Area{
+		TenantAwareEntityID: models.WithTenantAwareEntityID("2", "default-tenant"),
+		Name:                "Area 2",
+		LocationID:          locations[0].ID,
+	}))
+}
+
+func populateSettingsTestData(settingsRegistry registry.SettingsRegistry) {
+	must.Assert(settingsRegistry.Patch(context.Background(), "system.main_currency", "USD"))
+}
+
+func populateCommodityTestData(commodityRegistry registry.CommodityRegistry, areaRegistry registry.AreaRegistry) {
+	areas := must.Must(areaRegistry.List(context.Background()))
+
+	must.Must(commodityRegistry.Create(context.Background(), models.Commodity{
+		Name:                  "Commodity 1",
+		ShortName:             "C1",
+		AreaID:                areas[0].ID,
+		Type:                  models.CommodityTypeFurniture,
+		Status:                models.CommodityStatusInUse,
+		Count:                 10,
+		OriginalPrice:         must.Must(decimal.NewFromString("2000.00")),
+		OriginalPriceCurrency: models.Currency("USD"),
+	}))
+
+	must.Must(commodityRegistry.Create(context.Background(), models.Commodity{
+		Name:                  "Commodity 2",
+		ShortName:             "C2",
+		AreaID:                areas[0].ID,
+		Status:                models.CommodityStatusInUse,
+		Type:                  models.CommodityTypeElectronics,
+		Count:                 5,
+		OriginalPrice:         must.Must(decimal.NewFromString("1500.00")),
+		OriginalPriceCurrency: models.Currency("USD"),
+	}))
+}
+
+func populateImageTestData(imageRegistry registry.ImageRegistry, commodityRegistry registry.CommodityRegistry) {
+	commodities := must.Must(commodityRegistry.List(context.Background()))
+
+	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err := b.WriteAll(context.TODO(), "image1.jpg", []byte("image1"), nil)
+	if err != nil {
+		panic(err)
+	}
+
+	must.Must(imageRegistry.Create(context.Background(), models.Image{
+		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:         "image1",     // Without extension
+			OriginalPath: "image1.jpg", // This is the actual file name in storage
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err = b.WriteAll(context.TODO(), "image2.jpg", []byte("image2"), nil)
+	if err != nil {
+		panic(err)
+	}
+
+	must.Must(imageRegistry.Create(context.Background(), models.Image{
+		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:         "image2",     // Without extension
+			OriginalPath: "image2.jpg", // This is the actual file name in storage
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+}
+
+func populateInvoiceTestData(invoiceRegistry registry.InvoiceRegistry, commodityRegistry registry.CommodityRegistry) {
+	commodities := must.Must(commodityRegistry.List(context.Background()))
+
+	b := must.Must(blob.OpenBucket(context.Background(), uploadLocation))
+	defer b.Close()
+	err := b.WriteAll(context.TODO(), "invoice1.pdf", []byte("invoice1"), nil)
+	if err != nil {
+		panic(err)
+	}
+
+	must.Must(invoiceRegistry.Create(context.Background(), models.Invoice{
+		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:         "invoice1",     // Without extension
+			OriginalPath: "invoice1.pdf", // This is the actual file name in storage
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err = b.WriteAll(context.TODO(), "invoice2.pdf", []byte("invoice2"), nil)
+	if err != nil {
+		panic(err)
+	}
+
+	must.Must(invoiceRegistry.Create(context.Background(), models.Invoice{
+		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:         "invoice2",     // Without extension
+			OriginalPath: "invoice2.pdf", // This is the actual file name in storage
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+}
+
+func populateManualTestData(manualRegistry registry.ManualRegistry, commodityRegistry registry.CommodityRegistry) {
+	commodities := must.Must(commodityRegistry.List(context.Background()))
+
+	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err := b.WriteAll(context.TODO(), "manual1.pdf", []byte("manual1"), nil)
+	if err != nil {
+		panic(err)
+	}
+
+	must.Must(manualRegistry.Create(context.Background(), models.Manual{
+		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:         "manual1",     // Without extension
+			OriginalPath: "manual1.pdf", // This is the actual file name in storage
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	b = must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
+	defer b.Close()
+	err = b.WriteAll(context.TODO(), "manual2.pdf", []byte("manual2"), nil)
+	if err != nil {
+		panic(err)
+	}
+
+	must.Must(manualRegistry.Create(context.Background(), models.Manual{
+		CommodityID: commodities[0].ID,
+		File: &models.File{
+			Path:         "manual2",     // Without extension
+			OriginalPath: "manual2.pdf", // This is the actual file name in storage
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
 }
 
 func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commodityRegistry registry.CommodityRegistry) {
@@ -422,48 +384,56 @@ func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commod
 
 func newParams() (apiserver.Params, *models.User) {
 	var params apiserver.Params
-	params.RegistrySet = &registry.Set{}
 
 	// Create user registry first to get the user ID
 	userRegistry, testUser := newUserRegistryWithUser()
-	params.RegistrySet.UserRegistry = userRegistry
 
-	// Now create other registries using the dynamic user ID
-	params.RegistrySet.LocationRegistry = newLocationRegistry(testUser.ID)
-	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry, testUser.ID)
-	params.RegistrySet.SettingsRegistry = newSettingsRegistry(testUser.ID)
+	// Create factory set
+	params.FactorySet = memory.NewFactorySet()
+	params.FactorySet.UserRegistry = userRegistry
 
-	// Create FileRegistry and populate it with test data first
+	// Create user context and get user-aware registry set
 	ctx := createTestUserContext(testUser.ID)
-	params.RegistrySet.FileRegistry = must.Must(memory.NewFileRegistry().WithCurrentUser(ctx))
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 
-	// Create CommodityRegistry
-	params.RegistrySet.CommodityRegistry = newCommodityRegistry(params.RegistrySet.AreaRegistry, testUser.ID)
-	params.RegistrySet.ImageRegistry = newImageRegistry(params.RegistrySet.CommodityRegistry, testUser.ID)
-	params.RegistrySet.InvoiceRegistry = newInvoiceRegistry(params.RegistrySet.CommodityRegistry, testUser.ID)
-	params.RegistrySet.ManualRegistry = newManualRegistry(params.RegistrySet.CommodityRegistry, testUser.ID)
+	// Populate test data
+	populateLocationTestData(registrySet.LocationRegistry)
+	populateAreaTestData(registrySet.AreaRegistry, registrySet.LocationRegistry)
+	populateSettingsTestData(registrySet.SettingsRegistry)
+	populateCommodityTestData(registrySet.CommodityRegistry, registrySet.AreaRegistry)
+	populateImageTestData(registrySet.ImageRegistry, registrySet.CommodityRegistry)
+	populateInvoiceTestData(registrySet.InvoiceRegistry, registrySet.CommodityRegistry)
+	populateManualTestData(registrySet.ManualRegistry, registrySet.CommodityRegistry)
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
 
 	// Create EntityService
-	params.EntityService = services.NewEntityService(params.RegistrySet, params.UploadLocation)
+	params.EntityService = services.NewEntityService(params.FactorySet, params.UploadLocation)
 
 	// Populate FileRegistry with test data using the same instance
-	populateFileRegistryWithTestData(params.RegistrySet.FileRegistry, params.RegistrySet.CommodityRegistry)
+	populateFileRegistryWithTestData(registrySet.FileRegistry, registrySet.CommodityRegistry)
 	return params, testUser
 }
 
 func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
 	var params apiserver.Params
-	params.RegistrySet = &registry.Set{}
 
 	// Create user registry first to get the user ID
 	userRegistry, testUser := newUserRegistryWithUser()
-	params.RegistrySet.UserRegistry = userRegistry
 
-	params.RegistrySet.LocationRegistry = newLocationRegistry(testUser.ID)
-	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry, testUser.ID)
+	// Create factory set
+	params.FactorySet = memory.NewFactorySet()
+	params.FactorySet.UserRegistry = userRegistry
+
+	// Create user context and get user-aware registry set
+	ctx := createTestUserContext(testUser.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+
+	// Populate minimal test data
+	populateLocationTestData(registrySet.LocationRegistry)
+	populateAreaTestData(registrySet.AreaRegistry, registrySet.LocationRegistry)
+
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
 	return params, testUser

@@ -13,8 +13,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.ImageRegistry = (*ImageRegistry)(nil)
+// ImageRegistryFactory creates ImageRegistry instances with proper context
+type ImageRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// ImageRegistry is a context-aware registry that can only be created through the factory
 type ImageRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -23,40 +28,49 @@ type ImageRegistry struct {
 	service    bool
 }
 
-func NewImageRegistry(dbx *sqlx.DB) *ImageRegistry {
+var _ registry.ImageRegistry = (*ImageRegistry)(nil)
+var _ registry.ImageRegistryFactory = (*ImageRegistryFactory)(nil)
+
+func NewImageRegistry(dbx *sqlx.DB) *ImageRegistryFactory {
 	return NewImageRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewImageRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *ImageRegistry {
-	return &ImageRegistry{
+func NewImageRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *ImageRegistryFactory {
+	return &ImageRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *ImageRegistry) MustWithCurrentUser(ctx context.Context) registry.ImageRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.ImageRegistryFactory
+
+func (f *ImageRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.ImageRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *ImageRegistry) WithCurrentUser(ctx context.Context) (registry.ImageRegistry, error) {
-	tmp := *r
-
+func (f *ImageRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ImageRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &ImageRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *ImageRegistry) WithServiceAccount() registry.ImageRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *ImageRegistryFactory) CreateServiceRegistry() registry.ImageRegistry {
+	return &ImageRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *ImageRegistry) Get(ctx context.Context, id string) (*models.Image, error) {

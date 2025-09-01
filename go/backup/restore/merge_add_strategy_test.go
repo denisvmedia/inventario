@@ -87,7 +87,7 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
@@ -242,7 +242,7 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Set up main currency in settings (required for commodity validation)
@@ -384,15 +384,13 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	createdUser2, err := userRegistry.Create(ctx, testUser2)
 	c.Assert(err, qt.IsNil)
 
-	// Create shared registry set that both users will use
-	sharedRegistrySet := memory.NewRegistrySet()
-	sharedRegistrySet.UserRegistry = userRegistry
+	// Create shared factory set that both users will use
+	sharedFactorySet := memory.NewFactorySet()
+	sharedFactorySet.UserRegistry = userRegistry
 
 	// Create user-specific registry sets that share the same underlying data
 	user1Ctx := appctx.WithUser(ctx, createdUser1)
-	registrySet1 := &registry.Set{}
-	registrySet1.LocationRegistry, err = sharedRegistrySet.LocationRegistry.WithCurrentUser(user1Ctx)
-	c.Assert(err, qt.IsNil)
+	registrySet1 := must.Must(sharedFactorySet.CreateUserRegistrySet(user1Ctx))
 	registrySet1.AreaRegistry, err = sharedRegistrySet.AreaRegistry.WithCurrentUser(user1Ctx)
 	c.Assert(err, qt.IsNil)
 	registrySet1.CommodityRegistry, err = sharedRegistrySet.CommodityRegistry.WithCurrentUser(user1Ctx)
@@ -439,8 +437,8 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// User 1 imports their data
-	entityService1 := services.NewEntityService(registrySet1, "file://./test_uploads?create_dir=true")
-	proc1 := processor.NewRestoreOperationProcessor("test-restore-op-user1", registrySet1, entityService1, "file://./test_uploads?create_dir=true")
+	entityService1 := services.NewEntityService(sharedFactorySet, "file://./test_uploads?create_dir=true")
+	proc1 := processor.NewRestoreOperationProcessor("test-restore-op-user1", sharedFactorySet, entityService1, "file://./test_uploads?create_dir=true")
 
 	options := types.RestoreOptions{
 		Strategy:        types.RestoreStrategyFullReplace,
@@ -559,7 +557,7 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create shared registry set that both tenants will use for security validation
-	sharedTenantRegistrySet := memory.NewRegistrySet()
+	sharedTenantRegistrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	sharedTenantRegistrySet.UserRegistry = userRegistry
 
 	// Create tenant-specific registry sets that share the same underlying data
@@ -856,7 +854,7 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 	c.Assert(err, qt.IsNil)
 
 	// Create shared registry set that both users will use
-	sharedLoggingRegistrySet := memory.NewRegistrySet()
+	sharedLoggingRegistrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	sharedLoggingRegistrySet.UserRegistry = userRegistry
 
 	// Create user-specific registry sets that share the same underlying data
@@ -1187,14 +1185,14 @@ func TestRestoreService_SecurityValidation_MaliciousFileOperations(t *testing.T)
 	c.Assert(err, qt.IsNil)
 
 	// Setup registry sets for both users
-	sharedRegistrySet := memory.NewRegistrySet()
+	sharedRegistrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	sharedRegistrySet.UserRegistry = userRegistry
 
-	registrySet1 := memory.NewRegistrySet()
+	registrySet1 := memory.NewFactorySet().CreateServiceRegistrySet()
 	registrySet1.UserRegistry = userRegistry
 	registrySet1.TenantRegistry = sharedRegistrySet.TenantRegistry
 
-	registrySet2 := memory.NewRegistrySet()
+	registrySet2 := memory.NewFactorySet().CreateServiceRegistrySet()
 	registrySet2.UserRegistry = userRegistry
 	registrySet2.TenantRegistry = sharedRegistrySet.TenantRegistry
 
@@ -1371,7 +1369,7 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 		userCtx := appctx.WithUser(ctx, createdUser)
 		userContexts = append(userContexts, userCtx)
 
-		registrySet := memory.NewRegistrySet()
+		registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 		registrySet.UserRegistry = userRegistry
 		registrySets = append(registrySets, registrySet)
 
@@ -1569,7 +1567,7 @@ func TestRestoreService_SecurityValidation_EdgeCases(t *testing.T) {
 	createdUser, err := userRegistry.Create(ctx, testUser)
 	c.Assert(err, qt.IsNil)
 
-	registrySet := memory.NewRegistrySet()
+	registrySet := memory.NewFactorySet().CreateServiceRegistrySet()
 	registrySet.UserRegistry = userRegistry
 
 	userCtx := appctx.WithUser(ctx, createdUser)

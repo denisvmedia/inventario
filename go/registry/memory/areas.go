@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -14,12 +15,17 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.AreaRegistry = (*AreaRegistry)(nil)
+// AreaRegistryFactory creates AreaRegistry instances with proper context
+type AreaRegistryFactory struct {
+	baseAreaRegistry *Registry[models.Area, *models.Area]
+	commoditiesLock  *sync.RWMutex
+	commodities      models.AreaCommodities
+	locationRegistry *LocationRegistryFactory // required dependency for relationship tracking
+}
 
-type baseAreaRegistry = Registry[models.Area, *models.Area]
-
+// AreaRegistry is a context-aware registry that can only be created through the factory
 type AreaRegistry struct {
-	*baseAreaRegistry
+	*Registry[models.Area, *models.Area]
 
 	userID           string
 	commoditiesLock  *sync.RWMutex
@@ -27,8 +33,11 @@ type AreaRegistry struct {
 	locationRegistry *LocationRegistry // required dependency for relationship tracking
 }
 
-func NewAreaRegistry(locationRegistry *LocationRegistry) *AreaRegistry {
-	return &AreaRegistry{
+var _ registry.AreaRegistry = (*AreaRegistry)(nil)
+var _ registry.AreaRegistryFactory = (*AreaRegistryFactory)(nil)
+
+func NewAreaRegistry(locationRegistry *LocationRegistryFactory) *AreaRegistryFactory {
+	return &AreaRegistryFactory{
 		baseAreaRegistry: NewRegistry[models.Area, *models.Area](),
 		commoditiesLock:  &sync.RWMutex{},
 		commodities:      make(models.AreaCommodities),
@@ -36,52 +45,72 @@ func NewAreaRegistry(locationRegistry *LocationRegistry) *AreaRegistry {
 	}
 }
 
-func (r *AreaRegistry) MustWithCurrentUser(ctx context.Context) registry.AreaRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.AreaRegistryFactory
+
+func (f *AreaRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.AreaRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegistry, error) {
+func (f *AreaRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.AreaRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
 
-	// Create a shallow copy of the registry
-	tmp := *r
-	tmp.userID = user.ID
-
-	// Create a new base registry with the same data but user-specific userID
-	// Avoid copying the mutex by creating a new instance
-	newBaseRegistry := &Registry[models.Area, *models.Area]{
-		items:  r.baseAreaRegistry.items, // Share the data map
-		lock:   r.baseAreaRegistry.lock,  // Share the mutex pointer
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.Area, *models.Area]{
+		items:  f.baseAreaRegistry.items, // Share the data map
+		lock:   f.baseAreaRegistry.lock,  // Share the mutex pointer
 		userID: user.ID,                  // Set user-specific userID
 	}
-	tmp.baseAreaRegistry = newBaseRegistry
 
-	return &tmp, nil
+	// Create user-aware location registry
+	locationRegistryInterface, err := f.locationRegistry.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create user location registry")
+	}
+
+	// Cast to concrete type for relationship management
+	locationRegistry, ok := locationRegistryInterface.(*LocationRegistry)
+	if !ok {
+		return nil, errors.New("failed to cast location registry to concrete type")
+	}
+
+	return &AreaRegistry{
+		Registry:         userRegistry,
+		userID:           user.ID,
+		commoditiesLock:  f.commoditiesLock,
+		commodities:      f.commodities,
+		locationRegistry: locationRegistry,
+	}, nil
 }
 
-func (r *AreaRegistry) WithServiceAccount() registry.AreaRegistry {
-	// Create a shallow copy of the registry
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-
-	// Create a new base registry with the same data but no user filtering
-	// Avoid copying the mutex by creating a new instance
-	newBaseRegistry := &Registry[models.Area, *models.Area]{
-		items:  r.baseAreaRegistry.items, // Share the data map
-		lock:   r.baseAreaRegistry.lock,  // Share the mutex pointer
-		userID: "",                       // No user filtering for service account
+func (f *AreaRegistryFactory) CreateServiceRegistry() registry.AreaRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.Area, *models.Area]{
+		items:  f.baseAreaRegistry.items, // Share the data map
+		lock:   f.baseAreaRegistry.lock,  // Share the mutex pointer
+		userID: "",                       // Clear userID to bypass user filtering
 	}
-	tmp.baseAreaRegistry = newBaseRegistry
 
-	return &tmp
+	// Create service-aware location registry
+	locationRegistryInterface := f.locationRegistry.CreateServiceRegistry()
+
+	// Cast to concrete type for relationship management
+	locationRegistry := locationRegistryInterface.(*LocationRegistry)
+
+	return &AreaRegistry{
+		Registry:         serviceRegistry,
+		userID:           "", // Clear userID to bypass user filtering
+		commoditiesLock:  f.commoditiesLock,
+		commodities:      f.commodities,
+		locationRegistry: locationRegistry,
+	}
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	// Use CreateWithUser to ensure user context is applied
-	newArea, err := r.baseAreaRegistry.CreateWithUser(ctx, area)
+	newArea, err := r.Registry.CreateWithUser(ctx, area)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create area")
 	}
@@ -95,12 +124,12 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Area, error) {
 	// Get the existing area to check if LocationID changed
 	var oldLocationID string
-	if existingArea, err := r.baseAreaRegistry.Get(ctx, area.GetID()); err == nil {
+	if existingArea, err := r.Registry.Get(ctx, area.GetID()); err == nil {
 		oldLocationID = existingArea.LocationID
 	}
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
-	updatedArea, err := r.baseAreaRegistry.UpdateWithUser(ctx, area)
+	updatedArea, err := r.Registry.UpdateWithUser(ctx, area)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update area")
 	}
@@ -126,12 +155,12 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	}
 
 	// Remove this area from its parent location's area list
-	area, err := r.baseAreaRegistry.Get(ctx, id)
+	area, err := r.Registry.Get(ctx, id)
 	if err == nil {
 		_ = r.locationRegistry.DeleteArea(ctx, area.LocationID, id)
 	}
 
-	err = r.baseAreaRegistry.Delete(ctx, id)
+	err = r.Registry.Delete(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete area")
 	}

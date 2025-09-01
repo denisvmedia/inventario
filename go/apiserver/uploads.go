@@ -18,7 +18,6 @@ import (
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 type uploadedFile struct {
@@ -37,14 +36,17 @@ func uploadedFilesFromContext(ctx context.Context) []uploadedFile {
 }
 
 type uploadsAPI struct {
-	uploadLocation  string
-	imageRegistry   registry.ImageRegistry
-	manualRegistry  registry.ManualRegistry
-	invoiceRegistry registry.InvoiceRegistry
-	fileRegistry    registry.FileRegistry
+	uploadLocation string
 }
 
 func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	uploadedFiles := uploadedFilesFromContext(r.Context())
 	if len(uploadedFiles) == 0 {
 		unprocessableEntityError(w, r, ErrNoFilesUploaded)
@@ -68,11 +70,7 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	fileReg, err := api.fileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	fileReg := registrySet.FileRegistry
 
 	for _, f := range uploadedFiles {
 		// Get the extension from the MIME type
@@ -121,6 +119,13 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 }
 
 func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	uploadedFiles := uploadedFilesFromContext(r.Context())
 	if len(uploadedFiles) == 0 {
 		unprocessableEntityError(w, r, ErrNoFilesUploaded)
@@ -144,11 +149,7 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	fileReg, err := api.fileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	fileReg := registrySet.FileRegistry
 
 	for _, f := range uploadedFiles {
 		// Get the extension from the MIME type
@@ -197,6 +198,13 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 }
 
 func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	uploadedFiles := uploadedFilesFromContext(r.Context())
 	if len(uploadedFiles) == 0 {
 		unprocessableEntityError(w, r, ErrNoFilesUploaded)
@@ -220,11 +228,7 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	fileReg, err := api.fileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	fileReg := registrySet.FileRegistry
 
 	for _, f := range uploadedFiles {
 		// Get the extension from the MIME type
@@ -273,6 +277,13 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 }
 
 func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	uploadedFiles := uploadedFilesFromContext(r.Context())
 	if len(uploadedFiles) == 0 {
 		unprocessableEntityError(w, r, ErrNoFilesUploaded)
@@ -288,11 +299,7 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	fileReg, err := api.fileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	fileReg := registrySet.FileRegistry
 
 	for _, f := range uploadedFiles {
 		// Get the extension from the MIME type
@@ -467,15 +474,11 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 func Uploads(params Params) func(r chi.Router) {
 	api := &uploadsAPI{
-		uploadLocation:  params.UploadLocation,
-		imageRegistry:   params.RegistrySet.ImageRegistry,
-		manualRegistry:  params.RegistrySet.ManualRegistry,
-		invoiceRegistry: params.RegistrySet.InvoiceRegistry,
-		fileRegistry:    params.RegistrySet.FileRegistry,
+		uploadLocation: params.UploadLocation,
 	}
 
 	return func(r chi.Router) {
-		r.With(commodityCtx(params.RegistrySet.CommodityRegistry)).
+		r.With(commodityCtx()).
 			Route("/commodities/{commodityID}", func(r chi.Router) {
 				r.With(api.uploadFiles(mimekit.ImageContentTypes()...)).Post("/images", api.handleImagesUpload)
 				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)

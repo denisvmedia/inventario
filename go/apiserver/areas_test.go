@@ -31,7 +31,9 @@ func TestAreasList(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List(context.Background()))
+	ctx := createTestUserContext(testUser.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 
 	req, err := http.NewRequest("GET", "/api/v1/areas", nil)
 	c.Assert(err, qt.IsNil)
@@ -59,7 +61,9 @@ func TestAreasGet(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List(context.Background()))
+	ctx := createTestUserContext(testUser.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
 
 	req, err := http.NewRequest("GET", "/api/v1/areas/"+area.ID, nil)
@@ -85,7 +89,9 @@ func TestAreaCreate(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	expectedLocations := must.Must(params.RegistrySet.LocationRegistry.List(context.Background()))
+	ctx := createTestUserContext(testUser.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	expectedLocations := must.Must(registrySet.LocationRegistry.List(context.Background()))
 	location := expectedLocations[1]
 
 	obj := &jsonapi.AreaRequest{
@@ -144,7 +150,9 @@ func TestAreaDelete(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParamsAreaRegistryOnly()
-	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List(context.Background()))
+	ctx := createTestUserContext(testUser.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
 
 	req, err := http.NewRequest("DELETE", "/api/v1/areas/"+area.ID, nil)
@@ -153,7 +161,7 @@ func TestAreaDelete(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	expectedCount := must.Must(params.RegistrySet.AreaRegistry.Count(context.Background())) - 1
+	expectedCount := must.Must(registrySet.AreaRegistry.Count(context.Background())) - 1
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	handler := apiserver.APIServer(params, mockRestoreWorker)
@@ -161,7 +169,7 @@ func TestAreaDelete(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
 
-	cnt, err := params.RegistrySet.AreaRegistry.Count(context.Background())
+	cnt, err := registrySet.AreaRegistry.Count(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(cnt, qt.Equals, expectedCount)
 }
@@ -170,7 +178,9 @@ func TestAreaDelete_AreaHasCommodities(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List(context.Background()))
+	ctx := createTestUserContext(testUser.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
 
 	req, err := http.NewRequest("DELETE", "/api/v1/areas/"+area.ID, nil)
@@ -179,7 +189,7 @@ func TestAreaDelete_AreaHasCommodities(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	expectedCount := must.Must(params.RegistrySet.AreaRegistry.Count(context.Background()))
+	expectedCount := must.Must(registrySet.AreaRegistry.Count(context.Background()))
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	handler := apiserver.APIServer(params, mockRestoreWorker)
@@ -187,7 +197,7 @@ func TestAreaDelete_AreaHasCommodities(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 
-	cnt, err := params.RegistrySet.AreaRegistry.Count(context.Background())
+	cnt, err := registrySet.AreaRegistry.Count(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(cnt, qt.Equals, expectedCount)
 }
@@ -196,7 +206,9 @@ func TestAreaUpdate(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List(context.Background()))
+	ctx := createTestUserContext(testUser.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
 
 	obj := &jsonapi.AreaRequest{
@@ -307,7 +319,9 @@ func TestAreaUpdate_WrongIDInRequestBody(t *testing.T) {
 	c := qt.New(t)
 
 	params, testUser := newParams()
-	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List(context.Background()))
+	ctx := createTestUserContext(testUser.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[0]
 
 	wrongID := "wrong-id"
