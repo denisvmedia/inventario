@@ -1,9 +1,11 @@
 package memory_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -14,20 +16,25 @@ import (
 func TestManualRegistry_Create(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of ManualRegistry
-	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	baseRegistry := memory.NewManualRegistryFactory(commodityRegistry)
-	r, err := baseRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Create a commodity first (needed for manual)
+	_, createdCommodity := getCommodityRegistry(c)
 
 	// Create a test manual
 	manual := models.Manual{
@@ -41,12 +48,12 @@ func TestManualRegistry_Create(t *testing.T) {
 	}
 
 	// Create a new manual in the registry
-	createdManual, err := r.Create(ctx, manual)
+	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdManual, qt.Not(qt.IsNil))
 
 	// Verify the count of manuals in the registry
-	count, err := r.Count(ctx)
+	count, err := registrySet.ManualRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
@@ -54,20 +61,25 @@ func TestManualRegistry_Create(t *testing.T) {
 func TestManualRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of ManualRegistry
-	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	baseRegistry := memory.NewManualRegistryFactory(commodityRegistry)
-	r, err := baseRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Create a commodity first (needed for manual)
+	_, createdCommodity := getCommodityRegistry(c)
 
 	// Create a test manual
 	manual := models.Manual{
@@ -81,19 +93,19 @@ func TestManualRegistry_Delete(t *testing.T) {
 	}
 
 	// Create a new manual in the registry
-	createdManual, err := r.Create(ctx, manual)
+	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
 
 	// Delete the manual from the registry
-	err = r.Delete(ctx, createdManual.ID)
+	err = registrySet.ManualRegistry.Delete(ctx, createdManual.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the manual is no longer present in the registry
-	_, err = r.Get(ctx, createdManual.ID)
+	_, err = registrySet.ManualRegistry.Get(ctx, createdManual.ID)
 	c.Assert(err, qt.Equals, registry.ErrNotFound)
 
 	// Verify the count of manuals in the registry
-	count, err := r.Count(ctx)
+	count, err := registrySet.ManualRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }
@@ -101,26 +113,26 @@ func TestManualRegistry_Delete(t *testing.T) {
 func TestManualRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of ManualRegistry
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
-	baseManualRegistry := memory.NewManualRegistryFactory(commodityRegistry)
-	r, err := baseManualRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create a test manual without required fields
 	manual := models.Manual{}
-	createdManual, err := r.Create(ctx, manual)
+	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdManual, qt.Not(qt.IsNil))
 
@@ -134,7 +146,7 @@ func TestManualRegistry_Create_Validation(t *testing.T) {
 		CommodityID: "invalid",
 	}
 	// Create the manual - should succeed (no validation in memory registry)
-	createdManual2, err := r.Create(ctx, manual)
+	createdManual2, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdManual2, qt.Not(qt.IsNil))
 }
@@ -142,22 +154,22 @@ func TestManualRegistry_Create_Validation(t *testing.T) {
 func TestManualRegistry_Create_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of ManualRegistry
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
-	baseManualRegistry := memory.NewManualRegistryFactory(commodityRegistry)
-	r, err := baseManualRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create a test manual with an invalid commodity ID
 	manual := models.Manual{
@@ -171,7 +183,7 @@ func TestManualRegistry_Create_CommodityNotFound(t *testing.T) {
 	}
 
 	// Create the manual - should succeed (no validation in memory registry)
-	createdManual, err := r.Create(ctx, manual)
+	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdManual, qt.Not(qt.IsNil))
 }

@@ -1,9 +1,11 @@
 package postgres_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -33,25 +35,31 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := appctx.WithUser(c.Context(), &models.User{
+
+			factorySet, cleanup := setupTestFactorySet(t)
+			c.Cleanup(cleanup)
+
+			// Create and register user
+			testUser := models.User{
 				TenantAwareEntityID: models.TenantAwareEntityID{
 					EntityID: models.EntityID{ID: "test-user-id"},
 					TenantID: "test-tenant-id",
 				},
-			})
+			}
 
-			registrySet, cleanup := setupTestRegistrySet(t)
-			c.Cleanup(cleanup)
-
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+			serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+			createdUser, err := serviceRegistrySet.UserRegistry.Create(context.Background(), testUser)
 			c.Assert(err, qt.IsNil)
 
+			ctx := appctx.WithUser(context.Background(), createdUser)
+			registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
 			// Create a test location first
-			location := createTestLocation(c, registrySet)
+			location := createTestLocation(c, factorySet, ctx)
 			tc.area.LocationID = location.GetID()
 
 			// Create area
-			result, err := areaReg.Create(ctx, tc.area)
+			result, err := registrySet.AreaRegistry.Create(ctx, tc.area)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")
@@ -91,27 +99,33 @@ func TestAreaRegistry_Create_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := appctx.WithUser(c.Context(), &models.User{
+
+			factorySet, cleanup := setupTestFactorySet(t)
+			defer cleanup()
+
+			// Create and register user
+			testUser := models.User{
 				TenantAwareEntityID: models.TenantAwareEntityID{
 					EntityID: models.EntityID{ID: "test-user-id"},
 					TenantID: "test-tenant-id",
 				},
-			})
+			}
 
-			registrySet, cleanup := setupTestRegistrySet(t)
-			defer cleanup()
-
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+			serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+			createdUser, err := serviceRegistrySet.UserRegistry.Create(context.Background(), testUser)
 			c.Assert(err, qt.IsNil)
+
+			ctx := appctx.WithUser(context.Background(), createdUser)
+			registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 			// For the non-existent location test, we don't need to create a location
 			// For other tests, create a location if LocationID is not empty
 			if tc.area.LocationID != "" && tc.area.LocationID != "non-existent-location" {
-				location := createTestLocation(c, registrySet)
+				location := createTestLocation(c, factorySet, ctx)
 				tc.area.LocationID = location.GetID()
 			}
 
-			result, err := areaReg.Create(ctx, tc.area)
+			result, err := registrySet.AreaRegistry.Create(ctx, tc.area)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -119,26 +133,32 @@ func TestAreaRegistry_Create_UnhappyPath(t *testing.T) {
 }
 
 func TestAreaRegistry_Get_HappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
+	factorySet, cleanup := setupTestFactorySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create and register user
+	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+	createdUser, err := serviceRegistrySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
 
+	ctx := appctx.WithUser(context.Background(), createdUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
 	// Create a test location and area
-	location := createTestLocation(c, registrySet)
-	created := createTestArea(c, registrySet, location.ID)
+	location := createTestLocation(c, factorySet, ctx)
+	created := createTestArea(c, factorySet, ctx, location.ID)
 
 	// Get the area
-	result, err := areaReg.Get(ctx, created.ID)
+	result, err := registrySet.AreaRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.ID, qt.Equals, created.ID)
@@ -147,19 +167,27 @@ func TestAreaRegistry_Get_HappyPath(t *testing.T) {
 }
 
 func TestAreaRegistry_Get_UnhappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
+	factorySet, cleanup := setupTestFactorySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create and register user
+	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+	createdUser, err := serviceRegistrySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), createdUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Registry set is already user-aware
 
 	testCases := []struct {
 		name string
@@ -179,7 +207,7 @@ func TestAreaRegistry_Get_UnhappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result, err := areaReg.Get(ctx, tc.id)
+			result, err := registrySet.AreaRegistry.Get(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -187,32 +215,38 @@ func TestAreaRegistry_Get_UnhappyPath(t *testing.T) {
 }
 
 func TestAreaRegistry_List_HappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
+	factorySet, cleanup := setupTestFactorySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create and register user
+	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+	createdUser, err := serviceRegistrySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
 
+	ctx := appctx.WithUser(context.Background(), createdUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
 	// Initially should be empty
-	areas, err := areaReg.List(ctx)
+	areas, err := registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Equals, 0)
 
 	// Create test location and areas
-	location := createTestLocation(c, registrySet)
-	area1 := createTestArea(c, registrySet, location.ID)
-	area2 := createTestArea(c, registrySet, location.ID)
+	location := createTestLocation(c, factorySet, ctx)
+	area1 := createTestArea(c, factorySet, ctx, location.ID)
+	area2 := createTestArea(c, factorySet, ctx, location.ID)
 
 	// List should now contain both areas
-	areas, err = areaReg.List(ctx)
+	areas, err = registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Equals, 2)
 
@@ -226,19 +260,25 @@ func TestAreaRegistry_List_HappyPath(t *testing.T) {
 }
 
 func TestAreaRegistry_Update_HappyPath(t *testing.T) {
-	registrySet, cleanup := setupTestRegistrySet(t)
+	factorySet, cleanup := setupTestFactorySet(t)
 	defer cleanup()
 
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create and register user
+	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+	createdUser, err := serviceRegistrySet.UserRegistry.Create(context.Background(), testUser)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), createdUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create test location and area
 	location := createTestLocation(c, registrySet)

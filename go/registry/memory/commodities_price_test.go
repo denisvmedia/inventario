@@ -1,9 +1,11 @@
 package memory_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -14,31 +16,32 @@ import (
 func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create registries
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
 
-	// Create commodity registry
-	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create a location
-	location, err := locationRegistry.Create(ctx, models.Location{
+	location, err := registrySet.LocationRegistry.Create(ctx, models.Location{
 		Name:    "Test Location",
 		Address: "Test Address",
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create an area
-	area, err := areaRegistry.Create(ctx, models.Area{
+	area, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Test Area",
 		LocationID: location.ID,
 	})
@@ -58,7 +61,7 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 		Draft:                  false,
 	}
 
-	_, err = commodityRegistry.Create(ctx, commodity1)
+	_, err = registrySet.CommodityRegistry.Create(ctx, commodity1)
 	c.Assert(err, qt.IsNil, qt.Commentf("Should allow creation when original price is in main currency and converted price is zero"))
 
 	// Test case 2: Original price in main currency (USD) and converted original price is not zero - should fail
@@ -75,7 +78,7 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 		Draft:                  false,
 	}
 
-	_, err = commodityRegistry.Create(ctx, commodity2)
+	_, err = registrySet.CommodityRegistry.Create(ctx, commodity2)
 	c.Assert(err, qt.IsNil, qt.Commentf("Should allow creation even when original price is in main currency and converted price is not zero (validation is only done in the API)"))
 
 	// Test case 3: Original price in different currency (EUR) and converted original price is not zero - should pass
@@ -92,37 +95,39 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 		Draft:                  false,
 	}
 
-	_, err = commodityRegistry.Create(ctx, commodity3)
+	_, err = registrySet.CommodityRegistry.Create(ctx, commodity3)
 	c.Assert(err, qt.IsNil, qt.Commentf("Should allow creation when original price is in different currency and converted price is not zero"))
 }
 
 func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
-	// Create registries
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	}
 
-	// Create commodity registry
-	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create a location
-	location, err := locationRegistry.Create(ctx, models.Location{
+	location, err := registrySet.LocationRegistry.Create(ctx, models.Location{
 		Name:    "Test Location",
 		Address: "Test Address",
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create an area
-	area, err := areaRegistry.Create(ctx, models.Area{
+	area, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Test Area",
 		LocationID: location.ID,
 	})
@@ -142,7 +147,7 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 		Draft:                  false,
 	}
 
-	createdCommodity, err := commodityRegistry.Create(ctx, commodity)
+	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 
 	// Test case 1: Update to have original price in main currency (USD) and converted original price is zero - should pass
@@ -150,7 +155,7 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	updatedCommodity1.OriginalPriceCurrency = "USD"
 	updatedCommodity1.ConvertedOriginalPrice = decimal.Zero
 
-	_, err = commodityRegistry.Update(ctx, updatedCommodity1)
+	_, err = registrySet.CommodityRegistry.Update(ctx, updatedCommodity1)
 	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update when original price is in main currency and converted price is zero"))
 
 	// Test case 2: Update to have original price in main currency (USD) and converted original price is not zero - should fail
@@ -158,6 +163,6 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	updatedCommodity2.OriginalPriceCurrency = "USD"
 	updatedCommodity2.ConvertedOriginalPrice = decimal.NewFromFloat(110.00) // Non-zero value
 
-	_, err = commodityRegistry.Update(ctx, updatedCommodity2)
+	_, err = registrySet.CommodityRegistry.Update(ctx, updatedCommodity2)
 	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update even when original price is in main currency and converted price is not zero (validation should be done in the API)"))
 }

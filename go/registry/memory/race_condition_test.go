@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -39,29 +40,36 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 	t.Run("commodity registry race condition", func(t *testing.T) {
 		c := qt.New(t)
 
-		locationRegistry := memory.NewLocationRegistryFactory()
-		areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-		commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
+		// Create factory set and register users
+		factorySet := memory.NewFactorySet()
+		serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+
+		// Register users in the system
+		u1, err := serviceRegistrySet.UserRegistry.Create(context.Background(), *user1)
+		c.Assert(err, qt.IsNil)
+		u2, err := serviceRegistrySet.UserRegistry.Create(context.Background(), *user2)
+		c.Assert(err, qt.IsNil)
+
+		// Create user contexts
+		ctx1 := appctx.WithUser(context.Background(), u1)
+		ctx2 := appctx.WithUser(context.Background(), u2)
+
+		// Get user registry set for user1
+		registrySet1 := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
 		// Create a commodity for user1
 		commodity := models.Commodity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				// ID will be generated server-side for security
 				TenantID: "tenant-1",
-				UserID:   user1.ID,
+				UserID:   u1.ID,
 			},
 			Name:   "Test Commodity",
 			AreaID: "area-1",
 		}
 
-		ctx1 := appctx.WithUser(context.Background(), user1)
-		ctx2 := appctx.WithUser(context.Background(), user2)
-
 		// User1 creates the commodity
-		comReg1, err := commodityRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
-
-		createdCommodity, err := comReg1.Create(ctx1, commodity)
+		createdCommodity, err := registrySet1.CommodityRegistry.Create(ctx1, commodity)
 		c.Assert(err, qt.IsNil)
 
 		// Simulate the e2e test scenario: concurrent access with different users
@@ -71,20 +79,17 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 
 		// Test the exact e2e scenario: sequential operations with fresh registries
 		// Step 1: Update the commodity
-		updateReg, err := commodityRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
-
 		updatedCommodity := *createdCommodity
 		updatedCommodity.Name = "Updated Commodity"
 
-		_, err = updateReg.Update(ctx1, updatedCommodity)
+		_, err = registrySet1.CommodityRegistry.Update(ctx1, updatedCommodity)
 		c.Assert(err, qt.IsNil)
 
 		// Step 2: Get a fresh registry and retrieve the commodity (this was failing)
-		getReg, err := commodityRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
+		// Create a new registry set to simulate fresh registry access
+		freshRegistrySet1 := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
-		retrievedCommodity, err := getReg.Get(ctx1, createdCommodity.ID)
+		retrievedCommodity, err := freshRegistrySet1.CommodityRegistry.Get(ctx1, createdCommodity.ID)
 		c.Assert(err, qt.IsNil, qt.Commentf("This should not return 404 - the race condition bug"))
 		c.Assert(retrievedCommodity.Name, qt.Equals, "Updated Commodity")
 
@@ -94,13 +99,10 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 			defer wg.Done()
 
 			// User2 should not be able to access user1's commodity
-			comReg, err := commodityRegistry.WithCurrentUser(ctx2)
-			if err != nil {
-				errors <- err
-				return
-			}
+			// Create a fresh registry set for user2 to simulate concurrent access
+			freshRegistrySet2 := must.Must(factorySet.CreateUserRegistrySet(ctx2))
 
-			_, err = comReg.Get(ctx2, createdCommodity.ID)
+			_, err := freshRegistrySet2.CommodityRegistry.Get(ctx2, createdCommodity.ID)
 			// We expect this to fail with "not found" for user2
 			if err != nil && err.Error() != "not found" {
 				errors <- err
@@ -114,13 +116,10 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				comReg, err := commodityRegistry.WithCurrentUser(ctx1)
-				if err != nil {
-					errors <- err
-					return
-				}
+				// Create a fresh registry set for each concurrent access
+				concurrentRegistrySet1 := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
-				retrievedCommodity, err := comReg.Get(ctx1, createdCommodity.ID)
+				retrievedCommodity, err := concurrentRegistrySet1.CommodityRegistry.Get(ctx1, createdCommodity.ID)
 				if err != nil {
 					errors <- err
 					return
@@ -158,24 +157,31 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 	t.Run("location registry race condition", func(t *testing.T) {
 		c := qt.New(t)
 
-		locationRegistry := memory.NewLocationRegistryFactory()
+		// Create factory set and register users
+		factorySet := memory.NewFactorySet()
+		serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+
+		// Register users in the system
+		u1, err := serviceRegistrySet.UserRegistry.Create(context.Background(), *user1)
+		c.Assert(err, qt.IsNil)
+
+		// Create user context
+		ctx1 := appctx.WithUser(context.Background(), u1)
+
+		// Get user registry set
+		registrySet1 := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
 		location := models.Location{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				// ID will be generated server-side for security
 				TenantID: "tenant-1",
-				UserID:   user1.ID,
+				UserID:   u1.ID,
 			},
 			Name: "Test Location",
 		}
 
-		ctx1 := appctx.WithUser(context.Background(), user1)
-
 		// Create location
-		locReg1, err := locationRegistry.WithCurrentUser(ctx1)
-		c.Assert(err, qt.IsNil)
-
-		createdLocation, err := locReg1.Create(ctx1, location)
+		createdLocation, err := registrySet1.LocationRegistry.Create(ctx1, location)
 		c.Assert(err, qt.IsNil)
 
 		// Test concurrent access
@@ -187,24 +193,20 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				// Each goroutine gets its own user-aware registry
-				locReg, err := locationRegistry.WithCurrentUser(ctx1)
-				if err != nil {
-					errors <- err
-					return
-				}
+				// Each goroutine gets its own user-aware registry set
+				concurrentRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
 				// Update and retrieve
 				updatedLocation := *createdLocation
 				updatedLocation.Name = "Updated Location"
 
-				_, err = locReg.Update(ctx1, updatedLocation)
+				_, err := concurrentRegistrySet.LocationRegistry.Update(ctx1, updatedLocation)
 				if err != nil {
 					errors <- err
 					return
 				}
 
-				_, err = locReg.Get(ctx1, createdLocation.ID)
+				_, err = concurrentRegistrySet.LocationRegistry.Get(ctx1, createdLocation.ID)
 				if err != nil {
 					errors <- err
 					return
@@ -229,9 +231,13 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 func TestE2EScenarioSimulation(t *testing.T) {
 	c := qt.New(t)
 
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+
 	// Create a test user with generated UUID
 	testUserID := "test-user-12345678-1234-1234-1234-123456789012"
-	user := &models.User{
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: testUserID},
 			TenantID: "tenant-1",
@@ -241,44 +247,41 @@ func TestE2EScenarioSimulation(t *testing.T) {
 		Name:  "Admin User",
 	}
 
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
-	ctx := appctx.WithUser(context.Background(), user)
+	// Register user in the system
+	u, err := serviceRegistrySet.UserRegistry.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	commodity := models.Commodity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			// ID will be generated server-side for security
 			TenantID: "tenant-1",
-			UserID:   user.ID,
+			UserID:   u.ID,
 		},
 		Name:   "Test Commodity",
 		AreaID: "area-1",
 	}
 
 	// Step 1: Create commodity
-	comReg1, err := commodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	createdCommodity, err := comReg1.Create(ctx, commodity)
+	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 
 	// Step 2: Update commodity (get fresh registry like new HTTP request)
-	comReg2, err := commodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	freshRegistrySet2 := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	updatedCommodity := *createdCommodity
 	updatedCommodity.Name = "Updated Commodity"
 
-	_, err = comReg2.Update(ctx, updatedCommodity)
+	_, err = freshRegistrySet2.CommodityRegistry.Update(ctx, updatedCommodity)
 	c.Assert(err, qt.IsNil)
 
 	// Step 3: Get commodity (get fresh registry like new HTTP request)
 	// This was failing with 404 in the e2e test due to race condition
-	comReg3, err := commodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	freshRegistrySet3 := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	finalCommodity, err := comReg3.Get(ctx, createdCommodity.ID)
+	finalCommodity, err := freshRegistrySet3.CommodityRegistry.Get(ctx, createdCommodity.ID)
 	c.Assert(err, qt.IsNil, qt.Commentf("This should not return 404 - the race condition bug"))
 	c.Assert(finalCommodity.Name, qt.Equals, "Updated Commodity")
 }

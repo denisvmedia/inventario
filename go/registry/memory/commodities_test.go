@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -138,25 +139,28 @@ func TestCommodityRegistry_Delete(t *testing.T) {
 func TestCommodityRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of CommodityRegistry
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-	r := memory.NewCommodityRegistryFactory(areaRegistry)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create a test commodity without required fields
 	commodity := models.Commodity{}
 
 	// Create the commodity - should succeed (no validation in memory registry)
-	createdCommodity, err := r.Create(ctx, commodity)
+	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdCommodity, qt.Not(qt.IsNil))
 }
@@ -164,19 +168,22 @@ func TestCommodityRegistry_Create_Validation(t *testing.T) {
 func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of CommodityRegistry
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-	r := memory.NewCommodityRegistryFactory(areaRegistry)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create a test commodity with an invalid area ID
 	commodity := models.Commodity{
@@ -189,7 +196,7 @@ func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 	}
 
 	// Create the commodity - should succeed (no validation in memory registry)
-	createdCommodity, err := r.Create(ctx, commodity)
+	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdCommodity, qt.Not(qt.IsNil))
 }
@@ -197,54 +204,58 @@ func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 func TestCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of CommodityRegistry
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-	baseCommodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
-	r, err := baseCommodityRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
 
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
 	// Attempt to delete a non-existing commodity from the registry and expect a not found error
-	err = r.Delete(ctx, "nonexistent")
+	err = registrySet.CommodityRegistry.Delete(ctx, "nonexistent")
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity) {
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
 
-	r := memory.NewCommodityRegistryFactory(areaRegistry)
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
-	location1, err := locationRegistry.Create(ctx, models.Location{
+	location1, err := registrySet.LocationRegistry.Create(ctx, models.Location{
 		Name: "Location 1",
 	})
 	c.Assert(err, qt.IsNil)
 
-	area1, err := areaRegistry.Create(ctx, models.Area{
+	area1, err := registrySet.AreaRegistry.Create(ctx, models.Area{
 		Name:       "Area 1",
 		LocationID: location1.ID,
 	})
 	c.Assert(err, qt.IsNil)
 
-	createdCommodity, err := r.Create(ctx, models.Commodity{
+	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 		AreaID:    area1.ID,
 		Name:      "commodity1",
 		ShortName: "commodity1",
@@ -261,5 +272,5 @@ func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity
 	c.Assert(createdCommodity.Name, qt.Equals, "commodity1")
 	c.Assert(createdCommodity.AreaID, qt.Equals, area1.ID)
 
-	return r, createdCommodity
+	return registrySet.CommodityRegistry.(*memory.CommodityRegistry), createdCommodity
 }

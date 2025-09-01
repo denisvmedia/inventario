@@ -1,9 +1,11 @@
 package memory_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -14,20 +16,25 @@ import (
 func TestInvoiceRegistry_Create(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of InvoiceRegistry
-	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	baseRegistry := memory.NewInvoiceRegistryFactory(commodityRegistry)
-	r, err := baseRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Create a commodity first (needed for invoice)
+	_, createdCommodity := getCommodityRegistry(c)
 
 	// Create a test invoice
 	invoice := models.Invoice{
@@ -41,12 +48,12 @@ func TestInvoiceRegistry_Create(t *testing.T) {
 	}
 
 	// Create a new invoice in the registry
-	createdInvoice, err := r.Create(ctx, invoice)
+	createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdInvoice, qt.Not(qt.IsNil))
 
 	// Verify the count of invoices in the registry
-	count, err := r.Count(ctx)
+	count, err := registrySet.InvoiceRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
@@ -54,20 +61,25 @@ func TestInvoiceRegistry_Create(t *testing.T) {
 func TestInvoiceRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of InvoiceRegistry
-	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	baseRegistry := memory.NewInvoiceRegistryFactory(commodityRegistry)
-	r, err := baseRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Create a commodity first (needed for invoice)
+	_, createdCommodity := getCommodityRegistry(c)
 
 	// Create a test invoice
 	invoice := models.Invoice{
@@ -81,19 +93,19 @@ func TestInvoiceRegistry_Delete(t *testing.T) {
 	}
 
 	// Create a new invoice in the registry
-	createdInvoice, err := r.Create(ctx, invoice)
+	createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 
 	// Delete the invoice from the registry
-	err = r.Delete(ctx, createdInvoice.ID)
+	err = registrySet.InvoiceRegistry.Delete(ctx, createdInvoice.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the invoice is no longer present in the registry
-	_, err = r.Get(ctx, createdInvoice.ID)
+	_, err = registrySet.InvoiceRegistry.Get(ctx, createdInvoice.ID)
 	c.Assert(err, qt.Equals, registry.ErrNotFound)
 
 	// Verify the count of invoices in the registry
-	count, err := r.Count(ctx)
+	count, err := registrySet.InvoiceRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }
@@ -101,26 +113,26 @@ func TestInvoiceRegistry_Delete(t *testing.T) {
 func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of InvoiceRegistry
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
-	baseInvoiceRegistry := memory.NewInvoiceRegistryFactory(commodityRegistry)
-	r, err := baseInvoiceRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create a test invoice without required fields
 	invoice := models.Invoice{}
-	createdInvoice, err := r.Create(ctx, invoice)
+	createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdInvoice, qt.Not(qt.IsNil))
 
@@ -134,7 +146,7 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 		CommodityID: "invalid",
 	}
 	// Create the invoice - should succeed (no validation in memory registry)
-	createdInvoice2, err := r.Create(ctx, invoice)
+	createdInvoice2, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdInvoice2, qt.Not(qt.IsNil))
 }
@@ -142,22 +154,22 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Add user context for user-aware entities
-	userID := "test-user-123"
-	ctx := appctx.WithUser(c.Context(), &models.User{
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
+			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
-	})
+	}
 
-	// Create a new instance of InvoiceRegistry
-	locationRegistry := memory.NewLocationRegistryFactory()
-	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
-	baseInvoiceRegistry := memory.NewInvoiceRegistryFactory(commodityRegistry)
-	r, err := baseInvoiceRegistry.WithCurrentUser(ctx)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create a test invoice with an invalid commodity ID
 	invoice := models.Invoice{
@@ -171,7 +183,7 @@ func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	}
 
 	// Create the invoice - should succeed (no validation in memory registry)
-	createdInvoice, err := r.Create(ctx, invoice)
+	createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdInvoice, qt.Not(qt.IsNil))
 }
