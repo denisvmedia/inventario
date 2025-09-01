@@ -36,7 +36,7 @@ type AreaRegistry struct {
 var _ registry.AreaRegistry = (*AreaRegistry)(nil)
 var _ registry.AreaRegistryFactory = (*AreaRegistryFactory)(nil)
 
-func NewAreaRegistry(locationRegistry *LocationRegistryFactory) *AreaRegistryFactory {
+func NewAreaRegistryFactory(locationRegistry *LocationRegistryFactory) *AreaRegistryFactory {
 	return &AreaRegistryFactory{
 		baseAreaRegistry: NewRegistry[models.Area, *models.Area](),
 		commoditiesLock:  &sync.RWMutex{},

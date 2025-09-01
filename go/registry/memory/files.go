@@ -28,7 +28,7 @@ type FileRegistry struct {
 var _ registry.FileRegistry = (*FileRegistry)(nil)
 var _ registry.FileRegistryFactory = (*FileRegistryFactory)(nil)
 
-func NewFileRegistry() *FileRegistryFactory {
+func NewFileRegistryFactory() *FileRegistryFactory {
 	return &FileRegistryFactory{
 		baseFileRegistry: NewRegistry[models.FileEntity, *models.FileEntity](),
 	}

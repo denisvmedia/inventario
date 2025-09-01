@@ -25,7 +25,7 @@ func TestManualRegistry_Create(t *testing.T) {
 
 	// Create a new instance of ManualRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	baseRegistry := memory.NewManualRegistry(commodityRegistry)
+	baseRegistry := memory.NewManualRegistryFactory(commodityRegistry)
 	r, err := baseRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
@@ -65,7 +65,7 @@ func TestManualRegistry_Delete(t *testing.T) {
 
 	// Create a new instance of ManualRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	baseRegistry := memory.NewManualRegistry(commodityRegistry)
+	baseRegistry := memory.NewManualRegistryFactory(commodityRegistry)
 	r, err := baseRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
@@ -111,10 +111,10 @@ func TestManualRegistry_Create_Validation(t *testing.T) {
 	})
 
 	// Create a new instance of ManualRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	baseManualRegistry := memory.NewManualRegistry(commodityRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
+	baseManualRegistry := memory.NewManualRegistryFactory(commodityRegistry)
 	r, err := baseManualRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
@@ -152,10 +152,10 @@ func TestManualRegistry_Create_CommodityNotFound(t *testing.T) {
 	})
 
 	// Create a new instance of ManualRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	baseManualRegistry := memory.NewManualRegistry(commodityRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
+	baseManualRegistry := memory.NewManualRegistryFactory(commodityRegistry)
 	r, err := baseManualRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 

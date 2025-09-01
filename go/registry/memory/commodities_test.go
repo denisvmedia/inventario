@@ -148,9 +148,9 @@ func TestCommodityRegistry_Create_Validation(t *testing.T) {
 	})
 
 	// Create a new instance of CommodityRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	r := memory.NewCommodityRegistry(areaRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	r := memory.NewCommodityRegistryFactory(areaRegistry)
 
 	// Create a test commodity without required fields
 	commodity := models.Commodity{}
@@ -174,9 +174,9 @@ func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 	})
 
 	// Create a new instance of CommodityRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	r := memory.NewCommodityRegistry(areaRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	r := memory.NewCommodityRegistryFactory(areaRegistry)
 
 	// Create a test commodity with an invalid area ID
 	commodity := models.Commodity{
@@ -207,9 +207,9 @@ func TestCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
 	})
 
 	// Create a new instance of CommodityRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	baseCommodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	baseCommodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
 	r, err := baseCommodityRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
@@ -228,10 +228,10 @@ func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity
 		},
 	})
 
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
 
-	r := memory.NewCommodityRegistry(areaRegistry)
+	r := memory.NewCommodityRegistryFactory(areaRegistry)
 
 	location1, err := locationRegistry.Create(ctx, models.Location{
 		Name: "Location 1",

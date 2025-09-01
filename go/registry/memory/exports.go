@@ -26,7 +26,7 @@ type ExportRegistry struct {
 var _ registry.ExportRegistry = (*ExportRegistry)(nil)
 var _ registry.ExportRegistryFactory = (*ExportRegistryFactory)(nil)
 
-func NewExportRegistry() *ExportRegistryFactory {
+func NewExportRegistryFactory() *ExportRegistryFactory {
 	return &ExportRegistryFactory{
 		baseExportRegistry: NewRegistry[models.Export, *models.Export](),
 	}

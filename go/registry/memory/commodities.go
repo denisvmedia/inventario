@@ -45,7 +45,7 @@ type CommodityRegistry struct {
 var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
 var _ registry.CommodityRegistryFactory = (*CommodityRegistryFactory)(nil)
 
-func NewCommodityRegistry(areaRegistry *AreaRegistryFactory) *CommodityRegistryFactory {
+func NewCommodityRegistryFactory(areaRegistry *AreaRegistryFactory) *CommodityRegistryFactory {
 	return &CommodityRegistryFactory{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
 		imagesLock:            &sync.RWMutex{},

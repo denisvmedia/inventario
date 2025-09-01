@@ -29,7 +29,7 @@ type ImageRegistry struct {
 var _ registry.ImageRegistry = (*ImageRegistry)(nil)
 var _ registry.ImageRegistryFactory = (*ImageRegistryFactory)(nil)
 
-func NewImageRegistry(commodityRegistry *CommodityRegistryFactory) *ImageRegistryFactory {
+func NewImageRegistryFactory(commodityRegistry *CommodityRegistryFactory) *ImageRegistryFactory {
 	return &ImageRegistryFactory{
 		baseImageRegistry: NewRegistry[models.Image, *models.Image](),
 		commodityRegistry: commodityRegistry,

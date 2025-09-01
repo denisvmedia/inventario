@@ -25,7 +25,7 @@ func TestInvoiceRegistry_Create(t *testing.T) {
 
 	// Create a new instance of InvoiceRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	baseRegistry := memory.NewInvoiceRegistry(commodityRegistry)
+	baseRegistry := memory.NewInvoiceRegistryFactory(commodityRegistry)
 	r, err := baseRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
@@ -65,7 +65,7 @@ func TestInvoiceRegistry_Delete(t *testing.T) {
 
 	// Create a new instance of InvoiceRegistry
 	commodityRegistry, createdCommodity := getCommodityRegistry(c)
-	baseRegistry := memory.NewInvoiceRegistry(commodityRegistry)
+	baseRegistry := memory.NewInvoiceRegistryFactory(commodityRegistry)
 	r, err := baseRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
@@ -111,10 +111,10 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 	})
 
 	// Create a new instance of InvoiceRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	baseInvoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
+	baseInvoiceRegistry := memory.NewInvoiceRegistryFactory(commodityRegistry)
 	r, err := baseInvoiceRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 
@@ -152,10 +152,10 @@ func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	})
 
 	// Create a new instance of InvoiceRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	baseInvoiceRegistry := memory.NewInvoiceRegistry(commodityRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
+	baseInvoiceRegistry := memory.NewInvoiceRegistryFactory(commodityRegistry)
 	r, err := baseInvoiceRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 

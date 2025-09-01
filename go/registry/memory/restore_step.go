@@ -26,7 +26,7 @@ type RestoreStepRegistry struct {
 var _ registry.RestoreStepRegistry = (*RestoreStepRegistry)(nil)
 var _ registry.RestoreStepRegistryFactory = (*RestoreStepRegistryFactory)(nil)
 
-func NewRestoreStepRegistry() *RestoreStepRegistryFactory {
+func NewRestoreStepRegistryFactory() *RestoreStepRegistryFactory {
 	return &RestoreStepRegistryFactory{
 		baseRestoreStepRegistry: NewRegistry[models.RestoreStep, *models.RestoreStep](),
 	}

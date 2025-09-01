@@ -16,7 +16,7 @@ func TestLocationRegistry_Create(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a new instance of LocationRegistry
-	r := memory.NewLocationRegistry()
+	r := memory.NewLocationRegistryFactory()
 
 	// Create a test location
 	location := &models.Location{
@@ -41,7 +41,7 @@ func TestLocationRegistry_Areas(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a new instance of LocationRegistry
-	r := memory.NewLocationRegistry()
+	r := memory.NewLocationRegistryFactory()
 
 	// Create a test location
 	location := models.WithID("location1", &models.Location{})
@@ -77,7 +77,7 @@ func TestLocationRegistry_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a new instance of LocationRegistry
-	r := memory.NewLocationRegistry()
+	r := memory.NewLocationRegistryFactory()
 
 	// Create a test location
 	location := models.WithID("location1", &models.Location{})
@@ -105,7 +105,7 @@ func TestLocationRegistry_Delete_ErrCases(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a new instance of LocationRegistry
-	r := memory.NewLocationRegistry()
+	r := memory.NewLocationRegistryFactory()
 
 	// Create a test location
 	location := models.WithID("location1", &models.Location{})

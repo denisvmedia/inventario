@@ -20,17 +20,17 @@ func Register() (cleanup func() error) {
 
 func NewFactorySet() *registry.FactorySet {
 	// Create factory instances that will create context-aware registries
-	locationFactory := NewLocationRegistry()
-	areaFactory := NewAreaRegistry(locationFactory)
-	settingsFactory := NewSettingsRegistry()
-	fileFactory := NewFileRegistry()
-	commodityFactory := NewCommodityRegistry(areaFactory)
-	imageFactory := NewImageRegistry(commodityFactory)
-	invoiceFactory := NewInvoiceRegistry(commodityFactory)
-	manualFactory := NewManualRegistry(commodityFactory)
-	exportFactory := NewExportRegistry()
-	restoreStepFactory := NewRestoreStepRegistry()
-	restoreOperationFactory := NewRestoreOperationRegistry(restoreStepFactory)
+	locationFactory := NewLocationRegistryFactory()
+	areaFactory := NewAreaRegistryFactory(locationFactory)
+	settingsFactory := NewSettingsRegistryFactory()
+	fileFactory := NewFileRegistryFactory()
+	commodityFactory := NewCommodityRegistryFactory(areaFactory)
+	imageFactory := NewImageRegistryFactory(commodityFactory)
+	invoiceFactory := NewInvoiceRegistryFactory(commodityFactory)
+	manualFactory := NewManualRegistryFactory(commodityFactory)
+	exportFactory := NewExportRegistryFactory()
+	restoreStepFactory := NewRestoreStepRegistryFactory()
+	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 
 	fs := &registry.FactorySet{}
 	fs.LocationRegistryFactory = locationFactory

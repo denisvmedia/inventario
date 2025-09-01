@@ -29,7 +29,7 @@ type InvoiceRegistry struct {
 var _ registry.InvoiceRegistry = (*InvoiceRegistry)(nil)
 var _ registry.InvoiceRegistryFactory = (*InvoiceRegistryFactory)(nil)
 
-func NewInvoiceRegistry(commodityRegistry *CommodityRegistryFactory) *InvoiceRegistryFactory {
+func NewInvoiceRegistryFactory(commodityRegistry *CommodityRegistryFactory) *InvoiceRegistryFactory {
 	return &InvoiceRegistryFactory{
 		baseInvoiceRegistry: NewRegistry[models.Invoice, *models.Invoice](),
 		commodityRegistry:   commodityRegistry,

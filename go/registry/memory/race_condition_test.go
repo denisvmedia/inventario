@@ -39,9 +39,9 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 	t.Run("commodity registry race condition", func(t *testing.T) {
 		c := qt.New(t)
 
-		locationRegistry := memory.NewLocationRegistry()
-		areaRegistry := memory.NewAreaRegistry(locationRegistry)
-		commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+		locationRegistry := memory.NewLocationRegistryFactory()
+		areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+		commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
 
 		// Create a commodity for user1
 		commodity := models.Commodity{
@@ -158,7 +158,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 	t.Run("location registry race condition", func(t *testing.T) {
 		c := qt.New(t)
 
-		locationRegistry := memory.NewLocationRegistry()
+		locationRegistry := memory.NewLocationRegistryFactory()
 
 		location := models.Location{
 			TenantAwareEntityID: models.TenantAwareEntityID{
@@ -241,9 +241,9 @@ func TestE2EScenarioSimulation(t *testing.T) {
 		Name:  "Admin User",
 	}
 
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	areaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
+	commodityRegistry := memory.NewCommodityRegistryFactory(areaRegistry)
 	ctx := appctx.WithUser(context.Background(), user)
 
 	commodity := models.Commodity{

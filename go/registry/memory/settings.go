@@ -29,7 +29,7 @@ type SettingsRegistry struct {
 var _ registry.SettingsRegistry = (*SettingsRegistry)(nil)
 var _ registry.SettingsRegistryFactory = (*SettingsRegistryFactory)(nil)
 
-func NewSettingsRegistry() *SettingsRegistryFactory {
+func NewSettingsRegistryFactory() *SettingsRegistryFactory {
 	return &SettingsRegistryFactory{
 		settings: make(map[string]models.SettingsObject),
 	}

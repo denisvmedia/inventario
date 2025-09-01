@@ -33,7 +33,7 @@ type LocationRegistry struct {
 var _ registry.LocationRegistry = (*LocationRegistry)(nil)
 var _ registry.LocationRegistryFactory = (*LocationRegistryFactory)(nil)
 
-func NewLocationRegistry() *LocationRegistryFactory {
+func NewLocationRegistryFactory() *LocationRegistryFactory {
 	return &LocationRegistryFactory{
 		baseLocationRegistry: NewRegistry[models.Location, *models.Location](),
 		areasLock:            &sync.RWMutex{},

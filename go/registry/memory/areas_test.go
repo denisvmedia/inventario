@@ -24,8 +24,9 @@ func TestMemoryAreaRegistry_Create(t *testing.T) {
 	})
 
 	// Create a new instance of AreaRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	r := memory.NewAreaRegistry(locationRegistry)
+	locationRegistryFactory := memory.NewLocationRegistryFactory()
+	locationRegistry := locationRegistryFactory.MustCreateUserRegistry(ctx)
+	r := memory.NewAreaRegistryFactory(locationRegistryFactory)
 
 	// Test area
 	var area models.Area
@@ -62,8 +63,8 @@ func TestAreaRegistry_Create_Validation(t *testing.T) {
 	})
 
 	// Create a new instance of AreaRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	r := memory.NewAreaRegistry(locationRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	r := memory.NewAreaRegistryFactory(locationRegistry)
 
 	// Create a test area without a location ID
 	var area models.Area
@@ -94,8 +95,8 @@ func TestAreaRegistry_Commodities(t *testing.T) {
 	})
 
 	// Create a new instance of AreaRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	r := memory.NewAreaRegistry(locationRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	r := memory.NewAreaRegistryFactory(locationRegistry)
 
 	// Test area
 	var area models.Area
@@ -147,8 +148,8 @@ func TestAreaRegistry_Delete(t *testing.T) {
 	})
 
 	// Create a new instance of AreaRegistry
-	locationRegistry := memory.NewLocationRegistry()
-	baseAreaRegistry := memory.NewAreaRegistry(locationRegistry)
+	locationRegistry := memory.NewLocationRegistryFactory()
+	baseAreaRegistry := memory.NewAreaRegistryFactory(locationRegistry)
 	r, err := baseAreaRegistry.WithCurrentUser(ctx)
 	c.Assert(err, qt.IsNil)
 

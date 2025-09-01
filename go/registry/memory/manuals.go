@@ -29,7 +29,7 @@ type ManualRegistry struct {
 var _ registry.ManualRegistry = (*ManualRegistry)(nil)
 var _ registry.ManualRegistryFactory = (*ManualRegistryFactory)(nil)
 
-func NewManualRegistry(commodityRegistry *CommodityRegistryFactory) *ManualRegistryFactory {
+func NewManualRegistryFactory(commodityRegistry *CommodityRegistryFactory) *ManualRegistryFactory {
 	return &ManualRegistryFactory{
 		baseManualRegistry: NewRegistry[models.Manual, *models.Manual](),
 		commodityRegistry:  commodityRegistry,
