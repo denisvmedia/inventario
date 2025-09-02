@@ -11,7 +11,6 @@ import (
 )
 
 type settingsAPI struct {
-	registry registry.SettingsRegistry
 }
 
 // getSettings returns the current settings.
@@ -189,10 +188,8 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 }
 
 // Settings returns a handler for settings.
-func Settings(settingsRegistry registry.SettingsRegistry) func(r chi.Router) {
-	api := &settingsAPI{
-		registry: settingsRegistry,
-	}
+func Settings() func(r chi.Router) {
+	api := &settingsAPI{}
 
 	return func(r chi.Router) {
 		r.Get("/", api.getSettings)           // GET /settings

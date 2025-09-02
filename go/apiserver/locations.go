@@ -6,12 +6,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 type locationsAPI struct {
-	locationRegistry registry.LocationRegistry
 }
 
 // listLocations lists all locations.
@@ -23,7 +22,13 @@ type locationsAPI struct {
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
 // @Router /locations [get].
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
-	locReg := api.locationRegistry
+	// Get user-aware registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+	locReg := registrySet.LocationRegistry
 
 	locations, err := locReg.List(r.Context())
 	if err != nil {
@@ -47,7 +52,13 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.LocationResponse "OK"
 // @Router /locations/{id} [get].
 func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	locReg := api.locationRegistry
+	// Get user-aware registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+	locReg := registrySet.LocationRegistry
 
 	location := locationFromContext(r.Context())
 	if location == nil {
@@ -84,6 +95,13 @@ func (api *locationsAPI) getLocation(w http.ResponseWriter, r *http.Request) { /
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /locations [post].
 func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	var input jsonapi.LocationRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
@@ -102,9 +120,9 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 		location.TenantID = user.TenantID
 	}
 
-	// Use WithCurrentUser to ensure proper user context and validation
-	ctx := r.Context()
-	locationReg := api.locationRegistry
+	// Use WithUser to ensure proper user context and validation
+	ctx := appctx.WithUser(r.Context(), user)
+	locationReg := registrySet.LocationRegistry
 	createdLocation, err := locationReg.Create(ctx, location)
 	if err != nil {
 		renderEntityError(w, r, err)
@@ -140,6 +158,13 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 // @Failure 404 {object} jsonapi.Errors "Location not found"
 // @Router /locations/{id} [delete].
 func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	location := locationFromContext(r.Context())
 	if location == nil {
 		unprocessableEntityError(w, r, nil)
@@ -148,7 +173,7 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 
 	// Use WithCurrentUser to ensure proper user context and validation
 	ctx := r.Context()
-	locationReg := api.locationRegistry
+	locationReg := registrySet.LocationRegistry
 	err := locationReg.Delete(ctx, location.ID)
 	if err != nil {
 		renderEntityError(w, r, err)
@@ -170,6 +195,13 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /locations/{id} [put].
 func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	location := locationFromContext(r.Context())
 	if location == nil {
 		unprocessableEntityError(w, r, nil)
@@ -196,14 +228,14 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 
 	// Use WithCurrentUser to ensure proper user context and validation
 	ctx := r.Context()
-	locationReg := api.locationRegistry
+	locationReg := registrySet.LocationRegistry
 	newLocation, err := locationReg.Update(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	areas, err := api.locationRegistry.GetAreas(r.Context(), location.ID)
+	areas, err := locationReg.GetAreas(r.Context(), location.ID)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -221,12 +253,12 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func Locations(locationRegistry registry.LocationRegistry) func(r chi.Router) {
-	api := &locationsAPI{locationRegistry: locationRegistry}
+func Locations() func(r chi.Router) {
+	api := &locationsAPI{}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listLocations) // GET /locations
 		r.Route("/{locationID}", func(r chi.Router) {
-			r.Use(locationCtx(locationRegistry))
+			r.Use(locationCtx(nil))           // locationCtx will get registry from context
 			r.Get("/", api.getLocation)       // GET /locations/123
 			r.Put("/", api.updateLocation)    // PUT /locations/123
 			r.Delete("/", api.deleteLocation) // DELETE /locations/123

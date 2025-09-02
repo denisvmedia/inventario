@@ -42,7 +42,7 @@ func TestNewRestoreWorker(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings
-	ctx = appctx.WithUser(ctx, &user)
+	// Note: user context already set above
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
@@ -82,7 +82,7 @@ func TestRestoreWorkerStartStop(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings
-	ctx = appctx.WithUser(ctx, &user)
+	// Note: user context already set above
 
 	// Create a temporary directory for restores
 	tempDir := c.TempDir()
@@ -142,7 +142,7 @@ func TestRestoreWorkerConcurrentAccess(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings
-	ctx = appctx.WithUser(ctx, &user)
+	// Note: user context already set above
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
@@ -213,7 +213,7 @@ func TestRestoreWorkerContextCancellation(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings
-	ctx = appctx.WithUser(ctx, &user)
+	// Note: user context already set above
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
@@ -264,7 +264,7 @@ func TestRestoreWorkerConfigurableConcurrentLimit(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings
-	ctx = appctx.WithUser(ctx, &user)
+	// Note: user context already set above
 
 	// Create a temporary directory for restores
 	tempDir := c.TempDir()

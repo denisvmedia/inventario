@@ -17,7 +17,6 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -32,7 +31,6 @@ func exportFromContext(ctx context.Context) *models.Export {
 }
 
 type exportsAPI struct {
-	registrySet    *registry.Set
 	uploadLocation string
 	entityService  *services.EntityService
 }

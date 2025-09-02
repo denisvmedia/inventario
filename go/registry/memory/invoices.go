@@ -86,7 +86,10 @@ func (f *InvoiceRegistryFactory) CreateServiceRegistry() registry.InvoiceRegistr
 	commodityRegistryInterface := f.commodityRegistry.CreateServiceRegistry()
 
 	// Cast to concrete type for relationship management
-	commodityRegistry := commodityRegistryInterface.(*CommodityRegistry)
+	commodityRegistry, ok := commodityRegistryInterface.(*CommodityRegistry)
+	if !ok {
+		panic("commodityRegistryInterface is not of type *CommodityRegistry")
+	}
 
 	return &InvoiceRegistry{
 		Registry:          serviceRegistry,

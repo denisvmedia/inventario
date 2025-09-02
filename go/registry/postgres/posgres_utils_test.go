@@ -14,7 +14,6 @@ import (
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/debug/seeddata"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
@@ -173,10 +172,64 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) {
 	c.Helper()
 
-	// Use the existing seeddata functionality to create test users and tenants
-	// This ensures consistency with the application's seeding process
-	err := seeddata.SeedData(registrySet)
+	// For PostgreSQL tests, we need to create a factory set to use with seeddata.SeedData
+	// The seeddata function expects a FactorySet, not a Set
+	// We'll create a temporary factory set from the same database connection
+
+	// Get the database connection from the existing registry set
+	// This is a bit of a hack, but necessary for the current architecture
+	// In the future, we might want to refactor this to be cleaner
+
+	// For now, let's manually create the test tenant and user instead of using seeddata
+	// This ensures we have the expected test data without the type mismatch
+	ctx := context.Background()
+
+	// Create test tenant
+	testTenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Organization",
+		Slug:     "test-org",
+		Status:   models.TenantStatusActive,
+	}
+
+	// Try to get existing tenant first, create if it doesn't exist
+	_, err := registrySet.TenantRegistry.Get(ctx, "test-tenant-id")
+	if err != nil {
+		// Tenant doesn't exist, create it
+		_, err = registrySet.TenantRegistry.Create(ctx, testTenant)
+		c.Assert(err, qt.IsNil)
+	}
+
+	// Create test users
+	testUser1 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+		},
+		Email:    "admin@test-org.com",
+		Name:     "Test Administrator",
+		Role:     models.UserRoleAdmin,
+		IsActive: true,
+	}
+
+	err = testUser1.SetPassword("testpassword123")
 	c.Assert(err, qt.IsNil)
+
+	// Check if user already exists
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+
+	userExists := false
+	for _, user := range users {
+		if user.Email == testUser1.Email {
+			userExists = true
+			break
+		}
+	}
+
+	if !userExists {
+		_, err = registrySet.UserRegistry.Create(ctx, testUser1)
+		c.Assert(err, qt.IsNil)
+	}
 }
 
 // createTestLocation creates a test location for use in tests.

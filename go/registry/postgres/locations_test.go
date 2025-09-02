@@ -49,10 +49,8 @@ func TestLocationRegistry_Create_HappyPath(t *testing.T) {
 			seededUser := users[0]
 			ctx = appctx.WithUser(ctx, seededUser)
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			result, err := locationReg.Create(ctx, tc.location)
+			// Registry is already user-aware from setupTestRegistrySet
+			result, err := registrySet.LocationRegistry.Create(ctx, tc.location)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")
@@ -90,10 +88,9 @@ func TestLocationRegistry_Create_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Registry is already user-aware from setupTestRegistrySet
 
-			result, err := locationReg.Create(ctx, tc.location)
+			result, err := registrySet.LocationRegistry.Create(ctx, tc.location)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -113,14 +110,13 @@ func TestLocationRegistry_Get_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create a test location
 	created := createTestLocation(c, registrySet)
 
 	// Get the location
-	result, err := locationReg.Get(ctx, created.ID)
+	result, err := registrySet.LocationRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.ID, qt.Equals, created.ID)
@@ -157,10 +153,9 @@ func TestLocationRegistry_Get_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Registry is already user-aware from setupTestRegistrySet
 
-			result, err := locationReg.Get(ctx, tc.id)
+			result, err := registrySet.LocationRegistry.Get(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -180,11 +175,10 @@ func TestLocationRegistry_List_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Initially should be empty
-	locations, err := locationReg.List(ctx)
+	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(locations), qt.Equals, 0)
 
@@ -193,7 +187,7 @@ func TestLocationRegistry_List_HappyPath(t *testing.T) {
 	location2 := createTestLocation(c, registrySet)
 
 	// List should now contain both locations
-	locations, err = locationReg.List(ctx)
+	locations, err = registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(locations), qt.Equals, 2)
 
@@ -219,8 +213,7 @@ func TestLocationRegistry_Update_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create a test location
 	created := createTestLocation(c, registrySet)
@@ -229,7 +222,7 @@ func TestLocationRegistry_Update_HappyPath(t *testing.T) {
 	created.Name = "Updated Location"
 	created.Address = "Updated Address"
 
-	result, err := locationReg.Update(ctx, *created)
+	result, err := registrySet.LocationRegistry.Update(ctx, *created)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.ID, qt.Equals, created.ID)
@@ -237,7 +230,7 @@ func TestLocationRegistry_Update_HappyPath(t *testing.T) {
 	c.Assert(result.Address, qt.Equals, "Updated Address")
 
 	// Verify the update persisted
-	retrieved, err := locationReg.Get(ctx, created.ID)
+	retrieved, err := registrySet.LocationRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(retrieved.Name, qt.Equals, "Updated Location")
 	c.Assert(retrieved.Address, qt.Equals, "Updated Address")
@@ -272,10 +265,9 @@ func TestLocationRegistry_Update_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Registry is already user-aware from setupTestRegistrySet
 
-			result, err := locationReg.Update(ctx, tc.location)
+			result, err := registrySet.LocationRegistry.Update(ctx, tc.location)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -295,18 +287,17 @@ func TestLocationRegistry_Delete_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create a test location
 	created := createTestLocation(c, registrySet)
 
 	// Delete the location
-	err = locationReg.Delete(ctx, created.ID)
+	err := registrySet.LocationRegistry.Delete(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the location is deleted
-	result, err := locationReg.Get(ctx, created.ID)
+	result, err := registrySet.LocationRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(result, qt.IsNil)
 }
@@ -340,10 +331,9 @@ func TestLocationRegistry_Delete_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Registry is already user-aware from setupTestRegistrySet
 
-			err = locationReg.Delete(ctx, tc.id)
+			err := registrySet.LocationRegistry.Delete(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
 		})
 	}
@@ -362,11 +352,9 @@ func TestLocationRegistry_Delete_WithAreas_UnhappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create a test location
 	location := createTestLocation(c, registrySet)
@@ -375,16 +363,16 @@ func TestLocationRegistry_Delete_WithAreas_UnhappyPath(t *testing.T) {
 	area := createTestArea(c, registrySet, location.ID)
 
 	// Try to delete the location - should fail because it has areas
-	err = locationReg.Delete(ctx, location.ID)
+	err := registrySet.LocationRegistry.Delete(ctx, location.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Verify the location still exists
-	result, err := locationReg.Get(ctx, location.ID)
+	result, err := registrySet.LocationRegistry.Get(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 
 	// Verify the area still exists
-	areaResult, err := areaReg.Get(ctx, area.ID)
+	areaResult, err := registrySet.AreaRegistry.Get(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(areaResult, qt.IsNotNil)
 }
@@ -402,10 +390,10 @@ func TestLocationRegistry_Count_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg := registrySet.LocationRegistry.MustWithCurrentUser(ctx)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Initially should be 0
-	count, err := locationReg.Count(ctx)
+	count, err := registrySet.LocationRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 
@@ -414,7 +402,7 @@ func TestLocationRegistry_Count_HappyPath(t *testing.T) {
 	createTestLocation(c, registrySet)
 
 	// Count should now be 2
-	count, err = locationReg.Count(ctx)
+	count, err = registrySet.LocationRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 2)
 }
@@ -436,11 +424,10 @@ func TestLocationRegistry_GetAreas_WithCreatedArea_HappyPath(t *testing.T) {
 	location := createTestLocation(c, registrySet)
 	area := createTestArea(c, registrySet, location.ID)
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Verify the area is automatically linked to the location
-	areas, err := locationReg.GetAreas(ctx, location.ID)
+	areas, err := registrySet.LocationRegistry.GetAreas(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Equals, 1)
 	c.Assert(areas[0], qt.Equals, area.ID)
@@ -475,10 +462,9 @@ func TestLocationRegistry_GetAreas_WithInvalidLocation_UnhappyPath(t *testing.T)
 				},
 			})
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Registry is already user-aware from setupTestRegistrySet
 
-			areas, err := locationReg.GetAreas(ctx, tc.locationID)
+			areas, err := registrySet.LocationRegistry.GetAreas(ctx, tc.locationID)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(areas, qt.IsNil)
 		})
@@ -501,11 +487,10 @@ func TestLocationRegistry_GetAreas_HappyPath(t *testing.T) {
 	// Create a test location
 	location := createTestLocation(c, registrySet)
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Initially should have no areas
-	areas, err := locationReg.GetAreas(ctx, location.ID)
+	areas, err := registrySet.LocationRegistry.GetAreas(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Equals, 0)
 
@@ -514,7 +499,7 @@ func TestLocationRegistry_GetAreas_HappyPath(t *testing.T) {
 	area2 := createTestArea(c, registrySet, location.ID)
 
 	// Should now have 2 areas
-	areas, err = locationReg.GetAreas(ctx, location.ID)
+	areas, err = registrySet.LocationRegistry.GetAreas(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Equals, 2)
 
@@ -543,11 +528,10 @@ func TestLocationRegistry_GetAreas_EmptyLocation_HappyPath(t *testing.T) {
 	// Create a test location
 	location := createTestLocation(c, registrySet)
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Should have no areas initially
-	areas, err := locationReg.GetAreas(ctx, location.ID)
+	areas, err := registrySet.LocationRegistry.GetAreas(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Equals, 0)
 }

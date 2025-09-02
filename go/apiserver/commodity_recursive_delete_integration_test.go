@@ -159,7 +159,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	c.Assert(err, qt.IsNotNil) // Should be deleted
 
 	// Verify area still exists (should not be affected)
-	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, areas[0].ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).AreaRegistry.Get(ctx, areas[0].ID)
 	c.Assert(err, qt.IsNil) // Should still exist
 }
 
@@ -208,11 +208,11 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	c.Check(rr.Code, qt.Equals, http.StatusNoContent)
 
 	// Verify commodity is deleted
-	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, createdCommodity.ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.Get(ctx, createdCommodity.ID)
 	c.Assert(err, qt.IsNotNil) // Should be deleted
 
 	// Verify area still exists (should not be affected)
-	_, err = getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(ctx, areas[0].ID)
+	_, err = getRegistrySetFromParams(params, testUser.ID).AreaRegistry.Get(ctx, areas[0].ID)
 	c.Assert(err, qt.IsNil) // Should still exist
 }
 

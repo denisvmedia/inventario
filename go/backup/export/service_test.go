@@ -124,37 +124,6 @@ func TestExtractTenantUserFromContext(t *testing.T) {
 	}
 }
 
-func newTestRegistrySet() *registry.Set {
-	userRegistry := memory.NewUserRegistry()
-	tenantRegistry := memory.NewTenantRegistry()
-
-	// Create user with server-generated ID and capture it
-	createdUser := must.Must(userRegistry.Create(context.Background(), models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			// ID will be generated server-side for security
-			TenantID: "test-tenant",
-		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		Role:     models.UserRoleUser,
-		IsActive: true,
-	}))
-	// Set the global testUserID to the generated ID
-	testUserID = createdUser.ID
-
-	must.Must(tenantRegistry.Create(context.Background(), models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant"},
-		Name:     "Test Tenant",
-	}))
-
-	// Create factory set and return service registry set
-	factorySet := memory.NewFactorySet()
-	factorySet.UserRegistry = userRegistry
-	factorySet.TenantRegistry = tenantRegistry
-	registrySet := factorySet.CreateServiceRegistrySet()
-	return registrySet
-}
-
 // newTestFactorySet creates a factory set for testing
 func newTestFactorySet() *registry.FactorySet {
 	factorySet := memory.NewFactorySet()
@@ -863,12 +832,6 @@ func createTestFactoryAndRegistrySetWithFiles(c *qt.C, ctx context.Context) (*re
 	populateTestRegistrySetWithFiles(c, userCtx, registrySet)
 
 	return factorySet, registrySet
-}
-
-// createTestRegistrySetWithFiles creates a test registry set with sample data including files
-func createTestRegistrySetWithFiles(c *qt.C, ctx context.Context) *registry.Set {
-	_, registrySet := createTestFactoryAndRegistrySetWithFiles(c, ctx)
-	return registrySet
 }
 
 // populateTestRegistrySetWithFiles populates a registry set with test data

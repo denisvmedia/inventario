@@ -154,12 +154,10 @@ func TestSecurityIDRejection(t *testing.T) {
 			}
 
 			// Add authentication middleware and routes
-			areaReg := factorySet.AreaRegistryFactory.CreateServiceRegistry()
-			locReg := factorySet.LocationRegistryFactory.CreateServiceRegistry()
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/commodities", apiserver.Commodities(params))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/areas", apiserver.Areas(areaReg))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/locations", apiserver.Locations(locReg))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/files", apiserver.Files(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/commodities", apiserver.Commodities(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/areas", apiserver.Areas())
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations())
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
 
 			// Serialize request body
 			requestBodyBytes, err := json.Marshal(tc.requestBody)
@@ -308,11 +306,10 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 			}
 
 			// Add authentication middleware and routes
-			areaReg := factorySet.AreaRegistryFactory.CreateServiceRegistry()
-			locReg := factorySet.LocationRegistryFactory.CreateServiceRegistry()
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/commodities", apiserver.Commodities(params))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/areas", apiserver.Areas(areaReg))
-			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/locations", apiserver.Locations(locReg))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/commodities", apiserver.Commodities(params))
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/areas", apiserver.Areas())
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/locations", apiserver.Locations())
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
 
 			// Serialize request body
 			requestBodyBytes, err := json.Marshal(tc.requestBody)

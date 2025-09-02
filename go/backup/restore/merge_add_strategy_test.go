@@ -1307,8 +1307,6 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 						return
 					}
 
-
-
 					entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
 					proc := processor.NewRestoreOperationProcessor(
 						fmt.Sprintf("concurrent-attack-%d", userIndex),

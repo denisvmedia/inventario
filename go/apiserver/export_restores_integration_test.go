@@ -63,6 +63,7 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	// Set up router with authentication
 	r := chi.NewRouter()
 	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
 		FactorySet:     factorySet,
@@ -124,6 +125,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	// Set up router with authentication
 	r := chi.NewRouter()
 	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
 		FactorySet:     factorySet,
@@ -224,6 +226,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	// Set up router with authentication
 	r := chi.NewRouter()
 	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
 		FactorySet:     factorySet,
@@ -312,6 +315,7 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	// Set up router with authentication
 	r := chi.NewRouter()
 	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
 		FactorySet:     factorySet,

@@ -55,13 +55,14 @@ func TestExportHardDelete(t *testing.T) {
 		FilePath:    "test/export.xml",
 	}
 
-	created, err := registrySet.ExportRegistry.Create(context.Background(), export)
+	created, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
 
 	// Create router with export routes and authentication
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
 		FactorySet:     factorySet,
@@ -128,14 +129,14 @@ func TestExportListExcludesDeleted(t *testing.T) {
 		Status:      models.ExportStatusCompleted,
 	}
 
-	created1, err := registrySet.ExportRegistry.Create(context.Background(), export1)
+	created1, err := registrySet.ExportRegistry.Create(ctx, export1)
 	c.Assert(err, qt.IsNil)
 
-	created2, err := registrySet.ExportRegistry.Create(context.Background(), export2)
+	created2, err := registrySet.ExportRegistry.Create(ctx, export2)
 	c.Assert(err, qt.IsNil)
 
 	// Soft delete one export
-	err = registrySet.ExportRegistry.Delete(context.Background(), created2.ID)
+	err = registrySet.ExportRegistry.Delete(ctx, created2.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Create router with export routes
@@ -147,7 +148,7 @@ func TestExportListExcludesDeleted(t *testing.T) {
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint
 	req := httptest.NewRequest("GET", "/exports", nil)
@@ -191,14 +192,14 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 		Status:      models.ExportStatusCompleted,
 	}
 
-	created1, err := registrySet.ExportRegistry.Create(context.Background(), export1)
+	created1, err := registrySet.ExportRegistry.Create(ctx, export1)
 	c.Assert(err, qt.IsNil)
 
-	created2, err := registrySet.ExportRegistry.Create(context.Background(), export2)
+	created2, err := registrySet.ExportRegistry.Create(ctx, export2)
 	c.Assert(err, qt.IsNil)
 
 	// Hard delete one export (changed from soft delete to be consistent with PostgreSQL)
-	err = registrySet.ExportRegistry.Delete(context.Background(), created2.ID)
+	err = registrySet.ExportRegistry.Delete(ctx, created2.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Create router with export routes
@@ -210,7 +211,7 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint with include_deleted=true
 	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
@@ -258,6 +259,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
 		FactorySet:     factorySet,

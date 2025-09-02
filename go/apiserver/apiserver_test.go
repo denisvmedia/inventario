@@ -90,42 +90,42 @@ func addTestUserAuthHeader(req *http.Request, userID string) {
 	addAuthHeader(req, userID, models.UserRoleUser)
 }
 
-func populateLocationTestData(locationRegistry registry.LocationRegistry) {
-	must.Must(locationRegistry.Create(context.Background(), models.Location{
+func populateLocationTestData(ctx context.Context, locationRegistry registry.LocationRegistry) {
+	must.Must(locationRegistry.Create(ctx, models.Location{
 		Name:    "Location 1",
 		Address: "Address 1",
 	}))
 
-	must.Must(locationRegistry.Create(context.Background(), models.Location{
+	must.Must(locationRegistry.Create(ctx, models.Location{
 		Name:    "Location 2",
 		Address: "Address 2",
 	}))
 }
 
-func populateAreaTestData(areaRegistry registry.AreaRegistry, locationRegistry registry.LocationRegistry) {
-	locations := must.Must(locationRegistry.List(context.Background()))
+func populateAreaTestData(ctx context.Context, areaRegistry registry.AreaRegistry, locationRegistry registry.LocationRegistry) {
+	locations := must.Must(locationRegistry.List(ctx))
 
-	must.Must(areaRegistry.Create(context.Background(), models.Area{
+	must.Must(areaRegistry.Create(ctx, models.Area{
 		TenantAwareEntityID: models.WithTenantAwareEntityID("1", "default-tenant"),
 		Name:                "Area 1",
 		LocationID:          locations[0].ID,
 	}))
 
-	must.Must(areaRegistry.Create(context.Background(), models.Area{
+	must.Must(areaRegistry.Create(ctx, models.Area{
 		TenantAwareEntityID: models.WithTenantAwareEntityID("2", "default-tenant"),
 		Name:                "Area 2",
 		LocationID:          locations[0].ID,
 	}))
 }
 
-func populateSettingsTestData(settingsRegistry registry.SettingsRegistry) {
-	must.Assert(settingsRegistry.Patch(context.Background(), "system.main_currency", "USD"))
+func populateSettingsTestData(ctx context.Context, settingsRegistry registry.SettingsRegistry) {
+	must.Assert(settingsRegistry.Patch(ctx, "system.main_currency", "USD"))
 }
 
-func populateCommodityTestData(commodityRegistry registry.CommodityRegistry, areaRegistry registry.AreaRegistry) {
-	areas := must.Must(areaRegistry.List(context.Background()))
+func populateCommodityTestData(ctx context.Context, commodityRegistry registry.CommodityRegistry, areaRegistry registry.AreaRegistry) {
+	areas := must.Must(areaRegistry.List(ctx))
 
-	must.Must(commodityRegistry.Create(context.Background(), models.Commodity{
+	must.Must(commodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Commodity 1",
 		ShortName:             "C1",
 		AreaID:                areas[0].ID,
@@ -136,7 +136,7 @@ func populateCommodityTestData(commodityRegistry registry.CommodityRegistry, are
 		OriginalPriceCurrency: models.Currency("USD"),
 	}))
 
-	must.Must(commodityRegistry.Create(context.Background(), models.Commodity{
+	must.Must(commodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Commodity 2",
 		ShortName:             "C2",
 		AreaID:                areas[0].ID,
@@ -148,8 +148,8 @@ func populateCommodityTestData(commodityRegistry registry.CommodityRegistry, are
 	}))
 }
 
-func populateImageTestData(imageRegistry registry.ImageRegistry, commodityRegistry registry.CommodityRegistry) {
-	commodities := must.Must(commodityRegistry.List(context.Background()))
+func populateImageTestData(ctx context.Context, imageRegistry registry.ImageRegistry, commodityRegistry registry.CommodityRegistry) {
+	commodities := must.Must(commodityRegistry.List(ctx))
 
 	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
 	defer b.Close()
@@ -158,7 +158,7 @@ func populateImageTestData(imageRegistry registry.ImageRegistry, commodityRegist
 		panic(err)
 	}
 
-	must.Must(imageRegistry.Create(context.Background(), models.Image{
+	must.Must(imageRegistry.Create(ctx, models.Image{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "image1",     // Without extension
@@ -175,7 +175,7 @@ func populateImageTestData(imageRegistry registry.ImageRegistry, commodityRegist
 		panic(err)
 	}
 
-	must.Must(imageRegistry.Create(context.Background(), models.Image{
+	must.Must(imageRegistry.Create(ctx, models.Image{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "image2",     // Without extension
@@ -186,8 +186,8 @@ func populateImageTestData(imageRegistry registry.ImageRegistry, commodityRegist
 	}))
 }
 
-func populateInvoiceTestData(invoiceRegistry registry.InvoiceRegistry, commodityRegistry registry.CommodityRegistry) {
-	commodities := must.Must(commodityRegistry.List(context.Background()))
+func populateInvoiceTestData(ctx context.Context, invoiceRegistry registry.InvoiceRegistry, commodityRegistry registry.CommodityRegistry) {
+	commodities := must.Must(commodityRegistry.List(ctx))
 
 	b := must.Must(blob.OpenBucket(context.Background(), uploadLocation))
 	defer b.Close()
@@ -196,7 +196,7 @@ func populateInvoiceTestData(invoiceRegistry registry.InvoiceRegistry, commodity
 		panic(err)
 	}
 
-	must.Must(invoiceRegistry.Create(context.Background(), models.Invoice{
+	must.Must(invoiceRegistry.Create(ctx, models.Invoice{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "invoice1",     // Without extension
@@ -213,7 +213,7 @@ func populateInvoiceTestData(invoiceRegistry registry.InvoiceRegistry, commodity
 		panic(err)
 	}
 
-	must.Must(invoiceRegistry.Create(context.Background(), models.Invoice{
+	must.Must(invoiceRegistry.Create(ctx, models.Invoice{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "invoice2",     // Without extension
@@ -224,8 +224,8 @@ func populateInvoiceTestData(invoiceRegistry registry.InvoiceRegistry, commodity
 	}))
 }
 
-func populateManualTestData(manualRegistry registry.ManualRegistry, commodityRegistry registry.CommodityRegistry) {
-	commodities := must.Must(commodityRegistry.List(context.Background()))
+func populateManualTestData(ctx context.Context, manualRegistry registry.ManualRegistry, commodityRegistry registry.CommodityRegistry) {
+	commodities := must.Must(commodityRegistry.List(ctx))
 
 	b := must.Must(blob.OpenBucket(context.TODO(), uploadLocation))
 	defer b.Close()
@@ -234,7 +234,7 @@ func populateManualTestData(manualRegistry registry.ManualRegistry, commodityReg
 		panic(err)
 	}
 
-	must.Must(manualRegistry.Create(context.Background(), models.Manual{
+	must.Must(manualRegistry.Create(ctx, models.Manual{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "manual1",     // Without extension
@@ -251,7 +251,7 @@ func populateManualTestData(manualRegistry registry.ManualRegistry, commodityReg
 		panic(err)
 	}
 
-	must.Must(manualRegistry.Create(context.Background(), models.Manual{
+	must.Must(manualRegistry.Create(ctx, models.Manual{
 		CommodityID: commodities[0].ID,
 		File: &models.File{
 			Path:         "manual2",     // Without extension
@@ -262,8 +262,8 @@ func populateManualTestData(manualRegistry registry.ManualRegistry, commodityReg
 	}))
 }
 
-func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commodityRegistry registry.CommodityRegistry) {
-	commodities := must.Must(commodityRegistry.List(context.Background()))
+func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry.FileRegistry, commodityRegistry registry.CommodityRegistry) {
+	commodities := must.Must(commodityRegistry.List(ctx))
 	if len(commodities) == 0 {
 		return
 	}
@@ -271,7 +271,7 @@ func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commod
 	now := time.Now()
 
 	// Create file entities for images
-	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+	must.Must(fileRegistry.Create(ctx, models.FileEntity{
 		Title:            "image1",
 		Description:      "Test image 1",
 		Type:             models.FileTypeImage,
@@ -289,7 +289,7 @@ func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commod
 		},
 	}))
 
-	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+	must.Must(fileRegistry.Create(ctx, models.FileEntity{
 		Title:            "image2",
 		Description:      "Test image 2",
 		Type:             models.FileTypeImage,
@@ -308,7 +308,7 @@ func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commod
 	}))
 
 	// Create file entities for invoices
-	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+	must.Must(fileRegistry.Create(ctx, models.FileEntity{
 		Title:            "invoice1",
 		Description:      "Test invoice 1",
 		Type:             models.FileTypeDocument,
@@ -326,7 +326,7 @@ func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commod
 		},
 	}))
 
-	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+	must.Must(fileRegistry.Create(ctx, models.FileEntity{
 		Title:            "invoice2",
 		Description:      "Test invoice 2",
 		Type:             models.FileTypeDocument,
@@ -345,7 +345,7 @@ func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commod
 	}))
 
 	// Create file entities for manuals
-	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+	must.Must(fileRegistry.Create(ctx, models.FileEntity{
 		Title:            "manual1",
 		Description:      "Test manual 1",
 		Type:             models.FileTypeDocument,
@@ -363,7 +363,7 @@ func populateFileRegistryWithTestData(fileRegistry registry.FileRegistry, commod
 		},
 	}))
 
-	must.Must(fileRegistry.Create(context.Background(), models.FileEntity{
+	must.Must(fileRegistry.Create(ctx, models.FileEntity{
 		Title:            "manual2",
 		Description:      "Test manual 2",
 		Type:             models.FileTypeDocument,
@@ -397,13 +397,13 @@ func newParams() (apiserver.Params, *models.User) {
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 
 	// Populate test data
-	populateLocationTestData(registrySet.LocationRegistry)
-	populateAreaTestData(registrySet.AreaRegistry, registrySet.LocationRegistry)
-	populateSettingsTestData(registrySet.SettingsRegistry)
-	populateCommodityTestData(registrySet.CommodityRegistry, registrySet.AreaRegistry)
-	populateImageTestData(registrySet.ImageRegistry, registrySet.CommodityRegistry)
-	populateInvoiceTestData(registrySet.InvoiceRegistry, registrySet.CommodityRegistry)
-	populateManualTestData(registrySet.ManualRegistry, registrySet.CommodityRegistry)
+	populateLocationTestData(ctx, registrySet.LocationRegistry)
+	populateAreaTestData(ctx, registrySet.AreaRegistry, registrySet.LocationRegistry)
+	populateSettingsTestData(ctx, registrySet.SettingsRegistry)
+	populateCommodityTestData(ctx, registrySet.CommodityRegistry, registrySet.AreaRegistry)
+	populateImageTestData(ctx, registrySet.ImageRegistry, registrySet.CommodityRegistry)
+	populateInvoiceTestData(ctx, registrySet.InvoiceRegistry, registrySet.CommodityRegistry)
+	populateManualTestData(ctx, registrySet.ManualRegistry, registrySet.CommodityRegistry)
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
@@ -412,7 +412,7 @@ func newParams() (apiserver.Params, *models.User) {
 	params.EntityService = services.NewEntityService(params.FactorySet, params.UploadLocation)
 
 	// Populate FileRegistry with test data using the same instance
-	populateFileRegistryWithTestData(registrySet.FileRegistry, registrySet.CommodityRegistry)
+	populateFileRegistryWithTestData(ctx, registrySet.FileRegistry, registrySet.CommodityRegistry)
 	return params, testUser
 }
 
@@ -431,8 +431,8 @@ func newParamsAreaRegistryOnly() (apiserver.Params, *models.User) {
 	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 
 	// Populate minimal test data
-	populateLocationTestData(registrySet.LocationRegistry)
-	populateAreaTestData(registrySet.AreaRegistry, registrySet.LocationRegistry)
+	populateLocationTestData(ctx, registrySet.LocationRegistry)
+	populateAreaTestData(ctx, registrySet.AreaRegistry, registrySet.LocationRegistry)
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret

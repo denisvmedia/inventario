@@ -3,7 +3,6 @@ package seeddata
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/go-extras/go-kit/ptr"
 	"github.com/shopspring/decimal"
@@ -20,11 +19,6 @@ func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, c
 	commodity.UserID = "test-user-id"
 
 	return registrySet.CommodityRegistry.Create(ctx, commodity)
-}
-
-// isPostgreSQLDSN checks if the given DSN is for PostgreSQL
-func isPostgreSQLDSN(dsn string) bool {
-	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
 }
 
 // SeedData seeds the database with example data.

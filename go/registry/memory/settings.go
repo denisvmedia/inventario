@@ -16,13 +16,13 @@ import (
 // SettingsRegistryFactory creates SettingsRegistry instances with proper context
 type SettingsRegistryFactory struct {
 	settings map[string]models.SettingsObject // userID -> settings
-	lock     sync.RWMutex
+	lock     *sync.RWMutex
 }
 
 // SettingsRegistry is a context-aware registry that can only be created through the factory
 type SettingsRegistry struct {
 	settings map[string]models.SettingsObject // userID -> settings
-	lock     sync.RWMutex
+	lock     *sync.RWMutex
 	userID   string
 }
 
@@ -32,6 +32,7 @@ var _ registry.SettingsRegistryFactory = (*SettingsRegistryFactory)(nil)
 func NewSettingsRegistryFactory() *SettingsRegistryFactory {
 	return &SettingsRegistryFactory{
 		settings: make(map[string]models.SettingsObject),
+		lock:     &sync.RWMutex{},
 	}
 }
 

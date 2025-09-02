@@ -54,8 +54,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			c.Cleanup(cleanup)
 
-			manualReg, err := registrySet.ManualRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Registry is already user-aware from setupTestRegistrySet
 
 			// Create test hierarchy
 			location := createTestLocation(c, registrySet)
@@ -66,7 +65,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 			tc.manual.CommodityID = commodity.ID
 
 			// Create manual
-			result, err := manualReg.Create(ctx, tc.manual)
+			result, err := registrySet.ManualRegistry.Create(ctx, tc.manual)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")

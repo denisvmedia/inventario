@@ -10,7 +10,6 @@ import (
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 func areaFromContext(ctx context.Context) *models.Area {
@@ -225,12 +224,12 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Areas(areaRegistry registry.AreaRegistry) func(r chi.Router) {
+func Areas() func(r chi.Router) {
 	api := &areasAPI{}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listAreas) // GET /areas
 		r.Route("/{areaID}", func(r chi.Router) {
-			r.Use(areaCtx(areaRegistry))
+			r.Use(areaCtx(nil))           // areaCtx will get registry from context
 			r.Get("/", api.getArea)       // GET /areas/123
 			r.Put("/", api.updateArea)    // PUT /areas/123
 			r.Delete("/", api.deleteArea) // DELETE /areas/123

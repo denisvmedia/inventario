@@ -97,7 +97,10 @@ func (f *AreaRegistryFactory) CreateServiceRegistry() registry.AreaRegistry {
 	locationRegistryInterface := f.locationRegistry.CreateServiceRegistry()
 
 	// Cast to concrete type for relationship management
-	locationRegistry := locationRegistryInterface.(*LocationRegistry)
+	locationRegistry, ok := locationRegistryInterface.(*LocationRegistry)
+	if !ok {
+		panic("locationRegistryInterface is not of type *LocationRegistry")
+	}
 
 	return &AreaRegistry{
 		Registry:         serviceRegistry,

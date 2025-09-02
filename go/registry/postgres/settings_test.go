@@ -23,12 +23,10 @@ func TestSettingsRegistry_Get_HappyPath(t *testing.T) {
 		},
 	})
 
-	// Get user-aware settings registry
-	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Test getting empty settings initially
-	settings, err := settingsRegistry.Get(ctx)
+	settings, err := registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(settings.MainCurrency, qt.IsNil)
 	c.Assert(settings.Theme, qt.IsNil)
@@ -79,16 +77,14 @@ func TestSettingsRegistry_Save_HappyPath(t *testing.T) {
 				},
 			})
 
-			// Get user-aware settings registry
-			settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Registry is already user-aware from setupTestRegistrySet
 
 			// Save the settings
-			err = settingsRegistry.Save(ctx, tc.settings)
+			err := registrySet.SettingsRegistry.Save(ctx, tc.settings)
 			c.Assert(err, qt.IsNil)
 
 			// Retrieve and verify the settings
-			retrievedSettings, err := settingsRegistry.Get(ctx)
+			retrievedSettings, err := registrySet.SettingsRegistry.Get(ctx)
 			c.Assert(err, qt.IsNil)
 
 			if tc.settings.MainCurrency != nil {
@@ -124,9 +120,7 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 		},
 	})
 
-	// Get user-aware settings registry
-	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Save initial settings
 	initialSettings := models.SettingsObject{
@@ -135,7 +129,7 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 		ShowDebugInfo:     boolPtr(true),
 		DefaultDateFormat: stringPtr("2006-01-02"),
 	}
-	err = settingsRegistry.Save(ctx, initialSettings)
+	err := registrySet.SettingsRegistry.Save(ctx, initialSettings)
 	c.Assert(err, qt.IsNil)
 
 	// Update settings
@@ -145,11 +139,11 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 		ShowDebugInfo:     boolPtr(false),
 		DefaultDateFormat: stringPtr("02/01/2006"),
 	}
-	err = settingsRegistry.Save(ctx, updatedSettings)
+	err = registrySet.SettingsRegistry.Save(ctx, updatedSettings)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the updated settings
-	retrievedSettings, err := settingsRegistry.Get(ctx)
+	retrievedSettings, err := registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(*retrievedSettings.MainCurrency, qt.Equals, "EUR")
 	c.Assert(*retrievedSettings.Theme, qt.Equals, "light")
