@@ -109,7 +109,7 @@ func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, image, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdImage, err := reg.Create(ctx, image, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Check if the commodity exists
 		var commodity models.Commodity
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
@@ -123,7 +123,7 @@ func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models
 		return nil, errkit.Wrap(err, "failed to create image")
 	}
 
-	return &image, nil
+	return &createdImage, nil
 }
 
 func (r *ImageRegistry) Update(ctx context.Context, image models.Image) (*models.Image, error) {

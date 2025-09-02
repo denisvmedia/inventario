@@ -16,12 +16,10 @@ func TestSettingsRegistry_Get_HappyPath(t *testing.T) {
 
 	c := qt.New(t)
 	ctx := c.Context()
-	ctx = appctx.WithUser(ctx, &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
-			TenantID: "test-tenant-id",
-		},
-	})
+
+	// Get the test user and set user context
+	testUser := getTestUser(c, registrySet)
+	ctx = appctx.WithUser(ctx, testUser)
 
 	// Registry is already user-aware from setupTestRegistrySet
 
@@ -70,12 +68,10 @@ func TestSettingsRegistry_Save_HappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := c.Context()
-			ctx = appctx.WithUser(ctx, &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "test-user-id"},
-					TenantID: "test-tenant-id",
-				},
-			})
+
+			// Get the test user and set user context
+			testUser := getTestUser(c, registrySet)
+			ctx = appctx.WithUser(ctx, testUser)
 
 			// Registry is already user-aware from setupTestRegistrySet
 
@@ -113,12 +109,10 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 
 	c := qt.New(t)
 	ctx := c.Context()
-	ctx = appctx.WithUser(ctx, &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
-			TenantID: "test-tenant-id",
-		},
-	})
+
+	// Get the test user and set user context
+	testUser := getTestUser(c, registrySet)
+	ctx = appctx.WithUser(ctx, testUser)
 
 	// Registry is already user-aware from setupTestRegistrySet
 

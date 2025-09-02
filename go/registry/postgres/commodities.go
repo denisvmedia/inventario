@@ -84,7 +84,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdCommodity, err := reg.Create(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx) error {
 		_, err := r.getArea(ctx, tx, commodity.AreaID)
 		return err
 	})
@@ -92,7 +92,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		return nil, errkit.Wrap(err, "failed to create commodity")
 	}
 
-	return &commodity, nil
+	return &createdCommodity, nil
 }
 
 func (r *CommodityRegistry) GetByName(ctx context.Context, name string) (*models.Commodity, error) {

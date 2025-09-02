@@ -112,12 +112,12 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, file, nil)
+	createdFile, err := reg.Create(ctx, file, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create file")
 	}
 
-	return &file, nil
+	return &createdFile, nil
 }
 
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {

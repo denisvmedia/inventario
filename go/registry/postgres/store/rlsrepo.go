@@ -107,10 +107,11 @@ func (r *RLSRepository[T, P]) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (T, error) {
+	var zero T
 	tx, err := r.beginTx(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return zero, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
@@ -124,17 +125,17 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call checker function", "entity_type", r.table)
+			return zero, errkit.Wrap(err, "failed to call checker function", "entity_type", r.table)
 		}
 	}
 
 	txreg := NewTxRegistry[T](tx, r.table)
 	err = txreg.Insert(ctx, entity)
 	if err != nil {
-		return errkit.Wrap(err, "failed to insert entity")
+		return zero, errkit.Wrap(err, "failed to insert entity")
 	}
 
-	return nil
+	return entity, nil
 }
 
 func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) error {

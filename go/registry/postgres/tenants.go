@@ -101,7 +101,7 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, tenant, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdTenant, err := reg.Create(ctx, tenant, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Check if a tenant with the same slug already exists
 		var existingTenant models.Tenant
 		txReg := store.NewTxRegistry[models.Tenant](tx, r.tableNames.Tenants())
@@ -119,7 +119,7 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		return nil, errkit.Wrap(err, "failed to create tenant")
 	}
 
-	return &tenant, nil
+	return &createdTenant, nil
 }
 
 func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {

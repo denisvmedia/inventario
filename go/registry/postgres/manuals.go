@@ -109,7 +109,7 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, manual, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdManual, err := reg.Create(ctx, manual, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Check if the commodity exists
 		var commodity models.Commodity
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
@@ -123,7 +123,7 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 		return nil, errkit.Wrap(err, "failed to create manual")
 	}
 
-	return &manual, nil
+	return &createdManual, nil
 }
 
 func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*models.Manual, error) {

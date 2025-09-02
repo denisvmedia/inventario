@@ -144,12 +144,12 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, operation, nil)
+	createdOperation, err := reg.Create(ctx, operation, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create restore operation")
 	}
 
-	return &operation, nil
+	return &createdOperation, nil
 }
 
 func (r *RestoreOperationRegistry) Update(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {

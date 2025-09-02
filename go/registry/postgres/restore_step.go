@@ -117,12 +117,12 @@ func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreSte
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, step, nil)
+	createdStep, err := reg.Create(ctx, step, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create restore step")
 	}
 
-	return &step, nil
+	return &createdStep, nil
 }
 
 func (r *RestoreStepRegistry) Update(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {

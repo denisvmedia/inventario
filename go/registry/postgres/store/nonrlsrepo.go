@@ -112,10 +112,11 @@ func (r *NonRLSRepository[T, P]) Count(ctx context.Context) (int, error) {
 }
 
 // Create creates a new entity with transaction support
-func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) error {
+func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (T, error) {
+	var zero T
 	tx, err := r.dbx.Beginx()
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return zero, errkit.Wrap(err, "failed to begin transaction")
 	}
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
@@ -127,17 +128,17 @@ func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call checker function", "entity_type", r.table)
+			return zero, errkit.Wrap(err, "failed to call checker function", "entity_type", r.table)
 		}
 	}
 
 	txreg := NewTxRegistry[T](tx, r.table)
 	err = txreg.Insert(ctx, entity)
 	if err != nil {
-		return errkit.Wrap(err, "failed to insert entity")
+		return zero, errkit.Wrap(err, "failed to insert entity")
 	}
 
-	return nil
+	return entity, nil
 }
 
 // Update updates an entity with transaction support

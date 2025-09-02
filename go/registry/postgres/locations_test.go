@@ -40,14 +40,10 @@ func TestLocationRegistry_Create_HappyPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			ctx := context.Background()
-			// Get the first seeded user to use as the current user
-			users, err := registrySet.UserRegistry.List(ctx)
-			c.Assert(err, qt.IsNil)
-			c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
 
-			// Use the first seeded user (should be the admin user created by seeddata)
-			seededUser := users[0]
-			ctx = appctx.WithUser(ctx, seededUser)
+			// Get the test user and set user context
+			testUser := getTestUser(c, registrySet)
+			ctx = appctx.WithUser(ctx, testUser)
 
 			// Registry is already user-aware from setupTestRegistrySet
 			result, err := registrySet.LocationRegistry.Create(ctx, tc.location)

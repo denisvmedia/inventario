@@ -82,12 +82,12 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, export, nil)
+	createdExport, err := reg.Create(ctx, export, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create export")
 	}
 
-	return &export, nil
+	return &createdExport, nil
 }
 
 func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, error) {

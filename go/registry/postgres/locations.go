@@ -117,12 +117,12 @@ func (r *LocationRegistry) Create(ctx context.Context, location models.Location)
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, location, nil)
+	createdLocation, err := reg.Create(ctx, location, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create location")
 	}
 
-	return &location, nil
+	return &createdLocation, nil
 }
 
 func (r *LocationRegistry) Update(ctx context.Context, location models.Location) (*models.Location, error) {

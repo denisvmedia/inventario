@@ -112,7 +112,7 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, area, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdArea, err := reg.Create(ctx, area, func(ctx context.Context, tx *sqlx.Tx) error {
 		_, err := r.getLocation(ctx, tx, area.LocationID)
 		return err
 	})
@@ -120,7 +120,7 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 		return nil, errkit.Wrap(err, "failed to count areas")
 	}
 
-	return &area, nil
+	return &createdArea, nil
 }
 
 func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Area, error) {

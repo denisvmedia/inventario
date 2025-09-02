@@ -109,7 +109,7 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, invoice, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdInvoice, err := reg.Create(ctx, invoice, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Check if the commodity exists
 		var commodity models.Commodity
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
@@ -123,7 +123,7 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 		return nil, errkit.Wrap(err, "failed to create invoice")
 	}
 
-	return &invoice, nil
+	return &createdInvoice, nil
 }
 
 func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
