@@ -16,8 +16,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.AreaRegistry = (*AreaRegistry)(nil)
+// AreaRegistryFactory creates AreaRegistry instances with proper context
+type AreaRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// AreaRegistry is a context-aware registry that can only be created through the factory
 type AreaRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -26,40 +31,49 @@ type AreaRegistry struct {
 	service    bool
 }
 
-func NewAreaRegistry(dbx *sqlx.DB) *AreaRegistry {
+var _ registry.AreaRegistry = (*AreaRegistry)(nil)
+var _ registry.AreaRegistryFactory = (*AreaRegistryFactory)(nil)
+
+func NewAreaRegistry(dbx *sqlx.DB) *AreaRegistryFactory {
 	return NewAreaRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *AreaRegistry {
-	return &AreaRegistry{
+func NewAreaRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *AreaRegistryFactory {
+	return &AreaRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *AreaRegistry) MustWithCurrentUser(ctx context.Context) registry.AreaRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.AreaRegistryFactory
+
+func (f *AreaRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.AreaRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *AreaRegistry) WithCurrentUser(ctx context.Context) (registry.AreaRegistry, error) {
-	tmp := *r
-
+func (f *AreaRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.AreaRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &AreaRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *AreaRegistry) WithServiceAccount() registry.AreaRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *AreaRegistryFactory) CreateServiceRegistry() registry.AreaRegistry {
+	return &AreaRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *AreaRegistry) Get(ctx context.Context, id string) (*models.Area, error) {
@@ -94,15 +108,11 @@ func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
-	if area.GetID() == "" {
-		area.SetID(generateID())
-	}
-	area.SetTenantID(r.tenantID)
-	area.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, area, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdArea, err := reg.Create(ctx, area, func(ctx context.Context, tx *sqlx.Tx) error {
 		_, err := r.getLocation(ctx, tx, area.LocationID)
 		return err
 	})
@@ -110,7 +120,7 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 		return nil, errkit.Wrap(err, "failed to count areas")
 	}
 
-	return &area, nil
+	return &createdArea, nil
 }
 
 func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Area, error) {

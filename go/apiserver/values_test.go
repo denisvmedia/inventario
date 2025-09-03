@@ -8,21 +8,28 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func setupValuesTestData(c *qt.C) *registry.Set {
+func setupValuesTestData(c *qt.C) (*registry.FactorySet, *models.User) {
 	c.Helper()
 
-	// Create a memory registry for testing
-	registrySet := memory.NewRegistrySetWithUserID("test-user-id")
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create a memory factory set for testing
+	factorySet := memory.NewFactorySet()
+	userRegistry, testUser := newUserRegistryWithUser()
+	factorySet.UserRegistry = userRegistry
+	c.Assert(factorySet, qt.IsNotNil)
+
+	// Get user-aware registry set
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(appctx.WithUser(c.Context(), testUser)))
 
 	// Set main currency to USD
 	mainCurrency := "USD"
@@ -61,22 +68,22 @@ func setupValuesTestData(c *qt.C) *registry.Set {
 	})
 	c.Assert(err, qt.IsNil)
 
-	return registrySet
+	return factorySet, testUser
 }
 
 func TestValuesAPI_GetValues(t *testing.T) {
 	c := qt.New(t)
 
 	// Setup test data
-	registrySet := setupValuesTestData(c)
+	factorySet, testUser := setupValuesTestData(c)
 
-	// Create a router with the values endpoint
+	// Create a router with the values endpoint and required middleware
 	r := chi.NewRouter()
-	r.With(apiserver.RequireAuth(testJWTSecret, registrySet.UserRegistry)).Route("/values", apiserver.Values(registrySet))
+	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/values", apiserver.Values())
 
 	// Test GET /values
 	req := httptest.NewRequest("GET", "/values", nil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -97,6 +104,7 @@ func TestValuesAPI_GetValues(t *testing.T) {
 	// Check location totals
 	c.Assert(response.Data.Attributes.LocationTotals, qt.HasLen, 1)
 	// Get the location ID
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(appctx.WithUser(c.Context(), testUser)))
 	locations, err := registrySet.LocationRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	var locationID string

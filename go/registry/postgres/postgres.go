@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-extras/go-kit/must"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -23,23 +22,26 @@ func Register() (cleanup func() error) {
 	return cleanup
 }
 
-func NewRegistrySet(dbx *sqlx.DB) *registry.Set {
-	s := &registry.Set{}
-	s.LocationRegistry = NewLocationRegistry(dbx)
-	s.AreaRegistry = NewAreaRegistry(dbx)
-	s.SettingsRegistry = NewSettingsRegistry(dbx)
-	s.FileRegistry = NewFileRegistry(dbx)
-	s.CommodityRegistry = NewCommodityRegistry(dbx)
-	s.ImageRegistry = NewImageRegistry(dbx)
-	s.InvoiceRegistry = NewInvoiceRegistry(dbx)
-	s.ManualRegistry = NewManualRegistry(dbx)
-	s.ExportRegistry = NewExportRegistry(dbx)
-	s.RestoreStepRegistry = NewRestoreStepRegistry(dbx)
-	s.RestoreOperationRegistry = NewRestoreOperationRegistry(dbx, s.RestoreStepRegistry)
-	s.TenantRegistry = NewTenantRegistry(dbx)
-	s.UserRegistry = NewUserRegistry(dbx)
+func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
+	// Create factory instances that will create context-aware registries
+	restoreStepFactory := NewRestoreStepRegistry(dbx)
 
-	return s
+	fs := &registry.FactorySet{}
+	fs.LocationRegistryFactory = NewLocationRegistry(dbx)
+	fs.AreaRegistryFactory = NewAreaRegistry(dbx)
+	fs.SettingsRegistryFactory = NewSettingsRegistry(dbx)
+	fs.FileRegistryFactory = NewFileRegistry(dbx)
+	fs.CommodityRegistryFactory = NewCommodityRegistry(dbx)
+	fs.ImageRegistryFactory = NewImageRegistry(dbx)
+	fs.InvoiceRegistryFactory = NewInvoiceRegistry(dbx)
+	fs.ManualRegistryFactory = NewManualRegistry(dbx)
+	fs.ExportRegistryFactory = NewExportRegistry(dbx)
+	fs.RestoreStepRegistryFactory = restoreStepFactory
+	fs.RestoreOperationRegistryFactory = NewRestoreOperationRegistry(dbx, restoreStepFactory)
+	fs.TenantRegistry = NewTenantRegistry(dbx)
+	fs.UserRegistry = NewUserRegistry(dbx)
+
+	return fs
 }
 
 func NewRegistrySetWithUserID(dbx *sqlx.DB, userID, tenantID string) *registry.Set {
@@ -50,28 +52,18 @@ func NewRegistrySetWithUserID(dbx *sqlx.DB, userID, tenantID string) *registry.S
 		},
 	})
 
-	s := &registry.Set{}
-	s.LocationRegistry = must.Must(NewLocationRegistry(dbx).WithCurrentUser(ctx))
-	s.AreaRegistry = must.Must(NewAreaRegistry(dbx).WithCurrentUser(ctx))
-	s.SettingsRegistry = must.Must(NewSettingsRegistry(dbx).WithCurrentUser(ctx))
-	s.FileRegistry = must.Must(NewFileRegistry(dbx).WithCurrentUser(ctx))
-	s.CommodityRegistry = must.Must(NewCommodityRegistry(dbx).WithCurrentUser(ctx))
-	s.ImageRegistry = must.Must(NewImageRegistry(dbx).WithCurrentUser(ctx))
-	s.InvoiceRegistry = must.Must(NewInvoiceRegistry(dbx).WithCurrentUser(ctx))
-	s.ManualRegistry = must.Must(NewManualRegistry(dbx).WithCurrentUser(ctx))
-	s.ExportRegistry = must.Must(NewExportRegistry(dbx).WithCurrentUser(ctx))
-	s.RestoreStepRegistry = must.Must(NewRestoreStepRegistry(dbx).WithCurrentUser(ctx))
-	s.RestoreOperationRegistry = must.Must(NewRestoreOperationRegistry(dbx, s.RestoreStepRegistry).WithCurrentUser(ctx))
-	s.TenantRegistry = NewTenantRegistry(dbx)
-	s.UserRegistry = NewUserRegistry(dbx)
-
+	fs := NewFactorySet(dbx)
+	s, err := fs.CreateUserRegistrySet(ctx)
+	if err != nil {
+		panic(err) // This maintains the same behavior as the original must.Must calls
+	}
 	return s
 }
 
-func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (registrySet *registry.Set, err error), cleanup func() error) {
+func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (factorySet *registry.FactorySet, err error), cleanup func() error) {
 	var doCleanup = func() error { return nil }
 
-	return func(c registry.Config) (registrySet *registry.Set, err error) {
+	return func(c registry.Config) (factorySet *registry.FactorySet, err error) {
 		parsed, err := c.Parse()
 		if err != nil {
 			return nil, errkit.Wrap(err, "failed to parse config DSN")
@@ -122,8 +114,8 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (registry
 		sqlDB := stdlib.OpenDBFromPool(pool)
 		sqlxDB := sqlx.NewDb(sqlDB, "pgx")
 
-		// Create PostgreSQL registry set
-		registrySet = NewRegistrySet(sqlxDB)
+		// Create PostgreSQL factory set
+		factorySet = NewFactorySet(sqlxDB)
 
 		doCleanup = func() error {
 			err := sqlxDB.Close()
@@ -131,7 +123,7 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (registry
 			return err
 		}
 
-		return registrySet, nil
+		return factorySet, nil
 	}, doCleanup
 }
 

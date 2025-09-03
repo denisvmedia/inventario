@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
@@ -55,34 +56,42 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 		)
 	}
 
-	// Generate a new ID if one is not already provided
-	if user.GetID() == "" {
-		user.SetID(generateID())
-	}
+	// We need to handle user creation specially because of the self-referencing foreign key
+	// We'll create the user with a custom implementation that handles the UserID properly
 
-	// If UserID is not set, set it to the user's own ID (self-reference)
-	if user.UserID == "" {
-		user.UserID = user.GetID()
-	}
-
-	reg := r.newSQLRegistry()
-
-	err := reg.Create(ctx, user, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Check if a user with the same email already exists
-		var existingUser models.User
-		txReg := store.NewTxRegistry[models.User](tx, r.tableNames.Users())
-		err := txReg.ScanOneByField(ctx, store.Pair("email", user.Email), &existingUser)
-		if err == nil {
-			return errkit.WithStack(registry.ErrEmailAlreadyExists,
-				"email", user.Email,
-			)
-		} else if !errors.Is(err, store.ErrNotFound) {
-			return errkit.Wrap(err, "failed to check for existing user")
-		}
-		return nil
-	})
+	tx, err := r.dbx.Beginx()
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create user")
+		return nil, errkit.Wrap(err, "failed to begin transaction")
+	}
+	defer func() {
+		err = errors.Join(err, store.RollbackOrCommit(tx, err))
+	}()
+
+	// Generate a new server-side ID for security (ignore any user-provided ID)
+	generatedID := uuid.New().String()
+	user.ID = generatedID
+
+	// Set UserID to self-reference if not already set
+	if user.UserID == "" {
+		user.UserID = generatedID
+	}
+
+	// Check if a user with the same email already exists
+	var existingUser models.User
+	txReg := store.NewTxRegistry[models.User](tx, r.tableNames.Users())
+	err = txReg.ScanOneByField(ctx, store.Pair("email", user.Email), &existingUser)
+	if err == nil {
+		return nil, errkit.WithStack(registry.ErrEmailAlreadyExists,
+			"email", user.Email,
+		)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, errkit.Wrap(err, "failed to check for existing user")
+	}
+
+	// Insert the user
+	err = txReg.Insert(ctx, user)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to insert user")
 	}
 
 	return &user, nil

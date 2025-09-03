@@ -21,12 +21,13 @@ import (
 func TestCommoditiesList(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
+	params, testUser := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser.ID)
+	expectedCommodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities", nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 
@@ -63,16 +64,17 @@ func TestCommoditiesList(t *testing.T) {
 func TestCommodityGet(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
+	params, testUser := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser.ID)
+	expectedCommodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
-	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params).Images)
-	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
-	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params).Manuals)
+	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params, testUser.ID).Images)
+	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params, testUser.ID).Invoices)
+	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params, testUser.ID).Manuals)
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 
@@ -113,8 +115,9 @@ func TestCommodityGet(t *testing.T) {
 func TestCommodityCreate(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedAreas := must.Must(params.RegistrySet.AreaRegistry.List(context.Background()))
+	params, testUser := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser.ID)
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
 	area := expectedAreas[1]
 
 	urls := []*models.URL{
@@ -154,7 +157,7 @@ func TestCommodityCreate(t *testing.T) {
 
 	req, err := http.NewRequest("POST", "/api/v1/commodities", buf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 
@@ -191,8 +194,9 @@ func TestCommodityCreate(t *testing.T) {
 func TestCommodityUpdate(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
+	params, testUser := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser.ID)
+	expectedCommodities := must.Must(registrySet.CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	obj := &jsonapi.CommodityRequest{
@@ -227,7 +231,7 @@ func TestCommodityUpdate(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/commodities/"+commodity.ID, buf)
 	c.Check(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 
@@ -238,9 +242,9 @@ func TestCommodityUpdate(t *testing.T) {
 	body := rr.Body.Bytes()
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 
-	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params).Images)
-	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params).Invoices)
-	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params).Manuals)
+	expectedImages := sliceToSliceOfAny(getCommodityMeta(c, params, testUser.ID).Images)
+	expectedInvoices := sliceToSliceOfAny(getCommodityMeta(c, params, testUser.ID).Invoices)
+	expectedManuals := sliceToSliceOfAny(getCommodityMeta(c, params, testUser.ID).Manuals)
 
 	c.Check(body, checkers.JSONPathEquals("$.data.type"), "commodities")
 	c.Check(body, checkers.JSONPathEquals("$.data.id"), commodity.ID)
@@ -272,13 +276,13 @@ func TestCommodityUpdate(t *testing.T) {
 func TestCommodityDelete(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+commodity.ID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -291,14 +295,14 @@ func TestCommodityDelete(t *testing.T) {
 func TestCommodityDelete_MissingCommodity(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 
 	missingAreaID := "missing-area-id"
 	missingCommodityID := "missing-commodity-id"
 
 	req, err := http.NewRequest("DELETE", "/api/v1/areas/"+missingAreaID+"/commodities/"+missingCommodityID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -311,8 +315,8 @@ func TestCommodityDelete_MissingCommodity(t *testing.T) {
 func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	wrongAreaID := "wrong-area-id"
@@ -349,7 +353,7 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/commodities/"+commodity.ID, buf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -362,12 +366,12 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 func TestCommodityListImages(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	// Get file entities linked to this commodity with "images" meta
-	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "images")
+	files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "images")
 	c.Assert(err, qt.IsNil)
 
 	// Convert file entities to legacy image format for comparison
@@ -383,7 +387,7 @@ func TestCommodityListImages(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images", nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -403,12 +407,12 @@ func TestCommodityListImages(t *testing.T) {
 func TestCommodityListInvoices(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	// Get file entities linked to this commodity with "invoices" meta
-	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "invoices")
+	files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "invoices")
 	c.Assert(err, qt.IsNil)
 
 	// Convert file entities to legacy invoice format for comparison
@@ -424,7 +428,7 @@ func TestCommodityListInvoices(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices", nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -444,12 +448,12 @@ func TestCommodityListInvoices(t *testing.T) {
 func TestCommodityListManuals(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(context.Background()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(context.Background()))
 	commodity := expectedCommodities[0]
 
 	// Get file entities linked to this commodity with "manuals" meta
-	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "manuals")
+	files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "manuals")
 	c.Assert(err, qt.IsNil)
 
 	// Convert file entities to legacy manual format for comparison
@@ -465,7 +469,7 @@ func TestCommodityListManuals(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals", nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -485,14 +489,14 @@ func TestCommodityListManuals(t *testing.T) {
 func TestCommodityDeleteImage(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	imageID := "image-id-to-delete"
 
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+commodity.ID+"/images/"+imageID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -505,14 +509,14 @@ func TestCommodityDeleteImage(t *testing.T) {
 func TestCommodityDeleteInvoice(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	invoiceID := "invoice-id-to-delete"
 
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+commodity.ID+"/invoices/"+invoiceID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -525,14 +529,14 @@ func TestCommodityDeleteInvoice(t *testing.T) {
 func TestCommodityDeleteManual(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	manualID := "manual-id-to-delete"
 
 	req, err := http.NewRequest("DELETE", "/api/v1/commodities/"+commodity.ID+"/manuals/"+manualID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -545,16 +549,16 @@ func TestCommodityDeleteManual(t *testing.T) {
 func TestDownloadImage(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
-	expectedImage := must.Must(params.RegistrySet.ImageRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
+	expectedImage := must.Must(getRegistrySetFromParams(params, testUser.ID).ImageRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	imageID := expectedImage[0].ID
-	imageExt := expectedImage[0].Ext
+	imageExt := expectedImage[0].File.Ext
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images/"+imageID+"."+imageExt, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -569,13 +573,13 @@ func TestDownloadImage(t *testing.T) {
 func TestDownloadImage_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 	imageID := "image-id"
 	imageExt := "png"
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/non-existent/images/"+imageID+"."+imageExt, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -588,16 +592,16 @@ func TestDownloadImage_CommodityNotFound(t *testing.T) {
 func TestDownloadInvoice(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
-	expectedInvoices := must.Must(params.RegistrySet.InvoiceRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
+	expectedInvoices := must.Must(getRegistrySetFromParams(params, testUser.ID).InvoiceRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	invoiceID := expectedInvoices[0].ID
-	invoiceExt := expectedInvoices[0].Ext
+	invoiceExt := expectedInvoices[0].File.Ext
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices/"+invoiceID+"."+invoiceExt, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -612,13 +616,13 @@ func TestDownloadInvoice(t *testing.T) {
 func TestDownloadInvoice_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 	invoiceID := "invoice-id"
 	invoiceExt := "pdf"
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/non-existent/invoices/"+invoiceID+"."+invoiceExt, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -631,16 +635,16 @@ func TestDownloadInvoice_CommodityNotFound(t *testing.T) {
 func TestDownloadManual(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
-	expectedManuals := must.Must(params.RegistrySet.ManualRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
+	expectedManuals := must.Must(getRegistrySetFromParams(params, testUser.ID).ManualRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	manualID := expectedManuals[0].ID
-	manualExt := expectedManuals[0].Ext
+	manualExt := expectedManuals[0].File.Ext
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+manualID+"."+manualExt, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -655,13 +659,13 @@ func TestDownloadManual(t *testing.T) {
 func TestDownloadManual_CommodityNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 	manualID := "manual-id"
 	manualExt := "pdf"
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/non-existent/manuals/"+manualID+"."+manualExt, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -674,19 +678,19 @@ func TestDownloadManual_CommodityNotFound(t *testing.T) {
 func TestGetImageData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 
 	// Get file entities linked to this commodity with "images" meta
-	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "images")
+	files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "images")
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(files), qt.Not(qt.Equals), 0)
 	imageID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images/"+imageID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -697,7 +701,7 @@ func TestGetImageData(t *testing.T) {
 	body := rr.Body.Bytes()
 
 	// Get the expected file entity
-	expectedFile := must.Must(params.RegistrySet.FileRegistry.Get(c.Context(), imageID))
+	expectedFile := must.Must(getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(c.Context(), imageID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "images")
 	c.Check(body, checkers.JSONPathEquals("$.id"), expectedFile.ID)
@@ -709,14 +713,14 @@ func TestGetImageData(t *testing.T) {
 func TestGetImageData_ImageNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	nonExistentImageID := "non-existent-image-id"
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/images/"+nonExistentImageID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -729,19 +733,19 @@ func TestGetImageData_ImageNotFound(t *testing.T) {
 func TestGetInvoiceData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 
 	// Get file entities linked to this commodity with "invoices" meta
-	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "invoices")
+	files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "invoices")
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(files), qt.Not(qt.Equals), 0)
 	invoiceID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices/"+invoiceID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -752,7 +756,7 @@ func TestGetInvoiceData(t *testing.T) {
 	body := rr.Body.Bytes()
 
 	// Get the expected file entity
-	expectedFile := must.Must(params.RegistrySet.FileRegistry.Get(c.Context(), invoiceID))
+	expectedFile := must.Must(getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(c.Context(), invoiceID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "invoices")
 	c.Check(body, checkers.JSONPathEquals("$.id"), expectedFile.ID)
@@ -764,14 +768,14 @@ func TestGetInvoiceData(t *testing.T) {
 func TestGetInvoiceData_InvoiceNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	nonExistentInvoiceID := "non-existent-invoice-id"
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/invoices/"+nonExistentInvoiceID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -784,19 +788,19 @@ func TestGetInvoiceData_InvoiceNotFound(t *testing.T) {
 func TestGetManualsData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 
 	// Get file entities linked to this commodity with "manuals" meta
-	files, err := params.RegistrySet.FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "manuals")
+	files, err := getRegistrySetFromParams(params, testUser.ID).FileRegistry.ListByLinkedEntityAndMeta(c.Context(), "commodity", commodity.ID, "manuals")
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(files), qt.Not(qt.Equals), 0)
 	manualID := files[0].ID
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+manualID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -807,7 +811,7 @@ func TestGetManualsData(t *testing.T) {
 	body := rr.Body.Bytes()
 
 	// Get the expected file entity
-	expectedFile := must.Must(params.RegistrySet.FileRegistry.Get(c.Context(), manualID))
+	expectedFile := must.Must(getRegistrySetFromParams(params, testUser.ID).FileRegistry.Get(c.Context(), manualID))
 
 	c.Check(body, checkers.JSONPathEquals("$.type"), "manuals")
 	c.Check(body, checkers.JSONPathEquals("$.id"), expectedFile.ID)
@@ -819,14 +823,14 @@ func TestGetManualsData(t *testing.T) {
 func TestGetManualsData_ManualNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
-	expectedCommodities := must.Must(params.RegistrySet.CommodityRegistry.List(c.Context()))
+	params, testUser := newParams()
+	expectedCommodities := must.Must(getRegistrySetFromParams(params, testUser.ID).CommodityRegistry.List(c.Context()))
 	commodity := expectedCommodities[0]
 	nonExistentManualID := "non-existent-manual-id"
 
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+nonExistentManualID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -836,22 +840,23 @@ func TestGetManualsData_ManualNotFound(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
-func getCommodityMeta(c *qt.C, params apiserver.Params) *jsonapi.CommodityMeta {
-	expectedImages, err := params.RegistrySet.ImageRegistry.List(c.Context())
+func getCommodityMeta(c *qt.C, params apiserver.Params, userID string) *jsonapi.CommodityMeta {
+	registrySet := getRegistrySetFromParams(params, userID)
+	expectedImages, err := registrySet.ImageRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	images := make([]string, 0, len(expectedImages))
 	for _, image := range expectedImages {
 		images = append(images, image.ID)
 	}
 
-	expectedInvoices, err := params.RegistrySet.InvoiceRegistry.List(c.Context())
+	expectedInvoices, err := registrySet.InvoiceRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	invoices := make([]string, 0, len(expectedInvoices))
 	for _, invoice := range expectedInvoices {
 		invoices = append(invoices, invoice.ID)
 	}
 
-	expectedManuals, err := params.RegistrySet.ManualRegistry.List(c.Context())
+	expectedManuals, err := registrySet.ManualRegistry.List(c.Context())
 	c.Assert(err, qt.IsNil)
 	manuals := make([]string, 0, len(expectedManuals))
 	for _, manual := range expectedManuals {

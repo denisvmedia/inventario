@@ -23,7 +23,7 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 					Ext:          ".pdf",
 					MIMEType:     "application/pdf",
 				},
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id", "test-tenant-id", "test-user-id"),
+				// Note: ID will be generated server-side for security
 			},
 		},
 		{
@@ -54,25 +54,18 @@ func TestManualRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			c.Cleanup(cleanup)
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			manualReg, err := registrySet.ManualRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Registry is already user-aware from setupTestRegistrySet
 
 			// Create test hierarchy
-			location := createTestLocation(c, locationReg)
-			area := createTestArea(c, areaReg, location.ID)
+			location := createTestLocation(c, registrySet)
+			area := createTestArea(c, registrySet, location.ID)
 			commodity := createTestCommodity(c, registrySet, area.ID)
 
 			// Set commodity ID
 			tc.manual.CommodityID = commodity.ID
 
 			// Create manual
-			result, err := manualReg.Create(ctx, tc.manual)
+			result, err := registrySet.ManualRegistry.Create(ctx, tc.manual)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")
@@ -135,8 +128,8 @@ func TestManualRegistry_Create_UnhappyPath(t *testing.T) {
 
 			// For valid commodity ID tests, create test hierarchy
 			if tc.manual.CommodityID != "" && tc.manual.CommodityID != "non-existent-commodity" {
-				location := createTestLocation(c, registrySet.LocationRegistry)
-				area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+				location := createTestLocation(c, registrySet)
+				area := createTestArea(c, registrySet, location.ID)
 				commodity := createTestCommodity(c, registrySet, area.ID)
 				tc.manual.CommodityID = commodity.ID
 			}
@@ -157,8 +150,8 @@ func TestManualRegistry_Get_HappyPath(t *testing.T) {
 	ctx := c.Context()
 
 	// Create test hierarchy and manual
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 	created := createTestManual(c, registrySet, commodity.ID)
 
@@ -217,8 +210,8 @@ func TestManualRegistry_List_HappyPath(t *testing.T) {
 	c.Assert(len(manuals), qt.Equals, 0)
 
 	// Create test hierarchy and manuals
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 	manual1 := createTestManual(c, registrySet, commodity.ID)
 	manual2 := createTestManual(c, registrySet, commodity.ID)
@@ -245,8 +238,8 @@ func TestManualRegistry_Update_HappyPath(t *testing.T) {
 	ctx := c.Context()
 
 	// Create test hierarchy and manual
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 	created := createTestManual(c, registrySet, commodity.ID)
 
@@ -298,8 +291,8 @@ func TestManualRegistry_Update_UnhappyPath(t *testing.T) {
 
 			// For valid commodity ID tests, create test hierarchy
 			if tc.manual.CommodityID != "" && tc.manual.CommodityID != "non-existent-commodity" {
-				location := createTestLocation(c, registrySet.LocationRegistry)
-				area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+				location := createTestLocation(c, registrySet)
+				area := createTestArea(c, registrySet, location.ID)
 				commodity := createTestCommodity(c, registrySet, area.ID)
 				tc.manual.CommodityID = commodity.ID
 			}
@@ -320,8 +313,8 @@ func TestManualRegistry_Delete_HappyPath(t *testing.T) {
 	ctx := c.Context()
 
 	// Create test hierarchy and manual
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 	created := createTestManual(c, registrySet, commodity.ID)
 
@@ -377,8 +370,8 @@ func TestManualRegistry_Count_HappyPath(t *testing.T) {
 	c.Assert(count, qt.Equals, 0)
 
 	// Create test hierarchy and manuals
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 	createTestManual(c, registrySet, commodity.ID)
 	createTestManual(c, registrySet, commodity.ID)

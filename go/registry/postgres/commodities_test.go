@@ -87,27 +87,16 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			// Setup main currency
-			settingsReg, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-			setupMainCurrency(c, settingsReg)
-
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Setup main currency (registries are already user-aware from setupTestRegistrySet)
+			setupMainCurrency(c, registrySet.SettingsRegistry)
 
 			// Create test hierarchy
-			location := createTestLocation(c, locationReg)
-			area := createTestArea(c, areaReg, location.GetID())
+			location := createTestLocation(c, registrySet)
+			area := createTestArea(c, registrySet, location.GetID())
 			tc.commodity.AreaID = area.GetID()
 
 			// Create commodity
-			result, err := commodityReg.Create(ctx, tc.commodity)
+			result, err := registrySet.CommodityRegistry.Create(ctx, tc.commodity)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")
@@ -224,29 +213,18 @@ func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			// Setup main currency
-			settingsReg, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-			setupMainCurrency(c, settingsReg)
-
-			commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
+			// Setup main currency (registries are already user-aware from setupTestRegistrySet)
+			setupMainCurrency(c, registrySet.SettingsRegistry)
 
 			// For valid area ID tests, create test hierarchy
 			if tc.commodity.AreaID != "" && tc.commodity.AreaID != "non-existent-area" {
-				locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-				c.Assert(err, qt.IsNil)
-
-				areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-				c.Assert(err, qt.IsNil)
-
-				location := createTestLocation(c, locationReg)
-				area := createTestArea(c, areaReg, location.GetID())
+				location := createTestLocation(c, registrySet)
+				area := createTestArea(c, registrySet, location.GetID())
 				tc.commodity.AreaID = area.GetID()
 			}
 
 			// Attempt to create invalid commodity
-			result, err := commodityReg.Create(ctx, tc.commodity)
+			result, err := registrySet.CommodityRegistry.Create(ctx, tc.commodity)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -265,22 +243,15 @@ func TestCommodityRegistry_Get_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy and commodity
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	created := createTestCommodity(c, registrySet, area.GetID())
 
-	// Get the commodity
-	result, err := commodityReg.Get(ctx, created.ID)
+	// Get the commodity (registry is already user-aware)
+	result, err := registrySet.CommodityRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.ID, qt.Equals, created.ID)
@@ -340,8 +311,8 @@ func TestCommodityRegistry_List_HappyPath(t *testing.T) {
 	c.Assert(len(commodities), qt.Equals, 0)
 
 	// Create test hierarchy and commodities
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity1 := createTestCommodity(c, registrySet, area.GetID())
 	commodity2 := createTestCommodity(c, registrySet, area.GetID())
 
@@ -372,8 +343,8 @@ func TestCommodityRegistry_Update_HappyPath(t *testing.T) {
 	})
 
 	// Create test hierarchy and commodity
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	created := createTestCommodity(c, registrySet, area.GetID())
 
 	// Update the commodity
@@ -454,8 +425,8 @@ func TestCommodityRegistry_Delete_HappyPath(t *testing.T) {
 	})
 
 	// Create test hierarchy and commodity
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	created := createTestCommodity(c, registrySet, area.GetID())
 
 	// Delete the commodity
@@ -515,8 +486,8 @@ func TestCommodityRegistry_Count_HappyPath(t *testing.T) {
 	c.Assert(count, qt.Equals, 0)
 
 	// Create test hierarchy and commodities
-	location := createTestLocation(c, registrySet.LocationRegistry)
-	area := createTestArea(c, registrySet.AreaRegistry, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	createTestCommodity(c, registrySet, area.GetID())
 	createTestCommodity(c, registrySet, area.GetID())
 
@@ -541,7 +512,7 @@ func createTestImage(c *qt.C, registrySet *registry.Set, commodityID string) *mo
 			Ext:          ".jpg",
 			MIMEType:     "image/jpeg",
 		},
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-image-id-"+uuid.New().String(), "test-tenant-id", "test-user-id"),
+		// Note: ID will be generated server-side for security
 	}
 
 	createdImage, err := registrySet.ImageRegistry.Create(ctx, image)
@@ -564,7 +535,7 @@ func createTestManual(c *qt.C, registrySet *registry.Set, commodityID string) *m
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
-		TenantAwareEntityID: models.WithTenantUserAwareEntityID("test-manual-id-"+uuid.New().String(), "test-tenant-id", "test-user-id"),
+		// Note: ID will be generated server-side for security
 	}
 
 	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
@@ -611,25 +582,18 @@ func TestCommodityRegistry_GetImages_WithCreatedImage_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Create test image (automatically linked via commodity_id)
 	image := createTestImage(c, registrySet, commodity.ID)
 
 	// Verify the image is automatically linked
-	images, err := commodityReg.GetImages(ctx, commodity.ID)
+	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(images), qt.Equals, 1)
 	c.Assert(images[0], qt.Equals, image.ID)
@@ -663,10 +627,7 @@ func TestCommodityRegistry_GetImages_WithInvalidCommodity_UnhappyPath(t *testing
 				},
 			})
 
-			commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			images, err := commodityReg.GetImages(ctx, tc.commodityID)
+			images, err := registrySet.CommodityRegistry.GetImages(ctx, tc.commodityID)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(images, qt.IsNil)
 		})
@@ -685,22 +646,15 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no images
-	images, err := commodityReg.GetImages(ctx, commodity.ID)
+	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(images), qt.Equals, 0)
 
@@ -709,7 +663,7 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 	image2 := createTestImage(c, registrySet, commodity.ID)
 
 	// Should now have 2 images
-	images, err = commodityReg.GetImages(ctx, commodity.ID)
+	images, err = registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(images), qt.Equals, 2)
 
@@ -734,22 +688,15 @@ func TestCommodityRegistry_GetImages_EmptyCommodity_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Should have no images initially
-	images, err := commodityReg.GetImages(ctx, commodity.ID)
+	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(images), qt.Equals, 0)
 }
@@ -768,25 +715,18 @@ func TestCommodityRegistry_GetManuals_WithCreatedManual_HappyPath(t *testing.T) 
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Create test manual (automatically linked via commodity_id)
 	manual := createTestManual(c, registrySet, commodity.ID)
 
 	// Verify the manual is automatically linked
-	manuals, err := commodityReg.GetManuals(ctx, commodity.ID)
+	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(manuals), qt.Equals, 1)
 	c.Assert(manuals[0], qt.Equals, manual.ID)
@@ -804,22 +744,15 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no manuals
-	manuals, err := commodityReg.GetManuals(ctx, commodity.ID)
+	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(manuals), qt.Equals, 0)
 
@@ -828,7 +761,7 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 	manual2 := createTestManual(c, registrySet, commodity.ID)
 
 	// Should now have 2 manuals
-	manuals, err = commodityReg.GetManuals(ctx, commodity.ID)
+	manuals, err = registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(manuals), qt.Equals, 2)
 
@@ -853,22 +786,15 @@ func TestCommodityRegistry_GetManuals_EmptyCommodity_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Should have no manuals initially
-	manuals, err := commodityReg.GetManuals(ctx, commodity.ID)
+	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(manuals), qt.Equals, 0)
 }
@@ -887,25 +813,18 @@ func TestCommodityRegistry_GetInvoices_WithCreatedInvoice_HappyPath(t *testing.T
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Create test invoice (automatically linked via commodity_id)
 	invoice := createTestInvoice(c, registrySet, commodity.ID)
 
 	// Verify the invoice is automatically linked
-	invoices, err := commodityReg.GetInvoices(ctx, commodity.ID)
+	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(invoices), qt.Equals, 1)
 	c.Assert(invoices[0], qt.Equals, invoice.ID)
@@ -923,22 +842,15 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Initially should have no invoices
-	invoices, err := commodityReg.GetInvoices(ctx, commodity.ID)
+	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(invoices), qt.Equals, 0)
 
@@ -947,7 +859,7 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 	invoice2 := createTestInvoice(c, registrySet, commodity.ID)
 
 	// Should now have 2 invoices
-	invoices, err = commodityReg.GetInvoices(ctx, commodity.ID)
+	invoices, err = registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(invoices), qt.Equals, 2)
 
@@ -972,22 +884,15 @@ func TestCommodityRegistry_GetInvoices_EmptyCommodity_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	commodityReg, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	// Registry is already user-aware from setupTestRegistrySet
 
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.GetID())
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
 	commodity := createTestCommodity(c, registrySet, area.GetID())
 
 	// Should have no invoices initially
-	invoices, err := commodityReg.GetInvoices(ctx, commodity.ID)
+	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(invoices), qt.Equals, 0)
 }

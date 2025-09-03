@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory>
+	<locations>
+		<location id="attack-location-{{.UserID}}" name="Attack Location {{.UserID}}"/>
+	</locations>
+	<areas>
+		<area id="attack-area-{{.UserID}}" name="Attack Area {{.UserID}}" location_id="attack-location-{{.UserID}}"/>
+	</areas>
+	<commodities>
+		<commodity id="{{.CommodityID}}" name="Target Commodity" area_id="attack-area-{{.UserID}}"/>
+	</commodities>
+	<images>
+		<image id="attack-image-{{.UserID}}" commodity_id="{{.CommodityID}}" filename="attack.jpg" mime_type="image/jpeg">
+			<data>dGVzdCBkYXRh</data>
+		</image>
+	</images>
+</inventory>

@@ -15,11 +15,15 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.SettingsRegistry = (*SettingsRegistry)(nil)
+// SettingsRegistryFactory creates SettingsRegistry instances with proper context
+type SettingsRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// SettingsRegistry is a context-aware registry that can only be created through the factory
 // Use the actual Setting model instead of a separate type
 // This ensures consistency with the database schema
-
 type SettingsRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -28,40 +32,49 @@ type SettingsRegistry struct {
 	service    bool
 }
 
-func NewSettingsRegistry(dbx *sqlx.DB) *SettingsRegistry {
+var _ registry.SettingsRegistry = (*SettingsRegistry)(nil)
+var _ registry.SettingsRegistryFactory = (*SettingsRegistryFactory)(nil)
+
+func NewSettingsRegistry(dbx *sqlx.DB) *SettingsRegistryFactory {
 	return NewSettingsRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewSettingsRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *SettingsRegistry {
-	return &SettingsRegistry{
+func NewSettingsRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *SettingsRegistryFactory {
+	return &SettingsRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *SettingsRegistry) MustWithCurrentUser(ctx context.Context) registry.SettingsRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.SettingsRegistryFactory
+
+func (f *SettingsRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.SettingsRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.SettingsRegistry, error) {
-	tmp := *r
-
+func (f *SettingsRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.SettingsRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &SettingsRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *SettingsRegistry) WithServiceAccount() registry.SettingsRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *SettingsRegistryFactory) CreateServiceRegistry() registry.SettingsRegistry {
+	return &SettingsRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, error) {

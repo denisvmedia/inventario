@@ -102,15 +102,28 @@ func (ld *LocationData) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&ld.Type, validation.Required, validation.In("locations")),
 		validation.Field(&ld.Attributes, validation.Required),
 	)
+
+	// Only reject ID fields in CREATE requests (POST), allow them in UPDATE requests (PUT)
+	if httpMethod, ok := ctx.Value(httpMethodKey).(string); ok && httpMethod == "POST" {
+		fields = append(fields,
+			validation.Field(&ld.ID, validation.Empty.Error("ID field not allowed in create requests")),
+		)
+	}
+
 	return validation.ValidateStructWithContext(ctx, ld, fields...)
 }
 
 func (lr *LocationRequest) Bind(r *http.Request) error {
-	err := lr.ValidateWithContext(r.Context())
+	// Add HTTP method to context for validation
+	ctx := context.WithValue(r.Context(), httpMethodKey, r.Method)
+	err := lr.ValidateWithContext(ctx)
 	if err != nil {
 		return err
 	}
 
+	// For both CREATE and UPDATE requests, set the ID from the request data
+	// For CREATE, this will be empty and will be generated server-side
+	// For UPDATE, this will be the existing entity ID
 	lr.Data.Attributes.ID = lr.Data.ID
 
 	return nil

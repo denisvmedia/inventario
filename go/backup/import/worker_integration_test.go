@@ -14,23 +14,24 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
-func newTestRegistrySet() *registry.Set {
-	// Use the proper NewRegistrySet function to ensure all dependencies are set up correctly
-	registrySet := memory.NewRegistrySet()
-	return registrySet
+func newTestFactorySet() *registry.FactorySet {
+	// Use the proper NewFactorySet function to ensure all dependencies are set up correctly
+	factorySet := memory.NewFactorySet()
+	return factorySet
 }
 
 func TestImportWorkerHandlesProcessingErrors(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	importService := NewImportService(registrySet, uploadLocation)
+	importService := NewImportService(factorySet, uploadLocation)
 
 	// Setting max concurrent imports to enforce synchronous (serial) processing
-	worker := NewImportWorker(importService, registrySet, 1)
+	worker := NewImportWorker(importService, factorySet, 1)
 
 	ctx := context.Background()
 
@@ -63,15 +64,16 @@ func TestImportWorkerHandlesProcessingErrors(t *testing.T) {
 
 func TestImportWorkerProcessPendingImports(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	factorySet := newTestFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	importService := NewImportService(registrySet, uploadLocation)
+	importService := NewImportService(factorySet, uploadLocation)
 	// Setting max concurrent imports to enforce synchronous (serial) processing
-	worker := NewImportWorker(importService, registrySet, 1)
+	worker := NewImportWorker(importService, factorySet, 1)
 
 	ctx := context.Background()
 

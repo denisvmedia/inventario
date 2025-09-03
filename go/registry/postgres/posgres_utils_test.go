@@ -98,15 +98,15 @@ func getOrCreatePool(dsn string) (*pgxpool.Pool, error) {
 }
 
 // createRegistrySetFromPool creates a registry set using an existing shared pool
-func createRegistrySetFromPool(pool *pgxpool.Pool) *registry.Set {
+func createRegistrySetFromPool(pool *pgxpool.Pool) *registry.FactorySet {
 	// Create sqlx DB wrapper from the shared pgxpool
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	sqlxDB := sqlx.NewDb(sqlDB, "pgx")
 
-	// Create PostgreSQL registry set
-	registrySet := postgres.NewRegistrySetWithUserID(sqlxDB, "test-user-id", "test-tenant-id")
+	// Create PostgreSQL factory set
+	factorySet := postgres.NewFactorySet(sqlxDB)
 
-	return registrySet
+	return factorySet
 }
 
 // skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
@@ -159,84 +159,135 @@ func setupTestRegistrySet(t *testing.T) (*registry.Set, func()) {
 	err = migrateUp(t, ctx, migr, dsn)
 	c.Assert(err, qt.IsNil)
 
-	// Create registry set using the shared pool instead of creating a new one
-	registrySet := createRegistrySetFromPool(pool)
+	// Create factory set using the shared pool
+	factorySet := createRegistrySetFromPool(pool)
+
+	// Create a service registry set (without user context) to create tenant and user
+	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create test tenant and user that the tests expect
-	setupTestTenantAndUser(c, registrySet)
+	tenantID, userID := setupTestTenantAndUser(c, serviceRegistrySet)
 
-	return registrySet, func() {}
+	// Now create a user-aware registry set with the actual generated IDs
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	sqlxDB := sqlx.NewDb(sqlDB, "pgx")
+	userAwareRegistrySet := postgres.NewRegistrySetWithUserID(sqlxDB, userID, tenantID)
+
+	return userAwareRegistrySet, func() {}
 }
 
 // setupTestTenantAndUser creates the test tenant and user that the tests expect
-func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) {
+// Returns the created tenant ID and user ID for use in creating user-aware registry sets
+func setupTestTenantAndUser(c *qt.C, registrySet *registry.Set) (tenantID, userID string) {
 	c.Helper()
 
-	ctx := c.Context()
+	ctx := context.Background()
 
-	// Create test tenant if it doesn't exist
+	// Create test tenant (let the system generate the ID for security)
 	testTenant := models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant-id"},
-		Name:     "Test Tenant",
-		Slug:     "test-tenant",
-		Status:   models.TenantStatusActive,
+		// ID will be generated server-side for security
+		Name:   "Test Organization",
+		Slug:   "test-org",
+		Status: models.TenantStatusActive,
 	}
 
-	// Try to get existing tenant first
-	existingTenant, err := registrySet.TenantRegistry.Get(ctx, "test-tenant-id")
-	if err != nil {
+	// Check if tenant already exists by slug
+	tenants, err := registrySet.TenantRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+
+	var existingTenant *models.Tenant
+	for _, tenant := range tenants {
+		if tenant.Slug == testTenant.Slug {
+			existingTenant = tenant
+			tenantID = tenant.ID
+			break
+		}
+	}
+
+	if existingTenant == nil {
 		// Tenant doesn't exist, create it
-		_, err = registrySet.TenantRegistry.Create(ctx, testTenant)
+		createdTenant, err := registrySet.TenantRegistry.Create(ctx, testTenant)
 		c.Assert(err, qt.IsNil)
-	} else {
-		// Tenant exists, use it
-		_ = existingTenant
+		tenantID = createdTenant.ID
 	}
 
-	// Create test user if it doesn't exist
-	testUser := models.User{
+	// Create test user (let the system generate the ID for security)
+	testUser1 := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id", // Self-reference
+			// ID will be generated server-side for security
+			TenantID: tenantID, // Use the generated tenant ID
 		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		Role:     models.UserRoleUser,
+		Email:    "admin@test-org.com",
+		Name:     "Test Administrator",
+		Role:     models.UserRoleAdmin,
 		IsActive: true,
 	}
 
-	// Set a password
-	err = testUser.SetPassword("testpassword123")
+	err = testUser1.SetPassword("testpassword123")
 	c.Assert(err, qt.IsNil)
 
-	// Try to get existing user first
-	existingUser, err := registrySet.UserRegistry.Get(ctx, "test-user-id")
-	if err != nil {
-		// User doesn't exist, create it
-		_, err = registrySet.UserRegistry.Create(ctx, testUser)
-		c.Assert(err, qt.IsNil)
-	} else {
-		// User exists, use it
-		_ = existingUser
+	// Check if user already exists by email
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+
+	var existingUser *models.User
+	for _, user := range users {
+		if user.Email == testUser1.Email {
+			existingUser = user
+			break
+		}
 	}
+
+	if existingUser == nil {
+		// User doesn't exist, create it
+		createdUser, err := registrySet.UserRegistry.Create(ctx, testUser1)
+		c.Assert(err, qt.IsNil)
+		return tenantID, createdUser.ID
+	}
+
+	// User exists, return its ID
+	return tenantID, existingUser.ID
+}
+
+// getTestUser gets the test user created by setupTestTenantAndUser
+// This is a helper function for tests that need to set user context
+func getTestUser(c *qt.C, registrySet *registry.Set) *models.User {
+	c.Helper()
+
+	ctx := context.Background()
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+
+	// Use the first seeded user (should be the admin user created by setupTestTenantAndUser)
+	return users[0]
 }
 
 // createTestLocation creates a test location for use in tests.
-func createTestLocation(c *qt.C, locationRegistry registry.LocationRegistry) *models.Location {
+// This function requires that setupTestTenantAndUser has been called to seed test data.
+func createTestLocation(c *qt.C, registrySet *registry.Set) *models.Location {
 	c.Helper()
 
 	ctx := c.Context()
+
+	// Get the first seeded user to use for creating the location
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+
+	// Use the first seeded user (should be the admin user created by seeddata)
+	seededUser := users[0]
+
 	location := models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: seededUser.TenantID,
+			UserID:   seededUser.ID, // Use the actual generated user ID
 		},
 		Name:    "Test Location",
 		Address: "123 Test Street",
 	}
 
-	createdLocation, err := locationRegistry.Create(ctx, location)
+	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdLocation, qt.IsNotNil)
 
@@ -244,20 +295,29 @@ func createTestLocation(c *qt.C, locationRegistry registry.LocationRegistry) *mo
 }
 
 // createTestArea creates a test area for use in tests.
-func createTestArea(c *qt.C, areaRegistry registry.AreaRegistry, locationID string) *models.Area {
+func createTestArea(c *qt.C, registrySet *registry.Set, locationID string) *models.Area {
 	c.Helper()
 
 	ctx := c.Context()
+
+	// Get the first seeded user to use for creating the area
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+
+	// Use the first seeded user (should be the admin user created by seeddata)
+	seededUser := users[0]
+
 	area := models.Area{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: seededUser.TenantID,
+			UserID:   seededUser.ID, // Use the actual generated user ID
 		},
 		Name:       "Test Area",
 		LocationID: locationID,
 	}
 
-	createdArea, err := areaRegistry.Create(ctx, area)
+	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 	c.Assert(createdArea, qt.IsNotNil)
 
@@ -284,10 +344,18 @@ func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *mod
 	// Ensure main currency is set
 	setupMainCurrency(c, registrySet.SettingsRegistry)
 
+	// Get the first seeded user to use for creating the commodity
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(users), qt.Not(qt.Equals), 0, qt.Commentf("No users found - ensure setupTestTenantAndUser was called"))
+
+	// Use the first seeded user (should be the admin user created by seeddata)
+	seededUser := users[0]
+
 	commodity := models.Commodity{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			UserID:   "test-user-id",
+			TenantID: seededUser.TenantID,
+			UserID:   seededUser.ID, // Use the actual generated user ID
 		},
 		Name:                   "Test Commodity",
 		ShortName:              "TC",

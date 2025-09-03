@@ -11,40 +11,64 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.ExportRegistry = (*ExportRegistry)(nil)
+// ExportRegistryFactory creates ExportRegistry instances with proper context
+type ExportRegistryFactory struct {
+	baseExportRegistry *Registry[models.Export, *models.Export]
+}
 
+// ExportRegistry is a context-aware registry that can only be created through the factory
 type ExportRegistry struct {
 	*Registry[models.Export, *models.Export]
 
 	userID string
 }
 
-func NewExportRegistry() *ExportRegistry {
-	return &ExportRegistry{
-		Registry: NewRegistry[models.Export, *models.Export](),
+var _ registry.ExportRegistry = (*ExportRegistry)(nil)
+var _ registry.ExportRegistryFactory = (*ExportRegistryFactory)(nil)
+
+func NewExportRegistryFactory() *ExportRegistryFactory {
+	return &ExportRegistryFactory{
+		baseExportRegistry: NewRegistry[models.Export, *models.Export](),
 	}
 }
 
-func (r *ExportRegistry) MustWithCurrentUser(ctx context.Context) registry.ExportRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.ExportRegistryFactory
+
+func (f *ExportRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.ExportRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRegistry, error) {
-	tmp := *r
-
+func (f *ExportRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ExportRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = user.ID
-	return &tmp, nil
+
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.Export, *models.Export]{
+		items:  f.baseExportRegistry.items, // Share the data map
+		lock:   f.baseExportRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                    // Set user-specific userID
+	}
+
+	return &ExportRegistry{
+		Registry: userRegistry,
+		userID:   user.ID,
+	}, nil
 }
 
-func (r *ExportRegistry) WithServiceAccount() registry.ExportRegistry {
-	// Create a shallow copy of the registry with no user filtering
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-	return &tmp
+func (f *ExportRegistryFactory) CreateServiceRegistry() registry.ExportRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.Export, *models.Export]{
+		items:  f.baseExportRegistry.items, // Share the data map
+		lock:   f.baseExportRegistry.lock,  // Share the mutex pointer
+		userID: "",                         // Clear userID to bypass user filtering
+	}
+
+	return &ExportRegistry{
+		Registry: serviceRegistry,
+		userID:   "", // Clear userID to bypass user filtering
+	}
 }
 
 // List returns only non-deleted exports

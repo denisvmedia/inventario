@@ -34,10 +34,8 @@ func (r *Registry[T, P]) Create(ctx context.Context, item T) (P, error) {
 	}
 
 	iitem := P(&item)
-	// Generate a new ID if one is not already provided
-	if iitem.GetID() == "" {
-		iitem.SetID(uuid.New().String())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	iitem.SetID(uuid.New().String())
 
 	r.lock.Lock()
 	r.items.Set(iitem.GetID(), iitem)
@@ -196,10 +194,8 @@ func (r *Registry[T, P]) CreateWithUser(ctx context.Context, item T) (P, error) 
 		userAware.SetUserID(userID)
 	}
 
-	// Generate a new ID if one is not already provided
-	if iitem.GetID() == "" {
-		iitem.SetID(uuid.New().String())
-	}
+	// Always generate a new server-side ID for security (ignore any user-provided ID)
+	iitem.SetID(uuid.New().String())
 
 	r.lock.Lock()
 	r.items.Set(iitem.GetID(), iitem)

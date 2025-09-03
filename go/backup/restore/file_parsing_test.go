@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/processor"
@@ -17,23 +18,26 @@ import (
 
 func TestRestoreService_FileElementParsing(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+	}
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(c.Context(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(c.Context(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings (required for commodity validation)
-	mainCurrency := "USD"
-	settings := models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	}
-	err := registrySet.SettingsRegistry.Save(ctx, settings)
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with <file> elements (the correct structure)
@@ -80,8 +84,9 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 </inventory>`
 
 	// Create restore service with file:// blob storage for testing
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	operationID := "test-restore-operation"
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor(operationID, factorySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
 	options := types.RestoreOptions{
@@ -135,30 +140,33 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 	c.Assert(strings.HasPrefix(image.Path, "test-image-original-"), qt.IsTrue, qt.Commentf("Path should start with original filename"))
 	c.Assert(strings.HasSuffix(image.Path, ".jpg"), qt.IsTrue, qt.Commentf("Path should end with extension"))
 
-	// The image should preserve the XML ID
-	c.Assert(image.ID, qt.Equals, "test-image-1")
+	// The image should have a server-generated UUID (not the XML ID for security)
 	c.Assert(image.ID, qt.Not(qt.Equals), "")
+	c.Assert(len(image.ID), qt.Equals, 36) // UUID format: 8-4-4-4-12 characters
 }
 
 func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+	}
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(c.Context(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(c.Context(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings (required for commodity validation)
-	mainCurrency := "USD"
-	settings := models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	}
-	err := registrySet.SettingsRegistry.Save(ctx, settings)
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with <file> elements but disable file processing
@@ -205,8 +213,9 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	operationID := "test-restore-operation"
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor(operationID, factorySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing DISABLED
 	options := types.RestoreOptions{
@@ -237,23 +246,26 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 
 func TestRestoreService_PriceValidationFix(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+	}
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(c.Context(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(c.Context(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings (required for commodity validation)
-	mainCurrency := "USD"
-	settings := models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	}
-	err := registrySet.SettingsRegistry.Save(ctx, settings)
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with commodity that has original price in main currency but also has converted price
@@ -293,8 +305,9 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	operationID := "test-restore-operation"
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor(operationID, factorySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
 	options := types.RestoreOptions{
@@ -330,23 +343,26 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 
 func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+	}
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(c.Context(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(c.Context(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings (required for commodity validation)
-	mainCurrency := "USD"
-	settings := models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	}
-	err := registrySet.SettingsRegistry.Save(ctx, settings)
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with multiple entities to test for duplication
@@ -407,8 +423,9 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 </inventory>`
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	operationID := "test-restore-operation"
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor(operationID, factorySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with full replace strategy
 	options := types.RestoreOptions{
@@ -443,23 +460,26 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 
 func TestRestoreService_MultipleFileTypes(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(c.Context(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+	}
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(c.Context(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(c.Context(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Set up main currency in settings (required for commodity validation)
-	mainCurrency := "USD"
-	settings := models.SettingsObject{
-		MainCurrency: &mainCurrency,
-	}
-	err := registrySet.SettingsRegistry.Save(ctx, settings)
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
 	// Create XML with multiple file types
@@ -531,8 +551,9 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 </inventory>`
 
 	// Create restore service with file:// blob storage for testing
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
-	proc := processor.NewRestoreOperationProcessor("test-restore-operation", registrySet, entityService, "file://./test_uploads?create_dir=true")
+	operationID := " test-restore-operation"
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
+	proc := processor.NewRestoreOperationProcessor(operationID, factorySet, entityService, "file://./test_uploads?create_dir=true")
 
 	// Test restore with file data processing enabled
 	options := types.RestoreOptions{

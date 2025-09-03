@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -23,8 +24,8 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 		nonMainCurrency = "EUR"
 	}
 
-	// Create a memory registry for testing
-	registrySet := memory.NewRegistrySet()
+	// Create a memory factory set for testing
+	factorySet := memory.NewFactorySet()
 
 	ctx := appctx.WithUser(c.Context(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
@@ -33,30 +34,28 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 		},
 	})
 
+	// Create user-aware registry set
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
 	// Set main currency
-	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-	err = settingsRegistry.Save(ctx, models.SettingsObject{
+	err := registrySet.SettingsRegistry.Save(ctx, models.SettingsObject{
 		MainCurrency: &mainCurrency,
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create locations
-	locationRegistry, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-	location1, err := locationRegistry.Create(ctx, models.Location{
+	location1, err := registrySet.LocationRegistry.Create(ctx, models.Location{
 		Name: "Location 1",
 	})
 	c.Assert(err, qt.IsNil)
 
-	location2, err := locationRegistry.Create(ctx, models.Location{
+	location2, err := registrySet.LocationRegistry.Create(ctx, models.Location{
 		Name: "Location 2",
 	})
 	c.Assert(err, qt.IsNil)
 
 	// Create areas
-	areaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	areaRegistry := registrySet.AreaRegistry
 	area1, err := areaRegistry.Create(ctx, models.Area{
 		Name:       "Area 1",
 		LocationID: location1.ID,
@@ -76,8 +75,7 @@ func setupTestRegistry(c *qt.C, mainCurrency string) *registry.Set {
 	c.Assert(err, qt.IsNil)
 
 	// Create commodities
-	commodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	commodityRegistry := registrySet.CommodityRegistry
 	_, err = commodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Commodity 1",
 		ShortName:             "C1",
@@ -177,12 +175,7 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
 		registrySet := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(registrySet, &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant-id",
-				EntityID: models.EntityID{ID: "test-user-id"},
-			},
-		})
+		valuator := valuation.NewValuator(registrySet)
 
 		// Calculate global total value
 		total, err := valuator.CalculateGlobalTotalValue()
@@ -197,12 +190,7 @@ func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
 	c.Run("EUR as main currency", func(c *qt.C) {
 		// Setup test registry with EUR as main currency
 		registrySet := setupTestRegistry(c, "EUR")
-		valuator := valuation.NewValuator(registrySet, &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant-id",
-				EntityID: models.EntityID{ID: "test-user-id"},
-			},
-		})
+		valuator := valuation.NewValuator(registrySet)
 
 		// Calculate global total value
 		total, err := valuator.CalculateGlobalTotalValue()
@@ -221,12 +209,7 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
 		registrySet := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(registrySet, &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant-id",
-				EntityID: models.EntityID{ID: "test-user-id"},
-			},
-		})
+		valuator := valuation.NewValuator(registrySet)
 
 		userCtx := appctx.WithUser(c.Context(), &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
@@ -235,9 +218,7 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 			},
 		})
 
-		locReg, err := registrySet.LocationRegistry.WithCurrentUser(userCtx)
-		c.Assert(err, qt.IsNil)
-		locations, err := locReg.List(userCtx)
+		locations, err := registrySet.LocationRegistry.List(userCtx)
 		c.Assert(err, qt.IsNil)
 
 		locationsByName := map[string]string{
@@ -283,12 +264,7 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 	c.Run("USD as main currency", func(c *qt.C) {
 		// Setup test registry with USD as main currency
 		registrySet := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(registrySet, &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant-id",
-				EntityID: models.EntityID{ID: "test-user-id"},
-			},
-		})
+		valuator := valuation.NewValuator(registrySet)
 
 		// Calculate total value by area
 		areaTotals, err := valuator.CalculateTotalValueByArea()

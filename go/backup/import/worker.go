@@ -19,7 +19,7 @@ const (
 // ImportWorker processes import requests in the background
 type ImportWorker struct {
 	importService *ImportService
-	registrySet   *registry.Set
+	factorySet    *registry.FactorySet
 	pollInterval  time.Duration
 	stopCh        chan struct{}
 	wg            sync.WaitGroup
@@ -30,10 +30,10 @@ type ImportWorker struct {
 }
 
 // NewImportWorker creates a new import worker
-func NewImportWorker(importService *ImportService, registrySet *registry.Set, maxConcurrentImports int) *ImportWorker {
+func NewImportWorker(importService *ImportService, factorySet *registry.FactorySet, maxConcurrentImports int) *ImportWorker {
 	return &ImportWorker{
 		importService: importService,
-		registrySet:   registrySet,
+		factorySet:    factorySet,
 		pollInterval:  defaultPollInterval, // Check for new imports every 10 seconds
 		stopCh:        make(chan struct{}),
 		semaphore:     semaphore.NewWeighted(int64(maxConcurrentImports)),
@@ -41,10 +41,10 @@ func NewImportWorker(importService *ImportService, registrySet *registry.Set, ma
 }
 
 // NewImportWorkerWithPollInterval creates a new import worker with custom poll interval
-func NewImportWorkerWithPollInterval(importService *ImportService, registrySet *registry.Set, maxConcurrentImports int, pollInterval time.Duration) *ImportWorker {
+func NewImportWorkerWithPollInterval(importService *ImportService, factorySet *registry.FactorySet, maxConcurrentImports int, pollInterval time.Duration) *ImportWorker {
 	return &ImportWorker{
 		importService: importService,
-		registrySet:   registrySet,
+		factorySet:    factorySet,
 		pollInterval:  pollInterval,
 		stopCh:        make(chan struct{}),
 		semaphore:     semaphore.NewWeighted(int64(maxConcurrentImports)),
@@ -121,7 +121,8 @@ func (w *ImportWorker) run(ctx context.Context) {
 
 // processPendingImports finds and processes pending import requests
 func (w *ImportWorker) processPendingImports(ctx context.Context) {
-	exports, err := w.registrySet.ExportRegistry.WithServiceAccount().List(ctx)
+	expReg := w.factorySet.ExportRegistryFactory.CreateServiceRegistry()
+	exports, err := expReg.List(ctx)
 	if err != nil {
 		slog.Error("Failed to get exports", "error", err)
 		return

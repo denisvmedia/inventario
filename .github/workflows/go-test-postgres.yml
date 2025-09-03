@@ -62,10 +62,7 @@ jobs:
           # Connect as the superuser to create additional users and databases
           export PGPASSWORD=test_password
 
-          # Create the main test database for bootstrap tests (must be separate from other commands)
-          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
-            CREATE DATABASE inventario;
-          "
+          # Use the existing inventario_test database (no need to create a separate one)
 
           # Create the main application users that bootstrap migrations expect
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
@@ -89,11 +86,11 @@ jobs:
           # Grant minimal privileges (can connect but cannot create extensions)
           psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             CREATE USER limited_user WITH PASSWORD 'limited_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-            GRANT CONNECT ON DATABASE inventario TO limited_user;
+            GRANT CONNECT ON DATABASE inventario_test TO limited_user;
           "
 
-          # Connect to the inventario database and set up schema permissions
-          psql -h localhost -p 5432 -U inventario_test -d inventario -c "
+          # Set up schema permissions on the test database
+          psql -h localhost -p 5432 -U inventario_test -d inventario_test -c "
             -- Grant schema usage to main users
             GRANT ALL ON SCHEMA public TO inventario;
             GRANT ALL ON SCHEMA public TO inventario_migrator;
@@ -104,6 +101,15 @@ jobs:
 
           echo "PostgreSQL users and databases set up successfully"
 
+      - name: Run database migrations
+        env:
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
+        run: |
+          echo "Running database migrations..."
+          go run ./cmd/inventario db bootstrap apply --db-dsn="$POSTGRES_TEST_DSN" --username="inventario" --username-for-migrations="inventario_migrator"
+          go run ./cmd/inventario db migrations up --db-dsn="$POSTGRES_TEST_DSN"
+        working-directory: go
+
       - name: Run PostgreSQL registry tests
         env:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
@@ -113,9 +119,9 @@ jobs:
       - name: Run Bootstrap integration tests
         env:
           # Main DSN with superuser privileges for successful migration tests
-          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario?sslmode=disable"
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
           # Limited DSN for testing transaction rollback scenarios
-          POSTGRES_LIMITED_TEST_DSN: "postgres://limited_user:limited_password@localhost:5432/inventario?sslmode=disable"
+          POSTGRES_LIMITED_TEST_DSN: "postgres://limited_user:limited_password@localhost:5432/inventario_test?sslmode=disable"
         run: |
           echo "Running bootstrap integration tests..."
           echo "Main DSN: $POSTGRES_TEST_DSN"

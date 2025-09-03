@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -15,18 +16,23 @@ import (
 
 func TestExportDeletionOrder(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(context.Background(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
 		},
-	})
-
-	// Create in-memory registries
-	registrySet := &registry.Set{
-		ExportRegistry: memory.NewExportRegistry(),
-		FileRegistry:   memory.NewFileRegistry(),
 	}
+
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Note: We're testing the deletion order logic directly with registries
 	// rather than using the service to avoid file system complications
@@ -90,21 +96,26 @@ func TestExportDeletionOrder(t *testing.T) {
 
 func TestExportDeletionOrder_NoFile(t *testing.T) {
 	c := qt.New(t)
-	ctx := appctx.WithUser(context.Background(), &models.User{
+
+	// Create factory set and user
+	factorySet := memory.NewFactorySet()
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
 		},
-	})
-
-	// Create in-memory registries
-	registrySet := &registry.Set{
-		ExportRegistry: memory.NewExportRegistry(),
-		FileRegistry:   memory.NewFileRegistry(),
 	}
 
+	// Create user in the system first
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
 	// Create entity service
-	entityService := services.NewEntityService(registrySet, "memory://")
+	entityService := services.NewEntityService(factorySet, "memory://")
 
 	// Create an export without a file
 	export := models.Export{

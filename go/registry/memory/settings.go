@@ -13,46 +13,56 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.SettingsRegistry = (*SettingsRegistry)(nil)
+// SettingsRegistryFactory creates SettingsRegistry instances with proper context
+type SettingsRegistryFactory struct {
+	settings map[string]models.SettingsObject // userID -> settings
+	lock     *sync.RWMutex
+}
 
+// SettingsRegistry is a context-aware registry that can only be created through the factory
 type SettingsRegistry struct {
 	settings map[string]models.SettingsObject // userID -> settings
-	lock     sync.RWMutex
+	lock     *sync.RWMutex
 	userID   string
 }
 
-func NewSettingsRegistry() *SettingsRegistry {
-	return &SettingsRegistry{
+var _ registry.SettingsRegistry = (*SettingsRegistry)(nil)
+var _ registry.SettingsRegistryFactory = (*SettingsRegistryFactory)(nil)
+
+func NewSettingsRegistryFactory() *SettingsRegistryFactory {
+	return &SettingsRegistryFactory{
 		settings: make(map[string]models.SettingsObject),
+		lock:     &sync.RWMutex{},
 	}
 }
 
-func (r *SettingsRegistry) MustWithCurrentUser(ctx context.Context) registry.SettingsRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.SettingsRegistryFactory
+
+func (f *SettingsRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.SettingsRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *SettingsRegistry) WithCurrentUser(ctx context.Context) (registry.SettingsRegistry, error) {
+func (f *SettingsRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.SettingsRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
 
 	// Create a new registry with the same data but different userID
-	tmp := &SettingsRegistry{
-		settings: r.settings,
+	return &SettingsRegistry{
+		settings: f.settings,
+		lock:     f.lock,
 		userID:   user.ID,
-	}
-
-	return tmp, nil
+	}, nil
 }
 
-func (r *SettingsRegistry) WithServiceAccount() registry.SettingsRegistry {
+func (f *SettingsRegistryFactory) CreateServiceRegistry() registry.SettingsRegistry {
 	// Create a new registry with the same data but no user filtering
-	tmp := &SettingsRegistry{
-		settings: r.settings,
+	return &SettingsRegistry{
+		settings: f.settings,
+		lock:     f.lock,
 		userID:   "", // Clear userID to bypass user filtering
 	}
-	return tmp
 }
 
 func (r *SettingsRegistry) Get(_ context.Context) (models.SettingsObject, error) {

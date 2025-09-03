@@ -15,8 +15,8 @@ import (
 func TestStreamCommodityDirectly(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
-	service := NewExportService(registrySet, "")
+	factorySet := newTestFactorySet()
+	service := NewExportService(factorySet, "")
 	ctx := context.Background()
 
 	// Create a test commodity
@@ -154,8 +154,8 @@ func TestStreamingMemoryEfficiency(t *testing.T) {
 func TestEncodeCommodityMetadata(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
-	service := NewExportService(registrySet, "")
+	factorySet := newTestFactorySet()
+	service := NewExportService(factorySet, "")
 	ctx := context.Background()
 
 	commodity := &models.Commodity{

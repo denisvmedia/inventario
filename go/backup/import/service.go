@@ -19,14 +19,14 @@ import (
 
 // ImportService handles XML import operations for creating export records from external files
 type ImportService struct {
-	registrySet    *registry.Set
+	factorySet     *registry.FactorySet
 	uploadLocation string
 }
 
 // NewImportService creates a new import service
-func NewImportService(registrySet *registry.Set, uploadLocation string) *ImportService {
+func NewImportService(factorySet *registry.FactorySet, uploadLocation string) *ImportService {
 	return &ImportService{
-		registrySet:    registrySet,
+		factorySet:     factorySet,
 		uploadLocation: uploadLocation,
 	}
 }
@@ -36,7 +36,7 @@ func NewImportService(registrySet *registry.Set, uploadLocation string) *ImportS
 // and then saves it in the database.
 // The export record can be later used for restore operations.
 func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFilePath string) error {
-	expReg := s.registrySet.ExportRegistry.WithServiceAccount()
+	expReg := s.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	// Get the export record
 	exportRecord, err := expReg.Get(ctx, exportID)
 	if err != nil {
@@ -137,13 +137,13 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 	}
 
 	// Create the file entity
-	user, err := s.registrySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user")
 	}
-	fileReg, err := s.registrySet.FileRegistry.WithCurrentUser(appctx.WithUser(ctx, user))
+	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(appctx.WithUser(ctx, user))
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get file registry")
+		return nil, errkit.Wrap(err, "failed to create file registry")
 	}
 	created, err := fileReg.Create(ctx, fileEntity)
 	if err != nil {
@@ -155,7 +155,7 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 
 // markImportFailed marks an import operation as failed with an error message
 func (s *ImportService) markImportFailed(ctx context.Context, exportID, errorMessage string) error {
-	expReg := s.registrySet.ExportRegistry.WithServiceAccount()
+	expReg := s.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 
 	exportRecord, err := expReg.Get(ctx, exportID)
 	if err != nil {

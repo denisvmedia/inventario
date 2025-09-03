@@ -16,8 +16,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.ExportRegistry = (*ExportRegistry)(nil)
+// ExportRegistryFactory creates ExportRegistry instances with proper context
+type ExportRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// ExportRegistry is a context-aware registry that can only be created through the factory
 type ExportRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -26,60 +31,63 @@ type ExportRegistry struct {
 	service    bool
 }
 
-func NewExportRegistry(dbx *sqlx.DB) *ExportRegistry {
+var _ registry.ExportRegistry = (*ExportRegistry)(nil)
+var _ registry.ExportRegistryFactory = (*ExportRegistryFactory)(nil)
+
+func NewExportRegistry(dbx *sqlx.DB) *ExportRegistryFactory {
 	return NewExportRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewExportRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *ExportRegistry {
-	return &ExportRegistry{
+func NewExportRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *ExportRegistryFactory {
+	return &ExportRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *ExportRegistry) MustWithCurrentUser(ctx context.Context) registry.ExportRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.ExportRegistryFactory
+
+func (f *ExportRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.ExportRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *ExportRegistry) WithCurrentUser(ctx context.Context) (registry.ExportRegistry, error) {
-	tmp := *r
-
+func (f *ExportRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ExportRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &ExportRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *ExportRegistry) WithServiceAccount() registry.ExportRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *ExportRegistryFactory) CreateServiceRegistry() registry.ExportRegistry {
+	return &ExportRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*models.Export, error) {
-	// Generate a new ID if one is not already provided
-	if export.GetID() == "" {
-		export.SetID(generateID())
-	}
-
-	export.SetTenantID(r.tenantID)
-	export.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 	export.CreatedDate = models.PNow()
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, export, nil)
+	createdExport, err := reg.Create(ctx, export, nil)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create export")
 	}
 
-	return &export, nil
+	return &createdExport, nil
 }
 
 func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, error) {

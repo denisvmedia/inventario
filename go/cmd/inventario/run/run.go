@@ -143,15 +143,15 @@ func (c *Command) runCommand() error {
 
 	slog.Info("Selected database registry", "registry_type", fmt.Sprintf("%T", registrySetFn))
 
-	registrySet, err := registrySetFn(registry.Config(dsn))
+	factorySet, err := registrySetFn(registry.Config(dsn))
 	if err != nil {
 		slog.Error("Failed to setup registry", "error", err)
 		return err
 	}
 
-	params.RegistrySet = registrySet
+	params.FactorySet = factorySet
 	params.UploadLocation = c.config.UploadLocation
-	params.EntityService = services.NewEntityService(registrySet, params.UploadLocation)
+	params.EntityService = services.NewEntityService(factorySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
 	params.StartTime = time.Now()
 
@@ -174,21 +174,23 @@ func (c *Command) runCommand() error {
 
 	// Start export worker
 	maxConcurrentExports := c.config.MaxConcurrentExports
-	exportService := export.NewExportService(registrySet, params.UploadLocation)
-	exportWorker := export.NewExportWorker(exportService, registrySet, maxConcurrentExports)
+	exportService := export.NewExportService(factorySet, params.UploadLocation)
+	exportWorker := export.NewExportWorker(exportService, factorySet, maxConcurrentExports)
 	exportWorker.Start(ctx)
 	defer exportWorker.Stop()
 
 	// Start restore worker
-	restoreService := restore.NewRestoreService(registrySet, params.EntityService, params.UploadLocation)
-	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, params.UploadLocation)
+	restoreService := restore.NewRestoreService(factorySet, params.EntityService, params.UploadLocation)
+	// Create a service registry set for the restore worker
+	serviceRegistrySet := factorySet.CreateServiceRegistrySet()
+	restoreWorker := restore.NewRestoreWorker(restoreService, serviceRegistrySet, params.UploadLocation)
 	restoreWorker.Start(ctx)
 	defer restoreWorker.Stop()
 
 	// Start import worker
 	maxConcurrentImports := c.config.MaxConcurrentImports
-	importService := importpkg.NewImportService(registrySet, params.UploadLocation)
-	importWorker := importpkg.NewImportWorker(importService, registrySet, maxConcurrentImports)
+	importService := importpkg.NewImportService(factorySet, params.UploadLocation)
+	importWorker := importpkg.NewImportWorker(importService, factorySet, maxConcurrentImports)
 	importWorker.Start(ctx)
 	defer importWorker.Stop()
 

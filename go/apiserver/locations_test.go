@@ -9,34 +9,28 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/yalp/jsonpath"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/internal/checkers"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
 )
-
-// newParamsWithLocationRegistry creates test params with a specific location registry
-func newParamsWithLocationRegistry(locationRegistry registry.LocationRegistry) apiserver.Params {
-	params := newParams()
-	params.RegistrySet.LocationRegistry = locationRegistry
-	return params
-}
 
 func TestLocationsDelete(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
+	// Use the full params which includes EntityService and all components
+	params, testUser := newParams()
+	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
 
-	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+locations[0].ID, nil)
+	// Delete locations[1] instead of locations[0] because locations[0] has areas associated with it
+	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+locations[1].ID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
-	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count(c.Context())) - 1
+	expectedCount := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.Count(c.Context())) - 1
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	handler := apiserver.APIServer(params, mockRestoreWorker)
@@ -44,7 +38,7 @@ func TestLocationsDelete(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
 
-	cnt, err := params.RegistrySet.LocationRegistry.Count(c.Context())
+	cnt, err := getRegistrySetFromParams(params, testUser.ID).LocationRegistry.Count(c.Context())
 	c.Assert(err, qt.IsNil)
 	c.Assert(cnt, qt.Equals, expectedCount)
 }
@@ -66,10 +60,11 @@ func TestLocationsCreate(t *testing.T) {
 
 	req, err := http.NewRequest("POST", "/api/v1/locations", buf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+
+	// Use the full params which includes EntityService and all components
+	params, testUser := newParams()
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	expectedCount := must.Must(params.RegistrySet.LocationRegistry.Count(c.Context())) + 1
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	handler := apiserver.APIServer(params, mockRestoreWorker)
@@ -82,22 +77,31 @@ func TestLocationsCreate(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), "Address New")
 	c.Assert(body, checkers.JSONPathMatches("$.data.id", qt.Matches), "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$")
 
-	cnt, err := params.RegistrySet.LocationRegistry.Count(c.Context())
+	// Extract the created location ID and verify it can be retrieved
+	var v any
+	err = json.Unmarshal(body, &v)
 	c.Assert(err, qt.IsNil)
-	c.Assert(cnt, qt.Equals, expectedCount)
+	locationID, err := jsonpath.Read(v, "$.data.id")
+	c.Assert(err, qt.IsNil)
+
+	// Verify the location can be retrieved by ID to ensure it was properly persisted
+	retrievedLocation, err := getRegistrySetFromParams(params, testUser.ID).LocationRegistry.Get(c.Context(), locationID.(string))
+	c.Assert(err, qt.IsNil)
+	c.Assert(retrievedLocation.Name, qt.Equals, "LocationResponse New")
+	c.Assert(retrievedLocation.Address, qt.Equals, "Address New")
 }
 
 func TestLocationsGet(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	params.RegistrySet.AreaRegistry = newAreaRegistry(params.RegistrySet.LocationRegistry)
-	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
+	// Use the full params which includes EntityService and all components
+	params, testUser := newParams()
+	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	req, err := http.NewRequest("GET", "/api/v1/locations/"+location.ID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -112,7 +116,7 @@ func TestLocationsGet(t *testing.T) {
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), location.Name)
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), location.Address)
 
-	areas, err := params.RegistrySet.LocationRegistry.GetAreas(c.Context(), location.ID)
+	areas, err := getRegistrySetFromParams(params, testUser.ID).LocationRegistry.GetAreas(c.Context(), location.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(body, checkers.JSONPathMatches("$.data.attributes.areas", qt.HasLen), len(areas))
 	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.areas[0]"), areas[0])
@@ -122,14 +126,14 @@ func TestLocationsGet(t *testing.T) {
 func TestLocationsList(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 	// Override with specific location registry for this test
-	params.RegistrySet.LocationRegistry = newLocationRegistry()
-	expectedLocations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
+	// Note: Cannot easily replace location registry in factory pattern
+	expectedLocations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -151,8 +155,9 @@ func TestLocationsList(t *testing.T) {
 func TestLocationsUpdate(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
+	// Use the full params which includes EntityService and all components
+	params, testUser := newParams()
+	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
@@ -170,7 +175,7 @@ func TestLocationsUpdate(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -188,11 +193,14 @@ func TestLocationsUpdate(t *testing.T) {
 func TestLocationsList_EmptyRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(memory.NewLocationRegistry()) // Empty registry
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsAreaRegistryOnly() // Empty registry
+	params.FactorySet.UserRegistry = userRegistry
 
 	req, err := http.NewRequest("GET", "/api/v1/locations", nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -208,13 +216,16 @@ func TestLocationsList_EmptyRegistry(t *testing.T) {
 func TestLocationsGet_InvalidID(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsAreaRegistryOnly()
+	params.FactorySet.UserRegistry = userRegistry
 
 	invalidID := "invalid-id"
 
 	req, err := http.NewRequest("GET", "/api/v1/locations/"+invalidID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -227,8 +238,9 @@ func TestLocationsGet_InvalidID(t *testing.T) {
 func TestLocationsUpdate_PartialData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
+	// Use the full params which includes EntityService and all components
+	params, testUser := newParams()
+	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	updateObj := &jsonapi.LocationRequest{
@@ -246,7 +258,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -261,8 +273,9 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
+	// Use the full params which includes EntityService and all components
+	params, testUser := newParams()
+	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
 	location := locations[0]
 	anotherLocation := locations[1]
 
@@ -281,7 +294,7 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -294,7 +307,10 @@ func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {
 func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsAreaRegistryOnly()
+	params.FactorySet.UserRegistry = userRegistry
 
 	unknownID := "unknown-id"
 
@@ -312,7 +328,7 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+unknownID, updateBuf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -325,13 +341,16 @@ func TestLocationsUpdate_UnknownLocation(t *testing.T) {
 func TestLocationsDelete_MissingLocation(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsAreaRegistryOnly()
+	params.FactorySet.UserRegistry = userRegistry
 
 	missingID := "missing-id"
 
 	req, err := http.NewRequest("DELETE", "/api/v1/locations/"+missingID, nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -344,7 +363,10 @@ func TestLocationsDelete_MissingLocation(t *testing.T) {
 func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
+	// Create a user first to get the user ID for the location registry
+	userRegistry, testUser := newUserRegistryWithUser()
+	params, _ := newParamsAreaRegistryOnly()
+	params.FactorySet.UserRegistry = userRegistry
 
 	// Construct a request body with an unexpected data structure
 	// For example, sending an array instead of an object
@@ -352,7 +374,7 @@ func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 
 	req, err := http.NewRequest("POST", "/api/v1/locations", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 
@@ -366,8 +388,9 @@ func TestLocationsCreate_UnexpectedDataStructure(t *testing.T) {
 func TestLocationsUpdate_WithNestedData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
+	// Use the full params which includes EntityService and all components
+	params, testUser := newParams()
+	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	// This test simulates the issue where the frontend sends a nested data structure
@@ -395,7 +418,7 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, nestedUpdateBuf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
@@ -409,8 +432,9 @@ func TestLocationsUpdate_WithNestedData(t *testing.T) {
 func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParamsWithLocationRegistry(newLocationRegistry())
-	locations := must.Must(params.RegistrySet.LocationRegistry.List(c.Context()))
+	// Use the full params which includes EntityService and all components
+	params, testUser := newParams()
+	locations := must.Must(getRegistrySetFromParams(params, testUser.ID).LocationRegistry.List(c.Context()))
 	location := locations[0]
 
 	// This is the correct structure
@@ -429,7 +453,7 @@ func TestLocationsUpdate_WithCorrectData(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/api/v1/locations/"+location.ID, updateBuf)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}

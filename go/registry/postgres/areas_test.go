@@ -17,15 +17,15 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 		{
 			name: "valid area with all fields",
 			area: models.Area{
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area1", "test-tenant-id", "test-user-id"),
-				Name:                "Main Storage",
+				Name: "Main Storage",
+				// Note: ID will be generated server-side for security
 			},
 		},
 		{
 			name: "valid area with minimal fields",
 			area: models.Area{
-				TenantAwareEntityID: models.WithTenantUserAwareEntityID("area2", "test-tenant-id", "test-user-id"),
-				Name:                "Secondary Storage",
+				Name: "Secondary Storage",
+				// Note: ID will be generated server-side for security
 			},
 		},
 	}
@@ -43,18 +43,12 @@ func TestAreaRegistry_Create_HappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			c.Cleanup(cleanup)
 
-			locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
 			// Create a test location first
-			location := createTestLocation(c, locationReg)
+			location := createTestLocation(c, registrySet)
 			tc.area.LocationID = location.GetID()
 
-			// Create area
-			result, err := areaReg.Create(ctx, tc.area)
+			// Create area (registry is already user-aware from setupTestRegistrySet)
+			result, err := registrySet.AreaRegistry.Create(ctx, tc.area)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			c.Assert(result.ID, qt.Not(qt.Equals), "")
@@ -104,19 +98,14 @@ func TestAreaRegistry_Create_UnhappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
 			// For the non-existent location test, we don't need to create a location
 			// For other tests, create a location if LocationID is not empty
 			if tc.area.LocationID != "" && tc.area.LocationID != "non-existent-location" {
-				locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-				c.Assert(err, qt.IsNil)
-				location := createTestLocation(c, locationReg)
+				location := createTestLocation(c, registrySet)
 				tc.area.LocationID = location.GetID()
 			}
 
-			result, err := areaReg.Create(ctx, tc.area)
+			result, err := registrySet.AreaRegistry.Create(ctx, tc.area)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -135,18 +124,12 @@ func TestAreaRegistry_Get_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Create a test location and area
-	location := createTestLocation(c, locationReg)
-	created := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	created := createTestArea(c, registrySet, location.ID)
 
 	// Get the area
-	result, err := areaReg.Get(ctx, created.ID)
+	result, err := registrySet.AreaRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.ID, qt.Equals, created.ID)
@@ -157,6 +140,14 @@ func TestAreaRegistry_Get_HappyPath(t *testing.T) {
 func TestAreaRegistry_Get_UnhappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	testCases := []struct {
 		name string
@@ -175,17 +166,8 @@ func TestAreaRegistry_Get_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := appctx.WithUser(c.Context(), &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "test-user-id"},
-					TenantID: "test-tenant-id",
-				},
-			})
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			result, err := areaReg.Get(ctx, tc.id)
+			result, err := registrySet.AreaRegistry.Get(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -204,24 +186,18 @@ func TestAreaRegistry_List_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Initially should be empty
-	areas, err := areaReg.List(ctx)
+	areas, err := registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Equals, 0)
 
 	// Create test location and areas
-	location := createTestLocation(c, locationReg)
-	area1 := createTestArea(c, areaReg, location.ID)
-	area2 := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area1 := createTestArea(c, registrySet, location.ID)
+	area2 := createTestArea(c, registrySet, location.ID)
 
 	// List should now contain both areas
-	areas, err = areaReg.List(ctx)
+	areas, err = registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(areas), qt.Equals, 2)
 
@@ -246,20 +222,14 @@ func TestAreaRegistry_Update_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Create test location and area
-	location := createTestLocation(c, locationReg)
-	created := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	created := createTestArea(c, registrySet, location.ID)
 
 	// Update the area
 	created.Name = "Updated Area"
 
-	result, err := areaReg.Update(ctx, *created)
+	result, err := registrySet.AreaRegistry.Update(ctx, *created)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.ID, qt.Equals, created.ID)
@@ -267,7 +237,7 @@ func TestAreaRegistry_Update_HappyPath(t *testing.T) {
 	c.Assert(result.LocationID, qt.Equals, created.LocationID)
 
 	// Verify the update persisted
-	retrieved, err := areaReg.Get(ctx, created.ID)
+	retrieved, err := registrySet.AreaRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(retrieved.Name, qt.Equals, "Updated Area")
 	c.Assert(retrieved.LocationID, qt.Equals, created.LocationID)
@@ -276,6 +246,14 @@ func TestAreaRegistry_Update_HappyPath(t *testing.T) {
 func TestAreaRegistry_Update_UnhappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	testCases := []struct {
 		name string
@@ -294,17 +272,8 @@ func TestAreaRegistry_Update_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := appctx.WithUser(c.Context(), &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "test-user-id"},
-					TenantID: "test-tenant-id",
-				},
-			})
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			result, err := areaReg.Update(ctx, tc.area)
+			result, err := registrySet.AreaRegistry.Update(ctx, tc.area)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(result, qt.IsNil)
 		})
@@ -324,22 +293,16 @@ func TestAreaRegistry_Delete_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Create test location and area
-	location := createTestLocation(c, locationReg)
-	created := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	created := createTestArea(c, registrySet, location.ID)
 
 	// Delete the area
-	err = areaReg.Delete(ctx, created.ID)
+	err := registrySet.AreaRegistry.Delete(ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the area is deleted
-	result, err := areaReg.Get(ctx, created.ID)
+	result, err := registrySet.AreaRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(result, qt.IsNil)
 }
@@ -347,6 +310,14 @@ func TestAreaRegistry_Delete_HappyPath(t *testing.T) {
 func TestAreaRegistry_Delete_UnhappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
 
 	testCases := []struct {
 		name string
@@ -365,17 +336,8 @@ func TestAreaRegistry_Delete_UnhappyPath(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			ctx := appctx.WithUser(c.Context(), &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "test-user-id"},
-					TenantID: "test-tenant-id",
-				},
-			})
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			err = areaReg.Delete(ctx, tc.id)
+			err := registrySet.AreaRegistry.Delete(ctx, tc.id)
 			c.Assert(err, qt.IsNotNil)
 		})
 	}
@@ -393,24 +355,18 @@ func TestAreaRegistry_Delete_WithCommodities_UnhappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 
 	// Commodity is automatically linked to area via area_id field
 	// Try to delete the area - should fail because it has commodities
-	err = areaReg.Delete(ctx, area.ID)
+	err := registrySet.AreaRegistry.Delete(ctx, area.ID)
 	c.Assert(err, qt.IsNotNil)
 
 	// Verify the area still exists
-	result, err := areaReg.Get(ctx, area.ID)
+	result, err := registrySet.AreaRegistry.Get(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 
@@ -431,24 +387,18 @@ func TestAreaRegistry_Count_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Initially should be 0
-	count, err := areaReg.Count(ctx)
+	count, err := registrySet.AreaRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 
 	// Create test location and areas
-	location := createTestLocation(c, locationReg)
-	createTestArea(c, areaReg, location.ID)
-	createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	createTestArea(c, registrySet, location.ID)
+	createTestArea(c, registrySet, location.ID)
 
 	// Count should now be 2
-	count, err = areaReg.Count(ctx)
+	count, err = registrySet.AreaRegistry.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 2)
 }
@@ -466,20 +416,14 @@ func TestAreaRegistry_GetCommodities_WithCreatedCommodity_HappyPath(t *testing.T
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 	commodity := createTestCommodity(c, registrySet, area.ID)
 
 	// Commodity is automatically linked to area via area_id field
 	// Verify the commodity is linked
-	commodities, err := areaReg.GetCommodities(ctx, area.ID)
+	commodities, err := registrySet.AreaRegistry.GetCommodities(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(commodities), qt.Equals, 1)
 	c.Assert(commodities[0], qt.Equals, commodity.ID)
@@ -513,10 +457,7 @@ func TestAreaRegistry_GetCommodities_WithInvalidArea_UnhappyPath(t *testing.T) {
 				},
 			})
 
-			areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-			c.Assert(err, qt.IsNil)
-
-			commodities, err := areaReg.GetCommodities(ctx, tc.areaID)
+			commodities, err := registrySet.AreaRegistry.GetCommodities(ctx, tc.areaID)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(commodities, qt.IsNil)
 		})
@@ -535,18 +476,12 @@ func TestAreaRegistry_GetCommodities_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 
 	// Initially should have no commodities
-	commodities, err := areaReg.GetCommodities(ctx, area.ID)
+	commodities, err := registrySet.AreaRegistry.GetCommodities(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(commodities), qt.Equals, 0)
 
@@ -555,7 +490,7 @@ func TestAreaRegistry_GetCommodities_HappyPath(t *testing.T) {
 	commodity2 := createTestCommodity(c, registrySet, area.ID)
 
 	// Should now have 2 commodities
-	commodities, err = areaReg.GetCommodities(ctx, area.ID)
+	commodities, err = registrySet.AreaRegistry.GetCommodities(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(commodities), qt.Equals, 2)
 
@@ -580,18 +515,12 @@ func TestAreaRegistry_GetCommodities_EmptyArea_HappyPath(t *testing.T) {
 		},
 	})
 
-	locationReg, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
-	areaReg, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
-
 	// Create test hierarchy
-	location := createTestLocation(c, locationReg)
-	area := createTestArea(c, areaReg, location.ID)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.ID)
 
 	// Should have no commodities initially
-	commodities, err := areaReg.GetCommodities(ctx, area.ID)
+	commodities, err := registrySet.AreaRegistry.GetCommodities(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(commodities), qt.Equals, 0)
 }

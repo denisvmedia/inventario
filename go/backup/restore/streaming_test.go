@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/processor"
@@ -18,22 +19,34 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet := memory.NewRegistrySet()
-
-	// Set up main currency in settings
-	ctx := c.Context()
-	ctx = appctx.WithUser(ctx, &models.User{
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
 
-	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
+	entityService := services.NewEntityService(factorySet, "")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "")
 
 	// Create XML with processing instructions and various token types that should be handled properly
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -102,22 +115,34 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registries
-	registrySet := memory.NewRegistrySet()
-
-	// Set up main currency in settings
-	ctx := c.Context()
-	ctx = appctx.WithUser(ctx, &models.User{
+	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
-	})
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
 
-	err := registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	err = registrySet.SettingsRegistry.Patch(ctx, "system.main_currency", "USD")
 	c.Assert(err, qt.IsNil)
 
-	entityService := services.NewEntityService(registrySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "")
+	entityService := services.NewEntityService(factorySet, "")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "")
 
 	// This test demonstrates that the streaming XML parsing works correctly
 	// without loading everything into memory

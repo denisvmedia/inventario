@@ -13,8 +13,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.ManualRegistry = (*ManualRegistry)(nil)
+// ManualRegistryFactory creates ManualRegistry instances with proper context
+type ManualRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// ManualRegistry is a context-aware registry that can only be created through the factory
 type ManualRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -23,40 +28,49 @@ type ManualRegistry struct {
 	service    bool
 }
 
-func NewManualRegistry(dbx *sqlx.DB) *ManualRegistry {
+var _ registry.ManualRegistry = (*ManualRegistry)(nil)
+var _ registry.ManualRegistryFactory = (*ManualRegistryFactory)(nil)
+
+func NewManualRegistry(dbx *sqlx.DB) *ManualRegistryFactory {
 	return NewManualRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewManualRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *ManualRegistry {
-	return &ManualRegistry{
+func NewManualRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *ManualRegistryFactory {
+	return &ManualRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *ManualRegistry) MustWithCurrentUser(ctx context.Context) registry.ManualRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.ManualRegistryFactory
+
+func (f *ManualRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.ManualRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *ManualRegistry) WithCurrentUser(ctx context.Context) (registry.ManualRegistry, error) {
-	tmp := *r
-
+func (f *ManualRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ManualRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &ManualRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *ManualRegistry) WithServiceAccount() registry.ManualRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *ManualRegistryFactory) CreateServiceRegistry() registry.ManualRegistry {
+	return &ManualRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *ManualRegistry) Get(ctx context.Context, id string) (*models.Manual, error) {
@@ -91,16 +105,11 @@ func (r *ManualRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*models.Manual, error) {
-	// Generate a new ID if one is not already provided
-	if manual.GetID() == "" {
-		manual.SetID(generateID())
-	}
-	manual.SetTenantID(r.tenantID)
-	manual.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, manual, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdManual, err := reg.Create(ctx, manual, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Check if the commodity exists
 		var commodity models.Commodity
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
@@ -114,7 +123,7 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 		return nil, errkit.Wrap(err, "failed to create manual")
 	}
 
-	return &manual, nil
+	return &createdManual, nil
 }
 
 func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*models.Manual, error) {

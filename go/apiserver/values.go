@@ -6,14 +6,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/valuation"
 	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 type valuesAPI struct {
-	registrySet *registry.Set
 }
 
 // getValues returns the total value of commodities.
@@ -25,14 +22,15 @@ type valuesAPI struct {
 // @Success 200 {object} jsonapi.ValueResponse "OK"
 // @Router /commodities/values [get]
 func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	user, err := appctx.RequireUserFromContext(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
 	// Create a valuator
-	valuator := valuation.NewValuator(api.registrySet, user)
+	valuator := valuation.NewValuator(registrySet)
 
 	// Calculate global total
 	globalTotal, err := valuator.CalculateGlobalTotalValue()
@@ -64,10 +62,8 @@ func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revi
 }
 
 // Values returns a handler for commodity values.
-func Values(registrySet *registry.Set) func(r chi.Router) {
-	api := &valuesAPI{
-		registrySet: registrySet,
-	}
+func Values() func(r chi.Router) {
+	api := &valuesAPI{}
 
 	return func(r chi.Router) {
 		r.Get("/", api.getValues) // GET /commodities/values

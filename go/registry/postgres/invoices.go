@@ -13,8 +13,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres/store"
 )
 
-var _ registry.InvoiceRegistry = (*InvoiceRegistry)(nil)
+// InvoiceRegistryFactory creates InvoiceRegistry instances with proper context
+type InvoiceRegistryFactory struct {
+	dbx        *sqlx.DB
+	tableNames store.TableNames
+}
 
+// InvoiceRegistry is a context-aware registry that can only be created through the factory
 type InvoiceRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -23,40 +28,49 @@ type InvoiceRegistry struct {
 	service    bool
 }
 
-func NewInvoiceRegistry(dbx *sqlx.DB) *InvoiceRegistry {
+var _ registry.InvoiceRegistry = (*InvoiceRegistry)(nil)
+var _ registry.InvoiceRegistryFactory = (*InvoiceRegistryFactory)(nil)
+
+func NewInvoiceRegistry(dbx *sqlx.DB) *InvoiceRegistryFactory {
 	return NewInvoiceRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
 
-func NewInvoiceRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *InvoiceRegistry {
-	return &InvoiceRegistry{
+func NewInvoiceRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *InvoiceRegistryFactory {
+	return &InvoiceRegistryFactory{
 		dbx:        dbx,
 		tableNames: tableNames,
 	}
 }
 
-func (r *InvoiceRegistry) MustWithCurrentUser(ctx context.Context) registry.InvoiceRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.InvoiceRegistryFactory
+
+func (f *InvoiceRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.InvoiceRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *InvoiceRegistry) WithCurrentUser(ctx context.Context) (registry.InvoiceRegistry, error) {
-	tmp := *r
-
+func (f *InvoiceRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.InvoiceRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user ID from context")
 	}
-	tmp.userID = user.ID
-	tmp.tenantID = user.TenantID
-	tmp.service = false
-	return &tmp, nil
+
+	return &InvoiceRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		service:    false,
+	}, nil
 }
 
-func (r *InvoiceRegistry) WithServiceAccount() registry.InvoiceRegistry {
-	tmp := *r
-	tmp.userID = ""
-	tmp.tenantID = ""
-	tmp.service = true
-	return &tmp
+func (f *InvoiceRegistryFactory) CreateServiceRegistry() registry.InvoiceRegistry {
+	return &InvoiceRegistry{
+		dbx:        f.dbx,
+		tableNames: f.tableNames,
+		userID:     "",
+		tenantID:   "",
+		service:    true,
+	}
 }
 
 func (r *InvoiceRegistry) Get(ctx context.Context, id string) (*models.Invoice, error) {
@@ -91,16 +105,11 @@ func (r *InvoiceRegistry) Count(ctx context.Context) (int, error) {
 }
 
 func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
-	// Generate a new ID if one is not already provided
-	if invoice.GetID() == "" {
-		invoice.SetID(generateID())
-	}
-	invoice.SetTenantID(r.tenantID)
-	invoice.SetUserID(r.userID)
+	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Create(ctx, invoice, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdInvoice, err := reg.Create(ctx, invoice, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Check if the commodity exists
 		var commodity models.Commodity
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
@@ -114,7 +123,7 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 		return nil, errkit.Wrap(err, "failed to create invoice")
 	}
 
-	return &invoice, nil
+	return &createdInvoice, nil
 }
 
 func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {

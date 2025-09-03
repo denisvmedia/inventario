@@ -11,7 +11,7 @@ import (
 )
 
 type seedAPI struct {
-	registrySet *registry.Set
+	factorySet *registry.FactorySet
 }
 
 // seedDatabase seeds the database with example data.
@@ -23,7 +23,7 @@ type seedAPI struct {
 // @Success 200 {object} map[string]string "OK"
 // @Router /seed [post].
 func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
-	err := seeddata.SeedData(api.registrySet)
+	err := seeddata.SeedData(api.factorySet)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -33,9 +33,9 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 }
 
 // Seed returns a handler for seeding the database.
-func Seed(registrySet *registry.Set) func(r chi.Router) {
+func Seed(registrySet *registry.FactorySet) func(r chi.Router) {
 	api := &seedAPI{
-		registrySet: registrySet,
+		factorySet: registrySet,
 	}
 
 	return func(r chi.Router) {

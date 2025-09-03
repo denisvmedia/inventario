@@ -25,12 +25,12 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 		return
 	}
 
+	c := qt.New(b)
+
 	registrySetFunc, cleanup := postgres.NewPostgresRegistrySet()
-	registrySet, err := registrySetFunc(registry.Config(dsn))
-	if err != nil {
-		b.Fatalf("Failed to create registry set: %v", err)
-	}
 	defer cleanup()
+	factorySet, err := registrySetFunc(registry.Config(dsn))
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create registry set: %v", err))
 
 	// Create test users
 	users := make([]*models.User, 10)
@@ -45,21 +45,19 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
-		err = user.SetPassword("testpassword123")
-		if err != nil {
-			b.Fatalf("Failed to set password: %v", err)
-		}
 
-		created, err := registrySet.UserRegistry.Create(context.Background(), user)
-		if err != nil {
-			b.Fatalf("Failed to create user: %v", err)
-		}
+		err = user.SetPassword("testpassword123")
+		c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password: %v", err))
+
+		created, err := factorySet.UserRegistry.Create(context.Background(), user)
+		c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user: %v", err))
 		users[i] = created
 	}
 
 	b.ResetTimer()
 
 	b.Run("ConcurrentCommodityOperations", func(b *testing.B) {
+		c := qt.New(b)
 		b.RunParallel(func(pb *testing.PB) {
 			userIndex := 0
 			for pb.Next() {
@@ -88,41 +86,27 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 					Draft:                  false,
 				}
 
-				userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
-				if err != nil {
-					b.Errorf("Failed to create user-aware registry: %v", err)
-					continue
-				}
+				userAwareCommodityRegistry, err := factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user-aware registry: %v", err))
+
 				created, err := userAwareCommodityRegistry.Create(ctx, commodity)
-				if err != nil {
-					b.Errorf("Failed to create commodity: %v", err)
-					continue
-				}
+				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create commodity: %v", err))
 
 				// List commodities (should only see own)
-				userAwareCommodityRegistry, err = registrySet.CommodityRegistry.WithCurrentUser(ctx)
-				if err != nil {
-					b.Errorf("Failed to create user-aware registry: %v", err)
-					continue
-				}
+				userAwareCommodityRegistry, err = factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user-aware registry: %v", err))
+
 				commodities, err := userAwareCommodityRegistry.List(ctx)
-				if err != nil {
-					b.Errorf("Failed to list commodities: %v", err)
-					continue
-				}
+				c.Assert(err, qt.IsNil, qt.Commentf("Failed to list commodities: %v", err))
 
 				// Verify isolation - should only see own commodities
-				for _, c := range commodities {
-					if c.GetUserID() != user.ID {
-						b.Errorf("User %s can see commodity belonging to user %s", user.ID, c.GetUserID())
-					}
+				for _, commodity := range commodities {
+					c.Assert(commodity.GetUserID(), qt.Equals, user.ID, qt.Commentf("Expected user ID %s, got %s", user.ID, commodity.GetUserID()))
 				}
 
 				// Clean up
 				err = userAwareCommodityRegistry.Delete(ctx, created.ID)
-				if err != nil {
-					b.Errorf("Failed to delete commodity: %v", err)
-				}
+				c.Assert(err, qt.IsNil, qt.Commentf("Failed to delete commodity: %v", err))
 
 				userIndex++
 			}
@@ -179,7 +163,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 				Name:    fmt.Sprintf("Load Test Location %d", userIndex),
 				Address: fmt.Sprintf("123 Load Street %d", userIndex),
 			}
-			userAwareLocationRegistry, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+			userAwareLocationRegistry, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 			if err != nil {
 				errors <- fmt.Errorf("user %d failed to create location registry: %v", userIndex, err)
 				return
@@ -199,7 +183,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 				Name:       fmt.Sprintf("Load Test Area %d", userIndex),
 				LocationID: createdLocation.ID,
 			}
-			userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+			userAwareAreaRegistry, err := registrySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 			if err != nil {
 				errors <- fmt.Errorf("user %d failed to create area registry: %v", userIndex, err)
 				return
@@ -211,7 +195,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 			}
 
 			// Create user-aware registry once for this user
-			userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+			userAwareCommodityRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 			if err != nil {
 				errors <- fmt.Errorf("user %d failed to create user-aware registry: %v", userIndex, err)
 				return
@@ -287,7 +271,7 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 	defer cleanup()
 
 	// Create a legitimate user
-	user := createTestUser(c, registrySet, "legitimate@example.com")
+	user := createTestUser(c, registrySet.UserRegistry, "legitimate@example.com")
 	ctx := appctx.WithUser(context.Background(), user)
 
 	// Create location and area for the commodity
@@ -300,7 +284,7 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 		Name:    "Security Test Location",
 		Address: "123 Security Street",
 	}
-	userAwareLocationRegistry, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	userAwareLocationRegistry, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
 	createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
@@ -314,7 +298,7 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 		Name:       "Security Test Area",
 		LocationID: createdLocation.ID,
 	}
-	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	userAwareAreaRegistry, err := registrySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
 	createdArea, err := userAwareAreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
@@ -341,7 +325,7 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 		LastModifiedDate:       models.ToPDate("2023-01-03"),
 		Draft:                  false,
 	}
-	userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	userAwareCommodityRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
 	created, err := userAwareCommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
@@ -373,9 +357,9 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 			})
 
 			// Try to access the legitimate user's commodity
-			maliciousUserAwareRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(maliciousCtx)
+			maliciousUserAwareRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(maliciousCtx)
 			if err != nil {
-				// If WithCurrentUser fails, that's expected for malicious contexts
+				// If CreateUserRegistry fails, that's expected for malicious contexts
 				return
 			}
 			_, err = maliciousUserAwareRegistry.Get(maliciousCtx, created.ID)
@@ -412,7 +396,7 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 	defer cleanup()
 
 	// Create a user
-	user := createTestUser(c, registrySet, "perf@example.com")
+	user := createTestUser(c, registrySet.UserRegistry, "perf@example.com")
 	ctx := appctx.WithUser(context.Background(), user)
 
 	// Create location and area for commodities
@@ -425,7 +409,7 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 		Name:    "Performance Test Location",
 		Address: "123 Performance Street",
 	}
-	userAwareLocationRegistry, err := registrySet.LocationRegistry.WithCurrentUser(ctx)
+	userAwareLocationRegistry, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
 	createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
 	c.Assert(err, qt.IsNil)
@@ -439,14 +423,14 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 		Name:       "Performance Test Area",
 		LocationID: createdLocation.ID,
 	}
-	userAwareAreaRegistry, err := registrySet.AreaRegistry.WithCurrentUser(ctx)
+	userAwareAreaRegistry, err := registrySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
 	createdArea, err := userAwareAreaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
 
 	// Create many commodities
 	numCommodities := 1000
-	userAwareCommodityRegistry, err := registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	userAwareCommodityRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
 
 	for i := 0; i < numCommodities; i++ {
