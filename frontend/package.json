@@ -49,7 +49,7 @@
     "jsdom": "26.1.0",
     "postcss-html": "1.8.0",
     "postcss-scss": "4.0.9",
-    "sass": "1.91.0",
+    "sass": "1.92.0",
     "stylelint": "16.23.1",
     "stylelint-config-standard-scss": "15.0.1",
     "stylelint-scss": "6.12.1",
