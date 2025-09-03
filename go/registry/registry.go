@@ -39,29 +39,29 @@ type Registry[T any] interface {
 	Count(context.Context) (int, error)
 }
 
-type UserAwareRegistry[T any, P Registry[T]] interface {
-	// WithCurrentUser returns a new registry with user context set
-	WithCurrentUser(ctx context.Context) (P, error)
-	MustWithCurrentUser(ctx context.Context) P
+// Factory interfaces for creating context-aware registries
+// These replace the unsafe UserAwareRegistry and ServiceAwareRegistry patterns
+
+type UserRegistryFactory[T any, P Registry[T]] interface {
+	// CreateUserRegistry creates a new registry with user context from the provided context
+	CreateUserRegistry(ctx context.Context) (P, error)
+	// MustCreateUserRegistry creates a new registry with user context, panics on error
+	MustCreateUserRegistry(ctx context.Context) P
 }
 
-type ServiceAwareRegistry[T any, P Registry[T]] interface {
-	// WithServiceAccount returns a new registry with service account context
-	WithServiceAccount() P
+type ServiceRegistryFactory[T any, P Registry[T]] interface {
+	// CreateServiceRegistry creates a new registry with service account context
+	CreateServiceRegistry() P
 }
 
 type AreaRegistry interface {
 	Registry[models.Area]
-	UserAwareRegistry[models.Area, AreaRegistry]
-	ServiceAwareRegistry[models.Area, AreaRegistry]
 
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
 }
 
 type CommodityRegistry interface {
 	Registry[models.Commodity]
-	UserAwareRegistry[models.Commodity, CommodityRegistry]
-	ServiceAwareRegistry[models.Commodity, CommodityRegistry]
 
 	GetImages(ctx context.Context, commodityID string) ([]string, error)
 	GetManuals(ctx context.Context, commodityID string) ([]string, error)
@@ -81,47 +81,30 @@ type CommodityRegistry interface {
 
 type LocationRegistry interface {
 	Registry[models.Location]
-	UserAwareRegistry[models.Location, LocationRegistry]
-	ServiceAwareRegistry[models.Location, LocationRegistry]
 
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
 }
 
 type ImageRegistry interface {
 	Registry[models.Image]
-	UserAwareRegistry[models.Image, ImageRegistry]
-	ServiceAwareRegistry[models.Image, ImageRegistry]
 }
 
 type InvoiceRegistry interface {
 	Registry[models.Invoice]
-	UserAwareRegistry[models.Invoice, InvoiceRegistry]
-	ServiceAwareRegistry[models.Invoice, InvoiceRegistry]
 }
 
 type ManualRegistry interface {
 	Registry[models.Manual]
-	UserAwareRegistry[models.Manual, ManualRegistry]
-	ServiceAwareRegistry[models.Manual, ManualRegistry]
 }
 
 type SettingsRegistry interface {
 	Get(ctx context.Context) (models.SettingsObject, error)
 	Save(context.Context, models.SettingsObject) error
 	Patch(ctx context.Context, configfield string, value any) error
-
-	// WithCurrentUser returns a new registry with user context set
-	WithCurrentUser(ctx context.Context) (SettingsRegistry, error)
-	MustWithCurrentUser(ctx context.Context) SettingsRegistry
-
-	// WithServiceAccount returns a new registry with service account context
-	WithServiceAccount() SettingsRegistry
 }
 
 type ExportRegistry interface {
 	Registry[models.Export]
-	UserAwareRegistry[models.Export, ExportRegistry]
-	ServiceAwareRegistry[models.Export, ExportRegistry]
 
 	// ListWithDeleted returns all exports including soft deleted ones
 	ListWithDeleted(ctx context.Context) ([]*models.Export, error)
@@ -135,8 +118,6 @@ type ExportRegistry interface {
 
 type FileRegistry interface {
 	Registry[models.FileEntity]
-	UserAwareRegistry[models.FileEntity, FileRegistry]
-	ServiceAwareRegistry[models.FileEntity, FileRegistry]
 
 	// ListByType returns files filtered by type
 	ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error)
@@ -159,8 +140,6 @@ type FileRegistry interface {
 
 type RestoreOperationRegistry interface {
 	Registry[models.RestoreOperation]
-	UserAwareRegistry[models.RestoreOperation, RestoreOperationRegistry]
-	ServiceAwareRegistry[models.RestoreOperation, RestoreOperationRegistry]
 
 	// ListByExport returns all restore operations for an export
 	ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error)
@@ -168,8 +147,6 @@ type RestoreOperationRegistry interface {
 
 type RestoreStepRegistry interface {
 	Registry[models.RestoreStep]
-	UserAwareRegistry[models.RestoreStep, RestoreStepRegistry]
-	ServiceAwareRegistry[models.RestoreStep, RestoreStepRegistry]
 
 	// ListByRestoreOperation returns all restore steps for a restore operation
 	ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error)
@@ -201,6 +178,8 @@ type UserRegistry interface {
 	ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error)
 }
 
+// Set contains ready-to-use registries that have been created with proper user or service context.
+// This is the result of calling CreateUserRegistrySet() or CreateServiceRegistrySet() on a FactorySet.
 type Set struct {
 	LocationRegistry         LocationRegistry
 	AreaRegistry             AreaRegistry

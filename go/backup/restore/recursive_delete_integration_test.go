@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/processor"
@@ -17,8 +18,9 @@ import (
 func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 	c := qt.New(t)
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	// Create factory set and registry set with proper dependencies
+	factorySet := memory.NewFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	// Create test user in the registry
@@ -96,8 +98,8 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 </backup>`
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet, "mem://")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
+	entityService := services.NewEntityService(factorySet, "mem://")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "mem://")
 
 	// Test restore with full replace strategy (this should now work with recursive delete)
 	options := types.RestoreOptions{
@@ -131,9 +133,8 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 	c := qt.New(t)
 
-	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create factory set and registry set with proper dependencies
+	factorySet := memory.NewFactorySet()
 
 	// Create test user in the registry
 	testUser := models.User{
@@ -147,11 +148,10 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
-	_, err := registrySet.UserRegistry.Create(c.Context(), testUser)
+	tUser, err := factorySet.UserRegistry.Create(c.Context(), testUser)
 	c.Assert(err, qt.IsNil)
-
-	// Create context with the test user
-	ctx := appctx.WithUser(c.Context(), &testUser)
+	ctx := appctx.WithUser(c.Context(), tUser)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create multiple locations with areas and commodities
 	for i := 0; i < 3; i++ {
@@ -204,8 +204,8 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 	c.Assert(commodities, qt.HasLen, 6)
 
 	// Create restore service
-	entityService := services.NewEntityService(registrySet, "mem://")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", registrySet, entityService, "mem://")
+	entityService := services.NewEntityService(factorySet, "mem://")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "mem://")
 
 	// Test restore with full replace strategy
 	options := types.RestoreOptions{

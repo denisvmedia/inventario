@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"path"
@@ -16,7 +17,6 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -31,7 +31,6 @@ func exportFromContext(ctx context.Context) *models.Export {
 }
 
 type exportsAPI struct {
-	registrySet    *registry.Set
 	uploadLocation string
 	entityService  *services.EntityService
 }
@@ -46,16 +45,20 @@ type exportsAPI struct {
 // @Success 200 {object} jsonapi.ExportsResponse "OK"
 // @Router /exports [get].
 func (api *exportsAPI) listExports(w http.ResponseWriter, r *http.Request) {
-	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	expReg := registrySet.ExportRegistry
 
 	// Check if we should include deleted exports
 	includeDeleted := r.URL.Query().Get("include_deleted") == "true"
 
 	var exports []*models.Export
+	var err error
 
 	if includeDeleted {
 		exports, err = expReg.ListWithDeleted(r.Context())
@@ -93,7 +96,7 @@ func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
 
 	exp := exportFromContext(r.Context())
 	if exp == nil {
-		unprocessableEntityError(w, r, nil)
+		unprocessableEntityError(w, r, errors.New("export not found in context"))
 		return
 	}
 
@@ -114,6 +117,13 @@ func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Router /exports [post].
 func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	err := appctx.ValidateUserContext(r.Context())
 	if err != nil {
 		unauthorizedError(w, r, err)
@@ -126,9 +136,8 @@ func (api *exportsAPI) createExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	svc := export.NewExportService(api.registrySet, api.uploadLocation)
 	// Create an export to be later processed by the export worker
-	createdExport, err := svc.CreateExportFromUserInput(r.Context(), request.Data.Attributes)
+	createdExport, err := export.CreateExportFromUserInput(r.Context(), registrySet, request.Data.Attributes)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -160,7 +169,7 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 
 	exp := exportFromContext(r.Context())
 	if exp == nil {
-		unprocessableEntityError(w, r, nil)
+		unprocessableEntityError(w, r, errors.New("export not found in context"))
 		return
 	}
 
@@ -185,15 +194,18 @@ func (api *exportsAPI) deleteExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Router /exports/{id}/download [get].
 func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
+	fileReg := registrySet.FileRegistry
+
 	exp := exportFromContext(r.Context())
 	if exp == nil {
-		unprocessableEntityError(w, r, nil)
+		unprocessableEntityError(w, r, errors.New("export not found in context"))
 		return
 	}
 
@@ -211,6 +223,7 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 
 	// Get the file entity for the export
 	var fileEntity *models.FileEntity
+	var err error
 
 	switch {
 	case exp.FileID != nil && *exp.FileID != "":
@@ -302,11 +315,14 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Router /exports/import [post].
 func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
-	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	expReg := registrySet.ExportRegistry
 
 	var data jsonapi.ImportExportRequest
 	if err := render.Bind(r, &data); err != nil {
@@ -353,20 +369,23 @@ func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io
 	return b.NewReader(context.Background(), filePath, nil)
 }
 
-func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
+func exportCtx() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Get user-aware settings registry from context
+			registrySet := RegistrySetFromContext(r.Context())
+			if registrySet == nil {
+				http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+				return
+			}
+
 			exportID := chi.URLParam(r, "id")
 			if exportID == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			expReg, err := registrySet.ExportRegistry.WithCurrentUser(r.Context())
-			if err != nil {
-				renderEntityError(w, r, err)
-				return
-			}
+			expReg := registrySet.ExportRegistry
 
 			exp, err := expReg.Get(r.Context(), exportID)
 			if err != nil {
@@ -383,7 +402,6 @@ func exportCtx(registrySet *registry.Set) func(next http.Handler) http.Handler {
 // Exports sets up the exports API routes.
 func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Router) {
 	api := &exportsAPI{
-		registrySet:    params.RegistrySet,
 		uploadLocation: params.UploadLocation,
 		entityService:  params.EntityService,
 	}
@@ -394,11 +412,11 @@ func Exports(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Rou
 		r.Post("/import", api.importExport)
 
 		r.Route("/{id}", func(r chi.Router) {
-			r.Use(exportCtx(params.RegistrySet))
+			r.Use(exportCtx())
 			r.Get("/", api.apiGetExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
-			r.Route("/restores", ExportRestores(params, restoreWorker))
+			r.Route("/restores", ExportRestores(restoreWorker))
 		})
 	}
 }

@@ -12,13 +12,11 @@ import (
 	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/internal/version"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 type systemAPI struct {
-	settingsRegistry registry.SettingsRegistry
-	debugInfo        *debug.Info
-	startTime        time.Time
+	debugInfo *debug.Info
+	startTime time.Time
 }
 
 // SystemInfo contains comprehensive system information
@@ -54,12 +52,13 @@ type SystemInfo struct {
 // @Success 200 {object} SystemInfo "OK"
 // @Router /system [get]
 func (api *systemAPI) getSystemInfo(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	// Get user-aware settings registry
-	settingsRegistry, err := api.settingsRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	// Get user-aware settings registry from context
+	regSet := RegistrySetFromContext(r.Context())
+	if regSet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+	settingsRegistry := regSet.SettingsRegistry
 
 	// Get version information
 	buildInfo := version.Get()
@@ -142,11 +141,10 @@ func pluralize(value int) string {
 }
 
 // System returns a handler for system information.
-func System(settingsRegistry registry.SettingsRegistry, debugInfo *debug.Info, startTime time.Time) func(r chi.Router) {
+func System(debugInfo *debug.Info, startTime time.Time) func(r chi.Router) {
 	api := &systemAPI{
-		settingsRegistry: settingsRegistry,
-		debugInfo:        debugInfo,
-		startTime:        startTime,
+		debugInfo: debugInfo,
+		startTime: startTime,
 	}
 
 	return func(r chi.Router) {

@@ -11,15 +11,15 @@ import (
 
 // EntityService provides business logic for entity operations including recursive deletion
 type EntityService struct {
-	registrySet *registry.Set
+	factorySet  *registry.FactorySet
 	fileService *FileService
 }
 
 // NewEntityService creates a new entity service
-func NewEntityService(registrySet *registry.Set, uploadLocation string) *EntityService {
+func NewEntityService(factorySet *registry.FactorySet, uploadLocation string) *EntityService {
 	return &EntityService{
-		registrySet: registrySet,
-		fileService: NewFileService(registrySet, uploadLocation),
+		factorySet:  factorySet,
+		fileService: NewFileService(factorySet, uploadLocation),
 	}
 }
 
@@ -31,9 +31,9 @@ func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string)
 		return errkit.Wrap(err, "failed to delete linked files")
 	}
 
-	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get commodity registry")
+		return errkit.Wrap(err, "failed to create commodity registry")
 	}
 
 	// Then delete the commodity itself
@@ -42,9 +42,9 @@ func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string)
 
 // DeleteAreaRecursive deletes an area and all its commodities recursively
 func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) error {
-	areaReg, err := s.registrySet.AreaRegistry.WithCurrentUser(ctx)
+	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get area registry")
+		return errkit.Wrap(err, "failed to create area registry")
 	}
 
 	// Check if area exists first - if it's already deleted, that's fine
@@ -79,9 +79,9 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 
 // DeleteLocationRecursive deletes a location and all its areas and commodities recursively
 func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) error {
-	locReg, err := s.registrySet.LocationRegistry.WithCurrentUser(ctx)
+	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get location registry")
+		return errkit.Wrap(err, "failed to create location registry")
 	}
 
 	// Get the location to ensure it exists
@@ -112,9 +112,9 @@ func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) 
 
 // DeleteExportWithFile deletes an export and its associated file
 func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) error {
-	expReg, err := s.registrySet.ExportRegistry.WithCurrentUser(ctx)
+	expReg, err := s.factorySet.ExportRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get export registry")
+		return errkit.Wrap(err, "failed to create export registry")
 	}
 
 	// Get the export to check if it has a linked file

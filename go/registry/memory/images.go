@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-extras/go-kit/must"
 
@@ -11,48 +12,95 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.ImageRegistry = (*ImageRegistry)(nil)
+// ImageRegistryFactory creates ImageRegistry instances with proper context
+type ImageRegistryFactory struct {
+	baseImageRegistry *Registry[models.Image, *models.Image]
+	commodityRegistry *CommodityRegistryFactory // required dependency for relationship tracking
+}
 
-type baseImageRegistry = Registry[models.Image, *models.Image]
+// ImageRegistry is a context-aware registry that can only be created through the factory
 type ImageRegistry struct {
-	*baseImageRegistry
+	*Registry[models.Image, *models.Image]
 
 	userID            string
 	commodityRegistry *CommodityRegistry // required dependency for relationship tracking
 }
 
-func NewImageRegistry(commodityRegistry *CommodityRegistry) *ImageRegistry {
-	return &ImageRegistry{
+var _ registry.ImageRegistry = (*ImageRegistry)(nil)
+var _ registry.ImageRegistryFactory = (*ImageRegistryFactory)(nil)
+
+func NewImageRegistryFactory(commodityRegistry *CommodityRegistryFactory) *ImageRegistryFactory {
+	return &ImageRegistryFactory{
 		baseImageRegistry: NewRegistry[models.Image, *models.Image](),
 		commodityRegistry: commodityRegistry,
 	}
 }
 
-func (r *ImageRegistry) MustWithCurrentUser(ctx context.Context) registry.ImageRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.ImageRegistryFactory
+
+func (f *ImageRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.ImageRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *ImageRegistry) WithCurrentUser(ctx context.Context) (registry.ImageRegistry, error) {
-	tmp := *r
-
+func (f *ImageRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ImageRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = user.ID
-	return &tmp, nil
+
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.Image, *models.Image]{
+		items:  f.baseImageRegistry.items, // Share the data map
+		lock:   f.baseImageRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                   // Set user-specific userID
+	}
+
+	// Create user-aware commodity registry
+	commodityRegistryInterface, err := f.commodityRegistry.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create user commodity registry")
+	}
+
+	// Cast to concrete type for relationship management
+	commodityRegistry, ok := commodityRegistryInterface.(*CommodityRegistry)
+	if !ok {
+		return nil, errors.New("failed to cast commodity registry to concrete type")
+	}
+
+	return &ImageRegistry{
+		Registry:          userRegistry,
+		userID:            user.ID,
+		commodityRegistry: commodityRegistry,
+	}, nil
 }
 
-func (r *ImageRegistry) WithServiceAccount() registry.ImageRegistry {
-	// Create a shallow copy of the registry with no user filtering
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-	return &tmp
+func (f *ImageRegistryFactory) CreateServiceRegistry() registry.ImageRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.Image, *models.Image]{
+		items:  f.baseImageRegistry.items, // Share the data map
+		lock:   f.baseImageRegistry.lock,  // Share the mutex pointer
+		userID: "",                        // Clear userID to bypass user filtering
+	}
+
+	// Create service-aware commodity registry
+	commodityRegistryInterface := f.commodityRegistry.CreateServiceRegistry()
+
+	// Cast to concrete type for relationship management
+	commodityRegistry, ok := commodityRegistryInterface.(*CommodityRegistry)
+	if !ok {
+		panic("commodityRegistryInterface is not of type *CommodityRegistry")
+	}
+
+	return &ImageRegistry{
+		Registry:          serviceRegistry,
+		userID:            "", // Clear userID to bypass user filtering
+		commodityRegistry: commodityRegistry,
+	}
 }
 
 func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models.Image, error) {
 	// Use CreateWithUser to ensure user context is applied
-	newImage, err := r.baseImageRegistry.CreateWithUser(ctx, image)
+	newImage, err := r.Registry.CreateWithUser(ctx, image)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create image")
 	}
@@ -66,12 +114,12 @@ func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models
 func (r *ImageRegistry) Update(ctx context.Context, image models.Image) (*models.Image, error) {
 	// Get the existing image to check if CommodityID changed
 	var oldCommodityID string
-	if existingImage, err := r.baseImageRegistry.Get(ctx, image.GetID()); err == nil {
+	if existingImage, err := r.Registry.Get(ctx, image.GetID()); err == nil {
 		oldCommodityID = existingImage.CommodityID
 	}
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
-	updatedImage, err := r.baseImageRegistry.UpdateWithUser(ctx, image)
+	updatedImage, err := r.Registry.UpdateWithUser(ctx, image)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update image")
 	}
@@ -92,14 +140,14 @@ func (r *ImageRegistry) Update(ctx context.Context, image models.Image) (*models
 
 func (r *ImageRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this image from its parent commodity's image list
-	image, err := r.baseImageRegistry.Get(ctx, id)
+	image, err := r.Registry.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get image")
 	}
 
 	_ = r.commodityRegistry.DeleteImage(ctx, image.CommodityID, id)
 
-	err = r.baseImageRegistry.Delete(ctx, id)
+	err = r.Registry.Delete(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete image")
 	}

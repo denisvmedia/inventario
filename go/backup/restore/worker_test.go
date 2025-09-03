@@ -7,46 +7,49 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
-func newTestRegistrySet() *registry.Set {
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	restoreStepRegistry := memory.NewRestoreStepRegistry()
-
-	return &registry.Set{
-		LocationRegistry:         locationRegistry,
-		AreaRegistry:             areaRegistry,
-		CommodityRegistry:        commodityRegistry,
-		ImageRegistry:            memory.NewImageRegistry(commodityRegistry),
-		InvoiceRegistry:          memory.NewInvoiceRegistry(commodityRegistry),
-		ManualRegistry:           memory.NewManualRegistry(commodityRegistry),
-		SettingsRegistry:         memory.NewSettingsRegistry(),
-		ExportRegistry:           memory.NewExportRegistry(),
-		RestoreOperationRegistry: memory.NewRestoreOperationRegistry(restoreStepRegistry),
-		RestoreStepRegistry:      restoreStepRegistry,
-		FileRegistry:             fileRegistry,
-	}
-}
-
 func TestNewRestoreWorker(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	// Create test registries
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
+
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	// Note: user context already set above
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet, uploadLocation)
-	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
+	entityService := services.NewEntityService(factorySet, uploadLocation)
+	restoreService := restore.NewRestoreService(factorySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	c.Assert(worker, qt.IsNotNil)
@@ -55,14 +58,38 @@ func TestNewRestoreWorker(t *testing.T) {
 
 func TestRestoreWorkerStartStop(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	// Create test registries
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
+
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	// Note: user context already set above
 
 	// Create a temporary directory for restores
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet, uploadLocation)
-	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
+	entityService := services.NewEntityService(factorySet, uploadLocation)
+	restoreService := restore.NewRestoreService(factorySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -91,13 +118,37 @@ func TestRestoreWorkerStartStop(t *testing.T) {
 func TestRestoreWorkerConcurrentAccess(t *testing.T) {
 	c := qt.New(t)
 	// Test concurrent access to worker methods
-	registrySet := newTestRegistrySet()
+	// Create test registries
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
+
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	// Note: user context already set above
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet, uploadLocation)
-	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
+	entityService := services.NewEntityService(factorySet, uploadLocation)
+	restoreService := restore.NewRestoreService(factorySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -138,13 +189,37 @@ func TestRestoreWorkerConcurrentAccess(t *testing.T) {
 func TestRestoreWorkerContextCancellation(t *testing.T) {
 	c := qt.New(t)
 	// Test that worker respects context cancellation
-	registrySet := newTestRegistrySet()
+	// Create test registries
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
+
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	// Note: user context already set above
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet, uploadLocation)
-	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
+	entityService := services.NewEntityService(factorySet, uploadLocation)
+	restoreService := restore.NewRestoreService(factorySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -165,14 +240,38 @@ func TestRestoreWorkerContextCancellation(t *testing.T) {
 
 func TestRestoreWorkerConfigurableConcurrentLimit(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	// Create test registries
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
+
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	// Note: user context already set above
 
 	// Create a temporary directory for restores
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet, uploadLocation)
-	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
+	entityService := services.NewEntityService(factorySet, uploadLocation)
+	restoreService := restore.NewRestoreService(factorySet, entityService, uploadLocation)
 
 	// Test with different concurrent limits
 	worker1 := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
@@ -183,16 +282,38 @@ func TestRestoreWorkerConfigurableConcurrentLimit(t *testing.T) {
 
 func TestHasRunningRestores(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	// Create test registries
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
+
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	ctx = appctx.WithUser(ctx, &user)
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet, uploadLocation)
-	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
+	entityService := services.NewEntityService(factorySet, uploadLocation)
+	restoreService := restore.NewRestoreService(factorySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
-
-	ctx := context.Background()
 
 	// Initially no running restores
 	hasRunning, err := worker.HasRunningRestores(ctx)
@@ -223,16 +344,38 @@ func TestHasRunningRestores(t *testing.T) {
 
 func TestHasRunningRestores_PendingAlsoBlocks(t *testing.T) {
 	c := qt.New(t)
-	registrySet := newTestRegistrySet()
+	// Create test registries
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Name:     "Test Tenant",
+	}
+	ctx := c.Context()
+
+	// Create test registries
+	factorySet := memory.NewFactorySet()
+	u, err := factorySet.UserRegistry.Create(ctx, user)
+	qt.Assert(t, err, qt.IsNil)
+	must.Must(factorySet.TenantRegistry.Create(ctx, tenant))
+	ctx = appctx.WithUser(ctx, u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	// Set up main currency in settings
+	ctx = appctx.WithUser(ctx, &user)
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	entityService := services.NewEntityService(registrySet, uploadLocation)
-	restoreService := restore.NewRestoreService(registrySet, entityService, uploadLocation)
+	entityService := services.NewEntityService(factorySet, uploadLocation)
+	restoreService := restore.NewRestoreService(factorySet, entityService, uploadLocation)
 	worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
-
-	ctx := context.Background()
 
 	// Initially no running restores
 	hasRunning, err := worker.HasRunningRestores(ctx)

@@ -20,7 +20,7 @@ const (
 // ExportWorker processes export requests in the background
 type ExportWorker struct {
 	exportService *ExportService
-	registrySet   *registry.Set
+	factorySet    *registry.FactorySet
 	pollInterval  time.Duration
 	stopCh        chan struct{}
 	wg            sync.WaitGroup
@@ -31,10 +31,10 @@ type ExportWorker struct {
 }
 
 // NewExportWorker creates a new export worker
-func NewExportWorker(exportService *ExportService, registrySet *registry.Set, maxConcurrentExports int) *ExportWorker {
+func NewExportWorker(exportService *ExportService, factorySet *registry.FactorySet, maxConcurrentExports int) *ExportWorker {
 	return &ExportWorker{
 		exportService: exportService,
-		registrySet:   registrySet,
+		factorySet:    factorySet,
 		pollInterval:  defaultPollInterval, // Check for new exports every 10 seconds
 		stopCh:        make(chan struct{}),
 		semaphore:     semaphore.NewWeighted(int64(maxConcurrentExports)),
@@ -111,7 +111,8 @@ func (w *ExportWorker) run(ctx context.Context) {
 
 // processPendingExports finds and processes pending export requests
 func (w *ExportWorker) processPendingExports(ctx context.Context) {
-	exports, err := w.registrySet.ExportRegistry.WithServiceAccount().List(ctx)
+	reg := w.factorySet.ExportRegistryFactory.CreateServiceRegistry()
+	exports, err := reg.List(ctx)
 	if err != nil {
 		slog.Error("Failed to get exports", "error", err)
 		return

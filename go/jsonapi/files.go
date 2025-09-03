@@ -85,6 +85,11 @@ type FileRequestDataWrapper struct {
 }
 
 func (frdw *FileRequestDataWrapper) ValidateWithContext(ctx context.Context) error {
+	// Prevent user-specified IDs in create requests
+	if frdw.ID != "" {
+		return errors.New("ID field not allowed in create requests")
+	}
+
 	// Prevent manual creation of export-linked files
 	if frdw.Attributes.LinkedEntityType == "export" {
 		return errors.New("export files cannot be manually created")

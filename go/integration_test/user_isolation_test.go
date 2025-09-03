@@ -17,7 +17,7 @@ import (
 )
 
 // setupTestDatabase creates a test database connection and returns cleanup function
-func setupTestDatabase(t *testing.T) (*registry.Set, func()) {
+func setupTestDatabase(t *testing.T) (*registry.FactorySet, func()) {
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
 		t.Skip("POSTGRES_TEST_DSN environment variable not set")
@@ -36,7 +36,7 @@ func setupTestDatabase(t *testing.T) (*registry.Set, func()) {
 }
 
 // createTestUser creates a test user with the given email and returns the created user
-func createTestUser(c *qt.C, registrySet *registry.Set, email string) *models.User {
+func createTestUser(c *qt.C, userRegistry registry.UserRegistry, email string) *models.User {
 	// Make email unique by adding timestamp to avoid conflicts between tests
 	uniqueEmail := fmt.Sprintf("%s-%d", email, time.Now().UnixNano())
 	user := models.User{
@@ -53,7 +53,7 @@ func createTestUser(c *qt.C, registrySet *registry.Set, email string) *models.Us
 	err := user.SetPassword("testpassword123")
 	c.Assert(err, qt.IsNil)
 
-	created, err := registrySet.UserRegistry.Create(context.Background(), user)
+	created, err := userRegistry.Create(context.Background(), user)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created, qt.IsNotNil)
 
@@ -77,8 +77,8 @@ func TestUserIsolation_Commodities(t *testing.T) {
 	defer cleanup()
 
 	// Setup: Create two users
-	user1 := createTestUser(c, registrySet, "user1@example.com")
-	user2 := createTestUser(c, registrySet, "user2@example.com")
+	user1 := createTestUser(c, registrySet.UserRegistry, "user1@example.com")
+	user2 := createTestUser(c, registrySet.UserRegistry, "user2@example.com")
 
 	// Create location and area for user1's commodity
 	ctx1 := withUserContext(context.Background(), user1.ID)
@@ -91,7 +91,7 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		Name:    "User1 Location",
 		Address: "123 User1 Street",
 	}
-	userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
+	userAwareLocationRegistry1, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx1)
 	c.Assert(err, qt.IsNil)
 	createdLocation1, err := userAwareLocationRegistry1.Create(ctx1, location1)
 	c.Assert(err, qt.IsNil)
@@ -105,7 +105,7 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		Name:       "User1 Area",
 		LocationID: createdLocation1.ID,
 	}
-	userAwareAreaRegistry1, err := registrySet.AreaRegistry.WithCurrentUser(ctx1)
+	userAwareAreaRegistry1, err := registrySet.AreaRegistryFactory.CreateUserRegistry(ctx1)
 	c.Assert(err, qt.IsNil)
 	createdArea1, err := userAwareAreaRegistry1.Create(ctx1, area1)
 	c.Assert(err, qt.IsNil)
@@ -133,7 +133,7 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		Draft:                  false,
 	}
 
-	userAwareCommodityRegistry1, err := registrySet.CommodityRegistry.WithCurrentUser(ctx1)
+	userAwareCommodityRegistry1, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx1)
 	c.Assert(err, qt.IsNil)
 	created1, err := userAwareCommodityRegistry1.Create(ctx1, commodity1)
 	c.Assert(err, qt.IsNil)
@@ -142,7 +142,7 @@ func TestUserIsolation_Commodities(t *testing.T) {
 
 	// Test: User2 cannot access User1's commodity
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	userAwareCommodityRegistry2, err := registrySet.CommodityRegistry.WithCurrentUser(ctx2)
+	userAwareCommodityRegistry2, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx2)
 	c.Assert(err, qt.IsNil)
 	_, err = userAwareCommodityRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
@@ -166,8 +166,8 @@ func TestUserIsolation_Locations(t *testing.T) {
 	defer cleanup()
 
 	// Setup: Create two users
-	user1 := createTestUser(c, registrySet, "user1@example.com")
-	user2 := createTestUser(c, registrySet, "user2@example.com")
+	user1 := createTestUser(c, registrySet.UserRegistry, "user1@example.com")
+	user2 := createTestUser(c, registrySet.UserRegistry, "user2@example.com")
 
 	// Test: User1 creates a location
 	ctx1 := withUserContext(context.Background(), user1.ID)
@@ -180,7 +180,7 @@ func TestUserIsolation_Locations(t *testing.T) {
 		Address: "123 User1 Street",
 	}
 
-	userAwareLocationRegistry1, err := registrySet.LocationRegistry.WithCurrentUser(ctx1)
+	userAwareLocationRegistry1, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx1)
 	c.Assert(err, qt.IsNil)
 	created1, err := userAwareLocationRegistry1.Create(ctx1, location1)
 	c.Assert(err, qt.IsNil)
@@ -189,7 +189,7 @@ func TestUserIsolation_Locations(t *testing.T) {
 
 	// Test: User2 cannot access User1's location
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	userAwareLocationRegistry2, err := registrySet.LocationRegistry.WithCurrentUser(ctx2)
+	userAwareLocationRegistry2, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx2)
 	c.Assert(err, qt.IsNil)
 	_, err = userAwareLocationRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
@@ -213,8 +213,8 @@ func TestUserIsolation_Files(t *testing.T) {
 	defer cleanup()
 
 	// Setup: Create two users
-	user1 := createTestUser(c, registrySet, "user1@example.com")
-	user2 := createTestUser(c, registrySet, "user2@example.com")
+	user1 := createTestUser(c, registrySet.UserRegistry, "user1@example.com")
+	user2 := createTestUser(c, registrySet.UserRegistry, "user2@example.com")
 
 	// Test: User1 creates a file
 	ctx1 := withUserContext(context.Background(), user1.ID)
@@ -235,7 +235,7 @@ func TestUserIsolation_Files(t *testing.T) {
 		},
 	}
 
-	userAwareFileRegistry1, err := registrySet.FileRegistry.WithCurrentUser(ctx1)
+	userAwareFileRegistry1, err := registrySet.FileRegistryFactory.CreateUserRegistry(ctx1)
 	c.Assert(err, qt.IsNil)
 	created1, err := userAwareFileRegistry1.Create(ctx1, file1)
 	c.Assert(err, qt.IsNil)
@@ -244,7 +244,7 @@ func TestUserIsolation_Files(t *testing.T) {
 
 	// Test: User2 cannot access User1's file
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	userAwareFileRegistry2, err := registrySet.FileRegistry.WithCurrentUser(ctx2)
+	userAwareFileRegistry2, err := registrySet.FileRegistryFactory.CreateUserRegistry(ctx2)
 	c.Assert(err, qt.IsNil)
 	_, err = userAwareFileRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)
@@ -268,8 +268,8 @@ func TestUserIsolation_Exports(t *testing.T) {
 	defer cleanup()
 
 	// Setup: Create two users
-	user1 := createTestUser(c, registrySet, "user1@example.com")
-	user2 := createTestUser(c, registrySet, "user2@example.com")
+	user1 := createTestUser(c, registrySet.UserRegistry, "user1@example.com")
+	user2 := createTestUser(c, registrySet.UserRegistry, "user2@example.com")
 
 	// Test: User1 creates an export
 	ctx1 := withUserContext(context.Background(), user1.ID)
@@ -284,7 +284,7 @@ func TestUserIsolation_Exports(t *testing.T) {
 		Status:      models.ExportStatusPending,
 	}
 
-	userAwareExportRegistry1, err := registrySet.ExportRegistry.WithCurrentUser(ctx1)
+	userAwareExportRegistry1, err := registrySet.ExportRegistryFactory.CreateUserRegistry(ctx1)
 	c.Assert(err, qt.IsNil)
 	created1, err := userAwareExportRegistry1.Create(ctx1, export1)
 	c.Assert(err, qt.IsNil)
@@ -293,7 +293,7 @@ func TestUserIsolation_Exports(t *testing.T) {
 
 	// Test: User2 cannot access User1's export
 	ctx2 := withUserContext(context.Background(), user2.ID)
-	userAwareExportRegistry2, err := registrySet.ExportRegistry.WithCurrentUser(ctx2)
+	userAwareExportRegistry2, err := registrySet.ExportRegistryFactory.CreateUserRegistry(ctx2)
 	c.Assert(err, qt.IsNil)
 	_, err = userAwareExportRegistry2.Get(ctx2, created1.ID)
 	c.Assert(err, qt.IsNotNil)

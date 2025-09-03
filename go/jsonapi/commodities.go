@@ -127,6 +127,14 @@ func (cd *CommodityData) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&cd.Type, validation.Required, validation.In("commodities")),
 		validation.Field(&cd.Attributes, validation.Required),
 	)
+
+	// Only reject ID fields in CREATE requests (POST), allow them in UPDATE requests (PUT)
+	if httpMethod, ok := ctx.Value(httpMethodKey).(string); ok && httpMethod == "POST" {
+		fields = append(fields,
+			validation.Field(&cd.ID, validation.Empty.Error("ID field not allowed in create requests")),
+		)
+	}
+
 	return validation.ValidateStructWithContext(ctx, cd, fields...)
 }
 
@@ -134,9 +142,16 @@ var _ render.Binder = (*CommodityRequest)(nil)
 
 // Bind binds the commodity data from the request to the CommodityRequest object.
 func (cr *CommodityRequest) Bind(r *http.Request) error {
-	err := cr.ValidateWithContext(r.Context())
+	// Add HTTP method to context for validation
+	ctx := context.WithValue(r.Context(), httpMethodKey, r.Method)
+	err := cr.ValidateWithContext(ctx)
 	if err != nil {
 		return err
+	}
+
+	// For UPDATE requests, set the ID from the request data
+	if r.Method == "PUT" && cr.Data.ID != "" {
+		cr.Data.Attributes.ID = cr.Data.ID
 	}
 
 	return nil

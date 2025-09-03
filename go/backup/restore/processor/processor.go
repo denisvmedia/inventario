@@ -13,6 +13,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/backup/restore/security"
 	"github.com/denisvmedia/inventario/backup/restore/types"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/filekit"
@@ -24,36 +25,42 @@ import (
 
 // RestoreOperationProcessor wraps the restore service to provide detailed logging
 type RestoreOperationProcessor struct {
-	restoreOperationID string
-	registrySet        *registry.Set
-	entityService      *services.EntityService
-	uploadLocation     string
+	restoreOperationID    string
+	factorySet            *registry.FactorySet
+	entityService         *services.EntityService
+	uploadLocation        string
+	securityValidator     security.SecurityValidator
+	importSessionEntities map[string]bool // Track entities created in this session
 }
 
-func NewRestoreOperationProcessor(restoreOperationID string, registrySet *registry.Set, entityService *services.EntityService, uploadLocation string) *RestoreOperationProcessor {
+func NewRestoreOperationProcessor(restoreOperationID string, factorySet *registry.FactorySet, entityService *services.EntityService, uploadLocation string) *RestoreOperationProcessor {
+	logger := slog.Default()
 	return &RestoreOperationProcessor{
-		restoreOperationID: restoreOperationID,
-		registrySet:        registrySet,
-		entityService:      entityService,
-		uploadLocation:     uploadLocation,
+		restoreOperationID:    restoreOperationID,
+		factorySet:            factorySet,
+		entityService:         entityService,
+		uploadLocation:        uploadLocation,
+		securityValidator:     security.NewRestoreSecurityValidator(factorySet, logger),
+		importSessionEntities: make(map[string]bool),
 	}
 }
 
 func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
-	restoreOperationRegistry := l.registrySet.RestoreOperationRegistry.WithServiceAccount()
+	restoreOperationRegistry := l.factorySet.RestoreOperationRegistryFactory.CreateServiceRegistry()
 	// Get the restore operation
-	restoreOperation, err := restoreOperationRegistry.WithServiceAccount().Get(ctx, l.restoreOperationID)
+	restoreOperation, err := restoreOperationRegistry.Get(ctx, l.restoreOperationID)
 	if err != nil {
 		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get restore operation: %v", err))
 	}
 
 	// Get the export to find the file path
-	export, err := l.registrySet.ExportRegistry.WithServiceAccount().Get(ctx, restoreOperation.ExportID)
+	exportReg := l.factorySet.ExportRegistryFactory.CreateServiceRegistry()
+	export, err := exportReg.Get(ctx, restoreOperation.ExportID)
 	if err != nil {
 		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get export: %v", err))
 	}
 
-	user, err := l.registrySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := l.factorySet.UserRegistry.Get(ctx, export.UserID)
 	if err != nil {
 		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get user: %v", err))
 	}
@@ -342,7 +349,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	entities.Manuals = make(map[string]*models.Manual)
 
 	// Load locations - index by ID (which should be the same as XML ID for imported entities)
-	locations, err := l.registrySet.LocationRegistry.List(ctx)
+	locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user location registry")
+	}
+	locations, err := locReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing locations")
 	}
@@ -351,7 +362,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load areas - index by ID (which should be the same as XML ID for imported entities)
-	areas, err := l.registrySet.AreaRegistry.List(ctx)
+	areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user area registry")
+	}
+	areas, err := areaReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing areas")
 	}
@@ -360,7 +375,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load commodities - index by ID (which should be the same as XML ID for imported entities)
-	commodities, err := l.registrySet.CommodityRegistry.List(ctx)
+	comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user commodity registry")
+	}
+	commodities, err := comReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing commodities")
 	}
@@ -369,7 +388,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load images - index by ID (which should be the same as XML ID for imported entities)
-	images, err := l.registrySet.ImageRegistry.List(ctx)
+	imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user image registry")
+	}
+	images, err := imgReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing images")
 	}
@@ -378,7 +401,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load invoices - index by ID (which should be the same as XML ID for imported entities)
-	invoices, err := l.registrySet.InvoiceRegistry.List(ctx)
+	invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user invoice registry")
+	}
+	invoices, err := invReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing invoices")
 	}
@@ -387,7 +414,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	}
 
 	// Load manuals - index by ID (which should be the same as XML ID for imported entities)
-	manuals, err := l.registrySet.ManualRegistry.List(ctx)
+	manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to create user manual registry")
+	}
+	manuals, err := manReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to load existing manuals")
 	}
@@ -401,13 +432,75 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 // clearExistingData removes all existing data for full replace strategy
 func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error {
 	// Delete all locations recursively (this will also delete areas and commodities)
-	locations, err := l.registrySet.LocationRegistry.List(ctx)
+	locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
+	locations, err := locReg.List(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to list locations for deletion")
 	}
 	for _, location := range locations {
 		if err := l.entityService.DeleteLocationRecursive(ctx, location.ID); err != nil {
 			return errkit.Wrap(err, fmt.Sprintf("failed to delete location %s recursively", location.ID))
+		}
+	}
+
+	return nil
+}
+
+// validateCommodityOwnership validates that the user can link files to the specified commodity
+func (l *RestoreOperationProcessor) validateCommodityOwnership(
+	ctx context.Context,
+	commodityID, originalXMLID string,
+	stats *types.RestoreStats,
+	options types.RestoreOptions,
+	fileType string,
+) (string, error) {
+	// For merge strategies, validate commodity ownership before linking
+	if options.Strategy == types.RestoreStrategyMergeAdd || options.Strategy == types.RestoreStrategyMergeUpdate {
+		err := l.securityValidator.ValidateImportScope(ctx, commodityID, l.restoreOperationID, l.importSessionEntities)
+		if err != nil {
+			// If entity not found, upload file as orphaned (not linked to any commodity)
+			if errors.Is(err, registry.ErrNotFound) {
+				stats.ErrorCount++
+				stats.Errors = append(stats.Errors, fmt.Sprintf("%s %s uploaded as orphaned file: %v", fileType, originalXMLID, err))
+				// Return empty commodityID to create orphaned file
+				return "", nil
+			}
+			// For other security violations, fail completely
+			stats.ErrorCount++
+			stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for %s %s: %v", fileType, originalXMLID, err))
+			return "", err
+		}
+	}
+	return commodityID, nil
+}
+
+// validateCommodityOwnershipInDB validates that a commodity in the database belongs to the current user
+func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
+	ctx context.Context,
+	originalXMLID string,
+	currentUser *models.User,
+	existing *types.ExistingEntities,
+	stats *types.RestoreStats,
+) error {
+	existingCommodity := existing.Commodities[originalXMLID]
+	if existingCommodity != nil {
+		return nil // Already validated in existing entities
+	}
+
+	// Check if commodity exists in database but not in our existing entities map
+	// Use service account registry to see all entities across users
+	serviceAccountRegistry := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+	existingDBCommodity, err := serviceAccountRegistry.Get(ctx, originalXMLID)
+	if err != nil {
+		return nil // Commodity doesn't exist in DB, which is fine
+	}
+
+	if existingDBCommodity.UserID != currentUser.ID {
+		err := l.securityValidator.ValidateEntityOwnership(ctx, originalXMLID, currentUser.ID)
+		if err != nil {
+			stats.ErrorCount++
+			stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: %v", originalXMLID, err))
+			return err
 		}
 	}
 
@@ -424,6 +517,19 @@ func (l *RestoreOperationProcessor) createImageRecord(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	// Security validation: Check if user can link files to this commodity
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+
+	// Validate commodity ownership and handle security violations
+	validatedCommodityID, err := l.validateCommodityOwnership(ctx, commodityID, originalXMLID, stats, options, "Image")
+	if err != nil {
+		return err
+	}
+	commodityID = validatedCommodityID
+
 	// Apply strategy for images
 	existingImage := existing.Images[originalXMLID]
 	switch options.Strategy {
@@ -444,7 +550,8 @@ func (l *RestoreOperationProcessor) createImageRecord(
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid image")
 		}
-		createdImage, err := l.registrySet.ImageRegistry.Create(ctx, *image)
+		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
+		createdImage, err := imgReg.Create(ctx, *image)
 		if err != nil {
 			return errkit.Wrap(err, "failed to create image")
 		}
@@ -473,7 +580,8 @@ func (l *RestoreOperationProcessor) createImageRecord(
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid image")
 		}
-		createdImage, err := l.registrySet.ImageRegistry.Create(ctx, *image)
+		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
+		createdImage, err := imgReg.Create(ctx, *image)
 		if err != nil {
 			return errkit.Wrap(err, "failed to create image")
 		}
@@ -496,7 +604,8 @@ func (l *RestoreOperationProcessor) createImageRecord(
 				if err := image.ValidateWithContext(ctx); err != nil {
 					return errkit.Wrap(err, "invalid image")
 				}
-				createdImage, err := l.registrySet.ImageRegistry.Create(ctx, *image)
+				imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
+				createdImage, err := imgReg.Create(ctx, *image)
 				if err != nil {
 					return errkit.Wrap(err, "failed to create image")
 				}
@@ -521,7 +630,8 @@ func (l *RestoreOperationProcessor) createImageRecord(
 		if err := image.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid image")
 		}
-		updatedImage, err := l.registrySet.ImageRegistry.Update(ctx, *image)
+		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
+		updatedImage, err := imgReg.Update(ctx, *image)
 		if err != nil {
 			return errkit.Wrap(err, "failed to update image")
 		}
@@ -543,6 +653,19 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	// Security validation: Check if user can link files to this commodity
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+
+	// Validate commodity ownership and handle security violations
+	validatedCommodityID, err := l.validateCommodityOwnership(ctx, commodityID, originalXMLID, stats, options, "Invoice")
+	if err != nil {
+		return err
+	}
+	commodityID = validatedCommodityID
+
 	// Apply strategy for invoices
 	existingInvoice := existing.Invoices[originalXMLID]
 	switch options.Strategy {
@@ -563,7 +686,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid invoice")
 		}
-		createdInvoice, err := l.registrySet.InvoiceRegistry.Create(ctx, *invoice)
+		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
+		createdInvoice, err := invReg.Create(ctx, *invoice)
 		if err != nil {
 			return errkit.Wrap(err, "failed to create invoice")
 		}
@@ -589,7 +713,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid invoice")
 		}
-		createdInvoice, err := l.registrySet.InvoiceRegistry.Create(ctx, *invoice)
+		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
+		createdInvoice, err := invReg.Create(ctx, *invoice)
 		if err != nil {
 			return errkit.Wrap(err, "failed to create invoice")
 		}
@@ -609,7 +734,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 				if err := invoice.ValidateWithContext(ctx); err != nil {
 					return errkit.Wrap(err, "invalid invoice")
 				}
-				createdInvoice, err := l.registrySet.InvoiceRegistry.Create(ctx, *invoice)
+				invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
+				createdInvoice, err := invReg.Create(ctx, *invoice)
 				if err != nil {
 					return errkit.Wrap(err, "failed to create invoice")
 				}
@@ -633,7 +759,8 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 		if err := invoice.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid invoice")
 		}
-		updatedInvoice, err := l.registrySet.InvoiceRegistry.Update(ctx, *invoice)
+		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
+		updatedInvoice, err := invReg.Update(ctx, *invoice)
 		if err != nil {
 			return errkit.Wrap(err, "failed to update invoice")
 		}
@@ -656,6 +783,19 @@ func (l *RestoreOperationProcessor) createManualRecord(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	// Security validation: Check if user can link files to this commodity
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+
+	// Validate commodity ownership and handle security violations
+	validatedCommodityID, err := l.validateCommodityOwnership(ctx, commodityID, originalXMLID, stats, options, "Manual")
+	if err != nil {
+		return err
+	}
+	commodityID = validatedCommodityID
+
 	// Apply strategy for manuals
 	existingManual := existing.Manuals[originalXMLID]
 	switch options.Strategy {
@@ -673,7 +813,8 @@ func (l *RestoreOperationProcessor) createManualRecord(
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")
 		}
-		createdManual, err := l.registrySet.ManualRegistry.Create(ctx, *manual)
+		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
+		createdManual, err := manReg.Create(ctx, *manual)
 		if err != nil {
 			return errkit.Wrap(err, "failed to create manual")
 		}
@@ -699,7 +840,8 @@ func (l *RestoreOperationProcessor) createManualRecord(
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")
 		}
-		createdManual, err := l.registrySet.ManualRegistry.Create(ctx, *manual)
+		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
+		createdManual, err := manReg.Create(ctx, *manual)
 		if err != nil {
 			return errkit.Wrap(err, "failed to create manual")
 		}
@@ -722,7 +864,8 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			if err := manual.ValidateWithContext(ctx); err != nil {
 				return errkit.Wrap(err, "invalid manual")
 			}
-			createdManual, err := l.registrySet.ManualRegistry.Create(ctx, *manual)
+			manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
+			createdManual, err := manReg.Create(ctx, *manual)
 			if err != nil {
 				return errkit.Wrap(err, "failed to create manual")
 			}
@@ -745,7 +888,8 @@ func (l *RestoreOperationProcessor) createManualRecord(
 		if err := manual.ValidateWithContext(ctx); err != nil {
 			return errkit.Wrap(err, "invalid manual")
 		}
-		updatedManual, err := l.registrySet.ManualRegistry.Update(ctx, *manual)
+		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
+		updatedManual, err := manReg.Update(ctx, *manual)
 		if err != nil {
 			return errkit.Wrap(err, "failed to update manual")
 		}
@@ -755,6 +899,14 @@ func (l *RestoreOperationProcessor) createManualRecord(
 	}
 
 	return nil
+}
+
+// trackCreatedEntity tracks entities created in this import session for security validation
+func (l *RestoreOperationProcessor) trackCreatedEntity(entityID string) {
+	if l.importSessionEntities == nil {
+		l.importSessionEntities = make(map[string]bool)
+	}
+	l.importSessionEntities[entityID] = true
 }
 
 // createFileRecord creates a file record in the appropriate registry with strategy support
@@ -808,7 +960,8 @@ func (l *RestoreOperationProcessor) createRestoreStep(
 		CreatedDate:        models.PNow(),
 	}
 
-	_, err := l.registrySet.RestoreStepRegistry.Create(ctx, step)
+	stepReg := l.factorySet.RestoreStepRegistryFactory.CreateServiceRegistry()
+	_, err := stepReg.Create(ctx, step)
 	if err != nil {
 		// Log error but don't fail the restore operation
 		slog.Error("Failed to create restore step", "error", err)
@@ -818,7 +971,8 @@ func (l *RestoreOperationProcessor) createRestoreStep(
 // updateRestoreStep updates an existing restore step
 func (l *RestoreOperationProcessor) updateRestoreStep(ctx context.Context, name string, result models.RestoreStepResult, reason string) {
 	// Get all steps for this restore operation
-	steps, err := l.registrySet.RestoreStepRegistry.ListByRestoreOperation(ctx, l.restoreOperationID)
+	stepReg := l.factorySet.RestoreStepRegistryFactory.CreateServiceRegistry()
+	steps, err := stepReg.ListByRestoreOperation(ctx, l.restoreOperationID)
 	if err != nil {
 		// If we can't get steps, create a new one
 		l.createRestoreStep(ctx, name, result, reason)
@@ -830,7 +984,8 @@ func (l *RestoreOperationProcessor) updateRestoreStep(ctx context.Context, name 
 		if step.Name == name {
 			step.Result = result
 			step.Reason = reason
-			_, err := l.registrySet.RestoreStepRegistry.Update(ctx, *step)
+			stepReg := l.factorySet.RestoreStepRegistryFactory.CreateServiceRegistry()
+			_, err := stepReg.Update(ctx, *step)
 			if err != nil {
 				// Log error but don't fail the restore operation
 				slog.Error("Failed to update restore step", "error", err)
@@ -845,7 +1000,7 @@ func (l *RestoreOperationProcessor) updateRestoreStep(ctx context.Context, name 
 
 // markRestoreFailed marks a restore operation as failed with an error message
 func (l *RestoreOperationProcessor) markRestoreFailed(ctx context.Context, errorMessage string) error {
-	restoreOperationRegistry := l.registrySet.RestoreOperationRegistry.WithServiceAccount()
+	restoreOperationRegistry := l.factorySet.RestoreOperationRegistryFactory.CreateServiceRegistry()
 
 	restoreOperation, err := restoreOperationRegistry.Get(ctx, l.restoreOperationID)
 	if err != nil {
@@ -947,7 +1102,12 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 	}
 
 	// Get main currency from settings and add it to context for commodity validation
-	settings, err := l.registrySet.SettingsRegistry.Get(ctx)
+	// Use user-aware settings registry to get user-specific settings
+	settingsReg, err := l.factorySet.SettingsRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return stats, errkit.Wrap(err, "failed to create user settings registry")
+	}
+	settings, err := settingsReg.Get(ctx)
 	if err != nil {
 		return stats, errkit.Wrap(err, "failed to get settings")
 	}
@@ -1104,71 +1264,11 @@ func (l *RestoreOperationProcessor) processLocation(
 
 	// Apply strategy
 	existingLocation := existing.Locations[originalXMLID]
-	switch options.Strategy {
-	case types.RestoreStrategyFullReplace:
-		// Always create (database was cleared)
-		if !options.DryRun {
-			createdLocation, err := l.registrySet.LocationRegistry.Create(ctx, *location)
-			if err != nil {
-				l.updateRestoreStep(ctx,
-					fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-				return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
-			}
-			// Track the newly created location and store ID mapping
-			existing.Locations[originalXMLID] = createdLocation
-			idMapping.Locations[originalXMLID] = createdLocation.ID
-		}
-		stats.CreatedCount++
-		stats.LocationCount++
-	case types.RestoreStrategyMergeAdd:
-		// Only create if doesn't exist
-		if existingLocation != nil {
-			stats.SkippedCount++
-			break
-		}
-		if !options.DryRun {
-			createdLocation, err := l.registrySet.LocationRegistry.Create(ctx, *location)
-			if err != nil {
-				l.updateRestoreStep(ctx,
-					fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-				return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
-			}
-			// Track the newly created location and store ID mapping
-			existing.Locations[originalXMLID] = createdLocation
-			idMapping.Locations[originalXMLID] = createdLocation.ID
-		}
-		stats.CreatedCount++
-		stats.LocationCount++
-	case types.RestoreStrategyMergeUpdate:
-		// Create if missing, update if exists
-		if existingLocation == nil {
-			if !options.DryRun {
-				createdLocation, err := l.registrySet.LocationRegistry.Create(ctx, *location)
-				if err != nil {
-					l.updateRestoreStep(ctx,
-						fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-					return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
-				}
-				// Track the newly created location and store ID mapping
-				existing.Locations[originalXMLID] = createdLocation
-				idMapping.Locations[originalXMLID] = createdLocation.ID
-			}
-			stats.CreatedCount++
-			stats.LocationCount++
-			break
-		}
-		if !options.DryRun {
-			updatedLocation, err := l.registrySet.LocationRegistry.Update(ctx, *location)
-			if err != nil {
-				l.updateRestoreStep(ctx,
-					fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-				return errkit.Wrap(err, fmt.Sprintf("failed to update location %s", originalXMLID))
-			}
-			// Update the tracked location
-			existing.Locations[originalXMLID] = updatedLocation
-		}
-		stats.UpdatedCount++
-		stats.LocationCount++
+	err := l.applyStrategyForLocation(ctx, location, existingLocation, originalXMLID, stats, existing, idMapping, options, emoji, &xmlLocation)
+	if err != nil {
+		l.updateRestoreStep(ctx,
+			fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+		return errkit.Wrap(err, "failed to apply strategy for location")
 	}
 
 	l.updateRestoreStep(ctx,
@@ -1209,6 +1309,153 @@ func (l *RestoreOperationProcessor) processAreasWithLogging(
 	}
 }
 
+// applyStrategyForLocation applies the restore strategy for a location
+func (l *RestoreOperationProcessor) applyStrategyForLocation(
+	ctx context.Context,
+	location *models.Location,
+	existingLocation *models.Location,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+	emoji string,
+	xmlLocation *types.XMLLocation,
+) error {
+	switch options.Strategy {
+	case types.RestoreStrategyFullReplace:
+		return l.handleLocationFullReplace(ctx, location, originalXMLID, stats, existing, idMapping, options, emoji, xmlLocation)
+	case types.RestoreStrategyMergeAdd:
+		return l.handleLocationMergeAdd(ctx, location, existingLocation, originalXMLID, stats, existing, idMapping, options, emoji, xmlLocation)
+	case types.RestoreStrategyMergeUpdate:
+		return l.handleLocationMergeUpdate(ctx, location, existingLocation, originalXMLID, stats, existing, idMapping, options, emoji, xmlLocation)
+	}
+	return nil
+}
+
+// handleLocationFullReplace handles full replace strategy for locations
+func (l *RestoreOperationProcessor) handleLocationFullReplace(
+	ctx context.Context,
+	location *models.Location,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+	emoji string,
+	xmlLocation *types.XMLLocation,
+) error {
+	if !options.DryRun {
+		locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create user location registry")
+		}
+		createdLocation, err := locReg.Create(ctx, *location)
+		if err != nil {
+			l.updateRestoreStep(ctx,
+				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+			return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+		}
+		existing.Locations[originalXMLID] = createdLocation
+		idMapping.Locations[originalXMLID] = createdLocation.ID
+		l.trackCreatedEntity(createdLocation.ID)
+	}
+	stats.CreatedCount++
+	stats.LocationCount++
+	return nil
+}
+
+// handleLocationMergeAdd handles merge add strategy for locations
+func (l *RestoreOperationProcessor) handleLocationMergeAdd(
+	ctx context.Context,
+	location *models.Location,
+	existingLocation *models.Location,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+	emoji string,
+	xmlLocation *types.XMLLocation,
+) error {
+	if existingLocation != nil {
+		stats.SkippedCount++
+		return nil
+	}
+	if !options.DryRun {
+		locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create user location registry")
+		}
+		createdLocation, err := locReg.Create(ctx, *location)
+		if err != nil {
+			l.updateRestoreStep(ctx,
+				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+			return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+		}
+		existing.Locations[originalXMLID] = createdLocation
+		idMapping.Locations[originalXMLID] = createdLocation.ID
+		l.trackCreatedEntity(createdLocation.ID)
+	}
+	stats.CreatedCount++
+	stats.LocationCount++
+	return nil
+}
+
+// handleLocationMergeUpdate handles merge update strategy for locations
+func (l *RestoreOperationProcessor) handleLocationMergeUpdate(
+	ctx context.Context,
+	location *models.Location,
+	existingLocation *models.Location,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+	emoji string,
+	xmlLocation *types.XMLLocation,
+) error {
+	if existingLocation == nil {
+		if !options.DryRun {
+			locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+			if err != nil {
+				return errkit.Wrap(err, "failed to create user location registry")
+			}
+			createdLocation, err := locReg.Create(ctx, *location)
+			if err != nil {
+				l.updateRestoreStep(ctx,
+					fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+				return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+			}
+			existing.Locations[originalXMLID] = createdLocation
+			idMapping.Locations[originalXMLID] = createdLocation.ID
+			l.trackCreatedEntity(createdLocation.ID)
+		}
+		stats.CreatedCount++
+		stats.LocationCount++
+		return nil
+	}
+
+	// Update existing location
+	location.ID = existingLocation.ID
+	if !options.DryRun {
+		locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create user location registry")
+		}
+		updatedLocation, err := locReg.Update(ctx, *location)
+		if err != nil {
+			l.updateRestoreStep(ctx,
+				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
+			return errkit.Wrap(err, fmt.Sprintf("failed to update location %s", originalXMLID))
+		}
+		existing.Locations[originalXMLID] = updatedLocation
+	}
+	stats.UpdatedCount++
+	stats.LocationCount++
+	return nil
+}
+
 func (l *RestoreOperationProcessor) applyStrategyForArea(
 	ctx context.Context,
 	area *models.Area,
@@ -1223,62 +1470,104 @@ func (l *RestoreOperationProcessor) applyStrategyForArea(
 ) error {
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
-		// Always create (database was cleared)
-		if !options.DryRun {
-			createdArea, err := l.registrySet.AreaRegistry.Create(ctx, *area)
-			if err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
-			}
-			// Track the newly created area and store ID mapping
-			existing.Areas[originalXMLID] = createdArea
-			idMapping.Areas[originalXMLID] = createdArea.ID
-		}
-		stats.CreatedCount++
-		stats.AreaCount++
+		return l.handleAreaFullReplace(ctx, area, originalXMLID, stats, existing, idMapping, options)
 	case types.RestoreStrategyMergeAdd:
-		// Only create if doesn't exist
-		if existingArea == nil {
-			if !options.DryRun {
-				createdArea, err := l.registrySet.AreaRegistry.Create(ctx, *area)
-				if err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
-				}
-				// Track the newly created area and store ID mapping
-				existing.Areas[originalXMLID] = createdArea
-				idMapping.Areas[originalXMLID] = createdArea.ID
-			}
-			stats.CreatedCount++
-			stats.AreaCount++
-			break
-		}
-		stats.SkippedCount++
+		return l.handleAreaMergeAdd(ctx, area, existingArea, originalXMLID, stats, existing, idMapping, options)
 	case types.RestoreStrategyMergeUpdate:
-		// Create if missing, update if exists
-		if existingArea == nil {
-			if !options.DryRun {
-				createdArea, err := l.registrySet.AreaRegistry.Create(ctx, *area)
-				if err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
-				}
-				// Track the newly created area and store ID mapping
-				existing.Areas[originalXMLID] = createdArea
-				idMapping.Areas[originalXMLID] = createdArea.ID
-			}
-			stats.CreatedCount++
-			stats.AreaCount++
-			break
-		}
-		if !options.DryRun {
-			updatedArea, err := l.registrySet.AreaRegistry.Update(ctx, *area)
-			if err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to update area %s", originalXMLID))
-			}
-			// Update the tracked area
-			existing.Areas[originalXMLID] = updatedArea
-		}
-		stats.UpdatedCount++
-		stats.AreaCount++
+		return l.handleAreaMergeUpdate(ctx, area, existingArea, originalXMLID, stats, existing, idMapping, options)
 	}
+	return nil
+}
+
+// handleAreaFullReplace handles full replace strategy for areas
+func (l *RestoreOperationProcessor) handleAreaFullReplace(
+	ctx context.Context,
+	area *models.Area,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	return l.createAreaIfNotDryRun(ctx, area, originalXMLID, stats, existing, idMapping, options)
+}
+
+// handleAreaMergeAdd handles merge add strategy for areas
+func (l *RestoreOperationProcessor) handleAreaMergeAdd(
+	ctx context.Context,
+	area *models.Area,
+	existingArea *models.Area,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	if existingArea != nil {
+		stats.SkippedCount++
+		return nil
+	}
+
+	return l.createAreaIfNotDryRun(ctx, area, originalXMLID, stats, existing, idMapping, options)
+}
+
+// createAreaIfNotDryRun creates an area if not in dry run mode
+func (l *RestoreOperationProcessor) createAreaIfNotDryRun(
+	ctx context.Context,
+	area *models.Area,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	if !options.DryRun {
+		areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create user area registry")
+		}
+		createdArea, err := areaReg.Create(ctx, *area)
+		if err != nil {
+			return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
+		}
+		existing.Areas[originalXMLID] = createdArea
+		idMapping.Areas[originalXMLID] = createdArea.ID
+		l.trackCreatedEntity(createdArea.ID)
+	}
+	stats.CreatedCount++
+	stats.AreaCount++
+	return nil
+}
+
+// handleAreaMergeUpdate handles merge update strategy for areas
+func (l *RestoreOperationProcessor) handleAreaMergeUpdate(
+	ctx context.Context,
+	area *models.Area,
+	existingArea *models.Area,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	if existingArea == nil {
+		return l.createAreaIfNotDryRun(ctx, area, originalXMLID, stats, existing, idMapping, options)
+	}
+
+	// Update existing area
+	if !options.DryRun {
+		areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create user area registry")
+		}
+		updatedArea, err := areaReg.Update(ctx, *area)
+		if err != nil {
+			return errkit.Wrap(err, fmt.Sprintf("failed to update area %s", originalXMLID))
+		}
+		existing.Areas[originalXMLID] = updatedArea
+	}
+	stats.UpdatedCount++
+	stats.AreaCount++
 	return nil
 }
 
@@ -1644,63 +1933,128 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodity(
 ) error {
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace:
-		// Always create (database was cleared)
-		if !options.DryRun {
-			createdCommodity, err := l.registrySet.CommodityRegistry.Create(ctx, *commodity)
-			if err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
-			}
-			// Track the newly created commodity and store ID mapping
-			existing.Commodities[originalXMLID] = createdCommodity
-			idMapping.Commodities[originalXMLID] = createdCommodity.ID
-		}
-		stats.CreatedCount++
-		stats.CommodityCount++
+		return l.handleCommodityFullReplace(ctx, commodity, originalXMLID, stats, existing, idMapping, options)
 	case types.RestoreStrategyMergeAdd:
-		// Only create if doesn't exist
-		if existingCommodity == nil {
-			if !options.DryRun {
-				createdCommodity, err := l.registrySet.CommodityRegistry.Create(ctx, *commodity)
-				if err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
-				}
-				// Track the newly created commodity and store ID mapping
-				existing.Commodities[originalXMLID] = createdCommodity
-				idMapping.Commodities[originalXMLID] = createdCommodity.ID
-			}
-			stats.CreatedCount++
-			stats.CommodityCount++
-		} else {
-			stats.SkippedCount++
-		}
+		return l.handleCommodityMergeAdd(ctx, commodity, existingCommodity, originalXMLID, stats, existing, idMapping, options)
 	case types.RestoreStrategyMergeUpdate:
-		// Create if missing, update if exists
-		if existingCommodity == nil {
-			if !options.DryRun {
-				createdCommodity, err := l.registrySet.CommodityRegistry.Create(ctx, *commodity)
-				if err != nil {
-					return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
-				}
-				// Track the newly created commodity and store ID mapping
-				existing.Commodities[originalXMLID] = createdCommodity
-				idMapping.Commodities[originalXMLID] = createdCommodity.ID
-			}
-			stats.CreatedCount++
-			stats.CommodityCount++
-			return nil
-		}
-		if !options.DryRun {
-			updatedCommodity, err := l.registrySet.CommodityRegistry.Update(ctx, *commodity)
-			if err != nil {
-				return errkit.Wrap(err, fmt.Sprintf("failed to update commodity %s", originalXMLID))
-			}
-			// Update the tracked commodity
-			existing.Commodities[originalXMLID] = updatedCommodity
-		}
-		stats.UpdatedCount++
-		stats.CommodityCount++
+		return l.handleCommodityMergeUpdate(ctx, commodity, existingCommodity, originalXMLID, stats, existing, idMapping, options)
+	}
+	return nil
+}
+
+// handleCommodityFullReplace handles full replace strategy for commodities
+func (l *RestoreOperationProcessor) handleCommodityFullReplace(
+	ctx context.Context,
+	commodity *models.Commodity,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	return l.createCommodityIfNotDryRun(ctx, commodity, originalXMLID, stats, existing, idMapping, options)
+}
+
+// handleCommodityMergeAdd handles merge add strategy for commodities
+func (l *RestoreOperationProcessor) handleCommodityMergeAdd(
+	ctx context.Context,
+	commodity *models.Commodity,
+	existingCommodity *models.Commodity,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	if existingCommodity != nil {
+		stats.SkippedCount++
+		return nil
 	}
 
+	return l.createCommodityIfNotDryRun(ctx, commodity, originalXMLID, stats, existing, idMapping, options)
+}
+
+// createCommodityIfNotDryRun creates a commodity if not in dry run mode
+func (l *RestoreOperationProcessor) createCommodityIfNotDryRun(
+	ctx context.Context,
+	commodity *models.Commodity,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	if !options.DryRun {
+		comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create user commodity registry")
+		}
+		createdCommodity, err := comReg.Create(ctx, *commodity)
+		if err != nil {
+			return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
+		}
+		existing.Commodities[originalXMLID] = createdCommodity
+		idMapping.Commodities[originalXMLID] = createdCommodity.ID
+		l.trackCreatedEntity(createdCommodity.ID)
+	}
+	stats.CreatedCount++
+	stats.CommodityCount++
+	return nil
+}
+
+// handleCommodityMergeUpdate handles merge update strategy for commodities
+func (l *RestoreOperationProcessor) handleCommodityMergeUpdate(
+	ctx context.Context,
+	commodity *models.Commodity,
+	existingCommodity *models.Commodity,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	if existingCommodity == nil {
+		return l.createCommodityForMergeUpdate(ctx, commodity, originalXMLID, stats, existing, idMapping, options)
+	}
+
+	return l.updateExistingCommodity(ctx, commodity, originalXMLID, stats, existing, options)
+}
+
+// createCommodityForMergeUpdate creates a new commodity during merge update
+func (l *RestoreOperationProcessor) createCommodityForMergeUpdate(
+	ctx context.Context,
+	commodity *models.Commodity,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) error {
+	return l.createCommodityIfNotDryRun(ctx, commodity, originalXMLID, stats, existing, idMapping, options)
+}
+
+// updateExistingCommodity updates an existing commodity
+func (l *RestoreOperationProcessor) updateExistingCommodity(
+	ctx context.Context,
+	commodity *models.Commodity,
+	originalXMLID string,
+	stats *types.RestoreStats,
+	existing *types.ExistingEntities,
+	options types.RestoreOptions,
+) error {
+	if !options.DryRun {
+		comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errkit.Wrap(err, "failed to create user commodity registry")
+		}
+		updatedCommodity, err := comReg.Update(ctx, *commodity)
+		if err != nil {
+			return errkit.Wrap(err, fmt.Sprintf("failed to update commodity %s", originalXMLID))
+		}
+		existing.Commodities[originalXMLID] = updatedCommodity
+	}
+	stats.UpdatedCount++
+	stats.CommodityCount++
 	return nil
 }
 
@@ -1747,6 +2101,18 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 		return errkit.Wrap(err, "invalid commodity", "original_commodity_id", originalXMLID)
 	}
 
+	// Security validation: Check if user is trying to use an existing commodity ID that belongs to another user
+	currentUser := appctx.UserFromContext(ctx)
+	if currentUser == nil {
+		return security.ErrNoUserContext
+	}
+
+	// For all strategies, check if the commodity ID already exists and belongs to another user
+	err = l.validateCommodityOwnershipInDB(ctx, originalXMLID, currentUser, existing, stats)
+	if err != nil {
+		return err
+	}
+
 	// Apply strategy
 	existingCommodity := existing.Commodities[originalXMLID]
 	err = l.applyStrategyForCommodity(ctx, commodity, existingCommodity, originalXMLID, stats, existing, idMapping, options)
@@ -1785,13 +2151,16 @@ func (l *RestoreOperationProcessor) predictAction(ctx context.Context, entityTyp
 func (l *RestoreOperationProcessor) entityExists(ctx context.Context, entityType, entityID string) bool {
 	switch entityType {
 	case "location":
-		_, err := l.registrySet.LocationRegistry.Get(ctx, entityID)
+		locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
+		_, err := locReg.Get(ctx, entityID)
 		return err == nil
 	case "area":
-		_, err := l.registrySet.AreaRegistry.Get(ctx, entityID)
+		areaReg := l.factorySet.AreaRegistryFactory.CreateServiceRegistry()
+		_, err := areaReg.Get(ctx, entityID)
 		return err == nil
 	case "commodity":
-		_, err := l.registrySet.CommodityRegistry.Get(ctx, entityID)
+		comReg := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+		_, err := comReg.Get(ctx, entityID)
 		return err == nil
 	default:
 		return false

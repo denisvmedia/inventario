@@ -11,8 +11,13 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.RestoreOperationRegistry = (*RestoreOperationRegistry)(nil)
+// RestoreOperationRegistryFactory creates RestoreOperationRegistry instances with proper context
+type RestoreOperationRegistryFactory struct {
+	baseRestoreOperationRegistry *Registry[models.RestoreOperation, *models.RestoreOperation]
+	restoreStepRegistry          *RestoreStepRegistryFactory
+}
 
+// RestoreOperationRegistry is a context-aware registry that can only be created through the factory
 type RestoreOperationRegistry struct {
 	*Registry[models.RestoreOperation, *models.RestoreOperation]
 	restoreStepRegistry registry.RestoreStepRegistry
@@ -20,33 +25,64 @@ type RestoreOperationRegistry struct {
 	userID string
 }
 
-func NewRestoreOperationRegistry(restoreStepRegistry registry.RestoreStepRegistry) *RestoreOperationRegistry {
-	return &RestoreOperationRegistry{
-		Registry:            NewRegistry[models.RestoreOperation, *models.RestoreOperation](),
-		restoreStepRegistry: restoreStepRegistry,
+var _ registry.RestoreOperationRegistry = (*RestoreOperationRegistry)(nil)
+var _ registry.RestoreOperationRegistryFactory = (*RestoreOperationRegistryFactory)(nil)
+
+func NewRestoreOperationRegistryFactory(restoreStepRegistry *RestoreStepRegistryFactory) *RestoreOperationRegistryFactory {
+	return &RestoreOperationRegistryFactory{
+		baseRestoreOperationRegistry: NewRegistry[models.RestoreOperation, *models.RestoreOperation](),
+		restoreStepRegistry:          restoreStepRegistry,
 	}
 }
 
-func (r *RestoreOperationRegistry) MustWithCurrentUser(ctx context.Context) registry.RestoreOperationRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.RestoreOperationRegistryFactory
+
+func (f *RestoreOperationRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.RestoreOperationRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *RestoreOperationRegistry) WithCurrentUser(ctx context.Context) (registry.RestoreOperationRegistry, error) {
-	tmp := *r
-
+func (f *RestoreOperationRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.RestoreOperationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = user.ID
-	return &tmp, nil
+
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.RestoreOperation, *models.RestoreOperation]{
+		items:  f.baseRestoreOperationRegistry.items, // Share the data map
+		lock:   f.baseRestoreOperationRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                              // Set user-specific userID
+	}
+
+	// Create user-aware restore step registry
+	restoreStepRegistry, err := f.restoreStepRegistry.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create user restore step registry")
+	}
+
+	return &RestoreOperationRegistry{
+		Registry:            userRegistry,
+		restoreStepRegistry: restoreStepRegistry,
+		userID:              user.ID,
+	}, nil
 }
 
-func (r *RestoreOperationRegistry) WithServiceAccount() registry.RestoreOperationRegistry {
-	// Create a shallow copy of the registry with no user filtering
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-	return &tmp
+func (f *RestoreOperationRegistryFactory) CreateServiceRegistry() registry.RestoreOperationRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.RestoreOperation, *models.RestoreOperation]{
+		items:  f.baseRestoreOperationRegistry.items, // Share the data map
+		lock:   f.baseRestoreOperationRegistry.lock,  // Share the mutex pointer
+		userID: "",                                   // Clear userID to bypass user filtering
+	}
+
+	// Create service-aware restore step registry
+	restoreStepRegistry := f.restoreStepRegistry.CreateServiceRegistry()
+
+	return &RestoreOperationRegistry{
+		Registry:            serviceRegistry,
+		restoreStepRegistry: restoreStepRegistry,
+		userID:              "", // Clear userID to bypass user filtering
+	}
 }
 
 func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error) {

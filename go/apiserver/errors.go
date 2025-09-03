@@ -18,7 +18,6 @@ var (
 	ErrNoFilesUploaded    = errors.New("no files uploaded")
 	ErrEntityNotFound     = errors.New("entity not found")
 	ErrTenantNotFound     = errors.New("tenant not found")
-	ErrUserNotFound       = errors.New("user not found")
 )
 
 func NewNotFoundError(err error) jsonapi.Error {

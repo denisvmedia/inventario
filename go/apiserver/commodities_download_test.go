@@ -18,7 +18,7 @@ import (
 func TestDownloadWithOriginalPath(t *testing.T) {
 	c := qt.New(t)
 
-	params := newParams()
+	params, testUser := newParams()
 	b, err := blob.OpenBucket(context.Background(), params.UploadLocation)
 	c.Assert(err, qt.IsNil)
 	defer b.Close()
@@ -32,11 +32,11 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 	ctx := appctx.WithUser(context.Background(), &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
+			EntityID: models.EntityID{ID: testUser.ID},
 		},
 	})
-	comReg, err := params.RegistrySet.CommodityRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	registrySet := getRegistrySetFromParams(params, testUser.ID)
+	comReg := registrySet.CommodityRegistry
 
 	commodity := must.Must(comReg.List(ctx))[0]
 	manual := models.Manual{
@@ -49,14 +49,14 @@ func TestDownloadWithOriginalPath(t *testing.T) {
 		},
 	}
 
-	manReg, err := params.RegistrySet.ManualRegistry.WithCurrentUser(ctx)
-	c.Assert(err, qt.IsNil)
+	registrySet2 := getRegistrySetFromParams(params, testUser.ID)
+	manReg := registrySet2.ManualRegistry
 	createdManual := must.Must(manReg.Create(ctx, manual))
 
 	// Test downloading the file
 	req, err := http.NewRequest("GET", "/api/v1/commodities/"+commodity.ID+"/manuals/"+createdManual.ID+".pdf", nil)
 	c.Assert(err, qt.IsNil)
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 	rr := httptest.NewRecorder()
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	handler := apiserver.APIServer(params, mockRestoreWorker)

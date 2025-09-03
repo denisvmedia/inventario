@@ -10,15 +10,15 @@ import (
 
 // RestoreService handles XML restore operations with different strategies
 type RestoreService struct {
-	registrySet    *registry.Set
+	factorySet     *registry.FactorySet
 	entityService  *services.EntityService
 	uploadLocation string
 }
 
 // NewRestoreService creates a new restore service
-func NewRestoreService(registrySet *registry.Set, entityService *services.EntityService, uploadLocation string) *RestoreService {
+func NewRestoreService(factorySet *registry.FactorySet, entityService *services.EntityService, uploadLocation string) *RestoreService {
 	return &RestoreService{
-		registrySet:    registrySet,
+		factorySet:     factorySet,
 		entityService:  entityService,
 		uploadLocation: uploadLocation,
 	}
@@ -26,5 +26,5 @@ func NewRestoreService(registrySet *registry.Set, entityService *services.Entity
 
 // ProcessRestoreOperation processes a restore operation in the background with detailed logging
 func (s *RestoreService) ProcessRestoreOperation(ctx context.Context, restoreOperationID, uploadLocation string) error {
-	return processor.NewRestoreOperationProcessor(restoreOperationID, s.registrySet, s.entityService, uploadLocation).Process(ctx)
+	return processor.NewRestoreOperationProcessor(restoreOperationID, s.factorySet, s.entityService, uploadLocation).Process(ctx)
 }

@@ -16,9 +16,10 @@ import (
 func TestExportService_parseXMLMetadata(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create test factory set
+	factorySet := memory.NewFactorySet()
+	c.Assert(factorySet, qt.IsNotNil)
+	_ = factorySet.CreateServiceRegistrySet() // registrySet not used in this test
 
 	ctx := context.Background()
 
@@ -87,7 +88,8 @@ func TestExportService_parseXMLMetadata_Errors(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
-	registrySet := memory.NewRegistrySet()
+	factorySet := memory.NewFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	ctx := context.Background()
@@ -129,7 +131,8 @@ func TestExportService_parseXMLMetadata_LargeFile(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
-	registrySet := memory.NewRegistrySet()
+	factorySet := memory.NewFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	ctx := context.Background()
@@ -186,7 +189,8 @@ func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {
 	c := qt.New(t)
 
 	// Create test registry
-	registrySet := memory.NewRegistrySet()
+	factorySet := memory.NewFactorySet()
+	registrySet := factorySet.CreateServiceRegistrySet()
 	c.Assert(registrySet, qt.IsNotNil)
 
 	ctx := context.Background()

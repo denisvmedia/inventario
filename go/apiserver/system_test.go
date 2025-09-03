@@ -20,14 +20,14 @@ import (
 func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry set
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create test factory set
+	factorySet := memory.NewFactorySet()
+	c.Assert(factorySet, qt.IsNotNil)
 
-	_, err := registrySet.UserRegistry.Create(c.Context(), models.User{
+	testUser, err := factorySet.UserRegistry.Create(c.Context(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
@@ -35,7 +35,7 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 		IsActive: true,
 	})
 	c.Assert(err, qt.IsNil)
-	_, err = registrySet.TenantRegistry.Create(c.Context(), models.Tenant{
+	_, err = factorySet.TenantRegistry.Create(c.Context(), models.Tenant{
 		EntityID: models.EntityID{ID: "test-tenant-id"},
 		Name:     "Test Tenant",
 	})
@@ -44,7 +44,7 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	// Create test parameters
 	startTime := time.Now().Add(-1 * time.Hour) // 1 hour ago
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "file:///tmp/uploads?create_dir=1",
 		DebugInfo:      debug.NewInfo("memory://", "file:///tmp/uploads?create_dir=1"),
 		StartTime:      startTime,
@@ -57,7 +57,7 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest("GET", "/api/v1/system", nil)
 	req.Header.Set("Accept", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	// Create response recorder
 	w := httptest.NewRecorder()
@@ -89,14 +89,14 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	c := qt.New(t)
 
-	// Create test registry set
-	registrySet := memory.NewRegistrySet()
-	c.Assert(registrySet, qt.IsNotNil)
+	// Create test factory set
+	factorySet := memory.NewFactorySet()
+	c.Assert(factorySet, qt.IsNotNil)
 
 	// Create test user
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant-id",
 		},
 		Email:    "test@example.com",
@@ -106,9 +106,9 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	}
 	err := testUser.SetPassword("testpassword123")
 	c.Assert(err, qt.IsNil)
-	_, err = registrySet.UserRegistry.Create(c.Context(), testUser)
+	createdUser, err := factorySet.UserRegistry.Create(c.Context(), testUser)
 	c.Assert(err, qt.IsNil)
-	_, err = registrySet.TenantRegistry.Create(c.Context(), models.Tenant{
+	_, err = factorySet.TenantRegistry.Create(c.Context(), models.Tenant{
 		EntityID: models.EntityID{ID: "test-tenant-id"},
 		Name:     "Test Tenant",
 	})
@@ -120,16 +120,15 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 		Theme:        ptr("dark"),
 	}
 
-	userCtx := appctx.WithUser(c.Context(), &testUser)
-	settingsRegistry, err := registrySet.SettingsRegistry.WithCurrentUser(userCtx)
-	c.Assert(err, qt.IsNil)
+	userCtx := appctx.WithUser(c.Context(), createdUser)
+	settingsRegistry := factorySet.SettingsRegistryFactory.MustCreateUserRegistry(userCtx)
 	err = settingsRegistry.Save(c.Context(), testSettings)
 	c.Assert(err, qt.IsNil)
 
 	// Create test parameters
 	startTime := time.Now().Add(-30 * time.Minute) // 30 minutes ago
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "s3://my-bucket/uploads?region=us-east-1",
 		DebugInfo:      debug.NewInfo("postgres://user:pass@localhost:5432/db", "s3://my-bucket/uploads?region=us-east-1"),
 		StartTime:      startTime,
@@ -142,7 +141,7 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	// Create test request
 	req := httptest.NewRequest("GET", "/api/v1/system", nil)
 	req.Header.Set("Accept", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, createdUser.ID)
 
 	// Create response recorder
 	w := httptest.NewRecorder()

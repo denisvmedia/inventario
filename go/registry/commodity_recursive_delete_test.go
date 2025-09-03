@@ -6,6 +6,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
@@ -24,10 +25,11 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	factorySet := memory.NewFactorySet()
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create entity service
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity -> Files
 	location := models.Location{Name: "Test Location"}
@@ -176,10 +178,11 @@ func TestEntityService_DeleteCommodityRecursive_NoFiles(t *testing.T) {
 	})
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	factorySet := memory.NewFactorySet()
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create entity service
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
 
 	// Create test data hierarchy: Location -> Area -> Commodity (no files)
 	location := models.Location{Name: "Test Location"}
@@ -226,10 +229,10 @@ func TestEntityService_DeleteCommodityRecursive_NonExistentCommodity(t *testing.
 	ctx := context.Background()
 
 	// Create registry set with proper dependencies
-	registrySet := memory.NewRegistrySet()
+	factorySet := memory.NewFactorySet()
 
 	// Create entity service
-	entityService := services.NewEntityService(registrySet, "file://./test_uploads?create_dir=true")
+	entityService := services.NewEntityService(factorySet, "file://./test_uploads?create_dir=true")
 
 	// Test recursive delete on non-existent commodity
 	err := entityService.DeleteCommodityRecursive(ctx, "non-existent-id")

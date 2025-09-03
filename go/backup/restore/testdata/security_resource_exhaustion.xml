@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory>
+	<locations>
+		<location id="spam-location-{{.UserID}}" name="Spam Location {{.UserID}}" />
+	</locations>
+	<areas>
+		<area id="spam-area-{{.UserID}}" location_id="spam-location-{{.UserID}}" name="Spam Area {{.UserID}}" />
+	</areas>
+	<commodities>
+		<commodity id="spam-commodity-{{.UserID}}" area_id="spam-area-{{.UserID}}" name="Spam Commodity {{.UserID}}" />
+	</commodities>
+</inventory>

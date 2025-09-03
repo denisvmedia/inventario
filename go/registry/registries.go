@@ -11,7 +11,7 @@ func (c Config) Parse() (*url.URL, error) {
 	return url.Parse(string(c))
 }
 
-type SetFunc func(Config) (*Set, error)
+type SetFunc func(Config) (*FactorySet, error)
 
 var registries = make(map[string]SetFunc)
 

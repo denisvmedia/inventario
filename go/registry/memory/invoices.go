@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-extras/go-kit/must"
 
@@ -11,48 +12,95 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-var _ registry.InvoiceRegistry = (*InvoiceRegistry)(nil)
+// InvoiceRegistryFactory creates InvoiceRegistry instances with proper context
+type InvoiceRegistryFactory struct {
+	baseInvoiceRegistry *Registry[models.Invoice, *models.Invoice]
+	commodityRegistry   *CommodityRegistryFactory // required dependency for relationship tracking
+}
 
-type baseInvoiceRegistry = Registry[models.Invoice, *models.Invoice]
+// InvoiceRegistry is a context-aware registry that can only be created through the factory
 type InvoiceRegistry struct {
-	*baseInvoiceRegistry
+	*Registry[models.Invoice, *models.Invoice]
 
 	userID            string
 	commodityRegistry *CommodityRegistry // required dependency for relationship tracking
 }
 
-func NewInvoiceRegistry(commodityRegistry *CommodityRegistry) *InvoiceRegistry {
-	return &InvoiceRegistry{
+var _ registry.InvoiceRegistry = (*InvoiceRegistry)(nil)
+var _ registry.InvoiceRegistryFactory = (*InvoiceRegistryFactory)(nil)
+
+func NewInvoiceRegistryFactory(commodityRegistry *CommodityRegistryFactory) *InvoiceRegistryFactory {
+	return &InvoiceRegistryFactory{
 		baseInvoiceRegistry: NewRegistry[models.Invoice, *models.Invoice](),
 		commodityRegistry:   commodityRegistry,
 	}
 }
 
-func (r *InvoiceRegistry) MustWithCurrentUser(ctx context.Context) registry.InvoiceRegistry {
-	return must.Must(r.WithCurrentUser(ctx))
+// Factory methods implementing registry.InvoiceRegistryFactory
+
+func (f *InvoiceRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.InvoiceRegistry {
+	return must.Must(f.CreateUserRegistry(ctx))
 }
 
-func (r *InvoiceRegistry) WithCurrentUser(ctx context.Context) (registry.InvoiceRegistry, error) {
-	tmp := *r
-
+func (f *InvoiceRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.InvoiceRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user from context")
 	}
-	tmp.userID = user.ID
-	return &tmp, nil
+
+	// Create a new registry with user context already set
+	userRegistry := &Registry[models.Invoice, *models.Invoice]{
+		items:  f.baseInvoiceRegistry.items, // Share the data map
+		lock:   f.baseInvoiceRegistry.lock,  // Share the mutex pointer
+		userID: user.ID,                     // Set user-specific userID
+	}
+
+	// Create user-aware commodity registry
+	commodityRegistryInterface, err := f.commodityRegistry.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errkit.Wrap(err, "failed to create user commodity registry")
+	}
+
+	// Cast to concrete type for relationship management
+	commodityRegistry, ok := commodityRegistryInterface.(*CommodityRegistry)
+	if !ok {
+		return nil, errors.New("failed to cast commodity registry to concrete type")
+	}
+
+	return &InvoiceRegistry{
+		Registry:          userRegistry,
+		userID:            user.ID,
+		commodityRegistry: commodityRegistry,
+	}, nil
 }
 
-func (r *InvoiceRegistry) WithServiceAccount() registry.InvoiceRegistry {
-	// Create a shallow copy of the registry with no user filtering
-	tmp := *r
-	tmp.userID = "" // Clear userID to bypass user filtering
-	return &tmp
+func (f *InvoiceRegistryFactory) CreateServiceRegistry() registry.InvoiceRegistry {
+	// Create a new registry with service account context (no user filtering)
+	serviceRegistry := &Registry[models.Invoice, *models.Invoice]{
+		items:  f.baseInvoiceRegistry.items, // Share the data map
+		lock:   f.baseInvoiceRegistry.lock,  // Share the mutex pointer
+		userID: "",                          // Clear userID to bypass user filtering
+	}
+
+	// Create service-aware commodity registry
+	commodityRegistryInterface := f.commodityRegistry.CreateServiceRegistry()
+
+	// Cast to concrete type for relationship management
+	commodityRegistry, ok := commodityRegistryInterface.(*CommodityRegistry)
+	if !ok {
+		panic("commodityRegistryInterface is not of type *CommodityRegistry")
+	}
+
+	return &InvoiceRegistry{
+		Registry:          serviceRegistry,
+		userID:            "", // Clear userID to bypass user filtering
+		commodityRegistry: commodityRegistry,
+	}
 }
 
 func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
 	// Use CreateWithUser to ensure user context is applied
-	newInvoice, err := r.baseInvoiceRegistry.CreateWithUser(ctx, invoice)
+	newInvoice, err := r.Registry.CreateWithUser(ctx, invoice)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to create invoice")
 	}
@@ -66,12 +114,12 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*models.Invoice, error) {
 	// Get the existing invoice to check if CommodityID changed
 	var oldCommodityID string
-	if existingInvoice, err := r.baseInvoiceRegistry.Get(ctx, invoice.GetID()); err == nil {
+	if existingInvoice, err := r.Registry.Get(ctx, invoice.GetID()); err == nil {
 		oldCommodityID = existingInvoice.CommodityID
 	}
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
-	updatedInvoice, err := r.baseInvoiceRegistry.UpdateWithUser(ctx, invoice)
+	updatedInvoice, err := r.Registry.UpdateWithUser(ctx, invoice)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to update invoice")
 	}
@@ -92,14 +140,14 @@ func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*
 
 func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this invoice from its parent commodity's invoice list
-	invoice, err := r.baseInvoiceRegistry.Get(ctx, id)
+	invoice, err := r.Registry.Get(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get invoice")
 	}
 
 	_ = r.commodityRegistry.DeleteInvoice(ctx, invoice.CommodityID, id)
 
-	err = r.baseInvoiceRegistry.Delete(ctx, id)
+	err = r.Registry.Delete(ctx, id)
 	if err != nil {
 		return errkit.Wrap(err, "failed to delete invoice")
 	}

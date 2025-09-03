@@ -10,8 +10,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -20,18 +22,14 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-func newTestRegistrySet() *registry.Set {
-	locationRegistry := memory.NewLocationRegistry()
-	areaRegistry := memory.NewAreaRegistry(locationRegistry)
-	fileRegistry := memory.NewFileRegistry()
-	commodityRegistry := memory.NewCommodityRegistry(areaRegistry)
-	restoreStepRegistry := memory.NewRestoreStepRegistry()
-	userRegistry := memory.NewUserRegistry()
+func newTestFactorySet() (*registry.FactorySet, *models.User) {
+	// Create factory set
+	factorySet := memory.NewFactorySet()
 
 	// Create a test user for authentication
 	testUser := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-user-id"},
+			// ID will be generated server-side for security
 			TenantID: "test-tenant-id",
 		},
 		Email:    "test@example.com",
@@ -40,28 +38,15 @@ func newTestRegistrySet() *registry.Set {
 		IsActive: true,
 	}
 	testUser.SetPassword("password123")
-	userRegistry.Create(context.Background(), testUser)
+	createdUser, _ := factorySet.UserRegistry.Create(context.Background(), testUser)
 
-	return &registry.Set{
-		LocationRegistry:         locationRegistry,
-		AreaRegistry:             areaRegistry,
-		CommodityRegistry:        commodityRegistry,
-		ImageRegistry:            memory.NewImageRegistry(commodityRegistry),
-		InvoiceRegistry:          memory.NewInvoiceRegistry(commodityRegistry),
-		ManualRegistry:           memory.NewManualRegistry(commodityRegistry),
-		SettingsRegistry:         memory.NewSettingsRegistry(),
-		ExportRegistry:           memory.NewExportRegistry(),
-		RestoreOperationRegistry: memory.NewRestoreOperationRegistry(restoreStepRegistry),
-		RestoreStepRegistry:      restoreStepRegistry,
-		FileRegistry:             fileRegistry,
-		UserRegistry:             userRegistry,
-	}
+	return factorySet, createdUser
 }
 
 func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
+	factorySet, testUser := newTestFactorySet()
 
 	// Create an export first
 	export := models.Export{
@@ -70,15 +55,18 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 		FilePath:    "test-export.xml",
 		CreatedDate: models.PNow(),
 	}
-	createdExport, err := registrySet.ExportRegistry.Create(context.Background(), export)
+	ctx := appctx.WithUser(context.Background(), testUser)
+	exportRegistry := factorySet.ExportRegistryFactory.MustCreateUserRegistry(ctx)
+	createdExport, err := exportRegistry.Create(context.Background(), export)
 	c.Assert(err, qt.IsNil)
 
 	// Set up router with authentication
 	r := chi.NewRouter()
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "memory://",
 		JWTSecret:      testJWTSecret,
 	}
@@ -108,7 +96,7 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -120,7 +108,7 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
+	factorySet, testUser := newTestFactorySet()
 
 	// Create an export first
 	export := models.Export{
@@ -129,15 +117,18 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 		FilePath:    "test-export.xml",
 		CreatedDate: models.PNow(),
 	}
-	createdExport, err := registrySet.ExportRegistry.Create(context.Background(), export)
+	ctx := appctx.WithUser(context.Background(), testUser)
+	exportRegistry := factorySet.ExportRegistryFactory.MustCreateUserRegistry(ctx)
+	createdExport, err := exportRegistry.Create(context.Background(), export)
 	c.Assert(err, qt.IsNil)
 
 	// Set up router with authentication
 	r := chi.NewRouter()
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "memory://",
 		JWTSecret:      testJWTSecret,
 	}
@@ -167,7 +158,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -202,7 +193,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
+	factorySet, testUser := newTestFactorySet()
 
 	// Create an export first
 	export := models.Export{
@@ -211,7 +202,9 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 		FilePath:    "test-export.xml",
 		CreatedDate: models.PNow(),
 	}
-	createdExport, err := registrySet.ExportRegistry.Create(context.Background(), export)
+	ctx := appctx.WithUser(context.Background(), testUser)
+	exportRegistry := factorySet.ExportRegistryFactory.MustCreateUserRegistry(ctx)
+	createdExport, err := exportRegistry.Create(context.Background(), export)
 	c.Assert(err, qt.IsNil)
 
 	// Create a pending restore operation directly in the database
@@ -226,23 +219,27 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 		},
 		CreatedDate: models.PNow(),
 	}
-	_, err = registrySet.RestoreOperationRegistry.Create(context.Background(), pendingRestore)
+	restoreOpRegistry := factorySet.RestoreOperationRegistryFactory.MustCreateUserRegistry(ctx)
+	_, err = restoreOpRegistry.Create(context.Background(), pendingRestore)
 	c.Assert(err, qt.IsNil)
 
 	// Set up router with authentication
 	r := chi.NewRouter()
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "memory://",
 		JWTSecret:      testJWTSecret,
 	}
 
 	// Use real restore worker (not mock) to test actual logic
-	entityService := services.NewEntityService(registrySet, "memory://")
-	restoreService := restore.NewRestoreService(registrySet, entityService, "memory://")
-	restoreWorker := restore.NewRestoreWorker(restoreService, registrySet, "memory://")
+	entityService := services.NewEntityService(factorySet, "memory://")
+	restoreService := restore.NewRestoreService(factorySet, entityService, "memory://")
+	// Create user registry set for RestoreWorker
+	userRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+	restoreWorker := restore.NewRestoreWorker(restoreService, userRegistrySet, "memory://")
 	r.Route("/api/v1/exports", apiserver.Exports(params, restoreWorker))
 
 	// Try to create another restore request
@@ -266,7 +263,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -301,7 +298,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	c := qt.New(t)
 
-	registrySet := newTestRegistrySet()
+	factorySet, testUser := newTestFactorySet()
 
 	// Create an export first
 	export := models.Export{
@@ -310,15 +307,18 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 		FilePath:    "test-export.xml",
 		CreatedDate: models.PNow(),
 	}
-	createdExport, err := registrySet.ExportRegistry.Create(context.Background(), export)
+	ctx := appctx.WithUser(context.Background(), testUser)
+	exportRegistry := factorySet.ExportRegistryFactory.MustCreateUserRegistry(ctx)
+	createdExport, err := exportRegistry.Create(context.Background(), export)
 	c.Assert(err, qt.IsNil)
 
 	// Set up router with authentication
 	r := chi.NewRouter()
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, registrySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
-		RegistrySet:    registrySet,
+		FactorySet:     factorySet,
 		UploadLocation: "memory://",
 		JWTSecret:      testJWTSecret,
 	}
@@ -348,7 +348,7 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	req, err := http.NewRequest("POST", "/api/v1/exports/"+createdExport.ID+"/restores", bytes.NewReader(data))
 	c.Assert(err, qt.IsNil)
 	req.Header.Set("Content-Type", "application/json")
-	addTestUserAuthHeader(req)
+	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -367,7 +367,8 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 
 	// Verify the restore operation was created with pending status
-	restoreOp, err := registrySet.RestoreOperationRegistry.Get(context.Background(), restoreID)
+	restoreOpRegistry := factorySet.RestoreOperationRegistryFactory.MustCreateUserRegistry(ctx)
+	restoreOp, err := restoreOpRegistry.Get(context.Background(), restoreID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(restoreOp.Status, qt.Equals, models.RestoreStatusPending)
 }

@@ -24,7 +24,6 @@ import (
 
 type commoditiesAPI struct {
 	uploadLocation string
-	registrySet    *registry.Set
 	entityService  *services.EntityService
 	fileService    *services.FileService
 }
@@ -38,11 +37,13 @@ type commoditiesAPI struct {
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
-	commodityReg, err := api.registrySet.CommodityRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	regSet := RegistrySetFromContext(r.Context())
+	if regSet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+	commodityReg := regSet.CommodityRegistry
 
 	commodities, _ := commodityReg.List(r.Context())
 
@@ -62,15 +63,17 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Router /commodities/{id} [get].
 func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	comReg, err := api.registrySet.CommodityRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	regSet := RegistrySetFromContext(r.Context())
+	if regSet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+	comReg := regSet.CommodityRegistry
 
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
 
@@ -118,9 +121,16 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /commodities [post].
 func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	var input jsonapi.CommodityRequest
 
-	rWithCurrency, err := requestWithMainCurrency(r, api.registrySet.SettingsRegistry)
+	rWithCurrency, err := requestWithMainCurrency(r, registrySet.SettingsRegistry)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -132,10 +142,15 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Extract user from authenticated request context
-	user := GetUserFromRequest(r)
-	if user == nil {
-		http.Error(w, "User context required", http.StatusInternalServerError)
+	// Use standardized security validation
+	user, ok := RequireUserContext(w, r)
+	if !ok {
+		return // Error already handled by RequireUserContext
+	}
+
+	// Validate input
+	if secErr := ValidateInputSanitization(r, input.Data.Attributes); secErr != nil {
+		HandleSecurityError(w, r, secErr)
 		return
 	}
 
@@ -144,33 +159,29 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		commodity.TenantID = user.TenantID
 	}
 
-	// Use CreateWithUser to ensure proper user context and validation
-	ctx := r.Context()
-	commodityReg, err := api.registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-	createdCommodity, err := commodityReg.Create(ctx, commodity)
+	// Use standardized registry access
+	commodityReg := registrySet.CommodityRegistry
+
+	createdCommodity, err := commodityReg.Create(r.Context(), commodity)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	var imagesError string
-	images, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), createdCommodity.ID)
+	images, err := registrySet.CommodityRegistry.GetImages(r.Context(), createdCommodity.ID)
 	if err != nil {
 		imagesError = err.Error()
 	}
 
 	var manualsError string
-	manuals, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), createdCommodity.ID)
+	manuals, err := registrySet.CommodityRegistry.GetManuals(r.Context(), createdCommodity.ID)
 	if err != nil {
 		manualsError = err.Error()
 	}
 
 	var invoicesError string
-	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), createdCommodity.ID)
+	invoices, err := registrySet.CommodityRegistry.GetInvoices(r.Context(), createdCommodity.ID)
 	if err != nil {
 		invoicesError = err.Error()
 	}
@@ -203,7 +214,7 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Request) {
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
 
@@ -229,7 +240,14 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /commodities/{id} [put].
 func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Request) {
-	rWithCurrency, err := requestWithMainCurrency(r, api.registrySet.SettingsRegistry)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	rWithCurrency, err := requestWithMainCurrency(r, registrySet.SettingsRegistry)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -238,7 +256,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 
 	commodity := commodityFromContext(r.Context())
 	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
 
@@ -249,7 +267,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 	}
 
 	if commodity.ID != input.Data.ID {
-		unprocessableEntityError(w, r, nil)
+		unprocessableEntityError(w, r, errors.New("ID in URL does not match ID in request body"))
 		return
 	}
 
@@ -264,11 +282,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 
 	// Use UpdateWithUser to ensure proper user context and validation
 	ctx := r.Context()
-	commodityReg, err := api.registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	commodityReg := registrySet.CommodityRegistry
 	updatedCommodity, err := commodityReg.Update(ctx, updateData)
 	if err != nil {
 		renderEntityError(w, r, err)
@@ -276,19 +290,19 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 	}
 
 	var imagesError string
-	images, err := api.registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
+	images, err := registrySet.CommodityRegistry.GetImages(r.Context(), commodity.ID)
 	if err != nil {
 		imagesError = err.Error()
 	}
 
 	var manualsError string
-	manuals, err := api.registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
+	manuals, err := registrySet.CommodityRegistry.GetManuals(r.Context(), commodity.ID)
 	if err != nil {
 		manualsError = err.Error()
 	}
 
 	var invoicesError string
-	invoices, err := api.registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
+	invoices, err := registrySet.CommodityRegistry.GetInvoices(r.Context(), commodity.ID)
 	if err != nil {
 		invoicesError = err.Error()
 	}
@@ -318,17 +332,20 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Success 200 {object} jsonapi.ImagesResponse "OK"
 // @Router /commodities/{commodityID}/images [get].
 func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	// Get file entities linked to this commodity with "images" meta
 	files, err := fileReg.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "images")
@@ -365,17 +382,20 @@ func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.InvoicesResponse "OK"
 // @Router /commodities/{commodityID}/invoices [get].
 func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	// Get file entities linked to this commodity with "invoices" meta
 	files, err := fileReg.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "invoices")
@@ -412,17 +432,20 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 // @Success 200 {object} jsonapi.ManualsResponse "OK"
 // @Router /commodities/{commodityID}/manuals [get].
 func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	// Get file entities linked to this commodity with "manuals" meta
 	files, err := fileReg.ListByLinkedEntityAndMeta(r.Context(), "commodity", commodity.ID, "manuals")
@@ -461,17 +484,20 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
 // @Router /commodities/{commodityID}/images/{imageID} [delete].
 func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	imageID := chi.URLParam(r, "imageID")
 
@@ -509,17 +535,20 @@ func (api *commoditiesAPI) deleteImage(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
 // @Router /commodities/{commodityID}/invoices/{invoiceID} [delete].
 func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	invoiceID := chi.URLParam(r, "invoiceID")
 
@@ -557,17 +586,20 @@ func (api *commoditiesAPI) deleteInvoice(w http.ResponseWriter, r *http.Request)
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
 // @Router /commodities/{commodityID}/manuals/{manualID} [delete].
 func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	manualID := chi.URLParam(r, "manualID")
 
@@ -606,17 +638,20 @@ func (api *commoditiesAPI) deleteManual(w http.ResponseWriter, r *http.Request) 
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
 // @Router /commodities/{commodityID}/images/{imageID}.{imageExt} [get].
 func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	imageReg, err := api.registrySet.ImageRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	imageReg := registrySet.ImageRegistry
 
 	imageID := chi.URLParam(r, "imageID")
 	image, err := imageReg.Get(r.Context(), imageID)
@@ -666,17 +701,20 @@ func (api *commoditiesAPI) downloadImage(w http.ResponseWriter, r *http.Request)
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
 // @Router /commodities/{commodityID}/invoices/{invoiceID}.{invoiceExt} [get].
 func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	invoiceReg, err := api.registrySet.InvoiceRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	invoiceReg := registrySet.InvoiceRegistry
 
 	invoiceID := chi.URLParam(r, "invoiceID")
 	invoice, err := invoiceReg.Get(r.Context(), invoiceID)
@@ -726,17 +764,20 @@ func (api *commoditiesAPI) downloadInvoice(w http.ResponseWriter, r *http.Reques
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
 // @Router /commodities/{commodityID}/manuals/{manualID}.{manualExt} [get].
 func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request) {
-	commodity := commodityFromContext(r.Context())
-	if commodity == nil {
-		unprocessableEntityError(w, r, nil)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
 
-	manualReg, err := api.registrySet.ManualRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
 		return
 	}
+
+	manualReg := registrySet.ManualRegistry
 
 	manualID := chi.URLParam(r, "manualID")
 	manual, err := manualReg.Get(r.Context(), manualID)
@@ -796,11 +837,14 @@ func (api *commoditiesAPI) getDownloadFile(ctx context.Context, originalPath str
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
 // @Router /commodities/{commodityID}/images/{imageID} [get].
 func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	imageID := chi.URLParam(r, "imageID")
 
@@ -844,11 +888,14 @@ func (api *commoditiesAPI) getImageData(w http.ResponseWriter, r *http.Request) 
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
 // @Router /commodities/{commodityID}/invoices/{invoiceID} [get].
 func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	invoiceID := chi.URLParam(r, "invoiceID")
 
@@ -892,11 +939,14 @@ func (api *commoditiesAPI) getInvoiceData(w http.ResponseWriter, r *http.Request
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
 // @Router /commodities/{commodityID}/manuals/{manualID} [get].
 func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request) { //revive:disable-line:get-return
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	manualID := chi.URLParam(r, "manualID")
 
@@ -941,11 +991,14 @@ func (api *commoditiesAPI) getManualsData(w http.ResponseWriter, r *http.Request
 // @Failure 404 {object} jsonapi.Errors "Commodity or image not found"
 // @Router /commodities/{commodityID}/images/{imageID} [put].
 func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	imageID := chi.URLParam(r, "imageID")
 
@@ -1011,11 +1064,14 @@ func (api *commoditiesAPI) updateImage(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Commodity or invoice not found"
 // @Router /commodities/{commodityID}/invoices/{invoiceID} [put].
 func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	invoiceID := chi.URLParam(r, "invoiceID")
 
@@ -1081,11 +1137,14 @@ func (api *commoditiesAPI) updateInvoice(w http.ResponseWriter, r *http.Request)
 // @Failure 404 {object} jsonapi.Errors "Commodity or manual not found"
 // @Router /commodities/{commodityID}/manuals/{manualID} [put].
 func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) {
-	fileReg, err := api.registrySet.FileRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	fileReg := registrySet.FileRegistry
 
 	manualID := chi.URLParam(r, "manualID")
 
@@ -1141,15 +1200,14 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 func Commodities(params Params) func(r chi.Router) {
 	api := &commoditiesAPI{
 		uploadLocation: params.UploadLocation,
-		registrySet:    params.RegistrySet,
 		entityService:  params.EntityService,
-		fileService:    services.NewFileService(params.RegistrySet, params.UploadLocation),
+		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
 	}
 
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listCommodities) // GET /commodities
 		r.Route("/{commodityID}", func(r chi.Router) {
-			r.Use(commodityCtx(api.registrySet.CommodityRegistry))
+			r.Use(commodityCtx())
 			r.Get("/", api.getCommodity)       // GET /commodities/123
 			r.Put("/", api.updateCommodity)    // PUT /commodities/123
 			r.Delete("/", api.deleteCommodity) // DELETE /commodities/123
@@ -1178,13 +1236,7 @@ func Commodities(params Params) func(r chi.Router) {
 	}
 }
 
-func requestWithMainCurrency(r *http.Request, settingsRegistry registry.SettingsRegistry) (*http.Request, error) {
-	// Get user-aware settings registry
-	userSettingsRegistry, err := settingsRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
+func requestWithMainCurrency(r *http.Request, userSettingsRegistry registry.SettingsRegistry) (*http.Request, error) {
 	settings, err := userSettingsRegistry.Get(r.Context())
 	if err != nil {
 		return nil, err

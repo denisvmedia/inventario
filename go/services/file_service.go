@@ -12,23 +12,23 @@ import (
 
 // FileService provides business logic for file operations
 type FileService struct {
-	registrySet    *registry.Set
+	factorySet     *registry.FactorySet
 	uploadLocation string
 }
 
 // NewFileService creates a new file service
-func NewFileService(registrySet *registry.Set, uploadLocation string) *FileService {
+func NewFileService(factorySet *registry.FactorySet, uploadLocation string) *FileService {
 	return &FileService{
-		registrySet:    registrySet,
+		factorySet:     factorySet,
 		uploadLocation: uploadLocation,
 	}
 }
 
 // DeleteFileWithPhysical deletes a file entity and its associated physical file
 func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string) error {
-	fileReg, err := s.registrySet.FileRegistry.WithCurrentUser(ctx)
+	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get file registry")
+		return errkit.Wrap(err, "failed to create file registry")
 	}
 
 	// Get the file entity first
@@ -87,9 +87,9 @@ func (s *FileService) deletePhysicalFile(ctx context.Context, filePath string) e
 
 // DeleteLinkedFiles deletes all files linked to a specific entity
 func (s *FileService) DeleteLinkedFiles(ctx context.Context, entityType, entityID string) error {
-	fileReg, err := s.registrySet.FileRegistry.WithCurrentUser(ctx)
+	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get file registry")
+		return errkit.Wrap(err, "failed to create file registry")
 	}
 
 	// Get all linked files for this entity

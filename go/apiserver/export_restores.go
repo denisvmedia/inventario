@@ -9,11 +9,9 @@ import (
 
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 type exportRestoresAPI struct {
-	registrySet   *registry.Set
 	restoreWorker RestoreWorkerInterface
 }
 
@@ -27,11 +25,14 @@ type exportRestoresAPI struct {
 // @Success 200 {object} jsonapi.RestoreOperationsResponse "OK"
 // @Router /exports/{id}/restores [get].
 func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.Request) {
-	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		unauthorizedError(w, r, err)
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+
+	expReg := registrySet.ExportRegistry
 
 	exportID := chi.URLParam(r, "id")
 	if exportID == "" {
@@ -40,17 +41,13 @@ func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.
 	}
 
 	// Verify export exists
-	_, err = expReg.Get(r.Context(), exportID)
+	_, err := expReg.Get(r.Context(), exportID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	restoreOpReg, err := api.registrySet.RestoreOperationRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	restoreOpReg := registrySet.RestoreOperationRegistry
 
 	restoreOperations, err := restoreOpReg.ListByExport(r.Context(), exportID)
 	if err != nil {
@@ -76,26 +73,19 @@ func (api *exportRestoresAPI) listExportRestores(w http.ResponseWriter, r *http.
 // @Failure 404 {object} jsonapi.Errors "Not found"
 // @Router /exports/{id}/restores/{restoreId} [get].
 func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	exportID := chi.URLParam(r, "id")
 	restoreID := chi.URLParam(r, "restoreId")
 
-	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-
-	restoreOpReg, err := api.registrySet.RestoreOperationRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-
-	stepReg, err := api.registrySet.RestoreStepRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	expReg := registrySet.ExportRegistry
+	restoreOpReg := registrySet.RestoreOperationRegistry
+	stepReg := registrySet.RestoreStepRegistry
 
 	if exportID == "" {
 		badRequest(w, r, ErrEntityNotFound)
@@ -108,7 +98,7 @@ func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http
 	}
 
 	// Verify export exists
-	_, err = expReg.Get(r.Context(), exportID)
+	_, err := expReg.Get(r.Context(), exportID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -158,17 +148,20 @@ func (api *exportRestoresAPI) apiGetExportRestore(w http.ResponseWriter, r *http
 // @Failure 404 {object} jsonapi.Errors "Not found"
 // @Router /exports/{id}/restores [post].
 func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	exportID := chi.URLParam(r, "id")
 	if exportID == "" {
 		badRequest(w, r, ErrEntityNotFound)
 		return
 	}
 
-	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	expReg := registrySet.ExportRegistry
 
 	// Verify export exists and is completed
 	export, err := expReg.Get(r.Context(), exportID)
@@ -177,11 +170,7 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 		return
 	}
 
-	restoreOpReg, err := api.registrySet.RestoreOperationRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	restoreOpReg := registrySet.RestoreOperationRegistry
 
 	if export.Status != models.ExportStatusCompleted {
 		badRequest(w, r, ErrInvalidContentType)
@@ -237,20 +226,18 @@ func (api *exportRestoresAPI) createExportRestore(w http.ResponseWriter, r *http
 // @Failure 404 {object} jsonapi.Errors "Not found"
 // @Router /exports/{id}/restores/{restoreId} [delete].
 func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	exportID := chi.URLParam(r, "id")
 	restoreID := chi.URLParam(r, "restoreId")
 
-	restoreOpReg, err := api.registrySet.RestoreOperationRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-
-	expReg, err := api.registrySet.ExportRegistry.WithCurrentUser(r.Context())
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	restoreOpReg := registrySet.RestoreOperationRegistry
+	expReg := registrySet.ExportRegistry
 
 	if exportID == "" {
 		badRequest(w, r, ErrEntityNotFound)
@@ -263,7 +250,7 @@ func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http
 	}
 
 	// Verify export exists
-	_, err = expReg.Get(r.Context(), exportID)
+	_, err := expReg.Get(r.Context(), exportID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -297,9 +284,8 @@ func (api *exportRestoresAPI) deleteExportRestore(w http.ResponseWriter, r *http
 }
 
 // ExportRestores sets up the export restore API routes.
-func ExportRestores(params Params, restoreWorker RestoreWorkerInterface) func(r chi.Router) {
+func ExportRestores(restoreWorker RestoreWorkerInterface) func(r chi.Router) {
 	api := &exportRestoresAPI{
-		registrySet:   params.RegistrySet,
 		restoreWorker: restoreWorker,
 	}
 

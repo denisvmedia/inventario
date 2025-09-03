@@ -119,68 +119,22 @@ type File struct {
 
 // ExportService handles the background processing of export requests
 type ExportService struct {
-	registrySet    *registry.Set
+	factorySet     *registry.FactorySet
 	uploadLocation string
 }
 
 // NewExportService creates a new export service
-func NewExportService(registrySet *registry.Set, uploadLocation string) *ExportService {
+func NewExportService(factorySet *registry.FactorySet, uploadLocation string) *ExportService {
 	return &ExportService{
-		registrySet:    registrySet,
+		factorySet:     factorySet,
 		uploadLocation: uploadLocation,
 	}
-}
-
-// CreateExportFromUserInput creates a new export record from user input.
-// The export record is created with status "pending" and is ready for processing.
-// It will be processed by the ExportWorker in the background.
-func (s *ExportService) CreateExportFromUserInput(ctx context.Context, input *models.Export) (models.Export, error) {
-	// Validate the export
-	if err := input.ValidateWithContext(ctx); err != nil {
-		return models.Export{}, errkit.Wrap(err, "failed to validate export")
-	}
-
-	export := models.NewExportFromUserInput(input)
-
-	// Extract tenant and user from context
-	tenantID, userID, err := ExtractTenantUserFromContext(ctx)
-	if err != nil {
-		return models.Export{}, errkit.Wrap(err, "failed to extract tenant/user context")
-	}
-
-	if export.TenantID == "" {
-		export.TenantID = tenantID
-	}
-	if export.UserID == "" {
-		export.UserID = userID
-	}
-
-	// Enrich selected items with names from the database
-	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
-		// Ensure we have user context for enriching selected items
-		if err := s.enrichSelectedItemsWithNames(ctx, &export); err != nil {
-			return models.Export{}, errkit.Wrap(err, "failed to enrich selected items with names")
-		}
-	}
-
-	exportReg, err := s.registrySet.ExportRegistry.WithCurrentUser(ctx)
-	if err != nil {
-		return models.Export{}, errkit.Wrap(err, "failed to get export registry")
-	}
-
-	// Create the export
-	created, err := exportReg.Create(ctx, export)
-	if err != nil {
-		return models.Export{}, errkit.Wrap(err, "failed to create export")
-	}
-
-	return *created, nil
 }
 
 // ProcessExport processes an export request in the background
 func (s *ExportService) ProcessExport(ctx context.Context, exportID string) error {
 	// Get the export request
-	export, err := s.registrySet.ExportRegistry.WithServiceAccount().Get(ctx, exportID)
+	export, err := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Get(ctx, exportID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get export")
 	}
@@ -190,7 +144,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		return nil
 	}
 
-	user, err := s.registrySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get user")
 	}
@@ -199,7 +153,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 
 	// Update status to in_progress
 	export.Status = models.ExportStatusInProgress
-	expReg, err := s.registrySet.ExportRegistry.WithCurrentUser(ctx)
+	expReg, err := s.factorySet.ExportRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get export registry")
 	}
@@ -214,7 +168,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
-		_, expErr := s.registrySet.ExportRegistry.WithServiceAccount().Update(ctx, *export)
+		_, expErr := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Update(ctx, *export)
 		return errkit.Wrap(errors.Join(err, expErr), "failed to generate export")
 	}
 
@@ -224,7 +178,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 		// Update status to failed
 		export.Status = models.ExportStatusFailed
 		export.ErrorMessage = err.Error()
-		_, updateErr := s.registrySet.ExportRegistry.WithServiceAccount().Update(ctx, *export)
+		_, updateErr := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Update(ctx, *export)
 		return errkit.Wrap(errors.Join(err, updateErr), "failed to create export file entity")
 	}
 
@@ -249,7 +203,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	export.CompletedDate = models.PNow()
 	export.ErrorMessage = ""
 
-	userReg, err := s.registrySet.ExportRegistry.WithCurrentUser(ctx)
+	userReg, err := s.factorySet.ExportRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get export registry")
 	}
@@ -300,7 +254,7 @@ func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, de
 		},
 	}
 
-	fileReg, err := s.registrySet.FileRegistry.WithCurrentUser(ctx)
+	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get file registry")
 	}
@@ -410,7 +364,7 @@ func (s *ExportService) streamXMLExport(ctx context.Context, export models.Expor
 		return nil, errkit.Wrap(err, "failed to write root element")
 	}
 
-	user, err := s.registrySet.UserRegistry.Get(ctx, export.UserID)
+	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
 	if err != nil {
 		return nil, errkit.Wrap(err, "failed to get user")
 	}
@@ -469,7 +423,7 @@ func (s *ExportService) streamFullDatabase(ctx context.Context, writer io.Writer
 
 // streamLocations streams locations to the writer and tracks statistics
 func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
-	locReg, err := s.registrySet.LocationRegistry.WithCurrentUser(ctx)
+	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get location registry")
 	}
@@ -514,7 +468,7 @@ func (s *ExportService) streamLocations(ctx context.Context, writer io.Writer, e
 
 // streamAreas streams areas to the writer and tracks statistics
 func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error { //nolint:dupl // streamLocations and streamAreas have similar structure but are specific to their types
-	areaReg, err := s.registrySet.AreaRegistry.WithCurrentUser(ctx)
+	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get area registry")
 	}
@@ -559,7 +513,7 @@ func (s *ExportService) streamAreas(ctx context.Context, writer io.Writer, expor
 
 // streamCommodities streams commodities to the writer and tracks statistics
 func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer, export models.Export, stats *types.ExportStats) error {
-	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodity registry")
 	}
@@ -654,7 +608,7 @@ func (s *ExportService) groupSelectedItemsByType(selectedItems []models.ExportSe
 // streamSelectedLocations streams location data to the XML encoder and tracks statistics
 func (s *ExportService) streamSelectedLocations(ctx context.Context, encoder *xml.Encoder, locationIDs []string, stats *types.ExportStats) error {
 	return s.streamEntitySection(ctx, encoder, "locations", locationIDs, stats, func(ctx context.Context, id string) (any, error) {
-		locReg, err := s.registrySet.LocationRegistry.WithCurrentUser(ctx)
+		locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -674,7 +628,7 @@ func (s *ExportService) streamSelectedLocations(ctx context.Context, encoder *xm
 // streamSelectedAreas streams area data to the XML encoder and tracks statistics
 func (s *ExportService) streamSelectedAreas(ctx context.Context, encoder *xml.Encoder, areaIDs []string, stats *types.ExportStats) error {
 	return s.streamEntitySection(ctx, encoder, "areas", areaIDs, stats, func(ctx context.Context, id string) (any, error) {
-		areaReg, err := s.registrySet.AreaRegistry.WithCurrentUser(ctx)
+		areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -732,7 +686,7 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 		return errkit.Wrap(err, "failed to encode commodities start element")
 	}
 
-	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodity registry")
 	}
@@ -853,12 +807,17 @@ func (s *ExportService) addFileAttachments(ctx context.Context, commodityID stri
 
 // addImages adds images to the XML commodity and tracks statistics
 func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCommodity *Commodity, export models.Export, stats *types.ExportStats) error {
-	imageIDs, err := s.registrySet.CommodityRegistry.GetImages(ctx, commodityID)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return err
+	}
+	// Use the commodity registry to get related image IDs
+	imageIDs, err := comReg.GetImages(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get images")
 	}
 
-	imgReg, err := s.registrySet.ImageRegistry.WithCurrentUser(ctx)
+	imgReg, err := s.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get image registry")
 	}
@@ -875,12 +834,16 @@ func (s *ExportService) addImages(ctx context.Context, commodityID string, xmlCo
 
 // addInvoices adds invoices to the XML commodity and tracks statistics
 func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xmlCommodity *Commodity, export models.Export, stats *types.ExportStats) error {
-	invoiceIDs, err := s.registrySet.CommodityRegistry.GetInvoices(ctx, commodityID)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get commodity registry")
+	}
+	invoiceIDs, err := comReg.GetInvoices(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get invoices")
 	}
 
-	invReg, err := s.registrySet.InvoiceRegistry.WithCurrentUser(ctx)
+	invReg, err := s.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get invoice registry")
 	}
@@ -897,12 +860,16 @@ func (s *ExportService) addInvoices(ctx context.Context, commodityID string, xml
 
 // addManuals adds manuals to the XML commodity and tracks statistics
 func (s *ExportService) addManuals(ctx context.Context, commodityID string, xmlCommodity *Commodity, export models.Export, stats *types.ExportStats) error {
-	manualIDs, err := s.registrySet.CommodityRegistry.GetManuals(ctx, commodityID)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errkit.Wrap(err, "failed to get commodity registry")
+	}
+	manualIDs, err := comReg.GetManuals(ctx, commodityID)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get manuals")
 	}
 
-	manReg, err := s.registrySet.ManualRegistry.WithCurrentUser(ctx)
+	manReg, err := s.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get manual registry")
 	}
@@ -1092,32 +1059,32 @@ func (s *ExportService) streamFileCollectionDirectly(ctx context.Context, encode
 
 	var fileGetter func(context.Context, string) (any, error)
 	switch r := reg.(type) {
-	case registry.ImageRegistry:
-		reg, err := r.WithCurrentUser(ctx)
+	case registry.ImageRegistryFactory:
+		imgReg, err := r.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to get image registry")
+			return errkit.Wrap(err, "failed to create image registry")
 		}
 		fileGetter = func(ctx context.Context, id string) (any, error) {
-			return reg.Get(ctx, id)
+			return imgReg.Get(ctx, id)
 		}
-	case registry.InvoiceRegistry:
-		reg, err := r.WithCurrentUser(ctx)
+	case registry.InvoiceRegistryFactory:
+		invReg, err := r.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to get image registry")
+			return errkit.Wrap(err, "failed to create invoice registry")
 		}
 		fileGetter = func(ctx context.Context, id string) (any, error) {
-			return reg.Get(ctx, id)
+			return invReg.Get(ctx, id)
 		}
-	case registry.ManualRegistry:
-		reg, err := r.WithCurrentUser(ctx)
+	case registry.ManualRegistryFactory:
+		manReg, err := r.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to get image registry")
+			return errkit.Wrap(err, "failed to create manual registry")
 		}
 		fileGetter = func(ctx context.Context, id string) (any, error) {
-			return reg.Get(ctx, id)
+			return manReg.Get(ctx, id)
 		}
 	default:
-		return fmt.Errorf("unsupported file registry type: %T", reg)
+		return fmt.Errorf("unsupported file registry factory type: %T", reg)
 	}
 
 	for _, fileID := range fileIDs {
@@ -1458,7 +1425,7 @@ func (s *ExportService) streamFileAttachmentsDirectly(ctx context.Context, encod
 
 // streamImagesDirectly streams images directly to XML encoder and tracks statistics
 func (s *ExportService) streamImagesDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string, export models.Export, stats *types.ExportStats) error {
-	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodity registry")
 	}
@@ -1467,12 +1434,12 @@ func (s *ExportService) streamImagesDirectly(ctx context.Context, encoder *xml.E
 		return errkit.Wrap(err, "failed to get images")
 	}
 
-	return s.streamFileCollectionDirectly(ctx, encoder, "images", imageIDs, s.registrySet.ImageRegistry, stats, &stats.ImageCount)
+	return s.streamFileCollectionDirectly(ctx, encoder, "images", imageIDs, s.factorySet.ImageRegistryFactory, stats, &stats.ImageCount)
 }
 
 // streamInvoicesDirectly streams invoices directly to XML encoder and tracks statistics
 func (s *ExportService) streamInvoicesDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *types.ExportStats) error {
-	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodity registry")
 	}
@@ -1482,12 +1449,12 @@ func (s *ExportService) streamInvoicesDirectly(ctx context.Context, encoder *xml
 		return errkit.Wrap(err, "failed to get invoices")
 	}
 
-	return s.streamFileCollectionDirectly(ctx, encoder, "invoices", invoiceIDs, s.registrySet.InvoiceRegistry, stats, &stats.InvoiceCount)
+	return s.streamFileCollectionDirectly(ctx, encoder, "invoices", invoiceIDs, s.factorySet.InvoiceRegistryFactory, stats, &stats.InvoiceCount)
 }
 
 // streamManualsDirectly streams manuals directly to XML encoder and tracks statistics
 func (s *ExportService) streamManualsDirectly(ctx context.Context, encoder *xml.Encoder, commodityID string, stats *types.ExportStats) error {
-	comReg, err := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errkit.Wrap(err, "failed to get commodity registry")
 	}
@@ -1497,7 +1464,7 @@ func (s *ExportService) streamManualsDirectly(ctx context.Context, encoder *xml.
 		return errkit.Wrap(err, "failed to get manuals")
 	}
 
-	return s.streamFileCollectionDirectly(ctx, encoder, "manuals", manualIDs, s.registrySet.ManualRegistry, stats, &stats.ManualCount)
+	return s.streamFileCollectionDirectly(ctx, encoder, "manuals", manualIDs, s.factorySet.ManualRegistryFactory, stats, &stats.ManualCount)
 }
 
 // streamFileDataDirectly streams file data directly to XML encoder without loading into memory and tracks base64 size
@@ -1597,59 +1564,6 @@ func (s *ExportService) streamBase64Content(encoder *xml.Encoder, reader *blob.R
 	}
 
 	return xmlWriter.totalSize, nil
-}
-
-func (s *ExportService) enrichSelectedItemsWithNames(ctx context.Context, export *models.Export) error {
-	locReg, err1 := s.registrySet.LocationRegistry.WithCurrentUser(ctx)
-	areaReg, err2 := s.registrySet.AreaRegistry.WithCurrentUser(ctx)
-	comReg, err3 := s.registrySet.CommodityRegistry.WithCurrentUser(ctx)
-	errs := errors.Join(err1, err2, err3)
-	if errs != nil {
-		return errkit.Wrap(errs, "failed to get registries")
-	}
-
-	for i, item := range export.SelectedItems {
-		var name string
-		var locationID, areaID string
-
-		switch item.Type {
-		case models.ExportSelectedItemTypeLocation:
-			location, getErr := locReg.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Location " + item.ID + "]"
-			} else {
-				name = location.Name
-			}
-		case models.ExportSelectedItemTypeArea:
-			area, getErr := areaReg.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Area " + item.ID + "]"
-			} else {
-				name = area.Name
-				locationID = area.LocationID // Store the relationship
-			}
-		case models.ExportSelectedItemTypeCommodity:
-			commodity, getErr := comReg.Get(ctx, item.ID)
-			if getErr != nil {
-				// If item doesn't exist, use a fallback name
-				name = "[Deleted Commodity " + item.ID + "]"
-			} else {
-				name = commodity.Name
-				areaID = commodity.AreaID // Store the relationship
-			}
-		default:
-			name = "[Unknown Item " + item.ID + "]"
-		}
-
-		// Update the item with the name and relationships
-		export.SelectedItems[i].Name = name
-		export.SelectedItems[i].LocationID = locationID
-		export.SelectedItems[i].AreaID = areaID
-	}
-
-	return nil
 }
 
 // xmlBase64Writer is a custom writer that writes base64 data directly to XML encoder and tracks size
