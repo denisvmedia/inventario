@@ -326,37 +326,47 @@ func (s *Service) GetUser(ctx context.Context, idOrEmail string) (*models.User, 
 
 // ListUsers lists users with filtering and pagination
 func (s *Service) ListUsers(ctx context.Context, req UserListRequest) (*UserListResponse, error) {
-	userRegistry := s.registrySet.UserRegistry()
+	var allUsers []*models.User
+	var err error
 
-	// Build filter criteria
-	filter := make(map[string]any)
+	// If tenant filter is specified, use the optimized ListByTenant method
 	if req.TenantID != "" {
-		filter["tenant_id"] = req.TenantID
-	}
-	if req.Role != "" {
-		filter["role"] = req.Role
-	}
-	if req.Active != nil {
-		filter["is_active"] = *req.Active
-	}
-	if req.Search != "" {
-		filter["search"] = req.Search
-	}
-
-	// Get users with pagination
-	users, err := userRegistry.List(ctx, req.Limit, req.Offset, filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list users: %w", err)
+		allUsers, err = s.factorySet.UserRegistry.ListByTenant(ctx, req.TenantID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list users by tenant: %w", err)
+		}
+	} else {
+		// Get all users
+		allUsers, err = s.factorySet.UserRegistry.List(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list users: %w", err)
+		}
 	}
 
-	// Get total count
-	totalCount, err := userRegistry.Count(ctx, filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count users: %w", err)
+	// Apply additional filters in memory
+	var filteredUsers []*models.User
+	for _, user := range allUsers {
+		if s.matchesUserFilters(user, req) {
+			filteredUsers = append(filteredUsers, user)
+		}
 	}
+
+	// Apply pagination
+	totalCount := len(filteredUsers)
+	start := req.Offset
+	if start > len(filteredUsers) {
+		start = len(filteredUsers)
+	}
+
+	end := start + req.Limit
+	if end > len(filteredUsers) {
+		end = len(filteredUsers)
+	}
+
+	paginatedUsers := filteredUsers[start:end]
 
 	return &UserListResponse{
-		Users:      users,
+		Users:      paginatedUsers,
 		TotalCount: totalCount,
 	}, nil
 }
@@ -397,8 +407,7 @@ func (s *Service) UpdateUser(ctx context.Context, idOrEmail string, req UserUpda
 	}
 
 	// Update user
-	userRegistry := s.registrySet.UserRegistry()
-	updatedUser, err := userRegistry.Update(ctx, *user)
+	updatedUser, err := s.factorySet.UserRegistry.Update(ctx, *user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
@@ -415,8 +424,7 @@ func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
 	}
 
 	// Delete user
-	userRegistry := s.registrySet.UserRegistry()
-	if err := userRegistry.Delete(ctx, user.ID); err != nil {
+	if err := s.factorySet.UserRegistry.Delete(ctx, user.ID); err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
@@ -435,6 +443,30 @@ func (s *Service) matchesTenantFilters(tenant *models.Tenant, req TenantListRequ
 		searchLower := strings.ToLower(req.Search)
 		if !strings.Contains(strings.ToLower(tenant.Name), searchLower) &&
 			!strings.Contains(strings.ToLower(tenant.Slug), searchLower) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// matchesUserFilters checks if a user matches the given filters
+func (s *Service) matchesUserFilters(user *models.User, req UserListRequest) bool {
+	// Role filter
+	if req.Role != "" && string(user.Role) != req.Role {
+		return false
+	}
+
+	// Active filter
+	if req.Active != nil && user.IsActive != *req.Active {
+		return false
+	}
+
+	// Search filter (email or name)
+	if req.Search != "" {
+		searchLower := strings.ToLower(req.Search)
+		if !strings.Contains(strings.ToLower(user.Email), searchLower) &&
+			!strings.Contains(strings.ToLower(user.Name), searchLower) {
 			return false
 		}
 	}
