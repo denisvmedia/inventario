@@ -7,15 +7,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the user update command
@@ -152,30 +150,25 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	}
 	fmt.Fprintln(out)
 
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
+	// Create admin service
+	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
-	defer db.Close()
-
-	// Test connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Create registries
-	userRegistry := postgres.NewUserRegistry(db)
-	tenantRegistry := postgres.NewTenantRegistry(db)
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Fprintf(out, "Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
 	// Find the user to update
-	originalUser, err := c.findUser(userRegistry, idOrEmail)
+	originalUser, err := adminService.GetUser(context.Background(), idOrEmail)
 	if err != nil {
 		return fmt.Errorf("failed to find user: %w", err)
 	}
 
 	// Get current tenant info
-	currentTenant, err := tenantRegistry.Get(context.Background(), originalUser.TenantID)
+	currentTenant, err := adminService.GetTenant(context.Background(), originalUser.TenantID)
 	if err != nil {
 		return fmt.Errorf("failed to get current tenant: %w", err)
 	}

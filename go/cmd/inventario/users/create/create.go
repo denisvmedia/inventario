@@ -6,15 +6,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the user creation command
@@ -123,26 +121,53 @@ func (c *Command) registerFlags() {
 
 // createUser handles the user creation process
 func (c *Command) createUser(cfg *Config, dbConfig *shared.DatabaseConfig) error {
-	// Validate and setup
-	if err := c.validateAndSetup(cfg, dbConfig); err != nil {
-		return err
-	}
+	out := c.Cmd().OutOrStdout()
 
-	// Connect to database and create registries
-	dbConn, err := c.connectAndCreateRegistries(dbConfig)
+	// 1. Create admin service
+	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
 		return err
 	}
-	defer dbConn.DB.Close()
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Fprintf(out, "Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
-	// Collect and validate user information
-	user, tenant, err := c.collectAndValidateUser(cfg, dbConn.TenantRegistry)
+	// 2. Show operation info
+	fmt.Fprintln(out, "=== CREATE USER ===")
+	if cfg.DryRun {
+		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
+	} else {
+		fmt.Fprintln(out, "Mode: LIVE CREATION")
+	}
+	fmt.Fprintln(out)
+
+	// 3. Collect user information and convert to service request
+	userReq, err := c.collectUserRequest(cfg, adminService)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to collect user information: %w", err)
 	}
 
-	// Handle dry run or create user
-	return c.handleUserCreation(cfg, user, tenant, dbConn.UserRegistry)
+	// 4. Handle dry run
+	if cfg.DryRun {
+		fmt.Fprintln(out, "Would create user:")
+		c.printUserRequest(userReq)
+		fmt.Fprintln(out, "\n💡 To perform the actual creation, run the command without --dry-run")
+		return nil
+	}
+
+	// 5. Delegate to service
+	createdUser, err := adminService.CreateUser(context.Background(), *userReq)
+	if err != nil {
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// 6. Format and output result
+	fmt.Fprintln(out, "✅ User created successfully!")
+	c.printUserInfo(createdUser, nil) // We'll get tenant info separately if needed
+
+	return nil
 }
 
 // validateAndSetup validates configuration and prints setup information
@@ -448,6 +473,83 @@ func (c *Command) promptForPassword(prompt string) (string, error) {
 	return password, nil
 }
 
+// collectUserRequest collects user information and converts to service request
+func (c *Command) collectUserRequest(cfg *Config, adminService *admin.Service) (*admin.UserCreateRequest, error) {
+	// Collect email
+	email := cfg.Email
+	if email == "" && cfg.Interactive {
+		emailInput, err := c.promptForInput("Email", "")
+		if err != nil {
+			return nil, err
+		}
+		email = emailInput
+	}
+	if email == "" {
+		return nil, fmt.Errorf("email is required")
+	}
+
+	// Collect name
+	name := cfg.Name
+	if name == "" && cfg.Interactive {
+		nameInput, err := c.promptForInput("Full name", "")
+		if err != nil {
+			return nil, err
+		}
+		name = nameInput
+	}
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	// Collect password
+	password := cfg.Password
+	if password == "" {
+		passwordInput, err := c.promptForPassword("Password")
+		if err != nil {
+			return nil, err
+		}
+		password = passwordInput
+	}
+
+	// Get tenant ID from tenant slug/ID
+	tenantID := cfg.TenantID
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant ID is required")
+	}
+
+	// Validate tenant exists
+	_, err := adminService.GetTenant(context.Background(), tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("tenant not found: %w", err)
+	}
+
+	// Parse role
+	role := models.UserRoleUser
+	if cfg.Role != "" {
+		role = models.UserRole(cfg.Role)
+	}
+
+	return &admin.UserCreateRequest{
+		Email:    email,
+		Password: password,
+		Name:     name,
+		TenantID: tenantID,
+		Role:     role,
+		IsActive: cfg.Active,
+	}, nil
+}
+
+// printUserRequest prints user request information for dry run
+func (c *Command) printUserRequest(req *admin.UserCreateRequest) {
+	out := c.Cmd().OutOrStdout()
+
+	fmt.Fprintf(out, "  Email:    %s\n", req.Email)
+	fmt.Fprintf(out, "  Name:     %s\n", req.Name)
+	fmt.Fprintf(out, "  Role:     %s\n", req.Role)
+	fmt.Fprintf(out, "  Active:   %t\n", req.IsActive)
+	fmt.Fprintf(out, "  Tenant:   %s\n", req.TenantID)
+}
+
 // printUserInfo prints user information in a formatted way
 func (c *Command) printUserInfo(user *models.User, tenant *models.Tenant) {
 	out := c.Cmd().OutOrStdout()
@@ -457,5 +559,9 @@ func (c *Command) printUserInfo(user *models.User, tenant *models.Tenant) {
 	fmt.Fprintf(out, "  Name:     %s\n", user.Name)
 	fmt.Fprintf(out, "  Role:     %s\n", user.Role)
 	fmt.Fprintf(out, "  Active:   %t\n", user.IsActive)
-	fmt.Fprintf(out, "  Tenant:   %s (%s)\n", tenant.Name, tenant.Slug)
+	if tenant != nil {
+		fmt.Fprintf(out, "  Tenant:   %s (%s)\n", tenant.Name, tenant.Slug)
+	} else {
+		fmt.Fprintf(out, "  Tenant:   %s\n", user.TenantID)
+	}
 }

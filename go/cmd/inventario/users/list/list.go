@@ -9,14 +9,12 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the user list command
@@ -126,52 +124,42 @@ func (c *Command) listUsers(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 		return err
 	}
 
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
+	// Create admin service
+	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
-	// Test connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
+	// Build service request
+	listReq := admin.UserListRequest{
+		TenantID: cfg.Tenant,
+		Role:     cfg.Role,
+		Search:   cfg.Search,
+		Limit:    cfg.Limit,
+		Offset:   cfg.Offset,
 	}
-
-	// Create registries
-	userRegistry := postgres.NewUserRegistry(db)
-	tenantRegistry := postgres.NewTenantRegistry(db)
-
-	// Build filter criteria
-	filters, err := c.buildFilters(cfg, tenantRegistry)
-	if err != nil {
-		return fmt.Errorf("failed to build filters: %w", err)
-	}
-
-	// Get users with filtering and pagination
-	users, err := c.getFilteredUsers(userRegistry, filters, cfg.Limit, cfg.Offset)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve users: %w", err)
+	if cfg.Active != "" {
+		active := cfg.Active == "true"
+		listReq.Active = &active
 	}
 
-	// Get total count for pagination info
-	totalCount, err := c.getTotalCount(userRegistry, filters)
+	// Get users via service
+	response, err := adminService.ListUsers(context.Background(), listReq)
 	if err != nil {
-		return fmt.Errorf("failed to get total count: %w", err)
-	}
-
-	// Get tenant information for display
-	tenantMap, err := c.getTenantMap(tenantRegistry, users)
-	if err != nil {
-		return fmt.Errorf("failed to get tenant information: %w", err)
+		return fmt.Errorf("failed to list users: %w", err)
 	}
 
 	// Output results
 	switch cfg.Output {
 	case "json":
-		return c.outputJSON(users, totalCount, cfg, tenantMap)
+		return c.outputJSON(response.Users, response.TotalCount, cfg, nil)
 	case "table":
-		return c.outputTable(users, totalCount, cfg, tenantMap)
+		return c.outputTable(response.Users, response.TotalCount, cfg, nil)
 	default:
 		return fmt.Errorf("unsupported output format: %s", cfg.Output)
 	}

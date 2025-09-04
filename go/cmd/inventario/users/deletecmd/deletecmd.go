@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the user delete command
@@ -105,30 +103,25 @@ func (c *Command) deleteUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	}
 	fmt.Fprintln(out)
 
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
+	// Create admin service
+	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
-	defer db.Close()
-
-	// Test connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Create registries
-	userRegistry := postgres.NewUserRegistry(db)
-	tenantRegistry := postgres.NewTenantRegistry(db)
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Fprintf(out, "Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
 	// Find the user to delete
-	user, err := c.findUser(userRegistry, idOrEmail)
+	user, err := adminService.GetUser(context.Background(), idOrEmail)
 	if err != nil {
 		return fmt.Errorf("failed to find user: %w", err)
 	}
 
 	// Get tenant information
-	tenant, err := tenantRegistry.Get(context.Background(), user.TenantID)
+	tenant, err := adminService.GetTenant(context.Background(), user.TenantID)
 	if err != nil {
 		return fmt.Errorf("failed to get tenant information: %w", err)
 	}
@@ -164,8 +157,8 @@ func (c *Command) deleteUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 		}
 	}
 
-	// Delete the user
-	err = userRegistry.Delete(context.Background(), user.ID)
+	// Delete the user via service
+	err = adminService.DeleteUser(context.Background(), idOrEmail)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
