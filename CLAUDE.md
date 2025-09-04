@@ -64,6 +64,16 @@ The system implements enterprise-grade multi-tenancy with:
 
 ### Database Operations
 - `curl http://localhost:3333/api/v1/seed` - Seed the database with test data
+- `./inventario tenants create` - Create tenants for initial setup
+- `./inventario tenants list` - List all tenants with filtering
+- `./inventario tenants get <id-or-slug>` - Get detailed tenant information
+- `./inventario tenants update <id-or-slug>` - Update tenant properties
+- `./inventario tenants delete <id-or-slug>` - Delete tenants with confirmation
+- `./inventario users create` - Create users for initial setup
+- `./inventario users list` - List all users with filtering
+- `./inventario users get <id-or-email>` - Get detailed user information
+- `./inventario users update <id-or-email>` - Update user properties
+- `./inventario users delete <id-or-email>` - Delete users with confirmation
 - For PostgreSQL: Set POSTGRES_TEST_DSN environment variable for testing
 
 ## Project Structure
@@ -188,7 +198,7 @@ Support for multiple database backends via DSN:
 
 ### Database Schema Changes
 1. Update Ptah annotations in model structs
-2. Run migrations: `./inventario migrate --db-dsn=<dsn>`
+2. Run migrations: `./inventario db migrate up --db-dsn=<dsn>`
 3. Test with `--dry-run` flag first
 4. Update tests to reflect schema changes
 
