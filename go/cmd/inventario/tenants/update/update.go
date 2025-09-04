@@ -119,6 +119,8 @@ func (c *Command) registerFlags() {
 
 // updateTenant handles the tenant update process
 func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idOrSlug string) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Validate database configuration
 	if err := dbConfig.Validate(); err != nil {
 		return fmt.Errorf("database configuration error: %w", err)
@@ -134,15 +136,15 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 		return fmt.Errorf("tenant ID or slug is required")
 	}
 
-	fmt.Println("=== UPDATE TENANT ===")
-	fmt.Printf("Database: %s\n", dbConfig.DBDSN)
-	fmt.Printf("Target: %s\n", idOrSlug)
+	fmt.Fprintln(out, "=== UPDATE TENANT ===")
+	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
+	fmt.Fprintf(out, "Target: %s\n", idOrSlug)
 	if cfg.DryRun {
-		fmt.Println("Mode: DRY RUN (no changes will be made)")
+		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
 	} else {
-		fmt.Println("Mode: LIVE UPDATE")
+		fmt.Fprintln(out, "Mode: LIVE UPDATE")
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	// Connect to database
 	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
@@ -165,7 +167,7 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 		return fmt.Errorf("failed to find tenant: %w", err)
 	}
 
-	fmt.Printf("Found tenant: %s (%s)\n\n", originalTenant.Name, originalTenant.Slug)
+	fmt.Fprintf(out, "Found tenant: %s (%s)\n\n", originalTenant.Name, originalTenant.Slug)
 
 	// Collect updates
 	updatedTenant, hasChanges, err := c.collectUpdates(cfg, originalTenant)
@@ -174,7 +176,7 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 	}
 
 	if !hasChanges {
-		fmt.Println("No changes specified.")
+		fmt.Fprintln(out, "No changes specified.")
 		return nil
 	}
 
@@ -185,9 +187,9 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 
 	if cfg.DryRun {
 		// Show what would be updated
-		fmt.Println("Would update tenant with:")
+		fmt.Fprintln(out, "Would update tenant with:")
 		c.printChanges(originalTenant, updatedTenant)
-		fmt.Println("\n💡 To perform the actual update, run the command without --dry-run")
+		fmt.Fprintln(out, "\n💡 To perform the actual update, run the command without --dry-run")
 		return nil
 	}
 
@@ -197,7 +199,7 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 		return fmt.Errorf("failed to update tenant: %w", err)
 	}
 
-	fmt.Println("✅ Tenant updated successfully!")
+	fmt.Fprintln(out, "✅ Tenant updated successfully!")
 	c.printTenantInfo(finalTenant)
 
 	return nil
@@ -422,7 +424,8 @@ func (c *Command) promptForUpdate(fieldName, currentValue, flagValue string) (st
 		return flagValue, nil
 	}
 
-	fmt.Printf("%s [%s]: ", fieldName, currentValue)
+	out := c.Cmd().OutOrStdout()
+	fmt.Fprintf(out, "%s [%s]: ", fieldName, currentValue)
 	var input string
 	fmt.Scanln(&input)
 
