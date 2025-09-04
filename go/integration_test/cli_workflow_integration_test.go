@@ -91,6 +91,9 @@ func setupFreshDatabase(dsn string) error {
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	bootstrapCmd := apply.New(dbConfig)
 
+	// Register the database flags for the bootstrap command
+	shared.RegisterLocalDatabaseFlags(bootstrapCmd.Cmd(), dbConfig)
+
 	// Capture output
 	var bootstrapOutput bytes.Buffer
 	bootstrapCmd.Cmd().SetOut(&bootstrapOutput)
@@ -109,6 +112,9 @@ func setupFreshDatabase(dsn string) error {
 
 	// Step 2: Run schema migrations
 	migrateCmd := up.New(dbConfig)
+
+	// Register the database flags for the migration command
+	shared.RegisterLocalDatabaseFlags(migrateCmd.Cmd(), dbConfig)
 
 	// Capture output
 	var migrateOutput bytes.Buffer
