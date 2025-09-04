@@ -82,6 +82,8 @@ func (c *Command) registerFlags() {
 
 // getUser handles the user retrieval process
 func (c *Command) getUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEmail string) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Validate database configuration
 	if err := dbConfig.Validate(); err != nil {
 		return fmt.Errorf("database configuration error: %w", err)
@@ -103,8 +105,8 @@ func (c *Command) getUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEmai
 	}
 
 	if cfg.DryRun {
-		fmt.Printf("Would retrieve user information for: %s\n", idOrEmail)
-		fmt.Printf("Output format: %s\n", cfg.Output)
+		fmt.Fprintf(out, "Would retrieve user information for: %s\n", idOrEmail)
+		fmt.Fprintf(out, "Output format: %s\n", cfg.Output)
 		return nil
 	}
 
@@ -184,8 +186,10 @@ func (c *Command) outputJSON(user *models.User, tenant *models.Tenant) error {
 
 // outputTable outputs user information in table format
 func (c *Command) outputTable(user *models.User, tenant *models.Tenant) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Create table writer
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 
 	// Print user information
 	fmt.Fprintln(w, "FIELD\tVALUE")

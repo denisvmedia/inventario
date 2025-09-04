@@ -147,6 +147,8 @@ func (c *Command) createUser(cfg *Config, dbConfig *shared.DatabaseConfig) error
 
 // validateAndSetup validates configuration and prints setup information
 func (c *Command) validateAndSetup(cfg *Config, dbConfig *shared.DatabaseConfig) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Validate database configuration
 	if err := dbConfig.Validate(); err != nil {
 		return fmt.Errorf("database configuration error: %w", err)
@@ -157,14 +159,14 @@ func (c *Command) validateAndSetup(cfg *Config, dbConfig *shared.DatabaseConfig)
 		return fmt.Errorf("user creation is not supported for memory databases as they don't provide persistence. Please use a PostgreSQL database")
 	}
 
-	fmt.Println("=== CREATE USER ===")
-	fmt.Printf("Database: %s\n", dbConfig.DBDSN)
+	fmt.Fprintln(out, "=== CREATE USER ===")
+	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
 	if cfg.DryRun {
-		fmt.Println("Mode: DRY RUN (no changes will be made)")
+		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
 	} else {
-		fmt.Println("Mode: LIVE CREATION")
+		fmt.Fprintln(out, "Mode: LIVE CREATION")
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	return c.validateBasicInputs(cfg)
 }
@@ -257,11 +259,13 @@ func (c *Command) collectAndValidateUser(cfg *Config, tenantRegistry *postgres.T
 
 // handleUserCreation handles dry run or actual user creation
 func (c *Command) handleUserCreation(cfg *Config, user *models.User, tenant *models.Tenant, userRegistry *postgres.UserRegistry) error {
+	out := c.Cmd().OutOrStdout()
+
 	if cfg.DryRun {
 		// Show what would be created
-		fmt.Println("Would create user:")
+		fmt.Fprintln(out, "Would create user:")
 		c.printUserInfo(user, tenant)
-		fmt.Println("\n💡 To perform the actual creation, run the command without --dry-run")
+		fmt.Fprintln(out, "\n💡 To perform the actual creation, run the command without --dry-run")
 		return nil
 	}
 
@@ -271,7 +275,7 @@ func (c *Command) handleUserCreation(cfg *Config, user *models.User, tenant *mod
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 
-	fmt.Println("✅ User created successfully!")
+	fmt.Fprintln(out, "✅ User created successfully!")
 	c.printUserInfo(createdUser, tenant)
 
 	return nil
@@ -393,10 +397,12 @@ func (c *Command) collectTenant(cfg *Config, tenantRegistry *postgres.TenantRegi
 
 // promptForInput prompts the user for input with a default value
 func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
+	out := c.Cmd().OutOrStdout()
+
 	if defaultValue != "" {
-		fmt.Printf("%s [%s]: ", prompt, defaultValue)
+		fmt.Fprintf(out, "%s [%s]: ", prompt, defaultValue)
 	} else {
-		fmt.Printf("%s: ", prompt)
+		fmt.Fprintf(out, "%s: ", prompt)
 	}
 
 	var input string
@@ -411,14 +417,16 @@ func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
 
 // promptForPassword prompts for a password with hidden input
 func (c *Command) promptForPassword(prompt string) (string, error) {
-	fmt.Printf("%s: ", prompt)
+	out := c.Cmd().OutOrStdout()
+
+	fmt.Fprintf(out, "%s: ", prompt)
 
 	// Read password without echoing to terminal
 	passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
 	if err != nil {
 		return "", fmt.Errorf("failed to read password: %w", err)
 	}
-	fmt.Println() // Add newline after password input
+	fmt.Fprintln(out) // Add newline after password input
 
 	password := string(passwordBytes)
 	if password == "" {
@@ -426,12 +434,12 @@ func (c *Command) promptForPassword(prompt string) (string, error) {
 	}
 
 	// Confirm password
-	fmt.Printf("Confirm %s: ", prompt)
+	fmt.Fprintf(out, "Confirm %s: ", prompt)
 	confirmBytes, err := term.ReadPassword(int(syscall.Stdin))
 	if err != nil {
 		return "", fmt.Errorf("failed to read password confirmation: %w", err)
 	}
-	fmt.Println() // Add newline after confirmation
+	fmt.Fprintln(out) // Add newline after confirmation
 
 	if string(confirmBytes) != password {
 		return "", fmt.Errorf("passwords do not match")
@@ -442,10 +450,12 @@ func (c *Command) promptForPassword(prompt string) (string, error) {
 
 // printUserInfo prints user information in a formatted way
 func (c *Command) printUserInfo(user *models.User, tenant *models.Tenant) {
-	fmt.Printf("  ID:       %s\n", user.ID)
-	fmt.Printf("  Email:    %s\n", user.Email)
-	fmt.Printf("  Name:     %s\n", user.Name)
-	fmt.Printf("  Role:     %s\n", user.Role)
-	fmt.Printf("  Active:   %t\n", user.IsActive)
-	fmt.Printf("  Tenant:   %s (%s)\n", tenant.Name, tenant.Slug)
+	out := c.Cmd().OutOrStdout()
+
+	fmt.Fprintf(out, "  ID:       %s\n", user.ID)
+	fmt.Fprintf(out, "  Email:    %s\n", user.Email)
+	fmt.Fprintf(out, "  Name:     %s\n", user.Name)
+	fmt.Fprintf(out, "  Role:     %s\n", user.Role)
+	fmt.Fprintf(out, "  Active:   %t\n", user.IsActive)
+	fmt.Fprintf(out, "  Tenant:   %s (%s)\n", tenant.Name, tenant.Slug)
 }

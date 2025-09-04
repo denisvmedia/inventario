@@ -388,13 +388,15 @@ func (c *Command) outputJSON(users []*models.User, totalCount int, cfg *Config, 
 
 // outputTable outputs users in table format
 func (c *Command) outputTable(users []*models.User, totalCount int, cfg *Config, tenantMap map[string]*models.Tenant) error {
+	out := c.Cmd().OutOrStdout()
+
 	if len(users) == 0 {
-		fmt.Println("No users found.")
+		fmt.Fprintln(out, "No users found.")
 		return nil
 	}
 
 	// Create table writer
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 
 	// Print header
 	fmt.Fprintln(w, "ID\tEMAIL\tNAME\tROLE\tACTIVE\tTENANT\tCREATED")
@@ -422,11 +424,11 @@ func (c *Command) outputTable(users []*models.User, totalCount int, cfg *Config,
 	w.Flush()
 
 	// Print pagination info
-	fmt.Printf("\nShowing %d of %d users", len(users), totalCount)
+	fmt.Fprintf(out, "\nShowing %d of %d users", len(users), totalCount)
 	if cfg.Offset > 0 || cfg.Offset+len(users) < totalCount {
-		fmt.Printf(" (offset: %d, limit: %d)", cfg.Offset, cfg.Limit)
+		fmt.Fprintf(out, " (offset: %d, limit: %d)", cfg.Offset, cfg.Limit)
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	return nil
 }

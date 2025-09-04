@@ -125,6 +125,8 @@ func (c *Command) registerFlags() {
 
 // updateUser handles the user update process
 func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEmail string) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Validate database configuration
 	if err := dbConfig.Validate(); err != nil {
 		return fmt.Errorf("database configuration error: %w", err)
@@ -140,15 +142,15 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 		return fmt.Errorf("user ID or email is required")
 	}
 
-	fmt.Println("=== UPDATE USER ===")
-	fmt.Printf("Database: %s\n", dbConfig.DBDSN)
-	fmt.Printf("Target: %s\n", idOrEmail)
+	fmt.Fprintln(out, "=== UPDATE USER ===")
+	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
+	fmt.Fprintf(out, "Target: %s\n", idOrEmail)
 	if cfg.DryRun {
-		fmt.Println("Mode: DRY RUN (no changes will be made)")
+		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
 	} else {
-		fmt.Println("Mode: LIVE UPDATE")
+		fmt.Fprintln(out, "Mode: LIVE UPDATE")
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	// Connect to database
 	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
@@ -178,8 +180,8 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 		return fmt.Errorf("failed to get current tenant: %w", err)
 	}
 
-	fmt.Printf("Found user: %s (%s)\n", originalUser.Name, originalUser.Email)
-	fmt.Printf("Current tenant: %s (%s)\n\n", currentTenant.Name, currentTenant.Slug)
+	fmt.Fprintf(out, "Found user: %s (%s)\n", originalUser.Name, originalUser.Email)
+	fmt.Fprintf(out, "Current tenant: %s (%s)\n\n", currentTenant.Name, currentTenant.Slug)
 
 	// Collect updates
 	updatedUser, hasChanges, err := c.collectUpdates(cfg, originalUser, tenantRegistry)
@@ -188,7 +190,7 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	}
 
 	if !hasChanges {
-		fmt.Println("No changes specified.")
+		fmt.Fprintln(out, "No changes specified.")
 		return nil
 	}
 
@@ -199,9 +201,9 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 
 	if cfg.DryRun {
 		// Show what would be updated
-		fmt.Println("Would update user with:")
+		fmt.Fprintln(out, "Would update user with:")
 		c.printChanges(originalUser, updatedUser, tenantRegistry)
-		fmt.Println("\n💡 To perform the actual update, run the command without --dry-run")
+		fmt.Fprintln(out, "\n💡 To perform the actual update, run the command without --dry-run")
 		return nil
 	}
 
@@ -211,7 +213,7 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 
-	fmt.Println("✅ User updated successfully!")
+	fmt.Fprintln(out, "✅ User updated successfully!")
 	c.printUserInfo(finalUser, tenantRegistry)
 
 	return nil

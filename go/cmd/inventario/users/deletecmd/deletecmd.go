@@ -78,6 +78,8 @@ func (c *Command) registerFlags() {
 
 // deleteUser handles the user deletion process
 func (c *Command) deleteUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEmail string) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Validate database configuration
 	if err := dbConfig.Validate(); err != nil {
 		return fmt.Errorf("database configuration error: %w", err)
@@ -93,15 +95,15 @@ func (c *Command) deleteUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 		return fmt.Errorf("user ID or email is required")
 	}
 
-	fmt.Println("=== DELETE USER ===")
-	fmt.Printf("Database: %s\n", dbConfig.DBDSN)
-	fmt.Printf("Target: %s\n", idOrEmail)
+	fmt.Fprintln(out, "=== DELETE USER ===")
+	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
+	fmt.Fprintf(out, "Target: %s\n", idOrEmail)
 	if cfg.DryRun {
-		fmt.Println("Mode: DRY RUN (no changes will be made)")
+		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
 	} else {
-		fmt.Println("Mode: LIVE DELETION")
+		fmt.Fprintln(out, "Mode: LIVE DELETION")
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	// Connect to database
 	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
