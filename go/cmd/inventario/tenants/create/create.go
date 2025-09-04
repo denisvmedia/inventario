@@ -117,6 +117,8 @@ func (c *Command) registerFlags() {
 
 // createTenant handles the tenant creation process
 func (c *Command) createTenant(cfg *Config, dbConfig *shared.DatabaseConfig) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Validate database configuration
 	if err := dbConfig.Validate(); err != nil {
 		return fmt.Errorf("database configuration error: %w", err)
@@ -127,14 +129,14 @@ func (c *Command) createTenant(cfg *Config, dbConfig *shared.DatabaseConfig) err
 		return fmt.Errorf("tenant creation is not supported for memory databases as they don't provide persistence. Please use a PostgreSQL database")
 	}
 
-	fmt.Println("=== CREATE TENANT ===")
-	fmt.Printf("Database: %s\n", dbConfig.DBDSN)
+	fmt.Fprintln(out, "=== CREATE TENANT ===")
+	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
 	if cfg.DryRun {
-		fmt.Println("Mode: DRY RUN (no changes will be made)")
+		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
 	} else {
-		fmt.Println("Mode: LIVE CREATION")
+		fmt.Fprintln(out, "Mode: LIVE CREATION")
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	// Collect tenant information
 	tenant, err := c.collectTenantInfo(cfg)
@@ -164,9 +166,9 @@ func (c *Command) createTenant(cfg *Config, dbConfig *shared.DatabaseConfig) err
 
 	if cfg.DryRun {
 		// Show what would be created
-		fmt.Println("Would create tenant:")
+		fmt.Fprintln(out, "Would create tenant:")
 		c.printTenantInfo(tenant)
-		fmt.Println("\n💡 To perform the actual creation, run the command without --dry-run")
+		fmt.Fprintln(out, "\n💡 To perform the actual creation, run the command without --dry-run")
 		return nil
 	}
 
@@ -176,11 +178,11 @@ func (c *Command) createTenant(cfg *Config, dbConfig *shared.DatabaseConfig) err
 		return fmt.Errorf("failed to create tenant: %w", err)
 	}
 
-	fmt.Println("✅ Tenant created successfully!")
+	fmt.Fprintln(out, "✅ Tenant created successfully!")
 	c.printTenantInfo(createdTenant)
 
 	if cfg.Default {
-		fmt.Println("\n📌 This tenant has been marked as the default tenant for the system.")
+		fmt.Fprintln(out, "\n📌 This tenant has been marked as the default tenant for the system.")
 	}
 
 	return nil
@@ -270,10 +272,12 @@ func (c *Command) generateSlug(name string) string {
 
 // promptForInput prompts the user for input with a default value
 func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
+	out := c.Cmd().OutOrStdout()
+
 	if defaultValue != "" {
-		fmt.Printf("%s [%s]: ", prompt, defaultValue)
+		fmt.Fprintf(out, "%s [%s]: ", prompt, defaultValue)
 	} else {
-		fmt.Printf("%s: ", prompt)
+		fmt.Fprintf(out, "%s: ", prompt)
 	}
 
 	var input string
@@ -288,15 +292,17 @@ func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
 
 // printTenantInfo prints tenant information in a formatted way
 func (c *Command) printTenantInfo(tenant *models.Tenant) {
-	fmt.Printf("  ID:       %s\n", tenant.ID)
-	fmt.Printf("  Name:     %s\n", tenant.Name)
-	fmt.Printf("  Slug:     %s\n", tenant.Slug)
+	out := c.Cmd().OutOrStdout()
+
+	fmt.Fprintf(out, "  ID:       %s\n", tenant.ID)
+	fmt.Fprintf(out, "  Name:     %s\n", tenant.Name)
+	fmt.Fprintf(out, "  Slug:     %s\n", tenant.Slug)
 	if tenant.Domain != nil && *tenant.Domain != "" {
-		fmt.Printf("  Domain:   %s\n", *tenant.Domain)
+		fmt.Fprintf(out, "  Domain:   %s\n", *tenant.Domain)
 	}
-	fmt.Printf("  Status:   %s\n", tenant.Status)
+	fmt.Fprintf(out, "  Status:   %s\n", tenant.Status)
 	if len(tenant.Settings) > 0 {
 		settingsJSON, _ := json.MarshalIndent(tenant.Settings, "  ", "  ")
-		fmt.Printf("  Settings: %s\n", settingsJSON)
+		fmt.Fprintf(out, "  Settings: %s\n", settingsJSON)
 	}
 }

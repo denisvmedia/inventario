@@ -82,6 +82,8 @@ func (c *Command) registerFlags() {
 
 // getTenant handles the tenant retrieval process
 func (c *Command) getTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idOrSlug string) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Validate database configuration
 	if err := dbConfig.Validate(); err != nil {
 		return fmt.Errorf("database configuration error: %w", err)
@@ -103,8 +105,8 @@ func (c *Command) getTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idOrSl
 	}
 
 	if cfg.DryRun {
-		fmt.Printf("Would retrieve tenant information for: %s\n", idOrSlug)
-		fmt.Printf("Output format: %s\n", cfg.Output)
+		fmt.Fprintf(out, "Would retrieve tenant information for: %s\n", idOrSlug)
+		fmt.Fprintf(out, "Output format: %s\n", cfg.Output)
 		return nil
 	}
 
@@ -187,8 +189,10 @@ func (c *Command) outputJSON(tenant *models.Tenant, userCount int) error {
 
 // outputTable outputs tenant information in table format
 func (c *Command) outputTable(tenant *models.Tenant, userCount int) error {
+	out := c.Cmd().OutOrStdout()
+
 	// Create table writer
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 
 	// Print tenant information
 	fmt.Fprintln(w, "FIELD\tVALUE")
@@ -212,12 +216,12 @@ func (c *Command) outputTable(tenant *models.Tenant, userCount int) error {
 
 	// Print settings if they exist
 	if len(tenant.Settings) > 0 {
-		fmt.Println("\nSettings:")
+		fmt.Fprintln(out, "\nSettings:")
 		settingsJSON, err := json.MarshalIndent(tenant.Settings, "", "  ")
 		if err != nil {
-			fmt.Printf("Error formatting settings: %v\n", err)
+			fmt.Fprintf(out, "Error formatting settings: %v\n", err)
 		} else {
-			fmt.Println(string(settingsJSON))
+			fmt.Fprintln(out, string(settingsJSON))
 		}
 	}
 

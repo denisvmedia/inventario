@@ -273,13 +273,15 @@ func (c *Command) outputJSON(tenants []*models.Tenant, totalCount int, cfg *Conf
 
 // outputTable outputs tenants in table format
 func (c *Command) outputTable(tenants []*models.Tenant, totalCount int, cfg *Config) error {
+	out := c.Cmd().OutOrStdout()
+
 	if len(tenants) == 0 {
-		fmt.Println("No tenants found.")
+		fmt.Fprintln(out, "No tenants found.")
 		return nil
 	}
 
 	// Create table writer
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 
 	// Print header
 	fmt.Fprintln(w, "ID\tNAME\tSLUG\tDOMAIN\tSTATUS\tCREATED")
@@ -305,11 +307,11 @@ func (c *Command) outputTable(tenants []*models.Tenant, totalCount int, cfg *Con
 	w.Flush()
 
 	// Print pagination info
-	fmt.Printf("\nShowing %d of %d tenants", len(tenants), totalCount)
+	fmt.Fprintf(out, "\nShowing %d of %d tenants", len(tenants), totalCount)
 	if cfg.Offset > 0 || cfg.Offset+len(tenants) < totalCount {
-		fmt.Printf(" (offset: %d, limit: %d)", cfg.Offset, cfg.Limit)
+		fmt.Fprintf(out, " (offset: %d, limit: %d)", cfg.Offset, cfg.Limit)
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	return nil
 }
