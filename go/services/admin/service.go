@@ -273,9 +273,11 @@ type UserListResponse struct {
 // CreateUser creates a new user
 func (s *Service) CreateUser(ctx context.Context, req UserCreateRequest) (*models.User, error) {
 	user := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: req.TenantID,
+		},
 		Email:    req.Email,
 		Name:     req.Name,
-		TenantID: req.TenantID,
 		Role:     req.Role,
 		IsActive: req.IsActive,
 	}
@@ -393,7 +395,7 @@ func (s *Service) UpdateUser(ctx context.Context, idOrEmail string, req UserUpda
 		user.IsActive = *req.IsActive
 	}
 	if req.TenantID != nil {
-		user.TenantID = *req.TenantID
+		user.SetTenantID(*req.TenantID)
 	}
 	if req.Password != nil {
 		if err := user.SetPassword(*req.Password); err != nil {

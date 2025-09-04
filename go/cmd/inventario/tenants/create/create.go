@@ -7,14 +7,12 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the tenant creation command
@@ -119,18 +117,19 @@ func (c *Command) registerFlags() {
 func (c *Command) createTenant(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	out := c.Cmd().OutOrStdout()
 
-	// Validate database configuration
-	if err := dbConfig.Validate(); err != nil {
-		return fmt.Errorf("database configuration error: %w", err)
+	// 1. Create admin service
+	adminService, err := admin.NewService(dbConfig)
+	if err != nil {
+		return err
 	}
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Fprintf(out, "Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
-	// Check if this is a memory database and reject it
-	if strings.HasPrefix(dbConfig.DBDSN, "memory://") {
-		return fmt.Errorf("tenant creation is not supported for memory databases as they don't provide persistence. Please use a PostgreSQL database")
-	}
-
+	// 2. Show operation info
 	fmt.Fprintln(out, "=== CREATE TENANT ===")
-	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
 	if cfg.DryRun {
 		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
 	} else {
@@ -138,46 +137,27 @@ func (c *Command) createTenant(cfg *Config, dbConfig *shared.DatabaseConfig) err
 	}
 	fmt.Fprintln(out)
 
-	// Collect tenant information
-	tenant, err := c.collectTenantInfo(cfg)
+	// 3. Collect tenant information and convert to service request
+	tenantReq, err := c.collectTenantRequest(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to collect tenant information: %w", err)
 	}
 
-	// Validate tenant data
-	if err := tenant.ValidateWithContext(context.Background()); err != nil {
-		return fmt.Errorf("tenant validation failed: %w", err)
-	}
-
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer db.Close()
-
-	// Test connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Create tenant registry
-	tenantRegistry := postgres.NewTenantRegistry(db)
-
+	// 4. Handle dry run
 	if cfg.DryRun {
-		// Show what would be created
 		fmt.Fprintln(out, "Would create tenant:")
-		c.printTenantInfo(tenant)
+		c.printTenantRequest(tenantReq)
 		fmt.Fprintln(out, "\n💡 To perform the actual creation, run the command without --dry-run")
 		return nil
 	}
 
-	// Create the tenant
-	createdTenant, err := tenantRegistry.Create(context.Background(), *tenant)
+	// 5. Delegate to service
+	createdTenant, err := adminService.CreateTenant(context.Background(), *tenantReq)
 	if err != nil {
 		return fmt.Errorf("failed to create tenant: %w", err)
 	}
 
+	// 6. Format and output result
 	fmt.Fprintln(out, "✅ Tenant created successfully!")
 	c.printTenantInfo(createdTenant)
 
@@ -188,12 +168,8 @@ func (c *Command) createTenant(cfg *Config, dbConfig *shared.DatabaseConfig) err
 	return nil
 }
 
-// collectTenantInfo collects tenant information from flags and interactive prompts
-func (c *Command) collectTenantInfo(cfg *Config) (*models.Tenant, error) {
-	tenant := &models.Tenant{
-		Status: models.TenantStatus(cfg.Status),
-	}
-
+// collectTenantRequest collects tenant information and converts to service request
+func (c *Command) collectTenantRequest(cfg *Config) (*admin.TenantCreateRequest, error) {
 	// Collect name
 	if cfg.Name == "" && cfg.Interactive {
 		name, err := c.promptForInput("Tenant name", "")
@@ -208,7 +184,6 @@ func (c *Command) collectTenantInfo(cfg *Config) (*models.Tenant, error) {
 	if cfg.Name == "" {
 		return nil, fmt.Errorf("tenant name is required")
 	}
-	tenant.Name = cfg.Name
 
 	// Collect or generate slug
 	if cfg.Slug == "" {
@@ -223,7 +198,6 @@ func (c *Command) collectTenantInfo(cfg *Config) (*models.Tenant, error) {
 			cfg.Slug = generatedSlug
 		}
 	}
-	tenant.Slug = cfg.Slug
 
 	// Collect domain (optional)
 	if cfg.Domain == "" && cfg.Interactive {
@@ -233,20 +207,35 @@ func (c *Command) collectTenantInfo(cfg *Config) (*models.Tenant, error) {
 		}
 		cfg.Domain = domain
 	}
-	if cfg.Domain != "" {
-		tenant.Domain = &cfg.Domain
-	}
 
 	// Parse settings if provided
+	var settings map[string]any
 	if cfg.Settings != "" {
-		var settings models.TenantSettings
 		if err := json.Unmarshal([]byte(cfg.Settings), &settings); err != nil {
 			return nil, fmt.Errorf("invalid settings JSON: %w", err)
 		}
-		tenant.Settings = settings
 	}
 
-	return tenant, nil
+	// Parse status
+	status := models.TenantStatusActive
+	if cfg.Status != "" {
+		status = models.TenantStatus(cfg.Status)
+	}
+
+	// Handle domain
+	var domain *string
+	if cfg.Domain != "" {
+		domain = &cfg.Domain
+	}
+
+	return &admin.TenantCreateRequest{
+		Name:     cfg.Name,
+		Slug:     cfg.Slug,
+		Domain:   domain,
+		Status:   status,
+		Settings: settings,
+		Default:  cfg.Default,
+	}, nil
 }
 
 // generateSlug generates a URL-friendly slug from the tenant name
@@ -288,6 +277,22 @@ func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
 	}
 
 	return input, nil
+}
+
+// printTenantRequest prints tenant request information for dry run
+func (c *Command) printTenantRequest(req *admin.TenantCreateRequest) {
+	out := c.Cmd().OutOrStdout()
+
+	fmt.Fprintf(out, "  Name:     %s\n", req.Name)
+	fmt.Fprintf(out, "  Slug:     %s\n", req.Slug)
+	if req.Domain != nil && *req.Domain != "" {
+		fmt.Fprintf(out, "  Domain:   %s\n", *req.Domain)
+	}
+	fmt.Fprintf(out, "  Status:   %s\n", req.Status)
+	if len(req.Settings) > 0 {
+		settingsJSON, _ := json.MarshalIndent(req.Settings, "  ", "  ")
+		fmt.Fprintf(out, "  Settings: %s\n", settingsJSON)
+	}
 }
 
 // printTenantInfo prints tenant information in a formatted way
