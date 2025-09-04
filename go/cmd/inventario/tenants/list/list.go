@@ -8,14 +8,12 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the tenant list command
@@ -139,123 +137,43 @@ func (c *Command) listTenants(cfg *Config, dbConfig *shared.DatabaseConfig) erro
 		return fmt.Errorf("offset must be non-negative")
 	}
 
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
+	// Create admin service
+	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
-	// Test connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Create tenant registry
-	tenantRegistry := postgres.NewTenantRegistry(db)
-
-	// Build filter criteria
-	filters := make(map[string]any)
-	if cfg.Status != "" {
-		filters["status"] = models.TenantStatus(cfg.Status)
-	}
-	if cfg.Search != "" {
-		filters["search"] = cfg.Search
+	// Build service request
+	listReq := admin.TenantListRequest{
+		Status: cfg.Status,
+		Search: cfg.Search,
+		Limit:  cfg.Limit,
+		Offset: cfg.Offset,
 	}
 
-	// Get tenants with filtering and pagination
-	tenants, err := c.getFilteredTenants(tenantRegistry, filters, cfg.Limit, cfg.Offset)
+	// Get tenants via service
+	response, err := adminService.ListTenants(context.Background(), listReq)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve tenants: %w", err)
-	}
-
-	// Get total count for pagination info
-	totalCount, err := c.getTotalCount(tenantRegistry, filters)
-	if err != nil {
-		return fmt.Errorf("failed to get total count: %w", err)
+		return fmt.Errorf("failed to list tenants: %w", err)
 	}
 
 	// Output results
 	switch cfg.Output {
 	case "json":
-		return c.outputJSON(tenants, totalCount, cfg)
+		return c.outputJSON(response.Tenants, response.TotalCount, cfg)
 	case "table":
-		return c.outputTable(tenants, totalCount, cfg)
+		return c.outputTable(response.Tenants, response.TotalCount, cfg)
 	default:
 		return fmt.Errorf("unsupported output format: %s", cfg.Output)
 	}
 }
 
-// getFilteredTenants retrieves tenants with filtering and pagination
-func (c *Command) getFilteredTenants(registry *postgres.TenantRegistry, filters map[string]any, limit, offset int) ([]*models.Tenant, error) {
-	// For now, we'll get all tenants and filter in memory
-	// In a production system, this would be done at the database level
-	allTenants, err := registry.List(context.Background())
-	if err != nil {
-		return nil, err
-	}
 
-	// Apply filters
-	var filteredTenants []*models.Tenant
-	for _, tenant := range allTenants {
-		if c.matchesFilters(tenant, filters) {
-			filteredTenants = append(filteredTenants, tenant)
-		}
-	}
-
-	// Apply pagination
-	start := offset
-	if start > len(filteredTenants) {
-		start = len(filteredTenants)
-	}
-
-	end := start + limit
-	if end > len(filteredTenants) {
-		end = len(filteredTenants)
-	}
-
-	return filteredTenants[start:end], nil
-}
-
-// matchesFilters checks if a tenant matches the given filters
-func (c *Command) matchesFilters(tenant *models.Tenant, filters map[string]any) bool {
-	// Status filter
-	if status, ok := filters["status"]; ok {
-		if statusValue, ok := status.(models.TenantStatus); ok && tenant.Status != statusValue {
-			return false
-		}
-	}
-
-	// Search filter (case-insensitive)
-	if search, ok := filters["search"]; ok {
-		searchStr := strings.ToLower(search.(string))
-		if !strings.Contains(strings.ToLower(tenant.Name), searchStr) &&
-			!strings.Contains(strings.ToLower(tenant.Slug), searchStr) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// getTotalCount gets the total count of tenants matching filters
-func (c *Command) getTotalCount(registry *postgres.TenantRegistry, filters map[string]any) (int, error) {
-	// For now, we'll get all tenants and count in memory
-	// In a production system, this would be done at the database level
-	allTenants, err := registry.List(context.Background())
-	if err != nil {
-		return 0, err
-	}
-
-	count := 0
-	for _, tenant := range allTenants {
-		if c.matchesFilters(tenant, filters) {
-			count++
-		}
-	}
-
-	return count, nil
-}
 
 // outputJSON outputs tenants in JSON format
 func (c *Command) outputJSON(tenants []*models.Tenant, totalCount int, cfg *Config) error {

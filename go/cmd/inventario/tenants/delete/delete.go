@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the tenant delete command
@@ -105,30 +103,25 @@ func (c *Command) deleteTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 	}
 	fmt.Println()
 
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
+	// Create admin service
+	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
-	defer db.Close()
-
-	// Test connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Create registries
-	tenantRegistry := postgres.NewTenantRegistry(db)
-	userRegistry := postgres.NewUserRegistry(db)
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
 	// Find the tenant to delete
-	tenant, err := c.findTenant(tenantRegistry, idOrSlug)
+	tenant, err := adminService.GetTenant(context.Background(), idOrSlug)
 	if err != nil {
 		return fmt.Errorf("failed to find tenant: %w", err)
 	}
 
 	// Get impact assessment
-	impact, err := c.assessDeletionImpact(userRegistry, tenant.ID)
+	userCount, err := adminService.GetTenantUserCount(context.Background(), tenant.ID)
 	if err != nil {
 		return fmt.Errorf("failed to assess deletion impact: %w", err)
 	}
@@ -142,7 +135,7 @@ func (c *Command) deleteTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 	fmt.Printf("Status: %s\n\n", tenant.Status)
 
 	fmt.Println("DELETION IMPACT:")
-	fmt.Printf("  • Users: %d will be deleted\n", impact.UserCount)
+	fmt.Printf("  • Users: %d will be deleted\n", userCount)
 	fmt.Printf("  • All tenant data will be permanently removed\n")
 	fmt.Printf("  • This operation cannot be undone\n\n")
 
@@ -159,52 +152,20 @@ func (c *Command) deleteTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 		}
 	}
 
-	// Delete the tenant
-	err = tenantRegistry.Delete(context.Background(), tenant.ID)
+	// Delete the tenant via service
+	err = adminService.DeleteTenant(context.Background(), idOrSlug)
 	if err != nil {
 		return fmt.Errorf("failed to delete tenant: %w", err)
 	}
 
 	fmt.Println("✅ Tenant deleted successfully!")
 	fmt.Printf("Deleted tenant: %s (%s)\n", tenant.Name, tenant.Slug)
-	fmt.Printf("Deleted %d associated users\n", impact.UserCount)
+	fmt.Printf("Deleted %d associated users\n", userCount)
 
 	return nil
 }
 
-// DeletionImpact holds information about what will be deleted
-type DeletionImpact struct {
-	UserCount int
-}
 
-// findTenant tries to find a tenant by ID or slug
-func (c *Command) findTenant(registry *postgres.TenantRegistry, idOrSlug string) (*models.Tenant, error) {
-	// Try by ID first
-	tenant, err := registry.Get(context.Background(), idOrSlug)
-	if err == nil {
-		return tenant, nil
-	}
-
-	// Try by slug
-	tenant, err = registry.GetBySlug(context.Background(), idOrSlug)
-	if err != nil {
-		return nil, fmt.Errorf("tenant '%s' not found (tried both ID and slug)", idOrSlug)
-	}
-
-	return tenant, nil
-}
-
-// assessDeletionImpact assesses what will be deleted
-func (c *Command) assessDeletionImpact(userRegistry *postgres.UserRegistry, tenantID string) (*DeletionImpact, error) {
-	users, err := userRegistry.ListByTenant(context.Background(), tenantID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &DeletionImpact{
-		UserCount: len(users),
-	}, nil
-}
 
 // confirmDeletion prompts for deletion confirmation
 func (c *Command) confirmDeletion(tenant *models.Tenant) bool {

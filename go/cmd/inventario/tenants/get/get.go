@@ -8,14 +8,12 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the tenant get command
@@ -110,30 +108,25 @@ func (c *Command) getTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idOrSl
 		return nil
 	}
 
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
+	// Create admin service
+	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Fprintf(out, "Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
-	// Test connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Create registries
-	tenantRegistry := postgres.NewTenantRegistry(db)
-	userRegistry := postgres.NewUserRegistry(db)
-
-	// Try to get tenant by ID first, then by slug
-	tenant, err := c.findTenant(tenantRegistry, idOrSlug)
+	// Get tenant via service
+	tenant, err := adminService.GetTenant(context.Background(), idOrSlug)
 	if err != nil {
-		return fmt.Errorf("failed to find tenant: %w", err)
+		return fmt.Errorf("failed to get tenant: %w", err)
 	}
 
-	// Get additional information
-	userCount, err := c.getUserCount(userRegistry, tenant.ID)
+	// Get user count
+	userCount, err := adminService.GetTenantUserCount(context.Background(), tenant.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get user count: %w", err)
 	}
@@ -149,31 +142,7 @@ func (c *Command) getTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idOrSl
 	}
 }
 
-// findTenant tries to find a tenant by ID or slug
-func (c *Command) findTenant(registry *postgres.TenantRegistry, idOrSlug string) (*models.Tenant, error) {
-	// Try by ID first
-	tenant, err := registry.Get(context.Background(), idOrSlug)
-	if err == nil {
-		return tenant, nil
-	}
 
-	// Try by slug
-	tenant, err = registry.GetBySlug(context.Background(), idOrSlug)
-	if err != nil {
-		return nil, fmt.Errorf("tenant '%s' not found (tried both ID and slug)", idOrSlug)
-	}
-
-	return tenant, nil
-}
-
-// getUserCount gets the number of users associated with the tenant
-func (c *Command) getUserCount(registry *postgres.UserRegistry, tenantID string) (int, error) {
-	users, err := registry.ListByTenant(context.Background(), tenantID)
-	if err != nil {
-		return 0, err
-	}
-	return len(users), nil
-}
 
 // outputJSON outputs tenant information in JSON format
 func (c *Command) outputJSON(tenant *models.Tenant, userCount int) error {

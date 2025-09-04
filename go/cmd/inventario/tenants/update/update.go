@@ -7,14 +7,12 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"github.com/denisvmedia/inventario/services/admin"
 )
 
 // Command represents the tenant update command
@@ -146,31 +144,27 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 	}
 	fmt.Fprintln(out)
 
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
+	// Create admin service
+	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
-	defer db.Close()
-
-	// Test connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Create tenant registry
-	tenantRegistry := postgres.NewTenantRegistry(db)
+	defer func() {
+		if closeErr := adminService.Close(); closeErr != nil {
+			fmt.Fprintf(out, "Warning: failed to close admin service: %v\n", closeErr)
+		}
+	}()
 
 	// Find the tenant to update
-	originalTenant, err := c.findTenant(tenantRegistry, idOrSlug)
+	originalTenant, err := adminService.GetTenant(context.Background(), idOrSlug)
 	if err != nil {
 		return fmt.Errorf("failed to find tenant: %w", err)
 	}
 
 	fmt.Fprintf(out, "Found tenant: %s (%s)\n\n", originalTenant.Name, originalTenant.Slug)
 
-	// Collect updates
-	updatedTenant, hasChanges, err := c.collectUpdates(cfg, originalTenant)
+	// Collect updates and convert to service request
+	updateReq, hasChanges, err := c.collectUpdateRequest(cfg, originalTenant)
 	if err != nil {
 		return fmt.Errorf("failed to collect updates: %w", err)
 	}
@@ -180,21 +174,16 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 		return nil
 	}
 
-	// Validate updated tenant data
-	if err := updatedTenant.ValidateWithContext(context.Background()); err != nil {
-		return fmt.Errorf("tenant validation failed: %w", err)
-	}
-
 	if cfg.DryRun {
 		// Show what would be updated
 		fmt.Fprintln(out, "Would update tenant with:")
-		c.printChanges(originalTenant, updatedTenant)
+		c.printUpdateRequest(updateReq)
 		fmt.Fprintln(out, "\n💡 To perform the actual update, run the command without --dry-run")
 		return nil
 	}
 
-	// Update the tenant
-	finalTenant, err := tenantRegistry.Update(context.Background(), *updatedTenant)
+	// Update the tenant via service
+	finalTenant, err := adminService.UpdateTenant(context.Background(), idOrSlug, *updateReq)
 	if err != nil {
 		return fmt.Errorf("failed to update tenant: %w", err)
 	}
@@ -205,22 +194,7 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 	return nil
 }
 
-// findTenant tries to find a tenant by ID or slug
-func (c *Command) findTenant(registry *postgres.TenantRegistry, idOrSlug string) (*models.Tenant, error) {
-	// Try by ID first
-	tenant, err := registry.Get(context.Background(), idOrSlug)
-	if err == nil {
-		return tenant, nil
-	}
 
-	// Try by slug
-	tenant, err = registry.GetBySlug(context.Background(), idOrSlug)
-	if err != nil {
-		return nil, fmt.Errorf("tenant '%s' not found (tried both ID and slug)", idOrSlug)
-	}
-
-	return tenant, nil
-}
 
 // collectUpdates collects updates from flags and interactive prompts
 func (c *Command) collectUpdates(cfg *Config, original *models.Tenant) (*models.Tenant, bool, error) {
@@ -263,6 +237,102 @@ func (c *Command) collectUpdates(cfg *Config, original *models.Tenant) (*models.
 	}
 
 	return &updated, hasChanges, nil
+}
+
+// collectUpdateRequest collects updates and converts to service request
+func (c *Command) collectUpdateRequest(cfg *Config, original *models.Tenant) (*admin.TenantUpdateRequest, bool, error) {
+	req := &admin.TenantUpdateRequest{}
+	hasChanges := false
+
+	// Update name
+	if cfg.Name != "" && cfg.Name != original.Name {
+		req.Name = &cfg.Name
+		hasChanges = true
+	} else if cfg.Interactive {
+		name, err := c.promptForUpdate("Name", original.Name, cfg.Name)
+		if err != nil {
+			return nil, false, err
+		}
+		if name != "" && name != original.Name {
+			req.Name = &name
+			hasChanges = true
+		}
+	}
+
+	// Update slug
+	if cfg.Slug != "" && cfg.Slug != original.Slug {
+		req.Slug = &cfg.Slug
+		hasChanges = true
+	} else if cfg.Interactive {
+		slug, err := c.promptForUpdate("Slug", original.Slug, cfg.Slug)
+		if err != nil {
+			return nil, false, err
+		}
+		if slug != "" && slug != original.Slug {
+			req.Slug = &slug
+			hasChanges = true
+		}
+	}
+
+	// Update domain
+	originalDomain := ""
+	if original.Domain != nil {
+		originalDomain = *original.Domain
+	}
+	if cfg.Domain != "" && cfg.Domain != originalDomain {
+		req.Domain = &cfg.Domain
+		hasChanges = true
+	} else if cfg.Interactive {
+		domain, err := c.promptForUpdate("Domain", originalDomain, cfg.Domain)
+		if err != nil {
+			return nil, false, err
+		}
+		if domain != originalDomain {
+			req.Domain = &domain
+			hasChanges = true
+		}
+	}
+
+	// Update status
+	if cfg.Status != "" && models.TenantStatus(cfg.Status) != original.Status {
+		status := models.TenantStatus(cfg.Status)
+		req.Status = &status
+		hasChanges = true
+	}
+
+	// Update settings
+	if cfg.Settings != "" {
+		var settings map[string]any
+		if err := json.Unmarshal([]byte(cfg.Settings), &settings); err != nil {
+			return nil, false, fmt.Errorf("invalid settings JSON: %w", err)
+		}
+		req.Settings = settings
+		hasChanges = true
+	}
+
+	return req, hasChanges, nil
+}
+
+// printUpdateRequest prints what would be updated in dry run mode
+func (c *Command) printUpdateRequest(req *admin.TenantUpdateRequest) {
+	out := c.Cmd().OutOrStdout()
+
+	if req.Name != nil {
+		fmt.Fprintf(out, "  Name:     %s\n", *req.Name)
+	}
+	if req.Slug != nil {
+		fmt.Fprintf(out, "  Slug:     %s\n", *req.Slug)
+	}
+	if req.Domain != nil {
+		fmt.Fprintf(out, "  Domain:   %s\n", *req.Domain)
+	}
+	if req.Status != nil {
+		fmt.Fprintf(out, "  Status:   %s\n", *req.Status)
+	}
+	if req.Settings != nil {
+		settingsJSON, _ := json.MarshalIndent(req.Settings, "  ", "  ")
+		fmt.Fprintf(out, "  Settings: %s\n", settingsJSON)
+	}
 }
 
 // updateName handles name field updates
