@@ -56,9 +56,7 @@ Examples:
 
   # Output as JSON
   inventario users get admin@acme.com --output=json
-
-  # Preview operation (dry run)
-  inventario users get admin@acme.com --dry-run`,
+  inventario users get admin@acme.com -o json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.getUser(&c.config, dbConfig, args[0])
@@ -71,11 +69,8 @@ Examples:
 }
 
 func (c *Command) registerFlags() {
-	// Dry run flag
-	shared.RegisterDryRunFlag(c.Cmd(), &c.config.DryRun)
-
 	// Output flags
-	c.Cmd().Flags().StringVar(&c.config.Output, "output", c.config.Output, "Output format (table, json)")
+	c.Cmd().Flags().StringVarP(&c.config.Output, "output", "o", c.config.Output, "Output format (table, json)")
 }
 
 // getUser handles the user retrieval process
@@ -102,11 +97,7 @@ func (c *Command) getUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEmai
 		return fmt.Errorf("user ID or email is required")
 	}
 
-	if cfg.DryRun {
-		fmt.Fprintf(out, "Would retrieve user information for: %s\n", idOrEmail)
-		fmt.Fprintf(out, "Output format: %s\n", cfg.Output)
-		return nil
-	}
+
 
 	// Create admin service
 	adminService, err := admin.NewService(dbConfig)

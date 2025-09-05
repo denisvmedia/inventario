@@ -95,7 +95,7 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().IntVar(&c.config.Offset, "offset", c.config.Offset, "Number of users to skip")
 
 	// Output flags
-	c.Cmd().Flags().StringVar(&c.config.Output, "output", c.config.Output, "Output format (table, json)")
+	c.Cmd().Flags().StringVarP(&c.config.Output, "output", "o", c.config.Output, "Output format (table, json)")
 }
 
 // listUsers handles the user listing process
