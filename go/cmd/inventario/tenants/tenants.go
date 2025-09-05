@@ -5,7 +5,7 @@ import (
 
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/cmd/inventario/tenants/create"
-	"github.com/denisvmedia/inventario/cmd/inventario/tenants/delete"
+	"github.com/denisvmedia/inventario/cmd/inventario/tenants/deletecmd"
 	"github.com/denisvmedia/inventario/cmd/inventario/tenants/get"
 	"github.com/denisvmedia/inventario/cmd/inventario/tenants/list"
 	"github.com/denisvmedia/inventario/cmd/inventario/tenants/update"
@@ -51,7 +51,7 @@ CONFIGURATION:
 
 	// Add subcommands
 	cmd.AddCommand(create.New(dbConfig).Cmd())
-	cmd.AddCommand(delete.New(dbConfig).Cmd())
+	cmd.AddCommand(deletecmd.New(dbConfig).Cmd())
 	cmd.AddCommand(get.New(dbConfig).Cmd())
 	cmd.AddCommand(list.New(dbConfig).Cmd())
 	cmd.AddCommand(update.New(dbConfig).Cmd())

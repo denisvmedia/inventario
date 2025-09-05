@@ -51,8 +51,6 @@ Examples:
 	return c
 }
 
-
-
 // updateUser handles the user update process
 func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEmail string) error {
 	out := c.Cmd().OutOrStdout()

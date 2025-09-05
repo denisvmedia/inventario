@@ -1,4 +1,4 @@
-package delete
+package deletecmd
 
 // Config holds configuration for tenant delete command
 type Config struct {

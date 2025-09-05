@@ -142,8 +142,6 @@ func (c *Command) getUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEmai
 	}
 }
 
-
-
 // outputJSON outputs user information in JSON format
 func (c *Command) outputJSON(user *models.User, tenant *models.Tenant) error {
 	output := map[string]any{

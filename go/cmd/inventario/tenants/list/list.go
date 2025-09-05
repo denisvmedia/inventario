@@ -173,8 +173,6 @@ func (c *Command) listTenants(cfg *Config, dbConfig *shared.DatabaseConfig) erro
 	}
 }
 
-
-
 // outputJSON outputs tenants in JSON format
 func (c *Command) outputJSON(tenants []*models.Tenant, totalCount int, cfg *Config) error {
 	output := map[string]any{

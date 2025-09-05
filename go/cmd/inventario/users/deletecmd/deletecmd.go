@@ -169,8 +169,6 @@ func (c *Command) deleteUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	return nil
 }
 
-
-
 // confirmDeletion prompts for deletion confirmation
 func (c *Command) confirmDeletion(user *models.User) bool {
 	fmt.Printf("⚠️  Are you sure you want to delete user '%s' (%s)? [y/N]: ", user.Name, user.Email)

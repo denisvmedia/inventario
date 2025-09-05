@@ -199,10 +199,6 @@ func (c *Command) validateFilters(cfg *Config) error {
 	return nil
 }
 
-
-
-
-
 // outputJSON outputs users in JSON format
 func (c *Command) outputJSON(users []*models.User, totalCount int, cfg *Config, tenantMap map[string]*models.Tenant) error {
 	// Enhance users with tenant information

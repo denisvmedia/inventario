@@ -1,4 +1,4 @@
-package delete
+package deletecmd
 
 import (
 	"context"
@@ -164,8 +164,6 @@ func (c *Command) deleteTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 
 	return nil
 }
-
-
 
 // confirmDeletion prompts for deletion confirmation
 func (c *Command) confirmDeletion(tenant *models.Tenant) bool {

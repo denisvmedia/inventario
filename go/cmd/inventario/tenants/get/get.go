@@ -142,8 +142,6 @@ func (c *Command) getTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idOrSl
 	}
 }
 
-
-
 // outputJSON outputs tenant information in JSON format
 func (c *Command) outputJSON(tenant *models.Tenant, userCount int) error {
 	output := map[string]any{
