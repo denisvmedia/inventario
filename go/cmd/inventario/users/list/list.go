@@ -153,12 +153,18 @@ func (c *Command) listUsers(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 		return fmt.Errorf("failed to list users: %w", err)
 	}
 
+	// Build tenant map for display
+	tenantMap, err := c.buildTenantMap(adminService, response.Users)
+	if err != nil {
+		return fmt.Errorf("failed to get tenant information: %w", err)
+	}
+
 	// Output results
 	switch cfg.Output {
 	case "json":
-		return c.outputJSON(response.Users, response.TotalCount, cfg, nil)
+		return c.outputJSON(response.Users, response.TotalCount, cfg, tenantMap)
 	case "table":
-		return c.outputTable(response.Users, response.TotalCount, cfg, nil)
+		return c.outputTable(response.Users, response.TotalCount, cfg, tenantMap)
 	default:
 		return fmt.Errorf("unsupported output format: %s", cfg.Output)
 	}
@@ -272,4 +278,28 @@ func (c *Command) outputTable(users []*models.User, totalCount int, cfg *Config,
 	fmt.Fprintln(out)
 
 	return nil
+}
+
+// buildTenantMap builds a map of tenant information for display
+func (c *Command) buildTenantMap(adminService *admin.Service, users []*models.User) (map[string]*models.Tenant, error) {
+	tenantMap := make(map[string]*models.Tenant)
+
+	for _, user := range users {
+		if _, exists := tenantMap[user.TenantID]; !exists {
+			tenant, err := adminService.GetTenant(context.Background(), user.TenantID)
+			if err != nil {
+				// If we can't get tenant info, create a placeholder
+				placeholder := &models.Tenant{
+					Name: "<unknown>",
+					Slug: "<unknown>",
+				}
+				placeholder.SetID(user.TenantID)
+				tenantMap[user.TenantID] = placeholder
+			} else {
+				tenantMap[user.TenantID] = tenant
+			}
+		}
+	}
+
+	return tenantMap, nil
 }
