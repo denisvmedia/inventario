@@ -234,191 +234,13 @@ func (c *Command) validateBasicInputs(cfg *Config) error {
 	return nil
 }
 
-// DatabaseConnection holds database connection and registries
-type DatabaseConnection struct {
-	DB             *sqlx.DB
-	TenantRegistry *postgres.TenantRegistry
-	UserRegistry   *postgres.UserRegistry
-}
 
-// connectAndCreateRegistries connects to database and creates registries
-func (c *Command) connectAndCreateRegistries(dbConfig *shared.DatabaseConfig) (*DatabaseConnection, error) {
-	// Connect to database
-	db, err := sqlx.Open("postgres", dbConfig.DBDSN)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
 
-	// Test connection
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
 
-	// Create registries
-	tenantRegistry := postgres.NewTenantRegistry(db)
-	userRegistry := postgres.NewUserRegistry(db)
 
-	return &DatabaseConnection{
-		DB:             db,
-		TenantRegistry: tenantRegistry,
-		UserRegistry:   userRegistry,
-	}, nil
-}
 
-// collectAndValidateUser collects and validates user information
-func (c *Command) collectAndValidateUser(cfg *Config, tenantRegistry *postgres.TenantRegistry) (*models.User, *models.Tenant, error) {
-	// Collect user information
-	user, tenant, err := c.collectUserInfo(cfg, tenantRegistry)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to collect user information: %w", err)
-	}
 
-	// Validate user data
-	if err := user.ValidateWithContext(context.Background()); err != nil {
-		return nil, nil, fmt.Errorf("user validation failed: %w", err)
-	}
 
-	return user, tenant, nil
-}
-
-// handleUserCreation handles dry run or actual user creation
-func (c *Command) handleUserCreation(cfg *Config, user *models.User, tenant *models.Tenant, userRegistry *postgres.UserRegistry) error {
-	out := c.Cmd().OutOrStdout()
-
-	if cfg.DryRun {
-		// Show what would be created
-		fmt.Fprintln(out, "Would create user:")
-		c.printUserInfo(user, tenant)
-		fmt.Fprintln(out, "\n💡 To perform the actual creation, run the command without --dry-run")
-		return nil
-	}
-
-	// Create the user
-	createdUser, err := userRegistry.Create(context.Background(), *user)
-	if err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
-	}
-
-	fmt.Fprintln(out, "✅ User created successfully!")
-	c.printUserInfo(createdUser, tenant)
-
-	return nil
-}
-
-// collectUserInfo collects user information from flags and interactive prompts
-func (c *Command) collectUserInfo(cfg *Config, tenantRegistry *postgres.TenantRegistry) (*models.User, *models.Tenant, error) {
-	user := &models.User{
-		Role:     models.UserRole(cfg.Role),
-		IsActive: cfg.Active,
-	}
-
-	// Collect email
-	if err := c.collectEmail(cfg); err != nil {
-		return nil, nil, err
-	}
-	user.Email = cfg.Email
-
-	// Collect and validate tenant
-	tenant, err := c.collectTenant(cfg, tenantRegistry)
-	if err != nil {
-		return nil, nil, err
-	}
-	user.TenantID = tenant.ID
-
-	// Collect name (optional, defaults to email)
-	if cfg.Name == "" && cfg.Interactive {
-		name, err := c.promptForInput("Display name", cfg.Email)
-		if err != nil {
-			return nil, nil, err
-		}
-		cfg.Name = name
-	}
-	if cfg.Name == "" {
-		cfg.Name = cfg.Email
-	}
-	user.Name = cfg.Name
-
-	// Collect password
-	if cfg.Password == "" {
-		if !cfg.Interactive {
-			return nil, nil, fmt.Errorf("password is required in non-interactive mode")
-		}
-		password, err := c.promptForPassword("Password")
-		if err != nil {
-			return nil, nil, err
-		}
-		cfg.Password = password
-	}
-
-	// Validate and set password
-	if err := models.ValidatePassword(cfg.Password); err != nil {
-		return nil, nil, fmt.Errorf("password validation failed: %w", err)
-	}
-	if err := user.SetPassword(cfg.Password); err != nil {
-		return nil, nil, fmt.Errorf("failed to set password: %w", err)
-	}
-
-	// Collect role if interactive
-	if cfg.Interactive && cfg.Role == "user" {
-		role, err := c.promptForInput("Role (admin/user)", "user")
-		if err != nil {
-			return nil, nil, err
-		}
-		if role != "" {
-			cfg.Role = role
-			user.Role = models.UserRole(role)
-		}
-	}
-
-	return user, tenant, nil
-}
-
-// collectEmail collects and validates email address
-func (c *Command) collectEmail(cfg *Config) error {
-	if cfg.Email == "" && cfg.Interactive {
-		email, err := c.promptForInput("Email address", "")
-		if err != nil {
-			return err
-		}
-		if email == "" {
-			return fmt.Errorf("email address is required")
-		}
-		cfg.Email = email
-	}
-	if cfg.Email == "" {
-		return fmt.Errorf("email address is required")
-	}
-	return nil
-}
-
-// collectTenant collects and validates tenant
-func (c *Command) collectTenant(cfg *Config, tenantRegistry *postgres.TenantRegistry) (*models.Tenant, error) {
-	if cfg.Tenant == "" && cfg.Interactive {
-		tenant, err := c.promptForInput("Tenant ID or slug", "")
-		if err != nil {
-			return nil, err
-		}
-		if tenant == "" {
-			return nil, fmt.Errorf("tenant is required")
-		}
-		cfg.Tenant = tenant
-	}
-	if cfg.Tenant == "" {
-		return nil, fmt.Errorf("tenant is required")
-	}
-
-	// Look up tenant by ID or slug
-	tenant, err := tenantRegistry.Get(context.Background(), cfg.Tenant)
-	if err != nil {
-		// Try by slug
-		tenant, err = tenantRegistry.GetBySlug(context.Background(), cfg.Tenant)
-		if err != nil {
-			return nil, fmt.Errorf("tenant '%s' not found (tried both ID and slug)", cfg.Tenant)
-		}
-	}
-	return tenant, nil
-}
 
 // promptForInput prompts the user for input with a default value
 func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
@@ -512,7 +334,7 @@ func (c *Command) collectUserRequest(cfg *Config, adminService *admin.Service) (
 	}
 
 	// Get tenant ID from tenant slug/ID
-	tenantID := cfg.TenantID
+	tenantID := cfg.Tenant
 	if tenantID == "" {
 		return nil, fmt.Errorf("tenant ID is required")
 	}

@@ -169,28 +169,7 @@ func (c *Command) deleteUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	return nil
 }
 
-// findUser tries to find a user by ID or email
-func (c *Command) findUser(registry *postgres.UserRegistry, idOrEmail string) (*models.User, error) {
-	// Try by ID first
-	user, err := registry.Get(context.Background(), idOrEmail)
-	if err == nil {
-		return user, nil
-	}
 
-	// Try by email - search across all users since we don't have tenant context
-	users, err := registry.List(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to list users: %w", err)
-	}
-
-	for _, user := range users {
-		if user.Email == idOrEmail {
-			return user, nil
-		}
-	}
-
-	return nil, fmt.Errorf("user '%s' not found (tried both ID and email)", idOrEmail)
-}
 
 // confirmDeletion prompts for deletion confirmation
 func (c *Command) confirmDeletion(user *models.User) bool {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -200,151 +199,9 @@ func (c *Command) validateFilters(cfg *Config) error {
 	return nil
 }
 
-// buildFilters builds filter criteria
-func (c *Command) buildFilters(cfg *Config, tenantRegistry *postgres.TenantRegistry) (map[string]any, error) {
-	filters := make(map[string]any)
 
-	// Tenant filter - resolve tenant slug to ID if needed
-	if cfg.Tenant != "" {
-		// Try to get tenant by ID first, then by slug
-		tenant, err := tenantRegistry.Get(context.Background(), cfg.Tenant)
-		if err != nil {
-			// Try by slug
-			tenant, err = tenantRegistry.GetBySlug(context.Background(), cfg.Tenant)
-			if err != nil {
-				return nil, fmt.Errorf("tenant '%s' not found (tried both ID and slug)", cfg.Tenant)
-			}
-		}
-		filters["tenant_id"] = tenant.ID
-	}
 
-	// Role filter
-	if cfg.Role != "" {
-		filters["role"] = models.UserRole(cfg.Role)
-	}
 
-	// Active filter
-	if cfg.Active != "" {
-		active, _ := strconv.ParseBool(cfg.Active)
-		filters["active"] = active
-	}
-
-	// Search filter
-	if cfg.Search != "" {
-		filters["search"] = cfg.Search
-	}
-
-	return filters, nil
-}
-
-// getFilteredUsers retrieves users with filtering and pagination
-func (c *Command) getFilteredUsers(registry *postgres.UserRegistry, filters map[string]any, limit, offset int) ([]*models.User, error) {
-	// For now, we'll get all users and filter in memory
-	// In a production system, this would be done at the database level
-	allUsers, err := registry.List(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply filters
-	var filteredUsers []*models.User
-	for _, user := range allUsers {
-		if c.matchesFilters(user, filters) {
-			filteredUsers = append(filteredUsers, user)
-		}
-	}
-
-	// Apply pagination
-	start := offset
-	if start > len(filteredUsers) {
-		start = len(filteredUsers)
-	}
-
-	end := start + limit
-	if end > len(filteredUsers) {
-		end = len(filteredUsers)
-	}
-
-	return filteredUsers[start:end], nil
-}
-
-// matchesFilters checks if a user matches the given filters
-func (c *Command) matchesFilters(user *models.User, filters map[string]any) bool {
-	// Tenant filter
-	if tenantID, ok := filters["tenant_id"]; ok {
-		if tenantIDValue, ok := tenantID.(string); ok && user.TenantID != tenantIDValue {
-			return false
-		}
-	}
-
-	// Role filter
-	if role, ok := filters["role"]; ok {
-		if roleValue, ok := role.(models.UserRole); ok && user.Role != roleValue {
-			return false
-		}
-	}
-
-	// Active filter
-	if active, ok := filters["active"]; ok {
-		if activeValue, ok := active.(bool); ok && user.IsActive != activeValue {
-			return false
-		}
-	}
-
-	// Search filter (case-insensitive)
-	if search, ok := filters["search"]; ok {
-		searchStr := strings.ToLower(search.(string))
-		if !strings.Contains(strings.ToLower(user.Email), searchStr) &&
-			!strings.Contains(strings.ToLower(user.Name), searchStr) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// getTotalCount gets the total count of users matching filters
-func (c *Command) getTotalCount(registry *postgres.UserRegistry, filters map[string]any) (int, error) {
-	// For now, we'll get all users and count in memory
-	// In a production system, this would be done at the database level
-	allUsers, err := registry.List(context.Background())
-	if err != nil {
-		return 0, err
-	}
-
-	count := 0
-	for _, user := range allUsers {
-		if c.matchesFilters(user, filters) {
-			count++
-		}
-	}
-
-	return count, nil
-}
-
-// getTenantMap gets tenant information for display
-func (c *Command) getTenantMap(tenantRegistry *postgres.TenantRegistry, users []*models.User) (map[string]*models.Tenant, error) {
-	tenantMap := make(map[string]*models.Tenant)
-
-	for _, user := range users {
-		if _, exists := tenantMap[user.TenantID]; !exists {
-			tenant, err := tenantRegistry.Get(context.Background(), user.TenantID)
-			if err != nil {
-				// If we can't get tenant info, create a placeholder
-				placeholder := &models.Tenant{
-					Name: "<unknown>",
-					Slug: "<unknown>",
-				}
-				placeholder.SetID(user.TenantID)
-				tenantMap[user.TenantID] = placeholder
-			} else {
-				tenantMap[user.TenantID] = tenant
-			}
-		}
-	}
-
-	return tenantMap, nil
-}
 
 // outputJSON outputs users in JSON format
 func (c *Command) outputJSON(users []*models.User, totalCount int, cfg *Config, tenantMap map[string]*models.Tenant) error {
