@@ -1,8 +1,11 @@
 package create
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -179,9 +182,20 @@ func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
 		fmt.Fprintf(out, "%s: ", prompt)
 	}
 
-	var input string
-	fmt.Scanln(&input)
+	// Use bufio.Scanner to read the entire line including spaces
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("failed to read input: %w", err)
+		}
+		// EOF or no input
+		if defaultValue != "" {
+			return defaultValue, nil
+		}
+		return "", nil
+	}
 
+	input := strings.TrimSpace(scanner.Text())
 	if input == "" && defaultValue != "" {
 		return defaultValue, nil
 	}

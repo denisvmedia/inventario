@@ -1,9 +1,12 @@
 package update
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -273,9 +276,18 @@ func (c *Command) promptForUpdate(fieldName, currentValue, flagValue string) (st
 
 	out := c.Cmd().OutOrStdout()
 	fmt.Fprintf(out, "%s [%s]: ", fieldName, currentValue)
-	var input string
-	fmt.Scanln(&input)
 
+	// Use bufio.Scanner to read the entire line including spaces
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("failed to read input: %w", err)
+		}
+		// EOF or no input - return current value
+		return currentValue, nil
+	}
+
+	input := strings.TrimSpace(scanner.Text())
 	if input == "" {
 		return currentValue, nil
 	}
