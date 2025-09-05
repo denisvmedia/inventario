@@ -274,8 +274,15 @@ func (c *Command) collectUserRequest(cfg *Config, adminService *admin.Service) (
 		password = passwordInput
 	}
 
-	// Get tenant ID from tenant slug/ID
+	// Collect tenant ID
 	tenantID := cfg.Tenant
+	if tenantID == "" && cfg.Interactive {
+		tenantInput, err := c.promptForInput("Tenant ID or slug", "")
+		if err != nil {
+			return nil, err
+		}
+		tenantID = tenantInput
+	}
 	if tenantID == "" {
 		return nil, fmt.Errorf("tenant ID is required")
 	}
