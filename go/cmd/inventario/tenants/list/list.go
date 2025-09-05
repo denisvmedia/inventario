@@ -82,9 +82,6 @@ Examples:
 }
 
 func (c *Command) registerFlags() {
-	// Dry run flag
-	shared.RegisterDryRunFlag(c.Cmd(), &c.config.DryRun)
-
 	// Filtering flags
 	c.Cmd().Flags().StringVar(&c.config.Status, "status", c.config.Status, "Filter by tenant status (active, suspended, inactive)")
 	c.Cmd().Flags().StringVar(&c.config.Search, "search", c.config.Search, "Search by tenant name or slug")
