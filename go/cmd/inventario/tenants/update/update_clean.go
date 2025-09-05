@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -122,125 +123,72 @@ func (c *Command) collectUpdateRequest(cfg *Config, original *models.Tenant) (*a
 	hasChanges := false
 
 	// Update name
-	if changed, err := c.updateName(cfg, original, req); err != nil {
-		return nil, false, err
-	} else if changed {
-		hasChanges = true
-	}
-
-	// Update slug
-	if changed, err := c.updateSlug(cfg, original, req); err != nil {
-		return nil, false, err
-	} else if changed {
-		hasChanges = true
-	}
-
-	// Update domain
-	if changed, err := c.updateDomain(cfg, original, req); err != nil {
-		return nil, false, err
-	} else if changed {
-		hasChanges = true
-	}
-
-	// Update status
-	if changed, err := c.updateStatus(cfg, original, req); err != nil {
-		return nil, false, err
-	} else if changed {
-		hasChanges = true
-	}
-
-	// Update settings
-	if changed, err := c.updateSettings(cfg, req); err != nil {
-		return nil, false, err
-	} else if changed {
-		hasChanges = true
-	}
-
-	return req, hasChanges, nil
-}
-
-// updateName handles name field updates
-func (c *Command) updateName(cfg *Config, original *models.Tenant, req *admin.TenantUpdateRequest) (bool, error) {
 	if cfg.Name != "" && cfg.Name != original.Name {
 		req.Name = &cfg.Name
-		return true, nil
-	}
-	if cfg.Interactive {
+		hasChanges = true
+	} else if cfg.Interactive {
 		name, err := c.promptForUpdate("Name", original.Name, cfg.Name)
 		if err != nil {
-			return false, err
+			return nil, false, err
 		}
 		if name != "" && name != original.Name {
 			req.Name = &name
-			return true, nil
+			hasChanges = true
 		}
 	}
-	return false, nil
-}
 
-// updateSlug handles slug field updates
-func (c *Command) updateSlug(cfg *Config, original *models.Tenant, req *admin.TenantUpdateRequest) (bool, error) {
+	// Update slug
 	if cfg.Slug != "" && cfg.Slug != original.Slug {
 		req.Slug = &cfg.Slug
-		return true, nil
-	}
-	if cfg.Interactive {
+		hasChanges = true
+	} else if cfg.Interactive {
 		slug, err := c.promptForUpdate("Slug", original.Slug, cfg.Slug)
 		if err != nil {
-			return false, err
+			return nil, false, err
 		}
 		if slug != "" && slug != original.Slug {
 			req.Slug = &slug
-			return true, nil
+			hasChanges = true
 		}
 	}
-	return false, nil
-}
 
-// updateDomain handles domain field updates
-func (c *Command) updateDomain(cfg *Config, original *models.Tenant, req *admin.TenantUpdateRequest) (bool, error) {
+	// Update domain
 	originalDomain := ""
 	if original.Domain != nil {
 		originalDomain = *original.Domain
 	}
 	if cfg.Domain != "" && cfg.Domain != originalDomain {
 		req.Domain = &cfg.Domain
-		return true, nil
-	}
-	if cfg.Interactive {
+		hasChanges = true
+	} else if cfg.Interactive {
 		domain, err := c.promptForUpdate("Domain", originalDomain, cfg.Domain)
 		if err != nil {
-			return false, err
+			return nil, false, err
 		}
 		if domain != originalDomain {
 			req.Domain = &domain
-			return true, nil
+			hasChanges = true
 		}
 	}
-	return false, nil
-}
 
-// updateStatus handles status field updates
-func (c *Command) updateStatus(cfg *Config, original *models.Tenant, req *admin.TenantUpdateRequest) (bool, error) {
+	// Update status
 	if cfg.Status != "" && models.TenantStatus(cfg.Status) != original.Status {
 		status := models.TenantStatus(cfg.Status)
 		req.Status = &status
-		return true, nil
+		hasChanges = true
 	}
-	return false, nil
-}
 
-// updateSettings handles settings field updates
-func (c *Command) updateSettings(cfg *Config, req *admin.TenantUpdateRequest) (bool, error) {
+	// Update settings
 	if cfg.Settings != "" {
 		var settings map[string]any
 		if err := json.Unmarshal([]byte(cfg.Settings), &settings); err != nil {
-			return false, fmt.Errorf("invalid settings JSON: %w", err)
+			return nil, false, fmt.Errorf("invalid settings JSON: %w", err)
 		}
 		req.Settings = settings
-		return true, nil
+		hasChanges = true
 	}
-	return false, nil
+
+	return req, hasChanges, nil
 }
 
 // printUpdateRequest prints what would be updated in dry run mode

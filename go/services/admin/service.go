@@ -109,10 +109,8 @@ func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*m
 	}
 
 	// Handle default tenant setting
-	if req.Default {
-		// Implementation for setting default tenant would go here
-		// This might involve updating system settings
-	}
+	// TODO: Implement default tenant functionality when system settings are available
+	_ = req.Default
 
 	return createdTenant, nil
 }

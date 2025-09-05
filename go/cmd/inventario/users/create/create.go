@@ -3,7 +3,6 @@ package create
 import (
 	"context"
 	"fmt"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -169,78 +168,6 @@ func (c *Command) createUser(cfg *Config, dbConfig *shared.DatabaseConfig) error
 
 	return nil
 }
-
-// validateAndSetup validates configuration and prints setup information
-func (c *Command) validateAndSetup(cfg *Config, dbConfig *shared.DatabaseConfig) error {
-	out := c.Cmd().OutOrStdout()
-
-	// Validate database configuration
-	if err := dbConfig.Validate(); err != nil {
-		return fmt.Errorf("database configuration error: %w", err)
-	}
-
-	// Check if this is a memory database and reject it
-	if strings.HasPrefix(dbConfig.DBDSN, "memory://") {
-		return fmt.Errorf("user creation is not supported for memory databases as they don't provide persistence. Please use a PostgreSQL database")
-	}
-
-	fmt.Fprintln(out, "=== CREATE USER ===")
-	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
-	if cfg.DryRun {
-		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
-	} else {
-		fmt.Fprintln(out, "Mode: LIVE CREATION")
-	}
-	fmt.Fprintln(out)
-
-	return c.validateBasicInputs(cfg)
-}
-
-// validateBasicInputs validates basic inputs before database connection
-func (c *Command) validateBasicInputs(cfg *Config) error {
-	// Do basic validation before connecting to database
-	if cfg.Email == "" && !cfg.Interactive {
-		return fmt.Errorf("email address is required")
-	}
-	if cfg.Tenant == "" && !cfg.Interactive {
-		return fmt.Errorf("tenant is required")
-	}
-	if cfg.Password == "" && !cfg.Interactive {
-		return fmt.Errorf("password is required in non-interactive mode")
-	}
-
-	// Validate email format if provided
-	if cfg.Email != "" {
-		if !strings.Contains(cfg.Email, "@") || !strings.Contains(cfg.Email, ".") {
-			return fmt.Errorf("user validation failed: email must be in a valid format")
-		}
-	}
-
-	// Validate role if provided
-	if cfg.Role != "" {
-		role := models.UserRole(cfg.Role)
-		if err := role.Validate(); err != nil {
-			return fmt.Errorf("user validation failed: %w", err)
-		}
-	}
-
-	// Validate password if provided
-	if cfg.Password != "" {
-		if err := models.ValidatePassword(cfg.Password); err != nil {
-			return fmt.Errorf("password validation failed: %w", err)
-		}
-	}
-
-	return nil
-}
-
-
-
-
-
-
-
-
 
 // promptForInput prompts the user for input with a default value
 func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
