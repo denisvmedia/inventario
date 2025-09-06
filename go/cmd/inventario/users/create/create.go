@@ -282,10 +282,12 @@ func (c *Command) collectPassword(cfg *Config) (string, error) {
 	return password, nil
 }
 
-// collectTenantID collects tenant ID from config or prompts user
+// collectTenantID collects tenant ID from config or prompts user and returns the actual tenant ID
 func (c *Command) collectTenantID(cfg *Config, adminService *admin.Service) (string, error) {
-	tenantID := cfg.Tenant
-	if tenantID == "" && cfg.Interactive {
+	tenantIDOrSlug := cfg.Tenant
+
+	// For interactive mode, use validation and prompt
+	if tenantIDOrSlug == "" && cfg.Interactive {
 		ctx := context.Background()
 		reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
 
@@ -305,21 +307,21 @@ func (c *Command) collectTenantID(cfg *Config, adminService *admin.Service) (str
 		if !ok {
 			return "", fmt.Errorf("unexpected type returned from tenant field")
 		}
-		tenantID = tenantIDStr
+		tenantIDOrSlug = tenantIDStr
 	}
-	if tenantID == "" {
+
+	if tenantIDOrSlug == "" {
 		return "", fmt.Errorf("tenant ID is required")
 	}
 
-	// For non-interactive mode, still validate the tenant exists
-	if !cfg.Interactive && tenantID != "" {
-		_, err := adminService.GetTenant(context.Background(), tenantID)
-		if err != nil {
-			return "", fmt.Errorf("tenant not found: %w", err)
-		}
+	// Convert tenant slug/ID to actual tenant ID for database operations
+	tenant, err := adminService.GetTenant(context.Background(), tenantIDOrSlug)
+	if err != nil {
+		return "", fmt.Errorf("tenant not found: %w", err)
 	}
 
-	return tenantID, nil
+	// Return the actual tenant ID for database operations
+	return tenant.ID, nil
 }
 
 // createTenantValidator creates a validator function for tenant ID/slug validation
