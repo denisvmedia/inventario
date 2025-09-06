@@ -82,12 +82,15 @@ Examples:
 		},
 	})
 
-	c.registerFlags()
+	c.registerFlags(dbConfig)
 
 	return c
 }
 
-func (c *Command) registerFlags() {
+func (c *Command) registerFlags(dbConfig *shared.DatabaseConfig) {
+	// Database flags
+	shared.RegisterLocalDatabaseFlags(c.Cmd(), dbConfig)
+
 	// Dry run flag
 	shared.RegisterDryRunFlag(c.Cmd(), &c.config.DryRun)
 
