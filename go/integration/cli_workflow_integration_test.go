@@ -71,6 +71,11 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	err = createUserViaCLI(dsn, userEmail, userPassword, "Admin User", tenantSlug, "admin")
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user via CLI"))
 
+	// Step 4.5: Verify user was actually created in the database
+	t.Log("🔍 Verifying user was created in database...")
+	err = verifyUserExists(dsn, tenantID, userEmail)
+	c.Assert(err, qt.IsNil, qt.Commentf("User was not found in database after CLI creation"))
+
 	// Step 5: Attempt login with created user (should succeed)
 	t.Log("🔐 Testing login with created user (should succeed)...")
 	loginSuccess = attemptLogin(t, server.URL, userEmail, userPassword)
@@ -124,6 +129,30 @@ func createTenantWithSpecificID(dsn, tenantID, name, slug, domain string) error 
 	if err != nil {
 		return fmt.Errorf("failed to create tenant with specific ID: %w", err)
 	}
+
+	return nil
+}
+
+// verifyUserExists checks if a user exists in the database
+func verifyUserExists(dsn, tenantID, email string) error {
+	// Create registry set to query the database
+	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
+	defer cleanupFunc()
+
+	factorySet, err := registrySetFunc(registry.Config(dsn))
+	if err != nil {
+		return fmt.Errorf("failed to create factory set: %w", err)
+	}
+
+	// Try to get the user
+	user, err := factorySet.UserRegistry.GetByEmail(context.Background(), tenantID, email)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// Log user details for debugging
+	fmt.Printf("✅ User found: ID=%s, Email=%s, TenantID=%s, Name=%s, Role=%s\n",
+		user.ID, user.Email, user.TenantID, user.Name, user.Role)
 
 	return nil
 }
