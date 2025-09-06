@@ -32,6 +32,9 @@ import (
 func TestCLIWorkflowIntegration(t *testing.T) {
 	c := quicktest.New(t)
 
+	// Register PostgreSQL registry for CLI commands
+	postgres.Register()
+
 	// Get PostgreSQL DSN or skip test
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
