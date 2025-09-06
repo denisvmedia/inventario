@@ -78,9 +78,14 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 		t.Logf("⚠️  Could not list tenants: %v", err)
 	}
 
-	// Step 4.6: Verify user was actually created in the database
+	// Step 4.6: Get the actual tenant ID that CLI used (from the tenant listing)
+	actualTenantID, err := getActualTenantID(dsn, tenantSlug)
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to get actual tenant ID"))
+	t.Logf("🔍 Using actual tenant ID: %s (expected: %s)", actualTenantID, tenantID)
+
+	// Step 4.7: Verify user was actually created in the database
 	t.Log("🔍 Verifying user was created in database...")
-	err = verifyUserExists(dsn, tenantID, userEmail)
+	err = verifyUserExists(dsn, actualTenantID, userEmail)
 	c.Assert(err, qt.IsNil, qt.Commentf("User was not found in database after CLI creation"))
 
 	// Step 5: Attempt login with created user (should succeed)
@@ -120,6 +125,9 @@ func createTenantWithSpecificID(dsn, tenantID, name, slug, domain string) error 
 		return fmt.Errorf("failed to create factory set: %w", err)
 	}
 
+	// First, try to delete any existing tenant with this ID (ignore errors)
+	_ = factorySet.TenantRegistry.Delete(context.Background(), tenantID)
+
 	// Create tenant with specific ID
 	tenant := models.Tenant{
 		EntityID: models.EntityID{ID: tenantID}, // Set specific ID
@@ -132,9 +140,14 @@ func createTenantWithSpecificID(dsn, tenantID, name, slug, domain string) error 
 	}
 
 	// Insert directly using the registry
-	_, err = factorySet.TenantRegistry.Create(context.Background(), tenant)
+	createdTenant, err := factorySet.TenantRegistry.Create(context.Background(), tenant)
 	if err != nil {
 		return fmt.Errorf("failed to create tenant with specific ID: %w", err)
+	}
+
+	// Verify the tenant was created with the correct ID
+	if createdTenant.ID != tenantID {
+		return fmt.Errorf("tenant created with wrong ID: expected %s, got %s", tenantID, createdTenant.ID)
 	}
 
 	return nil
@@ -164,6 +177,26 @@ func listAllTenants(dsn string) error {
 	}
 
 	return nil
+}
+
+// getActualTenantID gets the tenant ID by slug from the database
+func getActualTenantID(dsn, slug string) (string, error) {
+	// Create registry set to query the database
+	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
+	defer cleanupFunc()
+
+	factorySet, err := registrySetFunc(registry.Config(dsn))
+	if err != nil {
+		return "", fmt.Errorf("failed to create factory set: %w", err)
+	}
+
+	// Get tenant by slug
+	tenant, err := factorySet.TenantRegistry.GetBySlug(context.Background(), slug)
+	if err != nil {
+		return "", fmt.Errorf("failed to get tenant by slug %s: %w", slug, err)
+	}
+
+	return tenant.ID, nil
 }
 
 // getTenantIDFromCLIOutput finds the actual tenant ID by querying for the user
