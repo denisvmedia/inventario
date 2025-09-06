@@ -71,7 +71,14 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	err = createUserViaCLI(dsn, userEmail, userPassword, "Admin User", tenantSlug, "admin")
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user via CLI"))
 
-	// Step 4.5: Verify user was actually created in the database
+	// Step 4.5: List all tenants to debug the mismatch
+	t.Log("🔍 Listing all tenants in database...")
+	err = listAllTenants(dsn)
+	if err != nil {
+		t.Logf("⚠️  Could not list tenants: %v", err)
+	}
+
+	// Step 4.6: Verify user was actually created in the database
 	t.Log("🔍 Verifying user was created in database...")
 	err = verifyUserExists(dsn, tenantID, userEmail)
 	c.Assert(err, qt.IsNil, qt.Commentf("User was not found in database after CLI creation"))
@@ -131,6 +138,58 @@ func createTenantWithSpecificID(dsn, tenantID, name, slug, domain string) error 
 	}
 
 	return nil
+}
+
+// listAllTenants lists all tenants in the database for debugging
+func listAllTenants(dsn string) error {
+	// Create registry set to query the database
+	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
+	defer cleanupFunc()
+
+	factorySet, err := registrySetFunc(registry.Config(dsn))
+	if err != nil {
+		return fmt.Errorf("failed to create factory set: %w", err)
+	}
+
+	// Get all tenants
+	tenants, err := factorySet.TenantRegistry.List(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to list tenants: %w", err)
+	}
+
+	fmt.Printf("📋 Found %d tenants in database:\n", len(tenants))
+	for i, tenant := range tenants {
+		fmt.Printf("  %d. ID=%s, Slug=%s, Name=%s, Status=%s\n",
+			i+1, tenant.ID, tenant.Slug, tenant.Name, tenant.Status)
+	}
+
+	return nil
+}
+
+// getTenantIDFromCLIOutput finds the actual tenant ID by querying for the user
+func getTenantIDFromCLIOutput(dsn, email string) (string, error) {
+	// Create registry set to query the database
+	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
+	defer cleanupFunc()
+
+	factorySet, err := registrySetFunc(registry.Config(dsn))
+	if err != nil {
+		return "", fmt.Errorf("failed to create factory set: %w", err)
+	}
+
+	// Get all users and find the one with matching email
+	users, err := factorySet.UserRegistry.List(context.Background())
+	if err != nil {
+		return "", fmt.Errorf("failed to list users: %w", err)
+	}
+
+	for _, user := range users {
+		if user.Email == email {
+			return user.TenantID, nil
+		}
+	}
+
+	return "", fmt.Errorf("user with email %s not found", email)
 }
 
 // verifyUserExists checks if a user exists in the database
