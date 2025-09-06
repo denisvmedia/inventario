@@ -4,6 +4,7 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	tenantcreate "github.com/denisvmedia/inventario/cmd/inventario/tenants/create"
 	usercreate "github.com/denisvmedia/inventario/cmd/inventario/users/create"
 	"github.com/denisvmedia/inventario/debug"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
 	"github.com/denisvmedia/inventario/services"
@@ -55,16 +57,17 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	loginSuccess := attemptLogin(t, server.URL, "nonexistent@example.com", "password123")
 	c.Assert(loginSuccess, quicktest.IsFalse, quicktest.Commentf("Login should fail for non-existent user"))
 
-	// Step 3: Create tenant via CLI
-	// Note: Using "test-tenant-id" as slug to match the hardcoded defaultTenantID in auth.go
-	// This is a temporary workaround until user-only authentication is implemented
-	t.Log("🏢 Creating tenant via CLI...")
-	tenantSlug := "test-tenant-id"
-	err = createTenantViaCLI(dsn, "Test Company", tenantSlug, "test-company.com")
-	c.Assert(err, quicktest.IsNil, quicktest.Commentf("Failed to create tenant via CLI"))
+	// Step 3: Create tenant with specific ID to match API server expectations
+	// Note: The API server uses hardcoded defaultTenantID = "test-tenant-id" for user lookup
+	// We need to create a tenant with this exact ID for the integration test to work
+	t.Log("🏢 Creating tenant with specific ID for API server compatibility...")
+	tenantID := "test-tenant-id"
+	tenantSlug := "test-company"
+	err = createTenantWithSpecificID(dsn, tenantID, "Test Company", tenantSlug, "test-company.com")
+	c.Assert(err, quicktest.IsNil, quicktest.Commentf("Failed to create tenant with specific ID"))
 
 	// Debug: Check what tenant was actually created
-	t.Logf("Created tenant with slug: %s", tenantSlug)
+	t.Logf("Created tenant with ID: %s, slug: %s", tenantID, tenantSlug)
 
 	// Step 4: Create user via CLI
 	t.Log("👤 Creating user via CLI...")
@@ -137,6 +140,42 @@ func setupFreshDatabase(dsn string) error {
 
 	if err := migrateCmd.Cmd().Execute(); err != nil {
 		return fmt.Errorf("migration failed: %w\nOutput: %s", err, migrateOutput.String())
+	}
+
+	return nil
+}
+
+// createTenantWithSpecificID creates a tenant with a specific ID directly in the database
+// This is needed for integration tests where the API server expects a specific tenant ID
+func createTenantWithSpecificID(dsn, tenantID, name, slug, domain string) error {
+	// Create registry set
+	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
+	defer func() {
+		if cleanupFunc != nil {
+			cleanupFunc()
+		}
+	}()
+
+	factorySet, err := registrySetFunc(registry.Config(dsn))
+	if err != nil {
+		return fmt.Errorf("failed to create factory set: %w", err)
+	}
+
+	// Create tenant with specific ID
+	tenant := models.Tenant{
+		EntityID: models.EntityID{ID: tenantID}, // Set specific ID
+		Name:     name,
+		Slug:     slug,
+		Status:   models.TenantStatusActive,
+	}
+	if domain != "" {
+		tenant.Domain = &domain
+	}
+
+	// Insert directly using the registry
+	_, err = factorySet.TenantRegistry.Create(context.Background(), tenant)
+	if err != nil {
+		return fmt.Errorf("failed to create tenant with specific ID: %w", err)
 	}
 
 	return nil
