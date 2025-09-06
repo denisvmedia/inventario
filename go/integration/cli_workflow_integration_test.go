@@ -1,5 +1,3 @@
-//go:build integration
-
 package integration_test
 
 import (
@@ -13,14 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/bootstrap/apply"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/up"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	tenantcreate "github.com/denisvmedia/inventario/cmd/inventario/tenants/create"
 	usercreate "github.com/denisvmedia/inventario/cmd/inventario/users/create"
 	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/models"
@@ -32,7 +27,7 @@ import (
 // TestCLIWorkflowIntegration tests the complete workflow from fresh database setup
 // through CLI operations to API access, simulating a CI pipeline scenario
 func TestCLIWorkflowIntegration(t *testing.T) {
-	c := quicktest.New(t)
+	c := qt.New(t)
 
 	// Register PostgreSQL registry for CLI commands
 	postgres.Register()
@@ -47,7 +42,7 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	// Step 1: Setup fresh database with bootstrap and migrations
 	t.Log("🔧 Setting up fresh database with bootstrap and migrations...")
 	err := setupFreshDatabase(dsn)
-	c.Assert(err, quicktest.IsNil, quicktest.Commentf("Failed to setup fresh database"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to setup fresh database"))
 
 	// Step 2: Attempt login with non-existent user (should fail)
 	t.Log("🔐 Testing login with non-existent user (should fail)...")
@@ -55,7 +50,7 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	defer cleanup()
 
 	loginSuccess := attemptLogin(t, server.URL, "nonexistent@example.com", "password123")
-	c.Assert(loginSuccess, quicktest.IsFalse, quicktest.Commentf("Login should fail for non-existent user"))
+	c.Assert(loginSuccess, qt.IsFalse, qt.Commentf("Login should fail for non-existent user"))
 
 	// Step 3: Create tenant with specific ID to match API server expectations
 	// Note: The API server uses hardcoded defaultTenantID = "test-tenant-id" for user lookup
@@ -64,7 +59,7 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	tenantID := "test-tenant-id"
 	tenantSlug := "test-company"
 	err = createTenantWithSpecificID(dsn, tenantID, "Test Company", tenantSlug, "test-company.com")
-	c.Assert(err, quicktest.IsNil, quicktest.Commentf("Failed to create tenant with specific ID"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create tenant with specific ID"))
 
 	// Debug: Check what tenant was actually created
 	t.Logf("Created tenant with ID: %s, slug: %s", tenantID, tenantSlug)
@@ -74,75 +69,27 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	userEmail := "admin@test-company.com"
 	userPassword := "SecurePassword123!"
 	err = createUserViaCLI(dsn, userEmail, userPassword, "Admin User", tenantSlug, "admin")
-	c.Assert(err, quicktest.IsNil, quicktest.Commentf("Failed to create user via CLI"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user via CLI"))
 
 	// Step 5: Attempt login with created user (should succeed)
 	t.Log("🔐 Testing login with created user (should succeed)...")
 	loginSuccess = attemptLogin(t, server.URL, userEmail, userPassword)
-	c.Assert(loginSuccess, quicktest.IsTrue, quicktest.Commentf("Login should succeed for created user"))
+	c.Assert(loginSuccess, qt.IsTrue, qt.Commentf("Login should succeed for created user"))
 
 	// Step 6: Get authentication token
 	t.Log("🎫 Getting authentication token...")
 	token, err := getAuthToken(server.URL, userEmail, userPassword)
-	c.Assert(err, quicktest.IsNil, quicktest.Commentf("Failed to get authentication token"))
-	c.Assert(token, quicktest.Not(quicktest.Equals), "", quicktest.Commentf("Token should not be empty"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to get authentication token"))
+	c.Assert(token, qt.Not(qt.Equals), "", qt.Commentf("Token should not be empty"))
 
 	// Step 7: Access system info API with valid token (should succeed)
 	t.Log("📊 Testing system info API access with valid token...")
 	systemInfo, err := getSystemInfo(server.URL, token)
-	c.Assert(err, quicktest.IsNil, quicktest.Commentf("Failed to access system info API"))
-	c.Assert(systemInfo, quicktest.IsNotNil, quicktest.Commentf("System info should not be nil"))
-	c.Assert(systemInfo["database_backend"], quicktest.Equals, "postgres", quicktest.Commentf("Database backend should be postgres"))
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to access system info API"))
+	c.Assert(systemInfo, qt.IsNotNil, qt.Commentf("System info should not be nil"))
+	c.Assert(systemInfo["database_backend"], qt.Equals, "postgres", qt.Commentf("Database backend should be postgres"))
 
 	t.Log("✅ CLI workflow integration test completed successfully!")
-}
-
-// setupFreshDatabase runs bootstrap and migration commands to set up a fresh database
-func setupFreshDatabase(dsn string) error {
-	// Step 1: Run bootstrap migrations
-	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
-	bootstrapCmd := apply.New(dbConfig)
-
-	// Register the database flags for the bootstrap command
-	shared.RegisterLocalDatabaseFlags(bootstrapCmd.Cmd(), dbConfig)
-
-	// Capture output
-	var bootstrapOutput bytes.Buffer
-	bootstrapCmd.Cmd().SetOut(&bootstrapOutput)
-	bootstrapCmd.Cmd().SetErr(&bootstrapOutput)
-
-	// Set bootstrap arguments
-	bootstrapCmd.Cmd().SetArgs([]string{
-		"--db-dsn=" + dsn,
-		"--username=inventario",
-		"--username-for-migrations=inventario",
-	})
-
-	if err := bootstrapCmd.Cmd().Execute(); err != nil {
-		return fmt.Errorf("bootstrap failed: %w\nOutput: %s", err, bootstrapOutput.String())
-	}
-
-	// Step 2: Run schema migrations
-	migrateCmd := up.New(dbConfig)
-
-	// Register the database flags for the migration command
-	shared.RegisterLocalDatabaseFlags(migrateCmd.Cmd(), dbConfig)
-
-	// Capture output
-	var migrateOutput bytes.Buffer
-	migrateCmd.Cmd().SetOut(&migrateOutput)
-	migrateCmd.Cmd().SetErr(&migrateOutput)
-
-	// Set migration arguments
-	migrateCmd.Cmd().SetArgs([]string{
-		"--db-dsn=" + dsn,
-	})
-
-	if err := migrateCmd.Cmd().Execute(); err != nil {
-		return fmt.Errorf("migration failed: %w\nOutput: %s", err, migrateOutput.String())
-	}
-
-	return nil
 }
 
 // createTenantWithSpecificID creates a tenant with a specific ID directly in the database
@@ -176,42 +123,6 @@ func createTenantWithSpecificID(dsn, tenantID, name, slug, domain string) error 
 	_, err = factorySet.TenantRegistry.Create(context.Background(), tenant)
 	if err != nil {
 		return fmt.Errorf("failed to create tenant with specific ID: %w", err)
-	}
-
-	return nil
-}
-
-// createTenantViaCLI creates a tenant using the CLI command
-func createTenantViaCLI(dsn, name, slug, domain string) error {
-	var dbConfig shared.DatabaseConfig
-
-	// Create root command with database flags
-	rootCmd := &cobra.Command{
-		Use: "inventario",
-	}
-	shared.RegisterDatabaseFlags(rootCmd, &dbConfig)
-
-	// Add tenant subcommand
-	tenantCmd := tenantcreate.New(&dbConfig)
-	rootCmd.AddCommand(tenantCmd.Cmd())
-
-	// Capture output
-	var output bytes.Buffer
-	rootCmd.SetOut(&output)
-	rootCmd.SetErr(&output)
-
-	// Set arguments for the full command
-	rootCmd.SetArgs([]string{
-		"--db-dsn=" + dsn,
-		"create",
-		"--name=" + name,
-		"--slug=" + slug,
-		"--domain=" + domain,
-		"--no-interactive",
-	})
-
-	if err := rootCmd.Execute(); err != nil {
-		return fmt.Errorf("tenant creation failed: %w\nOutput: %s", err, output.String())
 	}
 
 	return nil

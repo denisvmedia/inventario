@@ -1,5 +1,3 @@
-//go:build integration
-
 package integration_test
 
 import (
@@ -16,15 +14,13 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
-func init() {
-	// Register database backends for integration tests
-	memory.Register()
-	postgres.Register()
-}
-
 // TestInputSystemDryRunIntegration tests the new interactive input system
 // using dry-run mode to avoid requiring a database connection
 func TestInputSystemDryRunIntegration(t *testing.T) {
+	// Register database backends for integration tests
+	memory.Register()
+	postgres.Register()
+
 	c := qt.New(t)
 
 	t.Log("🧪 Testing input system integration with dry-run mode...")

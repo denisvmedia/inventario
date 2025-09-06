@@ -1,5 +1,3 @@
-//go:build integration
-
 package integration_test
 
 import (
@@ -12,8 +10,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/bootstrap/apply"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/up"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	tenantcreate "github.com/denisvmedia/inventario/cmd/inventario/tenants/create"
 	usercreate "github.com/denisvmedia/inventario/cmd/inventario/users/create"
@@ -373,47 +369,6 @@ func testSlugGeneration(t *testing.T, dsn string) {
 }
 
 // Helper functions
-
-// setupFreshDatabase runs bootstrap and migration commands to set up a fresh database
-func setupFreshDatabase(dsn string) error {
-	// Step 1: Run bootstrap migrations
-	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
-	bootstrapCmd := apply.New(dbConfig)
-
-	shared.RegisterLocalDatabaseFlags(bootstrapCmd.Cmd(), dbConfig)
-
-	var bootstrapOutput bytes.Buffer
-	bootstrapCmd.Cmd().SetOut(&bootstrapOutput)
-	bootstrapCmd.Cmd().SetErr(&bootstrapOutput)
-
-	bootstrapCmd.Cmd().SetArgs([]string{
-		"--db-dsn=" + dsn,
-		"--username=inventario",
-		"--username-for-migrations=inventario",
-	})
-
-	if err := bootstrapCmd.Cmd().Execute(); err != nil {
-		return fmt.Errorf("bootstrap failed: %w\nOutput: %s", err, bootstrapOutput.String())
-	}
-
-	// Step 2: Run regular migrations
-	migrateCmd := up.New(dbConfig)
-	shared.RegisterLocalDatabaseFlags(migrateCmd.Cmd(), dbConfig)
-
-	var migrateOutput bytes.Buffer
-	migrateCmd.Cmd().SetOut(&migrateOutput)
-	migrateCmd.Cmd().SetErr(&migrateOutput)
-
-	migrateCmd.Cmd().SetArgs([]string{
-		"--db-dsn=" + dsn,
-	})
-
-	if err := migrateCmd.Cmd().Execute(); err != nil {
-		return fmt.Errorf("migration failed: %w\nOutput: %s", err, migrateOutput.String())
-	}
-
-	return nil
-}
 
 // createTestTenant creates a test tenant and returns its slug
 func createTestTenant(t *testing.T, dsn, tenantName string) string {

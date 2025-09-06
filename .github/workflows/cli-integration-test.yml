@@ -74,7 +74,7 @@ jobs:
         echo "📊 Database: $POSTGRES_TEST_DSN"
         echo ""
         echo "🧪 Running CLI workflow integration test..."
-        go test -tags=integration ./integration/cli_workflow_integration_test.go -v -timeout=10m
+        go test ./integration/cli_workflow_integration_test.go -v -timeout=10m
         echo ""
         echo "✅ CLI workflow integration test completed successfully!"
         echo "🎉 The complete workflow from CLI setup to API access is working correctly."
