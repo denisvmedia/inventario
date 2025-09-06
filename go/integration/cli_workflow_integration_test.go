@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/frankban/quicktest"
+	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/cmd/inventario/db/bootstrap/apply"
@@ -135,30 +136,34 @@ func setupFreshDatabase(dsn string) error {
 
 // createTenantViaCLI creates a tenant using the CLI command
 func createTenantViaCLI(dsn, name, slug, domain string) error {
-	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
-	tenantCmd := tenantcreate.New(dbConfig)
+	var dbConfig shared.DatabaseConfig
+
+	// Create root command with database flags
+	rootCmd := &cobra.Command{
+		Use: "inventario",
+	}
+	shared.RegisterDatabaseFlags(rootCmd, &dbConfig)
+
+	// Add tenant subcommand
+	tenantCmd := tenantcreate.New(&dbConfig)
+	rootCmd.AddCommand(tenantCmd.Cmd())
 
 	// Capture output
 	var output bytes.Buffer
-	tenantCmd.Cmd().SetOut(&output)
-	tenantCmd.Cmd().SetErr(&output)
+	rootCmd.SetOut(&output)
+	rootCmd.SetErr(&output)
 
-	// Create a new command instance to avoid global state issues
-	cmd := tenantCmd.Cmd()
-	cmd.SetArgs([]string{
+	// Set arguments for the full command
+	rootCmd.SetArgs([]string{
 		"--db-dsn=" + dsn,
+		"create",
 		"--name=" + name,
 		"--slug=" + slug,
 		"--domain=" + domain,
 		"--no-interactive",
 	})
 
-	// Override the database config for this execution
-	originalDBConfig := dbConfig.DBDSN
-	dbConfig.DBDSN = dsn
-	defer func() { dbConfig.DBDSN = originalDBConfig }()
-
-	if err := cmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		return fmt.Errorf("tenant creation failed: %w\nOutput: %s", err, output.String())
 	}
 
@@ -167,18 +172,27 @@ func createTenantViaCLI(dsn, name, slug, domain string) error {
 
 // createUserViaCLI creates a user using the CLI command
 func createUserViaCLI(dsn, email, password, name, tenant, role string) error {
-	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
-	userCmd := usercreate.New(dbConfig)
+	var dbConfig shared.DatabaseConfig
+
+	// Create root command with database flags
+	rootCmd := &cobra.Command{
+		Use: "inventario",
+	}
+	shared.RegisterDatabaseFlags(rootCmd, &dbConfig)
+
+	// Add user subcommand
+	userCmd := usercreate.New(&dbConfig)
+	rootCmd.AddCommand(userCmd.Cmd())
 
 	// Capture output
 	var output bytes.Buffer
-	userCmd.Cmd().SetOut(&output)
-	userCmd.Cmd().SetErr(&output)
+	rootCmd.SetOut(&output)
+	rootCmd.SetErr(&output)
 
-	// Create a new command instance to avoid global state issues
-	cmd := userCmd.Cmd()
-	cmd.SetArgs([]string{
+	// Set arguments for the full command
+	rootCmd.SetArgs([]string{
 		"--db-dsn=" + dsn,
+		"create",
 		"--email=" + email,
 		"--password=" + password,
 		"--name=" + name,
@@ -187,12 +201,7 @@ func createUserViaCLI(dsn, email, password, name, tenant, role string) error {
 		"--no-interactive",
 	})
 
-	// Override the database config for this execution
-	originalDBConfig := dbConfig.DBDSN
-	dbConfig.DBDSN = dsn
-	defer func() { dbConfig.DBDSN = originalDBConfig }()
-
-	if err := cmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		return fmt.Errorf("user creation failed: %w\nOutput: %s", err, output.String())
 	}
 
