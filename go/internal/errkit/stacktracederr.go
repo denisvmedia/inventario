@@ -38,7 +38,7 @@ func WithStack(err error, fields ...any) error {
 		return result
 	}
 
-	return WithFields(result, fields)
+	return WithFields(result, fields...)
 }
 
 // Error implements the error interface and returns the error message.

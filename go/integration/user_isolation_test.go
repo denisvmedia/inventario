@@ -24,6 +24,12 @@ func setupTestDatabase(t *testing.T) (*registry.FactorySet, func()) {
 		return nil, nil
 	}
 
+	// Set up fresh database with bootstrap and migrations
+	err := setupFreshDatabase(dsn)
+	if err != nil {
+		t.Fatalf("Failed to setup fresh database: %v", err)
+	}
+
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
 	registrySet, err := registrySetFunc(registry.Config(dsn))
 	if err != nil {

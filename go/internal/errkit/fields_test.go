@@ -34,6 +34,11 @@ func TestToFields(t *testing.T) {
 			fields: []any{"key1", "value1", 42, "value2"},                    // Mixed types, including an int
 			result: errkit.Fields{"key1": "value1", "!BADKEY(42)": "value2"}, // Expecting type conversions and "!BADKEY"
 		},
+		{
+			name:   "Slice as Value",
+			fields: []any{"key1", []string{"value1", "value2", "value3"}},
+			result: errkit.Fields{"key1": []string{"value1", "value2", "value3"}},
+		},
 	}
 
 	for _, test := range tests {

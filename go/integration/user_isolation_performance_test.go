@@ -347,7 +347,12 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 	}
 
 	for _, maliciousID := range maliciousUserIDs {
-		t.Run(fmt.Sprintf("Malicious ID: %q", maliciousID), func(t *testing.T) {
+		// Create a sanitized test name to avoid 0x00 pollution in output
+		testName := fmt.Sprintf("Malicious ID: %q", maliciousID)
+		if len(maliciousID) > 100 {
+			testName = fmt.Sprintf("Malicious ID: very_long_string_%d_bytes", len(maliciousID))
+		}
+		t.Run(testName, func(t *testing.T) {
 			c := qt.New(t)
 			maliciousCtx := appctx.WithUser(context.Background(), &models.User{
 				TenantAwareEntityID: models.TenantAwareEntityID{

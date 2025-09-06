@@ -59,10 +59,11 @@ Inventario supports dry run mode for all database operations, allowing you to pr
 
 ```bash
 # Preview database migrations without executing them
-./inventario migrate --db-dsn postgres://user:pass@localhost/db --dry-run
+./inventario db migrate up --db-dsn postgres://user:pass@localhost/db --dry-run
 
-# Preview seed data without inserting it
-./inventario seed --db-dsn postgres://user:pass@localhost/db --dry-run
+# Create tenants and users for initial setup
+./inventario tenants create --name="My Organization" --slug="my-org" --dry-run
+./inventario users create --email="admin@example.com" --tenant="my-org" --role="admin" --dry-run
 ```
 
 For schema management operations using the Ptah tool:
@@ -83,6 +84,143 @@ Dry run mode is especially useful for:
 - Reviewing changes in CI/CD pipelines
 - Learning what operations each command performs
 - Debugging schema generation issues
+
+## CLI Commands
+
+Inventario provides comprehensive command-line tools for system administration and initial setup.
+
+### User and Tenant Management
+
+Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
+
+#### Tenant Management
+```bash
+# Create a tenant (organization)
+./inventario tenants create --name="Acme Corporation" --slug="acme" --domain="acme.com"
+
+# Create a tenant interactively (similar to Linux adduser)
+./inventario tenants create
+
+# List all tenants
+./inventario tenants list
+
+# List active tenants only
+./inventario tenants list --status=active
+
+# Search tenants
+./inventario tenants list --search=acme
+
+# Get detailed tenant information
+./inventario tenants get acme
+
+# Update tenant properties
+./inventario tenants update acme --name="Acme Corp Ltd" --domain="newdomain.com"
+
+# Update tenant interactively
+./inventario tenants update acme --interactive
+
+# Delete tenant with confirmation
+./inventario tenants delete acme
+
+# Preview operations without making changes
+./inventario tenants create --dry-run --name="Test Org"
+./inventario tenants update acme --name="New Name" --dry-run
+./inventario tenants delete acme --dry-run
+```
+
+#### User Management
+```bash
+# Create an admin user
+./inventario users create --email="admin@acme.com" --tenant="acme" --role="admin"
+
+# Create a user interactively with secure password input
+./inventario users create
+
+# List all users
+./inventario users list
+
+# List users in specific tenant
+./inventario users list --tenant=acme
+
+# List admin users only
+./inventario users list --role=admin
+
+# Search users
+./inventario users list --search=john
+
+# Get detailed user information
+./inventario users get admin@acme.com
+
+# Update user properties
+./inventario users update admin@acme.com --name="New Name" --role="user"
+
+# Change user password
+./inventario users update admin@acme.com --password
+
+# Move user to different tenant
+./inventario users update admin@acme.com --tenant="other-tenant"
+
+# Deactivate user
+./inventario users update admin@acme.com --active=false
+
+# Update user interactively
+./inventario users update admin@acme.com --interactive
+
+# Delete user with confirmation
+./inventario users delete admin@acme.com
+
+# Preview operations without making changes
+./inventario users create --dry-run --email="test@example.com" --tenant="acme"
+./inventario users update admin@acme.com --role="user" --dry-run
+./inventario users delete admin@acme.com --dry-run
+```
+
+**Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
+
+#### Command Options
+
+**Tenant Commands:**
+- `create`: Create new tenants with validation and auto-generated slugs
+- `list`: List tenants with filtering by status, search, and pagination
+- `get`: Get detailed tenant information including user count
+- `update`: Update tenant properties with validation
+- `delete`: Delete tenants with confirmation and impact assessment
+
+**User Commands:**
+- `create`: Create new users with secure password input and validation
+- `list`: List users with filtering by tenant, role, active status, and search
+- `get`: Get detailed user information including tenant details
+- `update`: Update user properties including password changes and tenant moves
+- `delete`: Delete users with confirmation prompts
+
+**Common Flags:**
+- `--dry-run`: Preview operations without making changes
+- `--interactive`: Enable guided prompts for all fields
+- `--no-interactive`: Disable interactive prompts (use flags only)
+- `--output`: Output format (table, json) for list and get commands
+- `--force`: Skip confirmation prompts for delete operations
+
+**Filtering and Pagination:**
+- `--limit`: Maximum number of results (default: 50)
+- `--offset`: Number of results to skip (default: 0)
+- `--search`: Search by name, slug, or email
+- `--status`: Filter by status (tenants: active, suspended, inactive)
+- `--role`: Filter by role (users: admin, user)
+- `--active`: Filter by active status (users: true, false)
+- `--tenant`: Filter by tenant (users only)
+
+### Database Management
+
+```bash
+# Run database migrations
+./inventario db migrate up --db-dsn postgres://user:pass@localhost/db
+
+# Initialize configuration
+./inventario init-config
+
+# Start the web server
+./inventario run --db-dsn postgres://user:pass@localhost/db
+```
 
 ### Prerequisites
 
@@ -193,6 +331,49 @@ Dry run mode is especially useful for:
 5. **Access the application**:
    Open your browser and navigate to http://localhost:3333/
 
+## Testing
+
+### Unit Tests
+
+Run the unit test suite:
+
+```bash
+cd go
+go test ./...
+```
+
+### Integration Tests
+
+For integration tests with PostgreSQL:
+
+```bash
+export POSTGRES_TEST_DSN="postgres://user:password@localhost:5432/test_db?sslmode=disable"
+go test -tags=integration ./...
+```
+
+### CLI Workflow Integration Test
+
+A comprehensive integration test validates the complete workflow from fresh database setup through CLI operations to API access:
+
+```bash
+# Set PostgreSQL DSN
+export POSTGRES_TEST_DSN="postgres://user:password@localhost:5432/test_db?sslmode=disable"
+
+# Run the CLI workflow integration test
+cd go
+go test -tags=integration ./integration_test/cli_workflow_integration_test.go -v
+
+# Or use the provided scripts
+./scripts/run-integration-tests.sh  # Linux/macOS
+.\scripts\run-integration-tests.ps1  # Windows PowerShell
+```
+
+This test validates:
+- Fresh database setup with bootstrap and migrations
+- CLI tenant and user creation commands
+- Authentication flow (login failure/success)
+- API access with JWT tokens
+- Complete end-to-end workflow for CI/CD pipelines
 
 ## License
 This module is licensed under the MIT License. See the [LICENSE](LICENSE) file for details. You are free to use, modify, and distribute this software in accordance with the terms of the license.

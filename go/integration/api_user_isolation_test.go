@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
 
+	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 	"github.com/go-extras/go-kit/ptr"
 	"github.com/golang-jwt/jwt/v5"
@@ -28,41 +30,38 @@ import (
 
 // setupTestAPIServer creates a test API server with authentication
 func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.User, user2 *models.User, jwtSecret string, registrySet *registry.Set, cleanup func()) {
+	c := qt.New(t)
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
 		t.Skip("POSTGRES_TEST_DSN environment variable not set")
 		return nil, nil, nil, "", nil, nil
 	}
 
+	// Set up fresh database with bootstrap and migrations
+	err := setupFreshDatabase(dsn)
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to setup fresh database"))
+
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
 	factorySet, err := registrySetFunc(registry.Config(dsn))
-	if err != nil {
-		t.Fatalf("Failed to create factory set: %v", err)
-	}
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create factory set"))
 
 	jwtSecretBytes := []byte("test-secret-32-bytes-minimum-length")
 
 	// Create test tenant first with unique identifiers
-	testTenantID := "test-tenant-" + time.Now().Format("20060102-150405") + "-" + fmt.Sprintf("%d", time.Now().UnixNano()%1000)
 	testTenant := models.Tenant{
-		EntityID: models.EntityID{ID: testTenantID},
-		Name:     "Test Tenant",
-		Slug:     "test-tenant-" + fmt.Sprintf("%d", time.Now().UnixNano()%1000000),
-		Status:   models.TenantStatusActive,
+		Name:   "Test Tenant API " + time.Now().Format("20060102-150405"),
+		Slug:   "test-tenant-api-" + fmt.Sprintf("%d", time.Now().UnixNano()%1000000),
+		Status: models.TenantStatusActive,
 	}
-	_, err = registrySet.TenantRegistry.Create(context.Background(), testTenant)
-	if err != nil {
-		t.Fatalf("Failed to create test tenant: %v", err)
-	}
+	createdTenant, err := factorySet.TenantRegistry.Create(context.Background(), testTenant)
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create test tenant"))
+	testTenantID := createdTenant.ID
 
 	// Create test users with unique identifiers
 	timestamp := fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
-	user1ID := "api-user-1-" + timestamp
 	user1Model := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: user1ID},
 			TenantID: testTenantID,
-			UserID:   user1ID, // Self-reference for RLS
 		},
 		Email:    "user1-" + timestamp + "@api-test.com",
 		Name:     "API Test User 1",
@@ -74,12 +73,9 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		t.Fatalf("Failed to set password: %v", err)
 	}
 
-	user2ID := "api-user-2-" + timestamp
 	user2Model := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: user2ID},
 			TenantID: testTenantID,
-			UserID:   user2ID, // Self-reference for RLS
 		},
 		Email:    "user2-" + timestamp + "@api-test.com",
 		Name:     "API Test User 2",
@@ -91,18 +87,26 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		t.Fatalf("Failed to set password: %v", err)
 	}
 
-	createdUser1, err := registrySet.UserRegistry.Create(context.Background(), user1Model)
+	createdUser1, err := factorySet.UserRegistry.Create(context.Background(), user1Model)
 	if err != nil {
 		t.Fatalf("Failed to create user1: %v", err)
 	}
 
-	createdUser2, err := registrySet.UserRegistry.Create(context.Background(), user2Model)
+	createdUser2, err := factorySet.UserRegistry.Create(context.Background(), user2Model)
 	if err != nil {
 		t.Fatalf("Failed to create user2: %v", err)
 	}
 
+	// Create user-aware registry set for user1 (for testing purposes)
+	ctx := appctx.WithUser(context.Background(), createdUser1)
+	registrySet, err = factorySet.CreateUserRegistrySet(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create user registry set: %v", err)
+	}
+
 	// Create API server
 	params := apiserver.Params{
+		FactorySet:     factorySet,
 		EntityService:  services.NewEntityService(factorySet, "file://uploads?memfs=1&create_dir=1"),
 		UploadLocation: "file://uploads?memfs=1&create_dir=1",
 		DebugInfo:      debug.NewInfo("postgres://test", "file://uploads?memfs=1&create_dir=1"),
@@ -159,13 +163,11 @@ func makeAuthenticatedRequest(method, url string, body []byte, token string) (*h
 
 // TestAPIUserIsolation_Commodities tests commodity API isolation
 func TestAPIUserIsolation_Commodities(t *testing.T) {
-	server, user1, user2, jwtSecret, registrySet, cleanup := setupTestAPIServer(t)
+	server, createdUser1, createdUser2, jwtSecret, registrySet, cleanup := setupTestAPIServer(t)
 	defer cleanup()
 
 	// Get the variables we need
-	timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
-	testTenantID := user1.TenantID // Both users have the same tenant ID
-	user1ID := user1.ID
+	testTenantID := createdUser1.TenantID // Both users have the same tenant ID
 
 	// Skip main currency setup for now - we'll create a commodity without price validation
 	// This avoids the RLS issues with settings
@@ -180,47 +182,40 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	// Create a location and area for the commodity
 	location := models.Location{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-location-" + timestamp},
 			TenantID: testTenantID,
-			UserID:   user1ID,
+			UserID:   createdUser1.ID,
 		},
 		Name:    "Test Location",
 		Address: "123 Test St",
 	}
 
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			EntityID: models.EntityID{ID: "test-user-id"},
-		},
-	})
-
-	_, err = registrySet.LocationRegistry.Create(ctx, location)
+	// Create location using user1's context
+	ctx := appctx.WithUser(context.Background(), createdUser1)
+	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 	if err != nil {
 		t.Fatalf("Failed to create location: %v", err)
 	}
 
 	area := models.Area{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "test-area-" + timestamp},
 			TenantID: testTenantID,
-			UserID:   user1ID,
+			UserID:   createdUser1.ID,
 		},
 		Name:       "Test Area",
-		LocationID: location.ID,
+		LocationID: createdLocation.ID,
 	}
-	_, err = registrySet.AreaRegistry.Create(context.Background(), area)
+	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
 	if err != nil {
 		t.Fatalf("Failed to create area: %v", err)
 	}
 
 	// Generate tokens for both users
-	token1, err := generateJWTToken(user1, jwtSecret)
+	token1, err := generateJWTToken(createdUser1, jwtSecret)
 	if err != nil {
 		t.Fatalf("Failed to generate token for user1: %v", err)
 	}
 
-	token2, err := generateJWTToken(user2, jwtSecret)
+	token2, err := generateJWTToken(createdUser2, jwtSecret)
 	if err != nil {
 		t.Fatalf("Failed to generate token for user2: %v", err)
 	}
@@ -241,7 +236,7 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 			Attributes: &models.Commodity{
 				Name:                   "New Commodity in Area 2",
 				ShortName:              "NewCom2",
-				AreaID:                 area.ID,
+				AreaID:                 createdArea.ID,
 				Type:                   models.CommodityTypeElectronics,
 				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
 				OriginalPriceCurrency:  models.Currency("USD"),
@@ -272,7 +267,8 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 		t.Fatalf("Failed to create commodity: %v", err)
 	}
 	if resp.StatusCode != http.StatusCreated {
-		t.Errorf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status %d, got %d. Response body: %s", http.StatusCreated, resp.StatusCode, string(body))
 	}
 	resp.Body.Close()
 
@@ -309,12 +305,15 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to decode commodities for user1: %v", err)
 	}
-	if len(commodities["data"].([]any)) != 1 {
-		t.Errorf("Expected 1 commodity for user1, got %d", len(commodities))
+	dataArray := commodities["data"].([]any)
+	if len(dataArray) != 1 {
+		t.Errorf("Expected 1 commodity for user1, got %d", len(dataArray))
 	}
-	name := commodities["data"].([]any)[0].(map[string]any)["attributes"].(map[string]any)["name"]
-	if name != obj.Data.Attributes.Name {
-		t.Errorf("Expected 'User1 Commodity', got %v", name)
+	if len(dataArray) > 0 {
+		name := dataArray[0].(map[string]any)["attributes"].(map[string]any)["name"]
+		if name != obj.Data.Attributes.Name {
+			t.Errorf("Expected '%s', got %v", obj.Data.Attributes.Name, name)
+		}
 	}
 	resp.Body.Close()
 }

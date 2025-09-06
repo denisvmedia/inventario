@@ -14,11 +14,13 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-const (
-	// defaultTenantID is used as a fallback tenant ID during the transition to user-only authentication
+var (
+	// DefaultTenantID is used as a fallback tenant ID during the transition to user-only authentication
 	// TODO: Remove this when user-only GetByEmail method is implemented
-	defaultTenantID = "test-tenant-id"
+	DefaultTenantID = "test-tenant-id"
+)
 
+const (
 	// jwtTokenExpiration defines how long JWT tokens remain valid
 	jwtTokenExpiration = 24 * time.Hour
 )
@@ -64,7 +66,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// Get user by email - for user-only mode, we use a default tenant ID
 	// Note: This uses the existing GetByEmail method with a default tenant ID
 	// In a future version, this should be replaced with a user-only GetByEmail method
-	user, err := api.userRegistry.GetByEmail(r.Context(), defaultTenantID, req.Email)
+	user, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email)
 	if err != nil {
 		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)

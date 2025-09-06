@@ -10,11 +10,16 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/features"
 	"github.com/denisvmedia/inventario/cmd/inventario/initconfig"
 	"github.com/denisvmedia/inventario/cmd/inventario/run"
+	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"github.com/denisvmedia/inventario/cmd/inventario/tenants"
+	"github.com/denisvmedia/inventario/cmd/inventario/users"
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(args ...string) {
+	var dbConfig shared.DatabaseConfig
+
 	var rootCmd = &cobra.Command{
 		Use:   "inventario",
 		Short: "Inventario application",
@@ -31,6 +36,7 @@ FEATURES:
   • File upload and attachment management
   • Database migration and seeding capabilities
   • RESTful API with JSON responses
+  • User and tenant management commands
 
 TODO: complete command docs
 
@@ -41,11 +47,16 @@ Use "inventario [command] --help" for detailed information about each command.`,
 		},
 	}
 
+	// Register database flags for commands that need them
+	shared.RegisterDatabaseFlags(rootCmd, &dbConfig)
+
 	rootCmd.SetArgs(args)
 	rootCmd.AddCommand(initconfig.New().Cmd())
 	rootCmd.AddCommand(db.New())
 	rootCmd.AddCommand(run.New().Cmd())
 	rootCmd.AddCommand(features.New())
+	rootCmd.AddCommand(tenants.New(&dbConfig))
+	rootCmd.AddCommand(users.New(&dbConfig))
 	rootCmd.AddCommand(version.New())
 	err := rootCmd.Execute()
 	if err != nil {
