@@ -97,8 +97,6 @@ func (c *Command) getUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEmai
 		return fmt.Errorf("user ID or email is required")
 	}
 
-
-
 	// Create admin service
 	adminService, err := admin.NewService(dbConfig)
 	if err != nil {

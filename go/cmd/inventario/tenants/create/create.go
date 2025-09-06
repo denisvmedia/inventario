@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
+	"github.com/denisvmedia/inventario/cmd/internal/input"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/services/admin"
@@ -170,14 +172,22 @@ func (c *Command) createTenant(cfg *Config, dbConfig *shared.DatabaseConfig) err
 
 // collectTenantRequest collects tenant information and converts to service request
 func (c *Command) collectTenantRequest(cfg *Config) (*admin.TenantCreateRequest, error) {
+	ctx := context.Background()
+
 	// Collect name
 	if cfg.Name == "" && cfg.Interactive {
-		name, err := c.promptForInput("Tenant name", "")
+		reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+		nameField := input.NewStringField("Tenant name", reader).
+			Required().
+			MinLength(1)
+
+		value, err := nameField.Prompt(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if name == "" {
-			return nil, fmt.Errorf("tenant name is required")
+		name, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type returned from name field")
 		}
 		cfg.Name = name
 	}
@@ -187,23 +197,26 @@ func (c *Command) collectTenantRequest(cfg *Config) (*admin.TenantCreateRequest,
 
 	// Collect or generate slug
 	if cfg.Slug == "" {
-		generatedSlug := c.generateSlug(cfg.Name)
-		if cfg.Interactive {
-			slug, err := c.promptForInput("Tenant slug", generatedSlug)
-			if err != nil {
-				return nil, err
-			}
-			cfg.Slug = slug
-		} else {
-			cfg.Slug = generatedSlug
+		slug, err := c.collectSlug(cfg, ctx)
+		if err != nil {
+			return nil, err
 		}
+		cfg.Slug = slug
 	}
 
 	// Collect domain (optional)
 	if cfg.Domain == "" && cfg.Interactive {
-		domain, err := c.promptForInput("Tenant domain (optional)", "")
+		reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+		domainField := input.NewStringField("Tenant domain (optional)", reader).
+			Optional()
+
+		value, err := domainField.Prompt(ctx)
 		if err != nil {
 			return nil, err
+		}
+		domain, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type returned from domain field")
 		}
 		cfg.Domain = domain
 	}
@@ -259,26 +272,6 @@ func (c *Command) generateSlug(name string) string {
 	return slug
 }
 
-// promptForInput prompts the user for input with a default value
-func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
-	out := c.Cmd().OutOrStdout()
-
-	if defaultValue != "" {
-		fmt.Fprintf(out, "%s [%s]: ", prompt, defaultValue)
-	} else {
-		fmt.Fprintf(out, "%s: ", prompt)
-	}
-
-	var input string
-	fmt.Scanln(&input)
-
-	if input == "" && defaultValue != "" {
-		return defaultValue, nil
-	}
-
-	return input, nil
-}
-
 // printTenantRequest prints tenant request information for dry run
 func (c *Command) printTenantRequest(req *admin.TenantCreateRequest) {
 	out := c.Cmd().OutOrStdout()
@@ -310,4 +303,27 @@ func (c *Command) printTenantInfo(tenant *models.Tenant) {
 		settingsJSON, _ := json.MarshalIndent(tenant.Settings, "  ", "  ")
 		fmt.Fprintf(out, "  Settings: %s\n", settingsJSON)
 	}
+}
+
+// collectSlug collects or generates slug for the tenant
+func (c *Command) collectSlug(cfg *Config, ctx context.Context) (string, error) {
+	generatedSlug := c.generateSlug(cfg.Name)
+	if !cfg.Interactive {
+		return generatedSlug, nil
+	}
+
+	reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+	slugField := input.NewStringField("Tenant slug", reader).
+		Default(generatedSlug).
+		ValidateSlug()
+
+	value, err := slugField.Prompt(ctx)
+	if err != nil {
+		return "", err
+	}
+	slug, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("unexpected type returned from slug field")
+	}
+	return slug, nil
 }

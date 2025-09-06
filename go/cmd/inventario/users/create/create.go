@@ -1,17 +1,15 @@
 package create
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
+	"github.com/denisvmedia/inventario/cmd/internal/input"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/services/admin"
@@ -172,125 +170,26 @@ func (c *Command) createUser(cfg *Config, dbConfig *shared.DatabaseConfig) error
 	return nil
 }
 
-// promptForInput prompts the user for input with a default value
-func (c *Command) promptForInput(prompt, defaultValue string) (string, error) {
-	out := c.Cmd().OutOrStdout()
-
-	if defaultValue != "" {
-		fmt.Fprintf(out, "%s [%s]: ", prompt, defaultValue)
-	} else {
-		fmt.Fprintf(out, "%s: ", prompt)
-	}
-
-	// Use bufio.Scanner to read the entire line including spaces
-	scanner := bufio.NewScanner(os.Stdin)
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return "", fmt.Errorf("failed to read input: %w", err)
-		}
-		// EOF or no input
-		if defaultValue != "" {
-			return defaultValue, nil
-		}
-		return "", nil
-	}
-
-	input := strings.TrimSpace(scanner.Text())
-	if input == "" && defaultValue != "" {
-		return defaultValue, nil
-	}
-
-	return input, nil
-}
-
-// promptForPassword prompts for a password with hidden input
-func (c *Command) promptForPassword(prompt string) (string, error) {
-	out := c.Cmd().OutOrStdout()
-
-	fmt.Fprintf(out, "%s: ", prompt)
-
-	// Read password without echoing to terminal
-	passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		return "", fmt.Errorf("failed to read password: %w", err)
-	}
-	fmt.Fprintln(out) // Add newline after password input
-
-	password := string(passwordBytes)
-	if password == "" {
-		return "", fmt.Errorf("password cannot be empty")
-	}
-
-	// Confirm password
-	fmt.Fprintf(out, "Confirm %s: ", prompt)
-	confirmBytes, err := term.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		return "", fmt.Errorf("failed to read password confirmation: %w", err)
-	}
-	fmt.Fprintln(out) // Add newline after confirmation
-
-	if string(confirmBytes) != password {
-		return "", fmt.Errorf("passwords do not match")
-	}
-
-	return password, nil
-}
-
 // collectUserRequest collects user information and converts to service request
 func (c *Command) collectUserRequest(cfg *Config, adminService *admin.Service) (*admin.UserCreateRequest, error) {
-	// Collect email
-	email := cfg.Email
-	if email == "" && cfg.Interactive {
-		emailInput, err := c.promptForInput("Email", "")
-		if err != nil {
-			return nil, err
-		}
-		email = emailInput
-	}
-	if email == "" {
-		return nil, fmt.Errorf("email is required")
-	}
-
-	// Collect name
-	name := cfg.Name
-	if name == "" && cfg.Interactive {
-		nameInput, err := c.promptForInput("Full name", "")
-		if err != nil {
-			return nil, err
-		}
-		name = nameInput
-	}
-	if name == "" {
-		return nil, fmt.Errorf("name is required")
-	}
-
-	// Collect password
-	password := cfg.Password
-	if password == "" {
-		passwordInput, err := c.promptForPassword("Password")
-		if err != nil {
-			return nil, err
-		}
-		password = passwordInput
-	}
-
-	// Collect tenant ID
-	tenantID := cfg.Tenant
-	if tenantID == "" && cfg.Interactive {
-		tenantInput, err := c.promptForInput("Tenant ID or slug", "")
-		if err != nil {
-			return nil, err
-		}
-		tenantID = tenantInput
-	}
-	if tenantID == "" {
-		return nil, fmt.Errorf("tenant ID is required")
-	}
-
-	// Validate tenant exists
-	_, err := adminService.GetTenant(context.Background(), tenantID)
+	email, err := c.collectEmail(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("tenant not found: %w", err)
+		return nil, err
+	}
+
+	name, err := c.collectName(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	password, err := c.collectPassword(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	tenantID, err := c.collectTenantID(cfg, adminService)
+	if err != nil {
+		return nil, err
 	}
 
 	// Parse role
@@ -307,6 +206,162 @@ func (c *Command) collectUserRequest(cfg *Config, adminService *admin.Service) (
 		Role:     role,
 		IsActive: cfg.Active,
 	}, nil
+}
+
+// collectEmail collects email from config or prompts user
+func (c *Command) collectEmail(cfg *Config) (string, error) {
+	email := cfg.Email
+	if email == "" && cfg.Interactive {
+		ctx := context.Background()
+		reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+		emailField := input.NewStringField("Email", reader).
+			Required().
+			ValidateEmail()
+
+		value, err := emailField.Prompt(ctx)
+		if err != nil {
+			return "", err
+		}
+		emailStr, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("unexpected type returned from email field")
+		}
+		email = emailStr
+	}
+	if email == "" {
+		return "", fmt.Errorf("email is required")
+	}
+	return email, nil
+}
+
+// collectName collects name from config or prompts user
+func (c *Command) collectName(cfg *Config) (string, error) {
+	name := cfg.Name
+	if name == "" && cfg.Interactive {
+		ctx := context.Background()
+		reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+		nameField := input.NewStringField("Full name", reader).
+			Required().
+			MinLength(1)
+
+		value, err := nameField.Prompt(ctx)
+		if err != nil {
+			return "", err
+		}
+		nameStr, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("unexpected type returned from name field")
+		}
+		name = nameStr
+	}
+	if name == "" {
+		return "", fmt.Errorf("name is required")
+	}
+	return name, nil
+}
+
+// collectPassword collects password from config or prompts user
+func (c *Command) collectPassword(cfg *Config) (string, error) {
+	password := cfg.Password
+	if password == "" {
+		ctx := context.Background()
+		reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+		passwordField := input.NewPasswordField("Password", reader).
+			ValidateStrength()
+
+		value, err := passwordField.Prompt(ctx)
+		if err != nil {
+			return "", err
+		}
+		passwordStr, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("unexpected type returned from password field")
+		}
+		password = passwordStr
+	}
+	return password, nil
+}
+
+// collectTenantID collects tenant ID from config or prompts user
+func (c *Command) collectTenantID(cfg *Config, adminService *admin.Service) (string, error) {
+	tenantID := cfg.Tenant
+	if tenantID == "" && cfg.Interactive {
+		ctx := context.Background()
+		reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+
+		// Create tenant validator
+		tenantValidator := c.createTenantValidator(adminService)
+
+		tenantField := input.NewStringField("Tenant ID or slug", reader).
+			Required().
+			MinLength(1).
+			ValidateCustom(tenantValidator)
+
+		value, err := tenantField.Prompt(ctx)
+		if err != nil {
+			return "", err
+		}
+		tenantIDStr, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("unexpected type returned from tenant field")
+		}
+		tenantID = tenantIDStr
+	}
+	if tenantID == "" {
+		return "", fmt.Errorf("tenant ID is required")
+	}
+
+	// For non-interactive mode, still validate the tenant exists
+	if !cfg.Interactive && tenantID != "" {
+		_, err := adminService.GetTenant(context.Background(), tenantID)
+		if err != nil {
+			return "", fmt.Errorf("tenant not found: %w", err)
+		}
+	}
+
+	return tenantID, nil
+}
+
+// createTenantValidator creates a validator function for tenant ID/slug validation
+func (c *Command) createTenantValidator(adminService *admin.Service) func(string) error {
+	return func(tenantID string) error {
+		// Try to get the tenant
+		_, err := adminService.GetTenant(context.Background(), tenantID)
+		if err != nil {
+			// Get available tenants to show in error message
+			availableTenants, listErr := c.getAvailableTenants(adminService)
+			if listErr != nil {
+				return input.NewAnswerError(fmt.Sprintf("Tenant '%s' not found", tenantID))
+			}
+
+			if len(availableTenants) == 0 {
+				return input.NewAnswerError("No tenants available. Please create a tenant first.")
+			}
+
+			return input.NewAnswerError(fmt.Sprintf("Tenant '%s' not found. Available tenants: %s",
+				tenantID, strings.Join(availableTenants, ", ")))
+		}
+		return nil
+	}
+}
+
+// getAvailableTenants retrieves a list of available tenant slugs
+func (c *Command) getAvailableTenants(adminService *admin.Service) ([]string, error) {
+	listReq := admin.TenantListRequest{
+		Limit: 100, // Get up to 100 tenants for the error message
+	}
+
+	response, err := adminService.ListTenants(context.Background(), listReq)
+	if err != nil {
+		return nil, err
+	}
+
+	var slugs []string
+	for _, tenant := range response.Tenants {
+		slugs = append(slugs, tenant.Slug)
+	}
+
+	return slugs, nil
 }
 
 // printUserRequest prints user request information for dry run

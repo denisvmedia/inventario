@@ -62,8 +62,6 @@ func main() {
 
 	setupSlog()
 
-	slog.Info("Starting Inventario")
-
 	cleanup := registerDBBackends()
 	defer func() {
 		err := cleanup()

@@ -97,8 +97,6 @@ func (c *Command) getTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idOrSl
 		return fmt.Errorf("tenant ID or slug is required")
 	}
 
-
-
 	// Create admin service
 	adminService, err := admin.NewService(dbConfig)
 	if err != nil {
