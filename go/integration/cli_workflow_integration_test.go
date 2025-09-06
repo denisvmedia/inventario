@@ -177,7 +177,7 @@ func createUserViaCLI(dsn, email, password, name, tenant, role string) error {
 	rootCmd.SetErr(&output)
 
 	// Set arguments for the full command
-	rootCmd.SetArgs([]string{
+	args := []string{
 		"--db-dsn=" + dsn,
 		"create",
 		"--email=" + email,
@@ -186,11 +186,19 @@ func createUserViaCLI(dsn, email, password, name, tenant, role string) error {
 		"--tenant=" + tenant,
 		"--role=" + role,
 		"--no-interactive",
-	})
+	}
+
+	// Debug: Print the arguments being passed
+	fmt.Printf("🔍 CLI user creation args: %v\n", args)
+
+	rootCmd.SetArgs(args)
 
 	if err := rootCmd.Execute(); err != nil {
 		return fmt.Errorf("user creation failed: %w\nOutput: %s", err, output.String())
 	}
+
+	// Debug: Print the output to see what actually happened
+	fmt.Printf("🔍 CLI user creation output: %s\n", output.String())
 
 	return nil
 }
