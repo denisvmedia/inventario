@@ -35,6 +35,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - id: vars
+      uses: ./.github/actions/vars
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
@@ -71,7 +74,7 @@ jobs:
         echo "📊 Database: $POSTGRES_TEST_DSN"
         echo ""
         echo "🧪 Running CLI workflow integration test..."
-        go test -tags=integration ./integration_test/cli_workflow_integration_test.go -v -timeout=10m
+        go test -tags=integration ./integration/cli_workflow_integration_test.go -v -timeout=10m
         echo ""
         echo "✅ CLI workflow integration test completed successfully!"
         echo "🎉 The complete workflow from CLI setup to API access is working correctly."
@@ -82,5 +85,5 @@ jobs:
       with:
         name: cli-integration-test-results
         path: |
-          go/integration_test/
+          go/integration/
         retention-days: 7
