@@ -22,7 +22,6 @@ func ToFields(fields []any) Fields {
 	}
 
 	if len(fields)%2 != 0 {
-		panic("odd number of fields")
 		fields = append(fields[:len(fields)-1], badKey, fields[len(fields)-1])
 	}
 
