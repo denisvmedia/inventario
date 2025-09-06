@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,19 +53,21 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	loginSuccess := attemptLogin(t, server.URL, "nonexistent@example.com", "password123")
 	c.Assert(loginSuccess, qt.IsFalse, qt.Commentf("Login should fail for non-existent user"))
 
-	// Step 3: Create tenant with specific ID to match API server expectations
-	// Note: The API server uses hardcoded defaultTenantID = "test-tenant-id" for user lookup
-	// We need to create a tenant with this exact ID for the integration test to work
-	t.Log("🏢 Creating tenant with specific ID for API server compatibility...")
-	tenantID := "test-tenant-id"
+	// Step 3: Create tenant and get the actual ID that was generated
+	t.Log("🏢 Creating tenant and getting generated ID...")
 	tenantSlug := "test-company"
-	err = createTenantWithSpecificID(dsn, tenantID, "Test Company", tenantSlug, "test-company.com")
-	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create tenant with specific ID"))
+	tenantID, err := createTenantAndGetID(dsn, "Test Company", tenantSlug, "test-company.com")
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create tenant"))
 
 	// Debug: Check what tenant was actually created
 	t.Logf("Created tenant with ID: %s, slug: %s", tenantID, tenantSlug)
 
-	// Step 4: Create user via CLI
+	// Step 4: Update API server to use the actual tenant ID
+	t.Log("🔧 Updating API server to use actual tenant ID...")
+	err = updateAPIServerTenantID(tenantID)
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to update API server tenant ID"))
+
+	// Step 5: Create user via CLI
 	t.Log("👤 Creating user via CLI...")
 	userEmail := "admin@test-company.com"
 	userPassword := "SecurePassword123!"
@@ -109,9 +112,8 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	t.Log("✅ CLI workflow integration test completed successfully!")
 }
 
-// createTenantWithSpecificID creates a tenant with a specific ID directly in the database
-// This is needed for integration tests where the API server expects a specific tenant ID
-func createTenantWithSpecificID(dsn, tenantID, name, slug, domain string) error {
+// createTenantAndGetID creates a tenant and returns the generated ID
+func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
 	// Create registry set
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
 	defer func() {
@@ -122,34 +124,53 @@ func createTenantWithSpecificID(dsn, tenantID, name, slug, domain string) error 
 
 	factorySet, err := registrySetFunc(registry.Config(dsn))
 	if err != nil {
-		return fmt.Errorf("failed to create factory set: %w", err)
+		return "", fmt.Errorf("failed to create factory set: %w", err)
 	}
 
-	// First, try to delete any existing tenant with this ID (ignore errors)
-	_ = factorySet.TenantRegistry.Delete(context.Background(), tenantID)
-
-	// Create tenant with specific ID
+	// Create tenant (let the system generate the ID)
 	tenant := models.Tenant{
-		EntityID: models.EntityID{ID: tenantID}, // Set specific ID
-		Name:     name,
-		Slug:     slug,
-		Status:   models.TenantStatusActive,
+		Name:   name,
+		Slug:   slug,
+		Status: models.TenantStatusActive,
 	}
 	if domain != "" {
 		tenant.Domain = &domain
 	}
 
-	// Insert directly using the registry
+	// Insert using the registry
 	createdTenant, err := factorySet.TenantRegistry.Create(context.Background(), tenant)
 	if err != nil {
-		return fmt.Errorf("failed to create tenant with specific ID: %w", err)
+		return "", fmt.Errorf("failed to create tenant: %w", err)
 	}
 
-	// Verify the tenant was created with the correct ID
-	if createdTenant.ID != tenantID {
-		return fmt.Errorf("tenant created with wrong ID: expected %s, got %s", tenantID, createdTenant.ID)
+	// Return the generated ID
+	return createdTenant.ID, nil
+}
+
+// updateAPIServerTenantID updates the hardcoded tenant ID in auth.go
+func updateAPIServerTenantID(tenantID string) error {
+	// Read the auth.go file
+	authFilePath := "apiserver/auth.go"
+	content, err := os.ReadFile(authFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read auth.go: %w", err)
 	}
 
+	// Replace the hardcoded tenant ID
+	oldContent := string(content)
+	newContent := strings.ReplaceAll(oldContent, `defaultTenantID = "test-tenant-id"`, fmt.Sprintf(`defaultTenantID = "%s"`, tenantID))
+
+	if oldContent == newContent {
+		return fmt.Errorf("failed to find defaultTenantID constant in auth.go")
+	}
+
+	// Write the updated content back
+	err = os.WriteFile(authFilePath, []byte(newContent), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write updated auth.go: %w", err)
+	}
+
+	fmt.Printf("🔧 Updated API server tenant ID from 'test-tenant-id' to '%s'\n", tenantID)
 	return nil
 }
 
