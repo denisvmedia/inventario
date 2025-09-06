@@ -71,12 +71,12 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	t.Log("👤 Creating user via CLI...")
 	userEmail := "admin-" + timestamp + "@test-company.com"
 	userPassword := "SecurePassword123!"
-	err = createUserViaCLI(dsn, userEmail, userPassword, "Admin User", tenantSlug, "admin")
+	err = createUserViaCLI(t, dsn, userEmail, userPassword, "Admin User", tenantSlug, "admin")
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user via CLI"))
 
 	// Step 4.5: List all tenants to debug the mismatch
 	t.Log("🔍 Listing all tenants in database...")
-	err = listAllTenants(dsn)
+	err = listAllTenants(t, dsn)
 	if err != nil {
 		t.Logf("⚠️  Could not list tenants: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 
 	// Step 4.7: Verify user was actually created in the database
 	t.Log("🔍 Verifying user was created in database...")
-	err = verifyUserExists(dsn, actualTenantID, userEmail)
+	err = verifyUserExists(t, dsn, actualTenantID, userEmail)
 	c.Assert(err, qt.IsNil, qt.Commentf("User was not found in database after CLI creation"))
 
 	// Step 5: Attempt login with created user (should succeed)
@@ -148,7 +148,7 @@ func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
 }
 
 // listAllTenants lists all tenants in the database for debugging
-func listAllTenants(dsn string) error {
+func listAllTenants(t *testing.T, dsn string) error {
 	// Create registry set to query the database
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
 	defer cleanupFunc()
@@ -164,9 +164,9 @@ func listAllTenants(dsn string) error {
 		return fmt.Errorf("failed to list tenants: %w", err)
 	}
 
-	fmt.Printf("📋 Found %d tenants in database:\n", len(tenants))
+	t.Logf("📋 Found %d tenants in database:", len(tenants))
 	for i, tenant := range tenants {
-		fmt.Printf("  %d. ID=%s, Slug=%s, Name=%s, Status=%s\n",
+		t.Logf("  %d. ID=%s, Slug=%s, Name=%s, Status=%s",
 			i+1, tenant.ID, tenant.Slug, tenant.Name, tenant.Status)
 	}
 
@@ -193,34 +193,8 @@ func getActualTenantID(dsn, slug string) (string, error) {
 	return tenant.ID, nil
 }
 
-// getTenantIDFromCLIOutput finds the actual tenant ID by querying for the user
-func getTenantIDFromCLIOutput(dsn, email string) (string, error) {
-	// Create registry set to query the database
-	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
-	defer cleanupFunc()
-
-	factorySet, err := registrySetFunc(registry.Config(dsn))
-	if err != nil {
-		return "", fmt.Errorf("failed to create factory set: %w", err)
-	}
-
-	// Get all users and find the one with matching email
-	users, err := factorySet.UserRegistry.List(context.Background())
-	if err != nil {
-		return "", fmt.Errorf("failed to list users: %w", err)
-	}
-
-	for _, user := range users {
-		if user.Email == email {
-			return user.TenantID, nil
-		}
-	}
-
-	return "", fmt.Errorf("user with email %s not found", email)
-}
-
 // verifyUserExists checks if a user exists in the database
-func verifyUserExists(dsn, tenantID, email string) error {
+func verifyUserExists(t *testing.T, dsn, tenantID, email string) error {
 	// Create registry set to query the database
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
 	defer cleanupFunc()
@@ -237,14 +211,14 @@ func verifyUserExists(dsn, tenantID, email string) error {
 	}
 
 	// Log user details for debugging
-	fmt.Printf("✅ User found: ID=%s, Email=%s, TenantID=%s, Name=%s, Role=%s\n",
+	t.Logf("✅ User found: ID=%s, Email=%s, TenantID=%s, Name=%s, Role=%s",
 		user.ID, user.Email, user.TenantID, user.Name, user.Role)
 
 	return nil
 }
 
 // createUserViaCLI creates a user using the CLI command
-func createUserViaCLI(dsn, email, password, name, tenant, role string) error {
+func createUserViaCLI(t *testing.T, dsn, email, password, name, tenant, role string) error {
 	var dbConfig shared.DatabaseConfig
 
 	// Create root command with database flags
@@ -275,7 +249,7 @@ func createUserViaCLI(dsn, email, password, name, tenant, role string) error {
 	}
 
 	// Debug: Print the arguments being passed
-	fmt.Printf("🔍 CLI user creation args: %v\n", args)
+	t.Logf("🔍 CLI user creation args: %v", args)
 
 	rootCmd.SetArgs(args)
 
@@ -284,7 +258,7 @@ func createUserViaCLI(dsn, email, password, name, tenant, role string) error {
 	}
 
 	// Debug: Print the output to see what actually happened
-	fmt.Printf("🔍 CLI user creation output: %s\n", output.String())
+	t.Logf("🔍 CLI user creation output: %s", output.String())
 
 	return nil
 }

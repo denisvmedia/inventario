@@ -1,6 +1,7 @@
 package create_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -36,7 +37,7 @@ func setupMemoryAsPostgresWithTenant(c *qt.C) {
 
 		// Create a test tenant in the memory registry
 		serviceRegistrySet := factorySet.CreateServiceRegistrySet()
-		_, err = serviceRegistrySet.TenantRegistry.Create(nil, models.Tenant{
+		_, err = serviceRegistrySet.TenantRegistry.Create(context.Background(), models.Tenant{
 			EntityID: models.EntityID{ID: "test-tenant"},
 			Name:     "Test Tenant",
 			Slug:     "test-tenant",
