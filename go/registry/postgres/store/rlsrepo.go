@@ -229,7 +229,7 @@ func (r *RLSRepository[T, P]) DoWithEntity(ctx context.Context, entity T, operat
 	if operationFn != nil {
 		err = operationFn(ctx, tx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call operationFn", "entity_type", r.table)
+			return errkit.Wrap(err, "failed to call operationFn (RLSRepository.DoWithEntity)", "entity_type", r.table)
 		}
 	}
 
@@ -257,7 +257,7 @@ func (r *RLSRepository[T, P]) DoWithEntityID(ctx context.Context, entityID strin
 	if operationFn != nil {
 		err = operationFn(ctx, tx, dbEntity)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call operationFn", "entity_type", r.table)
+			return errkit.Wrap(err, "failed to call operationFn (RLSRepository.DoWithEntityID)", "entity_type", r.table)
 		}
 	}
 
@@ -276,7 +276,7 @@ func (r *RLSRepository[T, P]) Do(ctx context.Context, operationFn func(context.C
 	if operationFn != nil {
 		err = operationFn(ctx, tx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call operationFn", "entity_type", r.table)
+			return errkit.Wrap(err, "failed to call operationFn (RLSRepository.Do)", "entity_type", r.table)
 		}
 	}
 
