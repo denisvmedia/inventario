@@ -54,8 +54,9 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 
 	// Step 3: Create tenant and get the actual ID that was generated
 	t.Log("🏢 Creating tenant and getting generated ID...")
-	tenantSlug := "test-company"
-	tenantID, err := createTenantAndGetID(dsn, "Test Company", tenantSlug, "test-company.com")
+	timestamp := fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
+	tenantSlug := "test-company-" + timestamp
+	tenantID, err := createTenantAndGetID(dsn, "Test Company CLI", tenantSlug, "test-company.com")
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create tenant"))
 
 	// Debug: Check what tenant was actually created
@@ -68,7 +69,7 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 
 	// Step 5: Create user via CLI
 	t.Log("👤 Creating user via CLI...")
-	userEmail := "admin@test-company.com"
+	userEmail := "admin-" + timestamp + "@test-company.com"
 	userPassword := "SecurePassword123!"
 	err = createUserViaCLI(dsn, userEmail, userPassword, "Admin User", tenantSlug, "admin")
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user via CLI"))
@@ -145,7 +146,6 @@ func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
 	// Return the generated ID
 	return createdTenant.ID, nil
 }
-
 
 // listAllTenants lists all tenants in the database for debugging
 func listAllTenants(dsn string) error {

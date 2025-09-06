@@ -293,7 +293,6 @@ func TestCommand_UserValidation_ErrorPath(t *testing.T) {
 			tenant:   "",
 			errorMsg: "tenant ID is required",
 		},
-
 	}
 
 	for _, tt := range tests {
