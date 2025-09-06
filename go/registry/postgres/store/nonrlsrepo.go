@@ -224,7 +224,7 @@ func (r *NonRLSRepository[T, P]) Do(ctx context.Context, operationFn func(contex
 	if operationFn != nil {
 		err = operationFn(ctx, tx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call operationFn", "entity_type", r.table)
+			return errkit.Wrap(err, "failed to call operationFn (NonRLSRepository.Do)", "entity_type", r.table)
 		}
 	}
 

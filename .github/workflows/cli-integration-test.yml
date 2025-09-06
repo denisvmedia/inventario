@@ -1,0 +1,89 @@
+name: CLI Integration Test
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'go/**'
+      - '.github/workflows/cli-integration-test.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'go/**'
+      - '.github/workflows/cli-integration-test.yml'
+
+jobs:
+  cli-integration-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: inventario_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - id: vars
+      uses: ./.github/actions/vars
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ steps.vars.outputs.go_version }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install dependencies
+      working-directory: ./go
+      run: go mod download
+
+    - name: Wait for PostgreSQL
+      run: |
+        until pg_isready -h localhost -p 5432 -U postgres; do
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+
+    - name: Run CLI Integration Test
+      working-directory: ./go
+      env:
+        POSTGRES_TEST_DSN: "postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable"
+      run: |
+        echo "🚀 Starting CLI Workflow Integration Test"
+        echo "=========================================="
+        echo "📊 Database: $POSTGRES_TEST_DSN"
+        echo ""
+        echo "🧪 Running CLI workflow integration test..."
+        go test ./integration -run TestCLIWorkflowIntegration -v -timeout=10m
+        echo ""
+        echo "✅ CLI workflow integration test completed successfully!"
+        echo "🎉 The complete workflow from CLI setup to API access is working correctly."
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: cli-integration-test-results
+        path: |
+          go/integration/
+        retention-days: 7
