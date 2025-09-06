@@ -146,6 +146,7 @@ func createTenantViaCLI(dsn, name, slug, domain string) error {
 	// Create a new command instance to avoid global state issues
 	cmd := tenantCmd.Cmd()
 	cmd.SetArgs([]string{
+		"--db-dsn=" + dsn,
 		"--name=" + name,
 		"--slug=" + slug,
 		"--domain=" + domain,
@@ -177,6 +178,7 @@ func createUserViaCLI(dsn, email, password, name, tenant, role string) error {
 	// Create a new command instance to avoid global state issues
 	cmd := userCmd.Cmd()
 	cmd.SetArgs([]string{
+		"--db-dsn=" + dsn,
 		"--email=" + email,
 		"--password=" + password,
 		"--name=" + name,
