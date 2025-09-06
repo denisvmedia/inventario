@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -63,9 +62,9 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	t.Logf("Created tenant with ID: %s, slug: %s", tenantID, tenantSlug)
 
 	// Step 4: Update API server to use the actual tenant ID
-	t.Log("🔧 Updating API server to use actual tenant ID...")
-	err = updateAPIServerTenantID(tenantID)
-	c.Assert(err, qt.IsNil, qt.Commentf("Failed to update API server tenant ID"))
+	t.Log("🔧 Setting API server tenant ID...")
+	apiserver.DefaultTenantID = tenantID
+	t.Logf("🔧 API server will now use tenant ID: %s", tenantID)
 
 	// Step 5: Create user via CLI
 	t.Log("👤 Creating user via CLI...")
@@ -147,32 +146,6 @@ func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
 	return createdTenant.ID, nil
 }
 
-// updateAPIServerTenantID updates the hardcoded tenant ID in auth.go
-func updateAPIServerTenantID(tenantID string) error {
-	// Read the auth.go file
-	authFilePath := "apiserver/auth.go"
-	content, err := os.ReadFile(authFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to read auth.go: %w", err)
-	}
-
-	// Replace the hardcoded tenant ID
-	oldContent := string(content)
-	newContent := strings.ReplaceAll(oldContent, `defaultTenantID = "test-tenant-id"`, fmt.Sprintf(`defaultTenantID = "%s"`, tenantID))
-
-	if oldContent == newContent {
-		return fmt.Errorf("failed to find defaultTenantID constant in auth.go")
-	}
-
-	// Write the updated content back
-	err = os.WriteFile(authFilePath, []byte(newContent), 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write updated auth.go: %w", err)
-	}
-
-	fmt.Printf("🔧 Updated API server tenant ID from 'test-tenant-id' to '%s'\n", tenantID)
-	return nil
-}
 
 // listAllTenants lists all tenants in the database for debugging
 func listAllTenants(dsn string) error {
