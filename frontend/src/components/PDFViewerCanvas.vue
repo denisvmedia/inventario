@@ -142,14 +142,11 @@ const loadPDF = async () => {
     // Use the provided URL directly (it should already be a signed URL)
     const pdfUrl = props.url
 
-    // Load the PDF document with authentication (both URL token and headers for compatibility)
+    // Load the PDF document (URL is already a signed URL with authentication)
     const loadingTask = pdfjsLib.getDocument({
       url: pdfUrl,
       cMapUrl: '/cmaps/',
-      cMapPacked: true,
-      httpHeaders: authToken ? {
-        'Authorization': `Bearer ${authToken}`
-      } : {}
+      cMapPacked: true
     })
 
     // Race between loading and timeout
