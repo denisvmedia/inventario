@@ -2721,6 +2721,13 @@ const docTemplate = `{
                     "format": "int64",
                     "example": 10
                 },
+                "signed_urls": {
+                    "description": "Map of file ID to signed URL",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "total": {
                     "type": "integer",
                     "format": "int64",

@@ -349,6 +349,11 @@ definitions:
         example: 10
         format: int64
         type: integer
+      signed_urls:
+        additionalProperties:
+          type: string
+        description: Map of file ID to signed URL
+        type: object
       total:
         example: 100
         format: int64
