@@ -130,7 +130,7 @@ import PDFViewerCanvas from './PDFViewerCanvas.vue'
 import FileList from './FileList.vue'
 import FileDetails from './FileDetails.vue'
 import Confirmation from './Confirmation.vue'
-import { fileService } from '@/services/fileService'
+import fileService from '@/services/fileService'
 
 const props = defineProps({
   files: {
