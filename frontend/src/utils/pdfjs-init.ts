@@ -1,8 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist'
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-// Set the worker source to use the local worker file
-// This is more reliable than using a CDN and works offline
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+// Set the worker source to use the CDN version for better reliability
+// This avoids issues with local worker file serving in development
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
 export { pdfjsLib }
