@@ -379,7 +379,7 @@ This test validates:
 
 ## Documentation
 
-- [Signed URLs for Secure File Access](docs/SIGNED_URLS.md) - Comprehensive guide to the secure file access system
+- [Signed URLs for Secure File Access](SIGNED_URLS.md) - Comprehensive guide to the secure file access system
 
 ## License
 This module is licensed under the MIT License. See the [LICENSE](LICENSE) file for details. You are free to use, modify, and distribute this software in accordance with the terms of the license.

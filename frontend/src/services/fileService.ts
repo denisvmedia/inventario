@@ -146,7 +146,8 @@ const fileService = {
   async generateSignedUrl(file: FileEntity): Promise<string> {
     try {
       const response = await api.post(`${API_URL}/${file.id}/signed-url`)
-      return response.data.signed_url
+      // Parse JSON:API response format
+      return response.data.attributes.url
     } catch (error) {
       console.error('Failed to generate signed URL:', error)
       throw error

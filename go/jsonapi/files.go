@@ -301,3 +301,41 @@ func (*SearchResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }
+
+// SignedFileUrlResponse is an object that holds signed file URL information.
+type SignedFileUrlResponse struct {
+	HTTPStatusCode int `json:"-"` // HTTP response status code
+
+	ID         string  `json:"id"`                                // file id
+	Type       string  `json:"type" example:"urls" enums:"urls"` // resource type
+	Attributes URLData `json:"attributes"`                       // URL data
+}
+
+// URLData is an object that holds URL data information.
+type URLData struct {
+	URL string `json:"url"` // signed URL for file access
+}
+
+// NewSignedFileUrlResponse creates a new SignedFileUrlResponse instance.
+func NewSignedFileUrlResponse(fileID, signedURL string) *SignedFileUrlResponse {
+	return &SignedFileUrlResponse{
+		ID:   fileID,
+		Type: "urls",
+		Attributes: URLData{
+			URL: signedURL,
+		},
+	}
+}
+
+// WithStatusCode sets the HTTP response status code for the SignedFileUrlResponse.
+func (sfur *SignedFileUrlResponse) WithStatusCode(statusCode int) *SignedFileUrlResponse {
+	tmp := *sfur
+	tmp.HTTPStatusCode = statusCode
+	return &tmp
+}
+
+// Render renders the SignedFileUrlResponse as an HTTP response.
+func (sfur *SignedFileUrlResponse) Render(_w http.ResponseWriter, r *http.Request) error {
+	render.Status(r, statusCodeDef(sfur.HTTPStatusCode, http.StatusOK))
+	return nil
+}

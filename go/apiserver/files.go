@@ -1,7 +1,6 @@
 package apiserver
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -347,7 +346,7 @@ func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 // @Description Generate a secure signed URL for downloading a file
 // @Tags files
 // @Param id path string true "File ID"
-// @Success 200 {object} map[string]string "Signed URL"
+// @Success 200 {object} jsonapi.SignedFileUrlResponse "Signed URL"
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id}/signed-url [post].
 func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
@@ -390,14 +389,10 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return the signed URL
-	response := map[string]string{
-		"signed_url": signedURL,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to encode response"))
+	// Return the signed URL using JSON:API format
+	response := jsonapi.NewSignedFileUrlResponse(fileID, signedURL)
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to render response"))
 		return
 	}
 }
