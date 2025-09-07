@@ -44,28 +44,44 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
     const fileItem = page.locator(`${selector} .file-item`).first();
     await expect(fileItem).toBeVisible();
 
-    // Get the file ID and extension from data attributes
+    // Get the file ID from data attributes
     const fileId = await fileItem.getAttribute('data-file-id');
-    const fileExt = await fileItem.getAttribute('data-file-ext');
 
-    if (!fileId || !fileExt) {
-        throw new Error(`Could not get file ID or extension for ${fileType}. ID: ${fileId}, Ext: ${fileExt}`);
+    if (!fileId) {
+        throw new Error(`Could not get file ID for ${fileType}. ID: ${fileId}`);
     }
 
-    // Construct the download URL
-    const ext = fileExt.startsWith('.') ? fileExt.substring(1) : fileExt;
-    const downloadUrl = `/api/v1/files/${fileId}.${ext}`;
-
-    console.log(`Download URL for ${fileType}: ${downloadUrl}`);
+    console.log(`Testing download for ${fileType} with file ID: ${fileId}`);
 
     // Get authentication token for API requests
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
 
-    // Verify the download URL is accessible by making a GET request with range header
-    // This will only download the first byte to verify the file exists and is accessible
-    const response = await page.request.get(downloadUrl, {
+    // Step 1: Generate signed URL by calling the signing API
+    const signedUrlResponse = await page.request.post(`/api/v1/files/${fileId}/signed-url`, {
         headers: {
             'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    expect(signedUrlResponse.status()).toBe(200);
+
+    const signedUrlData = await signedUrlResponse.json();
+    console.log(`Signed URL response:`, signedUrlData);
+
+    // Extract the signed URL from JSON:API response format
+    const signedUrl = signedUrlData.attributes.url;
+
+    if (!signedUrl) {
+        throw new Error(`Could not get signed URL for ${fileType}. Response: ${JSON.stringify(signedUrlData)}`);
+    }
+
+    console.log(`Signed download URL for ${fileType}: ${signedUrl}`);
+
+    // Step 2: Verify the signed URL is accessible by making a GET request with range header
+    // This will only download the first byte to verify the file exists and is accessible
+    const response = await page.request.get(signedUrl, {
+        headers: {
             'Range': 'bytes=0-0'
         }
     });
@@ -79,7 +95,7 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
         console.log(`Content-Disposition header: ${contentDisposition}`);
     }
 
-    // Click the download button to trigger the download
+    // Step 3: Click the download button to trigger the download (this tests the frontend flow)
     await fileItem.locator('.file-actions .btn-primary').click();
 
     // Take screenshot after download action

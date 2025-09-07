@@ -10,6 +10,8 @@ type Config struct {
 	MaxConcurrentExports int    `yaml:"max_concurrent_exports" env:"MAX_CONCURRENT_EXPORTS" env-default:"0"`
 	MaxConcurrentImports int    `yaml:"max_concurrent_imports" env:"MAX_CONCURRENT_IMPORTS" env-default:"0"`
 	JWTSecret            string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
+	FileSigningKey       string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
+	FileURLExpiration    string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
 }
 
 func (c *Config) setDefaults() {

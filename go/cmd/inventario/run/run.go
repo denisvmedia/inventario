@@ -112,6 +112,8 @@ func (c *Command) registerFlags() {
 	flags.IntVar(&c.config.MaxConcurrentExports, "max-concurrent-exports", c.config.MaxConcurrentExports, "Maximum number of concurrent export processes")
 	flags.IntVar(&c.config.MaxConcurrentImports, "max-concurrent-imports", c.config.MaxConcurrentImports, "Maximum number of concurrent import processes")
 	flags.StringVar(&c.config.JWTSecret, "jwt-secret", c.config.JWTSecret, "JWT secret for authentication (minimum 32 characters, auto-generated if not provided)")
+	flags.StringVar(&c.config.FileSigningKey, "file-signing-key", c.config.FileSigningKey, "File signing key for secure file URLs (minimum 32 characters, auto-generated if not provided)")
+	flags.StringVar(&c.config.FileURLExpiration, "file-url-expiration", c.config.FileURLExpiration, "File URL expiration duration (e.g., 15m, 1h, 30s)")
 }
 
 func (c *Command) runCommand() error {
@@ -161,7 +163,23 @@ func (c *Command) runCommand() error {
 		slog.Error("Failed to configure JWT secret", "error", err)
 		return err
 	}
+
+	// Configure file signing key from config/environment or generate a secure default
+	fileSigningKey, err := getFileSigningKey(c.config.FileSigningKey)
+	if err != nil {
+		slog.Error("Failed to configure file signing key", "error", err)
+		return err
+	}
+
+	// Parse file URL expiration duration
+	fileURLExpiration, err := time.ParseDuration(c.config.FileURLExpiration)
+	if err != nil {
+		slog.Error("Failed to parse file URL expiration duration", "error", err, "duration", c.config.FileURLExpiration)
+		return err
+	}
 	params.JWTSecret = jwtSecret
+	params.FileSigningKey = fileSigningKey
+	params.FileURLExpiration = fileURLExpiration
 
 	err = validation.Validate(params)
 	if err != nil {
@@ -246,4 +264,37 @@ func getJWTSecret(configSecret string) ([]byte, error) {
 	slog.Info("Save this secret to INVENTARIO_RUN_JWT_SECRET environment variable or config file for consistent authentication across restarts")
 
 	return secret, nil
+}
+
+// getFileSigningKey retrieves file signing key from config/environment or generates a secure default
+func getFileSigningKey(configKey string) ([]byte, error) {
+	// Use the key from config (which includes environment variables via cleanenv)
+	if configKey != "" {
+		// If provided as hex string, decode it
+		if decoded, err := hex.DecodeString(configKey); err == nil && len(decoded) >= 32 {
+			slog.Info("Using file signing key from configuration (hex decoded)")
+			return decoded, nil
+		}
+		// If provided as plain string and long enough, use it directly
+		if len(configKey) >= 32 {
+			slog.Info("Using file signing key from configuration")
+			return []byte(configKey), nil
+		}
+		slog.Warn("Configured file signing key is too short (minimum 32 characters), generating random key")
+	}
+
+	// Generate a secure random key
+	slog.Warn("No file signing key configured, generating random key")
+	slog.Warn("For production use, set INVENTARIO_RUN_FILE_SIGNING_KEY environment variable or file-signing-key in config file with a secure 32+ byte key")
+
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info("Generated random file signing key (hex)", "key", hex.EncodeToString(key))
+	slog.Info("Save this key to INVENTARIO_RUN_FILE_SIGNING_KEY environment variable or config file for consistent file URL signing across restarts")
+
+	return key, nil
 }

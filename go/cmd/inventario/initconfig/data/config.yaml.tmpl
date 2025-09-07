@@ -50,6 +50,18 @@ run:
   # For production, set this to a consistent value to maintain user sessions across restarts
   jwt-secret: "{{.Server.JWTSecret}}"
 
+  # File signing key for secure file URLs
+  # IMPORTANT: This should be a secure random string of at least 32 characters
+  # You can generate one using: openssl rand -hex 32
+  # If not provided, a random key will be generated on each startup
+  # For production, set this to a consistent value to maintain file URL signing across restarts
+  file-signing-key: "{{.Server.FileSigningKey}}"
+
+  # File URL expiration duration
+  # How long signed file URLs remain valid (e.g., 15m, 1h, 30s)
+  # Shorter durations are more secure but may cause issues with slow downloads
+  file-url-expiration: "{{.Server.FileURLExpiration}}"
+
 # NOTE: User interface settings (theme, debug info, date format) and system settings
 # (main currency) are stored in the database and configured through the web interface
 # at http://localhost:3333/settings - they are not configured through this file.

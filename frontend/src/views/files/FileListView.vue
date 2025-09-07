@@ -268,6 +268,7 @@ const files = ref<FileEntity[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 const deleting = ref(false)
+const fileUrls = ref<Record<string, string>>({})
 
 // Pagination
 const currentPage = ref(1)
@@ -338,6 +339,13 @@ const loadFiles = async () => {
     const response = await fileService.getFiles(params)
     files.value = response.data.data
     totalFiles.value = response.data.meta.total
+
+    // Use signed URLs from response metadata if available
+    if (response.data.meta.signed_urls) {
+      fileUrls.value = response.data.meta.signed_urls
+    } else {
+      fileUrls.value = {}
+    }
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to load files'
     console.error('Error loading files:', err)
@@ -382,8 +390,10 @@ const getPaginationUrl = (page: number) => {
   }
 }
 
+
+
 const getFileUrl = (file: FileEntity) => {
-  return fileService.getDownloadUrl(file)
+  return fileUrls.value[file.id] || ''
 }
 
 const getFileIcon = (file: FileEntity) => {
@@ -425,8 +435,13 @@ const editFile = (file: FileEntity) => {
   router.push(`/files/${file.id}/edit`)
 }
 
-const downloadFile = (file: FileEntity) => {
-  fileService.downloadFile(file)
+const downloadFile = async (file: FileEntity) => {
+  try {
+    await fileService.downloadFile(file)
+  } catch (error) {
+    console.error('Failed to download file:', error)
+    // You might want to show a user-friendly error message here
+  }
 }
 
 const canDeleteFile = (file: FileEntity) => {

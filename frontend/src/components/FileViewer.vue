@@ -5,6 +5,7 @@
       :file-type="fileType"
       :commodity-id="entityId"
       :loading="false"
+      :file-urls="fileUrls"
       @delete="confirmDeleteFile"
       @download="downloadFile"
       @update="updateFile"
@@ -36,6 +37,7 @@
             <button v-if="files.length > 1" class="nav-button prev" title="Previous file" @click="prevFile">&lt;</button>
             <div class="image-container">
               <img
+                v-if="currentFileUrl"
                 ref="fullImage"
                 :src="currentFileUrl"
                 :alt="currentFileName"
@@ -48,6 +50,9 @@
                 @mouseup="endPan"
                 @mouseleave="endPan"
               />
+              <div v-else class="loading-placeholder">
+                Loading preview...
+              </div>
             </div>
             <button v-if="files.length > 1" class="nav-button next" title="Next file" @click="nextFile">&gt;</button>
           </template>
@@ -56,13 +61,16 @@
           <template v-else-if="isPdfFile(currentFile)">
             <button v-if="files.length > 1" class="nav-button prev" title="Previous file" @click="prevFile">&lt;</button>
             <div class="pdf-container">
-              <template v-if="!pdfViewerError">
+              <template v-if="!pdfViewerError && currentFileUrl">
                 <PDFViewerCanvas
                   :url="currentFileUrl"
                   @error="handlePdfError"
                   @loading="(isLoading) => pdfLoading = isLoading"
                 />
               </template>
+              <div v-else-if="!currentFileUrl" class="loading-placeholder">
+                Loading preview...
+              </div>
               <div v-else class="pdf-error-container">
                 <div class="file-icon large">
                   <font-awesome-icon icon="file-pdf" size="3x" />
@@ -123,6 +131,7 @@ import PDFViewerCanvas from './PDFViewerCanvas.vue'
 import FileList from './FileList.vue'
 import FileDetails from './FileDetails.vue'
 import Confirmation from './Confirmation.vue'
+import fileService from '@/services/fileService'
 
 const props = defineProps({
   files: {
@@ -157,6 +166,7 @@ const fullImage = ref(null)
 const pdfViewerError = ref(false)
 const pdfLoading = ref(true)
 const pdfErrorMessage = ref('Unable to display PDF. Please download the file to view it.')
+const fileUrls = ref<Record<string, string>>({})
 
 // Zoom and pan state
 const isZoomed = ref(false)
@@ -192,80 +202,65 @@ const currentFile = computed(() => {
   return props.files[currentIndex.value]
 })
 
-const currentFileUrl = computed(() => {
-  if (!currentFile.value) return ''
-  return getFileUrl(currentFile.value)
-})
+const currentFileUrl = ref<string>('')
 
 const currentFileName = computed(() => {
   if (!currentFile.value) return ''
   return getFileName(currentFile.value)
 })
 
-const getFileUrl = (file: any) => {
-  // Check if there's a direct path to the file
-  const path = file.path || (file.attributes && file.attributes.path)
-
-  // If we have a path that starts with /api, use it directly
-  if (path && path.startsWith('/api')) {
-    return path
+// Generate signed URL for the current file
+const generateCurrentFileUrl = async () => {
+  if (!currentFile.value) {
+    currentFileUrl.value = ''
+    return
   }
 
-  // Get the file extension - now we should always have an ext field
-  let ext = ''
-  if (file.ext) {
-    // Use the ext field directly - remove the dot if not present
-    ext = file.ext
-    if (ext.startsWith('.')) {
-      ext = ext.substring(1)
-    }
-  } else if (file.attributes && file.attributes.ext) {
-    ext = file.attributes.ext
-    if (ext.startsWith('.')) {
-      ext = ext.substring(1)
-    }
+  try {
+    const signedUrl = await fileService.getDownloadUrl(currentFile.value)
+    currentFileUrl.value = signedUrl
+  } catch (error) {
+    console.error('Failed to generate signed URL for file viewer:', error)
+    currentFileUrl.value = ''
   }
-
-  // If we still don't have an extension, try to determine from content type
-  if (!ext) {
-    const contentType = file.content_type || (file.attributes && file.attributes.content_type) || file.mime_type
-    if (contentType) {
-      if (contentType.includes('pdf')) {
-        ext = 'pdf'
-      } else if (contentType.includes('jpeg') || contentType.includes('jpg')) {
-        ext = 'jpg'
-      } else if (contentType.includes('png')) {
-        ext = 'png'
-      } else if (contentType.includes('gif')) {
-        ext = 'gif'
-      } else if (contentType.includes('webp')) {
-        ext = 'webp'
-      }
-    }
-  }
-
-  // If we still don't have an extension, use a default
-  if (!ext) {
-    if (isPdfFile(file)) {
-      ext = 'pdf'
-    } else if (isImageFile(file)) {
-      ext = 'jpg' // Default image extension
-    } else {
-      ext = 'bin' // Generic binary
-    }
-  }
-
-  // Use generic file entity download URL with authentication
-  const baseUrl = `/api/v1/files/${file.id}.${ext}`
-
-  // Add JWT token as query parameter for direct browser access
-  const token = localStorage.getItem('inventario_token')
-  if (token) {
-    return `${baseUrl}?token=${encodeURIComponent(token)}`
-  }
-
-  return baseUrl
 }
+
+// Watch for changes to current file and generate new signed URL
+watch(currentFile, () => {
+  generateCurrentFileUrl()
+}, { immediate: true })
+
+// Generate signed URLs for all files (for FileList previews and downloads)
+const generateFileUrls = async () => {
+  const urlPromises = props.files
+    .map(async (file: any) => {
+      try {
+        const url = await fileService.getDownloadUrl(file)
+        return { fileId: file.id, url }
+      } catch (error) {
+        console.error(`Failed to generate URL for file ${file.id}:`, error)
+        return { fileId: file.id, url: null }
+      }
+    })
+
+  const results = await Promise.all(urlPromises)
+  const newUrls: Record<string, string> = {}
+
+  results.forEach(({ fileId, url }) => {
+    if (url) {
+      newUrls[fileId] = url
+    }
+  })
+
+  fileUrls.value = newUrls
+}
+
+// Watch for changes to files and generate new signed URLs
+watch(() => props.files, () => {
+  generateFileUrls()
+}, { immediate: true })
+
+
 
 const getFileName = (file: any) => {
   // Use the Path field directly (it's now just the filename without extension)

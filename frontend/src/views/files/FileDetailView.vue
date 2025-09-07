@@ -91,19 +91,27 @@
         <!-- Image Preview -->
         <div v-if="file.type === 'image'" class="image-preview">
           <img
-            :src="getFileUrl(file)"
+            v-if="fileUrl"
+            :src="fileUrl"
             :alt="getDisplayTitle(file)"
             class="preview-image"
             @error="handleImageError"
           />
+          <div v-else class="loading-placeholder">
+            Loading preview...
+          </div>
         </div>
 
         <!-- PDF Preview -->
         <div v-else-if="file.mime_type === 'application/pdf'" class="pdf-preview">
           <PDFViewerCanvas
-            :url="getFileUrl(file)"
+            v-if="fileUrl"
+            :url="fileUrl"
             @error="handlePdfError"
           />
+          <div v-else class="loading-placeholder">
+            Loading preview...
+          </div>
         </div>
 
         <!-- Other File Types -->
@@ -213,6 +221,7 @@ const error = ref<string | null>(null)
 const lastError = ref<any>(null) // Store the last error object for 404 detection
 const deleting = ref(false)
 const fileSize = ref<string | null>(null)
+const fileUrl = ref<string | null>(null) // Signed URL for file preview
 
 // Delete modal
 const showDeleteModal = ref(false)
@@ -266,6 +275,16 @@ const loadFile = async () => {
     const response = await fileService.getFile(fileId.value)
     file.value = response.data.attributes
 
+    // Generate signed URL for file preview
+    if (file.value) {
+      try {
+        fileUrl.value = await fileService.getDownloadUrl(file.value)
+      } catch (urlError) {
+        console.error('Failed to generate signed URL:', urlError)
+        // Continue without the URL - download will still work
+      }
+    }
+
     // Try to get file size (this would need to be added to the API response)
     // For now, we'll skip this or implement it later
   } catch (err: any) {
@@ -281,9 +300,7 @@ const loadFile = async () => {
   }
 }
 
-const getFileUrl = (file: FileEntity) => {
-  return fileService.getDownloadUrl(file)
-}
+// getFileUrl is no longer needed - we use the reactive fileUrl variable
 
 const getFileIcon = (file: FileEntity) => {
   return fileService.getFileIcon(file)
@@ -342,9 +359,14 @@ const goBack = () => {
   }
 }
 
-const downloadFile = () => {
+const downloadFile = async () => {
   if (file.value) {
-    fileService.downloadFile(file.value)
+    try {
+      await fileService.downloadFile(file.value)
+    } catch (error) {
+      console.error('Failed to download file:', error)
+      // You might want to show a user-friendly error message here
+    }
   }
 }
 

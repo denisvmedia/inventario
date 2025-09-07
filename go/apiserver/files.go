@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -22,8 +24,9 @@ import (
 )
 
 type filesAPI struct {
-	uploadLocation string
-	fileService    *services.FileService
+	uploadLocation     string
+	fileService        *services.FileService
+	fileSigningService *services.FileSigningService
 }
 
 // listFiles lists all files with optional filtering and pagination.
@@ -119,11 +122,39 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	response := jsonapi.NewFilesResponse(files, total)
+	// Generate signed URLs for all files
+	signedUrls := api.generateSignedURLsForFiles(r.Context(), files)
+
+	response := jsonapi.NewFilesResponseWithSignedUrls(files, total, signedUrls)
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
+}
+
+// generateSignedURLsForFiles generates signed URLs for a list of files.
+// Returns a map of file ID to signed URL. Missing URLs indicate generation failures.
+func (api *filesAPI) generateSignedURLsForFiles(ctx context.Context, files []*models.FileEntity) map[string]string {
+	signedUrls := make(map[string]string)
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		return signedUrls
+	}
+
+	for _, file := range files {
+		// Get file extension (remove leading dot if present)
+		fileExt := strings.TrimPrefix(file.Ext, ".")
+
+		signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID)
+		if err != nil {
+			// Log error but don't fail the entire request
+			// The frontend can handle missing URLs gracefully
+			continue
+		}
+		signedUrls[file.ID] = signedURL
+	}
+
+	return signedUrls
 }
 
 // createFile creates a new file entity (metadata only, file must be uploaded via /uploads/files first).
@@ -340,6 +371,62 @@ func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// generateSignedURL generates a signed URL for file download.
+// @Summary Generate signed URL for file download
+// @Description Generate a secure signed URL for downloading a file
+// @Tags files
+// @Param id path string true "File ID"
+// @Success 200 {object} jsonapi.SignedFileURLResponse "Signed URL"
+// @Failure 404 {object} jsonapi.Errors "File not found"
+// @Router /files/{id}/signed-url [post].
+func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	// Get user from context
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User not found in context", http.StatusUnauthorized)
+		return
+	}
+
+	fileReg := registrySet.FileRegistry
+	fileID := chi.URLParam(r, "fileID")
+
+	// Get the file to validate it exists and user has access
+	file, err := fileReg.Get(r.Context(), fileID)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	if file.File == nil {
+		renderEntityError(w, r, registry.ErrNotFound)
+		return
+	}
+
+	// Extract extension without the leading dot
+	fileExt := strings.TrimPrefix(file.Ext, ".")
+
+	// Generate signed URL
+	signedURL, err := api.fileSigningService.GenerateSignedURL(fileID, fileExt, user.ID)
+	if err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to generate signed URL"))
+		return
+	}
+
+	// Return the signed URL using JSON:API format
+	response := jsonapi.NewSignedFileURLResponse(fileID, signedURL)
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to render response"))
+		return
+	}
+}
+
 // downloadFile downloads a file.
 // @Summary Download a file
 // @Description download file content
@@ -421,19 +508,35 @@ func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 // Files sets up the files API routes.
 func Files(params Params) func(r chi.Router) {
+	fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
 	api := &filesAPI{
-		uploadLocation: params.UploadLocation,
-		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
+		uploadLocation:     params.UploadLocation,
+		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
+		fileSigningService: fileSigningService,
 	}
 
 	return func(r chi.Router) {
 		r.Get("/", api.listFiles)   // GET /files
 		r.Post("/", api.createFile) // POST /files
 		r.Route("/{fileID}", func(r chi.Router) {
-			r.Get("/", api.apiGetFile)    // GET /files/123
-			r.Put("/", api.updateFile)    // PUT /files/123
-			r.Delete("/", api.deleteFile) // DELETE /files/123
+			r.Get("/", api.apiGetFile)                   // GET /files/123
+			r.Put("/", api.updateFile)                   // PUT /files/123
+			r.Delete("/", api.deleteFile)                // DELETE /files/123
+			r.Post("/signed-url", api.generateSignedURL) // POST /files/123/signed-url
 		})
-		r.Get("/{fileID}.{fileExt}", api.downloadFile) // GET /files/123.pdf
+		// File downloads moved to signed URL routes for security
+	}
+}
+
+// SignedFiles sets up the signed file download routes that use signed URL validation
+func SignedFiles(params Params) func(r chi.Router) {
+	api := &filesAPI{
+		uploadLocation: params.UploadLocation,
+		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
+	}
+
+	return func(r chi.Router) {
+		// File downloads use signed URL validation instead of JWT authentication
+		r.Get("/{fileID}.{fileExt}", api.downloadFile) // GET /files/123.pdf (signed URL)
 	}
 }

@@ -349,6 +349,11 @@ definitions:
         example: 10
         format: int64
         type: integer
+      signed_urls:
+        additionalProperties:
+          type: string
+        description: Map of file ID to signed URL
+        type: object
       total:
         example: 100
         format: int64
@@ -585,6 +590,28 @@ definitions:
       data: {}
       meta:
         $ref: '#/definitions/jsonapi.SearchMeta'
+    type: object
+  jsonapi.SignedFileURLResponse:
+    properties:
+      attributes:
+        allOf:
+        - $ref: '#/definitions/jsonapi.URLData'
+        description: URL data
+      id:
+        description: file id
+        type: string
+      type:
+        description: resource type
+        enum:
+        - urls
+        example: urls
+        type: string
+    type: object
+  jsonapi.URLData:
+    properties:
+      url:
+        description: signed URL for file access
+        type: string
     type: object
   jsonapi.ValueAttrs:
     properties:
@@ -2250,6 +2277,27 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Download a file
+      tags:
+      - files
+  /files/{id}/signed-url:
+    post:
+      description: Generate a secure signed URL for downloading a file
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: Signed URL
+          schema:
+            $ref: '#/definitions/jsonapi.SignedFileURLResponse'
+        "404":
+          description: File not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Generate signed URL for file download
       tags:
       - files
   /locations:

@@ -1491,7 +1491,7 @@ func testWrite(t *testing.T, newHarness HarnessMaker) {
 			// Write the content.
 			opts := &blob.WriterOptions{
 				ContentType: tc.contentType,
-				ContentMD5:  tc.contentMD5[:],
+				ContentMD5:  tc.contentMD5,
 			}
 			w, err := b.NewWriter(ctx, tc.key, opts)
 			if err == nil {

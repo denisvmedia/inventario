@@ -16,5 +16,22 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // Ensure assets are properly named
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name && assetInfo.name.includes('pdf.worker')) {
+            return 'assets/pdf.worker.min-[hash].mjs'
+          }
+          return 'assets/[name]-[hash][extname]'
+        }
+      }
+    }
+  },
+  optimizeDeps: {
+    // Exclude PDF worker from dependency optimization
+    exclude: ['pdfjs-dist/build/pdf.worker.min.mjs']
   }
 })

@@ -1761,6 +1761,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/files/{id}/signed-url": {
+            "post": {
+                "description": "Generate a secure signed URL for downloading a file",
+                "tags": [
+                    "files"
+                ],
+                "summary": "Generate signed URL for file download",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Signed URL",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SignedFileURLResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/locations": {
             "get": {
                 "description": "get locations",
@@ -2689,6 +2721,13 @@ const docTemplate = `{
                     "format": "int64",
                     "example": 10
                 },
+                "signed_urls": {
+                    "description": "Map of file ID to signed URL",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "total": {
                     "type": "integer",
                     "format": "int64",
@@ -3046,6 +3085,40 @@ const docTemplate = `{
                 "data": {},
                 "meta": {
                     "$ref": "#/definitions/jsonapi.SearchMeta"
+                }
+            }
+        },
+        "jsonapi.SignedFileURLResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "description": "URL data",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.URLData"
+                        }
+                    ]
+                },
+                "id": {
+                    "description": "file id",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "resource type",
+                    "type": "string",
+                    "enum": [
+                        "urls"
+                    ],
+                    "example": "urls"
+                }
+            }
+        },
+        "jsonapi.URLData": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "description": "signed URL for file access",
+                    "type": "string"
                 }
             }
         },
