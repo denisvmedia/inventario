@@ -40,7 +40,7 @@ $POSTGRES_DB = "inventario_test"
 $POSTGRES_USER = "inventario_test"
 $POSTGRES_PASSWORD = "test_password"
 $POSTGRES_PORT = "55432"
-$GO_VERSION = "1.24.3"
+$GO_VERSION = "1.24.7"
 
 # Environment variables for tests
 $env:POSTGRES_TEST_DSN = "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"

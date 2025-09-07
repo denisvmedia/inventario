@@ -44,8 +44,9 @@ func (fr *FileResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 
 // FilesMeta is a meta information for FilesResponse.
 type FilesMeta struct {
-	Files int `json:"files" example:"10" format:"int64"`
-	Total int `json:"total" example:"100" format:"int64"`
+	Files      int               `json:"files" example:"10" format:"int64"`
+	Total      int               `json:"total" example:"100" format:"int64"`
+	SignedUrls map[string]string `json:"signed_urls,omitempty"` // Map of file ID to signed URL
 }
 
 // FilesResponse is an object that holds a list of file information.
@@ -63,6 +64,22 @@ func NewFilesResponse(files []*models.FileEntity, total int) *FilesResponse {
 	return &FilesResponse{
 		Data: files,
 		Meta: FilesMeta{Files: len(files), Total: total},
+	}
+}
+
+// NewFilesResponseWithSignedUrls creates a new FilesResponse instance with signed URLs.
+func NewFilesResponseWithSignedUrls(files []*models.FileEntity, total int, signedUrls map[string]string) *FilesResponse {
+	// Ensure Data is never nil to maintain consistent JSON output
+	if files == nil {
+		files = []*models.FileEntity{}
+	}
+	return &FilesResponse{
+		Data: files,
+		Meta: FilesMeta{
+			Files:      len(files),
+			Total:      total,
+			SignedUrls: signedUrls,
+		},
 	}
 }
 
@@ -299,5 +316,43 @@ func NewSearchResponse(entityType string, data any, total int) *SearchResponse {
 // Render renders the SearchResponse as an HTTP response
 func (*SearchResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
+	return nil
+}
+
+// SignedFileURLResponse is an object that holds signed file URL information.
+type SignedFileURLResponse struct {
+	HTTPStatusCode int `json:"-"` // HTTP response status code
+
+	ID         string  `json:"id"`                               // file id
+	Type       string  `json:"type" example:"urls" enums:"urls"` // resource type
+	Attributes URLData `json:"attributes"`                       // URL data
+}
+
+// URLData is an object that holds URL data information.
+type URLData struct {
+	URL string `json:"url"` // signed URL for file access
+}
+
+// NewSignedFileURLResponse creates a new SignedFileURLResponse instance.
+func NewSignedFileURLResponse(fileID, signedURL string) *SignedFileURLResponse {
+	return &SignedFileURLResponse{
+		ID:   fileID,
+		Type: "urls",
+		Attributes: URLData{
+			URL: signedURL,
+		},
+	}
+}
+
+// WithStatusCode sets the HTTP response status code for the SignedFileURLResponse.
+func (sfur *SignedFileURLResponse) WithStatusCode(statusCode int) *SignedFileURLResponse {
+	tmp := *sfur
+	tmp.HTTPStatusCode = statusCode
+	return &tmp
+}
+
+// Render renders the SignedFileURLResponse as an HTTP response.
+func (sfur *SignedFileURLResponse) Render(_w http.ResponseWriter, r *http.Request) error {
+	render.Status(r, statusCodeDef(sfur.HTTPStatusCode, http.StatusOK))
 	return nil
 }

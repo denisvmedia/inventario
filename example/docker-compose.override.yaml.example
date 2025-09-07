@@ -25,6 +25,13 @@ services:
       # Generate with: openssl rand -hex 32
       INVENTARIO_RUN_JWT_SECRET: "your-secure-32-byte-jwt-secret-here-replace-this-value"
 
+      # REQUIRED: Set a secure file signing key for production
+      # Generate with: openssl rand -hex 32
+      INVENTARIO_RUN_FILE_SIGNING_KEY: "your-secure-32-byte-file-signing-key-here-replace-this-value"
+
+      # Optional: Customize file URL expiration (default: 15m)
+      INVENTARIO_RUN_FILE_URL_EXPIRATION: "15m"
+
       # Optional: Customize worker limits based on your server capacity
       MAX_CONCURRENT_EXPORTS: "5"
       MAX_CONCURRENT_IMPORTS: "2"

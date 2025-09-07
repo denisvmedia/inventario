@@ -20,6 +20,8 @@ Note, the project is still under development.
 
 - **Locations and Areas**: Organize your items into locations and areas to create a structured inventory. Define custom locations such as rooms, storage spaces, or any other relevant categories that suit your needs.
 
+- **Secure File Access**: Advanced signed URL system for secure file downloads without exposing authentication tokens. Files are protected with time-limited, tamper-proof URLs that automatically expire.
+
 ## Building and Running
 
 Inventario is a Go application with a frontend built using web technologies. The following instructions will help you set up and run the application on your system.
@@ -374,6 +376,10 @@ This test validates:
 - Authentication flow (login failure/success)
 - API access with JWT tokens
 - Complete end-to-end workflow for CI/CD pipelines
+
+## Documentation
+
+- [Signed URLs for Secure File Access](SIGNED_URLS.md) - Comprehensive guide to the secure file access system
 
 ## License
 This module is licensed under the MIT License. See the [LICENSE](LICENSE) file for details. You are free to use, modify, and distribute this software in accordance with the terms of the license.

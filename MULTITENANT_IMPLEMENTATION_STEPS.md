@@ -750,7 +750,7 @@ func (api *AuthAPI) getCurrentUser(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    response := map[string]interface{}{
+    response := map[string]any{
         "user":   user,
         "tenant": tenant,
     }
@@ -804,7 +804,7 @@ func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(ht
                 return
             }
 
-            token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+            token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
                 if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
                     return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
                 }
@@ -1660,11 +1660,11 @@ CREATE INDEX CONCURRENTLY idx_areas_tenant_location ON areas(tenant_id, location
 ```go
 // Tenant-aware caching
 type TenantCache struct {
-    cache map[string]map[string]interface{} // tenant_id -> cache_key -> value
+    cache map[string]map[string]any // tenant_id -> cache_key -> value
     mutex sync.RWMutex
 }
 
-func (tc *TenantCache) Get(tenantID, key string) (interface{}, bool) {
+func (tc *TenantCache) Get(tenantID, key string) (any, bool) {
     tc.mutex.RLock()
     defer tc.mutex.RUnlock()
 

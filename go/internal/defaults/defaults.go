@@ -8,9 +8,11 @@ import (
 
 // Server contains default values for server configuration
 type Server struct {
-	Addr           string
-	UploadLocation string
-	JWTSecret      string
+	Addr              string
+	UploadLocation    string
+	JWTSecret         string
+	FileSigningKey    string
+	FileURLExpiration string
 }
 
 // Database contains default values for database configuration
@@ -50,9 +52,11 @@ func getFileURL(path string) string {
 func New() Config {
 	return Config{
 		Server: Server{
-			Addr:           ":3333",
-			UploadLocation: getFileURL("uploads"),
-			JWTSecret:      "", // Empty by default, will be generated if not provided
+			Addr:              ":3333",
+			UploadLocation:    getFileURL("uploads"),
+			JWTSecret:         "",    // Empty by default, will be generated if not provided
+			FileSigningKey:    "",    // Empty by default, will be generated if not provided
+			FileURLExpiration: "15m", // Default to 15 minutes for security
 		},
 		Database: Database{
 			DSN: "memory://",
