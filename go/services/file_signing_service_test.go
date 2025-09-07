@@ -97,7 +97,7 @@ func TestFileSigningService_GenerateSignedURL(t *testing.T) {
 	}
 }
 
-func TestFileSigningService_ValidateSignedURL(t *testing.T) {
+func TestFileSigningService_ValidateSignedURL_ValidCases(t *testing.T) {
 	c := qt.New(t)
 
 	signingKey := []byte("test-signing-key-32-bytes-long!!")
@@ -116,66 +116,14 @@ func TestFileSigningService_ValidateSignedURL(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	tests := []struct {
-		name        string
-		path        string
-		query       url.Values
-		expectError bool
-		errorMsg    string
+		name  string
+		path  string
+		query url.Values
 	}{
 		{
-			name:        "valid signed URL",
-			path:        parsedURL.Path,
-			query:       parsedURL.Query(),
-			expectError: false,
-		},
-		{
-			name:        "missing signature",
-			path:        parsedURL.Path,
-			query:       func() url.Values { q := parsedURL.Query(); q.Del("sig"); return q }(),
-			expectError: true,
-			errorMsg:    "missing signature parameter",
-		},
-		{
-			name:        "missing expiration",
-			path:        parsedURL.Path,
-			query:       func() url.Values { q := parsedURL.Query(); q.Del("exp"); return q }(),
-			expectError: true,
-			errorMsg:    "missing expiration parameter",
-		},
-		{
-			name:        "missing user ID",
-			path:        parsedURL.Path,
-			query:       func() url.Values { q := parsedURL.Query(); q.Del("uid"); return q }(),
-			expectError: true,
-			errorMsg:    "missing user ID parameter",
-		},
-		{
-			name:        "invalid expiration format",
-			path:        parsedURL.Path,
-			query:       func() url.Values { q := parsedURL.Query(); q.Set("exp", "invalid"); return q }(),
-			expectError: true,
-			errorMsg:    "invalid expiration timestamp",
-		},
-		{
-			name:        "expired URL",
-			path:        parsedURL.Path,
-			query:       func() url.Values { q := parsedURL.Query(); q.Set("exp", "1"); return q }(),
-			expectError: true,
-			errorMsg:    "signed URL has expired",
-		},
-		{
-			name:        "invalid signature",
-			path:        parsedURL.Path,
-			query:       func() url.Values { q := parsedURL.Query(); q.Set("sig", "invalid-signature"); return q }(),
-			expectError: true,
-			errorMsg:    "invalid signature",
-		},
-		{
-			name:        "tampered path",
-			path:        "/api/v1/files/download/different-file.pdf",
-			query:       parsedURL.Query(),
-			expectError: true,
-			errorMsg:    "invalid signature",
+			name:  "valid signed URL",
+			path:  parsedURL.Path,
+			query: parsedURL.Query(),
 		},
 	}
 
@@ -183,17 +131,90 @@ func TestFileSigningService_ValidateSignedURL(t *testing.T) {
 		c.Run(tt.name, func(c *qt.C) {
 			claims, err := service.ValidateSignedURL(tt.path, tt.query)
 
-			if tt.expectError {
-				c.Assert(err, qt.IsNotNil)
-				c.Assert(err.Error(), qt.Contains, tt.errorMsg)
-				c.Assert(claims, qt.IsNil)
-			} else {
-				c.Assert(err, qt.IsNil)
-				c.Assert(claims, qt.IsNotNil)
-				c.Assert(claims.FileID, qt.Equals, fileID)
-				c.Assert(claims.UserID, qt.Equals, userID)
-				c.Assert(claims.ExpiresAt.After(time.Now()), qt.IsTrue)
-			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(claims, qt.IsNotNil)
+			c.Assert(claims.FileID, qt.Equals, fileID)
+			c.Assert(claims.UserID, qt.Equals, userID)
+			c.Assert(claims.ExpiresAt.After(time.Now()), qt.IsTrue)
+		})
+	}
+}
+
+func TestFileSigningService_ValidateSignedURL_ErrorCases(t *testing.T) {
+	c := qt.New(t)
+
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	expiration := 15 * time.Minute
+	service := services.NewFileSigningService(signingKey, expiration)
+
+	// Generate a valid signed URL first to use as base for error cases
+	fileID := "test-file-123"
+	fileExt := "pdf"
+	userID := "user-456"
+	signedURL, err := service.GenerateSignedURL(fileID, fileExt, userID)
+	c.Assert(err, qt.IsNil)
+
+	// Parse the URL to get path and query parameters
+	parsedURL, err := url.Parse(signedURL)
+	c.Assert(err, qt.IsNil)
+
+	tests := []struct {
+		name     string
+		path     string
+		query    url.Values
+		errorMsg string
+	}{
+		{
+			name:     "missing signature",
+			path:     parsedURL.Path,
+			query:    func() url.Values { q := parsedURL.Query(); q.Del("sig"); return q }(),
+			errorMsg: "missing signature parameter",
+		},
+		{
+			name:     "missing expiration",
+			path:     parsedURL.Path,
+			query:    func() url.Values { q := parsedURL.Query(); q.Del("exp"); return q }(),
+			errorMsg: "missing expiration parameter",
+		},
+		{
+			name:     "missing user ID",
+			path:     parsedURL.Path,
+			query:    func() url.Values { q := parsedURL.Query(); q.Del("uid"); return q }(),
+			errorMsg: "missing user ID parameter",
+		},
+		{
+			name:     "invalid expiration format",
+			path:     parsedURL.Path,
+			query:    func() url.Values { q := parsedURL.Query(); q.Set("exp", "invalid"); return q }(),
+			errorMsg: "invalid expiration timestamp",
+		},
+		{
+			name:     "expired URL",
+			path:     parsedURL.Path,
+			query:    func() url.Values { q := parsedURL.Query(); q.Set("exp", "1"); return q }(),
+			errorMsg: "signed URL has expired",
+		},
+		{
+			name:     "invalid signature",
+			path:     parsedURL.Path,
+			query:    func() url.Values { q := parsedURL.Query(); q.Set("sig", "invalid-signature"); return q }(),
+			errorMsg: "invalid signature",
+		},
+		{
+			name:     "tampered path",
+			path:     "/api/v1/files/download/different-file.pdf",
+			query:    parsedURL.Query(),
+			errorMsg: "invalid signature",
+		},
+	}
+
+	for _, tt := range tests {
+		c.Run(tt.name, func(c *qt.C) {
+			claims, err := service.ValidateSignedURL(tt.path, tt.query)
+
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, tt.errorMsg)
+			c.Assert(claims, qt.IsNil)
 		})
 	}
 }
