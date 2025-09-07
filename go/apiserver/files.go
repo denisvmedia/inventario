@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -122,28 +123,38 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate signed URLs for all files
-	signedUrls := make(map[string]string)
-	user := appctx.UserFromContext(r.Context())
-	if user != nil {
-		for _, file := range files {
-			// Get file extension (remove leading dot if present)
-			fileExt := strings.TrimPrefix(file.Ext, ".")
-
-			signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID)
-			if err != nil {
-				// Log error but don't fail the entire request
-				// The frontend can handle missing URLs gracefully
-				continue
-			}
-			signedUrls[file.ID] = signedURL
-		}
-	}
+	signedUrls := api.generateSignedURLsForFiles(r.Context(), files)
 
 	response := jsonapi.NewFilesResponseWithSignedUrls(files, total, signedUrls)
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
+}
+
+// generateSignedURLsForFiles generates signed URLs for a list of files.
+// Returns a map of file ID to signed URL. Missing URLs indicate generation failures.
+func (api *filesAPI) generateSignedURLsForFiles(ctx context.Context, files []*models.FileEntity) map[string]string {
+	signedUrls := make(map[string]string)
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		return signedUrls
+	}
+
+	for _, file := range files {
+		// Get file extension (remove leading dot if present)
+		fileExt := strings.TrimPrefix(file.Ext, ".")
+
+		signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID)
+		if err != nil {
+			// Log error but don't fail the entire request
+			// The frontend can handle missing URLs gracefully
+			continue
+		}
+		signedUrls[file.ID] = signedURL
+	}
+
+	return signedUrls
 }
 
 // createFile creates a new file entity (metadata only, file must be uploaded via /uploads/files first).

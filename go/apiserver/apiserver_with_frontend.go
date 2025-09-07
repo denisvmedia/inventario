@@ -4,18 +4,12 @@ package apiserver
 
 import (
 	"io/fs"
-	"mime"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 
 	"github.com/denisvmedia/inventario/frontend"
 )
-
-func init() {
-	// Register .mjs MIME type for ES modules
-	mime.AddExtensionType(".mjs", "application/javascript")
-}
 
 func FrontendHandler() http.Handler {
 	dist := frontend.GetDist()
