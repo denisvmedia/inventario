@@ -44,9 +44,9 @@ func (fr *FileResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 
 // FilesMeta is a meta information for FilesResponse.
 type FilesMeta struct {
-	Files      int                `json:"files" example:"10" format:"int64"`
-	Total      int                `json:"total" example:"100" format:"int64"`
-	SignedUrls map[string]string  `json:"signed_urls,omitempty"` // Map of file ID to signed URL
+	Files      int               `json:"files" example:"10" format:"int64"`
+	Total      int               `json:"total" example:"100" format:"int64"`
+	SignedUrls map[string]string `json:"signed_urls,omitempty"` // Map of file ID to signed URL
 }
 
 // FilesResponse is an object that holds a list of file information.

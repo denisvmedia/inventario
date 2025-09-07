@@ -230,10 +230,9 @@ watch(currentFile, () => {
   generateCurrentFileUrl()
 }, { immediate: true })
 
-// Generate signed URLs for all files (for FileList previews)
+// Generate signed URLs for all files (for FileList previews and downloads)
 const generateFileUrls = async () => {
   const urlPromises = props.files
-    .filter((file: any) => isImageFile(file)) // Only generate URLs for images
     .map(async (file: any) => {
       try {
         const url = await fileService.getDownloadUrl(file)
