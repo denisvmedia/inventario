@@ -198,7 +198,7 @@ func TestFileSigningService_ValidateSignedURL(t *testing.T) {
 	}
 }
 
-func TestFileSigningService_ExtractFileIDFromPath(t *testing.T) {
+func TestFileSigningService_ExtractFileIDFromPath_ValidPaths(t *testing.T) {
 	c := qt.New(t)
 
 	signingKey := []byte("test-signing-key-32-bytes-long!!")
@@ -206,53 +206,27 @@ func TestFileSigningService_ExtractFileIDFromPath(t *testing.T) {
 	service := services.NewFileSigningService(signingKey, expiration)
 
 	tests := []struct {
-		name        string
-		path        string
-		expectedID  string
-		expectError bool
+		name string
+		path string
 	}{
 		{
-			name:        "valid file path",
-			path:        "/api/v1/files/download/test-file-123.pdf",
-			expectedID:  "test-file-123",
-			expectError: false,
+			name: "valid file path",
+			path: "/api/v1/files/download/test-file-123.pdf",
 		},
 		{
-			name:        "file with complex ID",
-			path:        "/api/v1/files/download/file-with-dashes-123.jpg",
-			expectedID:  "file-with-dashes-123",
-			expectError: false,
+			name: "file with complex ID",
+			path: "/api/v1/files/download/file-with-dashes-123.jpg",
 		},
 		{
-			name:        "file with UUID",
-			path:        "/api/v1/files/download/550e8400-e29b-41d4-a716-446655440000.png",
-			expectedID:  "550e8400-e29b-41d4-a716-446655440000",
-			expectError: false,
-		},
-		{
-			name:        "path without extension",
-			path:        "/api/v1/files/download/test-file-123",
-			expectedID:  "",
-			expectError: true,
-		},
-		{
-			name:        "path without file ID",
-			path:        "/api/v1/files/download/.pdf",
-			expectedID:  "",
-			expectError: true,
-		},
-		{
-			name:        "invalid path format",
-			path:        "/invalid/path",
-			expectedID:  "",
-			expectError: true,
+			name: "file with UUID",
+			path: "/api/v1/files/download/550e8400-e29b-41d4-a716-446655440000.png",
 		},
 	}
 
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			// We need to access the private method through validation
-			// Create a dummy query with valid parameters to test path extraction
+			// For valid paths, we expect the error to be about invalid signature
+			// (since we're using a dummy signature), not about path format
 			query := url.Values{}
 			query.Set("sig", "dummy-signature")
 			query.Set("exp", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
@@ -260,16 +234,51 @@ func TestFileSigningService_ExtractFileIDFromPath(t *testing.T) {
 
 			_, err := service.ValidateSignedURL(tt.path, query)
 
-			if tt.expectError {
-				c.Assert(err, qt.IsNotNil)
-				// The error could be about path format or invalid signature
-				// Both are acceptable for our test cases
-			} else {
-				// For valid paths, we expect the error to be about invalid signature
-				// (since we're using a dummy signature), not about path format
-				c.Assert(err, qt.IsNotNil)
-				c.Assert(err.Error(), qt.Equals, "invalid signature")
-			}
+			// Valid paths should fail with "invalid signature" error, not path format error
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Equals, "invalid signature")
+		})
+	}
+}
+
+func TestFileSigningService_ExtractFileIDFromPath_InvalidPaths(t *testing.T) {
+	c := qt.New(t)
+
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	expiration := 15 * time.Minute
+	service := services.NewFileSigningService(signingKey, expiration)
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "path without extension",
+			path: "/api/v1/files/download/test-file-123",
+		},
+		{
+			name: "path without file ID",
+			path: "/api/v1/files/download/.pdf",
+		},
+		{
+			name: "invalid path format",
+			path: "/invalid/path",
+		},
+	}
+
+	for _, tt := range tests {
+		c.Run(tt.name, func(c *qt.C) {
+			// Invalid paths should fail with path format errors
+			query := url.Values{}
+			query.Set("sig", "dummy-signature")
+			query.Set("exp", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
+			query.Set("uid", "test-user")
+
+			_, err := service.ValidateSignedURL(tt.path, query)
+
+			// Invalid paths should fail, but we don't care about the specific error message
+			// as it could be path format or other validation errors
+			c.Assert(err, qt.IsNotNil)
 		})
 	}
 }
