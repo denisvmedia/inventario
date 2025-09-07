@@ -268,6 +268,7 @@ const files = ref<FileEntity[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 const deleting = ref(false)
+const fileUrls = ref<Record<string, string>>({})
 
 // Pagination
 const currentPage = ref(1)
@@ -338,6 +339,9 @@ const loadFiles = async () => {
     const response = await fileService.getFiles(params)
     files.value = response.data.data
     totalFiles.value = response.data.meta.total
+
+    // Generate signed URLs for image files
+    await generateFileUrls()
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to load files'
     console.error('Error loading files:', err)
@@ -382,8 +386,34 @@ const getPaginationUrl = (page: number) => {
   }
 }
 
-const getFileUrl = async (file: FileEntity) => {
-  return await fileService.getDownloadUrl(file)
+// Generate signed URLs for all files (for image previews)
+const generateFileUrls = async () => {
+  const urlPromises = files.value
+    .filter(file => file.type === 'image') // Only generate URLs for images
+    .map(async (file) => {
+      try {
+        const url = await fileService.getDownloadUrl(file)
+        return { fileId: file.id, url }
+      } catch (error) {
+        console.error(`Failed to generate URL for file ${file.id}:`, error)
+        return { fileId: file.id, url: null }
+      }
+    })
+
+  const results = await Promise.all(urlPromises)
+  const newUrls: Record<string, string> = {}
+
+  results.forEach(({ fileId, url }) => {
+    if (url) {
+      newUrls[fileId] = url
+    }
+  })
+
+  fileUrls.value = newUrls
+}
+
+const getFileUrl = (file: FileEntity) => {
+  return fileUrls.value[file.id] || ''
 }
 
 const getFileIcon = (file: FileEntity) => {

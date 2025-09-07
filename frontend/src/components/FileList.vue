@@ -73,13 +73,19 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  fileUrls: {
+    type: Object,
+    default: () => ({})
   }
 })
 
 const emit = defineEmits(['delete', 'download', 'update', 'view-details', 'open-viewer'])
 
-// Note: getFileUrl is no longer needed as we use signed URLs
-// File URLs are now generated on-demand through the file service
+// Get file URL from the fileUrls prop
+const getFileUrl = (file: any) => {
+  return props.fileUrls[file.id] || ''
+}
 
 const getFileName = (file: any) => {
   // Use the Path field directly (it's now just the filename without extension)

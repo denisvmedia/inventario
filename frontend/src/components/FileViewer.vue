@@ -5,6 +5,7 @@
       :file-type="fileType"
       :commodity-id="entityId"
       :loading="false"
+      :file-urls="fileUrls"
       @delete="confirmDeleteFile"
       @download="downloadFile"
       @update="updateFile"
@@ -165,6 +166,7 @@ const fullImage = ref(null)
 const pdfViewerError = ref(false)
 const pdfLoading = ref(true)
 const pdfErrorMessage = ref('Unable to display PDF. Please download the file to view it.')
+const fileUrls = ref<Record<string, string>>({})
 
 // Zoom and pan state
 const isZoomed = ref(false)
@@ -226,6 +228,37 @@ const generateCurrentFileUrl = async () => {
 // Watch for changes to current file and generate new signed URL
 watch(currentFile, () => {
   generateCurrentFileUrl()
+}, { immediate: true })
+
+// Generate signed URLs for all files (for FileList previews)
+const generateFileUrls = async () => {
+  const urlPromises = props.files
+    .filter((file: any) => isImageFile(file)) // Only generate URLs for images
+    .map(async (file: any) => {
+      try {
+        const url = await fileService.getDownloadUrl(file)
+        return { fileId: file.id, url }
+      } catch (error) {
+        console.error(`Failed to generate URL for file ${file.id}:`, error)
+        return { fileId: file.id, url: null }
+      }
+    })
+
+  const results = await Promise.all(urlPromises)
+  const newUrls: Record<string, string> = {}
+
+  results.forEach(({ fileId, url }) => {
+    if (url) {
+      newUrls[fileId] = url
+    }
+  })
+
+  fileUrls.value = newUrls
+}
+
+// Watch for changes to files and generate new signed URLs
+watch(() => props.files, () => {
+  generateFileUrls()
 }, { immediate: true })
 
 
