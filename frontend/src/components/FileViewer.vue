@@ -36,6 +36,7 @@
             <button v-if="files.length > 1" class="nav-button prev" title="Previous file" @click="prevFile">&lt;</button>
             <div class="image-container">
               <img
+                v-if="currentFileUrl"
                 ref="fullImage"
                 :src="currentFileUrl"
                 :alt="currentFileName"
@@ -48,6 +49,9 @@
                 @mouseup="endPan"
                 @mouseleave="endPan"
               />
+              <div v-else class="loading-placeholder">
+                Loading preview...
+              </div>
             </div>
             <button v-if="files.length > 1" class="nav-button next" title="Next file" @click="nextFile">&gt;</button>
           </template>
@@ -56,13 +60,16 @@
           <template v-else-if="isPdfFile(currentFile)">
             <button v-if="files.length > 1" class="nav-button prev" title="Previous file" @click="prevFile">&lt;</button>
             <div class="pdf-container">
-              <template v-if="!pdfViewerError">
+              <template v-if="!pdfViewerError && currentFileUrl">
                 <PDFViewerCanvas
                   :url="currentFileUrl"
                   @error="handlePdfError"
                   @loading="(isLoading) => pdfLoading = isLoading"
                 />
               </template>
+              <div v-else-if="!currentFileUrl" class="loading-placeholder">
+                Loading preview...
+              </div>
               <div v-else class="pdf-error-container">
                 <div class="file-icon large">
                   <font-awesome-icon icon="file-pdf" size="3x" />
@@ -123,6 +130,7 @@ import PDFViewerCanvas from './PDFViewerCanvas.vue'
 import FileList from './FileList.vue'
 import FileDetails from './FileDetails.vue'
 import Confirmation from './Confirmation.vue'
+import { fileService } from '@/services/fileService'
 
 const props = defineProps({
   files: {
@@ -192,74 +200,35 @@ const currentFile = computed(() => {
   return props.files[currentIndex.value]
 })
 
-const currentFileUrl = computed(() => {
-  if (!currentFile.value) return ''
-  return getFileUrl(currentFile.value)
-})
+const currentFileUrl = ref<string>('')
 
 const currentFileName = computed(() => {
   if (!currentFile.value) return ''
   return getFileName(currentFile.value)
 })
 
-const getFileUrl = (file: any) => {
-  // Check if there's a direct path to the file
-  const path = file.path || (file.attributes && file.attributes.path)
-
-  // If we have a path that starts with /api, use it directly
-  if (path && path.startsWith('/api')) {
-    return path
+// Generate signed URL for the current file
+const generateCurrentFileUrl = async () => {
+  if (!currentFile.value) {
+    currentFileUrl.value = ''
+    return
   }
 
-  // Get the file extension - now we should always have an ext field
-  let ext = ''
-  if (file.ext) {
-    // Use the ext field directly - remove the dot if not present
-    ext = file.ext
-    if (ext.startsWith('.')) {
-      ext = ext.substring(1)
-    }
-  } else if (file.attributes && file.attributes.ext) {
-    ext = file.attributes.ext
-    if (ext.startsWith('.')) {
-      ext = ext.substring(1)
-    }
+  try {
+    const signedUrl = await fileService.getDownloadUrl(currentFile.value)
+    currentFileUrl.value = signedUrl
+  } catch (error) {
+    console.error('Failed to generate signed URL for file viewer:', error)
+    currentFileUrl.value = ''
   }
-
-  // If we still don't have an extension, try to determine from content type
-  if (!ext) {
-    const contentType = file.content_type || (file.attributes && file.attributes.content_type) || file.mime_type
-    if (contentType) {
-      if (contentType.includes('pdf')) {
-        ext = 'pdf'
-      } else if (contentType.includes('jpeg') || contentType.includes('jpg')) {
-        ext = 'jpg'
-      } else if (contentType.includes('png')) {
-        ext = 'png'
-      } else if (contentType.includes('gif')) {
-        ext = 'gif'
-      } else if (contentType.includes('webp')) {
-        ext = 'webp'
-      }
-    }
-  }
-
-  // If we still don't have an extension, use a default
-  if (!ext) {
-    if (isPdfFile(file)) {
-      ext = 'pdf'
-    } else if (isImageFile(file)) {
-      ext = 'jpg' // Default image extension
-    } else {
-      ext = 'bin' // Generic binary
-    }
-  }
-
-  // Note: This function now returns a placeholder URL
-  // Actual signed URLs are generated on-demand through the file service
-  // This is kept for compatibility but should be replaced with async signed URL generation
-  return `/api/v1/files/${file.id}.${ext}`
 }
+
+// Watch for changes to current file and generate new signed URL
+watch(currentFile, () => {
+  generateCurrentFileUrl()
+}, { immediate: true })
+
+
 
 const getFileName = (file: any) => {
   // Use the Path field directly (it's now just the filename without extension)
