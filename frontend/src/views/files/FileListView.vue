@@ -340,8 +340,12 @@ const loadFiles = async () => {
     files.value = response.data.data
     totalFiles.value = response.data.meta.total
 
-    // Generate signed URLs for image files
-    await generateFileUrls()
+    // Use signed URLs from response metadata if available
+    if (response.data.meta.signed_urls) {
+      fileUrls.value = response.data.meta.signed_urls
+    } else {
+      fileUrls.value = {}
+    }
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to load files'
     console.error('Error loading files:', err)
@@ -386,31 +390,7 @@ const getPaginationUrl = (page: number) => {
   }
 }
 
-// Generate signed URLs for all files (for image previews)
-const generateFileUrls = async () => {
-  const urlPromises = files.value
-    .filter(file => file.type === 'image') // Only generate URLs for images
-    .map(async (file) => {
-      try {
-        const url = await fileService.getDownloadUrl(file)
-        return { fileId: file.id, url }
-      } catch (error) {
-        console.error(`Failed to generate URL for file ${file.id}:`, error)
-        return { fileId: file.id, url: null }
-      }
-    })
 
-  const results = await Promise.all(urlPromises)
-  const newUrls: Record<string, string> = {}
-
-  results.forEach(({ fileId, url }) => {
-    if (url) {
-      newUrls[fileId] = url
-    }
-  })
-
-  fileUrls.value = newUrls
-}
 
 const getFileUrl = (file: FileEntity) => {
   return fileUrls.value[file.id] || ''

@@ -13,6 +13,7 @@ import (
 	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -120,7 +121,43 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	response := jsonapi.NewFilesResponse(files, total)
+	// Generate signed URLs for image files
+	signedUrls := make(map[string]string)
+	user := appctx.UserFromContext(r.Context())
+	if user != nil {
+		for _, file := range files {
+			// Only generate signed URLs for image files to optimize performance
+			if file.Type == models.FileTypeImage {
+				// Get file extension
+				fileExt := strings.TrimPrefix(file.Ext, ".")
+				if fileExt == "" {
+					// Try to determine extension from MIME type
+					switch file.MIMEType {
+					case "image/jpeg", "image/jpg":
+						fileExt = "jpg"
+					case "image/png":
+						fileExt = "png"
+					case "image/gif":
+						fileExt = "gif"
+					case "image/webp":
+						fileExt = "webp"
+					default:
+						fileExt = "jpg" // Default fallback
+					}
+				}
+
+				signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID)
+				if err != nil {
+					// Log error but don't fail the entire request
+					// The frontend can handle missing URLs gracefully
+					continue
+				}
+				signedUrls[file.ID] = signedURL
+			}
+		}
+	}
+
+	response := jsonapi.NewFilesResponseWithSignedUrls(files, total, signedUrls)
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
 		return
