@@ -22,9 +22,9 @@ import (
 )
 
 type filesAPI struct {
-	uploadLocation      string
-	fileService         *services.FileService
-	fileSigningService  *services.FileSigningService
+	uploadLocation     string
+	fileService        *services.FileService
+	fileSigningService *services.FileSigningService
 }
 
 // listFiles lists all files with optional filtering and pagination.
@@ -346,7 +346,7 @@ func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 // @Description Generate a secure signed URL for downloading a file
 // @Tags files
 // @Param id path string true "File ID"
-// @Success 200 {object} jsonapi.SignedFileUrlResponse "Signed URL"
+// @Success 200 {object} jsonapi.SignedFileURLResponse "Signed URL"
 // @Failure 404 {object} jsonapi.Errors "File not found"
 // @Router /files/{id}/signed-url [post].
 func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +390,7 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the signed URL using JSON:API format
-	response := jsonapi.NewSignedFileUrlResponse(fileID, signedURL)
+	response := jsonapi.NewSignedFileURLResponse(fileID, signedURL)
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, errkit.Wrap(err, "failed to render response"))
 		return
@@ -489,10 +489,10 @@ func Files(params Params) func(r chi.Router) {
 		r.Get("/", api.listFiles)   // GET /files
 		r.Post("/", api.createFile) // POST /files
 		r.Route("/{fileID}", func(r chi.Router) {
-			r.Get("/", api.apiGetFile)                    // GET /files/123
-			r.Put("/", api.updateFile)                    // PUT /files/123
-			r.Delete("/", api.deleteFile)                 // DELETE /files/123
-			r.Post("/signed-url", api.generateSignedURL)  // POST /files/123/signed-url
+			r.Get("/", api.apiGetFile)                   // GET /files/123
+			r.Put("/", api.updateFile)                   // PUT /files/123
+			r.Delete("/", api.deleteFile)                // DELETE /files/123
+			r.Post("/signed-url", api.generateSignedURL) // POST /files/123/signed-url
 		})
 		// File downloads moved to signed URL routes for security
 	}

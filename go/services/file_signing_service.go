@@ -155,11 +155,11 @@ func (s *FileSigningService) validateSignature(message, signature string) bool {
 func (s *FileSigningService) extractFileIDFromPath(path string) (string, error) {
 	// Parse the URL path to extract file ID
 	// Example: /api/v1/files/download/123.pdf -> fileID = "123"
-	
+
 	// Find the last slash and the last dot
 	lastSlash := -1
 	lastDot := -1
-	
+
 	for i := len(path) - 1; i >= 0; i-- {
 		if path[i] == '.' && lastDot == -1 {
 			lastDot = i
@@ -169,7 +169,7 @@ func (s *FileSigningService) extractFileIDFromPath(path string) (string, error) 
 			break
 		}
 	}
-	
+
 	if lastSlash == -1 || lastDot == -1 || lastSlash >= lastDot {
 		return "", errors.New("invalid file path format")
 	}
@@ -178,6 +178,6 @@ func (s *FileSigningService) extractFileIDFromPath(path string) (string, error) 
 	if fileID == "" {
 		return "", errors.New("empty file ID in path")
 	}
-	
+
 	return fileID, nil
 }

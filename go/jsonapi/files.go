@@ -302,11 +302,11 @@ func (*SearchResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// SignedFileUrlResponse is an object that holds signed file URL information.
-type SignedFileUrlResponse struct {
+// SignedFileURLResponse is an object that holds signed file URL information.
+type SignedFileURLResponse struct {
 	HTTPStatusCode int `json:"-"` // HTTP response status code
 
-	ID         string  `json:"id"`                                // file id
+	ID         string  `json:"id"`                               // file id
 	Type       string  `json:"type" example:"urls" enums:"urls"` // resource type
 	Attributes URLData `json:"attributes"`                       // URL data
 }
@@ -316,9 +316,9 @@ type URLData struct {
 	URL string `json:"url"` // signed URL for file access
 }
 
-// NewSignedFileUrlResponse creates a new SignedFileUrlResponse instance.
-func NewSignedFileUrlResponse(fileID, signedURL string) *SignedFileUrlResponse {
-	return &SignedFileUrlResponse{
+// NewSignedFileURLResponse creates a new SignedFileURLResponse instance.
+func NewSignedFileURLResponse(fileID, signedURL string) *SignedFileURLResponse {
+	return &SignedFileURLResponse{
 		ID:   fileID,
 		Type: "urls",
 		Attributes: URLData{
@@ -327,15 +327,15 @@ func NewSignedFileUrlResponse(fileID, signedURL string) *SignedFileUrlResponse {
 	}
 }
 
-// WithStatusCode sets the HTTP response status code for the SignedFileUrlResponse.
-func (sfur *SignedFileUrlResponse) WithStatusCode(statusCode int) *SignedFileUrlResponse {
+// WithStatusCode sets the HTTP response status code for the SignedFileURLResponse.
+func (sfur *SignedFileURLResponse) WithStatusCode(statusCode int) *SignedFileURLResponse {
 	tmp := *sfur
 	tmp.HTTPStatusCode = statusCode
 	return &tmp
 }
 
-// Render renders the SignedFileUrlResponse as an HTTP response.
-func (sfur *SignedFileUrlResponse) Render(_w http.ResponseWriter, r *http.Request) error {
+// Render renders the SignedFileURLResponse as an HTTP response.
+func (sfur *SignedFileURLResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, statusCodeDef(sfur.HTTPStatusCode, http.StatusOK))
 	return nil
 }

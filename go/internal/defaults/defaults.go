@@ -54,8 +54,8 @@ func New() Config {
 		Server: Server{
 			Addr:              ":3333",
 			UploadLocation:    getFileURL("uploads"),
-			JWTSecret:         "", // Empty by default, will be generated if not provided
-			FileSigningKey:    "", // Empty by default, will be generated if not provided
+			JWTSecret:         "",    // Empty by default, will be generated if not provided
+			FileSigningKey:    "",    // Empty by default, will be generated if not provided
 			FileURLExpiration: "15m", // Default to 15 minutes for security
 		},
 		Database: Database{

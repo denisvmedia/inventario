@@ -19,7 +19,7 @@ func TestFilesAPI_GenerateSignedURL_JSONAPIFormat(t *testing.T) {
 	fileID := "test-file-123"
 	signedURL := "https://example.com/api/v1/files/download/test-file-123.pdf?sig=abc&exp=123&uid=user"
 
-	response := jsonapi.NewSignedFileUrlResponse(fileID, signedURL)
+	response := jsonapi.NewSignedFileURLResponse(fileID, signedURL)
 
 	c.Run("JSON:API response structure", func(c *qt.C) {
 		// Verify the response structure
@@ -46,7 +46,7 @@ func TestFilesAPI_GenerateSignedURL_JSONAPIFormat(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		// Parse back to verify structure
-		var parsed map[string]interface{}
+		var parsed map[string]any
 		err = json.Unmarshal(jsonData, &parsed)
 		c.Assert(err, qt.IsNil)
 
@@ -54,7 +54,7 @@ func TestFilesAPI_GenerateSignedURL_JSONAPIFormat(t *testing.T) {
 		c.Assert(parsed["id"], qt.Equals, fileID)
 		c.Assert(parsed["type"], qt.Equals, "urls")
 
-		attributes, ok := parsed["attributes"].(map[string]interface{})
+		attributes, ok := parsed["attributes"].(map[string]any)
 		c.Assert(ok, qt.IsTrue)
 		c.Assert(attributes["url"], qt.Equals, signedURL)
 
@@ -101,7 +101,7 @@ func TestFilesAPI_GenerateSignedURL_JSONAPIFormat(t *testing.T) {
 			}
 		}`
 
-		var expected, actual map[string]interface{}
+		var expected, actual map[string]any
 		err = json.Unmarshal([]byte(expectedJSON), &expected)
 		c.Assert(err, qt.IsNil)
 
@@ -116,11 +116,11 @@ func TestSignedFileUrlResponse_Consistency(t *testing.T) {
 	c := qt.New(t)
 
 	c.Run("consistent with other JSON:API responses", func(c *qt.C) {
-		// Verify that SignedFileUrlResponse follows the same pattern as other responses
+		// Verify that SignedFileURLResponse follows the same pattern as other responses
 		fileID := "test-file-456"
 		signedURL := "https://example.com/signed-url"
 
-		response := jsonapi.NewSignedFileUrlResponse(fileID, signedURL)
+		response := jsonapi.NewSignedFileURLResponse(fileID, signedURL)
 
 		// Should have the same structure as other JSON:API responses
 		c.Assert(response.ID, qt.Not(qt.Equals), "")
@@ -147,7 +147,7 @@ func TestSignedFileUrlResponse_Consistency(t *testing.T) {
 		jsonData, err := json.Marshal(urlData)
 		c.Assert(err, qt.IsNil)
 
-		var parsed map[string]interface{}
+		var parsed map[string]any
 		err = json.Unmarshal(jsonData, &parsed)
 		c.Assert(err, qt.IsNil)
 

@@ -110,8 +110,8 @@ func (p *Params) Validate() error {
 			_ = b.Close() // best effort
 			return nil
 		})),
-		validation.Field(&p.JWTSecret, validation.Required, validation.Length(32, 0)),         // Require at least 32 bytes for security
-		validation.Field(&p.FileSigningKey, validation.Required, validation.Length(32, 0)),   // Require at least 32 bytes for security
+		validation.Field(&p.JWTSecret, validation.Required, validation.Length(32, 0)),            // Require at least 32 bytes for security
+		validation.Field(&p.FileSigningKey, validation.Required, validation.Length(32, 0)),       // Require at least 32 bytes for security
 		validation.Field(&p.FileURLExpiration, validation.Required, validation.Min(time.Minute)), // Require at least 1 minute expiration
 	)
 
