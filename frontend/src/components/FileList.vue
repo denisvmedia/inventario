@@ -78,19 +78,8 @@ const props = defineProps({
 
 const emit = defineEmits(['delete', 'download', 'update', 'view-details', 'open-viewer'])
 
-const getFileUrl = (file: any) => {
-  // Use generic file entity download URL with authentication
-  const ext = file.ext.startsWith('.') ? file.ext.substring(1) : file.ext
-  const baseUrl = `/api/v1/files/${file.id}.${ext}`
-
-  // Add JWT token as query parameter for direct browser access
-  const token = localStorage.getItem('inventario_token')
-  if (token) {
-    return `${baseUrl}?token=${encodeURIComponent(token)}`
-  }
-
-  return baseUrl
-}
+// Note: getFileUrl is no longer needed as we use signed URLs
+// File URLs are now generated on-demand through the file service
 
 const getFileName = (file: any) => {
   // Use the Path field directly (it's now just the filename without extension)

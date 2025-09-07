@@ -141,36 +141,41 @@ const fileService = {
   },
 
   /**
-   * Get download URL for a file
+   * Generate a signed URL for file download
    */
-  getDownloadUrl(file: FileEntity): string {
-    const ext = file.ext.startsWith('.') ? file.ext.substring(1) : file.ext
-    return this.getAuthenticatedFileUrl(`${API_URL}/${file.id}.${ext}`)
+  async generateSignedUrl(file: FileEntity): Promise<string> {
+    try {
+      const response = await api.post(`${API_URL}/${file.id}/signed-url`)
+      return response.data.signed_url
+    } catch (error) {
+      console.error('Failed to generate signed URL:', error)
+      throw error
+    }
   },
 
   /**
-   * Add authentication token to file URL for direct browser access
+   * Get download URL for a file (generates signed URL)
    */
-  getAuthenticatedFileUrl(baseUrl: string): string {
-    const token = localStorage.getItem('inventario_token')
-    if (token) {
-      const separator = baseUrl.includes('?') ? '&' : '?'
-      return `${baseUrl}${separator}token=${encodeURIComponent(token)}`
-    }
-    return baseUrl
+  async getDownloadUrl(file: FileEntity): Promise<string> {
+    return this.generateSignedUrl(file)
   },
 
   /**
    * Download a file
    */
-  downloadFile(file: FileEntity) {
-    const url = this.getDownloadUrl(file)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = file.path + file.ext
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  async downloadFile(file: FileEntity) {
+    try {
+      const url = await this.getDownloadUrl(file)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = file.path + file.ext
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (error) {
+      console.error('Failed to download file:', error)
+      throw error
+    }
   },
 
   /**

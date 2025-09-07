@@ -382,8 +382,8 @@ const getPaginationUrl = (page: number) => {
   }
 }
 
-const getFileUrl = (file: FileEntity) => {
-  return fileService.getDownloadUrl(file)
+const getFileUrl = async (file: FileEntity) => {
+  return await fileService.getDownloadUrl(file)
 }
 
 const getFileIcon = (file: FileEntity) => {
@@ -425,8 +425,13 @@ const editFile = (file: FileEntity) => {
   router.push(`/files/${file.id}/edit`)
 }
 
-const downloadFile = (file: FileEntity) => {
-  fileService.downloadFile(file)
+const downloadFile = async (file: FileEntity) => {
+  try {
+    await fileService.downloadFile(file)
+  } catch (error) {
+    console.error('Failed to download file:', error)
+    // You might want to show a user-friendly error message here
+  }
 }
 
 const canDeleteFile = (file: FileEntity) => {

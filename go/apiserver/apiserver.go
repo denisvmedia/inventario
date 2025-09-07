@@ -85,12 +85,14 @@ func paginate(next http.Handler) http.Handler {
 }
 
 type Params struct {
-	FactorySet     *registry.FactorySet
-	EntityService  *services.EntityService
-	UploadLocation string
-	DebugInfo      *debug.Info
-	StartTime      time.Time
-	JWTSecret      []byte // JWT secret for user authentication
+	FactorySet        *registry.FactorySet
+	EntityService     *services.EntityService
+	UploadLocation    string
+	DebugInfo         *debug.Info
+	StartTime         time.Time
+	JWTSecret         []byte        // JWT secret for user authentication
+	FileSigningKey    []byte        // File signing key for secure file URLs
+	FileURLExpiration time.Duration // File URL expiration duration
 }
 
 func (p *Params) Validate() error {
@@ -108,7 +110,9 @@ func (p *Params) Validate() error {
 			_ = b.Close() // best effort
 			return nil
 		})),
-		validation.Field(&p.JWTSecret, validation.Required, validation.Length(32, 0)), // Require at least 32 bytes for security
+		validation.Field(&p.JWTSecret, validation.Required, validation.Length(32, 0)),         // Require at least 32 bytes for security
+		validation.Field(&p.FileSigningKey, validation.Required, validation.Length(32, 0)),   // Require at least 32 bytes for security
+		validation.Field(&p.FileURLExpiration, validation.Required, validation.Min(time.Minute)), // Require at least 1 minute expiration
 	)
 
 	return validation.ValidateStruct(p, fields...)
@@ -178,6 +182,11 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 
 		// Uploads need special middleware without content type restrictions
 		r.With(userUploadMiddlewares...).Route("/uploads", Uploads(params))
+
+		// File downloads use signed URL validation instead of JWT authentication
+		fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
+		signedURLMiddleware := SignedURLMiddleware(fileSigningService, params.FactorySet.UserRegistry)
+		r.With(signedURLMiddleware, RLSContextMiddleware(params.FactorySet), RegistrySetMiddleware(params.FactorySet)).Route("/files/download", SignedFiles(params))
 	})
 
 	// use Frontend as a root directory
