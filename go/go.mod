@@ -27,7 +27,7 @@ require (
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.10.1
-	github.com/stokaro/ptah v0.0.0-20250819205839-43c042a66605
+	github.com/stokaro/ptah v0.0.0-20250906152351-07df82d27c5c
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag v1.16.6
 	github.com/wk8/go-ordered-map/v2 v2.1.8
