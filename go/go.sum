@@ -419,8 +419,8 @@ github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3A
 github.com/spf13/viper v1.7.0/go.mod h1:8WkrPz2fc9jxqZNCJI/76HCieCp4Q8HaLFoCha5qpdg=
 github.com/spiffe/go-spiffe/v2 v2.5.0 h1:N2I01KCUkv1FAjZXJMwh95KK1ZIQLYbPfhaxw8WS0hE=
 github.com/spiffe/go-spiffe/v2 v2.5.0/go.mod h1:P+NxobPc6wXhVtINNtFjNWGBTreew1GBUCwT2wPmb7g=
-github.com/stokaro/ptah v0.0.0-20250819205839-43c042a66605 h1:nWI+P3ZchOa1hVyZAVjEnIhLLGbBo7LcfuXAD1rsteE=
-github.com/stokaro/ptah v0.0.0-20250819205839-43c042a66605/go.mod h1:YyCdIhFoSd+yay8ujbBxFNxfY68kmv8moBIkEHYlI/s=
+github.com/stokaro/ptah v0.0.0-20250906152351-07df82d27c5c h1:0s1bMfGBd/peODmTLIToqxPGKHIJLHRzGf7whBNH+F8=
+github.com/stokaro/ptah v0.0.0-20250906152351-07df82d27c5c/go.mod h1:YyCdIhFoSd+yay8ujbBxFNxfY68kmv8moBIkEHYlI/s=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
