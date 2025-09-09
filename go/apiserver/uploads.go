@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,31 @@ import (
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/services"
 )
+
+// detectFileType auto-detects file type based on MIME type
+func detectFileType(mimeType string) models.FileType {
+	switch {
+	case strings.HasPrefix(mimeType, "image/"):
+		return models.FileTypeImage
+	case strings.HasPrefix(mimeType, "video/"):
+		return models.FileTypeVideo
+	case strings.HasPrefix(mimeType, "audio/"):
+		return models.FileTypeAudio
+	case mimeType == "application/zip" || mimeType == "application/x-zip-compressed":
+		return models.FileTypeArchive
+	case mimeType == "application/pdf" ||
+		mimeType == "text/plain" ||
+		mimeType == "text/csv" ||
+		strings.Contains(mimeType, "document") ||
+		strings.Contains(mimeType, "spreadsheet") ||
+		strings.Contains(mimeType, "presentation"):
+		return models.FileTypeDocument
+	default:
+		return models.FileTypeOther
+	}
+}
 
 type uploadedFile struct {
 	FilePath string
@@ -37,6 +62,7 @@ func uploadedFilesFromContext(ctx context.Context) []uploadedFile {
 
 type uploadsAPI struct {
 	uploadLocation string
+	fileService    *services.FileService
 }
 
 func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +134,10 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 			renderEntityError(w, r, err)
 			return
 		}
+
+		// Generate thumbnails for image files
+		api.generateThumbnailsWithLogging(r.Context(), createdFile, user.ID)
+
 		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 	}
 
@@ -158,6 +188,9 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
+		// Auto-detect file type based on MIME type
+		fileType := detectFileType(f.MIMEType)
+
 		// Create file entity instead of manual
 		now := time.Now()
 		fileEntity := models.FileEntity{
@@ -167,7 +200,7 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 			},
 			Title:            pathWithoutExt, // Use filename as title
 			Description:      "",
-			Type:             models.FileTypeDocument,
+			Type:             fileType, // Use auto-detected type
 			Tags:             []string{},
 			LinkedEntityType: "commodity",
 			LinkedEntityID:   entityID,
@@ -188,6 +221,9 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
+
+		// Generate thumbnails for image files
+		api.generateThumbnailsWithLogging(r.Context(), createdFile, user.ID)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
@@ -237,6 +273,9 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		// Set Path to be the filename without extension
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
+		// Auto-detect file type based on MIME type
+		fileType := detectFileType(f.MIMEType)
+
 		// Create file entity instead of invoice
 		now := time.Now()
 		fileEntity := models.FileEntity{
@@ -246,7 +285,7 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 			},
 			Title:            pathWithoutExt, // Use filename as title
 			Description:      "",
-			Type:             models.FileTypeDocument,
+			Type:             fileType, // Use auto-detected type
 			Tags:             []string{},
 			LinkedEntityType: "commodity",
 			LinkedEntityID:   entityID,
@@ -267,6 +306,9 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
+
+		// Generate thumbnails for image files
+		api.generateThumbnailsWithLogging(r.Context(), createdFile, user.ID)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
@@ -309,26 +351,7 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
 		// Auto-detect file type based on MIME type
-		var fileType models.FileType
-		switch {
-		case strings.HasPrefix(f.MIMEType, "image/"):
-			fileType = models.FileTypeImage
-		case strings.HasPrefix(f.MIMEType, "video/"):
-			fileType = models.FileTypeVideo
-		case strings.HasPrefix(f.MIMEType, "audio/"):
-			fileType = models.FileTypeAudio
-		case f.MIMEType == "application/zip" || f.MIMEType == "application/x-zip-compressed":
-			fileType = models.FileTypeArchive
-		case f.MIMEType == "application/pdf" ||
-			f.MIMEType == "text/plain" ||
-			f.MIMEType == "text/csv" ||
-			strings.Contains(f.MIMEType, "document") ||
-			strings.Contains(f.MIMEType, "spreadsheet") ||
-			strings.Contains(f.MIMEType, "presentation"):
-			fileType = models.FileTypeDocument
-		default:
-			fileType = models.FileTypeOther
-		}
+		fileType := detectFileType(f.MIMEType)
 
 		// Create file entity with auto-generated title from filename
 		now := time.Now()
@@ -356,6 +379,10 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 			renderEntityError(w, r, err)
 			return
 		}
+
+		// Generate thumbnails for image files
+		api.generateThumbnailsWithLogging(r.Context(), createdFile, user.ID)
+
 		createdFiles = append(createdFiles, *createdFile)
 	}
 
@@ -475,6 +502,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 func Uploads(params Params) func(r chi.Router) {
 	api := &uploadsAPI{
 		uploadLocation: params.UploadLocation,
+		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
 	}
 
 	return func(r chi.Router) {
@@ -490,5 +518,23 @@ func Uploads(params Params) func(r chi.Router) {
 
 		// Restore uploads - only allow XML files
 		r.With(api.uploadFiles(mimekit.XMLContentTypes()...)).Post("/restores", api.handleRestoreUpload)
+	}
+}
+
+// generateThumbnailsWithLogging generates thumbnails for image files with proper logging
+func (api *uploadsAPI) generateThumbnailsWithLogging(ctx context.Context, file *models.FileEntity, userID string) {
+	if err := api.fileService.GenerateThumbnails(ctx, file); err != nil {
+		// Log error but don't fail the upload - thumbnails are optional
+		slog.Error("Failed to generate thumbnails",
+			"error", err.Error(),
+			"original_path", file.OriginalPath,
+			"mime_type", file.MIMEType,
+			"file_id", file.ID,
+			"user_id", userID)
+	} else {
+		slog.Info("Thumbnails generated successfully",
+			"original_path", file.OriginalPath,
+			"mime_type", file.MIMEType,
+			"file_id", file.ID)
 	}
 }

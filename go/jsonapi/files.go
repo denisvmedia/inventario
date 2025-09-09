@@ -18,6 +18,12 @@ type FileResponse struct {
 	ID         string            `json:"id"`
 	Type       string            `json:"type" example:"files" enums:"files"`
 	Attributes models.FileEntity `json:"attributes"`
+	Meta       *FileMeta         `json:"meta,omitempty"` // Optional meta field for signed URLs
+}
+
+// FileMeta represents the meta part of a file response.
+type FileMeta struct {
+	SignedUrls map[string]URLData `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
 }
 
 // NewFileResponse creates a new FileResponse instance.
@@ -26,6 +32,18 @@ func NewFileResponse(file *models.FileEntity) *FileResponse {
 		ID:         file.ID,
 		Type:       "files",
 		Attributes: *file,
+	}
+}
+
+// NewFileResponseWithSignedUrls creates a new FileResponse instance with signed URLs.
+func NewFileResponseWithSignedUrls(file *models.FileEntity, signedUrls map[string]URLData) *FileResponse {
+	return &FileResponse{
+		ID:         file.ID,
+		Type:       "files",
+		Attributes: *file,
+		Meta: &FileMeta{
+			SignedUrls: signedUrls,
+		},
 	}
 }
 
@@ -44,9 +62,9 @@ func (fr *FileResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 
 // FilesMeta is a meta information for FilesResponse.
 type FilesMeta struct {
-	Files      int               `json:"files" example:"10" format:"int64"`
-	Total      int               `json:"total" example:"100" format:"int64"`
-	SignedUrls map[string]string `json:"signed_urls,omitempty"` // Map of file ID to signed URL
+	Files      int                    `json:"files" example:"10" format:"int64"`
+	Total      int                    `json:"total" example:"100" format:"int64"`
+	SignedUrls map[string]URLData     `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
 }
 
 // FilesResponse is an object that holds a list of file information.
@@ -68,7 +86,7 @@ func NewFilesResponse(files []*models.FileEntity, total int) *FilesResponse {
 }
 
 // NewFilesResponseWithSignedUrls creates a new FilesResponse instance with signed URLs.
-func NewFilesResponseWithSignedUrls(files []*models.FileEntity, total int, signedUrls map[string]string) *FilesResponse {
+func NewFilesResponseWithSignedUrls(files []*models.FileEntity, total int, signedUrls map[string]URLData) *FilesResponse {
 	// Ensure Data is never nil to maintain consistent JSON output
 	if files == nil {
 		files = []*models.FileEntity{}
@@ -330,7 +348,8 @@ type SignedFileURLResponse struct {
 
 // URLData is an object that holds URL data information.
 type URLData struct {
-	URL string `json:"url"` // signed URL for file access
+	URL        string            `json:"url"`                    // signed URL for file access
+	Thumbnails map[string]string `json:"thumbnails,omitempty"`   // map of thumbnail size to signed URL
 }
 
 // NewSignedFileURLResponse creates a new SignedFileURLResponse instance.
@@ -340,6 +359,18 @@ func NewSignedFileURLResponse(fileID, signedURL string) *SignedFileURLResponse {
 		Type: "urls",
 		Attributes: URLData{
 			URL: signedURL,
+		},
+	}
+}
+
+// NewSignedFileURLResponseWithThumbnails creates a new SignedFileURLResponse instance with thumbnails.
+func NewSignedFileURLResponseWithThumbnails(fileID, signedURL string, thumbnails map[string]string) *SignedFileURLResponse {
+	return &SignedFileURLResponse{
+		ID:   fileID,
+		Type: "urls",
+		Attributes: URLData{
+			URL:        signedURL,
+			Thumbnails: thumbnails,
 		},
 	}
 }
