@@ -43,8 +43,8 @@ func (ir *InvoiceResponse) Render(_w http.ResponseWriter, r *http.Request) error
 
 // InvoicesMeta is a meta information for InvoicesResponse.
 type InvoicesMeta struct {
-	Invoices   int                    `json:"invoices" example:"1" format:"int64"`
-	SignedUrls map[string]URLData     `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
+	Invoices   int                `json:"invoices" example:"1" format:"int64"`
+	SignedUrls map[string]URLData `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
 }
 
 // InvoicesResponse is an object that holds a list of invoice information.

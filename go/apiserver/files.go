@@ -16,7 +16,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
-	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
@@ -435,85 +434,6 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// downloadFile downloads a file.
-// @Summary Download a file
-// @Description download file content
-// @Tags files
-// @Param id path string true "File ID"
-// @Param ext path string true "File extension"
-// @Success 200 "File content"
-// @Failure 404 {object} jsonapi.Errors "File not found"
-// @Router /files/{id}.{ext} [get].
-func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware settings registry from context
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-
-	fileReg := registrySet.FileRegistry
-
-	fileID := chi.URLParam(r, "fileID")
-	ext := chi.URLParam(r, "fileExt")
-
-	file, err := fileReg.Get(r.Context(), fileID)
-	if err != nil {
-		renderEntityError(w, r, err)
-		return
-	}
-
-	if file.File == nil {
-		renderEntityError(w, r, registry.ErrNotFound)
-		return
-	}
-
-	// Validate extension matches
-	expectedExt := strings.TrimPrefix(file.Ext, ".")
-	if ext != expectedExt {
-		renderEntityError(w, r, registry.ErrNotFound)
-		return
-	}
-
-	// Get file attributes for Content-Length header
-	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, file.OriginalPath)
-	if err != nil {
-		// GetFileAttributes now returns registry.ErrNotFound for missing files
-		renderEntityError(w, r, err)
-		return
-	}
-
-	// Set streaming headers
-	filename := file.Path + file.Ext
-	downloadutils.SetStreamingHeaders(w, file.MIMEType, attrs.Size, filename)
-
-	// Open and stream the file
-	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
-	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to open bucket"))
-		return
-	}
-	defer b.Close()
-
-	reader, err := b.NewReader(r.Context(), file.OriginalPath, nil)
-	if err != nil {
-		// Check if this is a NotFound error from blob storage
-		if gcerrors.Code(err) == gcerrors.NotFound {
-			renderEntityError(w, r, registry.ErrNotFound)
-			return
-		}
-		internalServerError(w, r, errkit.Wrap(err, "failed to open file"))
-		return
-	}
-	defer reader.Close()
-
-	// Stream the file in chunks
-	if err := downloadutils.CopyFileInChunks(w, reader); err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-}
-
 // Files sets up the files API routes.
 func Files(params Params) func(r chi.Router) {
 	fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
@@ -601,7 +521,6 @@ func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 
 // streamFileFromStorage is a helper function to stream files from storage
 func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Request, filePath, mimeType, filename string) {
-
 	// Open the file from storage
 	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
 	if err != nil {
@@ -644,89 +563,6 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// downloadFileByID downloads a file by parsing fileID and extension from a simple path
-func (api *filesAPI) downloadFileByID(w http.ResponseWriter, r *http.Request, filePath string) {
-	// Parse fileID and extension from path like "123.pdf"
-	lastDot := strings.LastIndex(filePath, ".")
-	if lastDot == -1 {
-		renderEntityError(w, r, registry.ErrNotFound)
-		return
-	}
-
-	fileID := filePath[:lastDot]
-	ext := filePath[lastDot+1:]
-
-	// Get user-aware settings registry from context
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-
-	fileReg := registrySet.FileRegistry
-
-	file, err := fileReg.Get(r.Context(), fileID)
-	if err != nil {
-		renderEntityError(w, r, err)
-		return
-	}
-
-	if file.File == nil {
-		renderEntityError(w, r, registry.ErrNotFound)
-		return
-	}
-
-	// Validate extension matches
-	expectedExt := strings.TrimPrefix(file.Ext, ".")
-	if ext != expectedExt {
-		renderEntityError(w, r, registry.ErrNotFound)
-		return
-	}
-
-	// Use the original file path for download
-	api.downloadPhysicalFile(w, r, file.OriginalPath, file.MIMEType, file.Path+file.Ext)
-}
-
-// downloadPhysicalFile downloads a physical file from storage
-func (api *filesAPI) downloadPhysicalFile(w http.ResponseWriter, r *http.Request, filePath, mimeType, filename string) {
-	// Get file attributes for Content-Length header
-	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, filePath)
-	if err != nil {
-		// GetFileAttributes returns registry.ErrNotFound for missing files
-		renderEntityError(w, r, err)
-		return
-	}
-
-	// Set streaming headers
-	downloadutils.SetStreamingHeaders(w, mimeType, attrs.Size, filename)
-
-	// Open and stream the file
-	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
-	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to open bucket"))
-		return
-	}
-	defer b.Close()
-
-	reader, err := b.NewReader(r.Context(), filePath, nil)
-	if err != nil {
-		// Check if this is a NotFound error from blob storage
-		if gcerrors.Code(err) == gcerrors.NotFound {
-			renderEntityError(w, r, registry.ErrNotFound)
-			return
-		}
-		internalServerError(w, r, errkit.Wrap(err, "failed to open file"))
-		return
-	}
-	defer reader.Close()
-
-	// Stream the file in chunks
-	if err := downloadutils.CopyFileInChunks(w, reader); err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-}
-
 // SignedFiles sets up the signed file download routes that use signed URL validation
 func SignedFiles(params Params) func(r chi.Router) {
 	api := &filesAPI{
@@ -737,7 +573,7 @@ func SignedFiles(params Params) func(r chi.Router) {
 
 	return func(r chi.Router) {
 		// Separate routes for original files vs thumbnails
-		r.Get("/files/{fileID}", api.downloadOriginalFile)                    // GET /files/download/files/123 (original file)
-		r.Get("/thumbnails/{fileID}/{size}", api.downloadThumbnail)           // GET /files/download/thumbnails/123/medium (thumbnail)
+		r.Get("/files/{fileID}", api.downloadOriginalFile)          // GET /files/download/files/123 (original file)
+		r.Get("/thumbnails/{fileID}/{size}", api.downloadThumbnail) // GET /files/download/thumbnails/123/medium (thumbnail)
 	}
 }

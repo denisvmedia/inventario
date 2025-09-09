@@ -20,10 +20,10 @@ import (
 
 // FileService provides business logic for file operations
 type FileService struct {
-	factorySet      *registry.FactorySet
-	uploadLocation  string
-	imageProcessor  *imageprocessor.ImageProcessor
-	thumbnailSizes  map[string]int // map of size name to pixel size
+	factorySet     *registry.FactorySet
+	uploadLocation string
+	imageProcessor *imageprocessor.ImageProcessor
+	thumbnailSizes map[string]int // map of size name to pixel size
 }
 
 // NewFileService creates a new file service

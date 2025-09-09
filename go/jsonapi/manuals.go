@@ -43,8 +43,8 @@ func (mr *ManualResponse) Render(_w http.ResponseWriter, r *http.Request) error 
 
 // ManualsMeta is a meta information for ManualsResponse.
 type ManualsMeta struct {
-	Manuals    int                    `json:"manuals" example:"1" format:"int64"`
-	SignedUrls map[string]URLData     `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
+	Manuals    int                `json:"manuals" example:"1" format:"int64"`
+	SignedUrls map[string]URLData `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
 }
 
 // ManualsResponse is an object that holds a list of manual information.

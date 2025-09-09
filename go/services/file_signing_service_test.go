@@ -8,6 +8,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -235,6 +236,14 @@ func TestFileSigningService_ExtractFileIDFromPath_ValidPaths(t *testing.T) {
 			path: "/api/v1/files/download/test-file-123.pdf",
 		},
 		{
+			name: "thumbnail path small",
+			path: "/api/v1/files/download/image_thumb_small.jpg",
+		},
+		{
+			name: "thumbnail path medium",
+			path: "/api/v1/files/download/photo_thumb_medium.png",
+		},
+		{
 			name: "file with complex ID",
 			path: "/api/v1/files/download/file-with-dashes-123.jpg",
 		},
@@ -252,6 +261,7 @@ func TestFileSigningService_ExtractFileIDFromPath_ValidPaths(t *testing.T) {
 			query.Set("sig", "dummy-signature")
 			query.Set("exp", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
 			query.Set("uid", "test-user")
+			query.Set("fid", "test-file-id")
 
 			_, err := service.ValidateSignedURL(tt.path, query)
 
@@ -356,4 +366,168 @@ func TestFileSigningService_SecurityProperties(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(claims2, qt.IsNotNil)
 	})
+}
+
+func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	expiration := 15 * time.Minute
+	service := services.NewFileSigningService(signingKey, expiration)
+
+	tests := []struct {
+		name                   string
+		fileID                 string
+		fileExt                string
+		userID                 string
+		originalPath           string
+		mimeType               string
+		expectThumbnails       bool
+		expectedThumbnailCount int
+	}{
+		{
+			name:                   "JPEG image should generate thumbnails",
+			fileID:                 "test-file-123",
+			fileExt:                "jpg",
+			userID:                 "user-456",
+			originalPath:           "test-image.jpg",
+			mimeType:               "image/jpeg",
+			expectThumbnails:       true,
+			expectedThumbnailCount: 2, // small and medium
+		},
+		{
+			name:                   "PNG image should generate thumbnails",
+			fileID:                 "test-file-124",
+			fileExt:                "png",
+			userID:                 "user-456",
+			originalPath:           "test-image.png",
+			mimeType:               "image/png",
+			expectThumbnails:       true,
+			expectedThumbnailCount: 2, // small and medium
+		},
+		{
+			name:                   "PDF should not generate thumbnails",
+			fileID:                 "test-file-125",
+			fileExt:                "pdf",
+			userID:                 "user-456",
+			originalPath:           "test-document.pdf",
+			mimeType:               "application/pdf",
+			expectThumbnails:       false,
+			expectedThumbnailCount: 0,
+		},
+		{
+			name:                   "WebP image should not generate thumbnails",
+			fileID:                 "test-file-126",
+			fileExt:                "webp",
+			userID:                 "user-456",
+			originalPath:           "test-image.webp",
+			mimeType:               "image/webp",
+			expectThumbnails:       false,
+			expectedThumbnailCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			// Create a file entity for testing
+			fileEntity := &models.FileEntity{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: tt.fileID},
+				},
+				Type: models.FileTypeImage,
+				File: &models.File{
+					Path:         tt.fileID,
+					OriginalPath: tt.originalPath,
+					Ext:          "." + tt.fileExt,
+					MIMEType:     tt.mimeType,
+				},
+			}
+
+			originalURL, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, tt.userID)
+
+			c.Assert(err, qt.IsNil)
+			c.Assert(originalURL, qt.Not(qt.Equals), "")
+
+			// Verify original URL format
+			c.Assert(originalURL, qt.Contains, "/api/v1/files/download/")
+			c.Assert(originalURL, qt.Contains, "sig=")
+			c.Assert(originalURL, qt.Contains, "exp=")
+			c.Assert(originalURL, qt.Contains, "uid=")
+
+			// Verify thumbnails
+			if tt.expectThumbnails {
+				c.Assert(len(thumbnails), qt.Equals, tt.expectedThumbnailCount)
+				c.Assert(thumbnails["small"], qt.Not(qt.Equals), "")
+				c.Assert(thumbnails["medium"], qt.Not(qt.Equals), "")
+
+				// Verify thumbnail URLs contain expected paths
+				c.Assert(thumbnails["small"], qt.Contains, "_thumb_small")
+				c.Assert(thumbnails["medium"], qt.Contains, "_thumb_medium")
+			} else {
+				c.Assert(len(thumbnails), qt.Equals, tt.expectedThumbnailCount)
+			}
+		})
+	}
+}
+
+func TestFileSigningService_GetThumbnailPath(t *testing.T) {
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	expiration := 15 * time.Minute
+	service := services.NewFileSigningService(signingKey, expiration)
+
+	tests := []struct {
+		name         string
+		originalPath string
+		sizeName     string
+		expected     string
+	}{
+		{
+			name:         "PNG file small thumbnail",
+			originalPath: "test-image.png",
+			sizeName:     "small",
+			expected:     "test-image_thumb_small.jpg",
+		},
+		{
+			name:         "JPEG file medium thumbnail",
+			originalPath: "photo.jpg",
+			sizeName:     "medium",
+			expected:     "photo_thumb_medium.jpg",
+		},
+		{
+			name:         "File with path",
+			originalPath: "uploads/images/test.png",
+			sizeName:     "small",
+			expected:     "uploads/images/test_thumb_small.jpg",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			// Create a file entity for testing
+			fileEntity := &models.FileEntity{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-id"},
+				},
+				Type: models.FileTypeImage,
+				File: &models.File{
+					Path:         "test-id",
+					OriginalPath: tt.originalPath,
+					Ext:          ".png",
+					MIMEType:     "image/png",
+				},
+			}
+
+			_, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, "user-id")
+			c.Assert(err, qt.IsNil)
+
+			switch tt.sizeName {
+			case "small":
+				c.Assert(thumbnails["small"], qt.Contains, tt.expected)
+			case "medium":
+				c.Assert(thumbnails["medium"], qt.Contains, tt.expected)
+			}
+		})
+	}
 }

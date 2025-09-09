@@ -62,9 +62,9 @@ func (fr *FileResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 
 // FilesMeta is a meta information for FilesResponse.
 type FilesMeta struct {
-	Files      int                    `json:"files" example:"10" format:"int64"`
-	Total      int                    `json:"total" example:"100" format:"int64"`
-	SignedUrls map[string]URLData     `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
+	Files      int                `json:"files" example:"10" format:"int64"`
+	Total      int                `json:"total" example:"100" format:"int64"`
+	SignedUrls map[string]URLData `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
 }
 
 // FilesResponse is an object that holds a list of file information.
@@ -348,8 +348,8 @@ type SignedFileURLResponse struct {
 
 // URLData is an object that holds URL data information.
 type URLData struct {
-	URL        string            `json:"url"`                    // signed URL for file access
-	Thumbnails map[string]string `json:"thumbnails,omitempty"`   // map of thumbnail size to signed URL
+	URL        string            `json:"url"`                  // signed URL for file access
+	Thumbnails map[string]string `json:"thumbnails,omitempty"` // map of thumbnail size to signed URL
 }
 
 // NewSignedFileURLResponse creates a new SignedFileURLResponse instance.

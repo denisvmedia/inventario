@@ -149,42 +149,6 @@ func (s *FileSigningService) generateThumbnailSignedURL(fileID, sizeName, userID
 	return signedURL, nil
 }
 
-// getThumbnailPath generates the thumbnail file path using file ID
-// All thumbnails are saved as JPEG files regardless of the original format
-func (s *FileSigningService) getThumbnailPath(fileID, sizeName string) string {
-	// Use file ID for thumbnail paths to avoid conflicts with user-controlled paths
-	return fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, sizeName)
-}
-
-// generateSignedURLForPath generates a signed URL for a specific file path
-func (s *FileSigningService) generateSignedURLForPath(fileID, fileExt, userID, filePath string) (string, error) {
-	// Calculate expiration time
-	expiresAt := time.Now().Add(s.expiration)
-	expTimestamp := expiresAt.Unix()
-
-	// Create the base URL path using the file path
-	basePath := fmt.Sprintf("/api/v1/files/download/%s", filePath)
-
-	// Create the message to sign: method + path + fileID + userID + expiration
-	message := fmt.Sprintf("GET|%s|%s|%s|%d", basePath, fileID, userID, expTimestamp)
-
-	// Generate HMAC signature
-	signature, err := s.generateSignature(message)
-	if err != nil {
-		return "", errkit.Wrap(err, "failed to generate signature")
-	}
-
-	// Build the signed URL with query parameters, including file ID for validation
-	signedURL := fmt.Sprintf("%s?sig=%s&exp=%d&uid=%s&fid=%s",
-		basePath,
-		url.QueryEscape(signature),
-		expTimestamp,
-		url.QueryEscape(userID),
-		url.QueryEscape(fileID))
-
-	return signedURL, nil
-}
-
 // ValidateSignedURL validates a signed URL and returns the claims if valid
 func (s *FileSigningService) ValidateSignedURL(path string, queryParams url.Values) (*SignedURLClaims, error) {
 	// Extract required parameters
@@ -258,50 +222,4 @@ func (s *FileSigningService) validateSignature(message, signature string) bool {
 
 	// Use constant-time comparison to prevent timing attacks
 	return hmac.Equal([]byte(expectedSignature), []byte(signature))
-}
-
-// extractFileIDFromPath extracts the file ID from a file path
-// Expected formats:
-//   - /api/v1/files/download/{fileID}.{ext}
-//   - /api/v1/files/download/{filename}_thumb_{size}.{ext} (for thumbnails)
-func (s *FileSigningService) extractFileIDFromPath(path string) (string, error) {
-	// Parse the URL path to extract file ID
-	// Example: /api/v1/files/download/123.pdf -> fileID = "123"
-	// Example: /api/v1/files/download/image_thumb_medium.jpg -> fileID = "image" (original filename)
-
-	// Find the last slash and the last dot
-	lastSlash := -1
-	lastDot := -1
-
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '.' && lastDot == -1 {
-			lastDot = i
-		}
-		if path[i] == '/' && lastSlash == -1 {
-			lastSlash = i
-			break
-		}
-	}
-
-	if lastSlash == -1 || lastDot == -1 || lastSlash >= lastDot {
-		return "", errors.New("invalid file path format")
-	}
-
-	filename := path[lastSlash+1 : lastDot]
-	if filename == "" {
-		return "", errors.New("empty filename in path")
-	}
-
-	// Check if this is a thumbnail path (contains "_thumb_")
-	if strings.Contains(filename, "_thumb_") {
-		// Extract the original filename before "_thumb_"
-		parts := strings.Split(filename, "_thumb_")
-		if len(parts) >= 2 && parts[0] != "" {
-			return parts[0], nil
-		}
-		return "", errors.New("invalid thumbnail path format")
-	}
-
-	// Regular file path - return the filename as file ID
-	return filename, nil
 }
