@@ -22,7 +22,7 @@ jobs:
       - id: vars
         uses: ./.github/actions/vars
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ steps.vars.outputs.go_version }}
           cache: true
