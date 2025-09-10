@@ -40,14 +40,14 @@ jobs:
         uses: ./.github/actions/vars
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ steps.vars.outputs.go_version }}
           cache: true
           cache-dependency-path: go/go.sum
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.vars.outputs.node_version }}
           cache: 'npm'
