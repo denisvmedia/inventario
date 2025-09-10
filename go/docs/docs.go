@@ -315,7 +315,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.ImagesResponse"
+                            "$ref": "#/definitions/jsonapi.FilesResponse"
                         }
                     }
                 }
@@ -1725,42 +1725,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/files/{id}.{ext}": {
-            "get": {
-                "description": "download file content",
-                "tags": [
-                    "files"
-                ],
-                "summary": "Download a file",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "File ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "File extension",
-                        "name": "ext",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "File content"
-                    },
-                    "404": {
-                        "description": "File not found",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    }
-                }
-            }
-        },
         "/files/{id}/signed-url": {
             "post": {
                 "description": "Generate a secure signed URL for downloading a file",
@@ -2581,6 +2545,18 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.FileMeta": {
+            "type": "object",
+            "properties": {
+                "signed_urls": {
+                    "description": "Map of file ID to signed URLs and thumbnails",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.URLData"
+                    }
+                }
+            }
+        },
         "jsonapi.FileRequest": {
             "type": "object",
             "properties": {
@@ -2644,6 +2620,14 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "meta": {
+                    "description": "Optional meta field for signed URLs",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.FileMeta"
+                        }
+                    ]
                 },
                 "type": {
                     "type": "string",
@@ -2722,10 +2706,10 @@ const docTemplate = `{
                     "example": 10
                 },
                 "signed_urls": {
-                    "description": "Map of file ID to signed URL",
+                    "description": "Map of file ID to signed URLs and thumbnails",
                     "type": "object",
                     "additionalProperties": {
-                        "type": "string"
+                        "$ref": "#/definitions/jsonapi.URLData"
                     }
                 },
                 "total": {
@@ -2764,30 +2748,6 @@ const docTemplate = `{
                         "images"
                     ],
                     "example": "images"
-                }
-            }
-        },
-        "jsonapi.ImagesMeta": {
-            "type": "object",
-            "properties": {
-                "images": {
-                    "type": "integer",
-                    "format": "int64",
-                    "example": 1
-                }
-            }
-        },
-        "jsonapi.ImagesResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Image"
-                    }
-                },
-                "meta": {
-                    "$ref": "#/definitions/jsonapi.ImagesMeta"
                 }
             }
         },
@@ -2850,6 +2810,13 @@ const docTemplate = `{
                     "type": "integer",
                     "format": "int64",
                     "example": 1
+                },
+                "signed_urls": {
+                    "description": "Map of file ID to signed URLs and thumbnails",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.URLData"
+                    }
                 }
             }
         },
@@ -2988,6 +2955,13 @@ const docTemplate = `{
                     "type": "integer",
                     "format": "int64",
                     "example": 1
+                },
+                "signed_urls": {
+                    "description": "Map of file ID to signed URLs and thumbnails",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.URLData"
+                    }
                 }
             }
         },
@@ -3116,6 +3090,13 @@ const docTemplate = `{
         "jsonapi.URLData": {
             "type": "object",
             "properties": {
+                "thumbnails": {
+                    "description": "map of thumbnail size to signed URL",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "url": {
                     "description": "signed URL for file access",
                     "type": "string"

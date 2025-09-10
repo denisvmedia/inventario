@@ -254,6 +254,14 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ExportsMeta'
     type: object
+  jsonapi.FileMeta:
+    properties:
+      signed_urls:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.URLData'
+        description: Map of file ID to signed URLs and thumbnails
+        type: object
+    type: object
   jsonapi.FileRequest:
     properties:
       data:
@@ -297,6 +305,10 @@ definitions:
         $ref: '#/definitions/models.FileEntity'
       id:
         type: string
+      meta:
+        allOf:
+        - $ref: '#/definitions/jsonapi.FileMeta'
+        description: Optional meta field for signed URLs
       type:
         enum:
         - files
@@ -351,8 +363,8 @@ definitions:
         type: integer
       signed_urls:
         additionalProperties:
-          type: string
-        description: Map of file ID to signed URL
+          $ref: '#/definitions/jsonapi.URLData'
+        description: Map of file ID to signed URLs and thumbnails
         type: object
       total:
         example: 100
@@ -379,22 +391,6 @@ definitions:
         - images
         example: images
         type: string
-    type: object
-  jsonapi.ImagesMeta:
-    properties:
-      images:
-        example: 1
-        format: int64
-        type: integer
-    type: object
-  jsonapi.ImagesResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/models.Image'
-        type: array
-      meta:
-        $ref: '#/definitions/jsonapi.ImagesMeta'
     type: object
   jsonapi.ImportExportAttributes:
     properties:
@@ -436,6 +432,11 @@ definitions:
         example: 1
         format: int64
         type: integer
+      signed_urls:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.URLData'
+        description: Map of file ID to signed URLs and thumbnails
+        type: object
     type: object
   jsonapi.InvoicesResponse:
     properties:
@@ -527,6 +528,11 @@ definitions:
         example: 1
         format: int64
         type: integer
+      signed_urls:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.URLData'
+        description: Map of file ID to signed URLs and thumbnails
+        type: object
     type: object
   jsonapi.ManualsResponse:
     properties:
@@ -609,6 +615,11 @@ definitions:
     type: object
   jsonapi.URLData:
     properties:
+      thumbnails:
+        additionalProperties:
+          type: string
+        description: map of thumbnail size to signed URL
+        type: object
       url:
         description: signed URL for file access
         type: string
@@ -1298,7 +1309,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/jsonapi.ImagesResponse'
+            $ref: '#/definitions/jsonapi.FilesResponse'
       summary: List images for a commodity
       tags:
       - commodities
@@ -2253,30 +2264,6 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update a file
-      tags:
-      - files
-  /files/{id}.{ext}:
-    get:
-      description: download file content
-      parameters:
-      - description: File ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: File extension
-        in: path
-        name: ext
-        required: true
-        type: string
-      responses:
-        "200":
-          description: File content
-        "404":
-          description: File not found
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Download a file
       tags:
       - files
   /files/{id}/signed-url:
