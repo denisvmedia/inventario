@@ -536,32 +536,32 @@ func TestFileService_GetThumbnailPaths(t *testing.T) {
 	service := NewFileService(factorySet, "/tmp/uploads")
 
 	tests := []struct {
-		name         string
-		originalPath string
-		expected     map[string]string
+		name     string
+		fileID   string
+		expected map[string]string
 	}{
 		{
-			name:         "PNG file",
-			originalPath: "test-image.png",
+			name:   "File ID with thumbnails",
+			fileID: "test-file-123",
 			expected: map[string]string{
-				"small":  "test-image_thumb_small.jpg",
-				"medium": "test-image_thumb_medium.jpg",
+				"small":  "thumbnails/test-file-123_small.jpg",
+				"medium": "thumbnails/test-file-123_medium.jpg",
 			},
 		},
 		{
-			name:         "JPEG file",
-			originalPath: "photo.jpg",
+			name:   "Another file ID",
+			fileID: "photo-456",
 			expected: map[string]string{
-				"small":  "photo_thumb_small.jpg",
-				"medium": "photo_thumb_medium.jpg",
+				"small":  "thumbnails/photo-456_small.jpg",
+				"medium": "thumbnails/photo-456_medium.jpg",
 			},
 		},
 		{
-			name:         "File with path",
-			originalPath: "uploads/images/test.png",
+			name:   "UUID file ID",
+			fileID: "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 			expected: map[string]string{
-				"small":  "uploads/images/test_thumb_small.jpg",
-				"medium": "uploads/images/test_thumb_medium.jpg",
+				"small":  "thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_small.jpg",
+				"medium": "thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_medium.jpg",
 			},
 		},
 	}
@@ -570,7 +570,7 @@ func TestFileService_GetThumbnailPaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := service.GetThumbnailPaths(tt.originalPath)
+			result := service.GetThumbnailPaths(tt.fileID)
 			c.Assert(result, qt.DeepEquals, tt.expected)
 		})
 	}

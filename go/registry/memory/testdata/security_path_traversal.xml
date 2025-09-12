@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory>
+	<images>
+		<image id="path-traversal-image" commodity_id="{{.CommodityID}}" filename="{{.MaliciousFilename}}" mime_type="image/jpeg">
+			<data>dGVzdCBkYXRh</data>
+		</image>
+	</images>
+</inventory>

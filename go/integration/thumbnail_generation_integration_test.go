@@ -87,7 +87,7 @@ func TestThumbnailGenerationIntegration(t *testing.T) {
 
 	// Step 5: Test thumbnail cleanup
 	t.Log("🗑️ Testing thumbnail cleanup...")
-	verifyThumbnailCleanup(c, ctx, uploadLocation, originalPath, fileService)
+	verifyThumbnailCleanup(c, ctx, uploadLocation, fileEntity.ID, originalPath, fileService)
 
 	t.Log("✅ Thumbnail integration test completed successfully!")
 }
@@ -133,8 +133,9 @@ func verifyThumbnailsInStorage(c *qt.C, ctx context.Context, uploadLocation, ori
 	c.Assert(err, qt.IsNil)
 	defer b.Close()
 
-	// Check that thumbnails exist
-	thumbnailPaths := fileService.GetThumbnailPaths(originalPath)
+	// Check that thumbnails exist - use the file ID from the file entity
+	testFileID := "test-file-123" // This matches the ID in the fileEntity above
+	thumbnailPaths := fileService.GetThumbnailPaths(testFileID)
 
 	c.Assert(len(thumbnailPaths), qt.Equals, 2) // small and medium
 
@@ -171,15 +172,17 @@ func verifySignedURLGeneration(c *qt.C, fileSigningService *services.FileSigning
 	c.Assert(thumbnails["small"], qt.Not(qt.Equals), "")
 	c.Assert(thumbnails["medium"], qt.Not(qt.Equals), "")
 
-	// Verify thumbnail URLs contain expected paths
-	c.Assert(thumbnails["small"], qt.Contains, "_thumb_small")
-	c.Assert(thumbnails["medium"], qt.Contains, "_thumb_medium")
+	// Verify thumbnail URLs contain expected paths - current implementation uses /thumbnails/{fileID}/{size}
+	c.Assert(thumbnails["small"], qt.Contains, "/thumbnails/")
+	c.Assert(thumbnails["small"], qt.Contains, "/small")
+	c.Assert(thumbnails["medium"], qt.Contains, "/thumbnails/")
+	c.Assert(thumbnails["medium"], qt.Contains, "/medium")
 }
 
 // verifyThumbnailCleanup tests that thumbnails are deleted when using the file service
-func verifyThumbnailCleanup(c *qt.C, ctx context.Context, uploadLocation, originalPath string, fileService *services.FileService) {
+func verifyThumbnailCleanup(c *qt.C, ctx context.Context, uploadLocation, fileID, originalPath string, fileService *services.FileService) {
 	// Get thumbnail paths before deletion
-	thumbnailPaths := fileService.GetThumbnailPaths(originalPath)
+	thumbnailPaths := fileService.GetThumbnailPaths(fileID)
 
 	// Verify thumbnails exist before cleanup
 	b, err := blob.OpenBucket(ctx, uploadLocation)

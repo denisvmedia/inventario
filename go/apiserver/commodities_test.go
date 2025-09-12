@@ -401,7 +401,7 @@ func TestCommodityListImages(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data[0].id"), expectedImages[0].ID)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].path"), expectedImages[0].Path)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].ext"), expectedImages[0].Ext)
-	c.Check(body, checkers.JSONPathEquals("$.data[0].commodity_id"), expectedImages[0].CommodityID)
+	c.Check(body, checkers.JSONPathEquals("$.data[0].linked_entity_id"), expectedImages[0].CommodityID)
 }
 
 func TestCommodityListInvoices(t *testing.T) {

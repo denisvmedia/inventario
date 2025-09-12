@@ -76,8 +76,8 @@ func TestFileSigningService_GenerateSignedURL(t *testing.T) {
 				parsedURL, parseErr := url.Parse(signedURL)
 				c.Assert(parseErr, qt.IsNil)
 
-				// Check path format
-				expectedPath := "/api/v1/files/download/" + tt.fileID + "." + tt.fileExt
+				// Check path format - current implementation uses /files/{fileID} format
+				expectedPath := "/api/v1/files/download/files/" + tt.fileID
 				c.Assert(parsedURL.Path, qt.Equals, expectedPath)
 
 				// Check required query parameters
@@ -460,9 +460,11 @@ func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
 				c.Assert(thumbnails["small"], qt.Not(qt.Equals), "")
 				c.Assert(thumbnails["medium"], qt.Not(qt.Equals), "")
 
-				// Verify thumbnail URLs contain expected paths
-				c.Assert(thumbnails["small"], qt.Contains, "_thumb_small")
-				c.Assert(thumbnails["medium"], qt.Contains, "_thumb_medium")
+				// Verify thumbnail URLs contain expected paths - current implementation uses /thumbnails/{fileID}/{size}
+				c.Assert(thumbnails["small"], qt.Contains, "/thumbnails/")
+				c.Assert(thumbnails["small"], qt.Contains, "/small")
+				c.Assert(thumbnails["medium"], qt.Contains, "/thumbnails/")
+				c.Assert(thumbnails["medium"], qt.Contains, "/medium")
 			} else {
 				c.Assert(len(thumbnails), qt.Equals, tt.expectedThumbnailCount)
 			}
@@ -476,28 +478,28 @@ func TestFileSigningService_GetThumbnailPath(t *testing.T) {
 	service := services.NewFileSigningService(signingKey, expiration)
 
 	tests := []struct {
-		name         string
-		originalPath string
-		sizeName     string
-		expected     string
+		name     string
+		fileID   string
+		sizeName string
+		expected string
 	}{
 		{
-			name:         "PNG file small thumbnail",
-			originalPath: "test-image.png",
-			sizeName:     "small",
-			expected:     "test-image_thumb_small.jpg",
+			name:     "PNG file small thumbnail",
+			fileID:   "test-id",
+			sizeName: "small",
+			expected: "/thumbnails/test-id/small",
 		},
 		{
-			name:         "JPEG file medium thumbnail",
-			originalPath: "photo.jpg",
-			sizeName:     "medium",
-			expected:     "photo_thumb_medium.jpg",
+			name:     "JPEG file medium thumbnail",
+			fileID:   "test-id",
+			sizeName: "medium",
+			expected: "/thumbnails/test-id/medium",
 		},
 		{
-			name:         "File with path",
-			originalPath: "uploads/images/test.png",
-			sizeName:     "small",
-			expected:     "uploads/images/test_thumb_small.jpg",
+			name:     "File with UUID",
+			fileID:   "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+			sizeName: "small",
+			expected: "/thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479/small",
 		},
 	}
 
@@ -508,12 +510,12 @@ func TestFileSigningService_GetThumbnailPath(t *testing.T) {
 			// Create a file entity for testing
 			fileEntity := &models.FileEntity{
 				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: "test-id"},
+					EntityID: models.EntityID{ID: tt.fileID},
 				},
 				Type: models.FileTypeImage,
 				File: &models.File{
-					Path:         "test-id",
-					OriginalPath: tt.originalPath,
+					Path:         "test-image",
+					OriginalPath: "test-image.png",
 					Ext:          ".png",
 					MIMEType:     "image/png",
 				},

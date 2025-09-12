@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory>
+	<images>
+		<image id="oversized-image" commodity_id="{{.CommodityID}}" filename="huge_file.jpg" size="999999999999" mime_type="image/jpeg">
+			<data>{{.LargeData}}</data>
+		</image>
+	</images>
+</inventory>
