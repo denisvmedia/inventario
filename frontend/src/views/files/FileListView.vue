@@ -260,6 +260,15 @@ import { useRouter, useRoute } from 'vue-router'
 import fileService, { type FileEntity } from '@/services/fileService'
 import Confirmation from '@/components/Confirmation.vue'
 
+// Type for signed URLs structure
+interface URLData {
+  url: string
+  thumbnails?: {
+    small?: string
+    medium?: string
+  }
+}
+
 const router = useRouter()
 const route = useRoute()
 
@@ -342,8 +351,22 @@ const loadFiles = async () => {
 
     // Use signed URLs from response metadata if available
     if (response.data.meta.signed_urls) {
-      fileUrls.value = response.data.meta.signed_urls
+      console.log('FileListView: Using pre-generated signed URLs')
+      // Extract URLs from the signed URLs structure
+      const extractedUrls: Record<string, string> = {}
+      for (const [fileId, urlData] of Object.entries(response.data.meta.signed_urls as Record<string, URLData>)) {
+        // For images, prefer medium thumbnail if available, otherwise use original URL
+        if (urlData.thumbnails?.medium) {
+          extractedUrls[fileId] = urlData.thumbnails.medium
+        } else if (urlData.thumbnails?.small) {
+          extractedUrls[fileId] = urlData.thumbnails.small
+        } else {
+          extractedUrls[fileId] = urlData.url
+        }
+      }
+      fileUrls.value = extractedUrls
     } else {
+      console.log('FileListView: No signed URLs in response, URLs will be empty')
       fileUrls.value = {}
     }
   } catch (err: any) {

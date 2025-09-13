@@ -2,6 +2,10 @@ package services
 
 import (
 	"context"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -391,4 +395,183 @@ func TestFileService_ExportFileDeletion_Integration(t *testing.T) {
 	// Export should still exist (it's the service layer's responsibility to delete it)
 	_, err = registrySet.ExportRegistry.Get(ctx, createdExport.ID)
 	c.Assert(err, qt.IsNil)
+}
+
+// createTestImage creates a test image with the given dimensions and color
+func createTestImage(width, height int, c color.Color) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, c)
+		}
+	}
+	return img
+}
+
+func TestFileService_GenerateThumbnails(t *testing.T) {
+	c := qt.New(t)
+	ctx := newTestContext()
+
+	// Create temporary directory for test files
+	tempDir := c.TempDir()
+	var uploadLocation string
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	} else {
+		uploadLocation = "file://" + tempDir + "?create_dir=1"
+	}
+
+	// Create test registry set
+	factorySet := memory.NewFactorySet()
+
+	// Create file service
+	service := NewFileService(factorySet, uploadLocation)
+
+	tests := []struct {
+		name                     string
+		mimeType                 string
+		filename                 string
+		shouldGenerateThumbnails bool
+	}{
+		{
+			name:                     "PNG image should generate thumbnails",
+			mimeType:                 "image/png",
+			filename:                 "test-image.png",
+			shouldGenerateThumbnails: true,
+		},
+		{
+			name:                     "JPEG image should generate thumbnails",
+			mimeType:                 "image/jpeg",
+			filename:                 "test-image.jpg",
+			shouldGenerateThumbnails: true,
+		},
+		{
+			name:                     "PDF should not generate thumbnails",
+			mimeType:                 "application/pdf",
+			filename:                 "test-document.pdf",
+			shouldGenerateThumbnails: false,
+		},
+		{
+			name:                     "WebP image should not generate thumbnails",
+			mimeType:                 "image/webp",
+			filename:                 "test-webp-image.webp",
+			shouldGenerateThumbnails: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			b, err := blob.OpenBucket(ctx, uploadLocation)
+			c.Assert(err, qt.IsNil)
+			defer b.Close()
+
+			if tt.shouldGenerateThumbnails {
+				// Create a test image
+				testImg := createTestImage(400, 300, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+
+				// Save the test image
+				writer, err := b.NewWriter(ctx, tt.filename, nil)
+				c.Assert(err, qt.IsNil)
+
+				// Encode based on the expected format
+				if tt.mimeType == "image/jpeg" {
+					err = jpeg.Encode(writer, testImg, &jpeg.Options{Quality: 90})
+				} else {
+					err = png.Encode(writer, testImg)
+				}
+				c.Assert(err, qt.IsNil)
+				writer.Close()
+			} else {
+				// Create a non-image file
+				err = b.WriteAll(ctx, tt.filename, []byte("test content"), nil)
+				c.Assert(err, qt.IsNil)
+			}
+
+			// Create a file entity for testing
+			fileEntity := &models.FileEntity{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "test-file-" + tt.name},
+				},
+				Type: models.FileTypeImage,
+				File: &models.File{
+					Path:         tt.filename,
+					OriginalPath: tt.filename,
+					Ext:          ".jpg",
+					MIMEType:     tt.mimeType,
+				},
+			}
+
+			// Test thumbnail generation
+			err = service.GenerateThumbnails(ctx, fileEntity)
+			c.Assert(err, qt.IsNil)
+
+			if tt.shouldGenerateThumbnails {
+				// Check that thumbnails were created
+				thumbnailPaths := service.GetThumbnailPaths(fileEntity.ID)
+				c.Assert(len(thumbnailPaths), qt.Equals, 2) // small and medium
+
+				for sizeName, thumbnailPath := range thumbnailPaths {
+					exists, err := b.Exists(ctx, thumbnailPath)
+					c.Assert(err, qt.IsNil)
+					c.Assert(exists, qt.IsTrue, qt.Commentf("Thumbnail %s should exist at %s", sizeName, thumbnailPath))
+				}
+			} else {
+				// Check that no thumbnails were created
+				thumbnailPaths := service.GetThumbnailPaths(fileEntity.ID)
+				for _, thumbnailPath := range thumbnailPaths {
+					exists, err := b.Exists(ctx, thumbnailPath)
+					c.Assert(err, qt.IsNil)
+					c.Assert(exists, qt.IsFalse, qt.Commentf("Thumbnail should not exist at %s", thumbnailPath))
+				}
+			}
+		})
+	}
+}
+
+func TestFileService_GetThumbnailPaths(t *testing.T) {
+	// Create test registry set
+	factorySet := memory.NewFactorySet()
+	service := NewFileService(factorySet, "/tmp/uploads")
+
+	tests := []struct {
+		name     string
+		fileID   string
+		expected map[string]string
+	}{
+		{
+			name:   "File ID with thumbnails",
+			fileID: "test-file-123",
+			expected: map[string]string{
+				"small":  "thumbnails/test-file-123_small.jpg",
+				"medium": "thumbnails/test-file-123_medium.jpg",
+			},
+		},
+		{
+			name:   "Another file ID",
+			fileID: "photo-456",
+			expected: map[string]string{
+				"small":  "thumbnails/photo-456_small.jpg",
+				"medium": "thumbnails/photo-456_medium.jpg",
+			},
+		},
+		{
+			name:   "UUID file ID",
+			fileID: "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+			expected: map[string]string{
+				"small":  "thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_small.jpg",
+				"medium": "thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_medium.jpg",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			result := service.GetThumbnailPaths(tt.fileID)
+			c.Assert(result, qt.DeepEquals, tt.expected)
+		})
+	}
 }

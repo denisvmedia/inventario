@@ -13,6 +13,7 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/internal/validationctx"
@@ -23,9 +24,37 @@ import (
 )
 
 type commoditiesAPI struct {
-	uploadLocation string
-	entityService  *services.EntityService
-	fileService    *services.FileService
+	uploadLocation     string
+	entityService      *services.EntityService
+	fileService        *services.FileService
+	fileSigningService *services.FileSigningService
+}
+
+// generateSignedURLsForFiles generates signed URLs for a list of files.
+// Returns a map of file ID to URLData with signed URLs and thumbnails. Missing URLs indicate generation failures.
+func (api *commoditiesAPI) generateSignedURLsForFiles(ctx context.Context, files []*models.FileEntity) map[string]jsonapi.URLData {
+	signedUrls := make(map[string]jsonapi.URLData)
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		return signedUrls
+	}
+
+	for _, file := range files {
+		// Generate signed URLs for file and thumbnails
+		originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(file, user.ID)
+		if err != nil {
+			// Log error but don't fail the entire request
+			// The frontend can handle missing URLs gracefully
+			continue
+		}
+
+		signedUrls[file.ID] = jsonapi.URLData{
+			URL:        originalURL,
+			Thumbnails: thumbnails,
+		}
+	}
+
+	return signedUrls
 }
 
 // listCommodities lists all commodities.
@@ -329,7 +358,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Accept json-api
 // @Produce json-api
 // @Param commodityID path string true "Commodity ID"
-// @Success 200 {object} jsonapi.ImagesResponse "OK"
+// @Success 200 {object} jsonapi.FilesResponse "OK"
 // @Router /commodities/{commodityID}/images [get].
 func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
@@ -354,17 +383,11 @@ func (api *commoditiesAPI) listImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert file entities to legacy image format for compatibility
-	var images []*models.Image
-	for _, file := range files {
-		image := &models.Image{
-			TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: file.ID}, TenantID: "default-tenant"},
-			CommodityID:         commodity.ID,
-			File:                file.File,
-		}
-		images = append(images, image)
-	}
-	response := jsonapi.NewImagesResponse(images, len(files))
+	// Generate signed URLs with thumbnails for all files
+	signedUrls := api.generateSignedURLsForFiles(r.Context(), files)
+
+	// Use the new FilesResponse format with signed URLs and thumbnails
+	response := jsonapi.NewFilesResponseWithSignedUrls(files, len(files), signedUrls)
 
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
@@ -404,6 +427,9 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Generate signed URLs for all files
+	signedUrls := api.generateSignedURLsForFiles(r.Context(), files)
+
 	// Convert file entities to legacy invoice format for compatibility
 	var invoices []*models.Invoice
 	for _, file := range files {
@@ -414,7 +440,7 @@ func (api *commoditiesAPI) listInvoices(w http.ResponseWriter, r *http.Request) 
 		}
 		invoices = append(invoices, invoice)
 	}
-	response := jsonapi.NewInvoicesResponse(invoices, len(files))
+	response := jsonapi.NewInvoicesResponseWithSignedUrls(invoices, len(files), signedUrls)
 
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
@@ -454,6 +480,9 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Generate signed URLs for all files
+	signedUrls := api.generateSignedURLsForFiles(r.Context(), files)
+
 	// Convert file entities to legacy manual format for compatibility
 	var manuals []*models.Manual
 	for _, file := range files {
@@ -464,7 +493,7 @@ func (api *commoditiesAPI) listManuals(w http.ResponseWriter, r *http.Request) {
 		}
 		manuals = append(manuals, manual)
 	}
-	response := jsonapi.NewManualsResponse(manuals, len(files))
+	response := jsonapi.NewManualsResponseWithSignedUrls(manuals, len(files), signedUrls)
 
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
@@ -1199,9 +1228,10 @@ func (api *commoditiesAPI) updateManual(w http.ResponseWriter, r *http.Request) 
 
 func Commodities(params Params) func(r chi.Router) {
 	api := &commoditiesAPI{
-		uploadLocation: params.UploadLocation,
-		entityService:  params.EntityService,
-		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
+		uploadLocation:     params.UploadLocation,
+		entityService:      params.EntityService,
+		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
+		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 	}
 
 	return func(r chi.Router) {

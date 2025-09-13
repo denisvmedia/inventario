@@ -43,7 +43,8 @@ func (ir *InvoiceResponse) Render(_w http.ResponseWriter, r *http.Request) error
 
 // InvoicesMeta is a meta information for InvoicesResponse.
 type InvoicesMeta struct {
-	Invoices int `json:"invoices" example:"1" format:"int64"`
+	Invoices   int                `json:"invoices" example:"1" format:"int64"`
+	SignedUrls map[string]URLData `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
 }
 
 // InvoicesResponse is an object that holds a list of invoice information.
@@ -61,6 +62,21 @@ func NewInvoicesResponse(invoices []*models.Invoice, total int) *InvoicesRespons
 	return &InvoicesResponse{
 		Data: invoices,
 		Meta: InvoicesMeta{Invoices: total},
+	}
+}
+
+// NewInvoicesResponseWithSignedUrls creates a new InvoicesResponse instance with signed URLs.
+func NewInvoicesResponseWithSignedUrls(invoices []*models.Invoice, total int, signedUrls map[string]URLData) *InvoicesResponse {
+	// Ensure Data is never nil to maintain consistent JSON output
+	if invoices == nil {
+		invoices = []*models.Invoice{}
+	}
+	return &InvoicesResponse{
+		Data: invoices,
+		Meta: InvoicesMeta{
+			Invoices:   total,
+			SignedUrls: signedUrls,
+		},
 	}
 }
 

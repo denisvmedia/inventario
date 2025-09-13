@@ -3,7 +3,12 @@ package apiserver
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -11,7 +16,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
-	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
@@ -27,6 +31,7 @@ type filesAPI struct {
 	uploadLocation     string
 	fileService        *services.FileService
 	fileSigningService *services.FileSigningService
+	factorySet         *registry.FactorySet
 }
 
 // listFiles lists all files with optional filtering and pagination.
@@ -133,25 +138,27 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 // generateSignedURLsForFiles generates signed URLs for a list of files.
-// Returns a map of file ID to signed URL. Missing URLs indicate generation failures.
-func (api *filesAPI) generateSignedURLsForFiles(ctx context.Context, files []*models.FileEntity) map[string]string {
-	signedUrls := make(map[string]string)
+// Returns a map of file ID to URLData with signed URLs and thumbnails. Missing URLs indicate generation failures.
+func (api *filesAPI) generateSignedURLsForFiles(ctx context.Context, files []*models.FileEntity) map[string]jsonapi.URLData {
+	signedUrls := make(map[string]jsonapi.URLData)
 	user := appctx.UserFromContext(ctx)
 	if user == nil {
 		return signedUrls
 	}
 
 	for _, file := range files {
-		// Get file extension (remove leading dot if present)
-		fileExt := strings.TrimPrefix(file.Ext, ".")
-
-		signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID)
+		// Generate signed URLs for file and thumbnails
+		originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(file, user.ID)
 		if err != nil {
 			// Log error but don't fail the entire request
 			// The frontend can handle missing URLs gracefully
 			continue
 		}
-		signedUrls[file.ID] = signedURL
+
+		signedUrls[file.ID] = jsonapi.URLData{
+			URL:        originalURL,
+			Thumbnails: thumbnails,
+		}
 	}
 
 	return signedUrls
@@ -254,7 +261,10 @@ func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := jsonapi.NewFileResponse(file)
+	// Generate signed URLs for the file
+	signedUrls := api.generateSignedURLsForFiles(r.Context(), []*models.FileEntity{file})
+
+	response := jsonapi.NewFileResponseWithSignedUrls(file, signedUrls)
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -409,99 +419,17 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract extension without the leading dot
-	fileExt := strings.TrimPrefix(file.Ext, ".")
-
-	// Generate signed URL
-	signedURL, err := api.fileSigningService.GenerateSignedURL(fileID, fileExt, user.ID)
+	// Generate signed URLs for file and thumbnails
+	signedURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(file, user.ID)
 	if err != nil {
 		internalServerError(w, r, errkit.Wrap(err, "failed to generate signed URL"))
 		return
 	}
 
-	// Return the signed URL using JSON:API format
-	response := jsonapi.NewSignedFileURLResponse(fileID, signedURL)
+	// Return the signed URL using JSON:API format with thumbnails
+	response := jsonapi.NewSignedFileURLResponseWithThumbnails(fileID, signedURL, thumbnails)
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, errkit.Wrap(err, "failed to render response"))
-		return
-	}
-}
-
-// downloadFile downloads a file.
-// @Summary Download a file
-// @Description download file content
-// @Tags files
-// @Param id path string true "File ID"
-// @Param ext path string true "File extension"
-// @Success 200 "File content"
-// @Failure 404 {object} jsonapi.Errors "File not found"
-// @Router /files/{id}.{ext} [get].
-func (api *filesAPI) downloadFile(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware settings registry from context
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-
-	fileReg := registrySet.FileRegistry
-
-	fileID := chi.URLParam(r, "fileID")
-	ext := chi.URLParam(r, "fileExt")
-
-	file, err := fileReg.Get(r.Context(), fileID)
-	if err != nil {
-		renderEntityError(w, r, err)
-		return
-	}
-
-	if file.File == nil {
-		renderEntityError(w, r, registry.ErrNotFound)
-		return
-	}
-
-	// Validate extension matches
-	expectedExt := strings.TrimPrefix(file.Ext, ".")
-	if ext != expectedExt {
-		renderEntityError(w, r, registry.ErrNotFound)
-		return
-	}
-
-	// Get file attributes for Content-Length header
-	attrs, err := downloadutils.GetFileAttributes(r.Context(), api.uploadLocation, file.OriginalPath)
-	if err != nil {
-		// GetFileAttributes now returns registry.ErrNotFound for missing files
-		renderEntityError(w, r, err)
-		return
-	}
-
-	// Set streaming headers
-	filename := file.Path + file.Ext
-	downloadutils.SetStreamingHeaders(w, file.MIMEType, attrs.Size, filename)
-
-	// Open and stream the file
-	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
-	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to open bucket"))
-		return
-	}
-	defer b.Close()
-
-	reader, err := b.NewReader(r.Context(), file.OriginalPath, nil)
-	if err != nil {
-		// Check if this is a NotFound error from blob storage
-		if gcerrors.Code(err) == gcerrors.NotFound {
-			renderEntityError(w, r, registry.ErrNotFound)
-			return
-		}
-		internalServerError(w, r, errkit.Wrap(err, "failed to open file"))
-		return
-	}
-	defer reader.Close()
-
-	// Stream the file in chunks
-	if err := downloadutils.CopyFileInChunks(w, reader); err != nil {
-		internalServerError(w, r, err)
 		return
 	}
 }
@@ -513,6 +441,7 @@ func Files(params Params) func(r chi.Router) {
 		uploadLocation:     params.UploadLocation,
 		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
 		fileSigningService: fileSigningService,
+		factorySet:         params.FactorySet,
 	}
 
 	return func(r chi.Router) {
@@ -528,15 +457,123 @@ func Files(params Params) func(r chi.Router) {
 	}
 }
 
+// downloadOriginalFile downloads an original file using the file entity's stored metadata
+func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request) {
+	fileID := chi.URLParam(r, "fileID")
+	if fileID == "" {
+		renderEntityError(w, r, registry.ErrNotFound)
+		return
+	}
+
+	// Get the file entity to access stored metadata
+	fileReg, err := api.factorySet.FileRegistryFactory.CreateUserRegistry(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	file, err := fileReg.Get(r.Context(), fileID)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	// Use the stored MIME type and original path
+	filePath := file.OriginalPath
+	mimeType := file.MIMEType
+	if mimeType == "" {
+		// Fallback to extension-based detection only if MIME type is not stored
+		ext := filepath.Ext(filePath)
+		mimeType = mime.TypeByExtension(ext)
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+	}
+
+	api.streamFileFromStorage(w, r, filePath, mimeType, file.Path+file.Ext)
+}
+
+// downloadThumbnail downloads a thumbnail file (always JPEG)
+func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
+	fileID := chi.URLParam(r, "fileID")
+	size := chi.URLParam(r, "size")
+
+	if fileID == "" || size == "" {
+		renderEntityError(w, r, registry.ErrNotFound)
+		return
+	}
+
+	// Validate size parameter
+	if size != "small" && size != "medium" {
+		renderEntityError(w, r, registry.ErrNotFound)
+		return
+	}
+
+	// Generate thumbnail path using the new structure
+	thumbnailPath := fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, size)
+
+	// All thumbnails are JPEG files
+	mimeType := "image/jpeg"
+	filename := fmt.Sprintf("%s_%s.jpg", fileID, size)
+
+	api.streamFileFromStorage(w, r, thumbnailPath, mimeType, filename)
+}
+
+// streamFileFromStorage is a helper function to stream files from storage
+func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Request, filePath, mimeType, filename string) {
+	// Open the file from storage
+	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
+	if err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to open bucket"))
+		return
+	}
+	defer b.Close()
+
+	// Check if file exists
+	exists, err := b.Exists(r.Context(), filePath)
+	if err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to check file existence"))
+		return
+	}
+	if !exists {
+		renderEntityError(w, r, registry.ErrNotFound)
+		return
+	}
+
+	// Get file attributes for size
+	attrs, err := b.Attributes(r.Context(), filePath)
+	if err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to get file attributes"))
+		return
+	}
+
+	// Open file reader
+	reader, err := b.NewReader(r.Context(), filePath, nil)
+	if err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to open file reader"))
+		return
+	}
+	defer reader.Close()
+
+	// Set headers and stream the file
+	downloadutils.SetStreamingHeaders(w, mimeType, attrs.Size, filename)
+	if _, err := io.Copy(w, reader); err != nil {
+		// Log error but don't send response as headers are already sent
+		slog.Error("Failed to stream file", "error", err, "file_path", filePath)
+	}
+}
+
 // SignedFiles sets up the signed file download routes that use signed URL validation
 func SignedFiles(params Params) func(r chi.Router) {
 	api := &filesAPI{
 		uploadLocation: params.UploadLocation,
 		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
+		factorySet:     params.FactorySet,
 	}
 
 	return func(r chi.Router) {
-		// File downloads use signed URL validation instead of JWT authentication
-		r.Get("/{fileID}.{fileExt}", api.downloadFile) // GET /files/123.pdf (signed URL)
+		// Separate routes for original files vs thumbnails
+		r.Get("/files/{fileID}", api.downloadOriginalFile)          // GET /files/download/files/123 (original file)
+		r.Get("/thumbnails/{fileID}/{size}", api.downloadThumbnail) // GET /files/download/thumbnails/123/medium (thumbnail)
 	}
 }

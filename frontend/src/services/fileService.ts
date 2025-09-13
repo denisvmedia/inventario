@@ -155,6 +155,23 @@ const fileService = {
   },
 
   /**
+   * Generate signed URLs with thumbnails for a file
+   */
+  async generateSignedUrlWithThumbnails(file: FileEntity): Promise<{ url: string; thumbnails?: Record<string, string> }> {
+    try {
+      const response = await api.post(`${API_URL}/${file.id}/signed-url`)
+      // Parse JSON:API response format
+      return {
+        url: response.data.attributes.url,
+        thumbnails: response.data.attributes.thumbnails
+      }
+    } catch (error) {
+      console.error('Failed to generate signed URL with thumbnails:', error)
+      throw error
+    }
+  },
+
+  /**
    * Get download URL for a file (generates signed URL)
    */
   async getDownloadUrl(file: FileEntity): Promise<string> {
@@ -177,6 +194,19 @@ const fileService = {
       console.error('Failed to download file:', error)
       throw error
     }
+  },
+
+  /**
+   * Check if a file is an image based on its MIME type
+   */
+  isImageFile(file: { mime_type?: string; type?: string }): boolean {
+    if (file.mime_type) {
+      return file.mime_type.startsWith('image/')
+    }
+    if (file.type) {
+      return file.type === 'image'
+    }
+    return false
   },
 
   /**

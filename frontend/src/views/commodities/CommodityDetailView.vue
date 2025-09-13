@@ -154,6 +154,7 @@
           <FileViewer
             v-else
             :files="images"
+            :signed-urls="imagesSignedUrls"
             file-type="images"
             :entity-id="commodity.id"
             entity-type="commodities"
@@ -194,6 +195,7 @@
           <FileViewer
             v-else
             :files="manuals"
+            :signed-urls="manualsSignedUrls"
             file-type="manuals"
             :entity-id="commodity.id"
             entity-type="commodities"
@@ -234,6 +236,7 @@
           <FileViewer
             v-else
             :files="invoices"
+            :signed-urls="invoicesSignedUrls"
             file-type="invoices"
             :entity-id="commodity.id"
             entity-type="commodities"
@@ -300,6 +303,11 @@ const images = ref<any[]>([])
 const manuals = ref<any[]>([])
 const invoices = ref<any[]>([])
 
+// Signed URLs from API responses
+const imagesSignedUrls = ref<Record<string, any>>({})
+const manualsSignedUrls = ref<Record<string, any>>({})
+const invoicesSignedUrls = ref<Record<string, any>>({})
+
 // Loading states for files
 const loadingImages = ref<boolean>(false)
 const loadingManuals = ref<boolean>(false)
@@ -355,8 +363,12 @@ const loadFiles = async () => {
   // Load images
   loadingImages.value = true
   try {
+    console.log('CommodityDetailView: Loading images for commodity', commodity.value.id)
     const response = await commodityService.getImages(commodity.value.id)
     images.value = response.data?.data || []
+    // Extract signed URLs from the response
+    imagesSignedUrls.value = response.data?.meta?.signed_urls || {}
+    console.log('CommodityDetailView: Images signed URLs:', imagesSignedUrls.value)
   } catch (err: any) {
     console.error('Failed to load images:', err)
   } finally {
@@ -368,6 +380,8 @@ const loadFiles = async () => {
   try {
     const response = await commodityService.getManuals(commodity.value.id)
     manuals.value = response.data?.data || []
+    // Extract signed URLs from the response
+    manualsSignedUrls.value = response.data?.meta?.signed_urls || {}
   } catch (err: any) {
     console.error('Failed to load manuals:', err)
   } finally {
@@ -379,6 +393,8 @@ const loadFiles = async () => {
   try {
     const response = await commodityService.getInvoices(commodity.value.id)
     invoices.value = response.data?.data || []
+    // Extract signed URLs from the response
+    invoicesSignedUrls.value = response.data?.meta?.signed_urls || {}
   } catch (err: any) {
     console.error('Failed to load invoices:', err)
   } finally {
@@ -399,6 +415,8 @@ const uploadImages = async (files: File[]) => {
     loadingImages.value = true
     const response = await commodityService.getImages(commodity.value.id)
     images.value = response.data?.data || []
+    // Extract signed URLs from the response
+    imagesSignedUrls.value = response.data?.meta?.signed_urls || {}
     loadingImages.value = false
   } catch (err: any) {
     error.value = 'Failed to upload images: ' + (err.message || 'Unknown error')
@@ -419,6 +437,8 @@ const uploadManuals = async (files: File[]) => {
     loadingManuals.value = true
     const response = await commodityService.getManuals(commodity.value.id)
     manuals.value = response.data?.data || []
+    // Extract signed URLs from the response
+    manualsSignedUrls.value = response.data?.meta?.signed_urls || {}
     loadingManuals.value = false
   } catch (err: any) {
     error.value = 'Failed to upload manuals: ' + (err.message || 'Unknown error')
@@ -439,6 +459,8 @@ const uploadInvoices = async (files: File[]) => {
     loadingInvoices.value = true
     const response = await commodityService.getInvoices(commodity.value.id)
     invoices.value = response.data?.data || []
+    // Extract signed URLs from the response
+    invoicesSignedUrls.value = response.data?.meta?.signed_urls || {}
     loadingInvoices.value = false
   } catch (err: any) {
     error.value = 'Failed to upload invoices: ' + (err.message || 'Unknown error')

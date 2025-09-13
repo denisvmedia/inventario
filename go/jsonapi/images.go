@@ -43,7 +43,8 @@ func (ir *ImageResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 
 // ImagesMeta is a meta information for ImagesResponse.
 type ImagesMeta struct {
-	Images int `json:"images" example:"1" format:"int64"`
+	Images     int                `json:"images" example:"1" format:"int64"`
+	SignedUrls map[string]URLData `json:"signed_urls,omitempty"` // Map of file ID to signed URLs and thumbnails
 }
 
 // ImagesResponse is an object that holds a list of image information.

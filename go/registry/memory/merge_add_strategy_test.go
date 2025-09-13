@@ -1,4 +1,9 @@
-package restore_test
+package memory
+
+// TODO: this is here due to some suspected bug in Go linker that leads to:
+// TODO: github.com/denisvmedia/inventario/backup/restore.TestRestoreService_SecurityValidation_CrossUserAccess: relocation target github.com/wk8/go-ordered-map/v2.New[go.shape.string,go.shape.*github.com/denisvmedia/inventario/models.User] not defined
+// TODO: due to this issue, these tests must be placed in memory package (not even in memory_test package).
+// TODO: once this issue is addressed, the tests should be moved back to restore package (and guarded with _test suffix)
 
 import (
 	"bytes"
@@ -20,7 +25,6 @@ import (
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Import blob drivers
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -82,7 +86,7 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	c := qt.New(t)
 
 	// Create factory set and user
-	factorySet := memory.NewFactorySet()
+	factorySet := NewFactorySet()
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
@@ -241,7 +245,7 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	c := qt.New(t)
 
 	// Create factory set and user
-	factorySet := memory.NewFactorySet()
+	factorySet := NewFactorySet()
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: "test-tenant-id",
@@ -380,7 +384,7 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 		Email: "user1@example.com",
 	}
 
-	userRegistry := memory.NewUserRegistry()
+	userRegistry := NewUserRegistry()
 	createdUser1, err := userRegistry.Create(ctx, testUser1)
 	c.Assert(err, qt.IsNil)
 
@@ -394,7 +398,7 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create shared factory set that both users will use
-	sharedFactorySet := memory.NewFactorySet()
+	sharedFactorySet := NewFactorySet()
 	sharedFactorySet.UserRegistry = userRegistry
 
 	// Create user-specific registry sets that share the same underlying data
@@ -513,7 +517,7 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 		// TODO: Add tenant ID field when multi-tenancy is fully implemented
 	}
 
-	userRegistry := memory.NewUserRegistry()
+	userRegistry := NewUserRegistry()
 	createdUserTenant1, err := userRegistry.Create(ctx, testUserTenant1)
 	c.Assert(err, qt.IsNil)
 
@@ -528,7 +532,7 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Create shared registry set that both tenants will use for security validation
-	sharedTenantfactorySet := memory.NewFactorySet()
+	sharedTenantfactorySet := NewFactorySet()
 	sharedTenantfactorySet.UserRegistry = userRegistry
 
 	// Create tenant-specific registry sets that share the same underlying data
@@ -639,12 +643,12 @@ func TestRestoreService_SecurityValidation_ValidUserManipulations(t *testing.T) 
 		Email: "user@example.com",
 	}
 
-	userRegistry := memory.NewUserRegistry()
+	userRegistry := NewUserRegistry()
 	createdUser, err := userRegistry.Create(ctx, testUser)
 	c.Assert(err, qt.IsNil)
 	ctx = appctx.WithUser(ctx, createdUser)
 
-	factorySet := memory.NewFactorySet()
+	factorySet := NewFactorySet()
 	factorySet.UserRegistry = userRegistry
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
@@ -780,7 +784,7 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 		Email: "user2@example.com",
 	}
 
-	userRegistry := memory.NewUserRegistry()
+	userRegistry := NewUserRegistry()
 	createdUser1, err := userRegistry.Create(ctx, testUser1)
 	c.Assert(err, qt.IsNil)
 
@@ -788,7 +792,7 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 	c.Assert(err, qt.IsNil)
 
 	// Create shared registry set that both users will use
-	sharedLoggingfactorySet := memory.NewFactorySet()
+	sharedLoggingfactorySet := NewFactorySet()
 	sharedLoggingfactorySet.UserRegistry = userRegistry
 
 	// Create user-specific registry sets that share the same underlying data
@@ -1015,14 +1019,14 @@ func TestRestoreService_SecurityValidation_MaliciousFileOperations(t *testing.T)
 		Email: "user2@example.com",
 	}
 
-	userRegistry := memory.NewUserRegistry()
+	userRegistry := NewUserRegistry()
 	createdUser1, err := userRegistry.Create(ctx, testUser1)
 	c.Assert(err, qt.IsNil)
 	createdUser2, err := userRegistry.Create(ctx, testUser2)
 	c.Assert(err, qt.IsNil)
 
 	// Setup registry sets for both users
-	sharedfactorySet := memory.NewFactorySet()
+	sharedfactorySet := NewFactorySet()
 	sharedfactorySet.UserRegistry = userRegistry
 
 	user1Ctx := appctx.WithUser(ctx, createdUser1)
@@ -1182,11 +1186,11 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 	ctx := context.Background()
 
 	// Create multiple test users
-	userRegistry := memory.NewUserRegistry()
+	userRegistry := NewUserRegistry()
 	var userContexts []context.Context
 	var registrySets []*registry.Set
 
-	factorySet := memory.NewFactorySet()
+	factorySet := NewFactorySet()
 
 	for i := 0; i < 3; i++ {
 		testUser := models.User{
@@ -1404,11 +1408,11 @@ func TestRestoreService_SecurityValidation_EdgeCases(t *testing.T) {
 		Email: "edgecase@example.com",
 	}
 
-	userRegistry := memory.NewUserRegistry()
+	userRegistry := NewUserRegistry()
 	createdUser, err := userRegistry.Create(ctx, testUser)
 	c.Assert(err, qt.IsNil)
 
-	factorySet := memory.NewFactorySet()
+	factorySet := NewFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 	registrySet.UserRegistry = userRegistry
 

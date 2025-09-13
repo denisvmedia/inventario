@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
+  <locations>
+    <location id="{{.LocationID}}">
+      <locationName>Test Location</locationName>
+      <address>123 Test Street</address>
+    </location>
+  </locations>
+  <areas>
+    <area id="{{.AreaID}}">
+      <areaName>Test Area</areaName>
+      <locationId>{{.LocationID}}</locationId>
+    </area>
+  </areas>
+  <commodities>
+    <commodity id="{{.CommodityID}}">
+      <commodityName>Test Commodity</commodityName>
+      <shortName>TestComm</shortName>
+      <type>equipment</type>
+      <areaId>{{.AreaID}}</areaId>
+      <count>1</count>
+      <originalPrice>100.00</originalPrice>
+      <originalPriceCurrency>USD</originalPriceCurrency>
+      <currentPrice>100.00</currentPrice>
+      <status>in_use</status>
+      <purchaseDate>2024-01-01</purchaseDate>
+      <registeredDate>2024-01-01</registeredDate>
+      <lastModifiedDate>2024-01-01</lastModifiedDate>
+      <draft>false</draft>
+      <images>
+        <file id="{{.ImageID}}">
+          <path>test-image</path>
+          <originalPath>test-image-original.jpg</originalPath>
+          <extension>.jpg</extension>
+          <mimeType>image/jpeg</mimeType>
+          <data>VGhpcyBpcyBhIHRlc3QgaW1hZ2UgZmlsZSBjb250ZW50Lg==</data>
+        </file>
+        <file id="{{.NewImageID}}">
+          <path>test-image-2</path>
+          <originalPath>test-image-2-original.jpg</originalPath>
+          <extension>.jpg</extension>
+          <mimeType>image/jpeg</mimeType>
+          <data>VGhpcyBpcyBhbm90aGVyIHRlc3QgaW1hZ2UgZmlsZSBjb250ZW50Lg==</data>
+        </file>
+      </images>
+      <invoices>
+        <file id="{{.InvoiceID}}">
+          <path>test-invoice</path>
+          <originalPath>test-invoice-original.pdf</originalPath>
+          <extension>.pdf</extension>
+          <mimeType>application/pdf</mimeType>
+          <data>VGhpcyBpcyBhIHRlc3QgaW52b2ljZSBmaWxlIGNvbnRlbnQu</data>
+        </file>
+      </invoices>
+    </commodity>
+  </commodities>
+</inventory>

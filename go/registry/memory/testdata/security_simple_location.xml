@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory>
+	<locations>
+		<location id="test-location" name="Test Location" />
+	</locations>
+</inventory>
