@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inventory>
+	<images>
+		<image id="malicious-exe" commodity_id="{{.CommodityID}}" filename="{{.Filename}}" mime_type="{{.MimeType}}">
+			<data>{{.Data}}</data>
+		</image>
+	</images>
+</inventory>

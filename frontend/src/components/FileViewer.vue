@@ -138,6 +138,10 @@ const props = defineProps({
     type: Array,
     required: true
   },
+  signedUrls: {
+    type: Object,
+    default: () => ({})
+  },
   entityId: {
     type: String,
     required: true
@@ -216,6 +220,14 @@ const generateCurrentFileUrl = async () => {
     return
   }
 
+  // Use provided signed URLs if available
+  const urlData = props.signedUrls[currentFile.value.id]
+  if (urlData && urlData.url) {
+    currentFileUrl.value = urlData.url
+    return
+  }
+
+  // Fallback to API call
   try {
     const signedUrl = await fileService.getDownloadUrl(currentFile.value)
     currentFileUrl.value = signedUrl
@@ -232,31 +244,69 @@ watch(currentFile, () => {
 
 // Generate signed URLs for all files (for FileList previews and downloads)
 const generateFileUrls = async () => {
-  const urlPromises = props.files
-    .map(async (file: any) => {
-      try {
-        const url = await fileService.getDownloadUrl(file)
-        return { fileId: file.id, url }
-      } catch (error) {
-        console.error(`Failed to generate URL for file ${file.id}:`, error)
-        return { fileId: file.id, url: null }
-      }
-    })
-
-  const results = await Promise.all(urlPromises)
   const newUrls: Record<string, string> = {}
 
-  results.forEach(({ fileId, url }) => {
-    if (url) {
-      newUrls[fileId] = url
-    }
-  })
+  // Don't process if no files
+  if (!props.files || props.files.length === 0) {
+    fileUrls.value = newUrls
+    return
+  }
+
+  // Use provided signed URLs if available, otherwise fall back to API calls
+  console.log('FileViewer generateFileUrls - fileType:', props.fileType, 'files count:', props.files.length)
+  console.log('FileViewer generateFileUrls - signedUrls:', props.signedUrls)
+  console.log('FileViewer generateFileUrls - signedUrls keys:', Object.keys(props.signedUrls))
+  if (Object.keys(props.signedUrls).length > 0) {
+    console.log('FileViewer', props.fileType, ': Using pre-generated signed URLs')
+    // Use pre-generated signed URLs from the API response
+    props.files.forEach((file: any) => {
+      const urlData = props.signedUrls[file.id]
+      if (urlData) {
+        // For image files, prefer medium thumbnail for previews, fallback to original
+        if (urlData.thumbnails && urlData.thumbnails.medium && fileService.isImageFile(file)) {
+          newUrls[file.id] = urlData.thumbnails.medium
+        } else {
+          newUrls[file.id] = urlData.url
+        }
+      }
+    })
+  } else {
+    console.log('FileViewer', props.fileType, ': Falling back to individual API calls')
+    // Fallback to individual API calls (for backward compatibility)
+    const urlPromises = props.files
+      .map(async (file: any) => {
+        try {
+          const response = await fileService.generateSignedUrlWithThumbnails(file)
+          return {
+            fileId: file.id,
+            file: file,
+            url: response.url,
+            thumbnails: response.thumbnails
+          }
+        } catch (error) {
+          console.error(`Failed to generate URL for file ${file.id}:`, error)
+          return { fileId: file.id, file: file, url: null, thumbnails: null }
+        }
+      })
+
+    const results = await Promise.all(urlPromises)
+    results.forEach(({ fileId, file, url, thumbnails }) => {
+      if (url) {
+        // For image files, prefer medium thumbnail for previews, fallback to original
+        if (thumbnails && thumbnails.medium && fileService.isImageFile(file)) {
+          newUrls[fileId] = thumbnails.medium
+        } else {
+          newUrls[fileId] = url
+        }
+      }
+    })
+  }
 
   fileUrls.value = newUrls
 }
 
-// Watch for changes to files and generate new signed URLs
-watch(() => props.files, () => {
+// Watch for changes to files or signed URLs and generate new signed URLs
+watch([() => props.files, () => props.signedUrls], () => {
   generateFileUrls()
 }, { immediate: true })
 

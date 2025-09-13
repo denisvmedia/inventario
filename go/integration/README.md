@@ -1,10 +1,12 @@
-# CLI Workflow Integration Test
+# Integration Tests
 
-This directory contains comprehensive integration tests that validate the complete workflow from fresh database setup through CLI operations to API access, simulating real CI pipeline scenarios.
+This directory contains comprehensive integration tests that validate complete workflows and system functionality, simulating real CI pipeline scenarios and production use cases.
 
-## Overview
+## Test Files
 
-The CLI workflow integration test (`cli_workflow_integration_test.go`) validates the following scenario:
+### CLI Workflow Integration Test (`cli_workflow_integration_test.go`)
+
+The CLI workflow integration test validates the following scenario:
 
 1. **Fresh Database Setup**: Run bootstrap operations and migrations on a clean database
 2. **Authentication Failure Test**: Attempt to log in with non-existent user (should fail)
@@ -14,6 +16,18 @@ The CLI workflow integration test (`cli_workflow_integration_test.go`) validates
 6. **API Access Test**: Access the system info API with a valid token (should succeed)
 
 This test ensures that the complete workflow from CLI setup to API access works correctly in production environments.
+
+### Thumbnail Generation Integration Test (`thumbnail_generation_integration_test.go`)
+
+The thumbnail generation integration test validates the complete thumbnail workflow:
+
+1. **File Upload**: Upload image files through the API
+2. **Thumbnail Generation**: Verify thumbnails are automatically created
+3. **Storage Verification**: Check that thumbnail files exist in blob storage
+4. **API Response**: Validate that signed URLs include thumbnail URLs
+5. **Cleanup**: Ensure thumbnails are deleted when original files are deleted
+
+This test requires the `INTEGRATION_TESTS` environment variable to be set and validates the complete image processing pipeline.
 
 ## Test Structure
 

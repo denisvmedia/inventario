@@ -50,7 +50,7 @@ export interface Image {
 export interface Manual {
   id: string;
   name: string;
-  content_type: string;
+  mime_type: string;
   size: number;
   url: string;
 }
@@ -58,7 +58,7 @@ export interface Manual {
 export interface Invoice {
   id: string;
   name: string;
-  content_type: string;
+  mime_type: string;
   size: number;
   url: string;
 }

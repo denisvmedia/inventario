@@ -275,13 +275,22 @@ const loadFile = async () => {
     const response = await fileService.getFile(fileId.value)
     file.value = response.data.attributes
 
-    // Generate signed URL for file preview
+    // Use signed URL from response meta if available, otherwise fall back to API call
     if (file.value) {
-      try {
-        fileUrl.value = await fileService.getDownloadUrl(file.value)
-      } catch (urlError) {
-        console.error('Failed to generate signed URL:', urlError)
-        // Continue without the URL - download will still work
+      const signedUrls = response.data.meta?.signed_urls
+      if (signedUrls && signedUrls[file.value.id]) {
+        // Use pre-generated signed URL from response
+        fileUrl.value = signedUrls[file.value.id].url
+        console.log('FileDetailView: Using pre-generated signed URL')
+      } else {
+        // Fallback to individual API call
+        try {
+          console.log('FileDetailView: Falling back to individual API call')
+          fileUrl.value = await fileService.getDownloadUrl(file.value)
+        } catch (urlError) {
+          console.error('Failed to generate signed URL:', urlError)
+          // Continue without the URL - download will still work
+        }
       }
     }
 
