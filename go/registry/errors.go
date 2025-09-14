@@ -17,7 +17,9 @@ var (
 	ErrBadDataStructure   = errors.New("bad data structure")
 	ErrDeleted            = errkit.NewEquivalent("deleted", ErrNotFound)
 
-	ErrMainCurrencyNotSet     = errors.New("main currency not set")
-	ErrMainCurrencyAlreadySet = errors.New("main currency already set and cannot be changed")
-	ErrUserContextRequired    = errors.New("user context required")
+	ErrMainCurrencyNotSet       = errors.New("main currency not set")
+	ErrMainCurrencyAlreadySet   = errors.New("main currency already set and cannot be changed")
+	ErrUserContextRequired      = errors.New("user context required")
+	ErrResourceLimitExceeded    = errors.New("resource limit exceeded")
+	ErrConcurrencyLimitExceeded = errors.New("concurrency limit exceeded")
 )

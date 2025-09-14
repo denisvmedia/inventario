@@ -90,9 +90,10 @@ type Params struct {
 	UploadLocation    string
 	DebugInfo         *debug.Info
 	StartTime         time.Time
-	JWTSecret         []byte        // JWT secret for user authentication
-	FileSigningKey    []byte        // File signing key for secure file URLs
-	FileURLExpiration time.Duration // File URL expiration duration
+	JWTSecret         []byte                             // JWT secret for user authentication
+	FileSigningKey    []byte                             // File signing key for secure file URLs
+	FileURLExpiration time.Duration                      // File URL expiration duration
+	ThumbnailConfig   services.ThumbnailGenerationConfig // Thumbnail generation configuration
 }
 
 func (p *Params) Validate() error {

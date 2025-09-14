@@ -31,6 +31,8 @@ func NewFactorySet() *registry.FactorySet {
 	exportFactory := NewExportRegistryFactory()
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
+	thumbnailGenerationJobFactory := NewThumbnailGenerationJobRegistryFactory()
+	userConcurrencySlotFactory := NewUserConcurrencySlotRegistryFactory()
 
 	fs := &registry.FactorySet{}
 	fs.LocationRegistryFactory = locationFactory
@@ -44,6 +46,8 @@ func NewFactorySet() *registry.FactorySet {
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = restoreOperationFactory
+	fs.ThumbnailGenerationJobRegistryFactory = thumbnailGenerationJobFactory
+	fs.UserConcurrencySlotRegistryFactory = userConcurrencySlotFactory
 	fs.TenantRegistry = NewTenantRegistry()
 	fs.UserRegistry = NewUserRegistry()
 

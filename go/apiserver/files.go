@@ -19,6 +19,7 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/assets"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -32,6 +33,7 @@ type filesAPI struct {
 	fileService        *services.FileService
 	fileSigningService *services.FileSigningService
 	factorySet         *registry.FactorySet
+	thumbnailConfig    services.ThumbnailGenerationConfig
 }
 
 // listFiles lists all files with optional filtering and pagination.
@@ -415,7 +417,7 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if file.File == nil {
-		renderEntityError(w, r, registry.ErrNotFound)
+		renderEntityError(w, r, ErrNotFound)
 		return
 	}
 
@@ -442,26 +444,83 @@ func Files(params Params) func(r chi.Router) {
 		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
 		fileSigningService: fileSigningService,
 		factorySet:         params.FactorySet,
+		thumbnailConfig:    params.ThumbnailConfig,
 	}
 
 	return func(r chi.Router) {
 		r.Get("/", api.listFiles)   // GET /files
 		r.Post("/", api.createFile) // POST /files
 		r.Route("/{fileID}", func(r chi.Router) {
-			r.Get("/", api.apiGetFile)                   // GET /files/123
-			r.Put("/", api.updateFile)                   // PUT /files/123
-			r.Delete("/", api.deleteFile)                // DELETE /files/123
-			r.Post("/signed-url", api.generateSignedURL) // POST /files/123/signed-url
+			r.Get("/", api.apiGetFile)                         // GET /files/123
+			r.Put("/", api.updateFile)                         // PUT /files/123
+			r.Delete("/", api.deleteFile)                      // DELETE /files/123
+			r.Post("/signed-url", api.generateSignedURL)       // POST /files/123/signed-url
+			r.Get("/thumbnail-status", api.getThumbnailStatus) // GET /files/123/thumbnail-status
 		})
 		// File downloads moved to signed URL routes for security
 	}
+}
+
+// getThumbnailStatus returns the thumbnail generation status for a file.
+// @Summary Get thumbnail generation status
+// @Description get thumbnail generation status for a file
+// @Tags files
+// @Accept json-api
+// @Produce json-api
+// @Param id path string true "File ID"
+// @Success 200 {object} jsonapi.ThumbnailStatusResponse "OK"
+// @Failure 404 {object} jsonapi.Errors "File not found"
+// @Router /files/{id}/thumbnail-status [get].
+func (api *filesAPI) getThumbnailStatus(w http.ResponseWriter, r *http.Request) {
+	fileID := chi.URLParam(r, "fileID")
+	if fileID == "" {
+		renderEntityError(w, r, ErrNotFound)
+		return
+	}
+
+	// Check if there's a thumbnail generation job for this file
+	thumbnailService := services.NewThumbnailGenerationService(api.factorySet, api.uploadLocation, api.thumbnailConfig)
+
+	job, err := thumbnailService.GetJobByFileID(r.Context(), fileID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		internalServerError(w, r, errkit.Wrap(err, "failed to check thumbnail generation status"))
+		return
+	}
+
+	// Check if thumbnails exist
+	thumbnailsExist := api.checkThumbnailsExist(r.Context(), fileID)
+
+	// Create thumbnail status response following JSON:API patterns
+	response := jsonapi.NewThumbnailStatusResponse(fileID, job, thumbnailsExist)
+
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// checkThumbnailsExist checks if thumbnail files exist for a file
+func (api *filesAPI) checkThumbnailsExist(ctx context.Context, fileID string) map[string]bool {
+	thumbnailsExist := make(map[string]bool)
+	sizes := []string{"small", "medium"}
+
+	for _, size := range sizes {
+		exists, err := api.fileService.ThumbnailExists(ctx, fileID, size)
+		if err != nil {
+			thumbnailsExist[size] = false
+		} else {
+			thumbnailsExist[size] = exists
+		}
+	}
+
+	return thumbnailsExist
 }
 
 // downloadOriginalFile downloads an original file using the file entity's stored metadata
 func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
 	if fileID == "" {
-		renderEntityError(w, r, registry.ErrNotFound)
+		renderEntityError(w, r, ErrNotFound)
 		return
 	}
 
@@ -493,30 +552,93 @@ func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request
 	api.streamFileFromStorage(w, r, filePath, mimeType, file.Path+file.Ext)
 }
 
-// downloadThumbnail downloads a thumbnail file (always JPEG)
+// downloadThumbnail downloads a thumbnail file (always JPEG) with deferred generation support
 func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
 	size := chi.URLParam(r, "size")
 
 	if fileID == "" || size == "" {
-		renderEntityError(w, r, registry.ErrNotFound)
+		renderEntityError(w, r, ErrNotFound)
 		return
 	}
 
 	// Validate size parameter
 	if size != "small" && size != "medium" {
-		renderEntityError(w, r, registry.ErrNotFound)
+		renderEntityError(w, r, ErrNotFound)
 		return
 	}
 
 	// Generate thumbnail path using the new structure
 	thumbnailPath := fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, size)
 
+	// Check if thumbnail exists using file service
+	exists, err := api.fileService.ThumbnailExists(r.Context(), fileID, size)
+	if err != nil {
+		internalServerError(w, r, errkit.Wrap(err, "failed to check thumbnail existence"))
+		return
+	}
+
+	if !exists {
+		// Thumbnail doesn't exist - serve placeholder and trigger generation
+		api.servePlaceholderThumbnail(w, r, fileID, size)
+		return
+	}
+
 	// All thumbnails are JPEG files
 	mimeType := "image/jpeg"
 	filename := fmt.Sprintf("%s_%s.jpg", fileID, size)
 
 	api.streamFileFromStorage(w, r, thumbnailPath, mimeType, filename)
+}
+
+// servePlaceholderThumbnail serves a placeholder image while triggering thumbnail generation
+func (api *filesAPI) servePlaceholderThumbnail(w http.ResponseWriter, r *http.Request, fileID, size string) {
+	// Check if there's a thumbnail generation job for this file
+	thumbnailService := services.NewThumbnailGenerationService(api.factorySet, api.uploadLocation, api.thumbnailConfig)
+
+	job, err := thumbnailService.GetJobByFileID(r.Context(), fileID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		internalServerError(w, r, errkit.Wrap(err, "failed to check thumbnail generation status"))
+		return
+	}
+
+	// If no job exists or job failed, request thumbnail generation
+	if job == nil || job.Status == models.ThumbnailStatusFailed {
+		_, err := thumbnailService.RequestThumbnailGeneration(r.Context(), fileID)
+		if err != nil {
+			// Log error but still serve placeholder
+			slog.Error("Failed to request thumbnail generation", "error", err, "file_id", fileID)
+		}
+	}
+
+	// Serve the placeholder image
+	api.servePlaceholderImage(w, r, size)
+}
+
+// servePlaceholderImage serves a static placeholder image from embedded assets
+func (api *filesAPI) servePlaceholderImage(w http.ResponseWriter, r *http.Request, size string) {
+	// Set appropriate headers
+	w.Header().Set("Content-Type", "image/gif")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+
+	// Get placeholder from embedded assets
+	filename := fmt.Sprintf("generating_%s.gif", size)
+	data, err := assets.GetPlaceholderFile(filename)
+	if err != nil {
+		slog.Error("Failed to load placeholder image", "filename", filename, "error", err)
+		http.Error(w, "Placeholder not found", http.StatusNotFound)
+		return
+	}
+
+	// Set content length
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+
+	// Write the image data
+	if _, err := w.Write(data); err != nil {
+		slog.Error("Failed to write placeholder image", "filename", filename, "error", err)
+	}
 }
 
 // streamFileFromStorage is a helper function to stream files from storage
@@ -536,7 +658,7 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if !exists {
-		renderEntityError(w, r, registry.ErrNotFound)
+		renderEntityError(w, r, ErrNotFound)
 		return
 	}
 
@@ -566,9 +688,10 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 // SignedFiles sets up the signed file download routes that use signed URL validation
 func SignedFiles(params Params) func(r chi.Router) {
 	api := &filesAPI{
-		uploadLocation: params.UploadLocation,
-		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
-		factorySet:     params.FactorySet,
+		uploadLocation:  params.UploadLocation,
+		fileService:     services.NewFileService(params.FactorySet, params.UploadLocation),
+		factorySet:      params.FactorySet,
+		thumbnailConfig: params.ThumbnailConfig,
 	}
 
 	return func(r chi.Router) {

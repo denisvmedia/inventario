@@ -26,11 +26,19 @@ type Workers struct {
 	MaxConcurrentImports int
 }
 
+// ThumbnailGeneration contains default values for thumbnail generation configuration
+type ThumbnailGeneration struct {
+	MaxConcurrentPerUser int    // Maximum simultaneous thumbnail generation jobs per user
+	RateLimitPerMinute   int    // Maximum thumbnail generation requests per minute per user
+	SlotDuration         string // Duration for which a concurrency slot is held (e.g., "30m")
+}
+
 // Config contains all default configuration values
 type Config struct {
-	Server   Server
-	Database Database
-	Workers  Workers
+	Server              Server
+	Database            Database
+	Workers             Workers
+	ThumbnailGeneration ThumbnailGeneration
 }
 
 // getFileURL generates a file URL for the given path, similar to the function in run command
@@ -65,6 +73,11 @@ func New() Config {
 			MaxConcurrentExports: 3,
 			MaxConcurrentImports: 1,
 		},
+		ThumbnailGeneration: ThumbnailGeneration{
+			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
+			RateLimitPerMinute:   50,    // Maximum 50 thumbnail generation requests per minute per user
+			SlotDuration:         "30m", // Hold concurrency slots for 30 minutes
+		},
 	}
 }
 
@@ -98,4 +111,19 @@ func GetMaxConcurrentImports() int {
 // GetJWTSecret returns the default JWT secret
 func GetJWTSecret() string {
 	return defaultConfig.Server.JWTSecret
+}
+
+// GetThumbnailMaxConcurrentPerUser returns the default max concurrent thumbnail generation jobs per user
+func GetThumbnailMaxConcurrentPerUser() int {
+	return defaultConfig.ThumbnailGeneration.MaxConcurrentPerUser
+}
+
+// GetThumbnailRateLimitPerMinute returns the default thumbnail generation rate limit per minute per user
+func GetThumbnailRateLimitPerMinute() int {
+	return defaultConfig.ThumbnailGeneration.RateLimitPerMinute
+}
+
+// GetThumbnailSlotDuration returns the default thumbnail generation slot duration
+func GetThumbnailSlotDuration() string {
+	return defaultConfig.ThumbnailGeneration.SlotDuration
 }

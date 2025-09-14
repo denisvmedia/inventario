@@ -19,6 +19,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -61,8 +62,10 @@ func uploadedFilesFromContext(ctx context.Context) []uploadedFile {
 }
 
 type uploadsAPI struct {
-	uploadLocation string
-	fileService    *services.FileService
+	uploadLocation  string
+	fileService     *services.FileService
+	factorySet      *registry.FactorySet
+	thumbnailConfig services.ThumbnailGenerationConfig
 }
 
 func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request) {
@@ -135,8 +138,8 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		// Generate thumbnails for image files
-		api.generateThumbnailsWithLogging(r.Context(), createdFile, user.ID)
+		// Request thumbnail generation for image files
+		api.requestThumbnailGeneration(r.Context(), createdFile, user.ID)
 
 		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 	}
@@ -222,8 +225,8 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		}
 		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 
-		// Generate thumbnails for image files
-		api.generateThumbnailsWithLogging(r.Context(), createdFile, user.ID)
+		// Request thumbnail generation for image files
+		api.requestThumbnailGeneration(r.Context(), createdFile, user.ID)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
@@ -307,8 +310,8 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		}
 		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
 
-		// Generate thumbnails for image files
-		api.generateThumbnailsWithLogging(r.Context(), createdFile, user.ID)
+		// Request thumbnail generation for image files
+		api.requestThumbnailGeneration(r.Context(), createdFile, user.ID)
 	}
 
 	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
@@ -380,8 +383,8 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		// Generate thumbnails for image files
-		api.generateThumbnailsWithLogging(r.Context(), createdFile, user.ID)
+		// Request thumbnail generation for image files
+		api.requestThumbnailGeneration(r.Context(), createdFile, user.ID)
 
 		createdFiles = append(createdFiles, *createdFile)
 	}
@@ -501,8 +504,10 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 func Uploads(params Params) func(r chi.Router) {
 	api := &uploadsAPI{
-		uploadLocation: params.UploadLocation,
-		fileService:    services.NewFileService(params.FactorySet, params.UploadLocation),
+		uploadLocation:  params.UploadLocation,
+		fileService:     services.NewFileService(params.FactorySet, params.UploadLocation),
+		factorySet:      params.FactorySet,
+		thumbnailConfig: params.ThumbnailConfig,
 	}
 
 	return func(r chi.Router) {
@@ -521,18 +526,33 @@ func Uploads(params Params) func(r chi.Router) {
 	}
 }
 
-// generateThumbnailsWithLogging generates thumbnails for image files with proper logging
-func (api *uploadsAPI) generateThumbnailsWithLogging(ctx context.Context, file *models.FileEntity, userID string) {
-	if err := api.fileService.GenerateThumbnails(ctx, file); err != nil {
+// requestThumbnailGeneration requests thumbnail generation for image files with proper logging
+func (api *uploadsAPI) requestThumbnailGeneration(ctx context.Context, file *models.FileEntity, userID string) {
+	// Only request for supported image types
+	if !mimekit.IsImage(file.MIMEType) {
+		return // Not an image, skip thumbnail generation
+	}
+
+	// Only support JPEG and PNG for thumbnail generation
+	if !strings.HasPrefix(file.MIMEType, "image/jpeg") && !strings.HasPrefix(file.MIMEType, "image/png") {
+		return // Skip unsupported image formats
+	}
+
+	// Create thumbnail generation service
+	thumbnailService := services.NewThumbnailGenerationService(api.factorySet, api.uploadLocation, api.thumbnailConfig)
+
+	// Request thumbnail generation
+	_, err := thumbnailService.RequestThumbnailGeneration(ctx, file.ID)
+	if err != nil {
 		// Log error but don't fail the upload - thumbnails are optional
-		slog.Error("Failed to generate thumbnails",
+		slog.Error("Failed to request thumbnail generation",
 			"error", err.Error(),
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,
 			"file_id", file.ID,
 			"user_id", userID)
 	} else {
-		slog.Info("Thumbnails generated successfully",
+		slog.Info("Thumbnail generation requested successfully",
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,
 			"file_id", file.ID)

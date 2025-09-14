@@ -40,6 +40,8 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.RestoreOperationRegistryFactory = NewRestoreOperationRegistry(dbx, restoreStepFactory)
 	fs.TenantRegistry = NewTenantRegistry(dbx)
 	fs.UserRegistry = NewUserRegistry(dbx)
+	fs.ThumbnailGenerationJobRegistryFactory = NewThumbnailGenerationJobRegistry(dbx)
+	fs.UserConcurrencySlotRegistryFactory = NewUserConcurrencySlotRegistry(dbx)
 
 	return fs
 }

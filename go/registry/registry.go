@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"time"
 
 	"github.com/jellydator/validation"
 
@@ -138,6 +139,38 @@ type FileRegistry interface {
 	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error)
 }
 
+type ThumbnailGenerationJobRegistry interface {
+	Registry[models.ThumbnailGenerationJob]
+
+	// GetPendingJobs returns pending thumbnail generation jobs ordered by priority and creation time
+	GetPendingJobs(ctx context.Context, limit int) ([]*models.ThumbnailGenerationJob, error)
+
+	// GetJobByFileID returns the thumbnail generation job for a specific file
+	GetJobByFileID(ctx context.Context, fileID string) (*models.ThumbnailGenerationJob, error)
+
+	// UpdateJobStatus updates the status of a thumbnail generation job
+	UpdateJobStatus(ctx context.Context, jobID string, status models.ThumbnailGenerationStatus, errorMessage string) error
+
+	// CleanupCompletedJobs removes completed/failed jobs older than the specified duration
+	CleanupCompletedJobs(ctx context.Context, olderThan time.Duration) error
+}
+
+type UserConcurrencySlotRegistry interface {
+	Registry[models.UserConcurrencySlot]
+
+	// AcquireSlot attempts to acquire a concurrency slot for a user
+	AcquireSlot(ctx context.Context, userID, jobID string, maxSlots int, slotDuration time.Duration) (*models.UserConcurrencySlot, error)
+
+	// ReleaseSlot releases a concurrency slot
+	ReleaseSlot(ctx context.Context, userID, jobID string) error
+
+	// GetUserSlots returns all slots for a user
+	GetUserSlots(ctx context.Context, userID string) ([]*models.UserConcurrencySlot, error)
+
+	// CleanupExpiredSlots removes expired slots
+	CleanupExpiredSlots(ctx context.Context) error
+}
+
 type RestoreOperationRegistry interface {
 	Registry[models.RestoreOperation]
 
@@ -181,19 +214,21 @@ type UserRegistry interface {
 // Set contains ready-to-use registries that have been created with proper user or service context.
 // This is the result of calling CreateUserRegistrySet() or CreateServiceRegistrySet() on a FactorySet.
 type Set struct {
-	LocationRegistry         LocationRegistry
-	AreaRegistry             AreaRegistry
-	CommodityRegistry        CommodityRegistry
-	ImageRegistry            ImageRegistry
-	InvoiceRegistry          InvoiceRegistry
-	ManualRegistry           ManualRegistry
-	SettingsRegistry         SettingsRegistry
-	ExportRegistry           ExportRegistry
-	RestoreOperationRegistry RestoreOperationRegistry
-	RestoreStepRegistry      RestoreStepRegistry
-	FileRegistry             FileRegistry
-	TenantRegistry           TenantRegistry
-	UserRegistry             UserRegistry
+	LocationRegistry               LocationRegistry
+	AreaRegistry                   AreaRegistry
+	CommodityRegistry              CommodityRegistry
+	ImageRegistry                  ImageRegistry
+	InvoiceRegistry                InvoiceRegistry
+	ManualRegistry                 ManualRegistry
+	SettingsRegistry               SettingsRegistry
+	ExportRegistry                 ExportRegistry
+	RestoreOperationRegistry       RestoreOperationRegistry
+	RestoreStepRegistry            RestoreStepRegistry
+	FileRegistry                   FileRegistry
+	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
+	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
+	TenantRegistry                 TenantRegistry
+	UserRegistry                   UserRegistry
 }
 
 // Search-related types and functions
