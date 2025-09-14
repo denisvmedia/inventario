@@ -36,3 +36,29 @@ jobs:
       - name: Run tests
         run: go test -v -race ./...
         working-directory: go
+
+  test-windows:
+    name: Windows test
+    runs-on: windows-latest
+    steps:
+      # Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - id: vars
+        uses: ./.github/actions/vars
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ steps.vars.outputs.go_version }}
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Install dependencies
+        run: go mod download
+        working-directory: go
+
+      - name: Run tests
+        run: go test -v ./...
+        working-directory: go
