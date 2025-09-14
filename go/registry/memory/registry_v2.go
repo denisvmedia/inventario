@@ -1,4 +1,4 @@
-//go:build !v2
+//go:build v2
 
 package memory
 
@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/elliotchance/orderedmap/v3"
 	"github.com/google/uuid"
-	"github.com/wk8/go-ordered-map/v2"
 
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
@@ -24,7 +24,7 @@ type Registry[T any, P registry.PIDable[T]] struct {
 
 func NewRegistry[T any, P registry.PIDable[T]]() *Registry[T, P] {
 	return &Registry[T, P]{
-		items: orderedmap.New[string, P](),
+		items: orderedmap.NewOrderedMap[string, P](),
 		lock:  &sync.RWMutex{},
 	}
 }
@@ -73,7 +73,7 @@ func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
 func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
 	items := make([]P, 0, r.items.Len())
 	r.lock.RLock()
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+	for pair := r.items.Front(); pair != nil; pair = pair.Next() {
 		item := pair.Value
 
 		// If userID is set, filter by user
@@ -146,7 +146,7 @@ func (r *Registry[_, P]) Count(_ context.Context) (int, error) {
 	// If userID is set, count only items belonging to the user
 	if r.userID != "" {
 		count := 0
-		for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		for pair := r.items.Front(); pair != nil; pair = pair.Next() {
 			item := pair.Value
 			if userAware, ok := any(item).(models.UserAware); ok {
 				if userAware.GetUserID() == r.userID {
@@ -248,7 +248,7 @@ func (r *Registry[_, P]) ListWithUser(ctx context.Context) ([]P, error) {
 
 	var filteredItems []P
 	r.lock.RLock()
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+	for pair := r.items.Front(); pair != nil; pair = pair.Next() {
 		item := pair.Value
 
 		// Check if the entity belongs to the user

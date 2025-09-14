@@ -1,4 +1,4 @@
-//go:build !v2
+//go:build v2
 
 package memory
 
@@ -92,7 +92,7 @@ func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID st
 	defer r.lock.RUnlock()
 
 	var operations []*models.RestoreOperation
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+	for pair := r.items.Front(); pair != nil; pair = pair.Next() {
 		operation := pair.Value
 		if operation.ExportID == exportID {
 			// Load associated steps

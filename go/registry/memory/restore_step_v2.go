@@ -1,4 +1,4 @@
-//go:build !v2
+//go:build v2
 
 package memory
 
@@ -78,7 +78,7 @@ func (r *RestoreStepRegistry) ListByRestoreOperation(ctx context.Context, restor
 	defer r.lock.RUnlock()
 
 	var steps []*models.RestoreStep
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+	for pair := r.items.Front(); pair != nil; pair = pair.Next() {
 		step := pair.Value
 		if step.RestoreOperationID == restoreOperationID {
 			steps = append(steps, step)
@@ -93,7 +93,7 @@ func (r *RestoreStepRegistry) DeleteByRestoreOperation(ctx context.Context, rest
 	defer r.lock.Unlock()
 
 	var toDelete []string
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+	for pair := r.items.Front(); pair != nil; pair = pair.Next() {
 		step := pair.Value
 		if step.RestoreOperationID == restoreOperationID {
 			toDelete = append(toDelete, step.ID)

@@ -12,8 +12,13 @@ permissions:
 
 jobs:
   test:
-    name: test
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }}, Go ${{ matrix.go-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        go-version: [1.25.1, 1.25.0, 1.24.7]
     steps:
       # Checkout code
       - name: Checkout code
@@ -25,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ steps.vars.outputs.go_version }}
+          go-version: ${{ matrix.go-version }}
           cache: true
           cache-dependency-path: go/go.sum
 
@@ -34,5 +39,5 @@ jobs:
         working-directory: go
 
       - name: Run tests
-        run: go test -v -race ./...
+        run: go test -v ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} ./...
         working-directory: go
