@@ -15,6 +15,7 @@ jobs:
     name: test (${{ matrix.os }}, Go ${{ matrix.go-version }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         go-version: [1.25.1, 1.24.7]
