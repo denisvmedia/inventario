@@ -8,6 +8,7 @@ replace github.com/denisvmedia/inventario/frontend => ../frontend
 
 require (
 	github.com/bojanz/currency v1.3.1
+	github.com/elliotchance/orderedmap/v3 v3.1.0
 	github.com/frankban/quicktest v1.14.6
 	github.com/gabriel-vasile/mimetype v1.4.10
 	github.com/go-chi/chi/v5 v5.2.3
