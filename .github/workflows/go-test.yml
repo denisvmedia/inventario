@@ -12,8 +12,12 @@ permissions:
 
 jobs:
   test:
-    name: test
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }}, Go ${{ matrix.go-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        go-version: [1.25.1, 1.24.7]
     steps:
       # Checkout code
       - name: Checkout code
@@ -25,7 +29,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: 1.25.1
+          go-version: ${{ matrix.go-version }}
           cache: true
           cache-dependency-path: go/go.sum
 
@@ -34,31 +38,5 @@ jobs:
         working-directory: go
 
       - name: Run tests
-        run: go test -v -race ./...
-        working-directory: go
-
-  test-windows:
-    name: Windows test
-    runs-on: windows-latest
-    steps:
-      # Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - id: vars
-        uses: ./.github/actions/vars
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 1.25.1
-          cache: true
-          cache-dependency-path: go/go.sum
-
-      - name: Install dependencies
-        run: go mod download
-        working-directory: go
-
-      - name: Run tests
-        run: go test -v ./...
+        run: go test -v ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} ./...
         working-directory: go
