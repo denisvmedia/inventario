@@ -89,12 +89,11 @@
     <!-- Price Information -->
     <div class="form-section">
       <h2>Price Information</h2>
-      <!-- eslint-disable-next-line vue/no-v-html -->
       <div
 class="price-calculation-hint" :class="{
         'inactive-hint': !isPriceUsedInCalculations,
         'warning-hint': !hasSuitablePrice && isPriceUsedInCalculations
-      }" v-html="getPriceCalculationHint">
+      }" v-html="getPriceCalculationHint"> <!-- eslint-disable-line vue/no-v-html -->
       </div>
 
       <div class="form-group">

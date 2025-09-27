@@ -12,7 +12,7 @@ vi.mock('../../services/areaService', () => ({
 // Import the mocked service
 import areaService from '../../services/areaService'
 // eslint-disable-next-line no-unused-vars
-type MockedFunction<T> = T & { mockImplementation: (fn: () => any) => void }
+type MockedFunction<T> = T & { mockImplementation: (fn: () => unknown) => void }
 const mockedCreateArea = areaService.createArea as MockedFunction<typeof areaService.createArea>
 
 describe('AreaForm.vue', () => {
@@ -141,7 +141,7 @@ describe('AreaForm.vue', () => {
         status: 200,
         statusText: 'OK',
         headers: {},
-        config: {} as any
+        config: {} as unknown
       }
       vi.mocked(areaService.createArea).mockResolvedValue(mockResponse)
 
@@ -195,7 +195,7 @@ describe('AreaForm.vue', () => {
         status: 200,
         statusText: 'OK',
         headers: {},
-        config: {} as any
+        config: {} as unknown
       }
       vi.mocked(areaService.createArea).mockResolvedValue(mockResponse)
 
@@ -240,7 +240,7 @@ describe('AreaForm.vue', () => {
         status: 200,
         statusText: 'OK',
         headers: {},
-        config: {} as any
+        config: {} as unknown
       }
       vi.mocked(areaService.createArea).mockResolvedValue(mockResponse)
 
@@ -359,7 +359,7 @@ describe('AreaForm.vue', () => {
       })
 
       // Initial locationId should be set
-      const vm = wrapper.vm as any
+      const vm = wrapper.vm as { form: { locationId: string } }
       expect(vm.form.locationId).toBe(locationId)
     })
 
@@ -379,7 +379,7 @@ describe('AreaForm.vue', () => {
         status: 200,
         statusText: 'OK',
         headers: {},
-        config: {} as any
+        config: {} as unknown
       }
       vi.mocked(areaService.createArea).mockResolvedValue(mockResponse)
 

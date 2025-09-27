@@ -336,9 +336,10 @@ const uploadFiles = async () => {
         }
 
         console.log(`✅ Upload capacity available for ${props.operationName}`)
-      } catch (capacityError: any) {
+      } catch (capacityError: unknown) {
         console.error('❌ Failed to get upload capacity:', capacityError)
-        uploadCapacityError.value = capacityError.message || 'Upload capacity not available'
+        const errorMessage = capacityError && typeof capacityError === 'object' && 'message' in capacityError ? (capacityError as Error).message : 'Upload capacity not available'
+        uploadCapacityError.value = errorMessage
         isUploading.value = false
         isCheckingCapacity.value = false
         emit('uploadCapacityFailed', capacityError)

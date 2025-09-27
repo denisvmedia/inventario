@@ -99,21 +99,25 @@ const submitForm = async () => {
       if (errorResponse.response?.data?.errors) {
         const apiErrors = errorResponse.response.data.errors
         apiErrors.forEach((apiError) => {
-        if (apiError.source && apiError.source.pointer) {
-          const field = apiError.source.pointer.split('/').pop()
-          if (field === 'name') {
-            errors.name = apiError.detail
+          if (apiError.source && apiError.source.pointer) {
+            const field = apiError.source.pointer.split('/').pop()
+            if (field === 'name') {
+              errors.name = apiError.detail || ''
+            }
           }
-        }
-      })
+        })
 
-      if (Object.values(errors).some(e => e)) {
-        error.value = 'Please correct the errors above.'
+        if (Object.values(errors).some(e => e)) {
+          error.value = 'Please correct the errors above.'
+        } else {
+          error.value = `Failed to create area: ${errorResponse.response?.status || 'Unknown'} - ${JSON.stringify(errorResponse.response?.data || {})}`
+        }
       } else {
-        error.value = `Failed to create area: ${err.response.status} - ${JSON.stringify(err.response.data)}`
+        error.value = 'Failed to create area: Unknown server error'
       }
     } else {
-      error.value = 'Failed to create area: ' + (err.message || 'Unknown error')
+      const errorMessage = err && typeof err === 'object' && 'message' in err ? (err as Error).message : 'Unknown error'
+      error.value = 'Failed to create area: ' + errorMessage
     }
   } finally {
     isSubmitting.value = false

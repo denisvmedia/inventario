@@ -135,6 +135,17 @@ import FileDetails from './FileDetails.vue'
 import Confirmation from './Confirmation.vue'
 import fileService from '@/services/fileService'
 
+// Define file interface
+interface FileItem {
+  id: string
+  path?: string
+  ext: string
+  mime_type?: string
+  size?: number
+  created_at?: string
+  updated_at?: string
+}
+
 const props = defineProps({
   files: {
     type: Array,
@@ -261,7 +272,7 @@ const generateFileUrls = async () => {
   if (Object.keys(props.signedUrls).length > 0) {
     console.log('FileViewer', props.fileType, ': Using pre-generated signed URLs')
     // Use pre-generated signed URLs from the API response
-    props.files.forEach((file: any) => {
+    props.files.forEach((file: FileItem) => {
       const urlData = props.signedUrls[file.id]
       if (urlData) {
         // For image files, prefer medium thumbnail for previews, fallback to original
@@ -276,7 +287,7 @@ const generateFileUrls = async () => {
     console.log('FileViewer', props.fileType, ': Falling back to individual API calls')
     // Fallback to individual API calls (for backward compatibility)
     const urlPromises = props.files
-      .map(async (file: any) => {
+      .map(async (file: FileItem) => {
         try {
           const response = await fileService.generateSignedUrlWithThumbnails(file)
           return {
@@ -314,7 +325,7 @@ watch([() => props.files, () => props.signedUrls], () => {
 
 
 
-const getFileName = (file: any) => {
+const getFileName = (file: FileItem) => {
   // Use the Path field directly (it's now just the filename without extension)
   // and add the extension from the ext field
   if (file.path) {
@@ -333,7 +344,7 @@ const getFileName = (file: any) => {
   return `${file.id}${ext}`
 }
 
-const getFileIcon = (file: any) => {
+const getFileIcon = (file: FileItem) => {
   if (isPdfFile(file)) {
     return 'file-pdf'
   } else if (isImageFile(file)) {
@@ -346,7 +357,7 @@ const getFileIcon = (file: any) => {
   return 'file'
 }
 
-const isImageFile = (file: any) => {
+const isImageFile = (file: FileItem) => {
   if (!file) return false
   const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
   const imageMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
@@ -373,7 +384,7 @@ const isImageFile = (file: any) => {
   return false
 }
 
-const isPdfFile = (file: any) => {
+const isPdfFile = (file: FileItem) => {
   console.log('Checking if file is PDF:', file)
   if (!file) return false
 
@@ -570,7 +581,7 @@ const endPan = () => {
 }
 
 // Download functions
-const downloadFile = (file: any) => {
+const downloadFile = (file: FileItem) => {
   // Only pass through the download event to parent
   emit('download', file)
 }
@@ -581,10 +592,10 @@ const downloadCurrentFile = () => {
 }
 
 // Delete functions
-const fileToDelete = ref<any>(null)
+const fileToDelete = ref<FileItem | null>(null)
 const showDeleteConfirmation = ref(false)
 
-const confirmDeleteFile = (file: any) => {
+const confirmDeleteFile = (file: FileItem) => {
   // Store the file to delete and show the confirmation dialog
   fileToDelete.value = file
   showDeleteConfirmation.value = true
@@ -610,7 +621,7 @@ const cancelDelete = () => {
 }
 
 // Handle UI updates after a file is deleted
-const handlePostDeleteUI = (file: any) => {
+const handlePostDeleteUI = (file: FileItem) => {
   // If we're deleting the current file in the viewer, adjust accordingly
   if (showViewer.value && currentFile.value && currentFile.value.id === file.id) {
     if (props.files.length <= 1) {
@@ -629,11 +640,11 @@ const handlePostDeleteUI = (file: any) => {
   }
 }
 
-const updateFile = (data: any) => {
+const updateFile = (data: unknown) => {
   emit('update', data)
 }
 
-const openFileDetails = (file: any) => {
+const openFileDetails = (file: FileItem) => {
   selectedFile.value = file
 }
 
