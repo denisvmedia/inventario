@@ -2157,6 +2157,102 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/upload-slots/check": {
+            "get": {
+                "description": "Check if user can start an upload for a specific operation",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "upload-slots"
+                ],
+                "summary": "Check upload capacity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "image_upload",
+                        "description": "Operation name",
+                        "name": "operation",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Upload capacity available",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.UploadStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "429": {
+                        "description": "Too many concurrent uploads",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/upload-slots/status": {
+            "get": {
+                "description": "Get current upload status for a specific operation",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "upload-slots"
+                ],
+                "summary": "Get upload status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "image_upload",
+                        "description": "Operation name",
+                        "name": "operation",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Upload status retrieved successfully",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.UploadStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -3100,6 +3196,55 @@ const docTemplate = `{
                 "url": {
                     "description": "signed URL for file access",
                     "type": "string"
+                }
+            }
+        },
+        "jsonapi.UploadStatusAttributes": {
+            "type": "object",
+            "properties": {
+                "active_uploads": {
+                    "type": "integer"
+                },
+                "available_uploads": {
+                    "type": "integer"
+                },
+                "can_start_upload": {
+                    "type": "boolean"
+                },
+                "max_uploads": {
+                    "type": "integer"
+                },
+                "operation_name": {
+                    "type": "string"
+                },
+                "retry_after_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "jsonapi.UploadStatusData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.UploadStatusAttributes"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "upload-status"
+                    ],
+                    "example": "upload-status"
+                }
+            }
+        },
+        "jsonapi.UploadStatusResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.UploadStatusData"
                 }
             }
         },

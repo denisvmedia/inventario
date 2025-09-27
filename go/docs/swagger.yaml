@@ -624,6 +624,38 @@ definitions:
         description: signed URL for file access
         type: string
     type: object
+  jsonapi.UploadStatusAttributes:
+    properties:
+      active_uploads:
+        type: integer
+      available_uploads:
+        type: integer
+      can_start_upload:
+        type: boolean
+      max_uploads:
+        type: integer
+      operation_name:
+        type: string
+      retry_after_seconds:
+        type: integer
+    type: object
+  jsonapi.UploadStatusData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.UploadStatusAttributes'
+      id:
+        type: string
+      type:
+        enum:
+        - upload-status
+        example: upload-status
+        type: string
+    type: object
+  jsonapi.UploadStatusResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.UploadStatusData'
+    type: object
   jsonapi.ValueAttrs:
     properties:
       area_totals:
@@ -2555,4 +2587,68 @@ paths:
       summary: Get system information
       tags:
       - system
+  /upload-slots/check:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Check if user can start an upload for a specific operation
+      parameters:
+      - description: Operation name
+        example: image_upload
+        in: query
+        name: operation
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Upload capacity available
+          schema:
+            $ref: '#/definitions/jsonapi.UploadStatusResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "429":
+          description: Too many concurrent uploads
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Check upload capacity
+      tags:
+      - upload-slots
+  /upload-slots/status:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Get current upload status for a specific operation
+      parameters:
+      - description: Operation name
+        example: image_upload
+        in: query
+        name: operation
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Upload status retrieved successfully
+          schema:
+            $ref: '#/definitions/jsonapi.UploadStatusResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get upload status
+      tags:
+      - upload-slots
 swagger: "2.0"
