@@ -485,14 +485,7 @@ const getEntityIcon = (file: FileEntity) => {
   return 'link'
 }
 
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-  const parent = img.parentElement
-  if (parent) {
-    parent.innerHTML = '<div class="file-icon"><i class="fas fa-image" style="font-size: 3rem; color: var(--text-secondary-color);"></i></div>'
-  }
-}
+
 
 const viewFile = (file: FileEntity) => {
   router.push(`/files/${file.id}`)

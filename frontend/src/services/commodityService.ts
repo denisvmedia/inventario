@@ -38,7 +38,7 @@ const commodityService = {
   },
 
   // Single file upload methods - now using generic file entity system
-  async uploadImage(id: string, file: File, _onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any> {
+  async uploadImage(id: string, file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void): Promise<any> {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -67,7 +67,7 @@ const commodityService = {
   // - Allow cancellation of queued files before they start
   // - Provide per-file progress callbacks instead of aggregate progress
   // - Remove completed files from UI automatically
-  async uploadImages(id: string, files: File[], _onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any[]> {
+  async uploadImages(id: string, files: File[], _onProgress?: (_current: number, _total: number, _currentFile: string) => void): Promise<any[]> {
     // Get max concurrent uploads from API
     const uploadSlotService = (await import('./uploadSlotService')).default
     const statusResponse = await uploadSlotService.getUploadStatus('image_upload')
@@ -129,7 +129,7 @@ const commodityService = {
   },
 
   // Upload single image with retry logic for 429 responses
-  async uploadImageWithRetry(id: string, file: File, _onProgress?: (current: number, total: number, currentFile: string) => void, maxRetries: number = 10): Promise<any> {
+  async uploadImageWithRetry(id: string, file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void, maxRetries: number = 10): Promise<any> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await this.uploadImage(id, file, _onProgress)
@@ -150,7 +150,7 @@ const commodityService = {
     throw new Error(`Failed to upload ${file.name} after ${maxRetries} attempts`)
   },
 
-  async uploadManual(id: string, file: File, _onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any> {
+  async uploadManual(id: string, file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void): Promise<any> {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -177,7 +177,7 @@ const commodityService = {
   // - Allow cancellation of queued files before they start
   // - Provide per-file progress callbacks instead of aggregate progress
   // - Remove completed files from UI automatically
-  async uploadManuals(id: string, files: File[], _onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any[]> {
+  async uploadManuals(id: string, files: File[], _onProgress?: (_current: number, _total: number, _currentFile: string) => void): Promise<any[]> {
     // Get max concurrent uploads from API
     const uploadSlotService = (await import('./uploadSlotService')).default
     const statusResponse = await uploadSlotService.getUploadStatus('document_upload')
@@ -190,7 +190,7 @@ const commodityService = {
 
     console.log(`📄 Starting upload of ${files.length} manuals with slot-based concurrency control (max: ${maxConcurrent})`)
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _reject) => {
       const processNext = async () => {
         if (fileQueue.length === 0 && activeUploads === 0) {
           resolve(results)
@@ -233,7 +233,7 @@ const commodityService = {
   },
 
   // Upload single manual with retry logic for 429 responses
-  async uploadManualWithRetry(id: string, file: File, _onProgress?: (current: number, total: number, currentFile: string) => void, maxRetries: number = 10): Promise<any> {
+  async uploadManualWithRetry(id: string, file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void, maxRetries: number = 10): Promise<any> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await this.uploadManual(id, file, _onProgress)
@@ -253,7 +253,7 @@ const commodityService = {
     throw new Error(`Failed to upload ${file.name} after ${maxRetries} attempts`)
   },
 
-  async uploadInvoice(id: string, file: File, _onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any> {
+  async uploadInvoice(id: string, file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void): Promise<any> {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -280,7 +280,7 @@ const commodityService = {
   // - Allow cancellation of queued files before they start
   // - Provide per-file progress callbacks instead of aggregate progress
   // - Remove completed files from UI automatically
-  async uploadInvoices(id: string, files: File[], _onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any[]> {
+  async uploadInvoices(id: string, files: File[], _onProgress?: (_current: number, _total: number, _currentFile: string) => void): Promise<any[]> {
     // Get max concurrent uploads from API
     const uploadSlotService = (await import('./uploadSlotService')).default
     const statusResponse = await uploadSlotService.getUploadStatus('document_upload')
@@ -293,7 +293,7 @@ const commodityService = {
 
     console.log(`🧾 Starting upload of ${files.length} invoices with slot-based concurrency control (max: ${maxConcurrent})`)
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _reject) => {
       const processNext = async () => {
         if (fileQueue.length === 0 && activeUploads === 0) {
           resolve(results)
@@ -336,7 +336,7 @@ const commodityService = {
   },
 
   // Upload single invoice with retry logic for 429 responses
-  async uploadInvoiceWithRetry(id: string, file: File, _onProgress?: (current: number, total: number, currentFile: string) => void, maxRetries: number = 10): Promise<any> {
+  async uploadInvoiceWithRetry(id: string, file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void, maxRetries: number = 10): Promise<any> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await this.uploadInvoice(id, file, _onProgress)

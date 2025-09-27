@@ -266,7 +266,7 @@ describe('CommodityListItem.vue', () => {
       const wrapper = createWrapper()
 
       // Access the component instance
-      const vm = wrapper.vm as { getTypeIcon: (_type: string) => string }
+      const vm = wrapper.vm as { getTypeIcon: (type: string) => string }
 
       expect(vm.getTypeIcon('white_goods')).toBe('blender')
       expect(vm.getTypeIcon('electronics')).toBe('laptop')
@@ -281,7 +281,7 @@ describe('CommodityListItem.vue', () => {
       const wrapper = createWrapper()
 
       // Access the component instance
-      const vm = wrapper.vm as { getTypeName: (_type: string) => string }
+      const vm = wrapper.vm as { getTypeName: (type: string) => string }
 
       expect(vm.getTypeName('electronics')).toBe('Electronics')
       expect(vm.getTypeName('unknown')).toBe('unknown') // Fallback to type ID
@@ -291,7 +291,7 @@ describe('CommodityListItem.vue', () => {
       const wrapper = createWrapper()
 
       // Access the component instance
-      const vm = wrapper.vm as { getStatusName: (_status: string) => string }
+      const vm = wrapper.vm as { getStatusName: (status: string) => string }
 
       expect(vm.getStatusName('in_use')).toBe('In Use')
       expect(vm.getStatusName('unknown')).toBe('unknown') // Fallback to status ID
@@ -301,7 +301,7 @@ describe('CommodityListItem.vue', () => {
       const wrapper = createWrapper()
 
       // Access the component instance
-      const vm = wrapper.vm as { getAreaName: (_areaId: string) => string }
+      const vm = wrapper.vm as { getAreaName: (areaId: string) => string }
 
       expect(vm.getAreaName('area-1')).toBe('Test Area')
       expect(vm.getAreaName('unknown')).toBe('Unknown Area') // Fallback
@@ -311,7 +311,7 @@ describe('CommodityListItem.vue', () => {
       const wrapper = createWrapper()
 
       // Access the component instance
-      const vm = wrapper.vm as { getLocationName: (_areaId: string) => string }
+      const vm = wrapper.vm as { getLocationName: (areaId: string) => string }
 
       expect(vm.getLocationName('area-1')).toBe('Test Location')
       expect(vm.getLocationName('unknown')).toBe('Unknown Location') // Fallback
@@ -346,7 +346,7 @@ describe('CommodityListItem.vue', () => {
       })
 
       // Access the component instance
-      const vm = wrapper.vm as { getAreaName: (_areaId: string) => string, getLocationName: (_areaId: string) => string }
+      const vm = wrapper.vm as { getAreaName: (areaId: string) => string, getLocationName: (areaId: string) => string }
 
       expect(vm.getAreaName('non-existent-area')).toBe('Unknown Area')
       expect(vm.getLocationName('non-existent-area')).toBe('Unknown Location')
@@ -363,7 +363,7 @@ describe('CommodityListItem.vue', () => {
       const wrapper = createWrapper({ areaMap })
 
       // Access the component instance
-      const vm = wrapper.vm as { getLocationName: (_areaId: string) => string }
+      const vm = wrapper.vm as { getLocationName: (areaId: string) => string }
 
       expect(vm.getLocationName('area-1')).toBe('Unknown Location')
     })
@@ -402,7 +402,7 @@ describe('CommodityListItem.vue', () => {
 
     it('formats purchase date correctly', () => {
       const wrapper = createWrapper()
-      const vm = wrapper.vm as { formatPurchaseDate: (_date: string) => string }
+      const vm = wrapper.vm as { formatPurchaseDate: (date: string) => string }
 
       // Test different date formats
       expect(vm.formatPurchaseDate('2023-01-01')).toBe('Jan 1, 2023')

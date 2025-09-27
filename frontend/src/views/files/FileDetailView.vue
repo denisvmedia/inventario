@@ -206,7 +206,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PDFViewerCanvas from '@/components/PDFViewerCanvas.vue'
 import fileService, { type FileEntity } from '@/services/fileService'
@@ -387,7 +387,7 @@ const formatDate = (dateString: string) => {
 }
 
 // Handle image load (thumbnail polling was removed)
-const onImageLoad = (event: Event) => {
+const onImageLoad = (_event: Event) => {
   // Image loaded successfully - no additional action needed
   // Thumbnails are now generated inline during upload
   console.log('Image loaded successfully')
