@@ -629,14 +629,11 @@ const formatFileSize = (bytes: number): string => {
       &::after {
         content: '';
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        inset: 0;
         background: linear-gradient(
           90deg,
           transparent,
-          rgba(255, 255, 255, 0.3),
+          rgb(255 255 255 / 30%),
           transparent
         );
         animation: shimmer 2s infinite;
@@ -658,6 +655,7 @@ const formatFileSize = (bytes: number): string => {
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(100%);
   }
