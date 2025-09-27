@@ -75,7 +75,7 @@ const fileService = {
   /**
    * Upload a single file and create file entity
    */
-  async uploadFile(file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void) {
+  async uploadFile(file: File, _onProgress?: (number, number, string) => void) {
     const formData = new FormData()
     formData.append('file', file)
 
