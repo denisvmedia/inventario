@@ -75,7 +75,7 @@ const fileService = {
   /**
    * Upload a single file and create file entity
    */
-  async uploadFile(file: File, _onProgress?: (number, number, string) => void) {
+  async uploadFile(file: File, _onProgress?: (_current: number, _total: number, _currentFile: string) => void) {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -85,9 +85,9 @@ const fileService = {
           'Content-Type': 'multipart/form-data'
         },
         onUploadProgress: (progressEvent) => {
-          if (onProgress && progressEvent.total) {
+          if (_onProgress && progressEvent.total) {
             const percentage = (progressEvent.loaded / progressEvent.total) * 100
-            onProgress(percentage < 100 ? 0 : 1, 1, file.name)
+            _onProgress(percentage < 100 ? 0 : 1, 1, file.name)
           }
         }
       })
