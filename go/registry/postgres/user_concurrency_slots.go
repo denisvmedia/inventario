@@ -174,8 +174,20 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 			return registry.ErrResourceLimitExceeded
 		}
 
-		// Create the slot
+		// Get tenant ID from the job being processed
+		var tenantID string
+		jobQuery := fmt.Sprintf(`SELECT tenant_id FROM %s WHERE id = $1`, r.tableNames.ThumbnailGenerationJobs())
+		err = tx.QueryRowContext(ctx, jobQuery, jobID).Scan(&tenantID)
+		if err != nil {
+			return errkit.Wrap(err, "failed to get tenant ID from job")
+		}
+
+		// Create the slot with proper tenant/user context
 		slot := models.UserConcurrencySlot{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				UserID:   userID,
+				TenantID: tenantID,
+			},
 			JobID:     jobID,
 			Status:    models.SlotStatusActive,
 			CreatedAt: time.Now(),

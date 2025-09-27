@@ -43,6 +43,8 @@ export interface FileUpdateData {
   linked_entity_meta?: string
 }
 
+
+
 const fileService = {
   /**
    * Get list of files with optional filtering and pagination
@@ -71,23 +73,31 @@ const fileService = {
   },
 
   /**
-   * Upload a file and create file entity
+   * Upload a single file and create file entity
    */
-  uploadFile(file: File) {
+  async uploadFile(file: File, onProgress?: (current: number, total: number, currentFile: string) => void) {
     const formData = new FormData()
     formData.append('file', file)
 
-    return api.post('/api/v1/uploads/files', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    }).then(response => {
-      console.log('File upload successful:', response.data)
+    try {
+      const response = await api.post('/api/v1/uploads/file', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const percentage = (progressEvent.loaded / progressEvent.total) * 100
+            onProgress(percentage < 100 ? 0 : 1, 1, file.name)
+          }
+        }
+      })
+
+      console.log('File upload successful with signed URLs:', response.data)
       return response
-    }).catch(error => {
+    } catch (error) {
       console.error('Error uploading file:', error)
       throw error
-    })
+    }
   },
 
   /**
@@ -195,6 +205,8 @@ const fileService = {
       throw error
     }
   },
+
+
 
   /**
    * Check if a file is an image based on its MIME type

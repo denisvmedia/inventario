@@ -451,69 +451,13 @@ func Files(params Params) func(r chi.Router) {
 		r.Get("/", api.listFiles)   // GET /files
 		r.Post("/", api.createFile) // POST /files
 		r.Route("/{fileID}", func(r chi.Router) {
-			r.Get("/", api.apiGetFile)                         // GET /files/123
-			r.Put("/", api.updateFile)                         // PUT /files/123
-			r.Delete("/", api.deleteFile)                      // DELETE /files/123
-			r.Post("/signed-url", api.generateSignedURL)       // POST /files/123/signed-url
-			r.Get("/thumbnail-status", api.getThumbnailStatus) // GET /files/123/thumbnail-status
+			r.Get("/", api.apiGetFile)                   // GET /files/123
+			r.Put("/", api.updateFile)                   // PUT /files/123
+			r.Delete("/", api.deleteFile)                // DELETE /files/123
+			r.Post("/signed-url", api.generateSignedURL) // POST /files/123/signed-url
 		})
 		// File downloads moved to signed URL routes for security
 	}
-}
-
-// getThumbnailStatus returns the thumbnail generation status for a file.
-// @Summary Get thumbnail generation status
-// @Description get thumbnail generation status for a file
-// @Tags files
-// @Accept json-api
-// @Produce json-api
-// @Param id path string true "File ID"
-// @Success 200 {object} jsonapi.ThumbnailStatusResponse "OK"
-// @Failure 404 {object} jsonapi.Errors "File not found"
-// @Router /files/{id}/thumbnail-status [get].
-func (api *filesAPI) getThumbnailStatus(w http.ResponseWriter, r *http.Request) {
-	fileID := chi.URLParam(r, "fileID")
-	if fileID == "" {
-		renderEntityError(w, r, ErrNotFound)
-		return
-	}
-
-	// Check if there's a thumbnail generation job for this file
-	thumbnailService := services.NewThumbnailGenerationService(api.factorySet, api.uploadLocation, api.thumbnailConfig)
-
-	job, err := thumbnailService.GetJobByFileID(r.Context(), fileID)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		internalServerError(w, r, errkit.Wrap(err, "failed to check thumbnail generation status"))
-		return
-	}
-
-	// Check if thumbnails exist
-	thumbnailsExist := api.checkThumbnailsExist(r.Context(), fileID)
-
-	// Create thumbnail status response following JSON:API patterns
-	response := jsonapi.NewThumbnailStatusResponse(fileID, job, thumbnailsExist)
-
-	if err := render.Render(w, r, response); err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-}
-
-// checkThumbnailsExist checks if thumbnail files exist for a file
-func (api *filesAPI) checkThumbnailsExist(ctx context.Context, fileID string) map[string]bool {
-	thumbnailsExist := make(map[string]bool)
-	sizes := []string{"small", "medium"}
-
-	for _, size := range sizes {
-		exists, err := api.fileService.ThumbnailExists(ctx, fileID, size)
-		if err != nil {
-			thumbnailsExist[size] = false
-		} else {
-			thumbnailsExist[size] = exists
-		}
-	}
-
-	return thumbnailsExist
 }
 
 // downloadOriginalFile downloads an original file using the file entity's stored metadata

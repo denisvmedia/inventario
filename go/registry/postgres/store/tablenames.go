@@ -18,6 +18,7 @@ type TableNames struct {
 	Users                   func() TableName
 	ThumbnailGenerationJobs func() TableName
 	UserConcurrencySlots    func() TableName
+	OperationSlots          func() TableName
 }
 
 var DefaultTableNames = TableNames{
@@ -36,4 +37,10 @@ var DefaultTableNames = TableNames{
 	Users:                   func() TableName { return "users" },
 	ThumbnailGenerationJobs: func() TableName { return "thumbnail_generation_jobs" },
 	UserConcurrencySlots:    func() TableName { return "user_concurrency_slots" },
+	OperationSlots:          func() TableName { return "operation_slots" },
+}
+
+// NewTableNames returns the default table names
+func NewTableNames() TableNames {
+	return DefaultTableNames
 }

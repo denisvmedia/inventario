@@ -93,8 +93,9 @@
               v-if="file.type === 'image'"
               :src="getFileUrl(file)"
               :alt="getDisplayTitle(file)"
+              :data-file-id="file.id"
               class="file-thumbnail"
-              @error="handleImageError"
+              @error="onImageError"
             />
             <div v-else class="file-icon">
               <FontAwesomeIcon :icon="getFileIcon(file)" />
@@ -260,6 +261,7 @@ import { useRouter, useRoute } from 'vue-router'
 import fileService, { type FileEntity } from '@/services/fileService'
 import Confirmation from '@/components/Confirmation.vue'
 
+
 // Type for signed URLs structure
 interface URLData {
   url: string
@@ -271,6 +273,46 @@ interface URLData {
 
 const router = useRouter()
 const route = useRoute()
+
+// Image error handling with automatic URL refresh
+const onImageError = async (event: Event) => {
+  const img = event.target as HTMLImageElement
+  const fileId = img.dataset.fileId
+
+  if (!fileId) {
+    console.warn('Image load error: no file ID found', event)
+    return
+  }
+
+  console.warn('Image load error for file:', fileId, 'attempting to refresh URL')
+
+  try {
+    // Find the file in our current list
+    const file = files.value.find(f => f.id === fileId)
+    if (!file) {
+      console.warn('File not found in current list:', fileId)
+      return
+    }
+
+    // Generate new signed URL with thumbnails
+    const response = await fileService.generateSignedUrlWithThumbnails(file)
+
+    // Update the image source with new thumbnail URL
+    if (response.thumbnails?.medium) {
+      img.src = response.thumbnails.medium
+    } else if (response.thumbnails?.small) {
+      img.src = response.thumbnails.small
+    } else {
+      img.src = response.url
+    }
+
+    console.log('Successfully refreshed URL for file:', fileId)
+  } catch (error) {
+    console.error('Failed to refresh URL for file:', fileId, error)
+    // Hide the broken image
+    img.style.display = 'none'
+  }
+}
 
 // State
 const files = ref<FileEntity[]>([])
@@ -414,6 +456,8 @@ const getPaginationUrl = (page: number) => {
 }
 
 
+
+// No more image ref tracking needed (thumbnails generated during upload)
 
 const getFileUrl = (file: FileEntity) => {
   return fileUrls.value[file.id] || ''

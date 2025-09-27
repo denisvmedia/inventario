@@ -92,9 +92,12 @@
         <div v-if="file.type === 'image'" class="image-preview">
           <img
             v-if="fileUrl"
+            ref="previewImage"
             :src="fileUrl"
             :alt="getDisplayTitle(file)"
+            :data-file-id="file.id"
             class="preview-image"
+            @load="onImageLoad"
             @error="handleImageError"
           />
           <div v-else class="loading-placeholder">
@@ -203,16 +206,61 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PDFViewerCanvas from '@/components/PDFViewerCanvas.vue'
 import fileService, { type FileEntity } from '@/services/fileService'
 import Confirmation from '@/components/Confirmation.vue'
+
 import ResourceNotFound from '@/components/ResourceNotFound.vue'
 import { is404Error as checkIs404Error, get404Message, get404Title } from '@/utils/errorUtils'
 
 const route = useRoute()
 const router = useRouter()
+
+// Image error handling with automatic URL refresh
+const onThumbnailError = async (event: Event) => {
+  const img = event.target as HTMLImageElement
+  const fileId = img.dataset.fileId
+
+  if (!fileId || !file.value) {
+    console.warn('Thumbnail load error: no file ID or file data found', event)
+    return
+  }
+
+  console.warn('Thumbnail load error for file:', fileId, 'attempting to refresh URL')
+
+  try {
+    // Generate new signed URL with thumbnails
+    const response = await fileService.generateSignedUrlWithThumbnails(file.value)
+
+    // Update the image source with new thumbnail URL
+    if (response.thumbnails?.medium) {
+      img.src = response.thumbnails.medium
+    } else if (response.thumbnails?.small) {
+      img.src = response.thumbnails.small
+    } else {
+      img.src = response.url
+    }
+
+    console.log('Successfully refreshed thumbnail URL for file:', fileId)
+  } catch (error) {
+    console.error('Failed to refresh thumbnail URL for file:', fileId, error)
+    // Hide the broken image and show placeholder
+    img.style.display = 'none'
+    const parent = img.parentElement
+    if (parent) {
+      parent.innerHTML = `
+        <div class="file-placeholder">
+          <div class="file-icon">
+            <i class="fas fa-image" style="font-size: 4rem; color: var(--text-secondary-color); margin-bottom: 1rem;"></i>
+          </div>
+          <p>Image could not be loaded</p>
+        </div>
+      `
+    }
+  }
+}
 
 // State
 const file = ref<FileEntity | null>(null)
@@ -222,6 +270,7 @@ const lastError = ref<any>(null) // Store the last error object for 404 detectio
 const deleting = ref(false)
 const fileSize = ref<string | null>(null)
 const fileUrl = ref<string | null>(null) // Signed URL for file preview
+const previewImage = ref<HTMLImageElement | null>(null) // Reference to preview image element
 
 // Delete modal
 const showDeleteModal = ref(false)
@@ -337,20 +386,16 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString()
 }
 
+// Handle image load (thumbnail polling was removed)
+const onImageLoad = (event: Event) => {
+  // Image loaded successfully - no additional action needed
+  // Thumbnails are now generated inline during upload
+  console.log('Image loaded successfully')
+}
+
 const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-  const parent = img.parentElement
-  if (parent) {
-    parent.innerHTML = `
-      <div class="file-placeholder">
-        <div class="file-icon">
-          <i class="fas fa-image" style="font-size: 4rem; color: var(--text-secondary-color); margin-bottom: 1rem;"></i>
-        </div>
-        <p>Image could not be loaded</p>
-      </div>
-    `
-  }
+  // Use the new onThumbnailError function which handles URL refresh
+  onThumbnailError(event)
 }
 
 const handlePdfError = () => {
@@ -417,6 +462,8 @@ const deleteFile = async () => {
     showDeleteModal.value = false
   }
 }
+
+// Note: Thumbnail polling was removed as thumbnails are now generated inline during upload
 
 // Lifecycle
 onMounted(() => {

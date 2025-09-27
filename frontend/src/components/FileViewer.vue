@@ -41,6 +41,7 @@
                 ref="fullImage"
                 :src="currentFileUrl"
                 :alt="currentFileName"
+                :data-file-id="currentFile?.id"
                 class="full-image"
                 :class="{ 'zoomed': isZoomed }"
                 :style="imageStyle"
@@ -49,6 +50,7 @@
                 @mousemove="pan"
                 @mouseup="endPan"
                 @mouseleave="endPan"
+                @error="onImageError"
               />
               <div v-else class="loading-placeholder">
                 Loading preview...

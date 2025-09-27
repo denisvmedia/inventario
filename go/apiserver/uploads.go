@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/render"
 	"gocloud.dev/blob"
 
+	"github.com/denisvmedia/inventario/apiserver/middleware"
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/mimekit"
@@ -62,13 +63,14 @@ func uploadedFilesFromContext(ctx context.Context) []uploadedFile {
 }
 
 type uploadsAPI struct {
-	uploadLocation  string
-	fileService     *services.FileService
-	factorySet      *registry.FactorySet
-	thumbnailConfig services.ThumbnailGenerationConfig
+	uploadLocation     string
+	fileService        *services.FileService
+	fileSigningService *services.FileSigningService
+	factorySet         *registry.FactorySet
+	thumbnailConfig    services.ThumbnailGenerationConfig
 }
 
-func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request) {
+func (api *uploadsAPI) handleImageUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
 	if registrySet == nil {
@@ -77,7 +79,7 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	uploadedFiles := uploadedFilesFromContext(r.Context())
-	if len(uploadedFiles) == 0 {
+	if len(uploadedFiles) != 1 {
 		unprocessableEntityError(w, r, ErrNoFilesUploaded)
 		return
 	}
@@ -88,10 +90,6 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	uploadData := jsonapi.UploadData{
-		Type: "images",
-	}
-
 	// Extract user from authenticated request context
 	user := GetUserFromRequest(r)
 	if user == nil {
@@ -100,58 +98,78 @@ func (api *uploadsAPI) handleImagesUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	fileReg := registrySet.FileRegistry
+	f := uploadedFiles[0] // Single file only
 
-	for _, f := range uploadedFiles {
-		// Get the extension from the MIME type
-		ext := mimekit.ExtensionByMime(f.MIMEType)
-		originalPath := f.FilePath
-		// Set Path to be the filename without extension
-		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+	// Get the extension from the MIME type
+	ext := mimekit.ExtensionByMime(f.MIMEType)
+	originalPath := f.FilePath
+	// Set Path to be the filename without extension
+	pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		// Create file entity instead of image
-		now := time.Now()
-		fileEntity := models.FileEntity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: user.TenantID,
-				UserID:   user.ID,
-			},
-			Title:            pathWithoutExt, // Use filename as title
-			Description:      "",
-			Type:             models.FileTypeImage,
-			Tags:             []string{},
-			LinkedEntityType: "commodity",
-			LinkedEntityID:   entityID,
-			LinkedEntityMeta: "images",
-			CreatedAt:        now,
-			UpdatedAt:        now,
-			File: &models.File{
-				Path:         pathWithoutExt,
-				OriginalPath: originalPath,
-				Ext:          ext,
-				MIMEType:     f.MIMEType,
-			},
-		}
-
-		createdFile, err := fileReg.Create(r.Context(), fileEntity)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-
-		// Request thumbnail generation for image files
-		api.requestThumbnailGeneration(r.Context(), createdFile, user.ID)
-
-		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
+	// Create file entity instead of image
+	now := time.Now()
+	fileEntity := models.FileEntity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Title:            pathWithoutExt, // Use filename as title
+		Description:      "",
+		Type:             models.FileTypeImage,
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   entityID,
+		LinkedEntityMeta: "images",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         pathWithoutExt,
+			OriginalPath: originalPath,
+			Ext:          ext,
+			MIMEType:     f.MIMEType,
+		},
 	}
 
-	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
+	createdFile, err := fileReg.Create(r.Context(), fileEntity)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	// Generate thumbnail inline for image files
+	api.generateThumbnailInline(r.Context(), createdFile, user.ID)
+
+	// Generate signed URLs with thumbnails for immediate use
+	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID)
+	if err != nil {
+		// Log error but don't fail the upload - signed URLs are optional
+		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		// Return response without signed URLs
+		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
+		if err := render.Render(w, r, resp); err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+		return
+	}
+
+	// Create signed URLs map
+	signedUrls := map[string]jsonapi.URLData{
+		createdFile.ID: {
+			URL:        originalURL,
+			Thumbnails: thumbnails,
+		},
+	}
+
+	// Return response with signed URLs and thumbnails
+	resp := jsonapi.NewFileResponseWithSignedUrls(createdFile, signedUrls).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 }
 
-func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Request) {
+func (api *uploadsAPI) handleManualUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
 	if registrySet == nil {
@@ -160,7 +178,7 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 	}
 
 	uploadedFiles := uploadedFilesFromContext(r.Context())
-	if len(uploadedFiles) == 0 {
+	if len(uploadedFiles) != 1 {
 		unprocessableEntityError(w, r, ErrNoFilesUploaded)
 		return
 	}
@@ -171,10 +189,6 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	uploadData := jsonapi.UploadData{
-		Type: "manuals",
-	}
-
 	// Extract user from authenticated request context
 	user := GetUserFromRequest(r)
 	if user == nil {
@@ -183,60 +197,81 @@ func (api *uploadsAPI) handleManualsUpload(w http.ResponseWriter, r *http.Reques
 	}
 
 	fileReg := registrySet.FileRegistry
+	f := uploadedFiles[0] // Single file only
 
-	for _, f := range uploadedFiles {
-		// Get the extension from the MIME type
-		ext := mimekit.ExtensionByMime(f.MIMEType)
-		originalPath := f.FilePath
-		// Set Path to be the filename without extension
-		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+	// Get the extension from the MIME type
+	ext := mimekit.ExtensionByMime(f.MIMEType)
+	originalPath := f.FilePath
+	// Set Path to be the filename without extension
+	pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		// Auto-detect file type based on MIME type
-		fileType := detectFileType(f.MIMEType)
+	// Auto-detect file type based on MIME type
+	fileType := detectFileType(f.MIMEType)
 
-		// Create file entity instead of manual
-		now := time.Now()
-		fileEntity := models.FileEntity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: user.TenantID,
-				UserID:   user.ID,
-			},
-			Title:            pathWithoutExt, // Use filename as title
-			Description:      "",
-			Type:             fileType, // Use auto-detected type
-			Tags:             []string{},
-			LinkedEntityType: "commodity",
-			LinkedEntityID:   entityID,
-			LinkedEntityMeta: "manuals",
-			CreatedAt:        now,
-			UpdatedAt:        now,
-			File: &models.File{
-				Path:         pathWithoutExt,
-				OriginalPath: originalPath,
-				Ext:          ext,
-				MIMEType:     f.MIMEType,
-			},
-		}
-
-		createdFile, err := fileReg.Create(r.Context(), fileEntity)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
-
-		// Request thumbnail generation for image files
-		api.requestThumbnailGeneration(r.Context(), createdFile, user.ID)
+	// Create file entity instead of manual
+	now := time.Now()
+	fileEntity := models.FileEntity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Title:            pathWithoutExt, // Use filename as title
+		Description:      "",
+		Type:             fileType, // Use auto-detected type
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   entityID,
+		LinkedEntityMeta: "manuals",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         pathWithoutExt,
+			OriginalPath: originalPath,
+			Ext:          ext,
+			MIMEType:     f.MIMEType,
+		},
 	}
 
-	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
+	createdFile, err := fileReg.Create(r.Context(), fileEntity)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	// Generate thumbnail inline for image files
+	api.generateThumbnailInline(r.Context(), createdFile, user.ID)
+
+	// Generate signed URLs with thumbnails for immediate use
+	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID)
+	if err != nil {
+		// Log error but don't fail the upload - signed URLs are optional
+		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		// Return response without signed URLs
+		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
+		if err := render.Render(w, r, resp); err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+		return
+	}
+
+	// Create signed URLs map
+	signedUrls := map[string]jsonapi.URLData{
+		createdFile.ID: {
+			URL:        originalURL,
+			Thumbnails: thumbnails,
+		},
+	}
+
+	// Return response with signed URLs and thumbnails
+	resp := jsonapi.NewFileResponseWithSignedUrls(createdFile, signedUrls).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 }
 
-func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Request) {
+func (api *uploadsAPI) handleInvoiceUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
 	if registrySet == nil {
@@ -245,7 +280,7 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 	}
 
 	uploadedFiles := uploadedFilesFromContext(r.Context())
-	if len(uploadedFiles) == 0 {
+	if len(uploadedFiles) != 1 {
 		unprocessableEntityError(w, r, ErrNoFilesUploaded)
 		return
 	}
@@ -256,10 +291,6 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	uploadData := jsonapi.UploadData{
-		Type: "invoices",
-	}
-
 	// Extract user from authenticated request context
 	user := GetUserFromRequest(r)
 	if user == nil {
@@ -268,60 +299,81 @@ func (api *uploadsAPI) handleInvoicesUpload(w http.ResponseWriter, r *http.Reque
 	}
 
 	fileReg := registrySet.FileRegistry
+	f := uploadedFiles[0] // Single file only
 
-	for _, f := range uploadedFiles {
-		// Get the extension from the MIME type
-		ext := mimekit.ExtensionByMime(f.MIMEType)
-		originalPath := f.FilePath
-		// Set Path to be the filename without extension
-		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+	// Get the extension from the MIME type
+	ext := mimekit.ExtensionByMime(f.MIMEType)
+	originalPath := f.FilePath
+	// Set Path to be the filename without extension
+	pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		// Auto-detect file type based on MIME type
-		fileType := detectFileType(f.MIMEType)
+	// Auto-detect file type based on MIME type
+	fileType := detectFileType(f.MIMEType)
 
-		// Create file entity instead of invoice
-		now := time.Now()
-		fileEntity := models.FileEntity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: user.TenantID,
-				UserID:   user.ID,
-			},
-			Title:            pathWithoutExt, // Use filename as title
-			Description:      "",
-			Type:             fileType, // Use auto-detected type
-			Tags:             []string{},
-			LinkedEntityType: "commodity",
-			LinkedEntityID:   entityID,
-			LinkedEntityMeta: "invoices",
-			CreatedAt:        now,
-			UpdatedAt:        now,
-			File: &models.File{
-				Path:         pathWithoutExt,
-				OriginalPath: originalPath,
-				Ext:          ext,
-				MIMEType:     f.MIMEType,
-			},
-		}
-
-		createdFile, err := fileReg.Create(r.Context(), fileEntity)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-		uploadData.FileNames = append(uploadData.FileNames, createdFile.Path)
-
-		// Request thumbnail generation for image files
-		api.requestThumbnailGeneration(r.Context(), createdFile, user.ID)
+	// Create file entity instead of invoice
+	now := time.Now()
+	fileEntity := models.FileEntity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Title:            pathWithoutExt, // Use filename as title
+		Description:      "",
+		Type:             fileType, // Use auto-detected type
+		Tags:             []string{},
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   entityID,
+		LinkedEntityMeta: "invoices",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		File: &models.File{
+			Path:         pathWithoutExt,
+			OriginalPath: originalPath,
+			Ext:          ext,
+			MIMEType:     f.MIMEType,
+		},
 	}
 
-	resp := jsonapi.NewUploadResponse(entityID, uploadData).WithStatusCode(http.StatusCreated)
+	createdFile, err := fileReg.Create(r.Context(), fileEntity)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	// Generate thumbnail inline for image files
+	api.generateThumbnailInline(r.Context(), createdFile, user.ID)
+
+	// Generate signed URLs with thumbnails for immediate use
+	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID)
+	if err != nil {
+		// Log error but don't fail the upload - signed URLs are optional
+		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		// Return response without signed URLs
+		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
+		if err := render.Render(w, r, resp); err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+		return
+	}
+
+	// Create signed URLs map
+	signedUrls := map[string]jsonapi.URLData{
+		createdFile.ID: {
+			URL:        originalURL,
+			Thumbnails: thumbnails,
+		},
+	}
+
+	// Return response with signed URLs and thumbnails
+	resp := jsonapi.NewFileResponseWithSignedUrls(createdFile, signedUrls).WithStatusCode(http.StatusCreated)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 }
 
-func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
+func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
 	if registrySet == nil {
@@ -330,12 +382,10 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 	}
 
 	uploadedFiles := uploadedFilesFromContext(r.Context())
-	if len(uploadedFiles) == 0 {
+	if len(uploadedFiles) != 1 {
 		unprocessableEntityError(w, r, ErrNoFilesUploaded)
 		return
 	}
-
-	var createdFiles []models.FileEntity
 
 	// Extract user from authenticated request context
 	user := GetUserFromRequest(r)
@@ -345,59 +395,72 @@ func (api *uploadsAPI) handleFilesUpload(w http.ResponseWriter, r *http.Request)
 	}
 
 	fileReg := registrySet.FileRegistry
+	f := uploadedFiles[0] // Single file only
 
-	for _, f := range uploadedFiles {
-		// Get the extension from the MIME type
-		ext := mimekit.ExtensionByMime(f.MIMEType)
-		originalPath := f.FilePath
-		// Set Path to be the filename without extension
-		pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+	// Get the extension from the MIME type
+	ext := mimekit.ExtensionByMime(f.MIMEType)
+	originalPath := f.FilePath
+	// Set Path to be the filename without extension
+	pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
 
-		// Auto-detect file type based on MIME type
-		fileType := detectFileType(f.MIMEType)
+	// Auto-detect file type based on MIME type
+	fileType := detectFileType(f.MIMEType)
 
-		// Create file entity with auto-generated title from filename
-		now := time.Now()
-		fileEntity := models.FileEntity{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: user.TenantID,
-				UserID:   user.ID,
-			},
-			Title:       pathWithoutExt, // Use filename as default title
-			Description: "",             // Empty description
-			Type:        fileType,
-			Tags:        []string{}, // Empty tags
-			CreatedAt:   now,
-			UpdatedAt:   now,
-			File: &models.File{
-				Path:         pathWithoutExt,
-				OriginalPath: originalPath,
-				Ext:          ext,
-				MIMEType:     f.MIMEType,
-			},
-		}
+	// Create file entity with auto-generated title from filename
+	now := time.Now()
+	fileEntity := models.FileEntity{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		Title:       pathWithoutExt, // Use filename as default title
+		Description: "",             // Empty description
+		Type:        fileType,
+		Tags:        []string{}, // Empty tags
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		File: &models.File{
+			Path:         pathWithoutExt,
+			OriginalPath: originalPath,
+			Ext:          ext,
+			MIMEType:     f.MIMEType,
+		},
+	}
 
-		createdFile, err := fileReg.Create(r.Context(), fileEntity)
-		if err != nil {
-			renderEntityError(w, r, err)
+	createdFile, err := fileReg.Create(r.Context(), fileEntity)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	// Generate thumbnail inline for image files
+	api.generateThumbnailInline(r.Context(), createdFile, user.ID)
+
+	// Generate signed URLs with thumbnails for immediate use
+	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID)
+	if err != nil {
+		// Log error but don't fail the upload - signed URLs are optional
+		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		// Return response without signed URLs
+		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
+		if err := render.Render(w, r, resp); err != nil {
+			internalServerError(w, r, err)
 			return
 		}
-
-		// Request thumbnail generation for image files
-		api.requestThumbnailGeneration(r.Context(), createdFile, user.ID)
-
-		createdFiles = append(createdFiles, *createdFile)
+		return
 	}
 
-	// Return the created files
-	var filePtrs []*models.FileEntity
-	for i := range createdFiles {
-		filePtrs = append(filePtrs, &createdFiles[i])
+	// Create signed URLs map
+	signedUrls := map[string]jsonapi.URLData{
+		createdFile.ID: {
+			URL:        originalURL,
+			Thumbnails: thumbnails,
+		},
 	}
 
-	response := jsonapi.NewFilesResponse(filePtrs, len(createdFiles))
-	render.Status(r, http.StatusCreated)
-	if err := render.Render(w, r, response); err != nil {
+	// Return response with signed URLs and thumbnails
+	resp := jsonapi.NewFileResponseWithSignedUrls(createdFile, signedUrls).WithStatusCode(http.StatusCreated)
+	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -436,6 +499,7 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 			}
 
 			var uploadedFiles []uploadedFile
+			fileCount := 0
 
 		loop:
 			for {
@@ -453,6 +517,13 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 				// Skip if it's not a file part
 				if part.FileName() == "" {
 					continue
+				}
+
+				fileCount++
+				// Only allow single file uploads
+				if fileCount > 1 {
+					unprocessableEntityError(w, r, errkit.WithStack(errors.New("only single file uploads are allowed")))
+					return
 				}
 
 				// Generate the file path and open a new file
@@ -504,31 +575,62 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 func Uploads(params Params) func(r chi.Router) {
 	api := &uploadsAPI{
-		uploadLocation:  params.UploadLocation,
-		fileService:     services.NewFileService(params.FactorySet, params.UploadLocation),
-		factorySet:      params.FactorySet,
-		thumbnailConfig: params.ThumbnailConfig,
+		uploadLocation:     params.UploadLocation,
+		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
+		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
+		factorySet:         params.FactorySet,
+		thumbnailConfig:    params.ThumbnailConfig,
 	}
+
+	// Create concurrent upload service for upload limiting
+	config := services.LoadConcurrentUploadConfig()
+	concurrentUploadService := services.NewConcurrentUploadService(config)
+	uploadLimiter := middleware.UploadLimiter(concurrentUploadService)
 
 	return func(r chi.Router) {
 		r.With(commodityCtx()).
 			Route("/commodities/{commodityID}", func(r chi.Router) {
-				r.With(api.uploadFiles(mimekit.ImageContentTypes()...)).Post("/images", api.handleImagesUpload)
-				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/manuals", api.handleManualsUpload)
-				r.With(api.uploadFiles(mimekit.DocContentTypes()...)).Post("/invoices", api.handleInvoicesUpload)
+				// Single image upload with concurrent upload limiting
+				imageMiddlewares := []func(http.Handler) http.Handler{
+					middleware.SetUploadOperation("image_upload"),
+					uploadLimiter,
+					api.uploadFiles(mimekit.ImageContentTypes()...),
+				}
+				r.With(imageMiddlewares...).Post("/image", api.handleImageUpload)
+
+				// Single manual upload with concurrent upload limiting
+				manualMiddlewares := []func(http.Handler) http.Handler{
+					middleware.SetUploadOperation("document_upload"),
+					uploadLimiter,
+					api.uploadFiles(mimekit.DocContentTypes()...),
+				}
+				r.With(manualMiddlewares...).Post("/manual", api.handleManualUpload)
+
+				// Single invoice upload with concurrent upload limiting
+				invoiceMiddlewares := []func(http.Handler) http.Handler{
+					middleware.SetUploadOperation("document_upload"),
+					uploadLimiter,
+					api.uploadFiles(mimekit.DocContentTypes()...),
+				}
+				r.With(invoiceMiddlewares...).Post("/invoice", api.handleInvoiceUpload)
 			})
 
-		// File uploads - allow all content types
-		r.With(api.uploadFiles(mimekit.AllContentTypes()...)).Post("/files", api.handleFilesUpload)
+		// Single file upload - allow all content types with concurrent upload limiting
+		fileMiddlewares := []func(http.Handler) http.Handler{
+			middleware.SetUploadOperation("file_upload"),
+			uploadLimiter,
+			api.uploadFiles(mimekit.AllContentTypes()...),
+		}
+		r.With(fileMiddlewares...).Post("/file", api.handleFileUpload)
 
-		// Restore uploads - only allow XML files
+		// Restore uploads - only allow XML files (no upload limiting for system operations)
 		r.With(api.uploadFiles(mimekit.XMLContentTypes()...)).Post("/restores", api.handleRestoreUpload)
 	}
 }
 
-// requestThumbnailGeneration requests thumbnail generation for image files with proper logging
-func (api *uploadsAPI) requestThumbnailGeneration(ctx context.Context, file *models.FileEntity, userID string) {
-	// Only request for supported image types
+// generateThumbnailInline generates thumbnails inline during upload for image files
+func (api *uploadsAPI) generateThumbnailInline(ctx context.Context, file *models.FileEntity, userID string) {
+	// Only generate for supported image types
 	if !mimekit.IsImage(file.MIMEType) {
 		return // Not an image, skip thumbnail generation
 	}
@@ -538,21 +640,18 @@ func (api *uploadsAPI) requestThumbnailGeneration(ctx context.Context, file *mod
 		return // Skip unsupported image formats
 	}
 
-	// Create thumbnail generation service
-	thumbnailService := services.NewThumbnailGenerationService(api.factorySet, api.uploadLocation, api.thumbnailConfig)
-
-	// Request thumbnail generation
-	_, err := thumbnailService.RequestThumbnailGeneration(ctx, file.ID)
+	// Generate thumbnail inline using file service directly
+	err := api.fileService.GenerateThumbnails(ctx, file)
 	if err != nil {
 		// Log error but don't fail the upload - thumbnails are optional
-		slog.Error("Failed to request thumbnail generation",
+		slog.Error("Failed to generate thumbnail inline",
 			"error", err.Error(),
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,
 			"file_id", file.ID,
 			"user_id", userID)
 	} else {
-		slog.Info("Thumbnail generation requested successfully",
+		slog.Info("Thumbnail generated inline successfully",
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,
 			"file_id", file.ID)

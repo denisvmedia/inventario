@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -166,6 +168,9 @@ func (r *ThumbnailGenerationJobRegistry) GetJobByFileID(ctx context.Context, fil
 
 		err := tx.GetContext(ctx, &job, query, fileID)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errkit.Wrap(registry.ErrNotFound, "no thumbnail generation job found for file", "file_id", fileID)
+			}
 			return errkit.Wrap(err, "failed to get thumbnail generation job by file ID")
 		}
 		return nil

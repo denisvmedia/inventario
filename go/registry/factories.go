@@ -88,6 +88,12 @@ type UserConcurrencySlotRegistryFactory interface {
 	ServiceRegistryFactory[models.UserConcurrencySlot, UserConcurrencySlotRegistry]
 }
 
+// OperationSlotRegistryFactory creates OperationSlotRegistry instances with proper context
+type OperationSlotRegistryFactory interface {
+	UserRegistryFactory[models.OperationSlot, OperationSlotRegistry]
+	ServiceRegistryFactory[models.OperationSlot, OperationSlotRegistry]
+}
+
 // FactorySet contains all registry factories - these create safe, context-aware registries
 type FactorySet struct {
 	LocationRegistryFactory               LocationRegistryFactory
@@ -103,6 +109,7 @@ type FactorySet struct {
 	FileRegistryFactory                   FileRegistryFactory
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
+	OperationSlotRegistryFactory          OperationSlotRegistryFactory
 	TenantRegistry                        TenantRegistry // TenantRegistry doesn't need factory as it's not user-aware
 	UserRegistry                          UserRegistry   // UserRegistry doesn't need factory as it's not user-aware
 }
@@ -174,6 +181,11 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
+	operationSlotRegistry, err := fs.OperationSlotRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Set{
 		LocationRegistry:               locationRegistry,
 		AreaRegistry:                   areaRegistry,
@@ -188,6 +200,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		FileRegistry:                   fileRegistry,
 		ThumbnailGenerationJobRegistry: thumbnailGenerationJobRegistry,
 		UserConcurrencySlotRegistry:    userConcurrencySlotRegistry,
+		OperationSlotRegistry:          operationSlotRegistry,
 		TenantRegistry:                 fs.TenantRegistry,
 		UserRegistry:                   fs.UserRegistry,
 	}, nil
@@ -209,6 +222,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		FileRegistry:                   fs.FileRegistryFactory.CreateServiceRegistry(),
 		ThumbnailGenerationJobRegistry: fs.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry(),
 		UserConcurrencySlotRegistry:    fs.UserConcurrencySlotRegistryFactory.CreateServiceRegistry(),
+		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),
 		TenantRegistry:                 fs.TenantRegistry,
 		UserRegistry:                   fs.UserRegistry,
 	}

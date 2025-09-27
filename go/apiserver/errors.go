@@ -20,6 +20,8 @@ var (
 	ErrEntityNotFound         = errors.New("entity not found")
 	ErrTenantNotFound         = errors.New("tenant not found")
 	ErrUnknownThumbnailStatus = errors.New("unknown thumbnail generation status")
+	ErrMissingUploadSlot      = errors.New("missing X-Upload-Slot header")
+	ErrInvalidUploadSlot      = errors.New("invalid or expired upload slot")
 	ErrNotFound               = registry.ErrNotFound
 )
 
@@ -94,6 +96,8 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, ErrNotFound):
 		return NewNotFoundError(err)
+	case errors.Is(err, registry.ErrMainCurrencyNotSet):
+		return NewBadRequestError(err)
 	case errors.Is(err, registry.ErrMainCurrencyAlreadySet):
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrRateLimitExceeded):
@@ -102,6 +106,10 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewBadRequestError(err)
 	case errors.Is(err, registry.ErrResourceLimitExceeded):
 		return NewTooManyRequestsError(err)
+	case errors.Is(err, ErrMissingUploadSlot):
+		return NewBadRequestError(err)
+	case errors.Is(err, ErrInvalidUploadSlot):
+		return NewBadRequestError(err)
 	default:
 		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)

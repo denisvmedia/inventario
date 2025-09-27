@@ -171,6 +171,34 @@ type UserConcurrencySlotRegistry interface {
 	CleanupExpiredSlots(ctx context.Context) error
 }
 
+type OperationSlotRegistry interface {
+	Registry[models.OperationSlot]
+
+	// GetSlot retrieves a specific slot for a user and operation
+	GetSlot(ctx context.Context, userID, operationName string, slotID int) (*models.OperationSlot, error)
+
+	// ReleaseSlot removes a specific slot for a user and operation
+	ReleaseSlot(ctx context.Context, userID, operationName string, slotID int) error
+
+	// GetActiveSlotCount returns the number of active (non-expired) slots for a user and operation
+	GetActiveSlotCount(ctx context.Context, userID, operationName string) (int, error)
+
+	// GetNextSlotID returns the next available slot ID for a user and operation
+	GetNextSlotID(ctx context.Context, userID, operationName string) (int, error)
+
+	// CleanupExpiredSlots removes all expired slots and returns the count of deleted slots
+	CleanupExpiredSlots(ctx context.Context) (int, error)
+
+	// GetOperationStats returns statistics about slot usage across all operations
+	GetOperationStats(ctx context.Context) (map[string]models.OperationStats, error)
+
+	// GetUserSlotStats returns slot usage statistics for a specific user
+	GetUserSlotStats(ctx context.Context, userID string) (map[string]int, error)
+
+	// GetExpiredSlots returns all expired slots (for testing/debugging)
+	GetExpiredSlots(ctx context.Context) ([]models.OperationSlot, error)
+}
+
 type RestoreOperationRegistry interface {
 	Registry[models.RestoreOperation]
 
@@ -227,6 +255,7 @@ type Set struct {
 	FileRegistry                   FileRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
+	OperationSlotRegistry          OperationSlotRegistry
 	TenantRegistry                 TenantRegistry
 	UserRegistry                   UserRegistry
 }

@@ -7,7 +7,12 @@
     <div v-else class="files-container">
       <div v-for="file in files" :key="file.id" class="file-item" :data-file-id="file.id" :data-file-ext="file.ext">
         <div v-if="isImageFile(file)" class="file-preview image-preview" @click="openViewer(file)">
-          <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
+          <img
+            :src="getFileUrl(file)"
+            alt="Preview"
+            class="preview-image"
+            @error="onImageError"
+          />
         </div>
         <div v-else class="file-preview file-icon" @click="openViewer(file)">
           <font-awesome-icon :icon="getFileIcon(file)" size="3x" />
@@ -54,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted, watch } from 'vue'
 
 const props = defineProps({
   files: {
@@ -81,6 +86,12 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['delete', 'download', 'update', 'view-details', 'open-viewer'])
+
+// Simple image error handling (no more polling needed)
+const onImageError = (event: Event) => {
+  console.warn('Image load error:', event)
+  // Thumbnails are now generated during upload, so no retry needed
+}
 
 // Get file URL from the fileUrls prop
 const getFileUrl = (file: any) => {

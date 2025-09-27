@@ -10,6 +10,7 @@ var (
 	ErrNotFound           = errors.New("not found")
 	ErrCannotDelete       = errors.New("cannot delete")
 	ErrInvalidConfig      = errors.New("invalid config")
+	ErrInvalidInput       = errors.New("invalid input")
 	ErrFieldRequired      = errors.New("field required")
 	ErrAlreadyExists      = errors.New("already exists")
 	ErrEmailAlreadyExists = errors.New("email already exists")
@@ -22,4 +23,5 @@ var (
 	ErrUserContextRequired      = errors.New("user context required")
 	ErrResourceLimitExceeded    = errors.New("resource limit exceeded")
 	ErrConcurrencyLimitExceeded = errors.New("concurrency limit exceeded")
+	ErrTooManyRequests          = errors.New("too many requests")
 )
