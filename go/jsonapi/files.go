@@ -337,6 +337,105 @@ func (*SearchResponse) Render(_w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// ThumbnailStatusData represents thumbnail generation status data
+type ThumbnailStatusData struct {
+	ID         string                    `json:"id"`
+	Type       string                    `json:"type" example:"thumbnail-status" enums:"thumbnail-status"`
+	Attributes ThumbnailStatusAttributes `json:"attributes"`
+}
+
+// ThumbnailStatusAttributes contains the thumbnail status information
+type ThumbnailStatusAttributes struct {
+	FileID                string          `json:"file_id"`
+	Status                string          `json:"status"`
+	ThumbnailsExist       map[string]bool `json:"thumbnails_exist"`
+	JobID                 *string         `json:"job_id,omitempty"`
+	AttemptCount          *int            `json:"attempt_count,omitempty"`
+	MaxAttempts           *int            `json:"max_attempts,omitempty"`
+	CreatedAt             *string         `json:"created_at,omitempty"`
+	UpdatedAt             *string         `json:"updated_at,omitempty"`
+	ProcessingStartedAt   *string         `json:"processing_started_at,omitempty"`
+	ProcessingCompletedAt *string         `json:"processing_completed_at,omitempty"`
+	ErrorMessage          *string         `json:"error_message,omitempty"`
+	Message               string          `json:"message"`
+}
+
+// ThumbnailStatusResponse represents a thumbnail status response
+type ThumbnailStatusResponse struct {
+	HTTPStatusCode int                 `json:"-"` // HTTP response status code
+	Data           ThumbnailStatusData `json:"data"`
+}
+
+// NewThumbnailStatusResponse creates a new thumbnail status response following JSON:API patterns
+func NewThumbnailStatusResponse(fileID string, job *models.ThumbnailGenerationJob, thumbnailsExist map[string]bool) *ThumbnailStatusResponse {
+	attrs := ThumbnailStatusAttributes{
+		FileID:          fileID,
+		ThumbnailsExist: thumbnailsExist,
+	}
+
+	if job == nil {
+		attrs.Status = "no_job"
+		attrs.Message = "No thumbnail generation job exists"
+	} else {
+		attrs.Status = string(job.Status)
+		attrs.JobID = &job.ID
+		attrs.AttemptCount = &job.AttemptCount
+		attrs.MaxAttempts = &job.MaxAttempts
+
+		createdAt := job.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
+		updatedAt := job.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
+		attrs.CreatedAt = &createdAt
+		attrs.UpdatedAt = &updatedAt
+
+		if job.ProcessingStartedAt != nil {
+			startedAt := job.ProcessingStartedAt.Format("2006-01-02T15:04:05Z07:00")
+			attrs.ProcessingStartedAt = &startedAt
+		}
+		if job.ProcessingCompletedAt != nil {
+			completedAt := job.ProcessingCompletedAt.Format("2006-01-02T15:04:05Z07:00")
+			attrs.ProcessingCompletedAt = &completedAt
+		}
+		if job.ErrorMessage != "" {
+			attrs.ErrorMessage = &job.ErrorMessage
+		}
+
+		// Set appropriate message based on status
+		switch job.Status {
+		case models.ThumbnailStatusPending:
+			attrs.Message = "Thumbnail generation is pending"
+		case models.ThumbnailStatusProcessing:
+			attrs.Message = "Thumbnail generation is in progress"
+		case models.ThumbnailStatusCompleted:
+			attrs.Message = "Thumbnail generation completed successfully"
+		case models.ThumbnailStatusFailed:
+			attrs.Message = "Thumbnail generation failed"
+		default:
+			attrs.Message = "Unknown thumbnail generation status"
+		}
+	}
+
+	return &ThumbnailStatusResponse{
+		Data: ThumbnailStatusData{
+			ID:         fileID,
+			Type:       "thumbnail-status",
+			Attributes: attrs,
+		},
+	}
+}
+
+// WithStatusCode sets the HTTP response status code for the ThumbnailStatusResponse.
+func (tsr *ThumbnailStatusResponse) WithStatusCode(statusCode int) *ThumbnailStatusResponse {
+	tmp := *tsr
+	tmp.HTTPStatusCode = statusCode
+	return &tmp
+}
+
+// Render renders the ThumbnailStatusResponse as an HTTP response
+func (tsr *ThumbnailStatusResponse) Render(_w http.ResponseWriter, r *http.Request) error {
+	render.Status(r, statusCodeDef(tsr.HTTPStatusCode, http.StatusOK))
+	return nil
+}
+
 // SignedFileURLResponse is an object that holds signed file URL information.
 type SignedFileURLResponse struct {
 	HTTPStatusCode int `json:"-"` // HTTP response status code

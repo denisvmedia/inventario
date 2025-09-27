@@ -7,7 +7,12 @@
     <div v-else class="files-container">
       <div v-for="file in files" :key="file.id" class="file-item" :data-file-id="file.id" :data-file-ext="file.ext">
         <div v-if="isImageFile(file)" class="file-preview image-preview" @click="openViewer(file)">
-          <img :src="getFileUrl(file)" alt="Preview" class="preview-image" />
+          <img
+            :src="getFileUrl(file)"
+            alt="Preview"
+            class="preview-image"
+            @error="onImageError"
+          />
         </div>
         <div v-else class="file-preview file-icon" @click="openViewer(file)">
           <font-awesome-icon :icon="getFileIcon(file)" size="3x" />
@@ -82,12 +87,26 @@ const props = defineProps({
 
 const emit = defineEmits(['delete', 'download', 'update', 'view-details', 'open-viewer'])
 
+// Simple image error handling (no more polling needed)
+const onImageError = (event: Event) => {
+  console.warn('Image load error:', event)
+  // Thumbnails are now generated during upload, so no retry needed
+}
+
+// Define file interface
+interface FileItem {
+  id: string
+  path?: string
+  ext: string
+  mime_type?: string
+}
+
 // Get file URL from the fileUrls prop
-const getFileUrl = (file: any) => {
+const getFileUrl = (file: FileItem) => {
   return props.fileUrls[file.id] || ''
 }
 
-const getFileName = (file: any) => {
+const getFileName = (file: FileItem) => {
   // Use the Path field directly (it's now just the filename without extension)
   // and add the extension from the ext field
   if (file.path) {
@@ -97,7 +116,7 @@ const getFileName = (file: any) => {
   return `${file.id}${file.ext}`
 }
 
-const getFileIcon = (file: any) => {
+const getFileIcon = (file: FileItem) => {
   if (isPdfFile(file)) {
     return 'file-pdf'
   } else if (isImageFile(file)) {
@@ -110,12 +129,12 @@ const getFileIcon = (file: any) => {
   return 'file'
 }
 
-const downloadFile = (file: any) => {
+const downloadFile = (file: FileItem) => {
   // Only emit the event, let parent handle the actual download
   emit('download', file)
 }
 
-const confirmDelete = (file: any) => {
+const confirmDelete = (file: FileItem) => {
   // Only emit the event, let parent handle the confirmation and deletion
   emit('delete', file)
 }
@@ -125,10 +144,10 @@ const editingFile = ref<string | null>(null)
 const editedFileName = ref('')
 const fileNameInput = ref<HTMLInputElement | null>(null)
 
-const startEditing = (file: any) => {
+const startEditing = (file: FileItem) => {
   editingFile.value = file.id
   // Set the initial value to the path (without extension)
-  editedFileName.value = file.path
+  editedFileName.value = file.path || ''
 
   // Focus the input field after the DOM updates
   nextTick(() => {
@@ -143,7 +162,7 @@ const cancelEditing = () => {
   editedFileName.value = ''
 }
 
-const saveFileName = async (file: any) => {
+const saveFileName = async (file: FileItem) => {
   if (!editedFileName.value.trim()) {
     alert('File name cannot be empty')
     return
@@ -166,16 +185,16 @@ const saveFileName = async (file: any) => {
   }
 }
 
-const viewFileDetails = (file: any) => {
+const viewFileDetails = (file: FileItem) => {
   emit('view-details', file)
 }
 
-const openViewer = (file: any) => {
+const openViewer = (file: FileItem) => {
   emit('open-viewer', file)
 }
 
 // Helper functions to detect file types
-const isImageFile = (file: any) => {
+const isImageFile = (file: FileItem) => {
   if (!file) return false
   const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 
@@ -193,7 +212,7 @@ const isImageFile = (file: any) => {
   return false
 }
 
-const isPdfFile = (file: any) => {
+const isPdfFile = (file: FileItem) => {
   if (!file) return false
 
   // Check file extension

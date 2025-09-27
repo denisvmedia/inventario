@@ -90,9 +90,10 @@ type Params struct {
 	UploadLocation    string
 	DebugInfo         *debug.Info
 	StartTime         time.Time
-	JWTSecret         []byte        // JWT secret for user authentication
-	FileSigningKey    []byte        // File signing key for secure file URLs
-	FileURLExpiration time.Duration // File URL expiration duration
+	JWTSecret         []byte                             // JWT secret for user authentication
+	FileSigningKey    []byte                             // File signing key for secure file URLs
+	FileURLExpiration time.Duration                      // File URL expiration duration
+	ThumbnailConfig   services.ThumbnailGenerationConfig // Thumbnail generation configuration
 }
 
 func (p *Params) Validate() error {
@@ -179,6 +180,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.With(userMiddlewares...).Route("/search", Search(params.EntityService))
 		r.With(userMiddlewares...).Route("/commodities/values", Values())
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
+		r.With(userMiddlewares...).Route("/upload-slots", UploadSlots(params.FactorySet))
 
 		// Uploads need special middleware without content type restrictions
 		r.With(userUploadMiddlewares...).Route("/uploads", Uploads(params))

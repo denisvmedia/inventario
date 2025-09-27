@@ -144,9 +144,12 @@
               accept=".gif,.jpg,.jpeg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
               upload-prompt="Drag and drop images here"
               upload-hint="Supports GIF, JPG, JPEG, PNG, and WebP image formats"
+              operation-name="image_upload"
+              :require-slots="true"
               @upload="uploadImages"
               @files-selected="onFilesSelected('images')"
               @files-cleared="onFilesCleared('images')"
+              @upload-capacity-failed="onUploadCapacityFailed"
             />
           </Transition>
 
@@ -406,11 +409,24 @@ const uploadImages = async (files: File[]) => {
   if (!commodity.value || files.length === 0) return
 
   try {
-    await commodityService.uploadImages(commodity.value.id, files)
-    showImageUploader.value = false
+    // Hide overlay immediately when upload starts
     closeFocusOverlay()
+
+    // Setup progress tracking
+    // TODO: Replace with per-file progress tracking that allows:
+    // - Individual progress for each file
+    // - Cancel queued files before they start uploading
+    // - Remove completed files from the UI automatically
+    // - Show file status: queued -> uploading -> completed/failed
+    const onProgress = (current: number, total: number, currentFile: string) => {
+      imageUploaderRef.value?.updateProgress(current, total, currentFile)
+    }
+
+    await commodityService.uploadImages(commodity.value.id, files, onProgress)
     // Mark upload as completed in the uploader
     imageUploaderRef.value?.markUploadCompleted()
+    // Hide uploader after successful upload
+    showImageUploader.value = false
     // Reload images after upload
     loadingImages.value = true
     const response = await commodityService.getImages(commodity.value.id)
@@ -424,15 +440,33 @@ const uploadImages = async (files: File[]) => {
   }
 }
 
+const onUploadCapacityFailed = (error: any) => {
+  console.error('Upload capacity failed:', error)
+  error.value = 'Upload capacity unavailable: ' + (error.message || 'Try again later')
+}
+
 const uploadManuals = async (files: File[]) => {
   if (!commodity.value || files.length === 0) return
 
   try {
-    await commodityService.uploadManuals(commodity.value.id, files)
-    showManualUploader.value = false
+    // Hide overlay immediately when upload starts
     closeFocusOverlay()
+
+    // Setup progress tracking
+    // TODO: Replace with per-file progress tracking that allows:
+    // - Individual progress for each file
+    // - Cancel queued files before they start uploading
+    // - Remove completed files from the UI automatically
+    // - Show file status: queued -> uploading -> completed/failed
+    const onProgress = (current: number, total: number, currentFile: string) => {
+      manualUploaderRef.value?.updateProgress(current, total, currentFile)
+    }
+
+    await commodityService.uploadManuals(commodity.value.id, files, onProgress)
     // Mark upload as completed in the uploader
     manualUploaderRef.value?.markUploadCompleted()
+    // Hide uploader after successful upload
+    showManualUploader.value = false
     // Reload manuals after upload
     loadingManuals.value = true
     const response = await commodityService.getManuals(commodity.value.id)
@@ -450,11 +484,24 @@ const uploadInvoices = async (files: File[]) => {
   if (!commodity.value || files.length === 0) return
 
   try {
-    await commodityService.uploadInvoices(commodity.value.id, files)
-    showInvoiceUploader.value = false
+    // Hide overlay immediately when upload starts
     closeFocusOverlay()
+
+    // Setup progress tracking
+    // TODO: Replace with per-file progress tracking that allows:
+    // - Individual progress for each file
+    // - Cancel queued files before they start uploading
+    // - Remove completed files from the UI automatically
+    // - Show file status: queued -> uploading -> completed/failed
+    const onProgress = (current: number, total: number, currentFile: string) => {
+      invoiceUploaderRef.value?.updateProgress(current, total, currentFile)
+    }
+
+    await commodityService.uploadInvoices(commodity.value.id, files, onProgress)
     // Mark upload as completed in the uploader
     invoiceUploaderRef.value?.markUploadCompleted()
+    // Hide uploader after successful upload
+    showInvoiceUploader.value = false
     // Reload invoices after upload
     loadingInvoices.value = true
     const response = await commodityService.getInvoices(commodity.value.id)

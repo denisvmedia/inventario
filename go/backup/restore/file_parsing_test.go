@@ -26,6 +26,8 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -155,6 +157,8 @@ func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -254,6 +258,8 @@ func TestRestoreService_PriceValidationFix(t *testing.T) {
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -351,6 +357,8 @@ func TestRestoreService_NoDuplicationInFullReplace(t *testing.T) {
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -468,6 +476,8 @@ func TestRestoreService_MultipleFileTypes(t *testing.T) {
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first

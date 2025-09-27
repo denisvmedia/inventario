@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2025-08-29T00:20:42+02:00
+-- Generated on: 2025-09-14T20:32:29+02:00
 -- Direction: UP
 
 -- Gets the current tenant ID from session for RLS policies
@@ -116,6 +116,21 @@ CREATE TABLE exports (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
+-- POSTGRES TABLE: thumbnail_generation_jobs --
+CREATE TABLE thumbnail_generation_jobs (
+  file_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT '0',
+  max_attempts INTEGER NOT NULL DEFAULT '3',
+  error_message TEXT,
+  processing_started_at TIMESTAMP,
+  processing_completed_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL
+);
 -- POSTGRES TABLE: commodities --
 CREATE TABLE commodities (
   name TEXT NOT NULL,
@@ -164,8 +179,18 @@ CREATE TABLE restore_operations (
   user_id TEXT NOT NULL,
   id TEXT PRIMARY KEY NOT NULL
 );
--- POSTGRES TABLE: invoices --
-CREATE TABLE invoices (
+-- POSTGRES TABLE: user_concurrency_slots --
+CREATE TABLE user_concurrency_slots (
+  job_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL
+);
+-- POSTGRES TABLE: images --
+CREATE TABLE images (
   commodity_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -175,8 +200,8 @@ CREATE TABLE invoices (
   ext TEXT NOT NULL,
   mime_type TEXT NOT NULL
 );
--- POSTGRES TABLE: images --
-CREATE TABLE images (
+-- POSTGRES TABLE: invoices --
+CREATE TABLE invoices (
   commodity_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -239,6 +264,12 @@ ALTER TABLE exports ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFE
 -- ALTER statements: --
 ALTER TABLE exports ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
+ALTER TABLE thumbnail_generation_jobs ADD CONSTRAINT fk_thumbnail_job_file FOREIGN KEY (file_id) REFERENCES files(id);
+-- ALTER statements: --
+ALTER TABLE thumbnail_generation_jobs ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE thumbnail_generation_jobs ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- ALTER statements: --
 ALTER TABLE commodities ADD CONSTRAINT fk_commodity_area FOREIGN KEY (area_id) REFERENCES areas(id);
 -- ALTER statements: --
 ALTER TABLE commodities ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
@@ -251,17 +282,23 @@ ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tena
 -- ALTER statements: --
 ALTER TABLE restore_operations ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
-ALTER TABLE invoices ADD CONSTRAINT fk_invoice_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
+ALTER TABLE user_concurrency_slots ADD CONSTRAINT fk_concurrency_slot_job FOREIGN KEY (job_id) REFERENCES thumbnail_generation_jobs(id);
 -- ALTER statements: --
-ALTER TABLE invoices ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+ALTER TABLE user_concurrency_slots ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
-ALTER TABLE invoices ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+ALTER TABLE user_concurrency_slots ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE images ADD CONSTRAINT fk_image_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
 -- ALTER statements: --
 ALTER TABLE images ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 -- ALTER statements: --
 ALTER TABLE images ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
+-- ALTER statements: --
+ALTER TABLE invoices ADD CONSTRAINT fk_invoice_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
+-- ALTER statements: --
+ALTER TABLE invoices ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+-- ALTER statements: --
+ALTER TABLE invoices ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- ALTER statements: --
 ALTER TABLE manuals ADD CONSTRAINT fk_manual_commodity FOREIGN KEY (commodity_id) REFERENCES commodities(id);
 -- ALTER statements: --
@@ -276,26 +313,30 @@ ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_tenant FOREIGN KEY (tenant_id
 ALTER TABLE restore_steps ADD CONSTRAINT fk_entity_user FOREIGN KEY (user_id) REFERENCES users(id);
 -- Enable RLS for areas table
 ALTER TABLE areas ENABLE ROW LEVEL SECURITY;
--- Enable RLS for commodities table
-ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
--- Enable RLS for exports table
-ALTER TABLE exports ENABLE ROW LEVEL SECURITY;
--- Enable RLS for locations table
-ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_operations table
-ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
--- Enable RLS for restore_steps table
-ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
--- Enable RLS for images table
-ALTER TABLE images ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for invoices table
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for locations table
+ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for manuals table
 ALTER TABLE manuals ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for files table
 ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_operations table
+ALTER TABLE restore_operations ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for restore_steps table
+ALTER TABLE restore_steps ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for settings table
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for commodities table
+ALTER TABLE commodities ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for exports table
+ALTER TABLE exports ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for images table
+ALTER TABLE images ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for thumbnail_generation_jobs table
+ALTER TABLE thumbnail_generation_jobs ENABLE ROW LEVEL SECURITY;
+-- Enable RLS for user_concurrency_slots table
+ALTER TABLE user_concurrency_slots ENABLE ROW LEVEL SECURITY;
 -- Enable RLS for users table
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 -- Allows background workers to access all areas for processing
@@ -338,6 +379,11 @@ DROP POLICY IF EXISTS file_isolation ON files;
 CREATE POLICY file_isolation ON files FOR ALL TO inventario_app
     USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
     WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
+-- Allows background workers to access all invoices for processing
+DROP POLICY IF EXISTS image_background_worker_access ON images;
+CREATE POLICY image_background_worker_access ON images FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
 -- Ensures images can only be accessed and modified by their tenant and user with required contexts
 DROP POLICY IF EXISTS image_isolation ON images;
 CREATE POLICY image_isolation ON images FOR ALL TO inventario_app
@@ -403,11 +449,31 @@ DROP POLICY IF EXISTS setting_isolation ON settings;
 CREATE POLICY setting_isolation ON settings FOR ALL TO inventario_app
     USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
     WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
+-- Allows background workers to access all thumbnail generation jobs for processing
+DROP POLICY IF EXISTS thumbnail_generation_job_background_worker_access ON thumbnail_generation_jobs;
+CREATE POLICY thumbnail_generation_job_background_worker_access ON thumbnail_generation_jobs FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
+-- Ensures thumbnail generation jobs can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS thumbnail_generation_job_isolation ON thumbnail_generation_jobs;
+CREATE POLICY thumbnail_generation_job_isolation ON thumbnail_generation_jobs FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Allows background workers to access all users for processing
 DROP POLICY IF EXISTS user_background_worker_access ON users;
 CREATE POLICY user_background_worker_access ON users FOR ALL TO inventario_background_worker
     USING (true)
     WITH CHECK (true);
+-- Allows background workers to access all user concurrency slots for coordination
+DROP POLICY IF EXISTS user_concurrency_slot_background_worker_access ON user_concurrency_slots;
+CREATE POLICY user_concurrency_slot_background_worker_access ON user_concurrency_slots FOR ALL TO inventario_background_worker
+    USING (true)
+    WITH CHECK (true);
+-- Ensures user concurrency slots can only be accessed and modified by their tenant and user with required contexts
+DROP POLICY IF EXISTS user_concurrency_slot_isolation ON user_concurrency_slots;
+CREATE POLICY user_concurrency_slot_isolation ON user_concurrency_slots FOR ALL TO inventario_app
+    USING (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '')
+    WITH CHECK (tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != '');
 -- Ensures users can only access and modify their own data within their tenant with required contexts
 DROP POLICY IF EXISTS user_isolation ON users;
 CREATE POLICY user_isolation ON users FOR ALL TO inventario_app
@@ -454,6 +520,16 @@ CREATE INDEX IF NOT EXISTS idx_restore_steps_tenant_result ON restore_steps (ten
 CREATE INDEX IF NOT EXISTS idx_settings_tenant_id ON settings (tenant_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_settings_tenant_user_name ON settings (tenant_id, user_id, name);
 CREATE INDEX IF NOT EXISTS idx_settings_user_id ON settings (user_id);
+CREATE INDEX IF NOT EXISTS idx_thumbnail_jobs_cleanup ON thumbnail_generation_jobs (status, processing_completed_at);
+CREATE INDEX IF NOT EXISTS idx_thumbnail_jobs_file_id ON thumbnail_generation_jobs (file_id);
+CREATE INDEX IF NOT EXISTS idx_thumbnail_jobs_status_created ON thumbnail_generation_jobs (status, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_thumbnail_jobs_tenant_id ON thumbnail_generation_jobs (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_thumbnail_jobs_user_status ON thumbnail_generation_jobs (user_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_concurrency_slots_job_id ON user_concurrency_slots (job_id);
+CREATE INDEX IF NOT EXISTS idx_user_concurrency_slots_status ON user_concurrency_slots (status);
+CREATE INDEX IF NOT EXISTS idx_user_concurrency_slots_tenant_id ON user_concurrency_slots (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_user_concurrency_slots_user_id ON user_concurrency_slots (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_concurrency_slots_user_status ON user_concurrency_slots (user_id, status);
 CREATE INDEX IF NOT EXISTS settings_value_gin_idx ON settings USING GIN (value);
 CREATE INDEX IF NOT EXISTS tenants_domain_idx ON tenants (domain);
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_slug_idx ON tenants (slug);

@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"time"
 
 	"github.com/jellydator/validation"
 
@@ -138,6 +139,66 @@ type FileRegistry interface {
 	ListPaginated(ctx context.Context, offset, limit int, fileType *models.FileType) ([]*models.FileEntity, int, error)
 }
 
+type ThumbnailGenerationJobRegistry interface {
+	Registry[models.ThumbnailGenerationJob]
+
+	// GetPendingJobs returns pending thumbnail generation jobs ordered by priority and creation time
+	GetPendingJobs(ctx context.Context, limit int) ([]*models.ThumbnailGenerationJob, error)
+
+	// GetJobByFileID returns the thumbnail generation job for a specific file
+	GetJobByFileID(ctx context.Context, fileID string) (*models.ThumbnailGenerationJob, error)
+
+	// UpdateJobStatus updates the status of a thumbnail generation job
+	UpdateJobStatus(ctx context.Context, jobID string, status models.ThumbnailGenerationStatus, errorMessage string) error
+
+	// CleanupCompletedJobs removes completed/failed jobs older than the specified duration
+	CleanupCompletedJobs(ctx context.Context, olderThan time.Duration) error
+}
+
+type UserConcurrencySlotRegistry interface {
+	Registry[models.UserConcurrencySlot]
+
+	// AcquireSlot attempts to acquire a concurrency slot for a user
+	AcquireSlot(ctx context.Context, userID, jobID string, maxSlots int, slotDuration time.Duration) (*models.UserConcurrencySlot, error)
+
+	// ReleaseSlot releases a concurrency slot
+	ReleaseSlot(ctx context.Context, userID, jobID string) error
+
+	// GetUserSlots returns all slots for a user
+	GetUserSlots(ctx context.Context, userID string) ([]*models.UserConcurrencySlot, error)
+
+	// CleanupExpiredSlots removes expired slots
+	CleanupExpiredSlots(ctx context.Context) error
+}
+
+type OperationSlotRegistry interface {
+	Registry[models.OperationSlot]
+
+	// GetSlot retrieves a specific slot for a user and operation
+	GetSlot(ctx context.Context, userID, operationName string, slotID int) (*models.OperationSlot, error)
+
+	// ReleaseSlot removes a specific slot for a user and operation
+	ReleaseSlot(ctx context.Context, userID, operationName string, slotID int) error
+
+	// GetActiveSlotCount returns the number of active (non-expired) slots for a user and operation
+	GetActiveSlotCount(ctx context.Context, userID, operationName string) (int, error)
+
+	// GetNextSlotID returns the next available slot ID for a user and operation
+	GetNextSlotID(ctx context.Context, userID, operationName string) (int, error)
+
+	// CleanupExpiredSlots removes all expired slots and returns the count of deleted slots
+	CleanupExpiredSlots(ctx context.Context) (int, error)
+
+	// GetOperationStats returns statistics about slot usage across all operations
+	GetOperationStats(ctx context.Context) (map[string]models.OperationStats, error)
+
+	// GetUserSlotStats returns slot usage statistics for a specific user
+	GetUserSlotStats(ctx context.Context, userID string) (map[string]int, error)
+
+	// GetExpiredSlots returns all expired slots (for testing/debugging)
+	GetExpiredSlots(ctx context.Context) ([]models.OperationSlot, error)
+}
+
 type RestoreOperationRegistry interface {
 	Registry[models.RestoreOperation]
 
@@ -181,19 +242,22 @@ type UserRegistry interface {
 // Set contains ready-to-use registries that have been created with proper user or service context.
 // This is the result of calling CreateUserRegistrySet() or CreateServiceRegistrySet() on a FactorySet.
 type Set struct {
-	LocationRegistry         LocationRegistry
-	AreaRegistry             AreaRegistry
-	CommodityRegistry        CommodityRegistry
-	ImageRegistry            ImageRegistry
-	InvoiceRegistry          InvoiceRegistry
-	ManualRegistry           ManualRegistry
-	SettingsRegistry         SettingsRegistry
-	ExportRegistry           ExportRegistry
-	RestoreOperationRegistry RestoreOperationRegistry
-	RestoreStepRegistry      RestoreStepRegistry
-	FileRegistry             FileRegistry
-	TenantRegistry           TenantRegistry
-	UserRegistry             UserRegistry
+	LocationRegistry               LocationRegistry
+	AreaRegistry                   AreaRegistry
+	CommodityRegistry              CommodityRegistry
+	ImageRegistry                  ImageRegistry
+	InvoiceRegistry                InvoiceRegistry
+	ManualRegistry                 ManualRegistry
+	SettingsRegistry               SettingsRegistry
+	ExportRegistry                 ExportRegistry
+	RestoreOperationRegistry       RestoreOperationRegistry
+	RestoreStepRegistry            RestoreStepRegistry
+	FileRegistry                   FileRegistry
+	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
+	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
+	OperationSlotRegistry          OperationSlotRegistry
+	TenantRegistry                 TenantRegistry
+	UserRegistry                   UserRegistry
 }
 
 // Search-related types and functions

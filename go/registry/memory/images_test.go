@@ -23,6 +23,8 @@ func TestImageRegistry_Create(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -68,6 +70,8 @@ func TestImageRegistry_Delete(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -120,6 +124,8 @@ func TestImageRegistry_Create_Validation(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -161,6 +167,8 @@ func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first

@@ -161,7 +161,7 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 
 	rWithCurrency, err := requestWithMainCurrency(r, registrySet.SettingsRegistry)
 	if err != nil {
-		internalServerError(w, r, err)
+		renderEntityError(w, r, err)
 		return
 	}
 	r = rWithCurrency
@@ -278,7 +278,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 
 	rWithCurrency, err := requestWithMainCurrency(r, registrySet.SettingsRegistry)
 	if err != nil {
-		internalServerError(w, r, err)
+		renderEntityError(w, r, err)
 		return
 	}
 	r = rWithCurrency

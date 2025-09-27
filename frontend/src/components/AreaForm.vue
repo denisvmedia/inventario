@@ -93,25 +93,31 @@ const submitForm = async () => {
 
     // Emit created event with the new area
     emit('created', response.data.data)
-  } catch (err: any) {
-    if (err.response && err.response.data && err.response.data.errors) {
-      const apiErrors = err.response.data.errors
-      apiErrors.forEach((apiError: any) => {
-        if (apiError.source && apiError.source.pointer) {
-          const field = apiError.source.pointer.split('/').pop()
-          if (field === 'name') {
-            errors.name = apiError.detail
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'response' in err) {
+      const errorResponse = err as { response?: { data?: { errors?: Array<{ source?: { pointer?: string }, detail?: string }> } } }
+      if (errorResponse.response?.data?.errors) {
+        const apiErrors = errorResponse.response.data.errors
+        apiErrors.forEach((apiError) => {
+          if (apiError.source && apiError.source.pointer) {
+            const field = apiError.source.pointer.split('/').pop()
+            if (field === 'name') {
+              errors.name = apiError.detail || ''
+            }
           }
-        }
-      })
+        })
 
-      if (Object.values(errors).some(e => e)) {
-        error.value = 'Please correct the errors above.'
+        if (Object.values(errors).some(e => e)) {
+          error.value = 'Please correct the errors above.'
+        } else {
+          error.value = `Failed to create area: ${errorResponse.response?.status || 'Unknown'} - ${JSON.stringify(errorResponse.response?.data || {})}`
+        }
       } else {
-        error.value = `Failed to create area: ${err.response.status} - ${JSON.stringify(err.response.data)}`
+        error.value = 'Failed to create area: Unknown server error'
       }
     } else {
-      error.value = 'Failed to create area: ' + (err.message || 'Unknown error')
+      const errorMessage = err && typeof err === 'object' && 'message' in err ? (err as Error).message : 'Unknown error'
+      error.value = 'Failed to create area: ' + errorMessage
     }
   } finally {
     isSubmitting.value = false
