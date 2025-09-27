@@ -24,6 +24,8 @@ func newTestContext(factorySet *registry.FactorySet) context.Context {
 			EntityID: models.EntityID{ID: "test-user-" + generateTestID()},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 	// Set UserID to self-reference
 	testUser.UserID = testUser.ID

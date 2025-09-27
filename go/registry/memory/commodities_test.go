@@ -146,6 +146,8 @@ func TestCommodityRegistry_Create_Validation(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -175,6 +177,8 @@ func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -211,6 +215,8 @@ func TestCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -234,6 +240,8 @@ func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first

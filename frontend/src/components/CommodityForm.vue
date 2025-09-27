@@ -93,7 +93,7 @@
 class="price-calculation-hint" :class="{
         'inactive-hint': !isPriceUsedInCalculations,
         'warning-hint': !hasSuitablePrice && isPriceUsedInCalculations
-      }" v-html="getPriceCalculationHint">
+      }" v-html="getPriceCalculationHint"> <!-- eslint-disable-line vue/no-v-html -->
       </div>
 
       <div class="form-group">

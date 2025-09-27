@@ -24,6 +24,8 @@ func TestExportDeletionOrder(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -104,6 +106,8 @@ func TestExportDeletionOrder_NoFile(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-id"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first

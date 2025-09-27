@@ -76,21 +76,42 @@ type RestoreStepRegistryFactory interface {
 	ServiceRegistryFactory[models.RestoreStep, RestoreStepRegistry]
 }
 
+// ThumbnailGenerationJobRegistryFactory creates ThumbnailGenerationJobRegistry instances with proper context
+type ThumbnailGenerationJobRegistryFactory interface {
+	UserRegistryFactory[models.ThumbnailGenerationJob, ThumbnailGenerationJobRegistry]
+	ServiceRegistryFactory[models.ThumbnailGenerationJob, ThumbnailGenerationJobRegistry]
+}
+
+// UserConcurrencySlotRegistryFactory creates UserConcurrencySlotRegistry instances with proper context
+type UserConcurrencySlotRegistryFactory interface {
+	UserRegistryFactory[models.UserConcurrencySlot, UserConcurrencySlotRegistry]
+	ServiceRegistryFactory[models.UserConcurrencySlot, UserConcurrencySlotRegistry]
+}
+
+// OperationSlotRegistryFactory creates OperationSlotRegistry instances with proper context
+type OperationSlotRegistryFactory interface {
+	UserRegistryFactory[models.OperationSlot, OperationSlotRegistry]
+	ServiceRegistryFactory[models.OperationSlot, OperationSlotRegistry]
+}
+
 // FactorySet contains all registry factories - these create safe, context-aware registries
 type FactorySet struct {
-	LocationRegistryFactory         LocationRegistryFactory
-	AreaRegistryFactory             AreaRegistryFactory
-	CommodityRegistryFactory        CommodityRegistryFactory
-	ImageRegistryFactory            ImageRegistryFactory
-	InvoiceRegistryFactory          InvoiceRegistryFactory
-	ManualRegistryFactory           ManualRegistryFactory
-	SettingsRegistryFactory         SettingsRegistryFactory
-	ExportRegistryFactory           ExportRegistryFactory
-	RestoreOperationRegistryFactory RestoreOperationRegistryFactory
-	RestoreStepRegistryFactory      RestoreStepRegistryFactory
-	FileRegistryFactory             FileRegistryFactory
-	TenantRegistry                  TenantRegistry // TenantRegistry doesn't need factory as it's not user-aware
-	UserRegistry                    UserRegistry   // UserRegistry doesn't need factory as it's not user-aware
+	LocationRegistryFactory               LocationRegistryFactory
+	AreaRegistryFactory                   AreaRegistryFactory
+	CommodityRegistryFactory              CommodityRegistryFactory
+	ImageRegistryFactory                  ImageRegistryFactory
+	InvoiceRegistryFactory                InvoiceRegistryFactory
+	ManualRegistryFactory                 ManualRegistryFactory
+	SettingsRegistryFactory               SettingsRegistryFactory
+	ExportRegistryFactory                 ExportRegistryFactory
+	RestoreOperationRegistryFactory       RestoreOperationRegistryFactory
+	RestoreStepRegistryFactory            RestoreStepRegistryFactory
+	FileRegistryFactory                   FileRegistryFactory
+	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
+	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
+	OperationSlotRegistryFactory          OperationSlotRegistryFactory
+	TenantRegistry                        TenantRegistry // TenantRegistry doesn't need factory as it's not user-aware
+	UserRegistry                          UserRegistry   // UserRegistry doesn't need factory as it's not user-aware
 }
 
 // CreateUserRegistrySet creates a complete set of user-aware registries from factories
@@ -150,38 +171,59 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
+	thumbnailGenerationJobRegistry, err := fs.ThumbnailGenerationJobRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	userConcurrencySlotRegistry, err := fs.UserConcurrencySlotRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	operationSlotRegistry, err := fs.OperationSlotRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Set{
-		LocationRegistry:         locationRegistry,
-		AreaRegistry:             areaRegistry,
-		CommodityRegistry:        commodityRegistry,
-		ImageRegistry:            imageRegistry,
-		InvoiceRegistry:          invoiceRegistry,
-		ManualRegistry:           manualRegistry,
-		SettingsRegistry:         settingsRegistry,
-		ExportRegistry:           exportRegistry,
-		RestoreOperationRegistry: restoreOperationRegistry,
-		RestoreStepRegistry:      restoreStepRegistry,
-		FileRegistry:             fileRegistry,
-		TenantRegistry:           fs.TenantRegistry,
-		UserRegistry:             fs.UserRegistry,
+		LocationRegistry:               locationRegistry,
+		AreaRegistry:                   areaRegistry,
+		CommodityRegistry:              commodityRegistry,
+		ImageRegistry:                  imageRegistry,
+		InvoiceRegistry:                invoiceRegistry,
+		ManualRegistry:                 manualRegistry,
+		SettingsRegistry:               settingsRegistry,
+		ExportRegistry:                 exportRegistry,
+		RestoreOperationRegistry:       restoreOperationRegistry,
+		RestoreStepRegistry:            restoreStepRegistry,
+		FileRegistry:                   fileRegistry,
+		ThumbnailGenerationJobRegistry: thumbnailGenerationJobRegistry,
+		UserConcurrencySlotRegistry:    userConcurrencySlotRegistry,
+		OperationSlotRegistry:          operationSlotRegistry,
+		TenantRegistry:                 fs.TenantRegistry,
+		UserRegistry:                   fs.UserRegistry,
 	}, nil
 }
 
 // CreateServiceRegistrySet creates a complete set of service-aware registries from factories
 func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 	return &Set{
-		LocationRegistry:         fs.LocationRegistryFactory.CreateServiceRegistry(),
-		AreaRegistry:             fs.AreaRegistryFactory.CreateServiceRegistry(),
-		CommodityRegistry:        fs.CommodityRegistryFactory.CreateServiceRegistry(),
-		ImageRegistry:            fs.ImageRegistryFactory.CreateServiceRegistry(),
-		InvoiceRegistry:          fs.InvoiceRegistryFactory.CreateServiceRegistry(),
-		ManualRegistry:           fs.ManualRegistryFactory.CreateServiceRegistry(),
-		SettingsRegistry:         fs.SettingsRegistryFactory.CreateServiceRegistry(),
-		ExportRegistry:           fs.ExportRegistryFactory.CreateServiceRegistry(),
-		RestoreOperationRegistry: fs.RestoreOperationRegistryFactory.CreateServiceRegistry(),
-		RestoreStepRegistry:      fs.RestoreStepRegistryFactory.CreateServiceRegistry(),
-		FileRegistry:             fs.FileRegistryFactory.CreateServiceRegistry(),
-		TenantRegistry:           fs.TenantRegistry,
-		UserRegistry:             fs.UserRegistry,
+		LocationRegistry:               fs.LocationRegistryFactory.CreateServiceRegistry(),
+		AreaRegistry:                   fs.AreaRegistryFactory.CreateServiceRegistry(),
+		CommodityRegistry:              fs.CommodityRegistryFactory.CreateServiceRegistry(),
+		ImageRegistry:                  fs.ImageRegistryFactory.CreateServiceRegistry(),
+		InvoiceRegistry:                fs.InvoiceRegistryFactory.CreateServiceRegistry(),
+		ManualRegistry:                 fs.ManualRegistryFactory.CreateServiceRegistry(),
+		SettingsRegistry:               fs.SettingsRegistryFactory.CreateServiceRegistry(),
+		ExportRegistry:                 fs.ExportRegistryFactory.CreateServiceRegistry(),
+		RestoreOperationRegistry:       fs.RestoreOperationRegistryFactory.CreateServiceRegistry(),
+		RestoreStepRegistry:            fs.RestoreStepRegistryFactory.CreateServiceRegistry(),
+		FileRegistry:                   fs.FileRegistryFactory.CreateServiceRegistry(),
+		ThumbnailGenerationJobRegistry: fs.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry(),
+		UserConcurrencySlotRegistry:    fs.UserConcurrencySlotRegistryFactory.CreateServiceRegistry(),
+		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),
+		TenantRegistry:                 fs.TenantRegistry,
+		UserRegistry:                   fs.UserRegistry,
 	}
 }

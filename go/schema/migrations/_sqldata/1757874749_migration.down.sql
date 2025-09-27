@@ -1,5 +1,5 @@
 -- Migration rollback
--- Generated on: 2025-08-29T00:20:42+02:00
+-- Generated on: 2025-09-14T20:32:29+02:00
 -- Direction: DOWN
 
 DROP INDEX IF EXISTS commodities_active_idx;
@@ -43,6 +43,16 @@ DROP INDEX IF EXISTS idx_restore_steps_tenant_result;
 DROP INDEX IF EXISTS idx_settings_tenant_id;
 DROP INDEX IF EXISTS idx_settings_tenant_user_name;
 DROP INDEX IF EXISTS idx_settings_user_id;
+DROP INDEX IF EXISTS idx_thumbnail_jobs_cleanup;
+DROP INDEX IF EXISTS idx_thumbnail_jobs_file_id;
+DROP INDEX IF EXISTS idx_thumbnail_jobs_status_created;
+DROP INDEX IF EXISTS idx_thumbnail_jobs_tenant_id;
+DROP INDEX IF EXISTS idx_thumbnail_jobs_user_status;
+DROP INDEX IF EXISTS idx_user_concurrency_slots_job_id;
+DROP INDEX IF EXISTS idx_user_concurrency_slots_status;
+DROP INDEX IF EXISTS idx_user_concurrency_slots_tenant_id;
+DROP INDEX IF EXISTS idx_user_concurrency_slots_user_id;
+DROP INDEX IF EXISTS idx_user_concurrency_slots_user_status;
 DROP INDEX IF EXISTS settings_value_gin_idx;
 DROP INDEX IF EXISTS tenants_domain_idx;
 DROP INDEX IF EXISTS tenants_slug_idx;
@@ -67,6 +77,8 @@ DROP POLICY IF EXISTS export_isolation ON exports;
 DROP POLICY IF EXISTS file_background_worker_access ON files;
 -- Drop RLS policy file_isolation from table files
 DROP POLICY IF EXISTS file_isolation ON files;
+-- Drop RLS policy image_background_worker_access from table images
+DROP POLICY IF EXISTS image_background_worker_access ON images;
 -- Drop RLS policy image_isolation from table images
 DROP POLICY IF EXISTS image_isolation ON images;
 -- Drop RLS policy invoice_background_worker_access from table invoices
@@ -93,22 +105,32 @@ DROP POLICY IF EXISTS restore_step_isolation ON restore_steps;
 DROP POLICY IF EXISTS setting_background_worker_access ON settings;
 -- Drop RLS policy setting_isolation from table settings
 DROP POLICY IF EXISTS setting_isolation ON settings;
+-- Drop RLS policy thumbnail_generation_job_background_worker_access from table thumbnail_generation_jobs
+DROP POLICY IF EXISTS thumbnail_generation_job_background_worker_access ON thumbnail_generation_jobs;
+-- Drop RLS policy thumbnail_generation_job_isolation from table thumbnail_generation_jobs
+DROP POLICY IF EXISTS thumbnail_generation_job_isolation ON thumbnail_generation_jobs;
 -- Drop RLS policy user_background_worker_access from table users
 DROP POLICY IF EXISTS user_background_worker_access ON users;
+-- Drop RLS policy user_concurrency_slot_background_worker_access from table user_concurrency_slots
+DROP POLICY IF EXISTS user_concurrency_slot_background_worker_access ON user_concurrency_slots;
+-- Drop RLS policy user_concurrency_slot_isolation from table user_concurrency_slots
+DROP POLICY IF EXISTS user_concurrency_slot_isolation ON user_concurrency_slots;
 -- Drop RLS policy user_isolation from table users
 DROP POLICY IF EXISTS user_isolation ON users;
--- NOTE: RLS policies were removed from table images - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table locations - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table manuals - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table restore_operations - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table settings - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table commodities - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table files - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table invoices - verify if RLS should be disabled --
--- NOTE: RLS policies were removed from table restore_steps - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table users - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table user_concurrency_slots - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table areas - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table commodities - verify if RLS should be disabled --
 -- NOTE: RLS policies were removed from table exports - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table images - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table invoices - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table manuals - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table restore_steps - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table thumbnail_generation_jobs - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table files - verify if RLS should be disabled --
+-- NOTE: RLS policies were removed from table locations - verify if RLS should be disabled --
 -- WARNING: This will delete all data!
 DROP TABLE IF EXISTS areas CASCADE;
 -- WARNING: This will delete all data!
@@ -133,6 +155,10 @@ DROP TABLE IF EXISTS restore_steps CASCADE;
 DROP TABLE IF EXISTS settings CASCADE;
 -- WARNING: This will delete all data!
 DROP TABLE IF EXISTS tenants CASCADE;
+-- WARNING: This will delete all data!
+DROP TABLE IF EXISTS thumbnail_generation_jobs CASCADE;
+-- WARNING: This will delete all data!
+DROP TABLE IF EXISTS user_concurrency_slots CASCADE;
 -- WARNING: This will delete all data!
 DROP TABLE IF EXISTS users CASCADE;
 -- WARNING: Ensure no other objects depend on this function

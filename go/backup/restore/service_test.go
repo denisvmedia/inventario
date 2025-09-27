@@ -25,6 +25,8 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	t.Run("restore XML with full replace strategy", func(t *testing.T) {

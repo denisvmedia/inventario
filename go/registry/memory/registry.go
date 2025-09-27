@@ -20,6 +20,7 @@ type Registry[T any, P registry.PIDable[T]] struct {
 	userID string // For user-aware filtering
 }
 
+//go:noinline
 func NewRegistry[T any, P registry.PIDable[T]]() *Registry[T, P] {
 	return &Registry[T, P]{
 		items: orderedmap.New[string, P](),
@@ -246,6 +247,7 @@ func (r *Registry[_, P]) ListWithUser(ctx context.Context) ([]P, error) {
 
 	var filteredItems []P
 	r.lock.RLock()
+	// Iterate from the oldest to the newest
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		item := pair.Value
 

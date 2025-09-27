@@ -43,6 +43,16 @@ run:
   # Higher values allow more imports to run simultaneously but use more resources
   max-concurrent-imports: {{.Workers.MaxConcurrentImports}}
 
+  # Thumbnail generation limits per user
+  # Maximum number of simultaneous thumbnail generation jobs per user
+  thumbnail-max-concurrent-per-user: {{.ThumbnailGeneration.MaxConcurrentPerUser}}
+
+  # Maximum number of thumbnail generation requests per minute per user
+  thumbnail-rate-limit-per-minute: {{.ThumbnailGeneration.RateLimitPerMinute}}
+
+  # Duration for which a concurrency slot is held (e.g., "30m", "1h")
+  thumbnail-slot-duration: "{{.ThumbnailGeneration.SlotDuration}}"
+
   # JWT secret for user authentication
   # IMPORTANT: This should be a secure random string of at least 32 characters
   # You can generate one using: openssl rand -hex 32

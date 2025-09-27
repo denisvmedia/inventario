@@ -26,6 +26,11 @@ func TestDefaults(t *testing.T) {
 	// Test worker defaults
 	c.Assert(cfg.Workers.MaxConcurrentExports, qt.Equals, 3)
 	c.Assert(cfg.Workers.MaxConcurrentImports, qt.Equals, 1)
+
+	// Test thumbnail generation defaults
+	c.Assert(cfg.ThumbnailGeneration.MaxConcurrentPerUser, qt.Equals, 5)
+	c.Assert(cfg.ThumbnailGeneration.RateLimitPerMinute, qt.Equals, 50)
+	c.Assert(cfg.ThumbnailGeneration.SlotDuration, qt.Equals, "30m")
 }
 
 func TestDefaultGetters(t *testing.T) {

@@ -12,7 +12,7 @@
     <div class="confirmation-content">
       <font-awesome-icon v-if="confirmationIcon" :icon="confirmationIcon" class="confirmation-icon" />
       <div class="confirmation-message">
-        <p v-html="message"></p>
+        <p v-html="message"></p> <!-- eslint-disable-line vue/no-v-html -->
       </div>
     </div>
     <template #footer>
