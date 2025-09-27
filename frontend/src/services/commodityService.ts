@@ -38,7 +38,7 @@ const commodityService = {
   },
 
   // Single file upload methods - now using generic file entity system
-  async uploadImage(id: string, file: File, onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any> {
+  async uploadImage(id: string, file: File, _onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any> {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -67,7 +67,7 @@ const commodityService = {
   // - Allow cancellation of queued files before they start
   // - Provide per-file progress callbacks instead of aggregate progress
   // - Remove completed files from UI automatically
-  async uploadImages(id: string, files: File[], onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any[]> {
+  async uploadImages(id: string, files: File[], _onProgress?: (current: number, total: number, currentFile: string) => void): Promise<any[]> {
     // Get max concurrent uploads from API
     const uploadSlotService = (await import('./uploadSlotService')).default
     const statusResponse = await uploadSlotService.getUploadStatus('image_upload')
@@ -80,7 +80,7 @@ const commodityService = {
 
     console.log(`📸 Starting upload of ${files.length} images with slot-based concurrency control (max: ${maxConcurrent})`)
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const processNext = async () => {
         // If no more files and no active uploads, we're done
         if (fileQueue.length === 0 && activeUploads === 0) {
@@ -129,10 +129,10 @@ const commodityService = {
   },
 
   // Upload single image with retry logic for 429 responses
-  async uploadImageWithRetry(id: string, file: File, onProgress?: (current: number, total: number, currentFile: string) => void, maxRetries: number = 10): Promise<any> {
+  async uploadImageWithRetry(id: string, file: File, _onProgress?: (current: number, total: number, currentFile: string) => void, maxRetries: number = 10): Promise<any> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        return await this.uploadImage(id, file, onProgress)
+        return await this.uploadImage(id, file, _onProgress)
       } catch (error: any) {
         if (error.response?.status === 429 && attempt < maxRetries) {
           // Wait before retry (exponential backoff with jitter)

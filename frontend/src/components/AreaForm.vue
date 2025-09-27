@@ -93,10 +93,12 @@ const submitForm = async () => {
 
     // Emit created event with the new area
     emit('created', response.data.data)
-  } catch (err: any) {
-    if (err.response && err.response.data && err.response.data.errors) {
-      const apiErrors = err.response.data.errors
-      apiErrors.forEach((apiError: any) => {
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'response' in err) {
+      const errorResponse = err as { response?: { data?: { errors?: Array<{ source?: { pointer?: string }, detail?: string }> } } }
+      if (errorResponse.response?.data?.errors) {
+        const apiErrors = errorResponse.response.data.errors
+        apiErrors.forEach((apiError) => {
         if (apiError.source && apiError.source.pointer) {
           const field = apiError.source.pointer.split('/').pop()
           if (field === 'name') {

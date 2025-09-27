@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, watch } from 'vue'
+import { ref, nextTick } from 'vue'
 
 const props = defineProps({
   files: {
@@ -93,12 +93,20 @@ const onImageError = (event: Event) => {
   // Thumbnails are now generated during upload, so no retry needed
 }
 
+// Define file interface
+interface FileItem {
+  id: string
+  path?: string
+  ext: string
+  mime_type?: string
+}
+
 // Get file URL from the fileUrls prop
-const getFileUrl = (file: any) => {
+const getFileUrl = (file: FileItem) => {
   return props.fileUrls[file.id] || ''
 }
 
-const getFileName = (file: any) => {
+const getFileName = (file: FileItem) => {
   // Use the Path field directly (it's now just the filename without extension)
   // and add the extension from the ext field
   if (file.path) {
@@ -108,7 +116,7 @@ const getFileName = (file: any) => {
   return `${file.id}${file.ext}`
 }
 
-const getFileIcon = (file: any) => {
+const getFileIcon = (file: FileItem) => {
   if (isPdfFile(file)) {
     return 'file-pdf'
   } else if (isImageFile(file)) {
@@ -121,12 +129,12 @@ const getFileIcon = (file: any) => {
   return 'file'
 }
 
-const downloadFile = (file: any) => {
+const downloadFile = (file: FileItem) => {
   // Only emit the event, let parent handle the actual download
   emit('download', file)
 }
 
-const confirmDelete = (file: any) => {
+const confirmDelete = (file: FileItem) => {
   // Only emit the event, let parent handle the confirmation and deletion
   emit('delete', file)
 }
@@ -136,10 +144,10 @@ const editingFile = ref<string | null>(null)
 const editedFileName = ref('')
 const fileNameInput = ref<HTMLInputElement | null>(null)
 
-const startEditing = (file: any) => {
+const startEditing = (file: FileItem) => {
   editingFile.value = file.id
   // Set the initial value to the path (without extension)
-  editedFileName.value = file.path
+  editedFileName.value = file.path || ''
 
   // Focus the input field after the DOM updates
   nextTick(() => {
@@ -154,7 +162,7 @@ const cancelEditing = () => {
   editedFileName.value = ''
 }
 
-const saveFileName = async (file: any) => {
+const saveFileName = async (file: FileItem) => {
   if (!editedFileName.value.trim()) {
     alert('File name cannot be empty')
     return
@@ -177,16 +185,16 @@ const saveFileName = async (file: any) => {
   }
 }
 
-const viewFileDetails = (file: any) => {
+const viewFileDetails = (file: FileItem) => {
   emit('view-details', file)
 }
 
-const openViewer = (file: any) => {
+const openViewer = (file: FileItem) => {
   emit('open-viewer', file)
 }
 
 // Helper functions to detect file types
-const isImageFile = (file: any) => {
+const isImageFile = (file: FileItem) => {
   if (!file) return false
   const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 
@@ -204,7 +212,7 @@ const isImageFile = (file: any) => {
   return false
 }
 
-const isPdfFile = (file: any) => {
+const isPdfFile = (file: FileItem) => {
   if (!file) return false
 
   // Check file extension
