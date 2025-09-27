@@ -283,7 +283,8 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 			factorySet := memory.NewFactorySet()
 
 			// Add user to registry (even inactive users might be in the registry)
-			if user.ID != "" {
+			// Skip creating users with empty tenant ID as they shouldn't exist in the registry
+			if user.ID != "" && user.TenantID != "" {
 				_, err := factorySet.UserRegistry.Create(context.Background(), *user)
 				c.Assert(err, qt.IsNil)
 			}
