@@ -108,6 +108,11 @@ export INVENTARIO_RUN_JWT_SECRET="$(openssl rand -hex 32)"
 export INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS="3"
 export INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS="1"
 
+# Thumbnail generation configuration (optional)
+export INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER="5"
+export INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE="50"
+export INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION="30m"
+
 # Timezone (optional)
 export TZ="UTC"
 ```
@@ -126,6 +131,9 @@ run:
   jwt-secret: "your-secure-32-byte-secret-here"
   max-concurrent-exports: 3
   max-concurrent-imports: 1
+  thumbnail-max-concurrent-per-user: 5
+  thumbnail-rate-limit-per-minute: 50
+  thumbnail-slot-duration: "30m"
 ```
 
 ### Security Considerations

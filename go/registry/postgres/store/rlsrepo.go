@@ -119,8 +119,13 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 
 	// Always generate a new server-side ID for security (ignore any user-provided ID)
 	P(&entity).SetID(generateID())
-	P(&entity).SetUserID(r.userID)
-	P(&entity).SetTenantID(r.tenantID)
+
+	// For service registries, preserve the tenant and user IDs from the entity
+	// For user registries, use the registry's context
+	if !r.service {
+		P(&entity).SetUserID(r.userID)
+		P(&entity).SetTenantID(r.tenantID)
+	}
 
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
@@ -147,8 +152,11 @@ func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn fu
 		err = errors.Join(err, RollbackOrCommit(tx, err))
 	}()
 
-	P(&entity).SetUserID(r.userID)
-	P(&entity).SetTenantID(r.tenantID)
+	// Only set user/tenant IDs for user registries, not service registries
+	if !r.service {
+		P(&entity).SetUserID(r.userID)
+		P(&entity).SetTenantID(r.tenantID)
+	}
 
 	field := Pair("id", P(&entity).GetID())
 

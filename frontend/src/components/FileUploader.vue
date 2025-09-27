@@ -53,9 +53,41 @@
       </div>
     </div>
 
+    <!-- Upload Capacity Error -->
+    <div v-if="uploadCapacityError" class="upload-capacity-error">
+      <font-awesome-icon icon="exclamation-triangle" />
+      {{ uploadCapacityError }}
+    </div>
+
     <!-- Upload actions outside the file block -->
     <transition name="upload-actions" mode="out-in">
       <div v-if="selectedFiles.length > 0 && !uploadCompleted && !hideUploadButton" class="upload-actions">
+        <!-- Upload Capacity Status -->
+        <div v-if="requireSlots && hasUploadCapacity" class="slot-status">
+          <font-awesome-icon icon="check-circle" />
+          Upload capacity available
+        </div>
+
+        <!-- Upload Progress Bar -->
+        <div v-if="isUploading && uploadProgress.total > 0" class="upload-progress">
+          <div class="progress-info">
+            <span class="progress-text">
+              Uploading {{ uploadProgress.current }} of {{ uploadProgress.total }} files...
+            </span>
+            <span class="progress-percentage">{{ Math.round(uploadProgress.percentage) }}%</span>
+          </div>
+          <div class="progress-bar">
+            <div
+              class="progress-fill"
+              :style="{ width: uploadProgress.percentage + '%' }"
+            ></div>
+          </div>
+          <div v-if="uploadProgress.currentFile" class="current-file">
+            {{ uploadProgress.currentFile }}
+          </div>
+        </div>
+
+        <!-- Upload Button -->
         <button
           ref="uploadButton"
           type="button"
@@ -73,8 +105,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import uploadSlotService from '@/services/uploadSlotService'
 
 const props = defineProps({
   multiple: {
@@ -96,10 +129,18 @@ const props = defineProps({
   hideUploadButton: {
     type: Boolean,
     default: false
+  },
+  operationName: {
+    type: String,
+    default: 'file_upload'
+  },
+  requireSlots: {
+    type: Boolean,
+    default: true
   }
 })
 
-const emit = defineEmits(['upload', 'filesCleared', 'filesSelected'])
+const emit = defineEmits(['upload', 'filesCleared', 'filesSelected', 'uploadCapacityFailed'])
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploadButton = ref<HTMLButtonElement | null>(null)
@@ -108,6 +149,30 @@ const filePreviews = ref<{ [key: string]: string }>({}) // Store file previews b
 const isDragOver = ref(false)
 const isUploading = ref(false)
 const uploadCompleted = ref(false)
+
+// Upload progress tracking
+// TODO: Implement per-file progress tracking with the following features:
+// - Individual progress for each file in the queue
+// - Ability to cancel files that are still in queue (not yet started)
+// - Automatic removal of files from the list once they are successfully uploaded
+// - Visual indicators for: queued, uploading, completed, failed, cancelled states
+// - Cancel button for each file that's still in queue or currently uploading
+// - Retry functionality for failed uploads
+const uploadProgress = ref({
+  current: 0,
+  total: 0,
+  percentage: 0,
+  currentFile: ''
+})
+
+// Upload capacity tracking
+const uploadCapacityError = ref<string | null>(null)
+const isCheckingCapacity = ref(false)
+
+// Computed properties
+const hasUploadCapacity = computed(() => {
+  return !uploadCapacityError.value && !isCheckingCapacity.value
+})
 
 const triggerFileInput = () => {
   fileInput.value?.click()
@@ -181,22 +246,59 @@ const removeFile = (index: number) => {
   }
 }
 
-const clearFiles = () => {
-  selectedFiles.value = []
-  filePreviews.value = {} // Clear all previews
-  uploadCompleted.value = false
-  isUploading.value = false
-  emit('filesCleared')
-}
+
 
 const markUploadCompleted = () => {
   isUploading.value = false
   uploadCompleted.value = true
+  // Reset progress
+  uploadProgress.value = {
+    current: 0,
+    total: 0,
+    percentage: 0,
+    currentFile: ''
+  }
 }
 
 const markUploadFailed = () => {
   isUploading.value = false
   uploadCompleted.value = false
+  // Reset progress
+  uploadProgress.value = {
+    current: 0,
+    total: 0,
+    percentage: 0,
+    currentFile: ''
+  }
+}
+
+// Progress tracking methods
+const updateProgress = (current: number, total: number, currentFile: string = '') => {
+  uploadProgress.value = {
+    current,
+    total,
+    percentage: total > 0 ? (current / total) * 100 : 0,
+    currentFile
+  }
+}
+
+const resetProgress = () => {
+  uploadProgress.value = {
+    current: 0,
+    total: 0,
+    percentage: 0,
+    currentFile: ''
+  }
+}
+
+// Clear upload capacity error when clearing files
+const clearFiles = () => {
+  selectedFiles.value = []
+  filePreviews.value = {} // Clear all previews
+  uploadCompleted.value = false
+  isUploading.value = false
+  uploadCapacityError.value = null
+  emit('filesCleared')
 }
 
 // Expose methods for parent component
@@ -204,6 +306,8 @@ defineExpose({
   clearFiles,
   markUploadCompleted,
   markUploadFailed,
+  updateProgress,
+  resetProgress,
   getUploadButton: () => uploadButton.value,
   selectedFiles
 })
@@ -212,12 +316,46 @@ const uploadFiles = async () => {
   if (selectedFiles.value.length === 0) return
 
   isUploading.value = true
+  uploadCapacityError.value = null
+
   try {
-    emit('upload', selectedFiles.value)
+    // Check upload capacity if required
+    if (props.requireSlots) {
+      console.log(`🎫 Checking upload capacity for ${props.operationName}`)
+      isCheckingCapacity.value = true
+
+      try {
+        const capacityResponse = await uploadSlotService.waitForCapacity(
+          props.operationName,
+          3, // maxRetries
+          1000 // baseDelay
+        )
+
+        if (!capacityResponse.data.attributes.can_start_upload) {
+          throw new Error('Upload capacity not available')
+        }
+
+        console.log(`✅ Upload capacity available for ${props.operationName}`)
+      } catch (capacityError: unknown) {
+        console.error('❌ Failed to get upload capacity:', capacityError)
+        const errorMessage = capacityError && typeof capacityError === 'object' && 'message' in capacityError ? (capacityError as Error).message : 'Upload capacity not available'
+        uploadCapacityError.value = errorMessage
+        isUploading.value = false
+        isCheckingCapacity.value = false
+        emit('uploadCapacityFailed', capacityError)
+        return
+      } finally {
+        isCheckingCapacity.value = false
+      }
+    }
+
+    // Proceed with upload
+    emit('upload', selectedFiles.value, [])
     // Don't set uploadCompleted here - wait for parent to signal completion
   } catch (error) {
     console.error('Upload failed:', error)
     isUploading.value = false
+    uploadCapacityError.value = null
   }
 }
 
@@ -255,6 +393,33 @@ const formatFileSize = (bytes: number): string => {
 
 .file-uploader {
   margin-bottom: 1.5rem;
+}
+
+.upload-capacity-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.slot-status {
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  color: #0369a1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .upload-area {
@@ -418,5 +583,81 @@ const formatFileSize = (bytes: number): string => {
   margin-top: 0;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+// Upload progress styles
+.upload-progress {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: $light-bg-color;
+  border-radius: $default-radius;
+  border: 1px solid $border-color;
+
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+
+    .progress-text {
+      color: $text-color;
+      font-weight: 500;
+    }
+
+    .progress-percentage {
+      color: $primary-color;
+      font-weight: 600;
+    }
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: $border-color;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, $primary-color, color.adjust($primary-color, $lightness: 10%));
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      position: relative;
+
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgb(255 255 255 / 30%),
+          transparent
+        );
+        animation: shimmer 2s infinite;
+      }
+    }
+  }
+
+  .current-file {
+    font-size: 0.8rem;
+    color: $text-secondary-color;
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
 }
 </style>

@@ -28,7 +28,7 @@ func TestUploads(t *testing.T) {
 		checkResult    func(c *qt.C, expectedLen int, expectedCommodityID string)
 	}{
 		{
-			typ:         "images",
+			typ:         "image",
 			contentType: "image/jpeg",
 			filePath:    "testdata/image.jpg",
 			expectedLength: func(c *qt.C, commodityID string) int {
@@ -50,7 +50,7 @@ func TestUploads(t *testing.T) {
 			},
 		},
 		{
-			typ:         "manuals",
+			typ:         "manual",
 			contentType: "application/pdf",
 			filePath:    "testdata/manual.pdf",
 			expectedLength: func(c *qt.C, commodityID string) int {
@@ -72,7 +72,7 @@ func TestUploads(t *testing.T) {
 			},
 		},
 		{
-			typ:         "invoices",
+			typ:         "invoice",
 			contentType: "application/pdf",
 			filePath:    "testdata/invoice.pdf",
 			expectedLength: func(c *qt.C, commodityID string) int {
@@ -151,15 +151,15 @@ func TestUploads_invalid_upload(t *testing.T) {
 		contentType string
 	}{
 		{
-			typ:         "images",
+			typ:         "image",
 			contentType: "image/png",
 		},
 		{
-			typ:         "manuals",
+			typ:         "manual",
 			contentType: "application/pdf",
 		},
 		{
-			typ:         "invoices",
+			typ:         "invoice",
 			contentType: "application/pdf",
 		},
 	}

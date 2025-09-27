@@ -10,14 +10,19 @@ import (
 	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 var (
-	ErrUnknownContentType = errors.New("render: unable to automatically decode the request content type")
-	ErrInvalidContentType = errors.New("invalid content type")
-	ErrNoFilesUploaded    = errors.New("no files uploaded")
-	ErrEntityNotFound     = errors.New("entity not found")
-	ErrTenantNotFound     = errors.New("tenant not found")
+	ErrUnknownContentType     = errors.New("render: unable to automatically decode the request content type")
+	ErrInvalidContentType     = errors.New("invalid content type")
+	ErrNoFilesUploaded        = errors.New("no files uploaded")
+	ErrEntityNotFound         = errors.New("entity not found")
+	ErrTenantNotFound         = errors.New("tenant not found")
+	ErrUnknownThumbnailStatus = errors.New("unknown thumbnail generation status")
+	ErrMissingUploadSlot      = errors.New("missing X-Upload-Slot header")
+	ErrInvalidUploadSlot      = errors.New("invalid or expired upload slot")
+	ErrNotFound               = registry.ErrNotFound
 )
 
 func NewNotFoundError(err error) jsonapi.Error {
@@ -54,6 +59,24 @@ func NewUnauthorizedError(err error) jsonapi.Error {
 	}
 }
 
+func NewBadRequestError(err error) jsonapi.Error {
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errkit.ForceMarshalError(err),
+		HTTPStatusCode: http.StatusBadRequest,
+		StatusText:     "Bad Request",
+	}
+}
+
+func NewTooManyRequestsError(err error) jsonapi.Error {
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errkit.ForceMarshalError(err),
+		HTTPStatusCode: http.StatusTooManyRequests,
+		StatusText:     "Too Many Requests",
+	}
+}
+
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
 	slog.Error("internal server error", "error", err)
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
@@ -71,10 +94,22 @@ func toJSONAPIError(err error) jsonapi.Error {
 	switch {
 	case errors.Is(err, registry.ErrCannotDelete):
 		return NewUnprocessableEntityError(err)
-	case errors.Is(err, registry.ErrNotFound):
+	case errors.Is(err, ErrNotFound):
 		return NewNotFoundError(err)
+	case errors.Is(err, registry.ErrMainCurrencyNotSet):
+		return NewBadRequestError(err)
 	case errors.Is(err, registry.ErrMainCurrencyAlreadySet):
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrRateLimitExceeded):
+		return NewTooManyRequestsError(err)
+	case errors.Is(err, services.ErrInvalidThumbnailSize):
+		return NewBadRequestError(err)
+	case errors.Is(err, registry.ErrResourceLimitExceeded):
+		return NewTooManyRequestsError(err)
+	case errors.Is(err, ErrMissingUploadSlot):
+		return NewBadRequestError(err)
+	case errors.Is(err, ErrInvalidUploadSlot):
+		return NewBadRequestError(err)
 	default:
 		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)

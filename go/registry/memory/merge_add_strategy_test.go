@@ -92,6 +92,8 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -251,6 +253,8 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 			TenantID: "test-tenant-id",
 			EntityID: models.EntityID{ID: "test-user-id"},
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -380,6 +384,10 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 
 	// Create test user 1
 	testUser1 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-1"},
+		},
 		Name:  "Test User 1",
 		Email: "user1@example.com",
 	}
@@ -390,6 +398,10 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 
 	// Create test user 2
 	testUser2 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id-2",
+			EntityID: models.EntityID{ID: "test-user-2"},
+		},
 		Name:  "Test User 2",
 		Email: "user2@example.com",
 	}
@@ -512,9 +524,12 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 
 	// Create test user in tenant 1
 	testUserTenant1 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "tenant-1",
+			EntityID: models.EntityID{ID: "user-tenant-1"},
+		},
 		Name:  "Tenant 1 User",
 		Email: "user@tenant1.com",
-		// TODO: Add tenant ID field when multi-tenancy is fully implemented
 	}
 
 	userRegistry := NewUserRegistry()
@@ -523,9 +538,12 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 
 	// Create test user in tenant 2
 	testUserTenant2 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "tenant-2",
+			EntityID: models.EntityID{ID: "user-tenant-2"},
+		},
 		Name:  "Tenant 2 User",
 		Email: "user@tenant2.com",
-		// TODO: Add different tenant ID when multi-tenancy is fully implemented
 	}
 
 	createdUserTenant2, err := userRegistry.Create(ctx, testUserTenant2)
@@ -639,6 +657,10 @@ func TestRestoreService_SecurityValidation_ValidUserManipulations(t *testing.T) 
 
 	// Create test user
 	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
 		Name:  "Test User",
 		Email: "user@example.com",
 	}
@@ -775,11 +797,19 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 
 	// Create two test users
 	testUser1 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-1",
+			EntityID: models.EntityID{ID: "test-user-1"},
+		},
 		Name:  "User 1",
 		Email: "user1@example.com",
 	}
 
 	testUser2 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-2",
+			EntityID: models.EntityID{ID: "test-user-2"},
+		},
 		Name:  "User 2",
 		Email: "user2@example.com",
 	}
@@ -1010,11 +1040,19 @@ func TestRestoreService_SecurityValidation_MaliciousFileOperations(t *testing.T)
 
 	// Create test users
 	testUser1 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-1",
+			EntityID: models.EntityID{ID: "test-user-1"},
+		},
 		Name:  "Test User 1",
 		Email: "user1@example.com",
 	}
 
 	testUser2 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-2",
+			EntityID: models.EntityID{ID: "test-user-2"},
+		},
 		Name:  "Test User 2",
 		Email: "user2@example.com",
 	}
@@ -1194,6 +1232,10 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		testUser := models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantID: fmt.Sprintf("test-tenant-%d", i+1),
+				EntityID: models.EntityID{ID: fmt.Sprintf("test-user-%d", i+1)},
+			},
 			Name:  fmt.Sprintf("Test User %d", i+1),
 			Email: fmt.Sprintf("user%d@example.com", i+1),
 		}
@@ -1404,6 +1446,10 @@ func TestRestoreService_SecurityValidation_EdgeCases(t *testing.T) {
 
 	// Create test user
 	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "edge-case-user"},
+		},
 		Name:  "Edge Case User",
 		Email: "edgecase@example.com",
 	}

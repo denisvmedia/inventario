@@ -23,6 +23,8 @@ func TestLocationRegistry_Create(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -61,6 +63,8 @@ func TestLocationRegistry_Areas(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -96,6 +100,8 @@ func TestLocationRegistry_Delete(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -137,6 +143,8 @@ func TestLocationRegistry_Delete_ErrCases(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first

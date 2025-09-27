@@ -222,3 +222,28 @@ func (s *FileService) DeleteLinkedFiles(ctx context.Context, entityType, entityI
 
 	return nil
 }
+
+// ThumbnailExists checks if a thumbnail file exists for a given file and size
+func (s *FileService) ThumbnailExists(ctx context.Context, fileID, size string) (bool, error) {
+	// Validate size parameter
+	if size != "small" && size != "medium" {
+		return false, errkit.WithStack(ErrInvalidThumbnailSize, "size", size)
+	}
+
+	// Generate thumbnail path using the same structure as download
+	thumbnailPath := s.getThumbnailPath(fileID, size)
+
+	// Open bucket and check if file exists
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return false, errkit.Wrap(err, "failed to open bucket")
+	}
+	defer b.Close()
+
+	exists, err := b.Exists(ctx, thumbnailPath)
+	if err != nil {
+		return false, errkit.Wrap(err, "failed to check thumbnail existence").WithField("thumbnail_path", thumbnailPath)
+	}
+
+	return exists, nil
+}

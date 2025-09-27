@@ -32,9 +32,12 @@
             accept="*/*"
             upload-prompt="Drag and drop a file here"
             upload-hint="Supports images, documents, videos, audio files, and archives"
+            operation-name="file_upload"
+            :require-slots="true"
             :hide-upload-button="true"
             @filesCleared="handleFilesCleared"
             @filesSelected="handleFilesSelected"
+            @upload-capacity-failed="onUploadCapacityFailed"
           />
 
           <!-- Upload Actions -->
@@ -126,7 +129,16 @@ const uploadFile = async () => {
   error.value = null
 
   try {
-    const response = await fileService.uploadFile(file)
+    // Setup progress tracking
+    // TODO: Add support for cancellation of file upload in progress
+    // - Implement AbortController to allow cancelling the upload
+    // - Add cancel button in UI during upload
+    // - Handle cancellation gracefully with proper cleanup
+    const onProgress = (current: number, total: number, currentFile: string) => {
+      fileUploader.value?.updateProgress(current, total, currentFile)
+    }
+
+    const response = await fileService.uploadFile(file, onProgress)
 
     // Mark upload as completed in the FileUploader component
     fileUploader.value?.markUploadCompleted()
@@ -154,6 +166,11 @@ const uploadFile = async () => {
   } finally {
     uploading.value = false
   }
+}
+
+const onUploadCapacityFailed = (capacityError: any) => {
+  console.error('Upload capacity failed:', capacityError)
+  error.value = 'Upload capacity unavailable: ' + (capacityError.message || 'Try again later')
 }
 
 const clearError = () => {

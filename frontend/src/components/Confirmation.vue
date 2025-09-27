@@ -12,6 +12,7 @@
     <div class="confirmation-content">
       <font-awesome-icon v-if="confirmationIcon" :icon="confirmationIcon" class="confirmation-icon" />
       <div class="confirmation-message">
+        <!-- eslint-disable-next-line vue/no-v-html -->
         <p v-html="message"></p>
       </div>
     </div>

@@ -23,6 +23,8 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first
@@ -109,6 +111,8 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 			EntityID: models.EntityID{ID: "test-user-123"},
 			TenantID: "test-tenant-id",
 		},
+		Email: "test@example.com",
+		Name:  "Test User",
 	}
 
 	// Create user in the system first

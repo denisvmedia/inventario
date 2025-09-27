@@ -58,7 +58,8 @@ export default [
       'vue/no-reserved-component-names': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': 'warn'
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
     }
   },
 
@@ -78,7 +79,8 @@ export default [
       ...tseslint.configs.recommended.rules,
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': 'warn'
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
     }
   },
 
@@ -98,7 +100,8 @@ export default [
       ...tseslint.configs.recommended.rules,
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': 'warn'
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
     }
   },
 

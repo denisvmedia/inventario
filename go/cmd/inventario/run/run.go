@@ -177,9 +177,24 @@ func (c *Command) runCommand() error {
 		slog.Error("Failed to parse file URL expiration duration", "error", err, "duration", c.config.FileURLExpiration)
 		return err
 	}
+
+	// Parse thumbnail slot duration and create thumbnail config
+	thumbnailSlotDuration, err := time.ParseDuration(c.config.ThumbnailSlotDuration)
+	if err != nil {
+		slog.Error("Failed to parse thumbnail slot duration", "error", err, "duration", c.config.ThumbnailSlotDuration)
+		return err
+	}
+
+	thumbnailConfig := services.ThumbnailGenerationConfig{
+		MaxConcurrentPerUser: c.config.ThumbnailMaxConcurrentPerUser,
+		RateLimitPerMinute:   c.config.ThumbnailRateLimitPerMinute,
+		SlotDuration:         thumbnailSlotDuration,
+	}
+
 	params.JWTSecret = jwtSecret
 	params.FileSigningKey = fileSigningKey
 	params.FileURLExpiration = fileURLExpiration
+	params.ThumbnailConfig = thumbnailConfig
 
 	err = validation.Validate(params)
 	if err != nil {
@@ -211,6 +226,11 @@ func (c *Command) runCommand() error {
 	importWorker := importpkg.NewImportWorker(importService, factorySet, maxConcurrentImports)
 	importWorker.Start(ctx)
 	defer importWorker.Stop()
+
+	// Start thumbnail generation worker
+	thumbnailWorker := services.NewThumbnailGenerationWorker(factorySet, params.UploadLocation, thumbnailConfig)
+	thumbnailWorker.Start(ctx)
+	defer thumbnailWorker.Stop()
 
 	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker))
 
