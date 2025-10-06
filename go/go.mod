@@ -19,7 +19,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.15.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/jackc/pgx/v5 v5.7.6
-	github.com/jellydator/validation v1.1.0
+	github.com/jellydator/validation v1.2.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/mrosales/emoji-go v1.1.0
