@@ -30,7 +30,7 @@
     "rimraf": "6.1.0",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
-    "wait-on": "9.0.1"
+    "wait-on": "9.0.3"
   },
   "engines": {
     "node": "22.20.0"
