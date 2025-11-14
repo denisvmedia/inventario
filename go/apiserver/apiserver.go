@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
 	"github.com/rs/cors"
-	swagger "github.com/swaggo/http-swagger"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
 	// _ "gocloud.dev/blob/fileblob"  // register fileblob driver
@@ -151,8 +151,8 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	// })
 	//
 	// RESTy routes for "swagger" resource
-	r.Mount("/swagger", swagger.Handler(
-		swagger.URL("/swagger/doc.json"),
+	r.Mount("/swagger", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
 	))
 
 	r.Route("/api/v1", func(r chi.Router) {
