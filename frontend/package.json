@@ -25,7 +25,7 @@
     "@fortawesome/vue-fontawesome": "3.1.2",
     "@primeuix/themes": "1.2.5",
     "axios": "1.13.1",
-    "pdfjs-dist": "5.4.296",
+    "pdfjs-dist": "5.4.394",
     "pinia": "3.0.3",
     "primeicons": "7.0.0",
     "primevue": "4.4.1",
