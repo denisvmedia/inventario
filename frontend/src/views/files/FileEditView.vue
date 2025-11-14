@@ -715,7 +715,6 @@ h3 {
 
 .file-path {
   word-break: break-all;
-  word-wrap: break-word;
   overflow-wrap: break-word;
 }
 

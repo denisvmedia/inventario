@@ -371,7 +371,7 @@ onBeforeUnmount(() => {
 
 pre {
   white-space: pre-wrap;
-  word-wrap: break-word;
+  overflow-wrap: break-word;
   overflow-x: auto;
   background: $light-bg-color;
   padding: 0.5rem;
