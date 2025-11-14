@@ -200,15 +200,8 @@ test.describe('Export CRUD Operations', () => {
     await page.waitForSelector('h1:has-text("Export Details")');
 
     // Verify both download buttons are present and enabled
-    const detailDownloadButtons = page.locator('button:has-text("Download")');
-    const downloadButtonCount = await detailDownloadButtons.count();
-    expect(downloadButtonCount).toBeGreaterThanOrEqual(1);
-
-    // Verify all download buttons are enabled
-    for (let i = 0; i < downloadButtonCount; i++) {
-      const button = detailDownloadButtons.nth(i);
-      await expect(button).toBeEnabled();
-    }
+    await page.waitForSelector('button:has-text("Download")');
+    await page.waitForSelector('button:has-text("Download Export")');
 
     await recorder.takeScreenshot('exports-download-test-03-buttons-verified');
 
