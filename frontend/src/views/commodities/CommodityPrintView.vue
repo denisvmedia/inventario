@@ -496,7 +496,7 @@ const goBack = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  page-break-inside: avoid;
+  break-inside: avoid;
   height: 100%;
 
   & img {
@@ -560,19 +560,19 @@ const goBack = () => {
   }
 
   .info-section {
-    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   /* Image layout handling for print */
   .images-container.layout-1 .image-item {
-    page-break-before: always;
+    break-before: always;
     height: 100vh;
     margin-bottom: 2rem;
   }
 
   .images-container.layout-4 .image-item {
     height: 35vh;
-    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   .image-item img {

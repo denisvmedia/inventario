@@ -130,7 +130,7 @@ const handleTouchEnd = (event: TouchEvent, errorId: string) => {
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 10%), 0 4px 6px -2px rgb(0 0 0 / 5%);
   pointer-events: auto;
   max-width: 100%;
-  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .error-content {

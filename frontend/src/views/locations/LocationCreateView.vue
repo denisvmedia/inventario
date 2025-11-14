@@ -233,7 +233,7 @@ label {
 
   pre {
     white-space: pre-wrap;
-    word-wrap: break-word;
+    overflow-wrap: break-word;
     overflow-x: auto;
   }
 }
