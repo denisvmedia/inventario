@@ -279,7 +279,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 					TenantAwareEntityID: models.TenantAwareEntityID{
 						EntityID: models.EntityID{ID: fmt.Sprintf("bulk-commodity-user%d-%d", userIndex+1, i)},
 						TenantID: "test-tenant-id",
-						UserID:   users[userIndex].ID,
+						UserID:   users[userIndex].ID, //nolint:gosec // G602 is a false positive
 					},
 					Name:                   fmt.Sprintf("User%d Commodity %d", userIndex+1, i),
 					ShortName:              fmt.Sprintf("U%dC%d", userIndex+1, i),
@@ -298,7 +298,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 				}
 				userAwareCommodityRegistry := registrySet.CommodityRegistry
 				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user-aware registry for user %d: %v", userIndex+1, err))
-				_, err = userAwareCommodityRegistry.Create(ctxs[userIndex], commodity)
+				_, err = userAwareCommodityRegistry.Create(ctxs[userIndex], commodity) //nolint:gosec // G602 is a false positive
 				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create commodity for user %d: %v", userIndex+1, err))
 			}
 		}
