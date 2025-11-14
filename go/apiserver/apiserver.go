@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
 	"github.com/rs/cors"
-	swagger "github.com/swaggo/http-swagger"
+	swagger "github.com/swaggo/http-swagger/v2"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
 	// _ "gocloud.dev/blob/fileblob"  // register fileblob driver
