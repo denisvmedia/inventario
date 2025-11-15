@@ -74,6 +74,14 @@ export async function createCommodity(page: Page, recorder: TestRecorder,testCom
 
     // Wait to be redirected to the commodity detail page
     await page.waitForURL(/\/commodities\/[0-9a-fA-F-]{36}/);
+
+    // Wait for the page content to be fully loaded and rendered
+    // This is especially important for Safari/WebKit which may be slower
+    await page.waitForLoadState('networkidle');
+
+    // Wait for the h1 element to be visible (ensures page is rendered)
+    await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
+
     await recorder.takeScreenshot('commodity-create-03-created');
 
     return page.url();
@@ -215,6 +223,14 @@ export async function editCommodity(page: Page, recorder: TestRecorder, updatedC
 
     // Wait to be redirected back to the commodity detail page
     await expect(page).toHaveURL(/\/commodities\/[a-zA-Z0-9-]+\?/);
+
+    // Wait for the page content to be fully loaded and rendered
+    // This is especially important for Safari/WebKit which may be slower
+    await page.waitForLoadState('networkidle');
+
+    // Wait for the h1 element to be visible and contain text (ensures page is rendered)
+    await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
+
     await recorder.takeScreenshot('commodity-edit-02-after-edit');
 }
 
