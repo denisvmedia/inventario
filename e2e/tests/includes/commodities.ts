@@ -79,6 +79,18 @@ export async function createCommodity(page: Page, recorder: TestRecorder,testCom
     // This is especially important for Safari/WebKit which may be slower
     await page.waitForLoadState('networkidle');
 
+    // Also wait for the commodity GET response that contains the created data
+    await page.waitForResponse(async (resp) => {
+        if (resp.request().method() !== 'GET') return false;
+        if (!resp.url().includes('/api/v1/commodities/')) return false;
+        try {
+            const json = await resp.json();
+            return json?.data?.attributes?.name === testCommodity.name;
+        } catch {
+            return false;
+        }
+    }, { timeout: 15000 });
+
     // Wait for the h1 element to be visible (ensures page is rendered)
     await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
 
@@ -88,6 +100,10 @@ export async function createCommodity(page: Page, recorder: TestRecorder,testCom
 }
 
 export async function verifyCommodityDetails(page: Page, testCommodity: any) {
+    // Ensure the page has rendered before assertions (helps WebKit)
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
+
     // Verify the commodity details are displayed correctly
     await expect(page.locator('h1')).toContainText(testCommodity.name);
     await expect(page.locator('.commodity-short-name')).toContainText(testCommodity.shortName);
@@ -142,7 +158,7 @@ export async function editCommodity(page: Page, recorder: TestRecorder, updatedC
     }
 
     // Verify we're on the edit page
-    await expect(page).toHaveURL(/\/commodities\/[a-zA-Z0-9-]+\/edit\?/);
+    await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}\/edit(\?.*)?$/);
     await recorder.takeScreenshot('commodity-edit-01-edit-form');
 
     // Update the commodity fields
@@ -221,8 +237,21 @@ export async function editCommodity(page: Page, recorder: TestRecorder, updatedC
     // Save the changes
     await page.click('button:has-text("Save Commodity")');
 
-    // Wait to be redirected back to the commodity detail page
-    await expect(page).toHaveURL(/\/commodities\/[a-zA-Z0-9-]+\?/);
+    // Wait to be redirected back to the commodity detail page (query string may or may not be present)
+    await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}(\?.*)?$/);
+
+    // Wait for the commodity GET call with the updated data to complete
+    await page.waitForResponse(async (resp) => {
+        if (resp.request().method() !== 'GET') return false;
+        const url = resp.url();
+        if (!url.includes('/api/v1/commodities/')) return false;
+        try {
+            const json = await resp.json();
+            return json?.data?.attributes?.name === updatedCommodity.name;
+        } catch {
+            return false;
+        }
+    }, { timeout: 15000 });
 
     // Wait for the page content to be fully loaded and rendered
     // This is especially important for Safari/WebKit which may be slower
