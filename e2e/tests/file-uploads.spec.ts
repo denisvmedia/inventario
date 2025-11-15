@@ -40,38 +40,38 @@ test.describe('File Uploads and Properties Tests', () => {
     let step = 1;
 
     // STEP 1: CREATE LOCATION - First create a location
-    console.log(`Step ${step++}: Creating a new location`);
+    recorder.log(`Step ${step++}: Creating a new location`);
     await navigateTo(page, recorder, TO_LOCATIONS);
     await createLocation(page, recorder, testLocation);
 
     // STEP 2: CREATE AREA - Create a new area
-    console.log(`Step ${step++}: Creating a new area`);
+    recorder.log(`Step ${step++}: Creating a new area`);
     await createArea(page, recorder, testArea)
 
     // STEP 3: CREATE COMMODITY - Create a new commodity
-    console.log(`Step ${step++}: Creating a new commodity`);
+    recorder.log(`Step ${step++}: Creating a new commodity`);
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
     await createCommodity(page, recorder, testCommodity);
 
     // STEP 4: READ - Verify the commodity details
-    console.log(`Step ${step++}: Verifying the commodity details`);
+    recorder.log(`Step ${step++}: Verifying the commodity details`);
     await verifyCommodityDetails(page, testCommodity);
 
     // STEP 5: UPLOAD IMAGE - Upload an image to the commodity
-    console.log(`Step ${step++}: Uploading an image`);
+    recorder.log(`Step ${step++}: Uploading an image`);
     await uploadFile(page, recorder, '.commodity-images', testImagePath);
 
     // STEP 6: UPLOAD MANUAL - Upload a manual to the commodity
-    console.log(`Step ${step++}: Uploading a manual`);
+    recorder.log(`Step ${step++}: Uploading a manual`);
     await uploadFile(page, recorder, '.commodity-manuals', testManualPath);
 
     // STEP 7: UPLOAD INVOICE - Upload an invoice to the commodity
-    console.log(`Step ${step++}: Uploading an invoice`);
+    recorder.log(`Step ${step++}: Uploading an invoice`);
     await uploadFile(page, recorder, '.commodity-invoices', testInvoicePath);
 
     // STEP 8: Check file properties by looking at displayed information
-    console.log(`Step ${step++}: Testing file properties dialog`);
+    recorder.log(`Step ${step++}: Testing file properties dialog`);
 
     // For each file type, test file details view
     for (const { selector, fileType } of [
@@ -79,7 +79,7 @@ test.describe('File Uploads and Properties Tests', () => {
       { selector: '.commodity-manuals', fileType: 'manual' },
       { selector: '.commodity-invoices', fileType: 'invoice' }
     ]) {
-      console.log(`Testing file details for ${fileType}`);
+      recorder.log(`Testing file details for ${fileType}`);
       await fileinfo(page, recorder, selector, fileType);
     }
 
@@ -92,7 +92,7 @@ test.describe('File Uploads and Properties Tests', () => {
     }
 
     // STEP 9: TEST FILE DOWNLOAD - Verify that files can be downloaded
-    console.log(`Step ${step++}: Testing file downloads`);
+    recorder.log(`Step ${step++}: Testing file downloads`);
 
     // For each file type, test downloads
     for (const { selector, fileType } of [
@@ -100,12 +100,12 @@ test.describe('File Uploads and Properties Tests', () => {
       { selector: '.commodity-manuals', fileType: 'manual' },
       { selector: '.commodity-invoices', fileType: 'invoice' }
     ]) {
-      console.log(`Testing download for ${fileType}`);
+      recorder.log(`Testing download for ${fileType}`);
       await downloadFile(page, recorder, selector, fileType);
     }
 
     // STEP 10: TEST PDF VIEWER - Verify that PDFs can be viewed
-    console.log(`Step ${step++}: Testing PDF viewer`);
+    recorder.log(`Step ${step++}: Testing PDF viewer`);
     await page.click('.commodity-manuals .file-item .file-preview');
     await page.waitForSelector('.file-modal', { state: 'visible' });
     await recorder.takeScreenshot('pdf-viewer-opened');
@@ -118,7 +118,7 @@ test.describe('File Uploads and Properties Tests', () => {
     // Check initial page info
     await expect(pageIndicator).toBeVisible();
     const initialPageText = await pageIndicator.textContent();
-    console.log(`Initial page text: ${initialPageText}`);
+    recorder.log(`Initial page text: ${initialPageText}`);
     expect(initialPageText).toMatch(/1 \/ \d+/);
 
     // Extract total pages
@@ -127,7 +127,7 @@ test.describe('File Uploads and Properties Tests', () => {
 
     // Test pagination if multiple pages
     if (totalPages > 1) {
-      console.log(`Total pages: ${totalPages}`);
+      recorder.log(`Total pages: ${totalPages}`);
       await nextButton.click();
       await expect(pageIndicator).toContainText('2 /');
       await recorder.takeScreenshot('pdf-viewer-page-2');
@@ -135,11 +135,11 @@ test.describe('File Uploads and Properties Tests', () => {
       await prevButton.click();
       await expect(pageIndicator).toContainText('1 /');
     } else {
-      console.log('Only one page, skipping pagination test');
+      recorder.log('Only one page, skipping pagination test');
     }
 
     // Test container scrollability
-    console.log('Testing container scrollability');
+    recorder.log('Testing container scrollability');
     const pdfContainer = page.locator('.pdf-view > .pdf-container');
     await expect(pdfContainer).toBeVisible();
     const initialScrollTop = await pdfContainer.evaluate(el => el.scrollTop);
@@ -151,19 +151,19 @@ test.describe('File Uploads and Properties Tests', () => {
     const zoomInButton = page.locator('.pdf-zoom-in');
     const zoomOutButton = page.locator('.pdf-zoom-out');
 
-    console.log('Testing zoom in/out in paginated mode');
+    recorder.log('Testing zoom in/out in paginated mode');
     await zoomInButton.click();
     await recorder.takeScreenshot('pdf-viewer-zoomed-in');
     await zoomOutButton.click();
 
     // Switch to "view all pages" mode
     const pdfViewModeAllPages = page.locator('.pdf-view-mode-all-pages');
-    console.log('Switching to view all pages mode');
+    recorder.log('Switching to view all pages mode');
     await pdfViewModeAllPages.click();
     await recorder.takeScreenshot('pdf-viewer-all-pages-mode');
 
     // Verify pagination buttons are disabled in all-pages mode
-    console.log('Verifying pagination buttons are disabled in all-pages mode');
+    recorder.log('Verifying pagination buttons are disabled in all-pages mode');
     await expect(nextButton).toBeDisabled();
     await expect(prevButton).toBeDisabled();
 
@@ -172,7 +172,7 @@ test.describe('File Uploads and Properties Tests', () => {
 
     // Test scrolling updates current page in all-pages mode
     if (totalPages > 1) {
-      console.log('Testing scrolling updates current page in all-pages mode');
+      recorder.log('Testing scrolling updates current page in all-pages mode');
 
       // Get height of a single page
       const pageHeight = await page.evaluate(() => {
@@ -186,7 +186,7 @@ test.describe('File Uploads and Properties Tests', () => {
         el.scrollTop = height + 10;
       }, pageHeight);
 
-      console.log('Scrolling to second page...');
+      recorder.log('Scrolling to second page...');
       // Wait for page indicator to update
       await page.waitForFunction(
         () => document.querySelector('.page-info')?.textContent?.includes('2 /'),
@@ -197,28 +197,28 @@ test.describe('File Uploads and Properties Tests', () => {
     }
 
     // Test zoom in all-pages mode
-    console.log('Testing zoom in/out in all-pages mode');
+    recorder.log('Testing zoom in/out in all-pages mode');
     await zoomInButton.click();
     await recorder.takeScreenshot('pdf-viewer-all-pages-zoomed-in');
 
     // Close the viewer
-    console.log('Closing the PDF viewer');
+    recorder.log('Closing the PDF viewer');
     await page.click('.file-modal .btn-secondary');
     await expect(page.locator('.file-modal')).toBeHidden();
 
     // STEP 11: TEST Image viewer - Verify that images can be viewed
-    console.log(`Step ${step++}: Testing image viewer`);
+    recorder.log(`Step ${step++}: Testing image viewer`);
     await imageviewer(page, recorder);
 
     // STEP 12: CLEANUP - Delete the test image, manual, and invoice
-    console.log(`Step ${step++}: Cleaning up - deleting the test files`);
+    recorder.log(`Step ${step++}: Cleaning up - deleting the test files`);
     // For each file type, delete files
     for (const { selector, fileType } of [
       { selector: '.commodity-images', fileType: 'image' },
       { selector: '.commodity-manuals', fileType: 'manual' },
       { selector: '.commodity-invoices', fileType: 'invoice' }
     ]) {
-      console.log(`Deleting ${fileType}`);
+      recorder.log(`Deleting ${fileType}`);
       await deleteFile(page, recorder, selector, fileType);
     }
   });

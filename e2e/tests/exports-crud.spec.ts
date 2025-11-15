@@ -46,14 +46,14 @@ test.describe('Export CRUD Operations', () => {
 
   test('should create, view, and delete an export', async ({ page, recorder }) => {
     // Create prerequisite entities
-    console.log('Creating a new location');
+    recorder.log('Creating a new location');
     await navigateTo(page, recorder, TO_LOCATIONS);
     await createLocation(page, recorder, testLocation);
 
-    console.log('Creating a new area');
+    recorder.log('Creating a new area');
     await createArea(page, recorder, testArea);
 
-    console.log('Creating a new commodity');
+    recorder.log('Creating a new commodity');
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
     await createCommodity(page, recorder, testCommodity);
@@ -80,14 +80,14 @@ test.describe('Export CRUD Operations', () => {
     });
 
     // Test download functionality from detail view
-    console.log('Testing export download from detail view');
+    recorder.log('Testing export download from detail view');
     const downloadResult = await downloadExport(page, recorder, testExport.description, true);
-    console.log(`Downloaded file: ${downloadResult.filename} to ${downloadResult.path}`);
+    recorder.log(`Downloaded file: ${downloadResult.filename} to ${downloadResult.path}`);
 
     // Test download functionality from list view
-    console.log('Testing export download from list view');
+    recorder.log('Testing export download from list view');
     const listDownloadResult = await downloadExportFromList(page, recorder, testExport.description);
-    console.log(`Downloaded file from list: ${listDownloadResult.filename} to ${listDownloadResult.path}`);
+    recorder.log(`Downloaded file from list: ${listDownloadResult.filename} to ${listDownloadResult.path}`);
 
     // Navigate back to detail view for cleanup
     await page.click(`text=${testExport.description}`);
@@ -138,14 +138,14 @@ test.describe('Export CRUD Operations', () => {
     await recorder.takeScreenshot('exports-full-03-details');
 
     // Test download functionality for full database export
-    console.log('Testing full database export download from detail view');
+    recorder.log('Testing full database export download from detail view');
     const fullDbDownloadResult = await downloadExport(page, recorder, fullDatabaseExport.description, true);
-    console.log(`Downloaded full database export: ${fullDbDownloadResult.filename} to ${fullDbDownloadResult.path}`);
+    recorder.log(`Downloaded full database export: ${fullDbDownloadResult.filename} to ${fullDbDownloadResult.path}`);
 
     // Test download from list view as well
-    console.log('Testing full database export download from list view');
+    recorder.log('Testing full database export download from list view');
     const fullDbListDownloadResult = await downloadExportFromList(page, recorder, fullDatabaseExport.description);
-    console.log(`Downloaded full database export from list: ${fullDbListDownloadResult.filename} to ${fullDbListDownloadResult.path}`);
+    recorder.log(`Downloaded full database export from list: ${fullDbListDownloadResult.filename} to ${fullDbListDownloadResult.path}`);
 
     // Navigate back to detail view for cleanup
     await page.click(`text=${fullDatabaseExport.description}`);
@@ -175,25 +175,25 @@ test.describe('Export CRUD Operations', () => {
     await recorder.takeScreenshot('exports-download-test-02-export-ready');
 
     // Test 1: Download from detail view
-    console.log('Test 1: Download from export detail view');
+    recorder.log('Test 1: Download from export detail view');
     const detailDownload = await downloadExport(page, recorder, downloadTestExport.description, true);
 
     // Verify the downloaded file has expected characteristics
     expect(detailDownload.filename).toMatch(/\.xml$/);
     expect(detailDownload.path).toBeTruthy();
-    console.log(`Detail view download successful: ${detailDownload.filename}`);
+    recorder.log(`Detail view download successful: ${detailDownload.filename}`);
 
     // Test 2: Download from list view
-    console.log('Test 2: Download from export list view');
+    recorder.log('Test 2: Download from export list view');
     const listDownload = await downloadExportFromList(page, recorder, downloadTestExport.description);
 
     // Verify the downloaded file has expected characteristics
     expect(listDownload.filename).toMatch(/\.xml$/);
     expect(listDownload.path).toBeTruthy();
-    console.log(`List view download successful: ${listDownload.filename}`);
+    recorder.log(`List view download successful: ${listDownload.filename}`);
 
     // Test 3: Verify download button states
-    console.log('Test 3: Verify download button availability');
+    recorder.log('Test 3: Verify download button availability');
 
     // Navigate back to detail view
     await page.click(`text=${downloadTestExport.description}`);
