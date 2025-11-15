@@ -26,13 +26,29 @@ export async function deleteArea(page: Page, recorder: TestRecorder, areaName: s
     }
 
     await areaCard.waitFor({ state: 'visible' });
+
+    // Get the count of area cards before deletion
+    const areaCardsBefore = await page.locator('.area-card').count();
+
     await areaCard.locator('.area-actions button[title="Delete"]').click();
     await recorder.takeScreenshot('area-delete-01-confirm');
     await page.click('.confirmation-modal button:has-text("Delete")');
+
+    // Wait for the area to be removed from the DOM by checking the count decreased
+    await page.waitForFunction(
+        (expectedCount) => {
+            const cards = document.querySelectorAll('.area-card');
+            return cards.length === expectedCount;
+        },
+        areaCardsBefore - 1,
+        { timeout: 10000 }
+    );
+
     await recorder.takeScreenshot('area-delete-02-deleted');
 
     await expect(page).toHaveURL(/\/locations/);
-    await expect(areaCard).not.toBeVisible();
+    // Verify the specific area is no longer in the DOM
+    await expect(page.locator(`.area-card:has-text("${areaName}")`)).toHaveCount(0);
 }
 
 export async function verifyAreaHasCommodities(page: Page, recorder: TestRecorder) {

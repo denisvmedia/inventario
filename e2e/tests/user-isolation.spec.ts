@@ -130,13 +130,13 @@ test.describe('User Isolation', () => {
       await user1.page!.goto('/exports');
 
       // Check if export functionality exists, if not skip this test
-      const hasExportButton = await user1.page!.locator('button.new-export-button').isVisible({ timeout: 2000 });
+      const hasExportButton = await user1.page!.locator('a.new-export-button').isVisible({ timeout: 2000 });
       if (!hasExportButton) {
         console.log('Export functionality not found, skipping export isolation test');
         return;
       }
 
-      await user1.page!.click('button.new-export-button');
+      await user1.page!.click('a.new-export-button');
 
       // Fill export form (using generic selectors)
       const nameField = user1.page!.locator('input[name="name"], #name, input[placeholder*="name" i]').first();

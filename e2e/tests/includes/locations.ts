@@ -24,11 +24,26 @@ export async function createLocation(page: Page, recorder: TestRecorder, testLoc
 }
 
 export async function deleteLocation(page: Page, recorder: TestRecorder, locationName: string) {
+    // Get the count of location cards before deletion
+    const locationCardsBefore = await page.locator('.location-card').count();
+
     await page.click(`.location-card:has-text("${locationName}") button[title="Delete"]`);
     await recorder.takeScreenshot('location-delete-01-confirm');
     await page.click('.confirmation-modal button:has-text("Delete")');
+
+    // Wait for the location to be removed from the DOM by checking the count decreased
+    await page.waitForFunction(
+        (expectedCount) => {
+            const cards = document.querySelectorAll('.location-card');
+            return cards.length === expectedCount;
+        },
+        locationCardsBefore - 1,
+        { timeout: 10000 }
+    );
+
     await recorder.takeScreenshot('location-delete-02-deleted');
 
     await expect(page).toHaveURL(/\/locations/);
-    await expect(page.locator(`.location-card:has-text("${locationName}")`)).not.toBeVisible();
+    // Verify the specific location is no longer in the DOM
+    await expect(page.locator(`.location-card:has-text("${locationName}")`)).toHaveCount(0);
 }

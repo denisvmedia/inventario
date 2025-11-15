@@ -108,15 +108,29 @@ export const deleteFile = async (page: Page, recorder: TestRecorder, selector: s
     const fileItem = page.locator(`${selector} .file-item`).first();
     await expect(fileItem).toBeVisible();
 
+    // Get the count of file items before deletion
+    const fileItemsBefore = await page.locator(`${selector} .file-item`).count();
+
     // Find and click the delete button
     await fileItem.locator('.file-actions .btn-danger').click();
 
     await recorder.takeScreenshot(`file-delete-${fileType}-confirm`);
     await page.click('.confirmation-modal button:has-text("Delete")');
+
+    // Wait for the file to be removed from the DOM by checking the count decreased
+    await page.waitForFunction(
+        ({ selector, expectedCount }) => {
+            const items = document.querySelectorAll(`${selector} .file-item`);
+            return items.length === expectedCount;
+        },
+        { selector, expectedCount: fileItemsBefore - 1 },
+        { timeout: 10000 }
+    );
+
     await recorder.takeScreenshot(`filed-delete-${fileType}-deleted`);
 
-    // Verify file is no longer visible
-    await expect(page.locator(`${selector} .file-item`)).not.toBeVisible();
+    // Verify file is no longer visible (should have one less item)
+    await expect(page.locator(`${selector} .file-item`)).toHaveCount(fileItemsBefore - 1);
 
     // Take screenshot after deletion
     await recorder.takeScreenshot(`${fileType}-deletion-success`);
