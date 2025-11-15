@@ -51,7 +51,7 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
         throw new Error(`Could not get file ID for ${fileType}. ID: ${fileId}`);
     }
 
-    console.log(`Testing download for ${fileType} with file ID: ${fileId}`);
+    recorder.log(`Testing download for ${fileType} with file ID: ${fileId}`);
 
     // Get authentication token for API requests
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
@@ -67,7 +67,7 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
     expect(signedUrlResponse.status()).toBe(200);
 
     const signedUrlData = await signedUrlResponse.json();
-    console.log(`Signed URL response:`, signedUrlData);
+    recorder.log(`Signed URL response:`, signedUrlData);
 
     // Extract the signed URL from JSON:API response format
     const signedUrl = signedUrlData.attributes.url;
@@ -76,7 +76,7 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
         throw new Error(`Could not get signed URL for ${fileType}. Response: ${JSON.stringify(signedUrlData)}`);
     }
 
-    console.log(`Signed download URL for ${fileType}: ${signedUrl}`);
+    recorder.log(`Signed download URL for ${fileType}: ${signedUrl}`);
 
     // Step 2: Verify the signed URL is accessible by making a GET request with range header
     // This will only download the first byte to verify the file exists and is accessible
@@ -92,7 +92,7 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
     // Get the content-disposition header to verify filename
     const contentDisposition = response.headers()['content-disposition'];
     if (contentDisposition) {
-        console.log(`Content-Disposition header: ${contentDisposition}`);
+        recorder.log(`Content-Disposition header: ${contentDisposition}`);
     }
 
     // Step 3: Click the download button to trigger the download (this tests the frontend flow)
@@ -100,7 +100,7 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
 
     // Take screenshot after download action
     await recorder.takeScreenshot(`${fileType}-download-success`);
-    console.log(`${fileType} download verified successfully`);
+    recorder.log(`${fileType} download verified successfully`);
 };
 
 export const deleteFile = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {
@@ -108,19 +108,33 @@ export const deleteFile = async (page: Page, recorder: TestRecorder, selector: s
     const fileItem = page.locator(`${selector} .file-item`).first();
     await expect(fileItem).toBeVisible();
 
+    // Get the count of file items before deletion
+    const fileItemsBefore = await page.locator(`${selector} .file-item`).count();
+
     // Find and click the delete button
     await fileItem.locator('.file-actions .btn-danger').click();
 
     await recorder.takeScreenshot(`file-delete-${fileType}-confirm`);
     await page.click('.confirmation-modal button:has-text("Delete")');
+
+    // Wait for the file to be removed from the DOM by checking the count decreased
+    await page.waitForFunction(
+        ({ selector, expectedCount }) => {
+            const items = document.querySelectorAll(`${selector} .file-item`);
+            return items.length === expectedCount;
+        },
+        { selector, expectedCount: fileItemsBefore - 1 },
+        { timeout: 10000 }
+    );
+
     await recorder.takeScreenshot(`filed-delete-${fileType}-deleted`);
 
-    // Verify file is no longer visible
-    await expect(page.locator(`${selector} .file-item`)).not.toBeVisible();
+    // Verify file is no longer visible (should have one less item)
+    await expect(page.locator(`${selector} .file-item`)).toHaveCount(fileItemsBefore - 1);
 
     // Take screenshot after deletion
     await recorder.takeScreenshot(`${fileType}-deletion-success`);
-    console.log(`${fileType} deleted successfully`);
+    recorder.log(`${fileType} deleted successfully`);
 };
 
 export const fileinfo = async (page: Page, recorder: TestRecorder, selector: string, fileType: string) => {
@@ -196,28 +210,28 @@ export const imageviewer = async (page: Page, recorder: TestRecorder) => {
 
     // read img style attribute
     const imageStyleOriginal = await previewImage.evaluate((img) => img.style.transform);
-    console.log(`Image style: ${imageStyleOriginal}`);
+    recorder.log(`Image style: ${imageStyleOriginal}`);
 
     // Test dragging the zoomed image
     await page.mouse.move(400, 300);
     await page.mouse.down();
     await page.waitForSelector('.image-container img[style*="cursor: grabbing"]');
-    console.log("Cursor is changed to grabbing. Dragging image...")
+    recorder.log("Cursor is changed to grabbing. Dragging image...")
     await page.mouse.move(500, 350);
     await page.mouse.up();
     await page.waitForSelector('.image-container img[style*="cursor: grab"]');
-    console.log("Cursor is changed to grab.");
+    recorder.log("Cursor is changed to grab.");
     // compare imageStyleOriginal with current image style
     const imageStyleAfterDrag = await previewImage.evaluate((img) => img.style.transform);
-    console.log(`Image style after drag: ${imageStyleAfterDrag}`);
+    recorder.log(`Image style after drag: ${imageStyleAfterDrag}`);
     expect(imageStyleAfterDrag).not.toEqual(imageStyleOriginal);
     await recorder.takeScreenshot('image-dragged');
 
     // Test zoom out functionality
-    console.log("Clicking image to zoom out...")
+    recorder.log("Clicking image to zoom out...")
     await previewImage.click();
     await page.waitForSelector('.image-container img[style*="cursor: zoom-in"]');
-    console.log("Cursor is changed to zoom-in.");
+    recorder.log("Cursor is changed to zoom-in.");
     await recorder.takeScreenshot('image-zoomed-out');
 
     // Test closing the dialog

@@ -60,67 +60,67 @@ test.describe('Commodity Simple CRUD Operations', () => {
   // Fast-fail test to debug the specific issue
   test('should update and immediately retrieve a commodity (fast-fail debug)', async ({ page, recorder }) => {
     // STEP 1: CREATE LOCATION - First create a location
-    console.log('Step 1: Creating a new location');
+    recorder.log('Step 1: Creating a new location');
     await navigateTo(page, recorder, TO_LOCATIONS);
     await createLocation(page, recorder, testLocation);
 
     // STEP 2: CREATE AREA - Create a new area in-place in the location list view
-    console.log('Step 2: Creating a new area');
+    recorder.log('Step 2: Creating a new area');
     await createArea(page, recorder, testArea)
 
     // STEP 3: CREATE COMMODITY - Create a new commodity
-    console.log('Step 3: Creating a new commodity');
+    recorder.log('Step 3: Creating a new commodity');
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
     await createCommodity(page, recorder, testCommodity);
 
     // STEP 4: READ - Verify the commodity details
-    console.log('Step 4: Verifying the commodity details');
+    recorder.log('Step 4: Verifying the commodity details');
     await verifyCommodityDetails(page, testCommodity);
 
     // STEP 5: UPDATE - Edit the commodity
-    console.log('Step 5: Editing the commodity');
+    recorder.log('Step 5: Editing the commodity');
     await editCommodity(page, recorder, updatedCommodity);
 
     // STEP 6: READ - Verify the commodity details (this is where it fails in CI)
-    console.log('Step 6: Verifying updated commodity details');
+    recorder.log('Step 6: Verifying updated commodity details');
     await verifyCommodityDetails(page, updatedCommodity);
   });
 
   test('should perform full CRUD operations on a commodity', async ({ page, recorder }) => {
     // STEP 1: CREATE LOCATION - First create a location
-    console.log('Step 1: Creating a new location');
+    recorder.log('Step 1: Creating a new location');
     await navigateTo(page, recorder, TO_LOCATIONS);
     await createLocation(page, recorder, testLocation);
 
     // STEP 2: CREATE AREA - Create a new area in-place in the location list view
-    console.log('Step 2: Creating a new area');
+    recorder.log('Step 2: Creating a new area');
     await createArea(page, recorder, testArea)
 
     // STEP 3: CREATE COMMODITY - Create a new commodity
-    console.log('Step 3: Creating a new commodity');
+    recorder.log('Step 3: Creating a new commodity');
     await navigateTo(page, recorder, TO_AREA_COMMODITIES, FROM_LOCATIONS_AREA, testArea.name);
     await verifyAreaHasCommodities(page, recorder);
     await createCommodity(page, recorder, testCommodity);
 
     // STEP 4: READ - Verify the commodity details
-    console.log('Step 4: Verifying the commodity details');
+    recorder.log('Step 4: Verifying the commodity details');
     await verifyCommodityDetails(page, testCommodity);
 
     // STEP 5: UPDATE - Edit the commodity
-    console.log('Step 5: Editing the commodity');
+    recorder.log('Step 5: Editing the commodity');
     await editCommodity(page, recorder, updatedCommodity);
 
     // STEP 6: READ - Verify the commodity details
-    console.log('Step 6: Verifying updated commodity details');
+    recorder.log('Step 6: Verifying updated commodity details');
     await verifyCommodityDetails(page, updatedCommodity);
 
     // STEP 7: DELETE - Delete the commodity
-    console.log('Step 7: Deleting the commodity');
+    recorder.log('Step 7: Deleting the commodity');
     await deleteCommodity(page, recorder, updatedCommodity.name, BACK_TO_AREAS);
 
     // STEP 7: CLEANUP - Delete the area and location
-    console.log('Step 7: Cleaning up - deleting the area and location');
+    recorder.log('Step 7: Cleaning up - deleting the area and location');
     await navigateTo(page, recorder, TO_LOCATIONS, FROM_COMMODITIES);
 
     // Wait for the areas section to be visible after location expansion

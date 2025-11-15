@@ -130,13 +130,13 @@ test.describe('User Isolation', () => {
       await user1.page!.goto('/exports');
 
       // Check if export functionality exists, if not skip this test
-      const hasExportButton = await user1.page!.locator('button:has-text("New Export"), a:has-text("New Export")').isVisible({ timeout: 2000 });
+      const hasExportButton = await user1.page!.locator('a.new-export-button').isVisible({ timeout: 2000 });
       if (!hasExportButton) {
-        console.log('Export functionality not found, skipping export isolation test');
+        test.skip();
         return;
       }
 
-      await user1.page!.click('button:has-text("New Export"), a:has-text("New Export")');
+      await user1.page!.click('a.new-export-button');
 
       // Fill export form (using generic selectors)
       const nameField = user1.page!.locator('input[name="name"], #name, input[placeholder*="name" i]').first();
@@ -176,7 +176,7 @@ test.describe('User Isolation', () => {
       // Check if files functionality exists
       const hasFilesSection = await user1.page!.locator('h1:has-text("Files"), h2:has-text("Files")').isVisible({ timeout: 2000 });
       if (!hasFilesSection) {
-        console.log('Files functionality not found, skipping file isolation test');
+        test.skip();
         return;
       }
 
