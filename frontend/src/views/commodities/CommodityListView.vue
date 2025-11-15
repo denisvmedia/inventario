@@ -13,7 +13,7 @@
           <label class="toggle-label">Show drafts & inactive items</label>
         </div>
         <router-link v-if="loading" to="#" class="btn btn-primary"><font-awesome-icon icon="plus" /> Loading...</router-link>
-        <router-link v-else-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primar new-commodity-button"><font-awesome-icon icon="plus" /> New</router-link>
+        <router-link v-else-if="hasLocationsAndAreas" to="/commodities/new" class="btn btn-primary new-commodity-button"><font-awesome-icon icon="plus" /> New</router-link>
         <router-link v-else-if="locations.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Location First</router-link>
         <router-link v-else-if="areas.length === 0" to="/locations" class="btn btn-primary"><font-awesome-icon icon="plus" /> Create Area First</router-link>
       </div>
