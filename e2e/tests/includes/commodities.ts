@@ -228,8 +228,9 @@ export async function editCommodity(page: Page, recorder: TestRecorder, updatedC
     // This is especially important for Safari/WebKit which may be slower
     await page.waitForLoadState('networkidle');
 
-    // Wait for the h1 element to be visible and contain text (ensures page is rendered)
-    await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
+    // Wait for the h1 element to contain the updated name (ensures data is loaded and rendered)
+    // This is more reliable than just waiting for visibility, as it ensures the correct data is displayed
+    await expect(page.locator('h1')).toContainText(updatedCommodity.name, { timeout: 10000 });
 
     await recorder.takeScreenshot('commodity-edit-02-after-edit');
 }
