@@ -25,7 +25,8 @@ export async function createLocation(page: Page, recorder: TestRecorder, testLoc
 
 export async function deleteLocation(page: Page, recorder: TestRecorder, locationName: string) {
     // First, ensure the location card is visible
-    const locationCard = page.locator(`.location-card:has-text("${locationName}")`);
+    // Use .first() to handle cases where multiple locations might have similar names
+    const locationCard = page.locator(`.location-card:has-text("${locationName}")`).first();
     await locationCard.waitFor({ state: 'visible', timeout: 10000 });
 
     // Click the delete button

@@ -132,7 +132,7 @@ test.describe('User Isolation', () => {
       // Check if export functionality exists, if not skip this test
       const hasExportButton = await user1.page!.locator('a.new-export-button').isVisible({ timeout: 2000 });
       if (!hasExportButton) {
-        recorder.log('Export functionality not found, skipping export isolation test');
+        test.skip();
         return;
       }
 
@@ -176,7 +176,7 @@ test.describe('User Isolation', () => {
       // Check if files functionality exists
       const hasFilesSection = await user1.page!.locator('h1:has-text("Files"), h2:has-text("Files")').isVisible({ timeout: 2000 });
       if (!hasFilesSection) {
-        recorder.log('Files functionality not found, skipping file isolation test');
+        test.skip();
         return;
       }
 
