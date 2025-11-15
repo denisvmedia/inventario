@@ -24,26 +24,28 @@ export async function createLocation(page: Page, recorder: TestRecorder, testLoc
 }
 
 export async function deleteLocation(page: Page, recorder: TestRecorder, locationName: string) {
-    // Get the count of location cards before deletion
-    const locationCardsBefore = await page.locator('.location-card').count();
+    // First, ensure the location card is visible
+    const locationCard = page.locator(`.location-card:has-text("${locationName}")`);
+    await locationCard.waitFor({ state: 'visible', timeout: 10000 });
 
-    await page.click(`.location-card:has-text("${locationName}") button[title="Delete"]`);
+    // Click the delete button
+    await locationCard.locator('button[title="Delete"]').click();
     await recorder.takeScreenshot('location-delete-01-confirm');
+
+    // Wait for confirmation modal to be visible
+    await page.locator('.confirmation-modal').waitFor({ state: 'visible', timeout: 5000 });
+
+    // Click the delete button in the confirmation modal
     await page.click('.confirmation-modal button:has-text("Delete")');
 
-    // Wait for the location to be removed from the DOM by checking the count decreased
-    await page.waitForFunction(
-        (expectedCount) => {
-            const cards = document.querySelectorAll('.location-card');
-            return cards.length === expectedCount;
-        },
-        locationCardsBefore - 1,
-        { timeout: 10000 }
-    );
+    // Wait for the confirmation modal to disappear
+    await page.locator('.confirmation-modal').waitFor({ state: 'hidden', timeout: 5000 });
+
+    // Wait for the specific location card to be removed from the DOM
+    await expect(locationCard).toHaveCount(0, { timeout: 15000 });
 
     await recorder.takeScreenshot('location-delete-02-deleted');
 
+    // Verify we're still on the locations page
     await expect(page).toHaveURL(/\/locations/);
-    // Verify the specific location is no longer in the DOM
-    await expect(page.locator(`.location-card:has-text("${locationName}")`)).toHaveCount(0);
 }

@@ -9,11 +9,17 @@ on:
 jobs:
   e2e-tests:
     name: E2E Tests (${{ matrix.browser }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, firefox, webkit]
+        include:
+          - browser: chromium
+            os: ubuntu-latest
+          - browser: firefox
+            os: ubuntu-latest
+          - browser: webkit
+            os: macos-latest
     #container:
     #  image: mcr.microsoft.com/playwright:v1.50.0-noble
 
