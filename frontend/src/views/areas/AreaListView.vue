@@ -2,7 +2,7 @@
   <div class="area-list">
     <div class="header">
       <h1>Areas</h1>
-      <router-link to="/areas/new" class="btn btn-primary"><font-awesome-icon icon="plus" /> New</router-link>
+      <router-link to="/areas/new" class="btn btn-primary new-area-button"><font-awesome-icon icon="plus" /> New</router-link>
     </div>
 
     <!-- Error Notification Stack -->

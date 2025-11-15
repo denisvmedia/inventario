@@ -25,14 +25,38 @@ export async function deleteArea(page: Page, recorder: TestRecorder, areaName: s
         await page.click(`.location-card:has-text("${locationName}")`);
     }
 
-    await areaCard.waitFor({ state: 'visible' });
+    // Ensure the area card is visible
+    await areaCard.waitFor({ state: 'visible', timeout: 10000 });
+
+    // Click the delete button
     await areaCard.locator('.area-actions button[title="Delete"]').click();
     await recorder.takeScreenshot('area-delete-01-confirm');
-    await page.click('.confirmation-modal button:has-text("Delete")');
+
+    // Wait for confirmation modal to be visible
+    await page.locator('.confirmation-modal').waitFor({ state: 'visible', timeout: 5000 });
+
+    // Click the delete button in the confirmation modal and wait for the API response
+    await Promise.all([
+        page.waitForResponse(response =>
+            response.url().includes('/api/v1/areas/') &&
+            response.request().method() === 'DELETE' &&
+            response.status() === 204,
+            { timeout: 10000 }
+        ),
+        page.click('.confirmation-modal button:has-text("Delete")')
+    ]);
+
+    // Wait for the confirmation modal to disappear
+    await page.locator('.confirmation-modal').waitFor({ state: 'hidden', timeout: 5000 });
+
+    // Wait for the specific area card to be removed from the DOM
+    // Re-query the locator to ensure we're checking the current DOM state
+    await expect(page.locator(`.area-card:has-text("${areaName}")`)).toHaveCount(0, { timeout: 15000 });
+
     await recorder.takeScreenshot('area-delete-02-deleted');
 
+    // Verify we're still on the locations page
     await expect(page).toHaveURL(/\/locations/);
-    await expect(areaCard).not.toBeVisible();
 }
 
 export async function verifyAreaHasCommodities(page: Page, recorder: TestRecorder) {

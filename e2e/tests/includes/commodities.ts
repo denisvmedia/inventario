@@ -36,9 +36,9 @@ export async function createCommodity(page: Page, recorder: TestRecorder,testCom
     // Add extra serial numbers if provided
     if (testCommodity.extraSerialNumbers && testCommodity.extraSerialNumbers.length > 0) {
         for (let i = 0; i < testCommodity.extraSerialNumbers.length; i++) {
-            console.log(`Adding extra serial number ${i + 1}`);
+            recorder.log(`Adding extra serial number ${i + 1}`);
             await page.click('button:has-text("Add Serial Number")');
-            console.log(`Filling in extra serial number ${i + 1}`);
+            recorder.log(`Filling in extra serial number ${i + 1}`);
             await page.fill(`.array-input:has(button:has-text("Add Serial Number")) .array-item:nth-child(${i + 1}) input`, testCommodity.extraSerialNumbers[i]);
         }
     }
@@ -226,19 +226,26 @@ export async function deleteCommodity(page: Page, recorder: TestRecorder, commod
     // Click the Delete button
     await page.click('button:has-text("Delete")');
 
+    // Wait for confirmation modal to be visible
+    await page.locator('.confirmation-modal').waitFor({ state: 'visible', timeout: 5000 });
+
     // Confirm deletion in the modal
     await page.click('.confirmation-modal button:has-text("Delete")');
     await recorder.takeScreenshot('commodity-delete-01-on-delete-confirm');
 
-    // Verify we're redirected back to the commodities list
+    // Wait for the confirmation modal to disappear
+    await page.locator('.confirmation-modal').waitFor({ state: 'hidden', timeout: 5000 });
+
+    // Verify we're redirected back to the correct page
     if (backTo === 'commodities') {
-        await expect(page).toHaveURL('/commodities');
+        await expect(page).toHaveURL('/commodities', { timeout: 10000 });
         await recorder.takeScreenshot('commodity-delete-02-after-delete');
     } else if (backTo === 'areas') {
-        await expect(page).toHaveURL(/\/areas\/[a-zA-Z0-9-]+/);
+        await expect(page).toHaveURL(/\/areas\/[a-zA-Z0-9-]+/, { timeout: 10000 });
         await recorder.takeScreenshot('commodity-delete-01-after-delete');
     }
 
-    // Verify the commodity is no longer in the list
-    await expect(page.locator(`.commodity-card:has-text("${commodityName}")`)).not.toBeVisible();
+    // Wait for the specific commodity card to be removed from the DOM
+    const commodityCard = page.locator(`.commodity-card:has-text("${commodityName}")`);
+    await expect(commodityCard).toHaveCount(0, { timeout: 15000 });
 }

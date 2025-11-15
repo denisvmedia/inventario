@@ -8,7 +8,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <router-link to="/files/create" class="btn btn-primary">
+        <router-link to="/files/create" class="btn btn-primary file-upload-button">
           <FontAwesomeIcon icon="plus" />
           Upload File
         </router-link>

@@ -43,11 +43,11 @@ export async function createExport(page: Page, recorder: TestRecorder, testExpor
 
         // Get the location ID for later use
         const locationId = await locationItem.getAttribute('data-location_id');
-        console.log('Location ID: ' + locationId);
-        
+        recorder.log('Location ID: ' + locationId);
+
         // Click the location to select it
         await locationItem.click();
-        
+
         // Turn off "Include all areas and commodities" to drill down
         const locationToggle = page.locator(`.item-content[data-location_id="${locationId}"]`);
         await locationToggle.waitFor({ state: 'visible' });
@@ -63,7 +63,7 @@ export async function createExport(page: Page, recorder: TestRecorder, testExpor
 
         // Get the area ID for later use
         const areaId = await areaItem.getAttribute('data-area_id');
-        console.log('Area ID: ' + areaId);
+        recorder.log('Area ID: ' + areaId);
 
         // Click the area to select it
         await areaItem.click();
@@ -255,13 +255,13 @@ export async function downloadExport(page: Page, recorder: TestRecorder, exportD
 
     // Get the suggested filename and verify it's an XML file
     const suggestedFilename = download.suggestedFilename();
-    console.log(`Downloaded export file: ${suggestedFilename}`);
+    recorder.log(`Downloaded export file: ${suggestedFilename}`);
     expect(suggestedFilename).toMatch(/\.xml$/);
 
     // Save to a temp path to verify the download completed successfully
     const filePath = await download.path();
     expect(filePath).toBeTruthy();
-    console.log(`Export file saved to: ${filePath}`);
+    recorder.log(`Export file saved to: ${filePath}`);
 
     await recorder.takeScreenshot('exports-download-03-completed');
 

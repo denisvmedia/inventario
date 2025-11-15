@@ -7,11 +7,13 @@ on:
     branches: [ master ]
 
 jobs:
-  e2e-tests:
-    name: E2E Tests
+  e2e-tests-linux:
+    name: E2E Tests (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    #container:
-    #  image: mcr.microsoft.com/playwright:v1.50.0-noble
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
 
     services:
       postgres:
@@ -66,11 +68,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('e2e/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('e2e/package-lock.json') }}
 
-      # Install browsers with all system dependencies
-      - name: Install Playwright browsers
-        run: cd e2e && npx playwright install --with-deps
+      # Install only the browser needed for this matrix job
+      - name: Install Playwright browser (${{ matrix.browser }})
+        run: cd e2e && npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run database migrations
         run: |
@@ -84,7 +86,7 @@ jobs:
       - name: Start application stack and run fast-fail test
         run: |
           env
-          
+
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
 
@@ -92,18 +94,125 @@ jobs:
           npx wait-on http://localhost:5173
 
           # Run the fast-fail test first to debug the specific issue
-          cd e2e && npx playwright test --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
+          cd e2e && npx playwright test --project=${{ matrix.browser }} --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
 
       - name: Run full test suite
         if: success()
         run: |
-          # Run the full test suite
-          cd e2e && npm run test
+          # Run the full test suite for this browser
+          cd e2e && npx playwright test --project=${{ matrix.browser }}
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.browser }}
+          path: e2e/playwright-report/
+          retention-days: 30
+
+  e2e-tests-macos:
+    name: E2E Tests (webkit)
+    runs-on: macos-latest
+
+    env:
+      INVENTARIO_DB_DSN: postgres://postgres@localhost:5432/inventario_test?sslmode=disable
+      INVENTARIO_LOG_FORMAT: json
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - id: vars
+        uses: ./.github/actions/vars
+
+      # Set up PostgreSQL on macOS
+      - name: Set up PostgreSQL
+        run: |
+          brew install postgresql@17
+          brew services start postgresql@17
+
+          # Add PostgreSQL to PATH (it's keg-only)
+          export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
+
+          # Wait for PostgreSQL to be ready
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 2>/dev/null; then
+              echo "PostgreSQL is ready"
+              break
+            fi
+            echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 1
+          done
+
+          # Create test database and user
+          createuser -s postgres
+          createdb -O postgres inventario_test
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ steps.vars.outputs.go_version }}
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.vars.outputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Install e2e dependencies
+        run: cd e2e && npm ci
+
+      # Cache Playwright browsers
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: ${{ runner.os }}-playwright-webkit-${{ hashFiles('e2e/package-lock.json') }}
+
+      # Install only WebKit browser
+      - name: Install Playwright browser (webkit)
+        run: cd e2e && npx playwright install --with-deps webkit
+
+      - name: Run database migrations
+        run: |
+          cd go
+          go mod download
+          cd ..
+          make build-inventool
+          bin/inventool db bootstrap apply --username=postgres --db-dsn "${{ env.INVENTARIO_DB_DSN }}"
+          bin/inventool db migrations up --db-dsn "${{ env.INVENTARIO_DB_DSN }}"
+
+      - name: Start application stack and run fast-fail test
+        run: |
+          env
+
+          # Start the backend, seed the database, and start the frontend
+          cd e2e && npm run stack &
+
+          # Wait for stack to be ready
+          npx wait-on http://localhost:5173
+
+          # Run the fast-fail test first to debug the specific issue
+          cd e2e && npx playwright test --project=webkit --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
+
+      - name: Run full test suite
+        if: success()
+        run: |
+          # Run the full test suite for webkit
+          cd e2e && npx playwright test --project=webkit
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report-webkit
           path: e2e/playwright-report/
           retention-days: 30

@@ -13,10 +13,10 @@
           <label class="toggle-label">Show deleted exports</label>
         </div>
         <div class="actions">
-          <router-link to="/exports/import" class="btn btn-secondary">
+          <router-link to="/exports/import" class="btn btn-secondary new-import-button">
             <font-awesome-icon icon="upload" /> Import
           </router-link>
-          <router-link to="/exports/new" class="btn btn-primary">
+          <router-link to="/exports/new" class="btn btn-primary new-export-button">
             <font-awesome-icon icon="plus" /> New
           </router-link>
         </div>

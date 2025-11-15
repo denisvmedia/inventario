@@ -2,7 +2,7 @@
   <div class="location-list">
     <div class="header">
       <h1>Locations</h1>
-      <button class="btn btn-primary" @click="showLocationForm = !showLocationForm">
+      <button class="btn btn-primary new-location-button" @click="showLocationForm = !showLocationForm">
         <font-awesome-icon :icon="showLocationForm ? 'times' : 'plus'" /> {{ showLocationForm ? 'Cancel' : 'New' }}
       </button>
     </div>

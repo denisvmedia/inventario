@@ -28,7 +28,7 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
     const afterCount = await page.locator('.commodity-card').count();
 
     // Log the counts (useful for debugging)
-    console.log(`Commodities count before toggle: ${beforeCount}, after toggle: ${afterCount}`);
+    recorder.log(`Commodities count before toggle: ${beforeCount}, after toggle: ${afterCount}`);
 
     // We expect to see more items when showing inactive and draft items
     // The seed data has several items that are Sold, Lost, Disposed, Written Off, or Draft
@@ -42,7 +42,7 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
 
     // Count should be back to the original
     const finalCount = await page.locator('.commodity-card').count();
-    console.log(`Commodities count after hiding inactive: ${finalCount}`);
+    recorder.log(`Commodities count after hiding inactive: ${finalCount}`);
     expect(finalCount).toEqual(beforeCount);
   });
 
@@ -80,14 +80,14 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
     const afterCount = await page.locator('.commodity-card').count();
 
     // Log the counts (useful for debugging)
-    console.log(`Area commodities count before toggle: ${beforeCount}, after toggle: ${afterCount}`);
+    recorder.log(`Area commodities count before toggle: ${beforeCount}, after toggle: ${afterCount}`);
 
     // The specific area may or may not have inactive/draft items, so we'll check
     // if count changed and log it, but not make a strict assertion that might fail
     if (afterCount > beforeCount) {
-      console.log(`Found ${afterCount - beforeCount} hidden items in this area`);
+      recorder.log(`Found ${afterCount - beforeCount} hidden items in this area`);
     } else {
-      console.log('No hidden items found in this area, trying another area if available');
+      recorder.log('No hidden items found in this area, trying another area if available');
 
       // If no change, try another area that might have inactive items
       await navigateTo(page, recorder, TO_LOCATIONS);
@@ -113,7 +113,7 @@ test.describe('Draft and Inactive Items Toggle Functionality', () => {
 
         // Count after toggle
         const altAfterCount = await page.locator('.commodity-card').count();
-        console.log(`Alternative area commodities count before toggle: ${altBeforeCount}, after toggle: ${altAfterCount}`);
+        recorder.log(`Alternative area commodities count before toggle: ${altBeforeCount}, after toggle: ${altAfterCount}`);
       }
     }
 

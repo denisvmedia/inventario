@@ -94,4 +94,71 @@ export class TestRecorder {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
+
+  /**
+   * Log a message with the test name prefix
+   * This helps identify which test is logging when tests run in parallel
+   *
+   * @param message The message to log
+   * @param args Additional arguments to log
+   */
+  log(message: string, ...args: any[]): void {
+    console.log(`[${this.testName}] ${message}`, ...args);
+  }
+
+  /**
+   * Log a warning message with the test name prefix
+   *
+   * @param message The message to log
+   * @param args Additional arguments to log
+   */
+  warn(message: string, ...args: any[]): void {
+    console.warn(`[${this.testName}] ${message}`, ...args);
+  }
+
+  /**
+   * Log an error message with the test name prefix
+   *
+   * @param message The message to log
+   * @param args Additional arguments to log
+   */
+  error(message: string, ...args: any[]): void {
+    console.error(`[${this.testName}] ${message}`, ...args);
+  }
+}
+
+/**
+ * Helper function to log with optional recorder
+ * If recorder is provided, uses it; otherwise falls back to console.log
+ */
+export function log(recorder: TestRecorder | undefined, message: string, ...args: any[]): void {
+  if (recorder) {
+    recorder.log(message, ...args);
+  } else {
+    console.log(message, ...args);
+  }
+}
+
+/**
+ * Helper function to log warnings with optional recorder
+ * If recorder is provided, uses it; otherwise falls back to console.warn
+ */
+export function warn(recorder: TestRecorder | undefined, message: string, ...args: any[]): void {
+  if (recorder) {
+    recorder.warn(message, ...args);
+  } else {
+    console.warn(message, ...args);
+  }
+}
+
+/**
+ * Helper function to log errors with optional recorder
+ * If recorder is provided, uses it; otherwise falls back to console.error
+ */
+export function error(recorder: TestRecorder | undefined, message: string, ...args: any[]): void {
+  if (recorder) {
+    recorder.error(message, ...args);
+  } else {
+    console.error(message, ...args);
+  }
 }
