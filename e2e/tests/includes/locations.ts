@@ -36,14 +36,23 @@ export async function deleteLocation(page: Page, recorder: TestRecorder, locatio
     // Wait for confirmation modal to be visible
     await page.locator('.confirmation-modal').waitFor({ state: 'visible', timeout: 5000 });
 
-    // Click the delete button in the confirmation modal
-    await page.click('.confirmation-modal button:has-text("Delete")');
+    // Click the delete button in the confirmation modal and wait for the API response
+    await Promise.all([
+        page.waitForResponse(response =>
+            response.url().includes('/api/v1/locations/') &&
+            response.request().method() === 'DELETE' &&
+            response.status() === 204,
+            { timeout: 10000 }
+        ),
+        page.click('.confirmation-modal button:has-text("Delete")')
+    ]);
 
     // Wait for the confirmation modal to disappear
     await page.locator('.confirmation-modal').waitFor({ state: 'hidden', timeout: 5000 });
 
     // Wait for the specific location card to be removed from the DOM
-    await expect(locationCard).toHaveCount(0, { timeout: 15000 });
+    // Re-query the locator to ensure we're checking the current DOM state
+    await expect(page.locator(`.location-card:has-text("${locationName}")`)).toHaveCount(0, { timeout: 15000 });
 
     await recorder.takeScreenshot('location-delete-02-deleted');
 
