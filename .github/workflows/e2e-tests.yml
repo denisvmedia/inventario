@@ -131,6 +131,9 @@ jobs:
           brew install postgresql@17
           brew services start postgresql@17
 
+          # Add PostgreSQL to PATH (it's keg-only)
+          export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
+
           # Wait for PostgreSQL to be ready
           for i in {1..30}; do
             if pg_isready -h localhost -p 5432 2>/dev/null; then
