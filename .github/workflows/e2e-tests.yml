@@ -8,8 +8,12 @@ on:
 
 jobs:
   e2e-tests:
-    name: E2E Tests
+    name: E2E Tests (${{ matrix.browser }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
     #container:
     #  image: mcr.microsoft.com/playwright:v1.50.0-noble
 
@@ -66,11 +70,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('e2e/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('e2e/package-lock.json') }}
 
-      # Install browsers with all system dependencies
-      - name: Install Playwright browsers
-        run: cd e2e && npx playwright install --with-deps
+      # Install only the browser needed for this matrix job
+      - name: Install Playwright browser (${{ matrix.browser }})
+        run: cd e2e && npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run database migrations
         run: |
@@ -84,7 +88,7 @@ jobs:
       - name: Start application stack and run fast-fail test
         run: |
           env
-          
+
           # Start the backend, seed the database, and start the frontend
           cd e2e && npm run stack &
 
@@ -92,18 +96,18 @@ jobs:
           npx wait-on http://localhost:5173
 
           # Run the fast-fail test first to debug the specific issue
-          cd e2e && npx playwright test --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
+          cd e2e && npx playwright test --project=${{ matrix.browser }} --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
 
       - name: Run full test suite
         if: success()
         run: |
-          # Run the full test suite
-          cd e2e && npm run test
+          # Run the full test suite for this browser
+          cd e2e && npx playwright test --project=${{ matrix.browser }}
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.browser }}
           path: e2e/playwright-report/
           retention-days: 30
