@@ -22,7 +22,7 @@
     "clean:artifacts": "rimraf test-results"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1",
+    "@playwright/test": "1.57.0",
     "@types/node": "24.10.0",
     "@types/wait-on": "5.3.4",
     "axios": "1.13.2",
