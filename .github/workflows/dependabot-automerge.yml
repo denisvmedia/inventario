@@ -56,14 +56,14 @@ jobs:
 
       - name: Check if major update
         id: check-major
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ steps.pr-labels.outputs.labels }}
         run: |
-          title="${{ github.event.pull_request.title }}"
-          body="${{ github.event.pull_request.body }}"
-
           # Check if this is a major update based on title or labels
-          if echo "$title" | grep -qiE '\bmajor\b'; then
+          if echo "$PR_TITLE" | grep -qiE '\bmajor\b'; then
             echo "is_major=true" >> $GITHUB_OUTPUT
-          elif echo "${{ steps.pr-labels.outputs.labels }}" | grep -qi 'major'; then
+          elif echo "$PR_LABELS" | grep -qi 'major'; then
             echo "is_major=true" >> $GITHUB_OUTPUT
           else
             echo "is_major=false" >> $GITHUB_OUTPUT
