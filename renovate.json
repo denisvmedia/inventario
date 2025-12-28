@@ -7,6 +7,13 @@
   "schedule": ["before 6am on monday"],
   "packageRules": [
     {
+      "description": "Auto-merge patch and minor updates",
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
       "description": "Group Cloud SDKs updates",
       "groupName": "cloud-sdks",
       "matchPackageNames": [
