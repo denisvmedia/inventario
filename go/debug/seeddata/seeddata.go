@@ -19,6 +19,136 @@ type SeedOptions struct {
 	TenantSlug string // Optional: slug of tenant to seed for
 }
 
+// findOrCreateTenant finds an existing tenant by slug or creates a new test tenant
+func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, tenantSlug string) (*models.Tenant, error) {
+	if tenantSlug != "" {
+		// User specified a tenant slug, try to find it
+		tenant, err := registrySet.TenantRegistry.GetBySlug(ctx, tenantSlug)
+		if err != nil {
+			return nil, fmt.Errorf("tenant with slug '%s' not found: %w", tenantSlug, err)
+		}
+		return tenant, nil
+	}
+
+	// No tenant specified, try to find an existing tenant
+	existingTenants, err := registrySet.TenantRegistry.List(ctx)
+	if err == nil && len(existingTenants) > 0 {
+		// Use the first existing tenant
+		return existingTenants[0], nil
+	}
+
+	// No tenants exist, create test tenant
+	testTenant := models.Tenant{
+		Name:   "Test Organization",
+		Slug:   "test-org",
+		Status: models.TenantStatusActive,
+	}
+	return registrySet.TenantRegistry.Create(ctx, testTenant)
+}
+
+// findOrCreateUsers finds existing users or creates test users based on options
+func findOrCreateUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User, userEmail string) (user1 *models.User, user2 *models.User, err error) {
+	if userEmail != "" {
+		user1, user2 = findUserByEmail(users, tenant.ID, userEmail)
+		if user1 == nil && user2 == nil {
+			return nil, nil, fmt.Errorf("user with email '%s' not found in tenant '%s'", userEmail, tenant.Slug)
+		}
+		return user1, user2, nil
+	}
+
+	// No user specified, find existing admin and regular users for this tenant
+	user1, user2 = findExistingUsers(users, tenant.ID)
+
+	// Only create test users if no specific user was requested AND no suitable users were found
+	if user1 == nil {
+		return createTestUsers(ctx, registrySet, tenant, user2)
+	}
+
+	return user1, user2, nil
+}
+
+// findUserByEmail finds a specific user by email and tenant ID
+func findUserByEmail(users []*models.User, tenantID, email string) (admin *models.User, regular *models.User) {
+	for _, user := range users {
+		if user.TenantID == tenantID && user.Email == email {
+			if user.Role == models.UserRoleAdmin {
+				return user, nil
+			}
+			return nil, user
+		}
+	}
+	return nil, nil
+}
+
+// findExistingUsers finds the first admin and regular user for a tenant
+func findExistingUsers(users []*models.User, tenantID string) (admin *models.User, regular *models.User) {
+	for _, user := range users {
+		if user.TenantID != tenantID {
+			continue
+		}
+
+		if user.Role == models.UserRoleAdmin && admin == nil {
+			admin = user
+		} else if user.Role == models.UserRoleUser && regular == nil {
+			regular = user
+		}
+
+		// Stop if we found both
+		if admin != nil && regular != nil {
+			break
+		}
+	}
+	return admin, regular
+}
+
+// createTestUsers creates test admin and regular users
+func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, existingUser2 *models.User) (admin *models.User, regular *models.User, err error) {
+	slog.Info("Creating test users", "tenant", tenant.Slug)
+
+	// Create test admin
+	testUser1 := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenant.ID,
+		},
+		Email:    "admin@test-org.com",
+		Name:     "Test Administrator",
+		Role:     models.UserRoleAdmin,
+		IsActive: true,
+	}
+	err = testUser1.SetPassword("testpassword123")
+	if err != nil {
+		return nil, nil, err
+	}
+	admin, err = registrySet.UserRegistry.Create(ctx, testUser1)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// If no regular user exists, create test user 2
+	regular = existingUser2
+	if regular == nil {
+		testUser2 := models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantID: tenant.ID,
+			},
+			Email:    "user2@test-org.com",
+			Name:     "Test User 2",
+			Role:     models.UserRoleUser,
+			IsActive: true,
+		}
+		err = testUser2.SetPassword("testpassword123")
+		if err != nil {
+			return nil, nil, err
+		}
+		regular, err = registrySet.UserRegistry.Create(ctx, testUser2)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create test user 2: %v", err)
+		}
+	}
+
+	return admin, regular, nil
+}
+
 // createCommodityWithTenant is a helper function to create commodities with proper user context
 func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, commodity models.Commodity, user *models.User) (*models.Commodity, error) {
 	// Set the tenant and user IDs from the actual user
@@ -30,134 +160,28 @@ func createCommodityWithTenant(ctx context.Context, registrySet *registry.Set, c
 
 // SeedData seeds the database with example data.
 func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolint:funlen,gocyclo,gocognit // it's a seed function
-	fmt.Printf("=== SEEDDATA CALLED === user_email=%s tenant_slug=%s\n", opts.UserEmail, opts.TenantSlug)
-	slog.Info("=== SEEDDATA CALLED ===",
+	slog.Info("Seeding database",
 		"user_email", opts.UserEmail,
 		"tenant_slug", opts.TenantSlug,
-		"user_email_len", len(opts.UserEmail),
-		"tenant_slug_len", len(opts.TenantSlug),
 	)
 	ctx := context.Background()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Find or create tenant
-	var tenant *models.Tenant
-	var err error
-
-	if opts.TenantSlug != "" {
-		// User specified a tenant slug, try to find it
-		tenant, err = registrySet.TenantRegistry.GetBySlug(ctx, opts.TenantSlug)
-		if err != nil {
-			return fmt.Errorf("tenant with slug '%s' not found: %w", opts.TenantSlug, err)
-		}
-	} else {
-		// No tenant specified, try to find an existing tenant
-		existingTenants, err := registrySet.TenantRegistry.List(ctx)
-		if err == nil && len(existingTenants) > 0 {
-			// Use the first existing tenant
-			tenant = existingTenants[0]
-		} else {
-			// No tenants exist, create test tenant
-			testTenant := models.Tenant{
-				Name:   "Test Organization",
-				Slug:   "test-org",
-				Status: models.TenantStatusActive,
-			}
-			tenant, err = registrySet.TenantRegistry.Create(ctx, testTenant)
-			if err != nil {
-				return err
-			}
-		}
+	tenant, err := findOrCreateTenant(ctx, registrySet, opts.TenantSlug)
+	if err != nil {
+		return err
 	}
 
 	// Get existing users for the tenant
-	var user1 *models.User
-	var user2 *models.User
 	users, err := registrySet.UserRegistry.List(ctx)
 	if err != nil {
 		return err
 	}
 
-	if opts.UserEmail != "" {
-		// User specified an email, find that specific user
-		for _, user := range users {
-			if user.TenantID == tenant.ID && user.Email == opts.UserEmail {
-				if user.Role == models.UserRoleAdmin {
-					user1 = user
-				} else {
-					user2 = user
-				}
-				break
-			}
-		}
-		if user1 == nil && user2 == nil {
-			return fmt.Errorf("user with email '%s' not found in tenant '%s'", opts.UserEmail, tenant.Slug)
-		}
-	} else {
-		// No user specified, find existing admin and regular users for this tenant
-		// Use the first admin and regular user found
-		for _, user := range users {
-			if user.TenantID == tenant.ID {
-				if user.Role == models.UserRoleAdmin && user1 == nil {
-					user1 = user
-				} else if user.Role == models.UserRoleUser && user2 == nil {
-					user2 = user
-				}
-
-				// Stop if we found both
-				if user1 != nil && user2 != nil {
-					break
-				}
-			}
-		}
-	}
-
-	// Only create test users if no specific user was requested AND no suitable users were found
-	if opts.UserEmail == "" && user1 == nil {
-		slog.Info("=== CREATING TEST USERS ===",
-			"reason", "opts.UserEmail is empty and no admin found",
-			"opts.UserEmail", opts.UserEmail,
-			"user1_nil", user1 == nil,
-		)
-		// If no admin user exists, create test admin
-		testUser1 := models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: tenant.ID,
-			},
-			Email:    "admin@test-org.com",
-			Name:     "Test Administrator",
-			Role:     models.UserRoleAdmin,
-			IsActive: true,
-		}
-		err = testUser1.SetPassword("testpassword123")
-		if err != nil {
-			return err
-		}
-		user1, err = registrySet.UserRegistry.Create(ctx, testUser1)
-		if err != nil {
-			return err
-		}
-
-		// If no regular user exists, create test user 2
-		if user2 == nil {
-			testUser2 := models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					TenantID: tenant.ID,
-				},
-				Email:    "user2@test-org.com",
-				Name:     "Test User 2",
-				Role:     models.UserRoleUser,
-				IsActive: true,
-			}
-			err = testUser2.SetPassword("testpassword123")
-			if err != nil {
-				return err
-			}
-			user2, err = registrySet.UserRegistry.Create(ctx, testUser2)
-			if err != nil {
-				return fmt.Errorf("failed to create test user 2: %v", err)
-			}
-		}
+	user1, user2, err := findOrCreateUsers(ctx, registrySet, tenant, users, opts.UserEmail)
+	if err != nil {
+		return err
 	}
 
 	// Create default system configuration with CZK as main currency for the first test user
