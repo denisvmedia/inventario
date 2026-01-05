@@ -2132,9 +2132,7 @@ const docTemplate = `{
                         "name": "value",
                         "in": "body",
                         "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
+                        "schema": {}
                     }
                 ],
                 "responses": {
