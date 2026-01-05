@@ -12,19 +12,22 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/memblob" // register memblob driver
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
+	"github.com/denisvmedia/inventario/registry"
 )
 
 func TestGetFileAttributes(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	// Test with invalid bucket URL (should return error)
+	// Test with a file that doesn't exist in a valid bucket (should return NotFound)
 	attrs, err := downloadutils.GetFileAttributes(ctx, "mem://", "missing.txt")
-	c.Assert(err, qt.IsNotNil)
+	c.Assert(err, qt.Equals, registry.ErrNotFound)
 	c.Assert(attrs, qt.IsNil)
-	c.Assert(err.Error(), qt.Contains, "failed to open bucket")
 }
 
 func TestGetFileAttributes_InvalidBucket(t *testing.T) {
@@ -37,6 +40,50 @@ func TestGetFileAttributes_InvalidBucket(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(attrs, qt.IsNil)
 	c.Assert(err.Error(), qt.Contains, "failed to open bucket")
+}
+
+func TestGetFileAttributes_FileNotFound(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Create a temporary in-memory bucket with a unique name
+	uploadLocation := "mem://test-bucket-notfound"
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+
+	// Test with a file that doesn't exist
+	attrs, err := downloadutils.GetFileAttributes(ctx, uploadLocation, "non-existent-file.txt")
+
+	// Should return registry.ErrNotFound
+	c.Assert(err, qt.Equals, registry.ErrNotFound)
+	c.Assert(attrs, qt.IsNil)
+}
+
+func TestGetFileAttributes_FileExists(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Create a temporary directory for file-based bucket
+	tempDir := c.TempDir()
+	uploadLocation := "file:///" + tempDir + "?create_dir=1"
+
+	// Create a test file
+	testFilePath := "test-file.txt"
+	testContent := []byte("test content")
+
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	err = b.WriteAll(ctx, testFilePath, testContent, nil)
+	c.Assert(err, qt.IsNil)
+	b.Close()
+
+	// Test getting attributes for existing file
+	attrs, err := downloadutils.GetFileAttributes(ctx, uploadLocation, testFilePath)
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(attrs, qt.IsNotNil)
+	c.Assert(attrs.Size, qt.Equals, int64(len(testContent)))
 }
 
 func TestCopyFileInChunks(t *testing.T) {

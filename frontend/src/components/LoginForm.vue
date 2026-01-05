@@ -47,12 +47,6 @@
           <span v-else>Sign In</span>
         </button>
       </form>
-
-      <div class="login-footer">
-        <p>Default credentials for testing:</p>
-        <p><strong>Email:</strong> admin@test-org.com</p>
-        <p><strong>Password:</strong> testpassword123</p>
-      </div>
     </div>
   </div>
 </template>
@@ -103,8 +97,8 @@ async function handleSubmit() {
 
 // Auto-fill for development/testing
 function fillTestCredentials() {
-  form.value.email = 'admin@test-org.com'
-  form.value.password = 'testpassword123'
+  form.value.email = 'admin@example.com'
+  form.value.password = 'admin123'
 }
 
 // Expose for testing
@@ -215,18 +209,5 @@ defineExpose({
 
 .login-button:hover:not(:disabled) {
   opacity: 0.9;
-}
-
-.login-footer {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #eee;
-  text-align: center;
-  font-size: 0.8rem;
-  color: #666;
-}
-
-.login-footer p {
-  margin: 0.25rem 0;
 }
 </style>
