@@ -4,6 +4,18 @@ Welcome to Inventario - the ultimate app for managing and organizing your person
 
 Note, the project is still under development.
 
+## Quick Start
+
+**Want to get started immediately?** See the [Quick Start Guide](QUICKSTART.md) for step-by-step instructions to run Inventario with Docker Compose in under 5 minutes.
+
+```bash
+git clone https://github.com/denisvmedia/inventario.git
+cd inventario
+docker-compose up -d
+# Open http://localhost:3333
+# Login with credentials from .env.example: admin@example.com / admin123
+```
+
 ## Future Features
 
 - **Inventory Management**: Easily create, update, and delete items in your inventory. Add essential details such as item name, description, location, purchase date, and more.

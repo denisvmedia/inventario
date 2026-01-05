@@ -6,10 +6,10 @@ outputs:
     value: ${{ steps.node.outputs.NODE_VERSION }}
   go_version:
     description: "Go version"
-    value: '1.25.3'
+    value: '1.25.5'
   golangci_lint_version:
     description: "golangci-lint version"
-    value: 'v2.6.2'
+    value: 'v2.7.2'
   swag_version:
     description: "swag version"
     value: ${{ steps.swag_version.outputs.SWAG_VERSION }}

@@ -18,7 +18,7 @@ func TestSeedData(t *testing.T) {
 	factorySet := memory.NewFactorySet()
 
 	// Test that seed data creation works without errors
-	err := seeddata.SeedData(factorySet)
+	err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
 	c.Assert(err, qt.IsNil)
 
 	// Verify that a tenant was created
@@ -72,10 +72,10 @@ func TestSeedDataIdempotent(t *testing.T) {
 	factorySet := memory.NewFactorySet()
 
 	// Run seed data twice to ensure it's idempotent
-	err := seeddata.SeedData(factorySet)
+	err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
 	c.Assert(err, qt.IsNil)
 
-	err = seeddata.SeedData(factorySet)
+	err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
 	c.Assert(err, qt.IsNil)
 
 	// Verify that we still have only one tenant and two users
