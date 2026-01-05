@@ -3,7 +3,7 @@ import { TestRecorder, log, warn, error } from '../../utils/test-recorder.js';
 
 /**
  * Test credentials for e2e tests
- * These match the seeded user in the database
+ * These match the test users created when seeding without parameters (e2e test environment)
  */
 export const TEST_CREDENTIALS = {
   email: 'admin@test-org.com',
