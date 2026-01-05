@@ -2017,7 +2017,7 @@ const docTemplate = `{
         },
         "/seed": {
             "post": {
-                "description": "Seed the database with example data",
+                "description": "Seed the database with example data. Optionally specify user_email and tenant_slug in request body.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2028,6 +2028,16 @@ const docTemplate = `{
                     "admin"
                 ],
                 "summary": "Seed database",
+                "parameters": [
+                    {
+                        "description": "Seed options (optional)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.SeedRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -2122,7 +2132,9 @@ const docTemplate = `{
                         "name": "value",
                         "in": "body",
                         "required": true,
-                        "schema": {}
+                        "schema": {
+                            "type": "object"
+                        }
                     }
                 ],
                 "responses": {
@@ -2256,6 +2268,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "apiserver.SeedRequest": {
+            "type": "object",
+            "properties": {
+                "tenant_slug": {
+                    "type": "string"
+                },
+                "user_email": {
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.SystemInfo": {
             "type": "object",
             "properties": {

@@ -1,5 +1,12 @@
 basePath: /api/v1
 definitions:
+  apiserver.SeedRequest:
+    properties:
+      tenant_slug:
+        type: string
+      user_email:
+        type: string
+    type: object
   apiserver.SystemInfo:
     properties:
       build_date:
@@ -2496,7 +2503,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: Seed the database with example data
+      description: Seed the database with example data. Optionally specify user_email
+        and tenant_slug in request body.
+      parameters:
+      - description: Seed options (optional)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/apiserver.SeedRequest'
       produces:
       - application/json
       responses:
@@ -2560,7 +2574,8 @@ paths:
         in: body
         name: value
         required: true
-        schema: {}
+        schema:
+          type: object
       produces:
       - application/json
       responses:
