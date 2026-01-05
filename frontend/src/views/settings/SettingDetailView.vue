@@ -128,36 +128,11 @@
       </div>
     </div>
 
-    <!-- Custom Settings (JSON Editor) -->
-    <div v-else class="form">
-      <div class="form-group">
-        <label for="json-editor">JSON Value</label>
-        <textarea
-          id="json-editor"
-          v-model="jsonValue"
-          class="form-control json-editor"
-          :class="{ 'is-invalid': jsonError }"
-          rows="10"
-        ></textarea>
-        <div v-if="jsonError" class="error-message">{{ jsonError }}</div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn btn-secondary" @click="goBack">Cancel</button>
-        <button
-          class="btn btn-primary"
-          :disabled="isSubmitting || jsonError"
-          @click="saveCustomSetting"
-        >
-          {{ isSubmitting ? 'Saving...' : 'Save' }}
-        </button>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import settingsService from '@/services/settingsService'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -172,8 +147,6 @@ const settingId = computed(() => route.params.id as string)
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
 const isSubmitting = ref<boolean>(false)
-const jsonValue = ref<string>('')
-const jsonError = ref<string | null>(null)
 
 const currencies = ref<any[]>([])
 
@@ -247,19 +220,6 @@ const settingTitle = computed(() => {
   }
 })
 
-// Watch for changes in the JSON editor
-watch(jsonValue, (newValue) => {
-  try {
-    if (newValue.trim()) {
-      JSON.parse(newValue)
-      jsonError.value = null
-    } else {
-      jsonError.value = null
-    }
-  } catch (err: any) {
-    jsonError.value = 'Invalid JSON: ' + err.message
-  }
-})
 
 // Fetch currencies for the dropdown
 const fetchCurrencies = async () => {
@@ -331,9 +291,6 @@ async function loadSetting() {
       } else {
         isMainCurrencySet.value = false
       }
-    } else {
-      // For custom settings, just show empty JSON
-      jsonValue.value = '{}'
     }
   } catch (err: any) {
     // Handle error
@@ -357,8 +314,6 @@ async function loadSetting() {
         backup_location: '',
         main_currency: 'USD'
       }
-    } else {
-      jsonValue.value = '{}'
     }
   } finally {
     loading.value = false
@@ -474,22 +429,6 @@ async function saveSystemConfig() {
   }
 }
 
-async function saveCustomSetting() {
-  if (jsonError.value) return
-
-  isSubmitting.value = true
-  try {
-    // Custom settings are not supported in the new API
-    // This is a placeholder for future implementation
-    error.value = 'Custom settings are not supported in the current version'
-    console.warn('Custom settings are not supported in the current version')
-    isSubmitting.value = false
-  } catch (err: any) {
-    error.value = 'Failed to save setting: ' + (err.message || 'Unknown error')
-    console.error('Error saving setting:', err)
-    isSubmitting.value = false
-  }
-}
 
 function formatSettingName(id: string) {
   // Convert snake_case or kebab-case to Title Case
