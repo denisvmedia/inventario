@@ -41,11 +41,6 @@
     background-color: $secondary-color;
     color: white;
 
-    &:hover {
-      background-color: $secondary-hover-color;
-      text-decoration: none;
-    }
-
     &-alt {
       background-color: $light-bg-color;
       color: $text-color;
@@ -54,6 +49,12 @@
       &:hover {
         background-color: $light-hover-bg-color;
       }
+    }
+
+    /* stylelint-disable-next-line no-descending-specificity */
+    &:hover {
+      background-color: $secondary-hover-color;
+      text-decoration: none;
     }
   }
 
