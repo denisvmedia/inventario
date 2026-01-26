@@ -47,7 +47,7 @@
     "eslint-plugin-vue": "10.7.0",
     "globals": "17.0.0",
     "jsdom": "27.4.0",
-    "postcss-html": "1.8.0",
+    "postcss-html": "1.8.1",
     "postcss-scss": "4.0.9",
     "sass": "1.97.2",
     "stylelint": "17.0.0",
