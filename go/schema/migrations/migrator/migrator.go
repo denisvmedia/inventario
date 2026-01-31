@@ -142,6 +142,7 @@ func (m *Migrator) ResetDatabase(ctx context.Context, args Args, confirm bool) e
 }
 
 // DropTables drops all tables, indexes, and constraints
+//
 //revive:disable-next-line:flag-parameter CLI flags are appropriate
 func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) error {
 	if dryRun {
