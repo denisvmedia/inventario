@@ -180,7 +180,23 @@ seed-db:
 # Lint Go code
 .PHONY: lint-go
 lint-go:
+	@echo "Running nolintguard..."
+	$(CD) $(BACKEND_DIR) && go run github.com/go-extras/nolintguard/cmd/nolintguard@latest ./...
+	@echo ""
+	@echo "Running qtlint..."
+	$(CD) $(BACKEND_DIR) && go run github.com/go-extras/qtlint/cmd/qtlint@latest ./...
+	@echo ""
+	@echo "Running golangci-lint..."
 	$(CD) $(BACKEND_DIR) && golangci-lint run
+
+# Lint Go code with auto-fix
+.PHONY: lint-go-fix
+lint-go-fix:
+	@echo "Running qtlint with auto-fix..."
+	$(CD) $(BACKEND_DIR) && go run github.com/go-extras/qtlint/cmd/qtlint@latest -fix ./...
+	@echo ""
+	@echo "Running golangci-lint with auto-fix..."
+	$(CD) $(BACKEND_DIR) && golangci-lint run --fix
 
 # Lint frontend code
 .PHONY: lint-frontend
@@ -300,6 +316,7 @@ ifeq ($(OS),Windows_NT)
 	@echo   seed-db          - Seed the database with test data
 	@echo   lint             - Run all linters
 	@echo   lint-go          - Lint Go code
+	@echo   lint-go-fix      - Lint Go code with auto-fix
 	@echo   lint-frontend    - Lint frontend code
 	@echo   clean            - Clean build artifacts
 	@echo   deps             - Install dependencies
@@ -340,6 +357,7 @@ else
 	@echo "  seed-db          - Seed the database with test data"
 	@echo "  lint             - Run all linters"
 	@echo "  lint-go          - Lint Go code"
+	@echo "  lint-go-fix      - Lint Go code with auto-fix"
 	@echo "  lint-frontend    - Lint frontend code"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  deps             - Install dependencies"

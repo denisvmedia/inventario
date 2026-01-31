@@ -147,7 +147,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 			retrievedNames = append(retrievedNames, name)
 		}
 
-		c.Assert(len(retrievedNames), qt.Equals, 5, qt.Commentf("Expected 5 successful retrievals by user1"))
+		c.Assert(retrievedNames, qt.HasLen, 5, qt.Commentf("Expected 5 successful retrievals by user1"))
 		for _, name := range retrievedNames {
 			c.Assert(name, qt.Equals, "Updated Commodity", qt.Commentf("Expected updated commodity name"))
 		}

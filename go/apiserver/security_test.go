@@ -343,7 +343,7 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 			c.Assert(id, qt.Not(qt.Equals), "")
 
 			// Verify it's a valid UUID format (36 characters with hyphens)
-			c.Assert(len(id), qt.Equals, 36)
+			c.Assert(id, qt.HasLen, 36)
 			c.Assert(id[8], qt.Equals, byte('-'))
 			c.Assert(id[13], qt.Equals, byte('-'))
 			c.Assert(id[18], qt.Equals, byte('-'))

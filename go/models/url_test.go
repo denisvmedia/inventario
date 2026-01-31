@@ -58,7 +58,7 @@ func TestURL_Validate(t *testing.T) {
 
 	url := &models.URL{}
 	err := url.Validate()
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Equals, "must use validate with context")
 }
 

@@ -207,7 +207,7 @@ func TestManualRegistry_List_HappyPath(t *testing.T) {
 	// Initially should be empty
 	manuals, err := registrySet.ManualRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 0)
+	c.Assert(manuals, qt.HasLen, 0)
 
 	// Create test hierarchy and manuals
 	location := createTestLocation(c, registrySet)
@@ -219,7 +219,7 @@ func TestManualRegistry_List_HappyPath(t *testing.T) {
 	// List should now contain both manuals
 	manuals, err = registrySet.ManualRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 2)
+	c.Assert(manuals, qt.HasLen, 2)
 
 	// Verify the manuals are correct
 	manualIDs := make(map[string]bool)

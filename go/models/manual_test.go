@@ -68,7 +68,7 @@ func TestManual_ValidateWithContext_UnhappyPaths(t *testing.T) {
 
 			ctx := context.Background()
 			err := tc.manual.ValidateWithContext(ctx)
-			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
 	}

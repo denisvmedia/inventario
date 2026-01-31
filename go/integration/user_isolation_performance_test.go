@@ -374,7 +374,7 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 			commodities, err := maliciousUserAwareRegistry.List(maliciousCtx)
 			if err == nil {
 				// If no error, should return empty list
-				c.Assert(len(commodities), qt.Equals, 0)
+				c.Assert(commodities, qt.HasLen, 0)
 			}
 
 			// Try to update the commodity
@@ -470,7 +470,7 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 	duration := time.Since(start)
 
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, numCommodities)
+	c.Assert(commodities, qt.HasLen, numCommodities)
 
 	// Performance should be reasonable (less than 1 second for 1000 items)
 	if duration > time.Second {

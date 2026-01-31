@@ -57,7 +57,7 @@ func TestCommodityStatus_Validate_Invalid(t *testing.T) {
 	status := models.CommodityStatus("invalid_status")
 
 	err := status.Validate()
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Equals, "invalid status")
 }
 
@@ -106,7 +106,7 @@ func TestCommodityType_Validate_Invalid(t *testing.T) {
 	cType := models.CommodityType("invalid_type")
 
 	err := cType.Validate()
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Equals, "invalid type")
 }
 
@@ -115,7 +115,7 @@ func TestCommodity_Validate(t *testing.T) {
 
 	commodity := &models.Commodity{}
 	err := commodity.Validate()
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Equals, "must use validate with context")
 }
 
@@ -298,7 +298,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 			err := commodity.ValidateWithContext(ctx)
 
 			// Check the results
-			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
 	}
@@ -426,7 +426,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 			ctx := validationctx.WithMainCurrency(context.Background(), tc.mainCurrency)
 			err := tc.commodity.ValidateWithContext(ctx)
 
-			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
 	}
@@ -502,7 +502,7 @@ func TestCommodity_ValidateWithContext_NegativePrices(t *testing.T) {
 			ctx := validationctx.WithMainCurrency(context.Background(), "USD")
 			err := tc.commodity.ValidateWithContext(ctx)
 
-			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
 	}
@@ -561,7 +561,7 @@ func TestCommodity_ValidateWithContext_NameLength(t *testing.T) {
 			ctx := validationctx.WithMainCurrency(context.Background(), "USD")
 			err := tc.commodity.ValidateWithContext(ctx)
 
-			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
 	}

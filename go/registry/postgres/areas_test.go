@@ -189,7 +189,7 @@ func TestAreaRegistry_List_HappyPath(t *testing.T) {
 	// Initially should be empty
 	areas, err := registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 0)
+	c.Assert(areas, qt.HasLen, 0)
 
 	// Create test location and areas
 	location := createTestLocation(c, registrySet)
@@ -199,7 +199,7 @@ func TestAreaRegistry_List_HappyPath(t *testing.T) {
 	// List should now contain both areas
 	areas, err = registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 2)
+	c.Assert(areas, qt.HasLen, 2)
 
 	// Verify the areas are in the list
 	areaIDs := make(map[string]bool)
@@ -425,7 +425,7 @@ func TestAreaRegistry_GetCommodities_WithCreatedCommodity_HappyPath(t *testing.T
 	// Verify the commodity is linked
 	commodities, err := registrySet.AreaRegistry.GetCommodities(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 1)
+	c.Assert(commodities, qt.HasLen, 1)
 	c.Assert(commodities[0], qt.Equals, commodity.ID)
 }
 
@@ -483,7 +483,7 @@ func TestAreaRegistry_GetCommodities_HappyPath(t *testing.T) {
 	// Initially should have no commodities
 	commodities, err := registrySet.AreaRegistry.GetCommodities(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 0)
+	c.Assert(commodities, qt.HasLen, 0)
 
 	// Create commodities (they are automatically linked via area_id)
 	commodity1 := createTestCommodity(c, registrySet, area.ID)
@@ -492,7 +492,7 @@ func TestAreaRegistry_GetCommodities_HappyPath(t *testing.T) {
 	// Should now have 2 commodities
 	commodities, err = registrySet.AreaRegistry.GetCommodities(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 2)
+	c.Assert(commodities, qt.HasLen, 2)
 
 	// Verify the commodity IDs are correct
 	commodityIDs := make(map[string]bool)
@@ -522,5 +522,5 @@ func TestAreaRegistry_GetCommodities_EmptyArea_HappyPath(t *testing.T) {
 	// Should have no commodities initially
 	commodities, err := registrySet.AreaRegistry.GetCommodities(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 0)
+	c.Assert(commodities, qt.HasLen, 0)
 }

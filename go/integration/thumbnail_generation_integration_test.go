@@ -137,7 +137,7 @@ func verifyThumbnailsInStorage(c *qt.C, ctx context.Context, uploadLocation, ori
 	testFileID := "test-file-123" // This matches the ID in the fileEntity above
 	thumbnailPaths := fileService.GetThumbnailPaths(testFileID)
 
-	c.Assert(len(thumbnailPaths), qt.Equals, 2) // small and medium
+	c.Assert(thumbnailPaths, qt.HasLen, 2) // small and medium
 
 	for sizeName, thumbnailPath := range thumbnailPaths {
 		exists, err := b.Exists(ctx, thumbnailPath)
@@ -168,7 +168,7 @@ func verifySignedURLGeneration(c *qt.C, fileSigningService *services.FileSigning
 	c.Assert(err, qt.IsNil)
 	c.Assert(originalURL, qt.Not(qt.Equals), "")
 	c.Assert(thumbnails, qt.IsNotNil)
-	c.Assert(len(thumbnails), qt.Equals, 2) // small and medium
+	c.Assert(thumbnails, qt.HasLen, 2) // small and medium
 	c.Assert(thumbnails["small"], qt.Not(qt.Equals), "")
 	c.Assert(thumbnails["medium"], qt.Not(qt.Equals), "")
 

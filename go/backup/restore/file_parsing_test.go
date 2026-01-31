@@ -144,7 +144,7 @@ func TestRestoreService_FileElementParsing(t *testing.T) {
 
 	// The image should have a server-generated UUID (not the XML ID for security)
 	c.Assert(image.ID, qt.Not(qt.Equals), "")
-	c.Assert(len(image.ID), qt.Equals, 36) // UUID format: 8-4-4-4-12 characters
+	c.Assert(image.ID, qt.HasLen, 36) // UUID format: 8-4-4-4-12 characters
 }
 
 func TestRestoreService_FileElementParsing_WithoutFileData(t *testing.T) {

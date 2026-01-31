@@ -510,7 +510,7 @@ func TestFileService_GenerateThumbnails(t *testing.T) {
 			if tt.shouldGenerateThumbnails {
 				// Check that thumbnails were created
 				thumbnailPaths := service.GetThumbnailPaths(fileEntity.ID)
-				c.Assert(len(thumbnailPaths), qt.Equals, 2) // small and medium
+				c.Assert(thumbnailPaths, qt.HasLen, 2) // small and medium
 
 				for sizeName, thumbnailPath := range thumbnailPaths {
 					exists, err := b.Exists(ctx, thumbnailPath)

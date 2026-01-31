@@ -25,7 +25,7 @@ func TestSeedData(t *testing.T) {
 	registrySet := factorySet.CreateServiceRegistrySet()
 	tenants, err := registrySet.TenantRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(tenants), qt.Equals, 1)
+	c.Assert(tenants, qt.HasLen, 1)
 
 	tenant := tenants[0]
 	c.Assert(tenant.Name, qt.Equals, "Test Organization")
@@ -35,7 +35,7 @@ func TestSeedData(t *testing.T) {
 	// Verify that users were created with the correct tenant ID
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users), qt.Equals, 2)
+	c.Assert(users, qt.HasLen, 2)
 
 	// Check that both users have the correct tenant ID
 	for _, user := range users {
@@ -82,9 +82,9 @@ func TestSeedDataIdempotent(t *testing.T) {
 	registrySet := factorySet.CreateServiceRegistrySet()
 	tenants, err := registrySet.TenantRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(tenants), qt.Equals, 1)
+	c.Assert(tenants, qt.HasLen, 1)
 
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users), qt.Equals, 2)
+	c.Assert(users, qt.HasLen, 2)
 }

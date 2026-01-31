@@ -15,7 +15,7 @@ func TestFile_Validate(t *testing.T) {
 
 	file := &models.File{}
 	err := file.Validate()
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Equals, "must use validate with context")
 }
 
@@ -75,7 +75,7 @@ func TestFile_ValidateWithContext_UnhappyPaths(t *testing.T) {
 
 			ctx := context.Background()
 			err := tc.file.ValidateWithContext(ctx)
-			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.errorContains)
 		})
 	}

@@ -45,7 +45,7 @@ func TestLocationRegistry_Create(t *testing.T) {
 	// Create a new location in the registry
 	createdLocation, err := registrySet.LocationRegistry.Create(ctx, *location)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdLocation, qt.Not(qt.IsNil))
+	c.Assert(createdLocation, qt.IsNotNil)
 
 	// Verify the count of locations in the registry
 	count, err := registrySet.LocationRegistry.Count(ctx)

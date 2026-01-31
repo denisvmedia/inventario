@@ -22,7 +22,7 @@ func TestJSONPathEquals(t *testing.T) {
 		c := qt.New(t)
 		jsonData := `{"name": "John", "age": 30}`
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"Jane"}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 
 	t.Run("Test case 3: JSON value matches the expected value at the JSON path expression ([]any)", func(t *testing.T) {
@@ -36,7 +36,7 @@ func TestJSONPathEquals(t *testing.T) {
 		c := qt.New(t)
 		jsonData := []any{"name", "John", "age", 30}
 		result := checkers.JSONPathEquals("$[1]").Check(jsonData, []any{"Jane"}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 
 	t.Run("Test case 5: JSON value matches the expected value at the JSON path expression (map[string]any)", func(t *testing.T) {
@@ -50,7 +50,7 @@ func TestJSONPathEquals(t *testing.T) {
 		c := qt.New(t)
 		jsonData := map[string]any{"name": "John", "age": 30}
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"Jane"}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 
 	t.Run("Test case 7: JSON value matches the expected value at the JSON path expression ([]byte)", func(t *testing.T) {
@@ -64,14 +64,14 @@ func TestJSONPathEquals(t *testing.T) {
 		c := qt.New(t)
 		jsonData := []byte(`{"name": "John", "age": 30}`)
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{"Jane"}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 
 	t.Run("Test case 9: JSON value matches the expected value at the JSON path expression (different input type)", func(t *testing.T) {
 		c := qt.New(t)
 		jsonData := 42 // Example of a different input type (int)
 		result := checkers.JSONPathEquals("$.name").Check(jsonData, []any{42}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 }
 
@@ -89,7 +89,7 @@ func TestJSONPathMatches(t *testing.T) {
 		c := qt.New(t)
 		jsonData := `{"name": "John", "age": 30}`
 		result := checkers.JSONPathMatches("$.age", qt.Equals).Check(jsonData, []any{40}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 }
 
@@ -98,7 +98,7 @@ func TestJSONPathMatchesWithUnmarshalError(t *testing.T) {
 		c := qt.New(t)
 		jsonData := "invalid-json-data"
 		result := checkers.JSONPathMatches("$.age", qt.Equals).Check(jsonData, []any{30}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 }
 
@@ -107,7 +107,7 @@ func TestJSONPathMatchesWithEvaluateError(t *testing.T) {
 		c := qt.New(t)
 		jsonData := `{"name": "John", "age": 30}`
 		result := checkers.JSONPathMatches("$.unknown", qt.Equals).Check(jsonData, []any{"John"}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 }
 
@@ -116,7 +116,7 @@ func TestJSONPathMatchesWithInvalidValue(t *testing.T) {
 		c := qt.New(t)
 		jsonData := make(chan int) // Invalid JSON value
 		result := checkers.JSONPathMatches("$.age", qt.Equals).Check(jsonData, []any{30}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 }
 
@@ -125,6 +125,6 @@ func TestJSONPathMatchesWithNilValue(t *testing.T) {
 		c := qt.New(t)
 		var jsonData any // Nil JSON value
 		result := checkers.JSONPathMatches("$.age", qt.Equals).Check(jsonData, []any{30}, nopNoteFn)
-		c.Assert(result, qt.Not(qt.IsNil))
+		c.Assert(result, qt.IsNotNil)
 	})
 }

@@ -84,12 +84,12 @@ func TestResponseConsistency_EmptySlicesNotNull(t *testing.T) {
 			// Check that data field exists and is an array, not null
 			data, exists := result[tt.jsonPath]
 			c.Assert(exists, qt.IsTrue, qt.Commentf("Field %s should exist", tt.jsonPath))
-			c.Assert(data, qt.Not(qt.IsNil), qt.Commentf("Field %s should not be null", tt.jsonPath))
+			c.Assert(data, qt.IsNotNil, qt.Commentf("Field %s should not be null", tt.jsonPath))
 
 			// Verify it's an array
 			dataArray, ok := data.([]any)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("Field %s should be an array", tt.jsonPath))
-			c.Assert(len(dataArray), qt.Equals, 0, qt.Commentf("Field %s should be an empty array", tt.jsonPath))
+			c.Assert(dataArray, qt.HasLen, 0, qt.Commentf("Field %s should be an empty array", tt.jsonPath))
 
 			// Verify the JSON contains [] not null for the data field
 			jsonStr := string(jsonBytes)

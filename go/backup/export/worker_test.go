@@ -379,7 +379,7 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 	// Verify it's not in the deleted list (since it's hard deleted)
 	deletedExports, err := registrySet.ExportRegistry.ListDeleted(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(deletedExports), qt.Equals, 0)
+	c.Assert(deletedExports, qt.HasLen, 0)
 
 	// Run cleanup (this is now a no-op since exports use immediate hard delete with file entities)
 	worker.cleanupDeletedExports(ctx)
@@ -391,5 +391,5 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 	// (the cleanup is now a no-op since exports are hard deleted immediately)
 	deletedExports, err = registrySet.ExportRegistry.ListDeleted(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(deletedExports), qt.Equals, 0) // Should be empty since export was hard deleted
+	c.Assert(deletedExports, qt.HasLen, 0) // Should be empty since export was hard deleted
 }

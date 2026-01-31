@@ -40,7 +40,7 @@ func TestZeroOfType(t *testing.T) {
 	c.Run("nil pointer", func(c *qt.C) {
 		var ptr *testStruct
 		zero := typekit.ZeroOfType(ptr)
-		c.Assert(zero, qt.Not(qt.IsNil))
+		c.Assert(zero, qt.IsNotNil)
 		c.Assert(zero, qt.DeepEquals, &testStruct{})
 	})
 
@@ -520,7 +520,7 @@ func TestStructToMap_NonPointerStructs(t *testing.T) {
 
 		c.Assert(result["name"], qt.Equals, "Anonymous")
 		c.Assert(result["age"], qt.Equals, 25)
-		c.Assert(len(result), qt.Equals, 2)
+		c.Assert(result, qt.HasLen, 2)
 	})
 }
 
@@ -691,7 +691,7 @@ func TestStructToMap_EdgeCases(t *testing.T) {
 		result, err := typekit.StructToMap(config)
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
-		c.Assert(len(result), qt.Equals, 0)
+		c.Assert(result, qt.HasLen, 0)
 	})
 
 	// Test with struct containing only unexported fields
@@ -707,7 +707,7 @@ func TestStructToMap_EdgeCases(t *testing.T) {
 		result, err := typekit.StructToMap(config)
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
-		c.Assert(len(result), qt.Equals, 0)
+		c.Assert(result, qt.HasLen, 0)
 	})
 
 	// Test with struct containing fields with duplicate configfield tags
@@ -727,7 +727,7 @@ func TestStructToMap_EdgeCases(t *testing.T) {
 
 		// The second field should overwrite the first due to map behavior
 		c.Assert(result["name"], qt.Equals, "second")
-		c.Assert(len(result), qt.Equals, 1)
+		c.Assert(result, qt.HasLen, 1)
 	})
 
 	// Test with struct containing fields with empty configfield tags
@@ -750,7 +750,7 @@ func TestStructToMap_EdgeCases(t *testing.T) {
 		// Both empty tag fields should map to empty string key, second overwrites first
 		c.Assert(result[""], qt.Equals, "second")
 		c.Assert(result["valid"], qt.Equals, "third")
-		c.Assert(len(result), qt.Equals, 2)
+		c.Assert(result, qt.HasLen, 2)
 	})
 
 	// Test with struct containing mixed exported/unexported fields
@@ -773,7 +773,7 @@ func TestStructToMap_EdgeCases(t *testing.T) {
 		// Only exported fields should be included
 		c.Assert(result["exported"], qt.Equals, "exported value")
 		c.Assert(result["another"], qt.Equals, 42)
-		c.Assert(len(result), qt.Equals, 2)
+		c.Assert(result, qt.HasLen, 2)
 
 		// Unexported field should not be included
 		_, exists := result["unexported"]
@@ -788,7 +788,7 @@ func TestStructToMap_EdgeCases(t *testing.T) {
 		result, err := typekit.StructToMap(config)
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
-		c.Assert(len(result), qt.Equals, 0)
+		c.Assert(result, qt.HasLen, 0)
 	})
 
 	// Test with non-pointer struct with only unexported fields
@@ -804,7 +804,7 @@ func TestStructToMap_EdgeCases(t *testing.T) {
 		result, err := typekit.StructToMap(config)
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
-		c.Assert(len(result), qt.Equals, 0)
+		c.Assert(result, qt.HasLen, 0)
 	})
 }
 

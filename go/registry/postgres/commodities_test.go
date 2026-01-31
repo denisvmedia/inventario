@@ -308,7 +308,7 @@ func TestCommodityRegistry_List_HappyPath(t *testing.T) {
 	// Initially should be empty
 	commodities, err := registrySet.CommodityRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 0)
+	c.Assert(commodities, qt.HasLen, 0)
 
 	// Create test hierarchy and commodities
 	location := createTestLocation(c, registrySet)
@@ -319,7 +319,7 @@ func TestCommodityRegistry_List_HappyPath(t *testing.T) {
 	// List should now contain both commodities
 	commodities, err = registrySet.CommodityRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 2)
+	c.Assert(commodities, qt.HasLen, 2)
 
 	// Verify the commodities are in the list
 	commodityIDs := make(map[string]bool)
@@ -595,7 +595,7 @@ func TestCommodityRegistry_GetImages_WithCreatedImage_HappyPath(t *testing.T) {
 	// Verify the image is automatically linked
 	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 1)
+	c.Assert(images, qt.HasLen, 1)
 	c.Assert(images[0], qt.Equals, image.ID)
 }
 
@@ -656,7 +656,7 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 	// Initially should have no images
 	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 0)
+	c.Assert(images, qt.HasLen, 0)
 
 	// Create images (automatically linked via commodity_id)
 	image1 := createTestImage(c, registrySet, commodity.ID)
@@ -665,7 +665,7 @@ func TestCommodityRegistry_GetImages_HappyPath(t *testing.T) {
 	// Should now have 2 images
 	images, err = registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 2)
+	c.Assert(images, qt.HasLen, 2)
 
 	// Verify the image IDs are correct
 	imageIDs := make(map[string]bool)
@@ -698,7 +698,7 @@ func TestCommodityRegistry_GetImages_EmptyCommodity_HappyPath(t *testing.T) {
 	// Should have no images initially
 	images, err := registrySet.CommodityRegistry.GetImages(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 0)
+	c.Assert(images, qt.HasLen, 0)
 }
 
 // Manual-related tests
@@ -728,7 +728,7 @@ func TestCommodityRegistry_GetManuals_WithCreatedManual_HappyPath(t *testing.T) 
 	// Verify the manual is automatically linked
 	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 1)
+	c.Assert(manuals, qt.HasLen, 1)
 	c.Assert(manuals[0], qt.Equals, manual.ID)
 }
 
@@ -754,7 +754,7 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 	// Initially should have no manuals
 	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 0)
+	c.Assert(manuals, qt.HasLen, 0)
 
 	// Create manuals (automatically linked via commodity_id)
 	manual1 := createTestManual(c, registrySet, commodity.ID)
@@ -763,7 +763,7 @@ func TestCommodityRegistry_GetManuals_HappyPath(t *testing.T) {
 	// Should now have 2 manuals
 	manuals, err = registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 2)
+	c.Assert(manuals, qt.HasLen, 2)
 
 	// Verify the manual IDs are correct
 	manualIDs := make(map[string]bool)
@@ -796,7 +796,7 @@ func TestCommodityRegistry_GetManuals_EmptyCommodity_HappyPath(t *testing.T) {
 	// Should have no manuals initially
 	manuals, err := registrySet.CommodityRegistry.GetManuals(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 0)
+	c.Assert(manuals, qt.HasLen, 0)
 }
 
 // Invoice-related tests
@@ -826,7 +826,7 @@ func TestCommodityRegistry_GetInvoices_WithCreatedInvoice_HappyPath(t *testing.T
 	// Verify the invoice is automatically linked
 	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 1)
+	c.Assert(invoices, qt.HasLen, 1)
 	c.Assert(invoices[0], qt.Equals, invoice.ID)
 }
 
@@ -852,7 +852,7 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 	// Initially should have no invoices
 	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 0)
+	c.Assert(invoices, qt.HasLen, 0)
 
 	// Create invoices (automatically linked via commodity_id)
 	invoice1 := createTestInvoice(c, registrySet, commodity.ID)
@@ -861,7 +861,7 @@ func TestCommodityRegistry_GetInvoices_HappyPath(t *testing.T) {
 	// Should now have 2 invoices
 	invoices, err = registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 2)
+	c.Assert(invoices, qt.HasLen, 2)
 
 	// Verify the invoice IDs are correct
 	invoiceIDs := make(map[string]bool)
@@ -894,5 +894,5 @@ func TestCommodityRegistry_GetInvoices_EmptyCommodity_HappyPath(t *testing.T) {
 	// Should have no invoices initially
 	invoices, err := registrySet.CommodityRegistry.GetInvoices(ctx, commodity.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 0)
+	c.Assert(invoices, qt.HasLen, 0)
 }
