@@ -67,7 +67,17 @@ function extractNestedErrorMessage(errorObj: any): string | null {
     return null;
   }
 
-  // If this level has a msg property, use it
+  // Try display_text first (for errx.NewDisplayable errors - user-facing messages)
+  if (typeof errorObj.display_text === 'string' && errorObj.display_text.trim()) {
+    return errorObj.display_text.trim();
+  }
+
+  // Try message field (for errx errors)
+  if (typeof errorObj.message === 'string' && errorObj.message.trim()) {
+    return errorObj.message.trim();
+  }
+
+  // Fallback to msg field (for backward compatibility with old errkit errors)
   if (typeof errorObj.msg === 'string' && errorObj.msg.trim()) {
     return errorObj.msg.trim();
   }

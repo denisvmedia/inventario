@@ -3,7 +3,7 @@ import { extractErrorMessage, createUserFriendlyMessage, getErrorMessage, useErr
 
 describe('errorUtils', () => {
   describe('extractErrorMessage', () => {
-    it('should extract message from nested error structure', () => {
+    it('should extract message from nested error structure with msg (old errkit format)', () => {
       const err = {
         response: {
           status: 422,
@@ -37,6 +37,57 @@ describe('errorUtils', () => {
       expect(result).toBe('area has commodities')
     })
 
+    it('should extract message from nested errx error structure with message field', () => {
+      const err = {
+        response: {
+          status: 422,
+          data: {
+            errors: [
+              {
+                status: 'Unprocessable Entity',
+                error: {
+                  error: {
+                    message: 'area has commodities',
+                    type: '*errx.Error'
+                  },
+                  type: 'errx wrapped'
+                }
+              }
+            ]
+          }
+        }
+      }
+
+      const result = extractErrorMessage(err, 'fallback')
+      expect(result).toBe('area has commodities')
+    })
+
+    it('should extract display_text from errx.NewDisplayable errors', () => {
+      const err = {
+        response: {
+          status: 409,
+          data: {
+            errors: [
+              {
+                status: 'Conflict',
+                error: {
+                  error: {
+                    message: 'A restore operation is already in progress',
+                    display_text: 'A restore operation is already in progress. Please wait for it to complete.',
+                    type: '*errx.Error'
+                  },
+                  type: 'errx wrapped'
+                }
+              }
+            ]
+          }
+        }
+      }
+
+      const result = extractErrorMessage(err, 'fallback')
+      expect(result).toBe('A restore operation is already in progress. Please wait for it to complete.')
+    })
+
     it('should return fallback when no errors array', () => {
       const err = {
         response: {
@@ -63,6 +114,28 @@ describe('errorUtils', () => {
 
       const result = extractErrorMessage(err, 'fallback')
       expect(result).toBe('fallback')
+    })
+
+    it('should prefer display_text over message for user-facing errors', () => {
+      const err = {
+        response: {
+          status: 409,
+          data: {
+            errors: [
+              {
+                status: 'Conflict',
+                error: {
+                  message: 'technical message',
+                  display_text: 'user-friendly message'
+                }
+              }
+            ]
+          }
+        }
+      }
+
+      const result = extractErrorMessage(err, 'fallback')
+      expect(result).toBe('user-friendly message')
     })
   })
 
@@ -108,7 +181,7 @@ describe('errorUtils', () => {
               {
                 status: 'Unprocessable Entity',
                 error: {
-                  msg: 'area has commodities'
+                  message: 'area has commodities'
                 }
               }
             ]
@@ -179,7 +252,7 @@ describe('errorUtils', () => {
               {
                 status: 'Unprocessable Entity',
                 error: {
-                  msg: 'area has commodities'
+                  message: 'area has commodities'
                 }
               }
             ]
@@ -205,7 +278,7 @@ describe('errorUtils', () => {
               {
                 status: 'Unprocessable Entity',
                 error: {
-                  msg: 'area has commodities'
+                  message: 'area has commodities'
                 }
               }
             ]
@@ -221,7 +294,7 @@ describe('errorUtils', () => {
               {
                 status: 'Unprocessable Entity',
                 error: {
-                  msg: 'location has areas'
+                  message: 'location has areas'
                 }
               }
             ]
