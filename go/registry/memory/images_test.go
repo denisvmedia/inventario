@@ -52,7 +52,7 @@ func TestImageRegistry_Create(t *testing.T) {
 	// Create a new image in the registry
 	createdImage, err := registrySet.ImageRegistry.Create(ctx, image)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdImage, qt.Not(qt.IsNil))
+	c.Assert(createdImage, qt.IsNotNil)
 
 	// Verify the count of images in the registry
 	count, err := registrySet.ImageRegistry.Count(ctx)
@@ -140,7 +140,7 @@ func TestImageRegistry_Create_Validation(t *testing.T) {
 	image := models.Image{}
 	createdImage, err := registrySet.ImageRegistry.Create(ctx, image)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdImage, qt.Not(qt.IsNil))
+	c.Assert(createdImage, qt.IsNotNil)
 
 	image = models.Image{
 		File: &models.File{
@@ -154,7 +154,7 @@ func TestImageRegistry_Create_Validation(t *testing.T) {
 	// Create the image - should succeed (no validation in memory registry)
 	createdImage2, err := registrySet.ImageRegistry.Create(ctx, image)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdImage2, qt.Not(qt.IsNil))
+	c.Assert(createdImage2, qt.IsNotNil)
 }
 
 func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
@@ -193,5 +193,5 @@ func TestImageRegistry_Create_CommodityNotFound(t *testing.T) {
 	// Create the image - should succeed (no validation in memory registry)
 	createdImage, err := registrySet.ImageRegistry.Create(ctx, image)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdImage, qt.Not(qt.IsNil))
+	c.Assert(createdImage, qt.IsNotNil)
 }

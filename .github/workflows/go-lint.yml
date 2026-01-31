@@ -28,6 +28,16 @@ jobs:
           cache: true
           cache-dependency-path: go/go.sum
 
+      - name: nolintguard
+        run: |
+          echo "Running nolintguard..."
+          cd go && go run github.com/go-extras/nolintguard/cmd/nolintguard@latest ./...
+
+      - name: qtlint
+        run: |
+          echo "Running qtlint..."
+          cd go && go run github.com/go-extras/qtlint/cmd/qtlint@latest ./...
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:

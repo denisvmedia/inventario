@@ -223,7 +223,7 @@ func TestImageRegistry_List_HappyPath(t *testing.T) {
 	// Initially should be empty
 	images, err := registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 0)
+	c.Assert(images, qt.HasLen, 0)
 
 	// Create test hierarchy and images
 	location := createTestLocation(c, registrySet)
@@ -235,7 +235,7 @@ func TestImageRegistry_List_HappyPath(t *testing.T) {
 	// List should now contain both images
 	images, err = registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 2)
+	c.Assert(images, qt.HasLen, 2)
 
 	// Verify the images are correct
 	imageIDs := make(map[string]bool)

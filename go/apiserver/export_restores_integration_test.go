@@ -173,7 +173,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 
 	errors, ok := response["errors"].([]any)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(errors), qt.Equals, 1)
+	c.Assert(errors, qt.HasLen, 1)
 
 	errorObj, ok := errors[0].(map[string]any)
 	c.Assert(ok, qt.IsTrue)
@@ -278,7 +278,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 
 	errors, ok := response["errors"].([]any)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(errors), qt.Equals, 1)
+	c.Assert(errors, qt.HasLen, 1)
 
 	errorObj, ok := errors[0].(map[string]any)
 	c.Assert(ok, qt.IsTrue)

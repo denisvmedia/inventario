@@ -42,7 +42,7 @@ func TestMemoryAreaRegistry_Create(t *testing.T) {
 	// Create a new area in the registry
 	createdArea, err := areaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdArea, qt.Not(qt.IsNil))
+	c.Assert(createdArea, qt.IsNotNil)
 	c.Assert(createdArea.LocationID, qt.Equals, area.LocationID)
 
 	// Verify the count of areas in the registry
@@ -75,14 +75,14 @@ func TestAreaRegistry_Create_Validation(t *testing.T) {
 	// Create the area - should succeed (no validation in memory registry)
 	createdArea, err := areaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdArea, qt.Not(qt.IsNil))
+	c.Assert(createdArea, qt.IsNotNil)
 
 	// Create another area with location ID - should also succeed
 	area.Name = "area1"
 	area.LocationID = "location1"
 	createdArea2, err := areaRegistry.Create(ctx, area)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdArea2, qt.Not(qt.IsNil))
+	c.Assert(createdArea2, qt.IsNotNil)
 }
 
 func TestAreaRegistry_Commodities(t *testing.T) {

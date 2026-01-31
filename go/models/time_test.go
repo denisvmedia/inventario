@@ -16,7 +16,7 @@ func TestDate_Validate(t *testing.T) {
 
 	date := models.Date("2023-01-01")
 	err := date.Validate()
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Equals, "must use validate with context")
 }
 
@@ -65,7 +65,7 @@ func TestDate_ValidateWithContext_UnhappyPaths(t *testing.T) {
 
 			ctx := context.Background()
 			err := tc.date.ValidateWithContext(ctx)
-			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err, qt.IsNotNil)
 		})
 	}
 }
@@ -100,11 +100,11 @@ func TestDate_JSONUnmarshaling_Error(t *testing.T) {
 	// Test unmarshaling invalid JSON
 	var date models.Date
 	err := json.Unmarshal([]byte(`"invalid-date"`), &date)
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 
 	// Test unmarshaling non-string JSON
 	err = json.Unmarshal([]byte(`123`), &date)
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 }
 
 func TestDate_ToTime(t *testing.T) {
@@ -176,7 +176,7 @@ func TestTimestamp_Validate(t *testing.T) {
 
 	timestamp := models.Timestamp("2023-01-01T12:00:00Z")
 	err := timestamp.Validate()
-	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Equals, "must use validate with context")
 }
 
@@ -229,7 +229,7 @@ func TestTimestamp_ValidateWithContext_UnhappyPaths(t *testing.T) {
 
 			ctx := context.Background()
 			err := tc.timestamp.ValidateWithContext(ctx)
-			c.Assert(err, qt.Not(qt.IsNil))
+			c.Assert(err, qt.IsNotNil)
 		})
 	}
 }

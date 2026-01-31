@@ -164,7 +164,7 @@ func TestCommodityRegistry_Create_Validation(t *testing.T) {
 	// Create the commodity - should succeed (no validation in memory registry)
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdCommodity, qt.Not(qt.IsNil))
+	c.Assert(createdCommodity, qt.IsNotNil)
 }
 
 func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
@@ -202,7 +202,7 @@ func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 	// Create the commodity - should succeed (no validation in memory registry)
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdCommodity, qt.Not(qt.IsNil))
+	c.Assert(createdCommodity, qt.IsNotNil)
 }
 
 func TestCommodityRegistry_Delete_CommodityNotFound(t *testing.T) {
@@ -273,10 +273,10 @@ func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity
 		// Note: ID will be generated server-side for security
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdCommodity, qt.Not(qt.IsNil))
+	c.Assert(createdCommodity, qt.IsNotNil)
 	// Verify that a valid UUID was generated (36 characters with hyphens)
 	c.Assert(createdCommodity.ID, qt.Not(qt.Equals), "")
-	c.Assert(len(createdCommodity.ID), qt.Equals, 36)
+	c.Assert(createdCommodity.ID, qt.HasLen, 36)
 	c.Assert(createdCommodity.Name, qt.Equals, "commodity1")
 	c.Assert(createdCommodity.AreaID, qt.Equals, area1.ID)
 

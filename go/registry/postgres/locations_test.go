@@ -176,7 +176,7 @@ func TestLocationRegistry_List_HappyPath(t *testing.T) {
 	// Initially should be empty
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(locations), qt.Equals, 0)
+	c.Assert(locations, qt.HasLen, 0)
 
 	// Create test locations
 	location1 := createTestLocation(c, registrySet)
@@ -185,7 +185,7 @@ func TestLocationRegistry_List_HappyPath(t *testing.T) {
 	// List should now contain both locations
 	locations, err = registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(locations), qt.Equals, 2)
+	c.Assert(locations, qt.HasLen, 2)
 
 	// Verify the locations are in the list
 	locationIDs := make(map[string]bool)
@@ -425,7 +425,7 @@ func TestLocationRegistry_GetAreas_WithCreatedArea_HappyPath(t *testing.T) {
 	// Verify the area is automatically linked to the location
 	areas, err := registrySet.LocationRegistry.GetAreas(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 1)
+	c.Assert(areas, qt.HasLen, 1)
 	c.Assert(areas[0], qt.Equals, area.ID)
 }
 
@@ -488,7 +488,7 @@ func TestLocationRegistry_GetAreas_HappyPath(t *testing.T) {
 	// Initially should have no areas
 	areas, err := registrySet.LocationRegistry.GetAreas(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 0)
+	c.Assert(areas, qt.HasLen, 0)
 
 	// Create areas (they are automatically linked via location_id)
 	area1 := createTestArea(c, registrySet, location.ID)
@@ -497,7 +497,7 @@ func TestLocationRegistry_GetAreas_HappyPath(t *testing.T) {
 	// Should now have 2 areas
 	areas, err = registrySet.LocationRegistry.GetAreas(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 2)
+	c.Assert(areas, qt.HasLen, 2)
 
 	// Verify the area IDs are correct
 	areaIDs := make(map[string]bool)
@@ -529,5 +529,5 @@ func TestLocationRegistry_GetAreas_EmptyLocation_HappyPath(t *testing.T) {
 	// Should have no areas initially
 	areas, err := registrySet.LocationRegistry.GetAreas(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 0)
+	c.Assert(areas, qt.HasLen, 0)
 }
