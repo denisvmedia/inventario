@@ -1190,7 +1190,7 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 			// Skip processing instructions, directives, comments, character data, and end elements at root level
 			continue
 		default:
-			return stats, errx.Classify(errors.New("unexpected token type"), errx.Attrs("token_type", fmt.Sprintf("%T", t)))
+			return stats, errxtrace.ClassifyNew("unexpected token type", errx.Attrs("token_type", fmt.Sprintf("%T", t)))
 		}
 	}
 
@@ -2074,13 +2074,16 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 
 	// Validate that the area exists (either in existing data or was just created)
 	if existing.Areas[originalAreaXMLID] == nil {
-		return errxtrace.Wrap("commodity references non-existent area", errors.New("commodity references non-existent area"), errx.Attrs("original_commodity_id", originalXMLID, "original_area_id", originalAreaXMLID))
+		return errxtrace.ClassifyNew("commodity references non-existent area", errx.Attrs(
+			"original_commodity_id", originalXMLID,
+			"original_area_id", originalAreaXMLID,
+		))
 	}
 
 	// Get the actual database area ID
 	actualAreaID := idMapping.Areas[originalAreaXMLID]
 	if actualAreaID == "" {
-		return errxtrace.Wrap("no ID mapping found for area", errors.New("no ID mapping found for area"), errx.Attrs("original_area_id", originalAreaXMLID))
+		return errxtrace.ClassifyNew("no ID mapping found for area", errx.Attrs("original_area_id", originalAreaXMLID))
 	}
 
 	commodity, err := xmlCommodity.ConvertToCommodity()
