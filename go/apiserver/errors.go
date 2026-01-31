@@ -28,34 +28,60 @@ var (
 	ErrNotFound               = errx.NewSentinel("not found", registry.ErrNotFound)
 )
 
-// marshalError marshals an error to JSON, ignoring any marshaling errors
-func marshalError(err error) (result json.RawMessage) {
-	defer func() {
-		if r := recover(); r != nil {
-			// If errx marshaling panics, try standard JSON marshaling
-			// This handles cases like validation.Errors which have MarshalJSON
-			if data, e := json.Marshal(err); e == nil {
-				result = data
-				return
+// marshalError marshals an error to JSON, replicating the errkit.ForceMarshalError structure
+// It wraps the error in {"error": {...}, "type": "..."} to match the previous JSON API format
+func marshalError(err error) json.RawMessage {
+	type jsonError struct {
+		Error json.RawMessage `json:"error,omitempty"`
+		Type  string          `json:"type,omitempty"`
+	}
+	type jsonMinimalError struct {
+		Msg  string `json:"msg,omitempty"`
+		Type string `json:"type,omitempty"`
+	}
+
+	// Try errx JSON marshaling first, but catch panics (e.g., from validation.Errors with unhashable types)
+	var errxResult json.RawMessage
+	func() {
+		defer func() {
+			recover() // Silently catch panic from errxjson.Marshal
+		}()
+		if data, e := errxjson.Marshal(err); e == nil {
+			wrapped := jsonError{
+				Error: data,
+				Type:  fmt.Sprintf("%T", err),
 			}
-			// If that also fails, return error string as JSON
-			result = json.RawMessage(fmt.Sprintf(`"%s"`, err.Error()))
+			if result, e := json.Marshal(wrapped); e == nil {
+				errxResult = result
+			}
 		}
 	}()
-
-	// Try errx JSON marshaling first for errx errors
-	if data, e := errxjson.Marshal(err); e == nil {
-		return data
+	if errxResult != nil {
+		return errxResult
 	}
 
-	// Fallback: if error implements json.Marshaler or has a MarshalJSON method,
-	// standard JSON marshaling will work (e.g., validation.Errors)
+	// Try standard JSON marshaling (for types implementing json.Marshaler like validation.Errors)
 	if data, e := json.Marshal(err); e == nil {
+		wrapped := jsonError{
+			Error: data,
+			Type:  fmt.Sprintf("%T", err),
+		}
+		if result, e := json.Marshal(wrapped); e == nil {
+			return result
+		}
+	}
+
+	// Final fallback: minimal error structure
+	minimal := jsonMinimalError{
+		Msg:  err.Error(),
+		Type: fmt.Sprintf("%T", err),
+	}
+	if data, e := json.Marshal(minimal); e == nil {
 		return data
 	}
 
-	// Final fallback: return error string as JSON
-	return json.RawMessage(fmt.Sprintf(`"%s"`, err.Error()))
+	// Ultimate fallback: return error string as JSON
+	return json.RawMessage(fmt.Sprintf(`{"msg":"%s"}`, err.Error()))
 }
 
 func NewNotFoundError(err error) jsonapi.Error {
