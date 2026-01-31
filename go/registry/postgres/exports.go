@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
@@ -169,7 +168,7 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 		err := tx.GetContext(ctx, &export, query, id)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return errxtrace.Classify(registry.ErrNotFound, errx.NewDisplayable("export not found or already deleted"))
+				return errxtrace.Wrap("export not found or already deleted", registry.ErrNotFound)
 			}
 			return errxtrace.Wrap("failed to get export", err)
 		}
