@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -54,7 +54,7 @@ func (f *FileRegistryFactory) MustCreateUserRegistry(ctx context.Context) regist
 func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, stacktrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &FileRegistry{
@@ -88,7 +88,7 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 	// Query the database for all files (atomic operation)
 	for file, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list files")
+			return nil, stacktrace.Wrap("failed to list files", err)
 		}
 		files = append(files, &file)
 	}
@@ -101,7 +101,7 @@ func (r *FileRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count files")
+		return 0, stacktrace.Wrap("failed to count files", err)
 	}
 
 	return cnt, nil
@@ -114,7 +114,7 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 
 	createdFile, err := reg.Create(ctx, file, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create file")
+		return nil, stacktrace.Wrap("failed to create file", err)
 	}
 
 	return &createdFile, nil
@@ -125,7 +125,7 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 
 	err := reg.Update(ctx, file, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update file")
+		return nil, stacktrace.Wrap("failed to update file", err)
 	}
 
 	return &file, nil
@@ -150,7 +150,7 @@ func (r *FileRegistry) get(ctx context.Context, id string) (*models.FileEntity, 
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &file)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get file")
+		return nil, stacktrace.Wrap("failed to get file", err)
 	}
 
 	return &file, nil
@@ -162,7 +162,7 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 	reg := r.newSQLRegistry()
 	for file, err := range reg.ScanByField(ctx, store.Pair("type", fileType)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list files by type")
+			return nil, stacktrace.Wrap("failed to list files by type", err)
 		}
 		files = append(files, &file)
 	}
@@ -182,7 +182,7 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 
 		rows, err := tx.QueryxContext(ctx, query, entityType, entityID)
 		if err != nil {
-			return errkit.Wrap(err, "failed to list files by linked entity")
+			return stacktrace.Wrap("failed to list files by linked entity", err)
 		}
 		defer rows.Close()
 
@@ -190,7 +190,7 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 			var file models.FileEntity
 			err := rows.StructScan(&file)
 			if err != nil {
-				return errkit.Wrap(err, "failed to scan file")
+				return stacktrace.Wrap("failed to scan file", err)
 			}
 			files = append(files, &file)
 		}
@@ -198,7 +198,7 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list files by linked entity")
+		return nil, stacktrace.Wrap("failed to list files by linked entity", err)
 	}
 
 	return files, nil
@@ -216,7 +216,7 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 
 		rows, err := tx.QueryxContext(ctx, query, entityType, entityID, meta)
 		if err != nil {
-			return errkit.Wrap(err, "failed to list files by linked entity and meta")
+			return stacktrace.Wrap("failed to list files by linked entity and meta", err)
 		}
 		defer rows.Close()
 
@@ -224,7 +224,7 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 			var file models.FileEntity
 			err := rows.StructScan(&file)
 			if err != nil {
-				return errkit.Wrap(err, "failed to scan file")
+				return stacktrace.Wrap("failed to scan file", err)
 			}
 			files = append(files, &file)
 		}
@@ -232,7 +232,7 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list files by linked entity and meta")
+		return nil, stacktrace.Wrap("failed to list files by linked entity and meta", err)
 	}
 
 	return files, nil
@@ -282,7 +282,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 
 		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
 		if err != nil {
-			return errkit.Wrap(err, "failed to search files")
+			return stacktrace.Wrap("failed to search files", err)
 		}
 		defer rows.Close()
 
@@ -290,7 +290,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 			var file models.FileEntity
 			err := rows.StructScan(&file)
 			if err != nil {
-				return errkit.Wrap(err, "failed to scan file")
+				return stacktrace.Wrap("failed to scan file", err)
 			}
 			files = append(files, &file)
 		}
@@ -298,7 +298,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to search files")
+		return nil, stacktrace.Wrap("failed to search files", err)
 	}
 
 	return files, nil
@@ -323,7 +323,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 		err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
 		if err != nil {
-			return errkit.Wrap(err, "failed to count files")
+			return stacktrace.Wrap("failed to count files", err)
 		}
 
 		// Then get the paginated results
@@ -347,7 +347,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
-			return errkit.Wrap(err, "failed to list paginated files")
+			return stacktrace.Wrap("failed to list paginated files", err)
 		}
 		defer rows.Close()
 
@@ -355,7 +355,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 			var file models.FileEntity
 			err := rows.StructScan(&file)
 			if err != nil {
-				return errkit.Wrap(err, "failed to scan file")
+				return stacktrace.Wrap("failed to scan file", err)
 			}
 			files = append(files, &file)
 		}
@@ -363,7 +363,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, 0, errkit.Wrap(err, "failed to list paginated files")
+		return nil, 0, stacktrace.Wrap("failed to list paginated files", err)
 	}
 
 	return files, total, nil

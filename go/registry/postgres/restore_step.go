@@ -3,11 +3,11 @@ package postgres
 import (
 	"context"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -51,7 +51,7 @@ func (f *RestoreStepRegistryFactory) MustCreateUserRegistry(ctx context.Context)
 func (f *RestoreStepRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.RestoreStepRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, stacktrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &RestoreStepRegistry{
@@ -85,7 +85,7 @@ func (r *RestoreStepRegistry) List(ctx context.Context) ([]*models.RestoreStep, 
 	// Query the database for all restore steps (atomic operation)
 	for step, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list restore steps")
+			return nil, stacktrace.Wrap("failed to list restore steps", err)
 		}
 		steps = append(steps, &step)
 	}
@@ -98,7 +98,7 @@ func (r *RestoreStepRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count restore steps")
+		return 0, stacktrace.Wrap("failed to count restore steps", err)
 	}
 
 	return cnt, nil
@@ -106,7 +106,7 @@ func (r *RestoreStepRegistry) Count(ctx context.Context) (int, error) {
 
 func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
 	if err := step.ValidateWithContext(ctx); err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
+		return nil, stacktrace.Wrap("validation failed", err)
 	}
 
 	// Set timestamps
@@ -119,7 +119,7 @@ func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreSte
 
 	createdStep, err := reg.Create(ctx, step, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create restore step")
+		return nil, stacktrace.Wrap("failed to create restore step", err)
 	}
 
 	return &createdStep, nil
@@ -127,7 +127,7 @@ func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreSte
 
 func (r *RestoreStepRegistry) Update(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
 	if err := step.ValidateWithContext(ctx); err != nil {
-		return nil, errkit.Wrap(err, "validation failed")
+		return nil, stacktrace.Wrap("validation failed", err)
 	}
 
 	// Update timestamp
@@ -137,7 +137,7 @@ func (r *RestoreStepRegistry) Update(ctx context.Context, step models.RestoreSte
 
 	err := reg.Update(ctx, step, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update restore step")
+		return nil, stacktrace.Wrap("failed to update restore step", err)
 	}
 
 	return &step, nil
@@ -162,7 +162,7 @@ func (r *RestoreStepRegistry) get(ctx context.Context, id string) (*models.Resto
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &step)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get restore step")
+		return nil, stacktrace.Wrap("failed to get restore step", err)
 	}
 
 	return &step, nil
@@ -174,7 +174,7 @@ func (r *RestoreStepRegistry) ListByRestoreOperation(ctx context.Context, restor
 	reg := r.newSQLRegistry()
 	for step, err := range reg.ScanByField(ctx, store.Pair("restore_operation_id", restoreOperationID)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list restore steps by operation")
+			return nil, stacktrace.Wrap("failed to list restore steps by operation", err)
 		}
 		steps = append(steps, &step)
 	}
@@ -188,7 +188,7 @@ func (r *RestoreStepRegistry) DeleteByRestoreOperation(ctx context.Context, rest
 		txReg := store.NewTxRegistry[models.RestoreStep](tx, r.tableNames.RestoreSteps())
 		err := txReg.DeleteByField(ctx, store.Pair("restore_operation_id", restoreOperationID))
 		if err != nil {
-			return errkit.Wrap(err, "failed to delete restore steps by operation")
+			return stacktrace.Wrap("failed to delete restore steps by operation", err)
 		}
 		return nil
 	})

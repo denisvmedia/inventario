@@ -5,7 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/go-extras/errx"
+	"github.com/go-extras/errx/stacktrace"
 )
 
 // RateLimiter provides per-user rate limiting functionality
@@ -153,9 +154,8 @@ func NewThumbnailRateLimitService(requestsPerMinute int) *ThumbnailRateLimitServ
 func (s *ThumbnailRateLimitService) CheckRateLimit(ctx context.Context, userID string) error {
 	if !s.rateLimiter.Allow(userID) {
 		remaining := s.rateLimiter.GetRemainingTokens(userID)
-		return errkit.Wrap(ErrRateLimitExceeded, "thumbnail generation rate limit exceeded",
-			"user_id", userID,
-			"remaining_tokens", remaining)
+		return stacktrace.Wrap("thumbnail generation rate limit exceeded", ErrRateLimitExceeded, errx.Attrs("user_id", userID,
+			"remaining_tokens", remaining))
 	}
 	return nil
 }

@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/go-chi/render"
+	"github.com/go-extras/errx"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -160,15 +160,15 @@ var _ render.Binder = (*ImportExportRequest)(nil)
 
 func (cr *ImportExportRequest) Bind(r *http.Request) error {
 	if cr.Data == nil {
-		return errkit.WithMessage(nil, "missing required data field")
+		return errx.Wrap("missing required data field", nil)
 	}
 
 	if cr.Data.Type != "exports" {
-		return errkit.WithMessage(nil, "invalid type, expected 'exports'")
+		return errx.Wrap("invalid type, expected 'exports'", nil)
 	}
 
 	if cr.Data.Attributes == nil {
-		return errkit.WithMessage(nil, "missing required attributes field")
+		return errx.Wrap("missing required attributes field", nil)
 	}
 
 	// Validate the data structure

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/export/parser"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -139,15 +139,15 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 	// Create the file entity
 	user, err := s.factorySet.UserRegistry.Get(ctx, export.UserID)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user")
+		return nil, stacktrace.Wrap("failed to get user", err)
 	}
 	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(appctx.WithUser(ctx, user))
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create file registry")
+		return nil, stacktrace.Wrap("failed to create file registry", err)
 	}
 	created, err := fileReg.Create(ctx, fileEntity)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create file entity")
+		return nil, stacktrace.Wrap("failed to create file entity", err)
 	}
 
 	return created, nil

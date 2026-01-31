@@ -2,8 +2,6 @@ package registry
 
 import (
 	"errors"
-
-	"github.com/denisvmedia/inventario/internal/errkit"
 )
 
 var (
@@ -16,7 +14,7 @@ var (
 	ErrEmailAlreadyExists = errors.New("email already exists")
 	ErrSlugAlreadyExists  = errors.New("slug already exists")
 	ErrBadDataStructure   = errors.New("bad data structure")
-	ErrDeleted            = errkit.NewEquivalent("deleted", ErrNotFound)
+	ErrDeleted            = errors.New("deleted")
 
 	ErrMainCurrencyNotSet       = errors.New("main currency not set")
 	ErrMainCurrencyAlreadySet   = errors.New("main currency already set and cannot be changed")

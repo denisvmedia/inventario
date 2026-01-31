@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -52,7 +52,7 @@ func (r *OperationSlotRegistry) Create(ctx context.Context, slot models.Operatio
 
 	// Validate the slot
 	if err := slot.ValidateWithContext(ctx); err != nil {
-		return nil, errkit.Wrap(err, "invalid operation slot")
+		return nil, stacktrace.Wrap("invalid operation slot", err)
 	}
 
 	// Initialize nested maps if needed
@@ -66,7 +66,7 @@ func (r *OperationSlotRegistry) Create(ctx context.Context, slot models.Operatio
 	// Check for duplicate slot ID
 	if existingID, exists := r.userSlots[slot.UserID][slot.OperationName][slot.SlotID]; exists {
 		if existingSlot, ok := r.slots[existingID]; ok && !existingSlot.IsExpired() {
-			return nil, errkit.Wrap(registry.ErrAlreadyExists, "slot ID already exists for user/operation")
+			return nil, stacktrace.Wrap("slot ID already exists for user/operation", registry.ErrAlreadyExists)
 		}
 		// Clean up expired slot
 		delete(r.slots, existingID)
@@ -86,12 +86,12 @@ func (r *OperationSlotRegistry) Get(ctx context.Context, id string) (*models.Ope
 
 	slot, exists := r.slots[id]
 	if !exists {
-		return nil, errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return nil, stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	// Filter by user if not service registry
 	if !r.service && slot.UserID != r.userID {
-		return nil, errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return nil, stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	return slot, nil
@@ -104,22 +104,22 @@ func (r *OperationSlotRegistry) GetSlot(ctx context.Context, userID, operationNa
 
 	if r.userSlots[userID] == nil ||
 		r.userSlots[userID][operationName] == nil {
-		return nil, errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return nil, stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	slotEntityID, exists := r.userSlots[userID][operationName][slotID]
 	if !exists {
-		return nil, errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return nil, stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	slot, exists := r.slots[slotEntityID]
 	if !exists {
-		return nil, errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return nil, stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	// Check if expired
 	if slot.IsExpired() {
-		return nil, errkit.Wrap(registry.ErrNotFound, "operation slot expired")
+		return nil, stacktrace.Wrap("operation slot expired", registry.ErrNotFound)
 	}
 
 	return slot, nil
@@ -132,12 +132,12 @@ func (r *OperationSlotRegistry) ReleaseSlot(ctx context.Context, userID, operati
 
 	if r.userSlots[userID] == nil ||
 		r.userSlots[userID][operationName] == nil {
-		return errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	slotEntityID, exists := r.userSlots[userID][operationName][slotID]
 	if !exists {
-		return errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	// Remove from both maps
@@ -324,7 +324,7 @@ func (r *OperationSlotRegistry) Update(ctx context.Context, slot models.Operatio
 	defer r.mu.Unlock()
 
 	if _, exists := r.slots[slot.ID]; !exists {
-		return nil, errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return nil, stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	// Set user/tenant context if not service registry
@@ -335,7 +335,7 @@ func (r *OperationSlotRegistry) Update(ctx context.Context, slot models.Operatio
 
 	// Validate the slot
 	if err := slot.ValidateWithContext(ctx); err != nil {
-		return nil, errkit.Wrap(err, "invalid operation slot")
+		return nil, stacktrace.Wrap("invalid operation slot", err)
 	}
 
 	r.slots[slot.ID] = &slot
@@ -349,12 +349,12 @@ func (r *OperationSlotRegistry) Delete(ctx context.Context, id string) error {
 
 	slot, exists := r.slots[id]
 	if !exists {
-		return errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	// Filter by user if not service registry
 	if !r.service && slot.UserID != r.userID {
-		return errkit.Wrap(registry.ErrNotFound, "operation slot not found")
+		return stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	// Remove from user slots mapping
@@ -403,7 +403,7 @@ func NewOperationSlotRegistryFactory() *OperationSlotRegistryFactory {
 func (f *OperationSlotRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.OperationSlotRegistry, error) {
 	user := appctx.UserFromContext(ctx)
 	if user == nil {
-		return nil, errkit.Wrap(registry.ErrInvalidInput, "user context required")
+		return nil, stacktrace.Wrap("user context required", registry.ErrInvalidInput)
 	}
 
 	// For memory implementation, we use the same registry instance but filter by user context

@@ -5,8 +5,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/go-extras/errx"
+	"github.com/go-extras/errx/stacktrace"
+
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -33,7 +35,7 @@ func NewThumbnailGenerationJobRegistryFactory() *ThumbnailGenerationJobRegistryF
 func (f *ThumbnailGenerationJobRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ThumbnailGenerationJobRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user from context")
+		return nil, stacktrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -157,7 +159,7 @@ func (r *ThumbnailGenerationJobRegistry) CleanupCompletedJobs(ctx context.Contex
 	for _, jobID := range toDelete {
 		err := r.Delete(ctx, jobID)
 		if err != nil {
-			return errkit.Wrap(err, "failed to delete completed job").WithField("job_id", jobID)
+			return stacktrace.Wrap("failed to delete completed job", err, errx.Attrs("job_id", jobID))
 		}
 	}
 

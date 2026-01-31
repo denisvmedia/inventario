@@ -3,10 +3,10 @@ package memory
 import (
 	"context"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -44,7 +44,7 @@ func (f *RestoreOperationRegistryFactory) MustCreateUserRegistry(ctx context.Con
 func (f *RestoreOperationRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.RestoreOperationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user from context")
+		return nil, stacktrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -57,7 +57,7 @@ func (f *RestoreOperationRegistryFactory) CreateUserRegistry(ctx context.Context
 	// Create user-aware restore step registry
 	restoreStepRegistry, err := f.restoreStepRegistry.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create user restore step registry")
+		return nil, stacktrace.Wrap("failed to create user restore step registry", err)
 	}
 
 	return &RestoreOperationRegistry{
@@ -96,7 +96,7 @@ func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID st
 			// Load associated steps
 			steps, err := r.restoreStepRegistry.ListByRestoreOperation(ctx, operation.ID)
 			if err != nil {
-				return nil, errkit.Wrap(err, "failed to load restore steps")
+				return nil, stacktrace.Wrap("failed to load restore steps", err)
 			}
 
 			// Convert to slice of values instead of pointers for JSON serialization
@@ -121,7 +121,7 @@ func (r *RestoreOperationRegistry) Get(ctx context.Context, id string) (*models.
 	// Load associated steps
 	steps, err := r.restoreStepRegistry.ListByRestoreOperation(ctx, operation.ID)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to load restore steps")
+		return nil, stacktrace.Wrap("failed to load restore steps", err)
 	}
 
 	// Convert to slice of values instead of pointers for JSON serialization
@@ -136,7 +136,7 @@ func (r *RestoreOperationRegistry) Get(ctx context.Context, id string) (*models.
 func (r *RestoreOperationRegistry) Delete(ctx context.Context, id string) error {
 	// Delete associated steps first
 	if err := r.restoreStepRegistry.DeleteByRestoreOperation(ctx, id); err != nil {
-		return errkit.Wrap(err, "failed to delete restore steps")
+		return stacktrace.Wrap("failed to delete restore steps", err)
 	}
 
 	return r.Registry.Delete(ctx, id)

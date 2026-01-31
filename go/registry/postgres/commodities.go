@@ -4,11 +4,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -52,7 +52,7 @@ func (f *CommodityRegistryFactory) MustCreateUserRegistry(ctx context.Context) r
 func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.CommodityRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, stacktrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &CommodityRegistry{
@@ -89,7 +89,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create commodity")
+		return nil, stacktrace.Wrap("failed to create commodity", err)
 	}
 
 	return &createdCommodity, nil
@@ -101,7 +101,7 @@ func (r *CommodityRegistry) GetByName(ctx context.Context, name string) (*models
 
 	err := reg.ScanOneByField(ctx, store.Pair("name", name), &commodity)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get commodity")
+		return nil, stacktrace.Wrap("failed to get commodity", err)
 	}
 
 	return &commodity, nil
@@ -115,7 +115,7 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 	// Query the database for all commodities (atomic operation)
 	for commodity, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list commodities")
+			return nil, stacktrace.Wrap("failed to list commodities", err)
 		}
 		commodities = append(commodities, &commodity)
 	}
@@ -128,7 +128,7 @@ func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count commodities")
+		return 0, stacktrace.Wrap("failed to count commodities", err)
 	}
 
 	return cnt, nil
@@ -142,7 +142,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update commodity")
+		return nil, stacktrace.Wrap("failed to update commodity", err)
 	}
 
 	return &commodity, nil
@@ -176,7 +176,7 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 			"tenant_id", r.tenantID,
 			"service_mode", r.service,
 		)
-		return nil, errkit.Wrap(err, "failed to get commodity")
+		return nil, stacktrace.Wrap("failed to get commodity", err)
 	}
 
 	return &commodity, nil
@@ -187,7 +187,7 @@ func (r *CommodityRegistry) getArea(ctx context.Context, tx *sqlx.Tx, areaID str
 	areaReg := store.NewTxRegistry[models.Area](tx, r.tableNames.Areas())
 	err := areaReg.ScanOneByField(ctx, store.Pair("id", areaID), &area)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get area")
+		return nil, stacktrace.Wrap("failed to get area", err)
 	}
 
 	return &area, nil
@@ -205,7 +205,7 @@ func (r *CommodityRegistry) GetImages(ctx context.Context, commodityID string) (
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list images")
+		return nil, stacktrace.Wrap("failed to list images", err)
 	}
 
 	return images, nil
@@ -217,7 +217,7 @@ func (r *CommodityRegistry) getImages(ctx context.Context, tx *sqlx.Tx, commodit
 	imageReg := store.NewTxRegistry[models.Image](tx, r.tableNames.Images())
 	for image, err := range imageReg.ScanByField(ctx, store.Pair("commodity_id", commodityID)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list images")
+			return nil, stacktrace.Wrap("failed to list images", err)
 		}
 		images = append(images, image.GetID())
 	}
@@ -235,7 +235,7 @@ func (r *CommodityRegistry) GetManuals(ctx context.Context, commodityID string) 
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list manuals")
+		return nil, stacktrace.Wrap("failed to list manuals", err)
 	}
 
 	return manuals, nil
@@ -247,7 +247,7 @@ func (r *CommodityRegistry) getManuals(ctx context.Context, tx *sqlx.Tx, commodi
 	manualReg := store.NewTxRegistry[models.Manual](tx, r.tableNames.Manuals())
 	for manual, err := range manualReg.ScanByField(ctx, store.Pair("commodity_id", commodityID)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list manuals")
+			return nil, stacktrace.Wrap("failed to list manuals", err)
 		}
 		manuals = append(manuals, manual.GetID())
 	}
@@ -265,7 +265,7 @@ func (r *CommodityRegistry) GetInvoices(ctx context.Context, commodityID string)
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list invoices")
+		return nil, stacktrace.Wrap("failed to list invoices", err)
 	}
 
 	return invoices, nil
@@ -277,7 +277,7 @@ func (r *CommodityRegistry) getInvoices(ctx context.Context, tx *sqlx.Tx, commod
 	invoiceReg := store.NewTxRegistry[models.Invoice](tx, r.tableNames.Invoices())
 	for invoice, err := range invoiceReg.ScanByField(ctx, store.Pair("commodity_id", commodityID)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list invoices")
+			return nil, stacktrace.Wrap("failed to list invoices", err)
 		}
 		invoices = append(invoices, invoice.GetID())
 	}

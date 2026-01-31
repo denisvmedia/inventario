@@ -9,13 +9,14 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/go-extras/errx"
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/security"
 	"github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
@@ -141,7 +142,7 @@ func (l *RestoreOperationProcessor) skipSection(decoder *xml.Decoder, startEleme
 	for depth > 0 {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read token while skipping section")
+			return stacktrace.Wrap("failed to read token while skipping section", err)
 		}
 
 		switch t := tok.(type) {
@@ -169,7 +170,7 @@ func (l *RestoreOperationProcessor) collectFiles(
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to read file token")
+			return nil, stacktrace.Wrap("failed to read file token", err)
 		}
 
 		switch t := tok.(type) {
@@ -201,24 +202,24 @@ func (l *RestoreOperationProcessor) processFile(
 	switch t.Name.Local {
 	case "path":
 		if err := decoder.DecodeElement(&xmlFile.Path, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode path")
+			return stacktrace.Wrap("failed to decode path", err)
 		}
 	case "originalPath":
 		if err := decoder.DecodeElement(&xmlFile.OriginalPath, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode original path")
+			return stacktrace.Wrap("failed to decode original path", err)
 		}
 	case "extension":
 		if err := decoder.DecodeElement(&xmlFile.Extension, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode extension")
+			return stacktrace.Wrap("failed to decode extension", err)
 		}
 	case "mimeType":
 		if err := decoder.DecodeElement(&xmlFile.MimeType, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode mime type")
+			return stacktrace.Wrap("failed to decode mime type", err)
 		}
 	case "data":
 		// Stream and decode base64 data
 		if err := l.decodeBase64ToFile(ctx, decoder, xmlFile, stats); err != nil {
-			return errkit.Wrap(err, "failed to decode base64 data")
+			return stacktrace.Wrap("failed to decode base64 data", err)
 		}
 	}
 
@@ -246,7 +247,7 @@ func (l *RestoreOperationProcessor) collectFile(
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to read file element token")
+			return nil, stacktrace.Wrap("failed to read file element token", err)
 		}
 
 		switch t := tok.(type) {
@@ -273,7 +274,7 @@ func (l *RestoreOperationProcessor) decodeBase64ToFile(
 	// Open blob bucket
 	b, err := blob.OpenBucket(ctx, l.uploadLocation)
 	if err != nil {
-		return errkit.Wrap(err, "failed to open blob bucket")
+		return stacktrace.Wrap("failed to open blob bucket", err)
 	}
 	defer b.Close()
 
@@ -283,11 +284,11 @@ func (l *RestoreOperationProcessor) decodeBase64ToFile(
 	// Create blob writer
 	writer, err := b.NewWriter(ctx, filename, nil)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create blob writer")
+		return stacktrace.Wrap("failed to create blob writer", err)
 	}
 	defer func() {
 		if closeErr := writer.Close(); closeErr != nil {
-			err = errkit.Wrap(closeErr, "failed to close blob writer")
+			err = stacktrace.Wrap("failed to close blob writer", closeErr)
 		}
 	}()
 
@@ -296,7 +297,7 @@ func (l *RestoreOperationProcessor) decodeBase64ToFile(
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read base64 token")
+			return stacktrace.Wrap("failed to read base64 token", err)
 		}
 
 		switch t := tok.(type) {
@@ -305,11 +306,11 @@ func (l *RestoreOperationProcessor) decodeBase64ToFile(
 			decoded := make([]byte, len(t))
 			n, err := base64.StdEncoding.Decode(decoded, t)
 			if err != nil {
-				return errkit.Wrap(err, "failed to decode base64 data")
+				return stacktrace.Wrap("failed to decode base64 data", err)
 			}
 			if n > 0 {
 				if _, err := writer.Write(decoded[:n]); err != nil {
-					return errkit.Wrap(err, "failed to write decoded data")
+					return stacktrace.Wrap("failed to write decoded data", err)
 				}
 				totalSize += int64(n)
 			}
@@ -351,11 +352,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	// Load locations - index by ID (which should be the same as XML ID for imported entities)
 	locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create user location registry")
+		return stacktrace.Wrap("failed to create user location registry", err)
 	}
 	locations, err := locReg.List(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to load existing locations")
+		return stacktrace.Wrap("failed to load existing locations", err)
 	}
 	for _, location := range locations {
 		entities.Locations[location.ID] = location
@@ -364,11 +365,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	// Load areas - index by ID (which should be the same as XML ID for imported entities)
 	areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create user area registry")
+		return stacktrace.Wrap("failed to create user area registry", err)
 	}
 	areas, err := areaReg.List(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to load existing areas")
+		return stacktrace.Wrap("failed to load existing areas", err)
 	}
 	for _, area := range areas {
 		entities.Areas[area.ID] = area
@@ -377,11 +378,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	// Load commodities - index by ID (which should be the same as XML ID for imported entities)
 	comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create user commodity registry")
+		return stacktrace.Wrap("failed to create user commodity registry", err)
 	}
 	commodities, err := comReg.List(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to load existing commodities")
+		return stacktrace.Wrap("failed to load existing commodities", err)
 	}
 	for _, commodity := range commodities {
 		entities.Commodities[commodity.ID] = commodity
@@ -390,11 +391,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	// Load images - index by ID (which should be the same as XML ID for imported entities)
 	imgReg, err := l.factorySet.ImageRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create user image registry")
+		return stacktrace.Wrap("failed to create user image registry", err)
 	}
 	images, err := imgReg.List(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to load existing images")
+		return stacktrace.Wrap("failed to load existing images", err)
 	}
 	for _, image := range images {
 		entities.Images[image.ID] = image
@@ -403,11 +404,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	// Load invoices - index by ID (which should be the same as XML ID for imported entities)
 	invReg, err := l.factorySet.InvoiceRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create user invoice registry")
+		return stacktrace.Wrap("failed to create user invoice registry", err)
 	}
 	invoices, err := invReg.List(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to load existing invoices")
+		return stacktrace.Wrap("failed to load existing invoices", err)
 	}
 	for _, invoice := range invoices {
 		entities.Invoices[invoice.ID] = invoice
@@ -416,11 +417,11 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	// Load manuals - index by ID (which should be the same as XML ID for imported entities)
 	manReg, err := l.factorySet.ManualRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create user manual registry")
+		return stacktrace.Wrap("failed to create user manual registry", err)
 	}
 	manuals, err := manReg.List(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to load existing manuals")
+		return stacktrace.Wrap("failed to load existing manuals", err)
 	}
 	for _, manual := range manuals {
 		entities.Manuals[manual.ID] = manual
@@ -435,11 +436,11 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
 	locations, err := locReg.List(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to list locations for deletion")
+		return stacktrace.Wrap("failed to list locations for deletion", err)
 	}
 	for _, location := range locations {
 		if err := l.entityService.DeleteLocationRecursive(ctx, location.ID); err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to delete location %s recursively", location.ID))
+			return stacktrace.Wrap(fmt.Sprintf("failed to delete location %s recursively", location.ID), err)
 		}
 	}
 
@@ -548,12 +549,12 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			File:        file,
 		}
 		if err := image.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid image")
+			return stacktrace.Wrap("invalid image", err)
 		}
 		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
 		createdImage, err := imgReg.Create(ctx, *image)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create image")
+			return stacktrace.Wrap("failed to create image", err)
 		}
 		// Track the newly created image and store ID mapping
 		existing.Images[originalXMLID] = createdImage
@@ -578,12 +579,12 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			File:        file,
 		}
 		if err := image.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid image")
+			return stacktrace.Wrap("invalid image", err)
 		}
 		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
 		createdImage, err := imgReg.Create(ctx, *image)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create image")
+			return stacktrace.Wrap("failed to create image", err)
 		}
 		// Track the newly created image and store ID mapping
 		existing.Images[originalXMLID] = createdImage
@@ -602,12 +603,12 @@ func (l *RestoreOperationProcessor) createImageRecord(
 					File:        file,
 				}
 				if err := image.ValidateWithContext(ctx); err != nil {
-					return errkit.Wrap(err, "invalid image")
+					return stacktrace.Wrap("invalid image", err)
 				}
 				imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
 				createdImage, err := imgReg.Create(ctx, *image)
 				if err != nil {
-					return errkit.Wrap(err, "failed to create image")
+					return stacktrace.Wrap("failed to create image", err)
 				}
 				// Track the newly created image and store ID mapping
 				existing.Images[originalXMLID] = createdImage
@@ -628,12 +629,12 @@ func (l *RestoreOperationProcessor) createImageRecord(
 			File:                file,
 		}
 		if err := image.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid image")
+			return stacktrace.Wrap("invalid image", err)
 		}
 		imgReg := l.factorySet.ImageRegistryFactory.CreateServiceRegistry()
 		updatedImage, err := imgReg.Update(ctx, *image)
 		if err != nil {
-			return errkit.Wrap(err, "failed to update image")
+			return stacktrace.Wrap("failed to update image", err)
 		}
 		// Update the tracked image
 		existing.Images[originalXMLID] = updatedImage
@@ -684,12 +685,12 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			File:        file,
 		}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid invoice")
+			return stacktrace.Wrap("invalid invoice", err)
 		}
 		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
 		createdInvoice, err := invReg.Create(ctx, *invoice)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create invoice")
+			return stacktrace.Wrap("failed to create invoice", err)
 		}
 		// Track the newly created invoice and store ID mapping
 		existing.Invoices[originalXMLID] = createdInvoice
@@ -711,12 +712,12 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			File:                file,
 		}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid invoice")
+			return stacktrace.Wrap("invalid invoice", err)
 		}
 		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
 		createdInvoice, err := invReg.Create(ctx, *invoice)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create invoice")
+			return stacktrace.Wrap("failed to create invoice", err)
 		}
 		// Track the newly created invoice and store ID mapping
 		existing.Invoices[originalXMLID] = createdInvoice
@@ -732,12 +733,12 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 					File:                file,
 				}
 				if err := invoice.ValidateWithContext(ctx); err != nil {
-					return errkit.Wrap(err, "invalid invoice")
+					return stacktrace.Wrap("invalid invoice", err)
 				}
 				invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
 				createdInvoice, err := invReg.Create(ctx, *invoice)
 				if err != nil {
-					return errkit.Wrap(err, "failed to create invoice")
+					return stacktrace.Wrap("failed to create invoice", err)
 				}
 				// Track the newly created invoice and store ID mapping
 				existing.Invoices[originalXMLID] = createdInvoice
@@ -757,12 +758,12 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 			File:                file,
 		}
 		if err := invoice.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid invoice")
+			return stacktrace.Wrap("invalid invoice", err)
 		}
 		invReg := l.factorySet.InvoiceRegistryFactory.CreateServiceRegistry()
 		updatedInvoice, err := invReg.Update(ctx, *invoice)
 		if err != nil {
-			return errkit.Wrap(err, "failed to update invoice")
+			return stacktrace.Wrap("failed to update invoice", err)
 		}
 		// Update the tracked invoice
 		existing.Invoices[originalXMLID] = updatedInvoice
@@ -811,12 +812,12 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid manual")
+			return stacktrace.Wrap("invalid manual", err)
 		}
 		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
 		createdManual, err := manReg.Create(ctx, *manual)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create manual")
+			return stacktrace.Wrap("failed to create manual", err)
 		}
 		// Track the newly created manual and store ID mapping
 		existing.Manuals[originalXMLID] = createdManual
@@ -838,12 +839,12 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid manual")
+			return stacktrace.Wrap("invalid manual", err)
 		}
 		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
 		createdManual, err := manReg.Create(ctx, *manual)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create manual")
+			return stacktrace.Wrap("failed to create manual", err)
 		}
 		// Track the newly created manual and store ID mapping
 		existing.Manuals[originalXMLID] = createdManual
@@ -862,12 +863,12 @@ func (l *RestoreOperationProcessor) createManualRecord(
 				File:                file,
 			}
 			if err := manual.ValidateWithContext(ctx); err != nil {
-				return errkit.Wrap(err, "invalid manual")
+				return stacktrace.Wrap("invalid manual", err)
 			}
 			manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
 			createdManual, err := manReg.Create(ctx, *manual)
 			if err != nil {
-				return errkit.Wrap(err, "failed to create manual")
+				return stacktrace.Wrap("failed to create manual", err)
 			}
 			// Track the newly created manual and store ID mapping
 			existing.Manuals[originalXMLID] = createdManual
@@ -886,12 +887,12 @@ func (l *RestoreOperationProcessor) createManualRecord(
 			File:                file,
 		}
 		if err := manual.ValidateWithContext(ctx); err != nil {
-			return errkit.Wrap(err, "invalid manual")
+			return stacktrace.Wrap("invalid manual", err)
 		}
 		manReg := l.factorySet.ManualRegistryFactory.CreateServiceRegistry()
 		updatedManual, err := manReg.Update(ctx, *manual)
 		if err != nil {
-			return errkit.Wrap(err, "failed to update manual")
+			return stacktrace.Wrap("failed to update manual", err)
 		}
 		// Update the tracked manual
 		existing.Manuals[originalXMLID] = updatedManual
@@ -926,17 +927,17 @@ func (l *RestoreOperationProcessor) createFileRecord(
 	case "image":
 		err := l.createImageRecord(ctx, file, commodityID, originalXMLID, stats, existing, idMapping, options)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create image record")
+			return stacktrace.Wrap("failed to create image record", err)
 		}
 	case "invoice":
 		err := l.createInvoiceRecord(ctx, file, commodityID, originalXMLID, stats, existing, idMapping, options)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create invoice record")
+			return stacktrace.Wrap("failed to create invoice record", err)
 		}
 	case "manual":
 		err := l.createManualRecord(ctx, file, commodityID, originalXMLID, stats, existing, idMapping, options)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create manual record")
+			return stacktrace.Wrap("failed to create manual record", err)
 		}
 	default:
 		return fmt.Errorf("unknown file type: %s", fileType)
@@ -1054,7 +1055,7 @@ func (l *RestoreOperationProcessor) restoreTopLevelElements(
 		l.createRestoreStep(ctx, "Processing locations", models.RestoreStepResultInProgress, "")
 		if err := l.processLocationsWithLogging(ctx, decoder, stats, existingEntities, idMapping, options); err != nil {
 			l.updateRestoreStep(ctx, "Processing locations", models.RestoreStepResultError, err.Error())
-			return errkit.Wrap(err, "failed to process locations")
+			return stacktrace.Wrap("failed to process locations", err)
 		}
 		l.updateRestoreStep(ctx, "Processing locations", models.RestoreStepResultSuccess,
 			fmt.Sprintf("Processed %d locations", stats.LocationCount))
@@ -1062,7 +1063,7 @@ func (l *RestoreOperationProcessor) restoreTopLevelElements(
 		l.createRestoreStep(ctx, "Processing areas", models.RestoreStepResultInProgress, "")
 		if err := l.processAreasWithLogging(ctx, decoder, stats, existingEntities, idMapping, options); err != nil {
 			l.updateRestoreStep(ctx, "Processing areas", models.RestoreStepResultError, err.Error())
-			return errkit.Wrap(err, "failed to process areas")
+			return stacktrace.Wrap("failed to process areas", err)
 		}
 		l.updateRestoreStep(ctx, "Processing areas", models.RestoreStepResultSuccess,
 			fmt.Sprintf("Processed %d areas", stats.AreaCount))
@@ -1070,7 +1071,7 @@ func (l *RestoreOperationProcessor) restoreTopLevelElements(
 		l.createRestoreStep(ctx, "Processing commodities", models.RestoreStepResultInProgress, "")
 		if err := l.processCommoditiesWithLogging(ctx, decoder, stats, existingEntities, idMapping, options); err != nil {
 			l.updateRestoreStep(ctx, "Processing commodities", models.RestoreStepResultError, err.Error())
-			return errkit.Wrap(err, "failed to process commodities")
+			return stacktrace.Wrap("failed to process commodities", err)
 		}
 		l.updateRestoreStep(ctx, "Processing commodities", models.RestoreStepResultSuccess,
 			fmt.Sprintf("Processed %d commodities", stats.CommodityCount))
@@ -1098,18 +1099,18 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 
 	// Validate options
 	if err := l.validateOptions(options); err != nil {
-		return stats, errkit.Wrap(err, "invalid restore options")
+		return stats, stacktrace.Wrap("invalid restore options", err)
 	}
 
 	// Get main currency from settings and add it to context for commodity validation
 	// Use user-aware settings registry to get user-specific settings
 	settingsReg, err := l.factorySet.SettingsRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return stats, errkit.Wrap(err, "failed to create user settings registry")
+		return stats, stacktrace.Wrap("failed to create user settings registry", err)
 	}
 	settings, err := settingsReg.Get(ctx)
 	if err != nil {
-		return stats, errkit.Wrap(err, "failed to get settings")
+		return stats, stacktrace.Wrap("failed to get settings", err)
 	}
 
 	if settings.MainCurrency != nil && *settings.MainCurrency != "" {
@@ -1131,7 +1132,7 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 
 	if options.Strategy != types.RestoreStrategyFullReplace {
 		if err := l.loadExistingEntities(ctx, existingEntities); err != nil {
-			return stats, errkit.Wrap(err, "failed to load existing entities")
+			return stats, stacktrace.Wrap("failed to load existing entities", err)
 		}
 		// For non-full replace, populate ID mapping with existing entities
 		for xmlID, entity := range existingEntities.Locations {
@@ -1165,7 +1166,7 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 	// If full replace, clear existing data first
 	if options.Strategy == types.RestoreStrategyFullReplace && !options.DryRun {
 		if err := l.clearExistingData(ctx); err != nil {
-			return stats, errkit.Wrap(err, "failed to clear existing data")
+			return stats, stacktrace.Wrap("failed to clear existing data", err)
 		}
 	}
 
@@ -1176,7 +1177,7 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 			break
 		}
 		if err != nil {
-			return stats, errkit.Wrap(err, "failed to read XML token")
+			return stats, stacktrace.Wrap("failed to read XML token", err)
 		}
 
 		switch t := tok.(type) {
@@ -1189,7 +1190,7 @@ func (l *RestoreOperationProcessor) restoreFromXML(
 			// Skip processing instructions, directives, comments, character data, and end elements at root level
 			continue
 		default:
-			return stats, errkit.WithFields(errors.New("unexpected token type"), "token_type", fmt.Sprintf("%T", t))
+			return stats, errx.Classify(errors.New("unexpected token type"), errx.Attrs("token_type", fmt.Sprintf("%T", t)))
 		}
 	}
 
@@ -1208,7 +1209,7 @@ func (l *RestoreOperationProcessor) processLocationsWithLogging(
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read locations token")
+			return stacktrace.Wrap("failed to read locations token", err)
 		}
 
 		switch t := tok.(type) {
@@ -1240,7 +1241,7 @@ func (l *RestoreOperationProcessor) processLocation(
 ) error {
 	var xmlLocation types.XMLLocation
 	if err := decoder.DecodeElement(&xmlLocation, startElement); err != nil {
-		return errkit.Wrap(err, "failed to decode location")
+		return stacktrace.Wrap("failed to decode location", err)
 	}
 
 	// Predict action and log it
@@ -1256,7 +1257,7 @@ func (l *RestoreOperationProcessor) processLocation(
 	if err := location.ValidateWithContext(ctx); err != nil {
 		l.updateRestoreStep(ctx,
 			fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-		return errkit.Wrap(err, fmt.Sprintf("invalid location %s", location.ID))
+		return stacktrace.Wrap(fmt.Sprintf("invalid location %s", location.ID), err)
 	}
 
 	// Store the original XML ID for mapping
@@ -1268,7 +1269,7 @@ func (l *RestoreOperationProcessor) processLocation(
 	if err != nil {
 		l.updateRestoreStep(ctx,
 			fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-		return errkit.Wrap(err, "failed to apply strategy for location")
+		return stacktrace.Wrap("failed to apply strategy for location", err)
 	}
 
 	l.updateRestoreStep(ctx,
@@ -1289,7 +1290,7 @@ func (l *RestoreOperationProcessor) processAreasWithLogging(
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read areas token")
+			return stacktrace.Wrap("failed to read areas token", err)
 		}
 
 		switch t := tok.(type) {
@@ -1348,13 +1349,13 @@ func (l *RestoreOperationProcessor) handleLocationFullReplace(
 	if !options.DryRun {
 		locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create user location registry")
+			return stacktrace.Wrap("failed to create user location registry", err)
 		}
 		createdLocation, err := locReg.Create(ctx, *location)
 		if err != nil {
 			l.updateRestoreStep(ctx,
 				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-			return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+			return stacktrace.Wrap(fmt.Sprintf("failed to create location %s", originalXMLID), err)
 		}
 		existing.Locations[originalXMLID] = createdLocation
 		idMapping.Locations[originalXMLID] = createdLocation.ID
@@ -1385,13 +1386,13 @@ func (l *RestoreOperationProcessor) handleLocationMergeAdd(
 	if !options.DryRun {
 		locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create user location registry")
+			return stacktrace.Wrap("failed to create user location registry", err)
 		}
 		createdLocation, err := locReg.Create(ctx, *location)
 		if err != nil {
 			l.updateRestoreStep(ctx,
 				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-			return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+			return stacktrace.Wrap(fmt.Sprintf("failed to create location %s", originalXMLID), err)
 		}
 		existing.Locations[originalXMLID] = createdLocation
 		idMapping.Locations[originalXMLID] = createdLocation.ID
@@ -1419,13 +1420,13 @@ func (l *RestoreOperationProcessor) handleLocationMergeUpdate(
 		if !options.DryRun {
 			locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 			if err != nil {
-				return errkit.Wrap(err, "failed to create user location registry")
+				return stacktrace.Wrap("failed to create user location registry", err)
 			}
 			createdLocation, err := locReg.Create(ctx, *location)
 			if err != nil {
 				l.updateRestoreStep(ctx,
 					fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-				return errkit.Wrap(err, fmt.Sprintf("failed to create location %s", originalXMLID))
+				return stacktrace.Wrap(fmt.Sprintf("failed to create location %s", originalXMLID), err)
 			}
 			existing.Locations[originalXMLID] = createdLocation
 			idMapping.Locations[originalXMLID] = createdLocation.ID
@@ -1441,13 +1442,13 @@ func (l *RestoreOperationProcessor) handleLocationMergeUpdate(
 	if !options.DryRun {
 		locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create user location registry")
+			return stacktrace.Wrap("failed to create user location registry", err)
 		}
 		updatedLocation, err := locReg.Update(ctx, *location)
 		if err != nil {
 			l.updateRestoreStep(ctx,
 				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-			return errkit.Wrap(err, fmt.Sprintf("failed to update location %s", originalXMLID))
+			return stacktrace.Wrap(fmt.Sprintf("failed to update location %s", originalXMLID), err)
 		}
 		existing.Locations[originalXMLID] = updatedLocation
 	}
@@ -1524,11 +1525,11 @@ func (l *RestoreOperationProcessor) createAreaIfNotDryRun(
 	if !options.DryRun {
 		areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create user area registry")
+			return stacktrace.Wrap("failed to create user area registry", err)
 		}
 		createdArea, err := areaReg.Create(ctx, *area)
 		if err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to create area %s", originalXMLID))
+			return stacktrace.Wrap(fmt.Sprintf("failed to create area %s", originalXMLID), err)
 		}
 		existing.Areas[originalXMLID] = createdArea
 		idMapping.Areas[originalXMLID] = createdArea.ID
@@ -1558,11 +1559,11 @@ func (l *RestoreOperationProcessor) handleAreaMergeUpdate(
 	if !options.DryRun {
 		areaReg, err := l.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create user area registry")
+			return stacktrace.Wrap("failed to create user area registry", err)
 		}
 		updatedArea, err := areaReg.Update(ctx, *area)
 		if err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to update area %s", originalXMLID))
+			return stacktrace.Wrap(fmt.Sprintf("failed to update area %s", originalXMLID), err)
 		}
 		existing.Areas[originalXMLID] = updatedArea
 	}
@@ -1583,7 +1584,7 @@ func (l *RestoreOperationProcessor) processArea(
 ) error {
 	var xmlArea types.XMLArea
 	if err := decoder.DecodeElement(&xmlArea, startElement); err != nil {
-		return errkit.Wrap(err, "failed to decode area")
+		return stacktrace.Wrap("failed to decode area", err)
 	}
 
 	// Predict action and log it
@@ -1622,7 +1623,7 @@ func (l *RestoreOperationProcessor) processArea(
 	if err := area.ValidateWithContext(ctx); err != nil {
 		l.updateRestoreStep(ctx,
 			fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
-		return errkit.Wrap(err, fmt.Sprintf("invalid area %s", originalXMLID))
+		return stacktrace.Wrap(fmt.Sprintf("invalid area %s", originalXMLID), err)
 	}
 
 	// Apply strategy
@@ -1631,7 +1632,7 @@ func (l *RestoreOperationProcessor) processArea(
 	if err != nil {
 		l.updateRestoreStep(ctx,
 			fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
-		return errkit.Wrap(err, "failed to apply strategy for area")
+		return stacktrace.Wrap("failed to apply strategy for area", err)
 	}
 
 	l.updateRestoreStep(ctx,
@@ -1645,7 +1646,7 @@ func (l *RestoreOperationProcessor) processCommoditiesWithLogging(ctx context.Co
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read commodities token")
+			return stacktrace.Wrap("failed to read commodities token", err)
 		}
 
 		switch t := tok.(type) {
@@ -1679,96 +1680,96 @@ func (l *RestoreOperationProcessor) collectCommodityData(
 	switch t.Name.Local {
 	case "commodityName":
 		if err := decoder.DecodeElement(&xmlCommodity.CommodityName, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode commodity name")
+			return stacktrace.Wrap("failed to decode commodity name", err)
 		}
 		// Update step description with actual commodity name
 		l.updateRestoreStep(ctx, stepName, models.RestoreStepResultInProgress,
 			fmt.Sprintf("Processing %s", xmlCommodity.CommodityName))
 	case "shortName":
 		if err := decoder.DecodeElement(&xmlCommodity.ShortName, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode short name")
+			return stacktrace.Wrap("failed to decode short name", err)
 		}
 	case "areaId":
 		if err := decoder.DecodeElement(&xmlCommodity.AreaID, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode area ID")
+			return stacktrace.Wrap("failed to decode area ID", err)
 		}
 	case "type":
 		if err := decoder.DecodeElement(&xmlCommodity.Type, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode type")
+			return stacktrace.Wrap("failed to decode type", err)
 		}
 	case "count":
 		if err := decoder.DecodeElement(&xmlCommodity.Count, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode count")
+			return stacktrace.Wrap("failed to decode count", err)
 		}
 	case "status":
 		if err := decoder.DecodeElement(&xmlCommodity.Status, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode status")
+			return stacktrace.Wrap("failed to decode status", err)
 		}
 	case "originalPrice":
 		if err := decoder.DecodeElement(&xmlCommodity.OriginalPrice, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode original price")
+			return stacktrace.Wrap("failed to decode original price", err)
 		}
 	case "originalPriceCurrency":
 		if err := decoder.DecodeElement(&xmlCommodity.OriginalCurrency, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode original price currency")
+			return stacktrace.Wrap("failed to decode original price currency", err)
 		}
 	case "convertedOriginalPrice":
 		if err := decoder.DecodeElement(&xmlCommodity.ConvertedOriginalPrice, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode converted original price")
+			return stacktrace.Wrap("failed to decode converted original price", err)
 		}
 	case "currentPrice":
 		if err := decoder.DecodeElement(&xmlCommodity.CurrentPrice, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode current price")
+			return stacktrace.Wrap("failed to decode current price", err)
 		}
 	case "currentCurrency":
 		if err := decoder.DecodeElement(&xmlCommodity.CurrentCurrency, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode current currency")
+			return stacktrace.Wrap("failed to decode current currency", err)
 		}
 	case "serialNumber":
 		if err := decoder.DecodeElement(&xmlCommodity.SerialNumber, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode serial number")
+			return stacktrace.Wrap("failed to decode serial number", err)
 		}
 	case "extraSerialNumbers":
 		if err := decoder.DecodeElement(&xmlCommodity.ExtraSerialNumbers, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode extra serial numbers")
+			return stacktrace.Wrap("failed to decode extra serial numbers", err)
 		}
 	case "comments":
 		if err := decoder.DecodeElement(&xmlCommodity.Comments, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode comments")
+			return stacktrace.Wrap("failed to decode comments", err)
 		}
 	case "draft":
 		if err := decoder.DecodeElement(&xmlCommodity.Draft, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode draft")
+			return stacktrace.Wrap("failed to decode draft", err)
 		}
 	case "purchaseDate":
 		if err := decoder.DecodeElement(&xmlCommodity.PurchaseDate, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode purchase date")
+			return stacktrace.Wrap("failed to decode purchase date", err)
 		}
 	case "registeredDate":
 		if err := decoder.DecodeElement(&xmlCommodity.RegisteredDate, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode registered date")
+			return stacktrace.Wrap("failed to decode registered date", err)
 		}
 	case "lastModifiedDate":
 		if err := decoder.DecodeElement(&xmlCommodity.LastModifiedDate, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode last modified date")
+			return stacktrace.Wrap("failed to decode last modified date", err)
 		}
 	case "partNumbers":
 		if err := decoder.DecodeElement(&xmlCommodity.PartNumbers, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode part numbers")
+			return stacktrace.Wrap("failed to decode part numbers", err)
 		}
 	case "tags":
 		if err := decoder.DecodeElement(&xmlCommodity.Tags, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode tags")
+			return stacktrace.Wrap("failed to decode tags", err)
 		}
 	case "urls":
 		if err := decoder.DecodeElement(&xmlCommodity.URLs, &t); err != nil {
-			return errkit.Wrap(err, "failed to decode URLs")
+			return stacktrace.Wrap("failed to decode URLs", err)
 		}
 	case "images":
 		if options.IncludeFileData {
 			files, err := l.collectFiles(ctx, decoder, &t, stats)
 			if err != nil {
-				return errkit.Wrap(err, "failed to collect images")
+				return stacktrace.Wrap("failed to collect images", err)
 			}
 			if len(files) > 0 {
 				*pendingFiles = append(*pendingFiles, types.PendingFileData{
@@ -1779,14 +1780,14 @@ func (l *RestoreOperationProcessor) collectCommodityData(
 		} else {
 			// Skip images section
 			if err := l.skipSection(decoder, &t); err != nil {
-				return errkit.Wrap(err, "failed to skip images section")
+				return stacktrace.Wrap("failed to skip images section", err)
 			}
 		}
 	case "invoices":
 		if options.IncludeFileData {
 			files, err := l.collectFiles(ctx, decoder, &t, stats)
 			if err != nil {
-				return errkit.Wrap(err, "failed to collect invoices")
+				return stacktrace.Wrap("failed to collect invoices", err)
 			}
 			if len(files) > 0 {
 				*pendingFiles = append(*pendingFiles, types.PendingFileData{
@@ -1797,14 +1798,14 @@ func (l *RestoreOperationProcessor) collectCommodityData(
 		} else {
 			// Skip invoices section
 			if err := l.skipSection(decoder, &t); err != nil {
-				return errkit.Wrap(err, "failed to skip invoices section")
+				return stacktrace.Wrap("failed to skip invoices section", err)
 			}
 		}
 	case "manuals":
 		if options.IncludeFileData {
 			files, err := l.collectFiles(ctx, decoder, &t, stats)
 			if err != nil {
-				return errkit.Wrap(err, "failed to collect manuals")
+				return stacktrace.Wrap("failed to collect manuals", err)
 			}
 			if len(files) > 0 {
 				*pendingFiles = append(*pendingFiles, types.PendingFileData{
@@ -1815,7 +1816,7 @@ func (l *RestoreOperationProcessor) collectCommodityData(
 		} else {
 			// Skip manuals section
 			if err := l.skipSection(decoder, &t); err != nil {
-				return errkit.Wrap(err, "failed to skip manuals section")
+				return stacktrace.Wrap("failed to skip manuals section", err)
 			}
 		}
 	}
@@ -1894,7 +1895,7 @@ func (l *RestoreOperationProcessor) processCommodity(
 		tok, err := decoder.Token()
 		if err != nil {
 			l.updateRestoreStep(ctx, stepName, models.RestoreStepResultError, err.Error())
-			return errkit.Wrap(err, "failed to read commodity element token")
+			return stacktrace.Wrap("failed to read commodity element token", err)
 		}
 
 		switch t := tok.(type) {
@@ -1987,11 +1988,11 @@ func (l *RestoreOperationProcessor) createCommodityIfNotDryRun(
 	if !options.DryRun {
 		comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create user commodity registry")
+			return stacktrace.Wrap("failed to create user commodity registry", err)
 		}
 		createdCommodity, err := comReg.Create(ctx, *commodity)
 		if err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to create commodity %s", originalXMLID))
+			return stacktrace.Wrap(fmt.Sprintf("failed to create commodity %s", originalXMLID), err)
 		}
 		existing.Commodities[originalXMLID] = createdCommodity
 		idMapping.Commodities[originalXMLID] = createdCommodity.ID
@@ -2045,11 +2046,11 @@ func (l *RestoreOperationProcessor) updateExistingCommodity(
 	if !options.DryRun {
 		comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create user commodity registry")
+			return stacktrace.Wrap("failed to create user commodity registry", err)
 		}
 		updatedCommodity, err := comReg.Update(ctx, *commodity)
 		if err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to update commodity %s", originalXMLID))
+			return stacktrace.Wrap(fmt.Sprintf("failed to update commodity %s", originalXMLID), err)
 		}
 		existing.Commodities[originalXMLID] = updatedCommodity
 	}
@@ -2073,18 +2074,18 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 
 	// Validate that the area exists (either in existing data or was just created)
 	if existing.Areas[originalAreaXMLID] == nil {
-		return errkit.Wrap(errors.New("commodity references non-existent area"), "original_commodity_id", originalXMLID, "original_area_id", originalAreaXMLID)
+		return stacktrace.Wrap("original_commodity_id", errors.New("commodity references non-existent area"), errx.Attrs(originalXMLID, "original_area_id", originalAreaXMLID))
 	}
 
 	// Get the actual database area ID
 	actualAreaID := idMapping.Areas[originalAreaXMLID]
 	if actualAreaID == "" {
-		return errkit.Wrap(errors.New("no ID mapping found for area"), "original_area_id", originalAreaXMLID)
+		return stacktrace.Wrap("original_area_id", errors.New("no ID mapping found for area"), errx.Attrs(originalAreaXMLID))
 	}
 
 	commodity, err := xmlCommodity.ConvertToCommodity()
 	if err != nil {
-		return errkit.Wrap(err, "failed to convert commodity", "original_commodity_id", originalXMLID)
+		return stacktrace.Wrap("failed to convert commodity", err, errx.Attrs("original_commodity_id", originalXMLID))
 	}
 
 	// Set the correct area ID from the mapping
@@ -2098,7 +2099,7 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 	}
 
 	if err := commodity.ValidateWithContext(ctx); err != nil {
-		return errkit.Wrap(err, "invalid commodity", "original_commodity_id", originalXMLID)
+		return stacktrace.Wrap("invalid commodity", err, errx.Attrs("original_commodity_id", originalXMLID))
 	}
 
 	// Security validation: Check if user is trying to use an existing commodity ID that belongs to another user

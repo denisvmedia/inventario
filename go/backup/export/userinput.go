@@ -3,7 +3,8 @@ package export
 import (
 	"context"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/go-extras/errx/stacktrace"
+
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -14,7 +15,7 @@ import (
 func CreateExportFromUserInput(ctx context.Context, registrySet *registry.Set, input *models.Export) (models.Export, error) {
 	// Validate the export
 	if err := input.ValidateWithContext(ctx); err != nil {
-		return models.Export{}, errkit.Wrap(err, "failed to validate export")
+		return models.Export{}, stacktrace.Wrap("failed to validate export", err)
 	}
 
 	export := models.NewExportFromUserInput(input)
@@ -22,7 +23,7 @@ func CreateExportFromUserInput(ctx context.Context, registrySet *registry.Set, i
 	// Extract tenant and user from context
 	tenantID, userID, err := ExtractTenantUserFromContext(ctx)
 	if err != nil {
-		return models.Export{}, errkit.Wrap(err, "failed to extract tenant/user context")
+		return models.Export{}, stacktrace.Wrap("failed to extract tenant/user context", err)
 	}
 
 	if export.TenantID == "" {
@@ -36,7 +37,7 @@ func CreateExportFromUserInput(ctx context.Context, registrySet *registry.Set, i
 	if export.Type == models.ExportTypeSelectedItems && len(export.SelectedItems) > 0 {
 		// Ensure we have user context for enriching selected items
 		if err := enrichSelectedItemsWithNames(ctx, registrySet, &export); err != nil {
-			return models.Export{}, errkit.Wrap(err, "failed to enrich selected items with names")
+			return models.Export{}, stacktrace.Wrap("failed to enrich selected items with names", err)
 		}
 	}
 
@@ -45,7 +46,7 @@ func CreateExportFromUserInput(ctx context.Context, registrySet *registry.Set, i
 	// Create the export
 	created, err := exportReg.Create(ctx, export)
 	if err != nil {
-		return models.Export{}, errkit.Wrap(err, "failed to create export")
+		return models.Export{}, stacktrace.Wrap("failed to create export", err)
 	}
 
 	return *created, nil

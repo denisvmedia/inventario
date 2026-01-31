@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/schema/migrations/generator"
 )
 
@@ -70,7 +70,7 @@ func (c *Command) migrateGenerate(cfg *Config, dbConfig *shared.DatabaseConfig, 
 	if generateSchemaPreview {
 		statements, err := gen.GenerateSchemaSQL(context.Background())
 		if err != nil {
-			return errkit.Wrap(err, "failed to generate schema SQL")
+			return stacktrace.Wrap("failed to generate schema SQL", err)
 		}
 
 		if len(statements) == 0 {
@@ -101,7 +101,7 @@ func (c *Command) migrateGenerate(cfg *Config, dbConfig *shared.DatabaseConfig, 
 
 	files, err := gen.GenerateMigrationFiles(context.Background(), migrationName, cfg.MigrationsDir)
 	if err != nil {
-		return errkit.Wrap(err, "failed to generate migration files")
+		return stacktrace.Wrap("failed to generate migration files", err)
 	}
 
 	// Check if no migration was needed (files will be nil when no changes detected)

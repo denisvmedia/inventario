@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -45,7 +45,7 @@ func (f *ManualRegistryFactory) MustCreateUserRegistry(ctx context.Context) regi
 func (f *ManualRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ManualRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user from context")
+		return nil, stacktrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -58,7 +58,7 @@ func (f *ManualRegistryFactory) CreateUserRegistry(ctx context.Context) (registr
 	// Create user-aware commodity registry
 	commodityRegistryInterface, err := f.commodityRegistry.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create user commodity registry")
+		return nil, stacktrace.Wrap("failed to create user commodity registry", err)
 	}
 
 	// Cast to concrete type for relationship management
@@ -102,7 +102,7 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 	// Use CreateWithUser to ensure user context is applied
 	newManual, err := r.Registry.CreateWithUser(ctx, manual)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create manual")
+		return nil, stacktrace.Wrap("failed to create manual", err)
 	}
 
 	// Add this manual to its parent commodity's manual list
@@ -121,7 +121,7 @@ func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*mod
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedManual, err := r.Registry.UpdateWithUser(ctx, manual)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update manual")
+		return nil, stacktrace.Wrap("failed to update manual", err)
 	}
 
 	// Handle commodity registry tracking - commodity changed
@@ -142,19 +142,19 @@ func (r *ManualRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this manual from its parent commodity's manual list
 	manual, err := r.Registry.Get(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get manual")
+		return stacktrace.Wrap("failed to get manual", err)
 	}
 
 	_ = r.commodityRegistry.DeleteManual(ctx, manual.CommodityID, id)
 
 	err = r.Registry.Delete(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete manual")
+		return stacktrace.Wrap("failed to delete manual", err)
 	}
 
 	err = r.commodityRegistry.DeleteManual(ctx, manual.CommodityID, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete manual from commodity")
+		return stacktrace.Wrap("failed to delete manual from commodity", err)
 	}
 
 	return nil

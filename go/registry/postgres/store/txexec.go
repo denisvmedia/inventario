@@ -6,9 +6,9 @@ import (
 	"iter"
 	"strings"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/typekit"
 )
 
@@ -75,7 +75,7 @@ func (r *TxExecutor[T]) Insert(ctx context.Context, entity any) error {
 
 	err := typekit.ExtractDBFields(entity, &fields, &placeholders, params)
 	if err != nil {
-		return errkit.Wrap(err, "failed to extract fields")
+		return stacktrace.Wrap("failed to extract fields", err)
 	}
 
 	query := fmt.Sprintf(
@@ -89,7 +89,7 @@ func (r *TxExecutor[T]) Insert(ctx context.Context, entity any) error {
 
 	_, err = sqlx.NamedExecContext(ctx, r.tx, query, params)
 	if err != nil {
-		return errkit.Wrap(err, "failed to insert entity")
+		return stacktrace.Wrap("failed to insert entity", err)
 	}
 
 	return nil
@@ -102,7 +102,7 @@ func (r *TxExecutor[T]) UpdateByField(ctx context.Context, field FieldValue, ent
 
 	err := typekit.ExtractDBFields(entity, &fields, &placeholders, params)
 	if err != nil {
-		return errkit.Wrap(err, "failed to extract fields")
+		return stacktrace.Wrap("failed to extract fields", err)
 	}
 
 	// Convert fields to update format
@@ -121,7 +121,7 @@ func (r *TxExecutor[T]) UpdateByField(ctx context.Context, field FieldValue, ent
 
 	_, err = sqlx.NamedExecContext(ctx, r.tx, query, params)
 	if err != nil {
-		return errkit.Wrap(err, "failed to update entity")
+		return stacktrace.Wrap("failed to update entity", err)
 	}
 
 	return nil
@@ -184,7 +184,7 @@ func (r *TxExecutor[T]) DeleteByField(ctx context.Context, field FieldValue) err
 
 	_, err := r.tx.ExecContext(ctx, query, field.Value)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete entity")
+		return stacktrace.Wrap("failed to delete entity", err)
 	}
 
 	return nil
@@ -196,7 +196,7 @@ func (r *TxExecutor[T]) Count(ctx context.Context) (int, error) {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", r.table)
 	err := r.tx.QueryRowxContext(ctx, query).Scan(&count)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count entities")
+		return 0, stacktrace.Wrap("failed to count entities", err)
 	}
 
 	return count, nil

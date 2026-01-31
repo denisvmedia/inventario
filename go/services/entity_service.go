@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/go-extras/errx"
+	"github.com/go-extras/errx/stacktrace"
+
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -28,12 +30,12 @@ func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string)
 	// Delete all linked files (both physical and database records)
 	err := s.fileService.DeleteLinkedFiles(ctx, "commodity", id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete linked files")
+		return stacktrace.Wrap("failed to delete linked files", err)
 	}
 
 	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create commodity registry")
+		return stacktrace.Wrap("failed to create commodity registry", err)
 	}
 
 	// Then delete the commodity itself
@@ -44,7 +46,7 @@ func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string)
 func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) error {
 	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create area registry")
+		return stacktrace.Wrap("failed to create area registry", err)
 	}
 
 	// Check if area exists first - if it's already deleted, that's fine
@@ -54,13 +56,13 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 			// Area is already deleted, nothing to do
 			return nil
 		}
-		return errkit.Wrap(err, "failed to get area")
+		return stacktrace.Wrap("failed to get area", err)
 	}
 
 	// Get all commodities in this area first
 	commodities, err := areaReg.GetCommodities(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get commodities")
+		return stacktrace.Wrap("failed to get commodities", err)
 	}
 
 	// Delete all commodities recursively (this will also delete their files)
@@ -68,7 +70,7 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 		if err := s.DeleteCommodityRecursive(ctx, commodityID); err != nil {
 			// If the commodity is already deleted, that's fine - continue with others
 			if !errors.Is(err, registry.ErrNotFound) {
-				return errkit.Wrap(err, fmt.Sprintf("failed to delete commodity %s recursively", commodityID))
+				return stacktrace.Wrap(fmt.Sprintf("failed to delete commodity %s recursively", commodityID), err)
 			}
 		}
 	}
@@ -81,19 +83,19 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) error {
 	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create location registry")
+		return stacktrace.Wrap("failed to create location registry", err)
 	}
 
 	// Get the location to ensure it exists
 	_, err = locReg.Get(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get location")
+		return stacktrace.Wrap("failed to get location", err)
 	}
 
 	// Get all areas in this location
 	areas, err := locReg.GetAreas(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get areas")
+		return stacktrace.Wrap("failed to get areas", err)
 	}
 
 	// Delete all areas recursively (this will also delete their commodities)
@@ -101,7 +103,7 @@ func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) 
 		if err := s.DeleteAreaRecursive(ctx, areaID); err != nil {
 			// If the area is already deleted, that's fine - continue with others
 			if !errors.Is(err, registry.ErrNotFound) {
-				return errkit.Wrap(err, "failed to delete area recursively", "areaID", areaID)
+				return stacktrace.Wrap("failed to delete area recursively", err, errx.Attrs("areaID", areaID))
 			}
 		}
 	}
@@ -114,13 +116,13 @@ func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) 
 func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) error {
 	expReg, err := s.factorySet.ExportRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create export registry")
+		return stacktrace.Wrap("failed to create export registry", err)
 	}
 
 	// Get the export to check if it has a linked file
 	export, err := expReg.Get(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get export")
+		return stacktrace.Wrap("failed to get export", err)
 	}
 
 	// Store file ID for deletion after export is deleted
@@ -132,14 +134,14 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 	// Delete the export first to avoid foreign key constraint violation
 	err = expReg.Delete(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete export")
+		return stacktrace.Wrap("failed to delete export", err)
 	}
 
 	// Then delete the associated file if it exists
 	if fileIDToDelete != nil {
 		err = s.fileService.DeleteFileWithPhysical(ctx, *fileIDToDelete)
 		if err != nil && !errors.Is(err, registry.ErrNotFound) {
-			return errkit.Wrap(err, "failed to delete export file")
+			return stacktrace.Wrap("failed to delete export file", err)
 		}
 	}
 

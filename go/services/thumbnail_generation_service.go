@@ -7,7 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/go-extras/errx/stacktrace"
+
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -51,7 +52,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 	fileRegistry := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
 	file, err := fileRegistry.Get(ctx, fileID)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get file for thumbnail generation")
+		return nil, stacktrace.Wrap("failed to get file for thumbnail generation", err)
 	}
 
 	// Check rate limit first
@@ -60,13 +61,13 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 		if errors.Is(err, ErrRateLimitExceeded) {
 			return nil, err // Return rate limit error as-is with stack trace
 		}
-		return nil, errkit.Wrap(err, "failed to check rate limit")
+		return nil, stacktrace.Wrap("failed to check rate limit", err)
 	}
 
 	// Check if a job already exists for this file
 	existingJob, err := jobRegistry.GetJobByFileID(ctx, fileID)
 	if err != nil && !errors.Is(err, registry.ErrNotFound) {
-		return nil, errkit.Wrap(err, "failed to check for existing thumbnail job")
+		return nil, stacktrace.Wrap("failed to check for existing thumbnail job", err)
 	}
 
 	// If job exists and is not failed, return it
@@ -92,7 +93,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 
 	createdJob, err := jobRegistry.Create(ctx, job)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create thumbnail generation job")
+		return nil, stacktrace.Wrap("failed to create thumbnail generation job", err)
 	}
 
 	slog.Info("Requested thumbnail generation", "file_id", fileID, "job_id", createdJob.ID, "user_id", file.UserID)
@@ -116,7 +117,7 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	// Get the job
 	job, err := jobRegistry.Get(ctx, jobID)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get thumbnail generation job")
+		return stacktrace.Wrap("failed to get thumbnail generation job", err)
 	}
 
 	// Skip if job is not pending
@@ -128,7 +129,7 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	// Check user's current generation count and enforce limits
 	userSlots, err := s.concurrencyService.GetUserSlots(ctx, job.UserID)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get user concurrency slots")
+		return stacktrace.Wrap("failed to get user concurrency slots", err)
 	}
 
 	// Count active generations for this user
@@ -169,7 +170,7 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	now := time.Now()
 	err = jobRegistry.UpdateJobStatus(ctx, job.ID, models.ThumbnailStatusProcessing, "")
 	if err != nil {
-		return errkit.Wrap(err, "failed to update job status to processing")
+		return stacktrace.Wrap("failed to update job status to processing", err)
 	}
 
 	// Update processing started time
@@ -187,14 +188,14 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	file, err := fileRegistry.Get(ctx, job.FileID)
 	if err != nil {
 		s.markJobFailed(ctx, jobRegistry, job, "failed to get file: "+err.Error())
-		return errkit.Wrap(err, "failed to get file for thumbnail generation")
+		return stacktrace.Wrap("failed to get file for thumbnail generation", err)
 	}
 
 	// Generate thumbnails
 	err = s.fileService.GenerateThumbnails(ctx, file)
 	if err != nil {
 		s.markJobFailed(ctx, jobRegistry, job, "failed to generate thumbnails: "+err.Error())
-		return errkit.Wrap(err, "failed to generate thumbnails")
+		return stacktrace.Wrap("failed to generate thumbnails", err)
 	}
 
 	// Mark job as completed
@@ -209,7 +210,7 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	err = jobRegistry.UpdateJobStatus(ctx, job.ID, models.ThumbnailStatusCompleted, "")
 	if err != nil {
 		slog.Error("Failed to mark job as completed", "job_id", jobID, "error", err)
-		return errkit.Wrap(err, "failed to mark job as completed")
+		return stacktrace.Wrap("failed to mark job as completed", err)
 	}
 
 	slog.Info("Completed thumbnail generation", "job_id", jobID, "file_id", job.FileID, "user_id", job.UserID)
@@ -222,7 +223,7 @@ func (s *ThumbnailGenerationService) GetPendingJobs(ctx context.Context, limit i
 
 	jobs, err := jobRegistry.GetPendingJobs(ctx, limit)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get pending thumbnail jobs")
+		return nil, stacktrace.Wrap("failed to get pending thumbnail jobs", err)
 	}
 
 	return jobs, nil
@@ -234,7 +235,7 @@ func (s *ThumbnailGenerationService) GetJobByFileID(ctx context.Context, fileID 
 
 	job, err := jobRegistry.GetJobByFileID(ctx, fileID)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get thumbnail job by file ID")
+		return nil, stacktrace.Wrap("failed to get thumbnail job by file ID", err)
 	}
 
 	return job, nil
@@ -246,7 +247,7 @@ func (s *ThumbnailGenerationService) CleanupCompletedJobs(ctx context.Context, o
 
 	err := jobRegistry.CleanupCompletedJobs(ctx, olderThan)
 	if err != nil {
-		return errkit.Wrap(err, "failed to cleanup completed thumbnail jobs")
+		return stacktrace.Wrap("failed to cleanup completed thumbnail jobs", err)
 	}
 
 	return nil

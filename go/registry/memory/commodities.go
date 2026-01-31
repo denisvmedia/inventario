@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -67,7 +67,7 @@ func (f *CommodityRegistryFactory) MustCreateUserRegistry(ctx context.Context) r
 func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.CommodityRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, stacktrace.Wrap("failed to get user ID from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -80,7 +80,7 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 	// Create user-aware area registry
 	areaRegistryInterface, err := f.areaRegistry.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create user area registry")
+		return nil, stacktrace.Wrap("failed to create user area registry", err)
 	}
 
 	// Cast to concrete type for relationship management
@@ -136,7 +136,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create commodity")
+		return nil, stacktrace.Wrap("failed to create commodity", err)
 	}
 
 	// Add this commodity to its parent area's commodity list
@@ -149,19 +149,19 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this commodity from its parent area's commodity list
 	commodity, err := r.Registry.Get(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get commodity")
+		return stacktrace.Wrap("failed to get commodity", err)
 	}
 
 	_ = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
 
 	err = r.Registry.Delete(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete commodity")
+		return stacktrace.Wrap("failed to delete commodity", err)
 	}
 
 	err = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete commodity from area")
+		return stacktrace.Wrap("failed to delete commodity from area", err)
 	}
 
 	return nil
@@ -264,7 +264,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedCommodity, err := r.Registry.UpdateWithUser(ctx, commodity)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update commodity")
+		return nil, stacktrace.Wrap("failed to update commodity", err)
 	}
 
 	// Handle area registry tracking - area changed
@@ -537,12 +537,12 @@ func (r *CommodityRegistry) FindByDateRange(ctx context.Context, startDate, endD
 
 	start, err := time.Parse("2006-01-02", startDate)
 	if err != nil {
-		return nil, errkit.Wrap(err, "invalid start date format")
+		return nil, stacktrace.Wrap("invalid start date format", err)
 	}
 
 	end, err := time.Parse("2006-01-02", endDate)
 	if err != nil {
-		return nil, errkit.Wrap(err, "invalid end date format")
+		return nil, stacktrace.Wrap("invalid end date format", err)
 	}
 
 	var filtered []*models.Commodity

@@ -5,8 +5,10 @@ import (
 	"encoding/xml"
 	"io"
 
+	"github.com/go-extras/errx"
+	"github.com/go-extras/errx/stacktrace"
+
 	"github.com/denisvmedia/inventario/backup/export/types"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -23,7 +25,7 @@ func ParseXMLMetadata(_ctx context.Context, reader io.Reader) (*types.ExportStat
 			break
 		}
 		if err != nil {
-			return stats, exportType, errkit.Wrap(err, "failed to read XML token")
+			return stats, exportType, stacktrace.Wrap("failed to read XML token", err)
 		}
 
 		switch t := tok.(type) {
@@ -83,18 +85,18 @@ func parseTopLevelToken(t xml.StartElement, exportType *models.ExportType, decod
 		}
 	case "locations":
 		if err := countLocations(decoder, stats); err != nil {
-			return errkit.Wrap(err, "failed to count locations")
+			return stacktrace.Wrap("failed to count locations", err)
 		}
 	case "areas":
 		if err := countAreas(decoder, stats); err != nil {
-			return errkit.Wrap(err, "failed to count areas")
+			return stacktrace.Wrap("failed to count areas", err)
 		}
 	case "commodities":
 		if err := countCommodities(decoder, stats); err != nil {
-			return errkit.Wrap(err, "failed to count commodities")
+			return stacktrace.Wrap("failed to count commodities", err)
 		}
 	default:
-		return errkit.Wrap(ErrUnsupportedExportType, "unsupported top-level element", "element", t.Name.Local)
+		return stacktrace.Wrap("unsupported top-level element", ErrUnsupportedExportType, errx.Attrs("element", t.Name.Local))
 	}
 
 	return nil
@@ -105,7 +107,7 @@ func countLocations(decoder *xml.Decoder, stats *types.ExportStats) error {
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read location token")
+			return stacktrace.Wrap("failed to read location token", err)
 		}
 
 		switch t := tok.(type) {
@@ -126,7 +128,7 @@ func countAreas(decoder *xml.Decoder, stats *types.ExportStats) error {
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read area token")
+			return stacktrace.Wrap("failed to read area token", err)
 		}
 
 		switch t := tok.(type) {
@@ -147,7 +149,7 @@ func countCommodities(decoder *xml.Decoder, stats *types.ExportStats) error {
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read commodity token")
+			return stacktrace.Wrap("failed to read commodity token", err)
 		}
 
 		switch t := tok.(type) {
@@ -157,15 +159,15 @@ func countCommodities(decoder *xml.Decoder, stats *types.ExportStats) error {
 				stats.CommodityCount++
 			case "images":
 				if err := countFiles(decoder, "images", &stats.ImageCount, stats); err != nil {
-					return errkit.Wrap(err, "failed to count images")
+					return stacktrace.Wrap("failed to count images", err)
 				}
 			case "invoices":
 				if err := countFiles(decoder, "invoices", &stats.InvoiceCount, stats); err != nil {
-					return errkit.Wrap(err, "failed to count invoices")
+					return stacktrace.Wrap("failed to count invoices", err)
 				}
 			case "manuals":
 				if err := countFiles(decoder, "manuals", &stats.ManualCount, stats); err != nil {
-					return errkit.Wrap(err, "failed to count manuals")
+					return stacktrace.Wrap("failed to count manuals", err)
 				}
 			}
 		case xml.EndElement:
@@ -181,7 +183,7 @@ func countFiles(decoder *xml.Decoder, sectionName string, counter *int, stats *t
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read file section token")
+			return stacktrace.Wrap("failed to read file section token", err)
 		}
 
 		switch t := tok.(type) {
@@ -190,7 +192,7 @@ func countFiles(decoder *xml.Decoder, sectionName string, counter *int, stats *t
 				*counter++
 				// Process the file element to detect if it has data
 				if err := processFileElement(decoder, stats); err != nil {
-					return errkit.Wrap(err, "failed to process file element")
+					return stacktrace.Wrap("failed to process file element", err)
 				}
 			}
 		case xml.EndElement:
@@ -211,7 +213,7 @@ func processFileElement(decoder *xml.Decoder, stats *types.ExportStats) error {
 	for depth > 0 {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read file element token")
+			return stacktrace.Wrap("failed to read file element token", err)
 		}
 
 		switch t := tok.(type) {
@@ -220,7 +222,7 @@ func processFileElement(decoder *xml.Decoder, stats *types.ExportStats) error {
 			if t.Name.Local == "data" {
 				// We found a data element - estimate its size efficiently
 				if err := estimateDataElementSize(decoder, stats); err != nil {
-					return errkit.Wrap(err, "failed to estimate data element size")
+					return stacktrace.Wrap("failed to estimate data element size", err)
 				}
 				depth-- // estimateDataElementSize consumes the end element
 			}
@@ -244,7 +246,7 @@ func estimateDataElementSize(decoder *xml.Decoder, stats *types.ExportStats) err
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return errkit.Wrap(err, "failed to read data element token")
+			return stacktrace.Wrap("failed to read data element token", err)
 		}
 
 		switch t := tok.(type) {

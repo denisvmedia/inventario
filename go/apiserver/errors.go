@@ -1,13 +1,14 @@
 package apiserver
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/render"
+	errxjson "github.com/go-extras/errx/json"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
@@ -25,10 +26,26 @@ var (
 	ErrNotFound               = registry.ErrNotFound
 )
 
+// marshalError marshals an error to JSON, ignoring any marshaling errors
+func marshalError(err error) (result json.RawMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			// If marshaling panics, return a simple error message
+			result = json.RawMessage(`"error marshaling failed"`)
+		}
+	}()
+
+	if data, e := errxjson.Marshal(err); e == nil {
+		return data
+	}
+	// Fallback to simple error message if marshaling fails
+	return json.RawMessage(`"error marshaling failed"`)
+}
+
 func NewNotFoundError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      marshalError(err),
 		HTTPStatusCode: http.StatusNotFound,
 		StatusText:     "Not Found",
 	}
@@ -37,7 +54,7 @@ func NewNotFoundError(err error) jsonapi.Error {
 func NewUnprocessableEntityError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      marshalError(err),
 		HTTPStatusCode: http.StatusUnprocessableEntity,
 		StatusText:     "Unprocessable Entity",
 	}
@@ -62,7 +79,7 @@ func NewUnauthorizedError(err error) jsonapi.Error {
 func NewBadRequestError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      marshalError(err),
 		HTTPStatusCode: http.StatusBadRequest,
 		StatusText:     "Bad Request",
 	}
@@ -71,7 +88,7 @@ func NewBadRequestError(err error) jsonapi.Error {
 func NewTooManyRequestsError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      marshalError(err),
 		HTTPStatusCode: http.StatusTooManyRequests,
 		StatusText:     "Too Many Requests",
 	}
@@ -123,7 +140,7 @@ func renderEntityError(w http.ResponseWriter, r *http.Request, err error) error 
 func badRequest(w http.ResponseWriter, r *http.Request, err error) error {
 	badRequestError := jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      marshalError(err),
 		HTTPStatusCode: http.StatusBadRequest,
 		StatusText:     "Bad Request",
 	}
@@ -133,7 +150,7 @@ func badRequest(w http.ResponseWriter, r *http.Request, err error) error {
 func notFound(w http.ResponseWriter, r *http.Request) error {
 	notFoundError := jsonapi.Error{
 		Err:            ErrEntityNotFound,
-		UserError:      errkit.ForceMarshalError(ErrEntityNotFound),
+		UserError:      marshalError(ErrEntityNotFound),
 		HTTPStatusCode: http.StatusNotFound,
 		StatusText:     "Not Found",
 	}
@@ -143,7 +160,7 @@ func notFound(w http.ResponseWriter, r *http.Request) error {
 func conflictError(w http.ResponseWriter, r *http.Request, err, userErr error) error {
 	conflictErr := jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(userErr),
+		UserError:      marshalError(userErr),
 		HTTPStatusCode: http.StatusConflict,
 		StatusText:     "Conflict",
 	}

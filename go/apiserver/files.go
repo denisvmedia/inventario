@@ -15,12 +15,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/assets"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -424,14 +424,14 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 	// Generate signed URLs for file and thumbnails
 	signedURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(file, user.ID)
 	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to generate signed URL"))
+		internalServerError(w, r, stacktrace.Wrap("failed to generate signed URL", err))
 		return
 	}
 
 	// Return the signed URL using JSON:API format with thumbnails
 	response := jsonapi.NewSignedFileURLResponseWithThumbnails(fileID, signedURL, thumbnails)
 	if err := render.Render(w, r, response); err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to render response"))
+		internalServerError(w, r, stacktrace.Wrap("failed to render response", err))
 		return
 	}
 }
@@ -518,7 +518,7 @@ func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 	// Check if thumbnail exists using file service
 	exists, err := api.fileService.ThumbnailExists(r.Context(), fileID, size)
 	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to check thumbnail existence"))
+		internalServerError(w, r, stacktrace.Wrap("failed to check thumbnail existence", err))
 		return
 	}
 
@@ -542,7 +542,7 @@ func (api *filesAPI) servePlaceholderThumbnail(w http.ResponseWriter, r *http.Re
 
 	job, err := thumbnailService.GetJobByFileID(r.Context(), fileID)
 	if err != nil && !errors.Is(err, ErrNotFound) {
-		internalServerError(w, r, errkit.Wrap(err, "failed to check thumbnail generation status"))
+		internalServerError(w, r, stacktrace.Wrap("failed to check thumbnail generation status", err))
 		return
 	}
 
@@ -590,7 +590,7 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 	// Open the file from storage
 	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
 	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to open bucket"))
+		internalServerError(w, r, stacktrace.Wrap("failed to open bucket", err))
 		return
 	}
 	defer b.Close()
@@ -598,7 +598,7 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 	// Check if file exists
 	exists, err := b.Exists(r.Context(), filePath)
 	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to check file existence"))
+		internalServerError(w, r, stacktrace.Wrap("failed to check file existence", err))
 		return
 	}
 	if !exists {
@@ -609,14 +609,14 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 	// Get file attributes for size
 	attrs, err := b.Attributes(r.Context(), filePath)
 	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to get file attributes"))
+		internalServerError(w, r, stacktrace.Wrap("failed to get file attributes", err))
 		return
 	}
 
 	// Open file reader
 	reader, err := b.NewReader(r.Context(), filePath, nil)
 	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to open file reader"))
+		internalServerError(w, r, stacktrace.Wrap("failed to open file reader", err))
 		return
 	}
 	defer reader.Close()
