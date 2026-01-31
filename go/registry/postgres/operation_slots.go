@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -58,7 +58,7 @@ func (r *OperationSlotRegistry) Get(ctx context.Context, id string) (*models.Ope
 	reg := r.newSQLRegistry()
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &slot)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get operation slot", err)
+		return nil, errxtrace.Wrap("failed to get operation slot", err)
 	}
 	return &slot, nil
 }
@@ -70,7 +70,7 @@ func (r *OperationSlotRegistry) List(ctx context.Context) ([]*models.OperationSl
 
 	for slot, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to scan operation slots", err)
+			return nil, errxtrace.Wrap("failed to scan operation slots", err)
 		}
 		slots = append(slots, &slot)
 	}
@@ -83,7 +83,7 @@ func (r *OperationSlotRegistry) Update(ctx context.Context, slot models.Operatio
 	reg := r.newSQLRegistry()
 	err := reg.Update(ctx, slot, nil)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to update operation slot", err)
+		return nil, errxtrace.Wrap("failed to update operation slot", err)
 	}
 	return &slot, nil
 }
@@ -122,9 +122,9 @@ func (r *OperationSlotRegistry) GetSlot(ctx context.Context, userID, operationNa
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
+			return nil, errxtrace.Wrap("operation slot not found", registry.ErrNotFound)
 		}
-		return nil, stacktrace.Wrap("failed to get operation slot", err)
+		return nil, errxtrace.Wrap("failed to get operation slot", err)
 	}
 
 	return &slot, nil
@@ -139,16 +139,16 @@ func (r *OperationSlotRegistry) ReleaseSlot(ctx context.Context, userID, operati
 
 	result, err := r.dbx.ExecContext(ctx, query, userID, operationName, slotID)
 	if err != nil {
-		return stacktrace.Wrap("failed to release operation slot", err)
+		return errxtrace.Wrap("failed to release operation slot", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return stacktrace.Wrap("failed to get rows affected", err)
+		return errxtrace.Wrap("failed to get rows affected", err)
 	}
 
 	if rowsAffected == 0 {
-		return stacktrace.Wrap("operation slot not found", registry.ErrNotFound)
+		return errxtrace.Wrap("operation slot not found", registry.ErrNotFound)
 	}
 
 	return nil
@@ -165,7 +165,7 @@ func (r *OperationSlotRegistry) GetActiveSlotCount(ctx context.Context, userID, 
 	var count int
 	err := r.dbx.QueryRowContext(ctx, query, userID, operationName).Scan(&count)
 	if err != nil {
-		return 0, stacktrace.Wrap("failed to get active slot count", err)
+		return 0, errxtrace.Wrap("failed to get active slot count", err)
 	}
 
 	return count, nil
@@ -182,7 +182,7 @@ func (r *OperationSlotRegistry) GetNextSlotID(ctx context.Context, userID, opera
 	var nextID int
 	err := r.dbx.QueryRowContext(ctx, query, userID, operationName).Scan(&nextID)
 	if err != nil {
-		return 0, stacktrace.Wrap("failed to get next slot ID", err)
+		return 0, errxtrace.Wrap("failed to get next slot ID", err)
 	}
 
 	return nextID, nil
@@ -197,12 +197,12 @@ func (r *OperationSlotRegistry) CleanupExpiredSlots(ctx context.Context) (int, e
 
 	result, err := r.dbx.ExecContext(ctx, query)
 	if err != nil {
-		return 0, stacktrace.Wrap("failed to cleanup expired slots", err)
+		return 0, errxtrace.Wrap("failed to cleanup expired slots", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return 0, stacktrace.Wrap("failed to get rows affected", err)
+		return 0, errxtrace.Wrap("failed to get rows affected", err)
 	}
 
 	return int(rowsAffected), nil
@@ -222,7 +222,7 @@ func (r *OperationSlotRegistry) GetOperationStats(ctx context.Context) (map[stri
 
 	rows, err := r.dbx.QueryContext(ctx, query)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get operation statistics", err)
+		return nil, errxtrace.Wrap("failed to get operation statistics", err)
 	}
 	defer rows.Close()
 
@@ -234,7 +234,7 @@ func (r *OperationSlotRegistry) GetOperationStats(ctx context.Context) (map[stri
 
 		err := rows.Scan(&operationName, &activeSlots, &totalUsers)
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to scan operation statistics", err)
+			return nil, errxtrace.Wrap("failed to scan operation statistics", err)
 		}
 
 		// Note: MaxSlots and AvgUtilization will be calculated by the service layer
@@ -249,7 +249,7 @@ func (r *OperationSlotRegistry) GetOperationStats(ctx context.Context) (map[stri
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, stacktrace.Wrap("error iterating operation statistics", err)
+		return nil, errxtrace.Wrap("error iterating operation statistics", err)
 	}
 
 	return stats, nil
@@ -266,7 +266,7 @@ func (r *OperationSlotRegistry) GetUserSlotStats(ctx context.Context, userID str
 
 	rows, err := r.dbx.QueryContext(ctx, query, userID)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user slot statistics", err)
+		return nil, errxtrace.Wrap("failed to get user slot statistics", err)
 	}
 	defer rows.Close()
 
@@ -278,14 +278,14 @@ func (r *OperationSlotRegistry) GetUserSlotStats(ctx context.Context, userID str
 
 		err := rows.Scan(&operationName, &count)
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to scan user slot statistics", err)
+			return nil, errxtrace.Wrap("failed to scan user slot statistics", err)
 		}
 
 		stats[operationName] = count
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, stacktrace.Wrap("error iterating user slot statistics", err)
+		return nil, errxtrace.Wrap("error iterating user slot statistics", err)
 	}
 
 	return stats, nil
@@ -302,7 +302,7 @@ func (r *OperationSlotRegistry) GetExpiredSlots(ctx context.Context) ([]models.O
 
 	rows, err := r.dbx.QueryContext(ctx, query)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get expired slots", err)
+		return nil, errxtrace.Wrap("failed to get expired slots", err)
 	}
 	defer rows.Close()
 
@@ -320,14 +320,14 @@ func (r *OperationSlotRegistry) GetExpiredSlots(ctx context.Context) ([]models.O
 			&slot.ExpiresAt,
 		)
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to scan expired slot", err)
+			return nil, errxtrace.Wrap("failed to scan expired slot", err)
 		}
 
 		slots = append(slots, slot)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, stacktrace.Wrap("error iterating expired slots", err)
+		return nil, errxtrace.Wrap("error iterating expired slots", err)
 	}
 
 	return slots, nil
@@ -351,7 +351,7 @@ func NewOperationSlotRegistryFactory(db *sqlx.DB) *OperationSlotRegistryFactory 
 func (f *OperationSlotRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.OperationSlotRegistry, error) {
 	user := appctx.UserFromContext(ctx)
 	if user == nil {
-		return nil, stacktrace.Wrap("user context required", registry.ErrInvalidInput)
+		return nil, errxtrace.Wrap("user context required", registry.ErrInvalidInput)
 	}
 
 	return NewOperationSlotRegistry(f.db.DB, f.tableNames, false, user.ID, user.TenantID), nil

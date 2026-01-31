@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -45,7 +45,7 @@ func (f *InvoiceRegistryFactory) MustCreateUserRegistry(ctx context.Context) reg
 func (f *InvoiceRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.InvoiceRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user from context", err)
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -58,7 +58,7 @@ func (f *InvoiceRegistryFactory) CreateUserRegistry(ctx context.Context) (regist
 	// Create user-aware commodity registry
 	commodityRegistryInterface, err := f.commodityRegistry.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to create user commodity registry", err)
+		return nil, errxtrace.Wrap("failed to create user commodity registry", err)
 	}
 
 	// Cast to concrete type for relationship management
@@ -102,7 +102,7 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 	// Use CreateWithUser to ensure user context is applied
 	newInvoice, err := r.Registry.CreateWithUser(ctx, invoice)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to create invoice", err)
+		return nil, errxtrace.Wrap("failed to create invoice", err)
 	}
 
 	// Add this invoice to its parent commodity's invoice list
@@ -121,7 +121,7 @@ func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedInvoice, err := r.Registry.UpdateWithUser(ctx, invoice)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to update invoice", err)
+		return nil, errxtrace.Wrap("failed to update invoice", err)
 	}
 
 	// Handle commodity registry tracking - commodity changed
@@ -142,19 +142,19 @@ func (r *InvoiceRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this invoice from its parent commodity's invoice list
 	invoice, err := r.Registry.Get(ctx, id)
 	if err != nil {
-		return stacktrace.Wrap("failed to get invoice", err)
+		return errxtrace.Wrap("failed to get invoice", err)
 	}
 
 	_ = r.commodityRegistry.DeleteInvoice(ctx, invoice.CommodityID, id)
 
 	err = r.Registry.Delete(ctx, id)
 	if err != nil {
-		return stacktrace.Wrap("failed to delete invoice", err)
+		return errxtrace.Wrap("failed to delete invoice", err)
 	}
 
 	err = r.commodityRegistry.DeleteInvoice(ctx, invoice.CommodityID, id)
 	if err != nil {
-		return stacktrace.Wrap("failed to delete invoice from commodity", err)
+		return errxtrace.Wrap("failed to delete invoice from commodity", err)
 	}
 
 	return nil

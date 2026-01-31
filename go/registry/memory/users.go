@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/go-extras/errx"
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/models"
@@ -28,23 +28,23 @@ func NewUserRegistry() *UserRegistry {
 // Create creates a new user with special handling for self-referencing UserID
 func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.User, error) {
 	if user.Email == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
 	}
 
 	if user.Name == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
 	}
 
 	if user.TenantID == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 
 	// Check if a user with the same email already exists
 	existingUser, err := r.GetByEmail(ctx, user.TenantID, user.Email)
 	if err == nil && existingUser != nil {
-		return nil, stacktrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("email", user.Email))
+		return nil, errxtrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("email", user.Email))
 	} else if err != nil && err != registry.ErrNotFound {
-		return nil, stacktrace.Wrap("failed to check for existing user", err)
+		return nil, errxtrace.Wrap("failed to check for existing user", err)
 	}
 
 	// Generate a new server-side ID for security (ignore any user-provided ID)

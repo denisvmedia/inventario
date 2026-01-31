@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/go-extras/errx"
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -70,17 +70,17 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (factoryS
 	return func(c registry.Config) (factorySet *registry.FactorySet, err error) {
 		parsed, err := c.Parse()
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to parse config DSN", err)
+			return nil, errxtrace.Wrap("failed to parse config DSN", err)
 		}
 
 		if parsed.Scheme != Name {
-			return nil, stacktrace.Wrap("invalid scheme", registry.ErrInvalidConfig, errx.Attrs("expected", Name, "got", parsed.Scheme))
+			return nil, errxtrace.Wrap("invalid scheme", registry.ErrInvalidConfig, errx.Attrs("expected", Name, "got", parsed.Scheme))
 		}
 
 		// Create a connection pool
 		poolConfig, err := pgxpool.ParseConfig(string(c))
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to parse PostgreSQL connection string", err)
+			return nil, errxtrace.Wrap("failed to parse PostgreSQL connection string", err)
 		}
 
 		// Set some reasonable defaults if not specified
@@ -101,17 +101,17 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (factoryS
 		// Create the connection pool
 		pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to create PostgreSQL connection pool", err)
+			return nil, errxtrace.Wrap("failed to create PostgreSQL connection pool", err)
 		}
 
 		// Test the connection
 		if err := pool.Ping(context.Background()); err != nil {
-			return nil, stacktrace.Wrap("failed to connect to PostgreSQL", err)
+			return nil, errxtrace.Wrap("failed to connect to PostgreSQL", err)
 		}
 
 		// Initialize the database schema
 		if err := checkSchemaInited(pool); err != nil {
-			return nil, stacktrace.Wrap("failed to initialize database schema", err)
+			return nil, errxtrace.Wrap("failed to initialize database schema", err)
 		}
 
 		// Create sqlx DB wrapper from pgxpool

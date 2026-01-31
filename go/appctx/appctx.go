@@ -3,7 +3,7 @@ package appctx
 import (
 	"context"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"github.com/denisvmedia/inventario/models"
 )
@@ -45,7 +45,7 @@ func WithUser(ctx context.Context, user *models.User) context.Context {
 func ValidateUserContext(ctx context.Context) error {
 	user := UserFromContext(ctx)
 	if user == nil {
-		return stacktrace.Classify(ErrUserContextRequired)
+		return errxtrace.Classify(ErrUserContextRequired)
 	}
 
 	return nil
@@ -54,7 +54,7 @@ func ValidateUserContext(ctx context.Context) error {
 func RequireUserFromContext(ctx context.Context) (*models.User, error) {
 	user := UserFromContext(ctx)
 	if user == nil {
-		return nil, stacktrace.Classify(ErrUserContextRequired)
+		return nil, errxtrace.Classify(ErrUserContextRequired)
 	}
 
 	return user, nil

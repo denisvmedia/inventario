@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"github.com/go-extras/errx"
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
@@ -56,7 +56,7 @@ func (f *SettingsRegistryFactory) MustCreateUserRegistry(ctx context.Context) re
 func (f *SettingsRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.SettingsRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user from context", err)
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	return &SettingsRegistry{
@@ -87,7 +87,7 @@ func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, erro
 
 		for setting, err := range txReg.Scan(ctx) {
 			if err != nil {
-				return stacktrace.Wrap("failed to scan settings", err)
+				return errxtrace.Wrap("failed to scan settings", err)
 			}
 			// Skip nil values - they shouldn't be set on the struct
 			if setting.Value != nil {
@@ -98,7 +98,7 @@ func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, erro
 
 				err := json.Unmarshal(val, &setting.Value)
 				if err != nil {
-					return stacktrace.Wrap("failed to unmarshal setting value", err)
+					return errxtrace.Wrap("failed to unmarshal setting value", err)
 				}
 
 				if setting.Value == nil {
@@ -107,14 +107,14 @@ func (r *SettingsRegistry) Get(ctx context.Context) (models.SettingsObject, erro
 
 				err = settings.Set(setting.Name, setting.Value)
 				if err != nil {
-					return stacktrace.Wrap("failed to set settings object value", err, errx.Attrs("setting_name", setting.Name))
+					return errxtrace.Wrap("failed to set settings object value", err, errx.Attrs("setting_name", setting.Name))
 				}
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return models.SettingsObject{}, stacktrace.Wrap("failed to get settings", err)
+		return models.SettingsObject{}, errxtrace.Wrap("failed to get settings", err)
 	}
 
 	return settings, nil
@@ -147,7 +147,7 @@ func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObj
 			err := txReg.ScanOneByFields(ctx, fields, &sv)
 			isNotFound := errors.Is(err, store.ErrNotFound)
 			if err != nil && !isNotFound {
-				return stacktrace.Wrap("failed to scan setting", err)
+				return errxtrace.Wrap("failed to scan setting", err)
 			}
 
 			// Prepare the setting value
@@ -164,13 +164,13 @@ func (r *SettingsRegistry) Save(ctx context.Context, settings models.SettingsObj
 				// Insert new setting
 				err = txReg.Insert(ctx, sv)
 				if err != nil {
-					return stacktrace.Wrap("failed to insert setting", err)
+					return errxtrace.Wrap("failed to insert setting", err)
 				}
 			} else {
 				// Update existing setting
 				err = txReg.UpdateByField(ctx, store.Pair("name", settingName), sv)
 				if err != nil {
-					return stacktrace.Wrap("failed to update setting", err)
+					return errxtrace.Wrap("failed to update setting", err)
 				}
 			}
 		}
@@ -185,7 +185,7 @@ func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settin
 	var tempSettings models.SettingsObject
 	err := tempSettings.Set(settingName, settingValue)
 	if err != nil {
-		return stacktrace.Wrap("invalid setting name", err)
+		return errxtrace.Wrap("invalid setting name", err)
 	}
 
 	reg := r.newSQLRegistry()
@@ -196,7 +196,7 @@ func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settin
 		err := txReg.ScanOneByField(ctx, store.Pair("name", settingName), &sv)
 		isNotFound := errors.Is(err, store.ErrNotFound)
 		if err != nil && !isNotFound {
-			return stacktrace.Wrap("failed to scan setting", err)
+			return errxtrace.Wrap("failed to scan setting", err)
 		}
 
 		// Prepare the setting value
@@ -213,13 +213,13 @@ func (r *SettingsRegistry) Patch(ctx context.Context, settingName string, settin
 			// Insert new setting
 			err = txReg.Insert(ctx, sv)
 			if err != nil {
-				return stacktrace.Wrap("failed to insert setting", err)
+				return errxtrace.Wrap("failed to insert setting", err)
 			}
 		} else {
 			// Update existing setting
 			err = txReg.UpdateByField(ctx, store.Pair("name", settingName), sv)
 			if err != nil {
-				return stacktrace.Wrap("failed to update setting", err)
+				return errxtrace.Wrap("failed to update setting", err)
 			}
 		}
 		return nil

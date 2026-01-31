@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -32,7 +32,7 @@ func (s *ThumbnailConcurrencyService) AcquireSlot(ctx context.Context, userID, j
 
 	slot, err := slotRegistry.AcquireSlot(ctx, userID, jobID, s.maxSlotsPerUser, s.slotDuration)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to acquire concurrency slot", err)
+		return nil, errxtrace.Wrap("failed to acquire concurrency slot", err)
 	}
 
 	return slot, nil
@@ -44,7 +44,7 @@ func (s *ThumbnailConcurrencyService) ReleaseSlot(ctx context.Context, userID, j
 
 	err := slotRegistry.ReleaseSlot(ctx, userID, jobID)
 	if err != nil {
-		return stacktrace.Wrap("failed to release concurrency slot", err)
+		return errxtrace.Wrap("failed to release concurrency slot", err)
 	}
 
 	return nil
@@ -56,7 +56,7 @@ func (s *ThumbnailConcurrencyService) GetUserSlots(ctx context.Context, userID s
 
 	slots, err := slotRegistry.GetUserSlots(ctx, userID)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user slots", err)
+		return nil, errxtrace.Wrap("failed to get user slots", err)
 	}
 
 	return slots, nil
@@ -68,7 +68,7 @@ func (s *ThumbnailConcurrencyService) CleanupExpiredSlots(ctx context.Context) e
 
 	err := slotRegistry.CleanupExpiredSlots(ctx)
 	if err != nil {
-		return stacktrace.Wrap("failed to cleanup expired slots", err)
+		return errxtrace.Wrap("failed to cleanup expired slots", err)
 	}
 
 	return nil

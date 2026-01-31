@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -38,7 +38,7 @@ func NewUserConcurrencySlotRegistryFactory() *UserConcurrencySlotRegistryFactory
 func (f *UserConcurrencySlotRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.UserConcurrencySlotRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user from context", err)
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -85,7 +85,7 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 	// Get all active slots for the user
 	userSlots, err := r.getUserActiveSlots(ctx, userID)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user slots", err)
+		return nil, errxtrace.Wrap("failed to get user slots", err)
 	}
 
 	// Clean up expired slots first (based on created_at + slot_duration)
@@ -103,12 +103,12 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 	// Recount active slots after cleanup
 	userSlots, err = r.getUserActiveSlots(ctx, userID)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user slots after cleanup", err)
+		return nil, errxtrace.Wrap("failed to get user slots after cleanup", err)
 	}
 
 	// Check if user has reached the maximum number of slots
 	if len(userSlots) >= maxSlots {
-		return nil, stacktrace.Classify(registry.ErrResourceLimitExceeded)
+		return nil, errxtrace.Classify(registry.ErrResourceLimitExceeded)
 	}
 
 	// Get tenant ID from the job being processed
@@ -134,7 +134,7 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 	// Save the slot
 	createdSlot, err := r.Create(ctx, slot)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to create concurrency slot", err)
+		return nil, errxtrace.Wrap("failed to create concurrency slot", err)
 	}
 
 	return createdSlot, nil
@@ -166,20 +166,20 @@ func (r *UserConcurrencySlotRegistry) ReleaseSlot(ctx context.Context, userID, j
 	// Find the slot for this job
 	slots, err := r.List(ctx)
 	if err != nil {
-		return stacktrace.Wrap("failed to list slots", err)
+		return errxtrace.Wrap("failed to list slots", err)
 	}
 
 	for _, slot := range slots {
 		if slot.UserID == userID && slot.JobID == jobID && slot.Status == models.SlotStatusActive {
 			// Delete the slot
 			if err := r.Delete(ctx, slot.ID); err != nil {
-				return stacktrace.Wrap("failed to release concurrency slot", err)
+				return errxtrace.Wrap("failed to release concurrency slot", err)
 			}
 			return nil
 		}
 	}
 
-	return stacktrace.Classify(registry.ErrNotFound)
+	return errxtrace.Classify(registry.ErrNotFound)
 }
 
 // CleanupExpiredSlots removes expired concurrency slots
@@ -190,7 +190,7 @@ func (r *UserConcurrencySlotRegistry) CleanupExpiredSlots(ctx context.Context) e
 
 	slots, err := r.List(ctx)
 	if err != nil {
-		return stacktrace.Wrap("failed to list slots", err)
+		return errxtrace.Wrap("failed to list slots", err)
 	}
 
 	// Use a fixed duration of 1 hour for expired slots (matching postgres implementation)
@@ -211,7 +211,7 @@ func (r *UserConcurrencySlotRegistry) CleanupExpiredSlots(ctx context.Context) e
 func (r *UserConcurrencySlotRegistry) GetUserSlotCount(ctx context.Context, userID string) (int, error) {
 	activeSlots, err := r.getUserActiveSlots(ctx, userID)
 	if err != nil {
-		return 0, stacktrace.Wrap("failed to get user active slots", err)
+		return 0, errxtrace.Wrap("failed to get user active slots", err)
 	}
 
 	return len(activeSlots), nil
@@ -221,7 +221,7 @@ func (r *UserConcurrencySlotRegistry) GetUserSlotCount(ctx context.Context, user
 func (r *UserConcurrencySlotRegistry) GetUserSlots(ctx context.Context, userID string) ([]*models.UserConcurrencySlot, error) {
 	slots, err := r.List(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to list slots", err)
+		return nil, errxtrace.Wrap("failed to list slots", err)
 	}
 
 	var userSlots []*models.UserConcurrencySlot

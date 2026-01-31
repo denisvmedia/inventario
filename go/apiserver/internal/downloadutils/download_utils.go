@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
 
@@ -21,7 +21,7 @@ import (
 func GetFileAttributes(ctx context.Context, uploadLocation, filePath string) (*blob.Attributes, error) {
 	b, err := blob.OpenBucket(ctx, uploadLocation)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to open bucket", err)
+		return nil, errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 
@@ -31,7 +31,7 @@ func GetFileAttributes(ctx context.Context, uploadLocation, filePath string) (*b
 		if gcerrors.Code(err) == gcerrors.NotFound {
 			return nil, registry.ErrNotFound
 		}
-		return nil, stacktrace.Wrap("failed to get file attributes", err)
+		return nil, errxtrace.Wrap("failed to get file attributes", err)
 	}
 
 	return attrs, nil
@@ -50,7 +50,7 @@ func CopyFileInChunks(w http.ResponseWriter, r io.Reader) error {
 		n, err := r.Read(buf)
 		if n > 0 {
 			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				return stacktrace.Wrap("failed to write chunk to response", writeErr)
+				return errxtrace.Wrap("failed to write chunk to response", writeErr)
 			}
 			// Flush the response writer if it supports flushing
 			if flusher, ok := w.(http.Flusher); ok {
@@ -61,7 +61,7 @@ func CopyFileInChunks(w http.ResponseWriter, r io.Reader) error {
 			break
 		}
 		if err != nil {
-			return stacktrace.Wrap("failed to read chunk from file", err)
+			return errxtrace.Wrap("failed to read chunk from file", err)
 		}
 	}
 	return nil

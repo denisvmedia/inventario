@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -63,7 +63,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 	// Get all SQL files from embedded filesystem
 	files, err := m.getSQLFiles()
 	if err != nil {
-		return stacktrace.Wrap("failed to read bootstrap SQL files", err)
+		return errxtrace.Wrap("failed to read bootstrap SQL files", err)
 	}
 
 	if len(files) == 0 {
@@ -80,7 +80,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 	// Connect to database
 	conn, err := pgx.Connect(ctx, args.DSN)
 	if err != nil {
-		return stacktrace.Wrap("failed to connect to database", err)
+		return errxtrace.Wrap("failed to connect to database", err)
 	}
 	defer func() {
 		if closeErr := conn.Close(ctx); closeErr != nil {
@@ -91,7 +91,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 	// Apply each migration file
 	for _, filename := range files {
 		if err := m.applyMigrationFile(ctx, conn, filename, args.Template); err != nil {
-			return stacktrace.Wrap(fmt.Sprintf("failed to apply migration file %s", filename), err)
+			return errxtrace.Wrap(fmt.Sprintf("failed to apply migration file %s", filename), err)
 		}
 	}
 
@@ -103,7 +103,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 func (m *Migrator) getSQLFiles() ([]string, error) {
 	entries, err := bootstrapFS.ReadDir("_sqldata")
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to read bootstrap directory", err)
+		return nil, errxtrace.Wrap("failed to read bootstrap directory", err)
 	}
 
 	var sqlFiles []string
@@ -130,7 +130,7 @@ func (m *Migrator) dryRun(files []string, templateData TemplateData) error {
 		// Read and process the file content
 		content, err := m.readAndProcessFile(filename, templateData)
 		if err != nil {
-			return stacktrace.Wrap(fmt.Sprintf("failed to process file %s", filename), err)
+			return errxtrace.Wrap(fmt.Sprintf("failed to process file %s", filename), err)
 		}
 
 		// Show a preview of the processed content (first few lines)
@@ -162,13 +162,13 @@ func (m *Migrator) applyMigrationFile(ctx context.Context, conn *pgx.Conn, filen
 	// Read and process the file content
 	content, err := m.readAndProcessFile(filename, templateData)
 	if err != nil {
-		return stacktrace.Wrap("failed to read and process file", err)
+		return errxtrace.Wrap("failed to read and process file", err)
 	}
 
 	// Execute the SQL content in a transaction
 	tx, err := conn.Begin(ctx)
 	if err != nil {
-		return stacktrace.Wrap("failed to begin transaction", err)
+		return errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && rollbackErr != pgx.ErrTxClosed {
@@ -179,12 +179,12 @@ func (m *Migrator) applyMigrationFile(ctx context.Context, conn *pgx.Conn, filen
 	// Execute the SQL
 	_, err = tx.Exec(ctx, content)
 	if err != nil {
-		return stacktrace.Wrap("failed to execute SQL", err)
+		return errxtrace.Wrap("failed to execute SQL", err)
 	}
 
 	// Commit the transaction
 	if err := tx.Commit(ctx); err != nil {
-		return stacktrace.Wrap("failed to commit transaction", err)
+		return errxtrace.Wrap("failed to commit transaction", err)
 	}
 
 	fmt.Fprintln(m.w, "✅ Migration file applied successfully", filename)
@@ -196,18 +196,18 @@ func (m *Migrator) readAndProcessFile(filename string, templateData TemplateData
 	// Read the file content
 	content, err := bootstrapFS.ReadFile(fmt.Sprintf("_sqldata/%s", filename))
 	if err != nil {
-		return "", stacktrace.Wrap("failed to read file", err)
+		return "", errxtrace.Wrap("failed to read file", err)
 	}
 
 	// Process template variables
 	tmpl, err := template.New(filename).Parse(string(content))
 	if err != nil {
-		return "", stacktrace.Wrap("failed to parse template", err)
+		return "", errxtrace.Wrap("failed to parse template", err)
 	}
 
 	var processed strings.Builder
 	if err := tmpl.Execute(&processed, templateData); err != nil {
-		return "", stacktrace.Wrap("failed to execute template", err)
+		return "", errxtrace.Wrap("failed to execute template", err)
 	}
 
 	return processed.String(), nil
@@ -218,7 +218,7 @@ func (m *Migrator) Print(templateData TemplateData) error {
 	// Get all SQL files from embedded filesystem
 	files, err := m.getSQLFiles()
 	if err != nil {
-		return stacktrace.Wrap("failed to read bootstrap SQL files", err)
+		return errxtrace.Wrap("failed to read bootstrap SQL files", err)
 	}
 
 	if len(files) == 0 {
@@ -239,7 +239,7 @@ func (m *Migrator) Print(templateData TemplateData) error {
 		// Read and process the file content
 		content, err := m.readAndProcessFile(filename, templateData)
 		if err != nil {
-			return stacktrace.Wrap(fmt.Sprintf("failed to process file %s", filename), err)
+			return errxtrace.Wrap(fmt.Sprintf("failed to process file %s", filename), err)
 		}
 
 		// Print the processed content

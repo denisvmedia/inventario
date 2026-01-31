@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -45,7 +45,7 @@ func (f *ImageRegistryFactory) MustCreateUserRegistry(ctx context.Context) regis
 func (f *ImageRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ImageRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user from context", err)
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -58,7 +58,7 @@ func (f *ImageRegistryFactory) CreateUserRegistry(ctx context.Context) (registry
 	// Create user-aware commodity registry
 	commodityRegistryInterface, err := f.commodityRegistry.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to create user commodity registry", err)
+		return nil, errxtrace.Wrap("failed to create user commodity registry", err)
 	}
 
 	// Cast to concrete type for relationship management
@@ -102,7 +102,7 @@ func (r *ImageRegistry) Create(ctx context.Context, image models.Image) (*models
 	// Use CreateWithUser to ensure user context is applied
 	newImage, err := r.Registry.CreateWithUser(ctx, image)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to create image", err)
+		return nil, errxtrace.Wrap("failed to create image", err)
 	}
 
 	// Add this image to its parent commodity's image list
@@ -121,7 +121,7 @@ func (r *ImageRegistry) Update(ctx context.Context, image models.Image) (*models
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedImage, err := r.Registry.UpdateWithUser(ctx, image)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to update image", err)
+		return nil, errxtrace.Wrap("failed to update image", err)
 	}
 
 	// Handle commodity registry tracking - commodity changed
@@ -142,19 +142,19 @@ func (r *ImageRegistry) Delete(ctx context.Context, id string) error {
 	// Remove this image from its parent commodity's image list
 	image, err := r.Registry.Get(ctx, id)
 	if err != nil {
-		return stacktrace.Wrap("failed to get image", err)
+		return errxtrace.Wrap("failed to get image", err)
 	}
 
 	_ = r.commodityRegistry.DeleteImage(ctx, image.CommodityID, id)
 
 	err = r.Registry.Delete(ctx, id)
 	if err != nil {
-		return stacktrace.Wrap("failed to delete image", err)
+		return errxtrace.Wrap("failed to delete image", err)
 	}
 
 	err = r.commodityRegistry.DeleteImage(ctx, image.CommodityID, id)
 	if err != nil {
-		return stacktrace.Wrap("failed to delete image from commodity", err)
+		return errxtrace.Wrap("failed to delete image from commodity", err)
 	}
 
 	return nil

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -43,7 +43,7 @@ func (f *FileRegistryFactory) MustCreateUserRegistry(ctx context.Context) regist
 func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user from context", err)
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -264,12 +264,12 @@ func (r *FileRegistry) FindByDateRange(ctx context.Context, startDate, endDate s
 
 	start, err := time.Parse("2006-01-02", startDate)
 	if err != nil {
-		return nil, stacktrace.Wrap("invalid start date format", err)
+		return nil, errxtrace.Wrap("invalid start date format", err)
 	}
 
 	end, err := time.Parse("2006-01-02", endDate)
 	if err != nil {
-		return nil, stacktrace.Wrap("invalid end date format", err)
+		return nil, errxtrace.Wrap("invalid end date format", err)
 	}
 
 	var filtered []*models.FileEntity

@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 
 	"github.com/denisvmedia/inventario/internal/validationctx"
@@ -21,7 +21,7 @@ func ValidateCommodity(commodity *models.Commodity, settingsRegistry SettingsReg
 	ctx := context.Background()
 	settings, err := settingsRegistry.Get(ctx)
 	if err != nil {
-		return stacktrace.Wrap("failed to get settings", err)
+		return errxtrace.Wrap("failed to get settings", err)
 	}
 
 	if settings.MainCurrency == nil || *settings.MainCurrency == "" {

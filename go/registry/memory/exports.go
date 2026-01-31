@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/go-extras/errx"
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -42,7 +42,7 @@ func (f *ExportRegistryFactory) MustCreateUserRegistry(ctx context.Context) regi
 func (f *ExportRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ExportRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user from context", err)
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -98,7 +98,7 @@ func (r *ExportRegistry) Get(ctx context.Context, id string) (*models.Export, er
 	}
 
 	if export.IsDeleted() {
-		return export, stacktrace.Classify(registry.ErrDeleted, errx.Attrs("reason", "export is deleted"))
+		return export, errxtrace.Classify(registry.ErrDeleted, errx.Attrs("reason", "export is deleted"))
 	}
 
 	return export, nil
@@ -112,7 +112,7 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	}
 
 	if export.IsDeleted() {
-		return stacktrace.Classify(registry.ErrNotFound, errx.Attrs("export already deleted"))
+		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("export already deleted"))
 	}
 
 	// Hard delete the export

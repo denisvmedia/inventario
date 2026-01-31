@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/go-extras/errx"
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
@@ -40,15 +40,15 @@ func (r *UserRegistry) newSQLRegistry() *store.NonRLSRepository[models.User, *mo
 
 func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.User, error) {
 	if user.Email == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
 	}
 
 	if user.Name == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
 	}
 
 	if user.TenantID == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 
 	// We need to handle user creation specially because of the self-referencing foreign key
@@ -56,7 +56,7 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 
 	tx, err := r.dbx.Beginx()
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to begin transaction", err)
+		return nil, errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer func() {
 		err = errors.Join(err, store.RollbackOrCommit(tx, err))
@@ -76,15 +76,15 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 	txReg := store.NewTxRegistry[models.User](tx, r.tableNames.Users())
 	err = txReg.ScanOneByField(ctx, store.Pair("email", user.Email), &existingUser)
 	if err == nil {
-		return nil, stacktrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("email", user.Email))
+		return nil, errxtrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("email", user.Email))
 	} else if !errors.Is(err, store.ErrNotFound) {
-		return nil, stacktrace.Wrap("failed to check for existing user", err)
+		return nil, errxtrace.Wrap("failed to check for existing user", err)
 	}
 
 	// Insert the user
 	err = txReg.Insert(ctx, user)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to insert user", err)
+		return nil, errxtrace.Wrap("failed to insert user", err)
 	}
 
 	return &user, nil
@@ -92,7 +92,7 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 
 func (r *UserRegistry) Get(ctx context.Context, id string) (*models.User, error) {
 	if id == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 
 	var user models.User
@@ -100,11 +100,11 @@ func (r *UserRegistry) Get(ctx context.Context, id string) (*models.User, error)
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &user)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, stacktrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User",
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User",
 				"entity_id", id,
 			))
 		}
-		return nil, stacktrace.Wrap("failed to get entity", err)
+		return nil, errxtrace.Wrap("failed to get entity", err)
 	}
 
 	return &user, nil
@@ -118,7 +118,7 @@ func (r *UserRegistry) List(ctx context.Context) ([]*models.User, error) {
 	// Query the database for all users (atomic operation)
 	for user, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to list users", err)
+			return nil, errxtrace.Wrap("failed to list users", err)
 		}
 		users = append(users, &user)
 	}
@@ -128,26 +128,26 @@ func (r *UserRegistry) List(ctx context.Context) ([]*models.User, error) {
 
 func (r *UserRegistry) Update(ctx context.Context, user models.User) (*models.User, error) {
 	if user.GetID() == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 
 	if user.Email == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
 	}
 
 	if user.Name == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
 	}
 
 	if user.TenantID == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 
 	reg := r.newSQLRegistry()
 
 	err := reg.Update(ctx, user, nil)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to update user", err)
+		return nil, errxtrace.Wrap("failed to update user", err)
 	}
 
 	return &user, nil
@@ -155,14 +155,14 @@ func (r *UserRegistry) Update(ctx context.Context, user models.User) (*models.Us
 
 func (r *UserRegistry) Delete(ctx context.Context, id string) error {
 	if id == "" {
-		return stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 
 	reg := r.newSQLRegistry()
 
 	err := reg.Delete(ctx, id, nil)
 	if err != nil {
-		return stacktrace.Wrap("failed to delete user", err)
+		return errxtrace.Wrap("failed to delete user", err)
 	}
 
 	return nil
@@ -173,7 +173,7 @@ func (r *UserRegistry) Count(ctx context.Context) (int, error) {
 
 	count, err := reg.Count(ctx)
 	if err != nil {
-		return 0, stacktrace.Wrap("failed to count users", err)
+		return 0, errxtrace.Wrap("failed to count users", err)
 	}
 
 	return count, nil
@@ -182,11 +182,11 @@ func (r *UserRegistry) Count(ctx context.Context) (int, error) {
 // GetByEmail returns a user by email within a tenant
 func (r *UserRegistry) GetByEmail(ctx context.Context, tenantID, email string) (*models.User, error) {
 	if tenantID == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 
 	if email == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
 	}
 
 	reg := r.newSQLRegistry()
@@ -198,12 +198,12 @@ func (r *UserRegistry) GetByEmail(ctx context.Context, tenantID, email string) (
 		err := tx.GetContext(ctx, &user, query, tenantID, email)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return stacktrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User",
+				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User",
 					"tenant_id", tenantID,
 					"email", email,
 				))
 			}
-			return stacktrace.Wrap("failed to get user by email", err)
+			return errxtrace.Wrap("failed to get user by email", err)
 		}
 		return nil
 	})
@@ -217,7 +217,7 @@ func (r *UserRegistry) GetByEmail(ctx context.Context, tenantID, email string) (
 // ListByTenant returns all users for a tenant
 func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error) {
 	if tenantID == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 
 	var users []*models.User
@@ -225,7 +225,7 @@ func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*mo
 
 	for user, err := range reg.ScanByField(ctx, store.Pair("tenant_id", tenantID)) {
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to list users by tenant", err)
+			return nil, errxtrace.Wrap("failed to list users by tenant", err)
 		}
 		users = append(users, &user)
 	}
@@ -236,7 +236,7 @@ func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*mo
 // ListByRole returns all users with a specific role within a tenant
 func (r *UserRegistry) ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error) {
 	if tenantID == "" {
-		return nil, stacktrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 
 	var users []*models.User
@@ -247,7 +247,7 @@ func (r *UserRegistry) ListByRole(ctx context.Context, tenantID string, role mod
 		query := fmt.Sprintf(`SELECT * FROM %s WHERE tenant_id = $1 AND role = $2 ORDER BY name`, r.tableNames.Users())
 		err := tx.SelectContext(ctx, &users, query, tenantID, role)
 		if err != nil {
-			return stacktrace.Wrap("failed to list users by role", err)
+			return errxtrace.Wrap("failed to list users by role", err)
 		}
 		return nil
 	})

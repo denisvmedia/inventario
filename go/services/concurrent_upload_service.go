@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -63,7 +63,7 @@ func (s *MemoryConcurrentUploadService) StartUpload(ctx context.Context, userID 
 	currentCount := s.getCurrentCount(userID, operationName)
 
 	if currentCount >= opConfig.MaxSlotsPerUser {
-		return stacktrace.Wrap("maximum concurrent uploads reached", registry.ErrTooManyRequests)
+		return errxtrace.Wrap("maximum concurrent uploads reached", registry.ErrTooManyRequests)
 	}
 
 	// Initialize maps if needed

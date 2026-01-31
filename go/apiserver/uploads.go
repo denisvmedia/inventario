@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/middleware"
@@ -511,7 +511,7 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 				case io.EOF:
 					break loop
 				default:
-					internalServerError(w, r, stacktrace.Wrap("unable to read part in multipart form", err))
+					internalServerError(w, r, errxtrace.Wrap("unable to read part in multipart form", err))
 					return
 				}
 
@@ -523,7 +523,7 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 				fileCount++
 				// Only allow single file uploads
 				if fileCount > 1 {
-					unprocessableEntityError(w, r, stacktrace.Classify(errors.New("only single file uploads are allowed")))
+					unprocessableEntityError(w, r, errxtrace.Classify(errors.New("only single file uploads are allowed")))
 					return
 				}
 
@@ -532,10 +532,10 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 				mimeType, err := api.saveFile(r.Context(), filename, part, allowedContentTypes) // TODO: make sure that the file is not too big
 				switch {
 				case errors.Is(err, mimekit.ErrInvalidContentType):
-					unprocessableEntityError(w, r, stacktrace.Wrap("unsupported content type", err))
+					unprocessableEntityError(w, r, errxtrace.Wrap("unsupported content type", err))
 					return
 				case err != nil:
-					internalServerError(w, r, stacktrace.Wrap("unable to save file", err))
+					internalServerError(w, r, errxtrace.Wrap("unable to save file", err))
 					return
 				}
 				uploadedFiles = append(uploadedFiles, uploadedFile{FilePath: filename, MIMEType: mimeType})
@@ -550,7 +550,7 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) (mimeType string, err error) {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
-		return "", stacktrace.Wrap("failed to open bucket", err) // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
+		return "", errxtrace.Wrap("failed to open bucket", err) // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
 	}
 	defer func() {
 		err = errors.Join(err, b.Close())
@@ -558,7 +558,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 	fw, err := b.NewWriter(ctx, filename, nil)
 	if err != nil {
-		return "", stacktrace.Wrap("failed to create a new writer", err)
+		return "", errxtrace.Wrap("failed to create a new writer", err)
 	}
 	defer func() {
 		err = errors.Join(err, fw.Close())
@@ -568,7 +568,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 	_, err = io.Copy(fw, wrappedSrc)
 	if err != nil {
-		return "", stacktrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
+		return "", errxtrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
 	}
 
 	return wrappedSrc.MIMEType(), nil

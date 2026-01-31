@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
@@ -846,7 +846,7 @@ func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request
 func (api *commoditiesAPI) getDownloadFile(ctx context.Context, originalPath string) (io.ReadCloser, error) {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to open bucket", err)
+		return nil, errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-extras/errx"
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
@@ -56,7 +56,7 @@ func (f *ThumbnailGenerationJobRegistryFactory) MustCreateUserRegistry(ctx conte
 func (f *ThumbnailGenerationJobRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ThumbnailGenerationJobRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user ID from context", err)
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &ThumbnailGenerationJobRegistry{
@@ -85,7 +85,7 @@ func (r *ThumbnailGenerationJobRegistry) Get(ctx context.Context, id string) (*m
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &job)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get thumbnail generation job", err)
+		return nil, errxtrace.Wrap("failed to get thumbnail generation job", err)
 	}
 
 	return &job, nil
@@ -98,7 +98,7 @@ func (r *ThumbnailGenerationJobRegistry) List(ctx context.Context) ([]*models.Th
 
 	for job, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to list thumbnail generation jobs", err)
+			return nil, errxtrace.Wrap("failed to list thumbnail generation jobs", err)
 		}
 		jobs = append(jobs, &job)
 	}
@@ -112,7 +112,7 @@ func (r *ThumbnailGenerationJobRegistry) Count(ctx context.Context) (int, error)
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, stacktrace.Wrap("failed to count thumbnail generation jobs", err)
+		return 0, errxtrace.Wrap("failed to count thumbnail generation jobs", err)
 	}
 
 	return cnt, nil
@@ -124,7 +124,7 @@ func (r *ThumbnailGenerationJobRegistry) Create(ctx context.Context, job models.
 
 	result, err := reg.Create(ctx, job, nil)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to create thumbnail generation job", err)
+		return nil, errxtrace.Wrap("failed to create thumbnail generation job", err)
 	}
 
 	return &result, nil
@@ -136,7 +136,7 @@ func (r *ThumbnailGenerationJobRegistry) Update(ctx context.Context, job models.
 
 	err := reg.Update(ctx, job, nil)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to update thumbnail generation job", err)
+		return nil, errxtrace.Wrap("failed to update thumbnail generation job", err)
 	}
 
 	return &job, nil
@@ -148,7 +148,7 @@ func (r *ThumbnailGenerationJobRegistry) Delete(ctx context.Context, id string) 
 
 	err := reg.Delete(ctx, id, nil)
 	if err != nil {
-		return stacktrace.Wrap("failed to delete thumbnail generation job", err)
+		return errxtrace.Wrap("failed to delete thumbnail generation job", err)
 	}
 
 	return nil
@@ -170,9 +170,9 @@ func (r *ThumbnailGenerationJobRegistry) GetJobByFileID(ctx context.Context, fil
 		err := tx.GetContext(ctx, &job, query, fileID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return stacktrace.Wrap("no thumbnail generation job found for file", registry.ErrNotFound, errx.Attrs("file_id", fileID))
+				return errxtrace.Wrap("no thumbnail generation job found for file", registry.ErrNotFound, errx.Attrs("file_id", fileID))
 			}
-			return stacktrace.Wrap("failed to get thumbnail generation job by file ID", err)
+			return errxtrace.Wrap("failed to get thumbnail generation job by file ID", err)
 		}
 		return nil
 	})
@@ -191,7 +191,7 @@ func (r *ThumbnailGenerationJobRegistry) ListPending(ctx context.Context) ([]*mo
 
 	for job, err := range reg.ScanByField(ctx, store.Pair("status", models.ThumbnailStatusPending)) {
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to list pending thumbnail generation jobs", err)
+			return nil, errxtrace.Wrap("failed to list pending thumbnail generation jobs", err)
 		}
 		jobs = append(jobs, &job)
 	}
@@ -213,7 +213,7 @@ func (r *ThumbnailGenerationJobRegistry) GetPendingJobs(ctx context.Context, lim
 
 		err := tx.SelectContext(ctx, &jobs, query, models.ThumbnailStatusPending, limit)
 		if err != nil {
-			return stacktrace.Wrap("failed to get pending thumbnail generation jobs", err)
+			return errxtrace.Wrap("failed to get pending thumbnail generation jobs", err)
 		}
 		return nil
 	})
@@ -243,7 +243,7 @@ func (r *ThumbnailGenerationJobRegistry) UpdateJobStatus(ctx context.Context, jo
 
 		_, err := tx.ExecContext(ctx, query, jobID, status, errorMessage, time.Now())
 		if err != nil {
-			return stacktrace.Wrap("failed to update thumbnail generation job status", err)
+			return errxtrace.Wrap("failed to update thumbnail generation job status", err)
 		}
 		return nil
 	})
@@ -263,7 +263,7 @@ func (r *ThumbnailGenerationJobRegistry) CleanupCompletedJobs(ctx context.Contex
 
 		_, err := tx.ExecContext(ctx, query, models.ThumbnailStatusCompleted, models.ThumbnailStatusFailed, cutoffTime)
 		if err != nil {
-			return stacktrace.Wrap("failed to cleanup completed thumbnail generation jobs", err)
+			return errxtrace.Wrap("failed to cleanup completed thumbnail generation jobs", err)
 		}
 		return nil
 	})

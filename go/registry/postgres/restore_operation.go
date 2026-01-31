@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 
-	"github.com/go-extras/errx/stacktrace"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
@@ -54,13 +54,13 @@ func (f *RestoreOperationRegistryFactory) MustCreateUserRegistry(ctx context.Con
 func (f *RestoreOperationRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.RestoreOperationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get user ID from context", err)
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	// Create user-aware restore step registry
 	userAwareStepRegistry, err := f.restoreStepRegistry.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to set user context on restore step registry", err)
+		return nil, errxtrace.Wrap("failed to set user context on restore step registry", err)
 	}
 
 	return &RestoreOperationRegistry{
@@ -99,13 +99,13 @@ func (r *RestoreOperationRegistry) List(ctx context.Context) ([]*models.RestoreO
 	// Query the database for all restore operations (atomic operation)
 	for operation, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to list restore operations", err)
+			return nil, errxtrace.Wrap("failed to list restore operations", err)
 		}
 
 		// Load associated steps for each operation
 		err = r.loadSteps(ctx, &operation)
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to load steps for operation", err)
+			return nil, errxtrace.Wrap("failed to load steps for operation", err)
 		}
 
 		operations = append(operations, &operation)
@@ -119,7 +119,7 @@ func (r *RestoreOperationRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, stacktrace.Wrap("failed to count restore operations", err)
+		return 0, errxtrace.Wrap("failed to count restore operations", err)
 	}
 
 	return cnt, nil
@@ -127,7 +127,7 @@ func (r *RestoreOperationRegistry) Count(ctx context.Context) (int, error) {
 
 func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
 	if err := operation.ValidateWithContext(ctx); err != nil {
-		return nil, stacktrace.Wrap("validation failed", err)
+		return nil, errxtrace.Wrap("validation failed", err)
 	}
 
 	// Set timestamps
@@ -146,7 +146,7 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 
 	createdOperation, err := reg.Create(ctx, operation, nil)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to create restore operation", err)
+		return nil, errxtrace.Wrap("failed to create restore operation", err)
 	}
 
 	return &createdOperation, nil
@@ -154,14 +154,14 @@ func (r *RestoreOperationRegistry) Create(ctx context.Context, operation models.
 
 func (r *RestoreOperationRegistry) Update(ctx context.Context, operation models.RestoreOperation) (*models.RestoreOperation, error) {
 	if err := operation.ValidateWithContext(ctx); err != nil {
-		return nil, stacktrace.Wrap("validation failed", err)
+		return nil, errxtrace.Wrap("validation failed", err)
 	}
 
 	reg := r.newSQLRegistry()
 
 	err := reg.Update(ctx, operation, nil)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to update restore operation", err)
+		return nil, errxtrace.Wrap("failed to update restore operation", err)
 	}
 
 	return &operation, nil
@@ -172,7 +172,7 @@ func (r *RestoreOperationRegistry) Delete(ctx context.Context, id string) error 
 	err := reg.Delete(ctx, id, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Delete associated steps first (due to foreign key constraint)
 		if err := r.restoreStepRegistry.DeleteByRestoreOperation(ctx, id); err != nil {
-			return stacktrace.Wrap("failed to delete restore steps", err)
+			return errxtrace.Wrap("failed to delete restore steps", err)
 		}
 		return nil
 	})
@@ -192,13 +192,13 @@ func (r *RestoreOperationRegistry) get(ctx context.Context, id string) (*models.
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &operation)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to get restore operation", err)
+		return nil, errxtrace.Wrap("failed to get restore operation", err)
 	}
 
 	// Load associated steps
 	err = r.loadSteps(ctx, &operation)
 	if err != nil {
-		return nil, stacktrace.Wrap("failed to load steps", err)
+		return nil, errxtrace.Wrap("failed to load steps", err)
 	}
 
 	return &operation, nil
@@ -208,7 +208,7 @@ func (r *RestoreOperationRegistry) loadSteps(ctx context.Context, operation *mod
 	// Load associated steps
 	steps, err := r.restoreStepRegistry.ListByRestoreOperation(ctx, operation.ID)
 	if err != nil {
-		return stacktrace.Wrap("failed to load restore steps", err)
+		return errxtrace.Wrap("failed to load restore steps", err)
 	}
 
 	// Convert to slice of values instead of pointers for JSON serialization
@@ -226,13 +226,13 @@ func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID st
 	reg := r.newSQLRegistry()
 	for operation, err := range reg.ScanByField(ctx, store.Pair("export_id", exportID)) {
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to list restore operations by export", err)
+			return nil, errxtrace.Wrap("failed to list restore operations by export", err)
 		}
 
 		// Load associated steps for each operation
 		err = r.loadSteps(ctx, &operation)
 		if err != nil {
-			return nil, stacktrace.Wrap("failed to load steps for operation", err)
+			return nil, errxtrace.Wrap("failed to load steps for operation", err)
 		}
 
 		operations = append(operations, &operation)
