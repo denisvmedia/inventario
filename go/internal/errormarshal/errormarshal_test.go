@@ -44,7 +44,7 @@ func TestMarshal_NilError(t *testing.T) {
 	c := qt.New(t)
 
 	result := errormarshal.Marshal(nil)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// nil errors marshal to JSON null (matching original errkit behavior)
 	c.Assert(string(result), qt.Equals, "null")
@@ -55,7 +55,7 @@ func TestMarshal_StandardError(t *testing.T) {
 
 	testErr := errors.New("standard error")
 	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// Should produce valid JSON
 	var decoded map[string]any
@@ -73,7 +73,7 @@ func TestMarshal_CustomErrorWithoutMarshalJSON(t *testing.T) {
 
 	testErr := customError{Code: 42, Msg: "something went wrong"}
 	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// Should produce valid JSON
 	var decoded map[string]any
@@ -91,7 +91,7 @@ func TestMarshal_CustomErrorWithMarshalJSON(t *testing.T) {
 
 	testErr := customErrorWithMarshal{Code: 7, Msg: "boom"}
 	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// Should produce valid JSON
 	var decoded map[string]any
@@ -112,7 +112,7 @@ func TestMarshal_ErrxError(t *testing.T) {
 	baseErr := errors.New("base error")
 	testErr := errx.Wrap("wrapped error", baseErr, errx.Attrs("key", "value"))
 	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// Should produce valid JSON
 	var decoded map[string]any
@@ -121,7 +121,7 @@ func TestMarshal_ErrxError(t *testing.T) {
 
 	// Type and error field should be present
 	c.Assert(decoded["type"], qt.Not(qt.Equals), "")
-	c.Assert(decoded["error"], qt.Not(qt.IsNil))
+	c.Assert(decoded["error"], qt.IsNotNil)
 }
 
 func TestMarshal_ErrxWithStacktrace(t *testing.T) {
@@ -130,7 +130,7 @@ func TestMarshal_ErrxWithStacktrace(t *testing.T) {
 	baseErr := errors.New("base error")
 	testErr := errxtrace.Wrap("wrapped with trace", baseErr)
 	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// Should produce valid JSON
 	var decoded map[string]any
@@ -147,7 +147,7 @@ func TestMarshal_ValidationError(t *testing.T) {
 		"field2": errors.New("invalid format"),
 	}
 	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// Should handle validation.Errors properly (it implements MarshalJSON)
 	var decoded map[string]any
@@ -170,7 +170,7 @@ func TestMarshal_ErrxWrappedValidationError(t *testing.T) {
 	testErr := errx.Wrap("validation failed", validationErr)
 
 	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// Should handle the wrapped validation error
 	var decoded map[string]any
@@ -196,7 +196,7 @@ func TestMarshal_ReturnsValidJSON(t *testing.T) {
 			c := qt.New(t)
 
 			result := errormarshal.Marshal(tc.err)
-			c.Assert(result, qt.Not(qt.IsNil))
+			c.Assert(result, qt.IsNotNil)
 
 			// Must be valid JSON
 			var decoded any
@@ -211,7 +211,7 @@ func TestMustMarshal_Success(t *testing.T) {
 
 	testErr := errors.New("test error")
 	result := errormarshal.MustMarshal(testErr)
-	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNotNil)
 
 	// Should be valid JSON
 	var decoded any
