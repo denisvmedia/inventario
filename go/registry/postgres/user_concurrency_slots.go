@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -53,7 +53,7 @@ func (f *UserConcurrencySlotRegistryFactory) MustCreateUserRegistry(ctx context.
 func (f *UserConcurrencySlotRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.UserConcurrencySlotRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &UserConcurrencySlotRegistry{
@@ -82,7 +82,7 @@ func (r *UserConcurrencySlotRegistry) Get(ctx context.Context, id string) (*mode
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &slot)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user concurrency slot")
+		return nil, errxtrace.Wrap("failed to get user concurrency slot", err)
 	}
 
 	return &slot, nil
@@ -95,7 +95,7 @@ func (r *UserConcurrencySlotRegistry) List(ctx context.Context) ([]*models.UserC
 
 	for slot, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list user concurrency slots")
+			return nil, errxtrace.Wrap("failed to list user concurrency slots", err)
 		}
 		slots = append(slots, &slot)
 	}
@@ -109,7 +109,7 @@ func (r *UserConcurrencySlotRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count user concurrency slots")
+		return 0, errxtrace.Wrap("failed to count user concurrency slots", err)
 	}
 
 	return cnt, nil
@@ -121,7 +121,7 @@ func (r *UserConcurrencySlotRegistry) Create(ctx context.Context, slot models.Us
 
 	result, err := reg.Create(ctx, slot, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create user concurrency slot")
+		return nil, errxtrace.Wrap("failed to create user concurrency slot", err)
 	}
 
 	return &result, nil
@@ -133,7 +133,7 @@ func (r *UserConcurrencySlotRegistry) Update(ctx context.Context, slot models.Us
 
 	err := reg.Update(ctx, slot, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update user concurrency slot")
+		return nil, errxtrace.Wrap("failed to update user concurrency slot", err)
 	}
 
 	return &slot, nil
@@ -145,7 +145,7 @@ func (r *UserConcurrencySlotRegistry) Delete(ctx context.Context, id string) err
 
 	err := reg.Delete(ctx, id, nil)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete user concurrency slot")
+		return errxtrace.Wrap("failed to delete user concurrency slot", err)
 	}
 
 	return nil
@@ -166,7 +166,7 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 
 		err := tx.QueryRowContext(ctx, countQuery, userID).Scan(&activeCount)
 		if err != nil {
-			return errkit.Wrap(err, "failed to count existing slots")
+			return errxtrace.Wrap("failed to count existing slots", err)
 		}
 
 		// Check limits
@@ -179,7 +179,7 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 		jobQuery := fmt.Sprintf(`SELECT tenant_id FROM %s WHERE id = $1`, r.tableNames.ThumbnailGenerationJobs())
 		err = tx.QueryRowContext(ctx, jobQuery, jobID).Scan(&tenantID)
 		if err != nil {
-			return errkit.Wrap(err, "failed to get tenant ID from job")
+			return errxtrace.Wrap("failed to get tenant ID from job", err)
 		}
 
 		// Create the slot with proper tenant/user context
@@ -198,7 +198,7 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 		txReg := store.NewTxRegistry[models.UserConcurrencySlot](tx, r.tableNames.UserConcurrencySlots())
 		err = txReg.Insert(ctx, slot)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create concurrency slot")
+			return errxtrace.Wrap("failed to create concurrency slot", err)
 		}
 
 		result = &slot
@@ -220,12 +220,12 @@ func (r *UserConcurrencySlotRegistry) ReleaseSlot(ctx context.Context, userID, j
 		query := fmt.Sprintf(`DELETE FROM %s WHERE user_id = $1 AND job_id = $2`, r.tableNames.UserConcurrencySlots())
 		result, err := tx.ExecContext(ctx, query, userID, jobID)
 		if err != nil {
-			return errkit.Wrap(err, "failed to release concurrency slot")
+			return errxtrace.Wrap("failed to release concurrency slot", err)
 		}
 
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
-			return errkit.Wrap(err, "failed to get rows affected")
+			return errxtrace.Wrap("failed to get rows affected", err)
 		}
 
 		if rowsAffected == 0 {
@@ -244,7 +244,7 @@ func (r *UserConcurrencySlotRegistry) GetUserSlots(ctx context.Context, userID s
 
 	for slot, err := range reg.ScanByField(ctx, store.Pair("user_id", userID)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list user slots")
+			return nil, errxtrace.Wrap("failed to list user slots", err)
 		}
 		slots = append(slots, &slot)
 	}
@@ -265,7 +265,7 @@ func (r *UserConcurrencySlotRegistry) CleanupExpiredSlots(ctx context.Context) e
 
 		_, err := tx.ExecContext(ctx, query, expiredBefore)
 		if err != nil {
-			return errkit.Wrap(err, "failed to cleanup expired slots")
+			return errxtrace.Wrap("failed to cleanup expired slots", err)
 		}
 		return nil
 	})

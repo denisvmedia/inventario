@@ -12,7 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
+	errxtrace "github.com/go-extras/errx/stacktrace"
+
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/models"
 )
@@ -64,7 +65,7 @@ func (s *FileSigningService) GenerateSignedURL(fileID, fileExt, userID string) (
 	// Generate HMAC signature
 	signature, err := s.generateSignature(message)
 	if err != nil {
-		return "", errkit.Wrap(err, "failed to generate signature")
+		return "", errxtrace.Wrap("failed to generate signature", err)
 	}
 
 	// Build the signed URL with query parameters, including file ID for validation
@@ -86,7 +87,7 @@ func (s *FileSigningService) GenerateSignedURLsWithThumbnails(file *models.FileE
 	// Generate signed URL for the original file
 	originalURL, err := s.GenerateSignedURL(file.ID, fileExt, userID)
 	if err != nil {
-		return "", nil, errkit.Wrap(err, "failed to generate original file URL")
+		return "", nil, errxtrace.Wrap("failed to generate original file URL", err)
 	}
 
 	// Generate thumbnail URLs if it's a supported image format
@@ -135,7 +136,7 @@ func (s *FileSigningService) generateThumbnailSignedURL(fileID, sizeName, userID
 	// Generate HMAC signature
 	signature, err := s.generateSignature(message)
 	if err != nil {
-		return "", errkit.Wrap(err, "failed to generate signature")
+		return "", errxtrace.Wrap("failed to generate signature", err)
 	}
 
 	// Build the signed URL with query parameters
@@ -175,7 +176,7 @@ func (s *FileSigningService) ValidateSignedURL(path string, queryParams url.Valu
 	// Parse expiration timestamp
 	expTimestamp, err := strconv.ParseInt(expStr, 10, 64)
 	if err != nil {
-		return nil, errkit.Wrap(err, "invalid expiration timestamp")
+		return nil, errxtrace.Wrap("invalid expiration timestamp", err)
 	}
 
 	expiresAt := time.Unix(expTimestamp, 0)
@@ -206,7 +207,7 @@ func (s *FileSigningService) generateSignature(message string) (string, error) {
 	h := hmac.New(sha256.New, s.signingKey)
 	_, err := h.Write([]byte(message))
 	if err != nil {
-		return "", errkit.Wrap(err, "failed to write message to HMAC")
+		return "", errxtrace.Wrap("failed to write message to HMAC", err)
 	}
 
 	signature := base64.URLEncoding.EncodeToString(h.Sum(nil))

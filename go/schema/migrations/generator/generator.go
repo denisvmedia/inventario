@@ -5,12 +5,11 @@ import (
 	"log/slog"
 	"os"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/stokaro/ptah/config"
 	"github.com/stokaro/ptah/core/goschema"
 	"github.com/stokaro/ptah/dbschema"
 	"github.com/stokaro/ptah/migration/generator"
-
-	"github.com/denisvmedia/inventario/internal/errkit"
 )
 
 type Generator struct {
@@ -40,13 +39,13 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 	// Ensure output directory exists
 	err := os.MkdirAll(migrationsDir, 0o750)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create output directory")
+		return nil, errxtrace.Wrap("failed to create output directory", err)
 	}
 
 	// Connect to database first
 	conn, err := dbschema.ConnectToDatabase(m.dbURL)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to connect to database")
+		return nil, errxtrace.Wrap("failed to connect to database", err)
 	}
 	defer func() {
 		err := conn.Close()
@@ -67,7 +66,7 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 
 	files, err := generator.GenerateMigration(opts)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to generate migration files")
+		return nil, errxtrace.Wrap("failed to generate migration files", err)
 	}
 
 	// Check if no migration was needed (files will be nil when no changes detected)
@@ -89,7 +88,7 @@ func (m *Generator) GenerateSchemaSQL(ctx context.Context) ([]string, error) {
 	// Parse Go entities from models directory
 	goSchema, err := goschema.ParseDir(m.goEntitiesDir)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to parse Go schema")
+		return nil, errxtrace.Wrap("failed to parse Go schema", err)
 	}
 
 	m.logger.Info("Schema parsed successfully",

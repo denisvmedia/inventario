@@ -4,10 +4,10 @@ import (
 	"context"
 	"sync"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/typekit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -45,7 +45,7 @@ func (f *SettingsRegistryFactory) MustCreateUserRegistry(ctx context.Context) re
 func (f *SettingsRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.SettingsRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user from context")
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with the same data but different userID
@@ -94,7 +94,7 @@ func (r *SettingsRegistry) Patch(_ctx context.Context, configfield string, value
 
 	err := typekit.SetFieldByConfigfieldTag(&currentSettings, configfield, value)
 	if err != nil {
-		return errkit.Wrap(err, "failed to patch settings")
+		return errxtrace.Wrap("failed to patch settings", err)
 	}
 
 	// Save updated settings

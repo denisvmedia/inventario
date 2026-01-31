@@ -10,11 +10,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -846,7 +846,7 @@ func (api *commoditiesAPI) downloadManual(w http.ResponseWriter, r *http.Request
 func (api *commoditiesAPI) getDownloadFile(ctx context.Context, originalPath string) (io.ReadCloser, error) {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to open bucket")
+		return nil, errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 

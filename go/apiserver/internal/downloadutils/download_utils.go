@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strconv"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -21,7 +21,7 @@ import (
 func GetFileAttributes(ctx context.Context, uploadLocation, filePath string) (*blob.Attributes, error) {
 	b, err := blob.OpenBucket(ctx, uploadLocation)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to open bucket")
+		return nil, errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 
@@ -31,7 +31,7 @@ func GetFileAttributes(ctx context.Context, uploadLocation, filePath string) (*b
 		if gcerrors.Code(err) == gcerrors.NotFound {
 			return nil, registry.ErrNotFound
 		}
-		return nil, errkit.Wrap(err, "failed to get file attributes")
+		return nil, errxtrace.Wrap("failed to get file attributes", err)
 	}
 
 	return attrs, nil
@@ -50,7 +50,7 @@ func CopyFileInChunks(w http.ResponseWriter, r io.Reader) error {
 		n, err := r.Read(buf)
 		if n > 0 {
 			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				return errkit.Wrap(writeErr, "failed to write chunk to response")
+				return errxtrace.Wrap("failed to write chunk to response", writeErr)
 			}
 			// Flush the response writer if it supports flushing
 			if flusher, ok := w.(http.Flusher); ok {
@@ -61,7 +61,7 @@ func CopyFileInChunks(w http.ResponseWriter, r io.Reader) error {
 			break
 		}
 		if err != nil {
-			return errkit.Wrap(err, "failed to read chunk from file")
+			return errxtrace.Wrap("failed to read chunk from file", err)
 		}
 	}
 	return nil

@@ -10,12 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	_ "github.com/lib/pq" // PostgreSQL driver for database/sql
 	"github.com/stokaro/ptah/dbschema"
 	"github.com/stokaro/ptah/migration/migrator"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/schema/migrations"
 )
 
@@ -71,14 +72,14 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	// but the pool limits will prevent connection exhaustion
 	conn, err := dbschema.ConnectToDatabase(m.dbURL)
 	if err != nil {
-		return errkit.Wrap(err, "failed to connect to database")
+		return errxtrace.Wrap("failed to connect to database", err)
 	}
 	defer conn.Close()
 
 	// Create migrator
 	ptahMigrator, err := migrator.NewFSMigrator(conn, m.migFS)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create Ptah migrator")
+		return errxtrace.Wrap("failed to create Ptah migrator", err)
 	}
 
 	// Use file-based migrations from the provided filesystem
@@ -92,7 +93,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	// Apply migrations
 	err = ptahMigrator.MigrateUp(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to run migrations")
+		return errxtrace.Wrap("failed to run migrations", err)
 	}
 
 	m.logger.Info("Migrations completed successfully")
@@ -115,7 +116,7 @@ func (m *Migrator) ResetDatabase(ctx context.Context, args Args, confirm bool) e
 	// First drop all tables
 	err := m.DropTables(ctx, args.DryRun, confirm)
 	if err != nil {
-		return errkit.Wrap(err, "failed to drop database tables")
+		return errxtrace.Wrap("failed to drop database tables", err)
 	}
 
 	if args.DryRun {
@@ -134,7 +135,7 @@ func (m *Migrator) ResetDatabase(ctx context.Context, args Args, confirm bool) e
 		DryRun: args.DryRun,
 	})
 	if err != nil {
-		return errkit.Wrap(err, "failed to recreate schema")
+		return errxtrace.Wrap("failed to recreate schema", err)
 	}
 
 	fmt.Println("✅ Database reset completed successfully!")
@@ -154,19 +155,19 @@ func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) er
 	// Create direct database connection for drop operations
 	db, err := sql.Open("postgres", m.dbURL)
 	if err != nil {
-		return errkit.Wrap(err, "failed to connect to database")
+		return errxtrace.Wrap("failed to connect to database", err)
 	}
 	defer db.Close()
 
 	// Test the connection
 	if err := db.PingContext(ctx); err != nil {
-		return errkit.Wrap(err, "failed to ping database")
+		return errxtrace.Wrap("failed to ping database", err)
 	}
 
 	// Get list of all tables
 	tables, err := m.getAllTables(ctx, db)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get table list")
+		return errxtrace.Wrap("failed to get table list", err)
 	}
 
 	if len(tables) == 0 {
@@ -205,7 +206,7 @@ func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) er
 	fmt.Println("Dropping all tables...")
 	err = m.dropAllTables(ctx, db, tables)
 	if err != nil {
-		return errkit.Wrap(err, "failed to drop tables")
+		return errxtrace.Wrap("failed to drop tables", err)
 	}
 
 	fmt.Println("✅ All tables dropped successfully!")
@@ -223,7 +224,7 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 	// Parse the database URL to extract database name and connection info
 	dbName, adminDSN, err := m.parsePostgreSQLDSN()
 	if err != nil {
-		return errkit.Wrap(err, "failed to parse database DSN")
+		return errxtrace.Wrap("failed to parse database DSN", err)
 	}
 
 	m.logger.Info("Preparing to drop database", "database", dbName, "dry_run", dryRun)
@@ -256,13 +257,13 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 	// Connect to the postgres database (not the target database) to perform the drop
 	db, err := sql.Open("postgres", adminDSN)
 	if err != nil {
-		return errkit.Wrap(err, "failed to connect to PostgreSQL admin database")
+		return errxtrace.Wrap("failed to connect to PostgreSQL admin database", err)
 	}
 	defer db.Close()
 
 	// Test the connection
 	if err := db.PingContext(ctx); err != nil {
-		return errkit.Wrap(err, "failed to ping PostgreSQL admin database")
+		return errxtrace.Wrap("failed to ping PostgreSQL admin database", err)
 	}
 
 	// Terminate all connections to the target database
@@ -283,7 +284,7 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 	dropSQL := fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName)
 	_, err = db.ExecContext(ctx, dropSQL)
 	if err != nil {
-		return errkit.Wrap(err, fmt.Sprintf("failed to drop database %s", dbName))
+		return errxtrace.Wrap("failed to drop database", err, errx.Attrs("db_name", dbName))
 	}
 
 	fmt.Println("✅ Database dropped successfully!")
@@ -329,7 +330,7 @@ func (m *Migrator) getAllTables(ctx context.Context, db *sql.DB) ([]string, erro
 
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to query tables")
+		return nil, errxtrace.Wrap("failed to query tables", err)
 	}
 	defer rows.Close()
 
@@ -337,13 +338,13 @@ func (m *Migrator) getAllTables(ctx context.Context, db *sql.DB) ([]string, erro
 	for rows.Next() {
 		var tableName string
 		if err := rows.Scan(&tableName); err != nil {
-			return nil, errkit.Wrap(err, "failed to scan table name")
+			return nil, errxtrace.Wrap("failed to scan table name", err)
 		}
 		tables = append(tables, tableName)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errkit.Wrap(err, "error iterating table rows")
+		return nil, errxtrace.Wrap("error iterating table rows", err)
 	}
 
 	return tables, nil
@@ -358,7 +359,7 @@ func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []strin
 		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", table)
 		_, err := db.ExecContext(ctx, dropSQL)
 		if err != nil {
-			return errkit.Wrap(err, fmt.Sprintf("failed to drop table %s", table))
+			return errxtrace.Wrap("failed to drop table", err, errx.Attrs("table", table))
 		}
 	}
 
@@ -392,7 +393,7 @@ func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []strin
 func (m *Migrator) parsePostgreSQLDSN() (dbName string, adminDSN string, err error) {
 	parsed, err := url.Parse(m.dbURL)
 	if err != nil {
-		return "", "", errkit.Wrap(err, "failed to parse database URL")
+		return "", "", errxtrace.Wrap("failed to parse database URL", err)
 	}
 
 	// Validate that this is a PostgreSQL DSN

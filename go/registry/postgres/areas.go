@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"strings"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -54,7 +54,7 @@ func (f *AreaRegistryFactory) MustCreateUserRegistry(ctx context.Context) regist
 func (f *AreaRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.AreaRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &AreaRegistry{
@@ -88,7 +88,7 @@ func (r *AreaRegistry) List(ctx context.Context) ([]*models.Area, error) {
 	// Query the database for all locations (atomic operation)
 	for area, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list areas")
+			return nil, errxtrace.Wrap("failed to list areas", err)
 		}
 		areas = append(areas, &area)
 	}
@@ -101,7 +101,7 @@ func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count areas")
+		return 0, errxtrace.Wrap("failed to count areas", err)
 	}
 
 	return cnt, nil
@@ -117,7 +117,7 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to count areas")
+		return nil, errxtrace.Wrap("failed to count areas", err)
 	}
 
 	return &createdArea, nil
@@ -131,7 +131,7 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update area")
+		return nil, errxtrace.Wrap("failed to update area", err)
 	}
 
 	return &area, nil
@@ -146,7 +146,7 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 			return err
 		}
 		if len(commodities) > 0 {
-			return errkit.Wrap(registry.ErrCannotDelete, "area has commodities")
+			return errxtrace.Wrap("area has commodities", registry.ErrCannotDelete)
 		}
 		return nil
 	})
@@ -164,7 +164,7 @@ func (r *AreaRegistry) GetCommodities(ctx context.Context, areaID string) ([]str
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list commodities")
+		return nil, errxtrace.Wrap("failed to list commodities", err)
 	}
 
 	return commodities, nil
@@ -195,12 +195,12 @@ func (r *AreaRegistry) GetTotalValue(ctx context.Context, areaID string, currenc
 
 		err := tx.GetContext(ctx, &totalValue, sql, areaID, currency)
 		if err != nil {
-			return errkit.Wrap(err, "failed to calculate total value")
+			return errxtrace.Wrap("failed to calculate total value", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to list commodities")
+		return 0, errxtrace.Wrap("failed to list commodities", err)
 	}
 
 	return totalValue, nil
@@ -220,12 +220,12 @@ func (r *AreaRegistry) SearchByName(ctx context.Context, query string) ([]*model
 	`, r.tableNames.Areas())
 		err := tx.SelectContext(ctx, &areas, sql, "%"+query+"%")
 		if err != nil {
-			return errkit.Wrap(err, "failed to search areas by name")
+			return errxtrace.Wrap("failed to search areas by name", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list commodities")
+		return nil, errxtrace.Wrap("failed to list commodities", err)
 	}
 
 	return areas, nil
@@ -245,7 +245,7 @@ func (r *AreaRegistry) get(ctx context.Context, id string) (*models.Area, error)
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &area)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get area")
+		return nil, errxtrace.Wrap("failed to get area", err)
 	}
 
 	return &area, nil
@@ -257,7 +257,7 @@ func (r *AreaRegistry) getCommodities(ctx context.Context, tx *sqlx.Tx, areaID s
 	comReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
 	for commodity, err := range comReg.ScanByField(ctx, store.Pair("area_id", areaID)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list commodities")
+			return nil, errxtrace.Wrap("failed to list commodities", err)
 		}
 		commodities = append(commodities, commodity.GetID())
 	}
@@ -270,7 +270,7 @@ func (r *AreaRegistry) getLocation(ctx context.Context, tx *sqlx.Tx, id string) 
 	txreg := store.NewTxRegistry[models.Location](tx, r.tableNames.Locations())
 	err := txreg.ScanOneByField(ctx, store.Pair("id", id), &location)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get location")
+		return nil, errxtrace.Wrap("failed to get location", err)
 	}
 	return &location, nil
 }

@@ -9,9 +9,10 @@ import (
 	"image/png"
 	"strings"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -53,14 +54,14 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
-		return errkit.Wrap(err, "failed to open bucket")
+		return errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 
 	// Read the original image
 	reader, err := b.NewReader(ctx, file.OriginalPath, nil)
 	if err != nil {
-		return errkit.Wrap(err, "failed to open original image")
+		return errxtrace.Wrap("failed to open original image", err)
 	}
 	defer reader.Close()
 
@@ -75,7 +76,7 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 		return nil // Skip unsupported formats
 	}
 	if err != nil {
-		return errkit.Wrap(err, "failed to decode image")
+		return errxtrace.Wrap("failed to decode image", err)
 	}
 
 	// Generate thumbnails for each size
@@ -88,7 +89,7 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 		// Save thumbnail to storage
 		writer, err := b.NewWriter(ctx, thumbnailPath, nil)
 		if err != nil {
-			return errkit.Wrap(err, "failed to create thumbnail writer")
+			return errxtrace.Wrap("failed to create thumbnail writer", err)
 		}
 
 		// Always encode thumbnails as JPEG for consistency and smaller file sizes
@@ -96,7 +97,7 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 
 		writer.Close()
 		if err != nil {
-			return errkit.Wrap(err, "failed to encode thumbnail")
+			return errxtrace.Wrap("failed to encode thumbnail", err)
 		}
 	}
 
@@ -123,26 +124,26 @@ func (s *FileService) GetThumbnailPaths(fileID string) map[string]string {
 func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string) error {
 	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create file registry")
+		return errxtrace.Wrap("failed to create file registry", err)
 	}
 
 	// Get the file entity first
 	file, err := fileReg.Get(ctx, fileID)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get file entity")
+		return errxtrace.Wrap("failed to get file entity", err)
 	}
 
 	// Delete the physical file and thumbnails if they exist
 	if file.File != nil && file.File.OriginalPath != "" {
 		if err := s.deletePhysicalFileAndThumbnails(ctx, fileID, file.File.OriginalPath, file.File.MIMEType); err != nil {
-			return errkit.Wrap(err, "failed to delete physical file and thumbnails")
+			return errxtrace.Wrap("failed to delete physical file and thumbnails", err)
 		}
 	}
 
 	// Delete the file entity from database
 	err = fileReg.Delete(ctx, fileID)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete file entity")
+		return errxtrace.Wrap("failed to delete file entity", err)
 	}
 
 	return nil
@@ -157,7 +158,7 @@ func (s *FileService) DeletePhysicalFile(ctx context.Context, filePath string) e
 func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, fileID, filePath, mimeType string) error {
 	// Delete the original file
 	if err := s.deletePhysicalFile(ctx, filePath); err != nil {
-		return errkit.Wrap(err, "failed to delete original file")
+		return errxtrace.Wrap("failed to delete original file", err)
 	}
 
 	// Delete thumbnails if it's an image file
@@ -176,14 +177,14 @@ func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, fileI
 func (s *FileService) deletePhysicalFile(ctx context.Context, filePath string) error {
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
-		return errkit.Wrap(err, "failed to open bucket")
+		return errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 
 	// Check if file exists before trying to delete it
 	exists, err := b.Exists(ctx, filePath)
 	if err != nil {
-		return errkit.Wrap(err, "failed to check if file exists")
+		return errxtrace.Wrap("failed to check if file exists", err)
 	}
 
 	if !exists {
@@ -193,7 +194,7 @@ func (s *FileService) deletePhysicalFile(ctx context.Context, filePath string) e
 
 	err = b.Delete(ctx, filePath)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete file")
+		return errxtrace.Wrap("failed to delete file", err)
 	}
 
 	return nil
@@ -203,20 +204,20 @@ func (s *FileService) deletePhysicalFile(ctx context.Context, filePath string) e
 func (s *FileService) DeleteLinkedFiles(ctx context.Context, entityType, entityID string) error {
 	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to create file registry")
+		return errxtrace.Wrap("failed to create file registry", err)
 	}
 
 	// Get all linked files for this entity
 	files, err := fileReg.ListByLinkedEntity(ctx, entityType, entityID)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get linked files")
+		return errxtrace.Wrap("failed to get linked files", err)
 	}
 
 	// Delete all linked files (both physical and database records)
 	for _, file := range files {
 		err = s.DeleteFileWithPhysical(ctx, file.ID)
 		if err != nil && !errors.Is(err, registry.ErrNotFound) {
-			return errkit.Wrap(err, "failed to delete linked file")
+			return errxtrace.Wrap("failed to delete linked file", err)
 		}
 	}
 
@@ -227,7 +228,7 @@ func (s *FileService) DeleteLinkedFiles(ctx context.Context, entityType, entityI
 func (s *FileService) ThumbnailExists(ctx context.Context, fileID, size string) (bool, error) {
 	// Validate size parameter
 	if size != "small" && size != "medium" {
-		return false, errkit.WithStack(ErrInvalidThumbnailSize, "size", size)
+		return false, errxtrace.Classify(ErrInvalidThumbnailSize, errx.Attrs("size", size))
 	}
 
 	// Generate thumbnail path using the same structure as download
@@ -236,13 +237,13 @@ func (s *FileService) ThumbnailExists(ctx context.Context, fileID, size string) 
 	// Open bucket and check if file exists
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
-		return false, errkit.Wrap(err, "failed to open bucket")
+		return false, errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 
 	exists, err := b.Exists(ctx, thumbnailPath)
 	if err != nil {
-		return false, errkit.Wrap(err, "failed to check thumbnail existence").WithField("thumbnail_path", thumbnailPath)
+		return false, errxtrace.Wrap("failed to check thumbnail existence", err, errx.Attrs("thumbnail_path", thumbnailPath))
 	}
 
 	return exists, nil

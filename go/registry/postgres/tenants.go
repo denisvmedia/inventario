@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -36,9 +37,7 @@ func (r *TenantRegistry) newSQLRegistry() *store.NonRLSRepository[models.Tenant,
 
 func (r *TenantRegistry) Get(ctx context.Context, id string) (*models.Tenant, error) {
 	if id == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "ID",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 
 	var tenant models.Tenant
@@ -46,12 +45,12 @@ func (r *TenantRegistry) Get(ctx context.Context, id string) (*models.Tenant, er
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &tenant)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, errkit.WithStack(registry.ErrNotFound,
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
 				"entity_type", "Tenant",
 				"entity_id", id,
-			)
+			))
 		}
-		return nil, errkit.Wrap(err, "failed to get entity")
+		return nil, errxtrace.Wrap("failed to get entity", err)
 	}
 
 	return &tenant, nil
@@ -65,7 +64,7 @@ func (r *TenantRegistry) List(ctx context.Context) ([]*models.Tenant, error) {
 	// Query the database for all tenants (atomic operation)
 	for tenant, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list tenants")
+			return nil, errxtrace.Wrap("failed to list tenants", err)
 		}
 		tenants = append(tenants, &tenant)
 	}
@@ -78,7 +77,7 @@ func (r *TenantRegistry) Count(ctx context.Context) (int, error) {
 
 	count, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count tenants")
+		return 0, errxtrace.Wrap("failed to count tenants", err)
 	}
 
 	return count, nil
@@ -86,15 +85,11 @@ func (r *TenantRegistry) Count(ctx context.Context) (int, error) {
 
 func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {
 	if tenant.Name == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Name",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
 	}
 
 	if tenant.Slug == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Slug",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Slug"))
 	}
 
 	// ID is now set automatically by NonRLSRepository.Create
@@ -107,16 +102,14 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		txReg := store.NewTxRegistry[models.Tenant](tx, r.tableNames.Tenants())
 		err := txReg.ScanOneByField(ctx, store.Pair("slug", tenant.Slug), &existingTenant)
 		if err == nil {
-			return errkit.WithStack(registry.ErrSlugAlreadyExists,
-				"slug", tenant.Slug,
-			)
+			return errxtrace.Classify(registry.ErrSlugAlreadyExists, errx.Attrs("slug", tenant.Slug))
 		} else if !errors.Is(err, store.ErrNotFound) {
-			return errkit.Wrap(err, "failed to check for existing tenant")
+			return errxtrace.Wrap("failed to check for existing tenant", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create tenant")
+		return nil, errxtrace.Wrap("failed to create tenant", err)
 	}
 
 	return &createdTenant, nil
@@ -124,28 +117,22 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 
 func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*models.Tenant, error) {
 	if tenant.GetID() == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "ID",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 
 	if tenant.Name == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Name",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
 	}
 
 	if tenant.Slug == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Slug",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Slug"))
 	}
 
 	reg := r.newSQLRegistry()
 
 	err := reg.Update(ctx, tenant, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update tenant")
+		return nil, errxtrace.Wrap("failed to update tenant", err)
 	}
 
 	return &tenant, nil
@@ -153,16 +140,14 @@ func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*mod
 
 func (r *TenantRegistry) Delete(ctx context.Context, id string) error {
 	if id == "" {
-		return errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "ID",
-		)
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 
 	reg := r.newSQLRegistry()
 
 	err := reg.Delete(ctx, id, nil)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete tenant")
+		return errxtrace.Wrap("failed to delete tenant", err)
 	}
 
 	return nil
@@ -171,9 +156,7 @@ func (r *TenantRegistry) Delete(ctx context.Context, id string) error {
 // GetBySlug returns a tenant by its slug
 func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Tenant, error) {
 	if slug == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Slug",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Slug"))
 	}
 
 	var tenant models.Tenant
@@ -182,12 +165,12 @@ func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Te
 	err := reg.ScanOneByField(ctx, store.Pair("slug", slug), &tenant)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, errkit.WithStack(registry.ErrNotFound,
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
 				"entity_type", "Tenant",
 				"slug", slug,
-			)
+			))
 		}
-		return nil, errkit.Wrap(err, "failed to get tenant by slug")
+		return nil, errxtrace.Wrap("failed to get tenant by slug", err)
 	}
 
 	return &tenant, nil
@@ -196,9 +179,7 @@ func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Te
 // GetByDomain returns a tenant by its domain
 func (r *TenantRegistry) GetByDomain(ctx context.Context, domain string) (*models.Tenant, error) {
 	if domain == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Domain",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Domain"))
 	}
 
 	var tenant models.Tenant
@@ -207,12 +188,12 @@ func (r *TenantRegistry) GetByDomain(ctx context.Context, domain string) (*model
 	err := reg.ScanOneByField(ctx, store.Pair("domain", domain), &tenant)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, errkit.WithStack(registry.ErrNotFound,
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
 				"entity_type", "Tenant",
 				"domain", domain,
-			)
+			))
 		}
-		return nil, errkit.Wrap(err, "failed to get tenant by domain")
+		return nil, errxtrace.Wrap("failed to get tenant by domain", err)
 	}
 
 	return &tenant, nil

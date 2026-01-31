@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -54,7 +54,7 @@ func (f *AreaRegistryFactory) MustCreateUserRegistry(ctx context.Context) regist
 func (f *AreaRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.AreaRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -67,7 +67,7 @@ func (f *AreaRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.
 	// Create user-aware location registry
 	locationRegistryInterface, err := f.locationRegistry.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create user location registry")
+		return nil, errxtrace.Wrap("failed to create user location registry", err)
 	}
 
 	// Cast to concrete type for relationship management
@@ -115,7 +115,7 @@ func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Ar
 	// Use CreateWithUser to ensure user context is applied
 	newArea, err := r.Registry.CreateWithUser(ctx, area)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create area")
+		return nil, errxtrace.Wrap("failed to create area", err)
 	}
 
 	// Add this area to its parent location's area list
@@ -134,7 +134,7 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedArea, err := r.Registry.UpdateWithUser(ctx, area)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update area")
+		return nil, errxtrace.Wrap("failed to update area", err)
 	}
 
 	// Handle location registry tracking - location changed
@@ -154,7 +154,7 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	// Keep the constraint: refuse to delete if area still has commodities
 	if len(must.Must(r.GetCommodities(ctx, id))) > 0 {
-		return errkit.Wrap(registry.ErrCannotDelete, "area has commodities")
+		return errxtrace.Wrap("area has commodities", registry.ErrCannotDelete)
 	}
 
 	// Remove this area from its parent location's area list
@@ -165,7 +165,7 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 
 	err = r.Registry.Delete(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete area")
+		return errxtrace.Wrap("failed to delete area", err)
 	}
 
 	// Clean up the area's commodity list when the area is successfully deleted

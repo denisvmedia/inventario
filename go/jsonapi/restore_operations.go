@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/go-extras/errx"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -76,15 +76,15 @@ type RestoreOperationCreateRequestData struct {
 
 func (a *RestoreOperationCreateRequest) Bind(r *http.Request) error {
 	if a.Data == nil {
-		return errkit.WithMessage(nil, "missing required data field")
+		return errx.NewDisplayable("missing required data field")
 	}
 
 	if a.Data.Type != "restores" {
-		return errkit.WithMessage(nil, "invalid type, expected 'restores'")
+		return errx.NewDisplayable("invalid type, expected 'restores'")
 	}
 
 	if a.Data.Attributes == nil {
-		return errkit.WithMessage(nil, "missing required attributes field")
+		return errx.NewDisplayable("missing required attributes field")
 	}
 
 	return a.validateAttributesWithContext(r.Context())
@@ -113,15 +113,15 @@ type RestoreOperationUpdateRequestData struct {
 
 func (a *RestoreOperationUpdateRequest) Bind(r *http.Request) error {
 	if a.Data == nil {
-		return errkit.WithMessage(nil, "missing required data field")
+		return errx.NewDisplayable("missing required data field")
 	}
 
 	if a.Data.Type != "restores" {
-		return errkit.WithMessage(nil, "invalid type, expected 'restores'")
+		return errx.NewDisplayable("invalid type, expected 'restores'")
 	}
 
 	if a.Data.Attributes == nil {
-		return errkit.WithMessage(nil, "missing required attributes field")
+		return errx.NewDisplayable("missing required attributes field")
 	}
 
 	return a.validateAttributesWithContext(r.Context())

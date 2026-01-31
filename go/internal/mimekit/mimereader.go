@@ -7,9 +7,8 @@ import (
 	"mime"
 
 	"github.com/gabriel-vasile/mimetype"
+	"github.com/go-extras/errx"
 	"golang.org/x/exp/slices"
-
-	"github.com/denisvmedia/inventario/internal/errkit"
 )
 
 // The sniff algorithm uses at most sniffLen bytes to make its decision.
@@ -74,11 +73,11 @@ func (mr *MIMEReader) Read(p []byte) (n int, err error) {
 		mtype := mimetype.Detect(mr.buf.Bytes())
 		mt, _, _ := mime.ParseMediaType(mtype.String())
 		if mt == "" || !slices.Contains(mr.allowedContentTypes, mt) {
-			mr.err = errkit.WithFields(ErrInvalidContentType, errkit.Fields{
-				"expected": mr.allowedContentTypes,
-				"detected": mtype,
-				"parsed":   mt,
-			})
+			mr.err = errx.Classify(ErrInvalidContentType, errx.Attrs(
+				"expected", mr.allowedContentTypes,
+				"detected", mtype,
+				"parsed", mt,
+			))
 			log.Printf("=================== Invalid MIME: %s", mr.err.Error())
 			return n, mr.err
 		}
