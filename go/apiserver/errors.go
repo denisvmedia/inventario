@@ -74,17 +74,18 @@ func marshalError(err error) json.RawMessage {
 		}
 	}
 
-	// Final fallback: minimal error structure
+	// Final fallback: minimal error structure (this should always succeed)
 	minimal := jsonMinimalError{
 		Msg:  err.Error(),
 		Type: fmt.Sprintf("%T", err),
 	}
-	if data, e := json.Marshal(minimal); e == nil {
-		return data
+	data, e := json.Marshal(minimal)
+	if e != nil {
+		// This is an unexpected situation - marshaling a simple struct failed
+		// Panic to surface the issue rather than silently returning invalid JSON
+		panic(fmt.Sprintf("failed to marshal minimal error structure: %v", e))
 	}
-
-	// Ultimate fallback: return error string as JSON
-	return json.RawMessage(fmt.Sprintf(`{"msg":"%s"}`, err.Error()))
+	return data
 }
 
 func NewNotFoundError(err error) jsonapi.Error {
