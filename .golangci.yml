@@ -59,6 +59,8 @@ linters:
       alias:
         - pkg: github.com/frankban/quicktest
           alias: qt
+        - pkg: github.com/go-extras/errx/stacktrace
+          alias: errxtrace
     lll:
       line-length: 240
     nakedret: # Discussions on why naked return can be a problem: https://github.com/golang/go/issues/21291

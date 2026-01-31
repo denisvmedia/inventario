@@ -182,7 +182,12 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 	// Verify the error message contains the expected text and is user-friendly
 	errorDetails, ok := errorObj["error"].(map[string]any)
 	c.Assert(ok, qt.IsTrue)
-	errorMsg, ok := errorDetails["msg"].(string)
+	// errx wraps errors in {"error": {...}, "type": "..."} structure
+	// Extract the inner error details
+	innerError, ok := errorDetails["error"].(map[string]any)
+	c.Assert(ok, qt.IsTrue)
+	// Extract message from the inner error (using "message" for compatibility with both errx and standard errors)
+	errorMsg, ok := innerError["message"].(string)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(errorMsg, qt.Matches, ".*restore operation is already in progress.*")
 
@@ -287,7 +292,12 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 	// Verify the error message mentions pending operations and is user-friendly
 	errorDetails, ok := errorObj["error"].(map[string]any)
 	c.Assert(ok, qt.IsTrue)
-	errorMsg, ok := errorDetails["msg"].(string)
+	// errx wraps errors in {"error": {...}, "type": "..."} structure
+	// Extract the inner error details
+	innerError, ok := errorDetails["error"].(map[string]any)
+	c.Assert(ok, qt.IsTrue)
+	// Extract message from the inner error (using "message" for compatibility with both errx and standard errors)
+	errorMsg, ok := innerError["message"].(string)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(errorMsg, qt.Matches, ".*restore operation is already in progress or pending.*")
 

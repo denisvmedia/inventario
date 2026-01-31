@@ -3,11 +3,11 @@ package postgres
 import (
 	"context"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -51,7 +51,7 @@ func (f *InvoiceRegistryFactory) MustCreateUserRegistry(ctx context.Context) reg
 func (f *InvoiceRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.InvoiceRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &InvoiceRegistry{
@@ -85,7 +85,7 @@ func (r *InvoiceRegistry) List(ctx context.Context) ([]*models.Invoice, error) {
 	// Query the database for all invoices (atomic operation)
 	for invoice, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list invoices")
+			return nil, errxtrace.Wrap("failed to list invoices", err)
 		}
 		invoices = append(invoices, &invoice)
 	}
@@ -98,7 +98,7 @@ func (r *InvoiceRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count invoices")
+		return 0, errxtrace.Wrap("failed to count invoices", err)
 	}
 
 	return cnt, nil
@@ -115,12 +115,12 @@ func (r *InvoiceRegistry) Create(ctx context.Context, invoice models.Invoice) (*
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
 		err := commodityReg.ScanOneByField(ctx, store.Pair("id", invoice.CommodityID), &commodity)
 		if err != nil {
-			return errkit.Wrap(err, "failed to get commodity")
+			return errxtrace.Wrap("failed to get commodity", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create invoice")
+		return nil, errxtrace.Wrap("failed to create invoice", err)
 	}
 
 	return &createdInvoice, nil
@@ -135,13 +135,13 @@ func (r *InvoiceRegistry) Update(ctx context.Context, invoice models.Invoice) (*
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
 		err := commodityReg.ScanOneByField(ctx, store.Pair("id", invoice.CommodityID), &commodity)
 		if err != nil {
-			return errkit.Wrap(err, "failed to get commodity")
+			return errxtrace.Wrap("failed to get commodity", err)
 		}
 		// TODO: what if commodity has changed, allow or not? (currently allowed)
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update invoice")
+		return nil, errxtrace.Wrap("failed to update invoice", err)
 	}
 
 	return &invoice, nil
@@ -166,7 +166,7 @@ func (r *InvoiceRegistry) get(ctx context.Context, id string) (*models.Invoice, 
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &invoice)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get invoice")
+		return nil, errxtrace.Wrap("failed to get invoice", err)
 	}
 
 	return &invoice, nil

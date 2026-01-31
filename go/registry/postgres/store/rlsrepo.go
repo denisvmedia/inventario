@@ -5,9 +5,9 @@ import (
 	"errors"
 	"iter"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
-
-	"github.com/denisvmedia/inventario/internal/errkit"
 )
 
 type RLSRepository[T any, P ptrTenantUserAware[T]] struct {
@@ -60,13 +60,13 @@ func (r *RLSRepository[T, P]) ScanByField(ctx context.Context, field FieldValue)
 func (r *RLSRepository[T, P]) ScanOneByField(ctx context.Context, field FieldValue, entity *T) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer tx.Rollback() // Read-only transaction, so rollback is safe
 
 	err = NewTxRegistry[T](tx, r.table).ScanOneByField(ctx, field, entity)
 	if err != nil {
-		return errkit.Wrap(err, "failed to scan entity")
+		return errxtrace.Wrap("failed to scan entity", err)
 	}
 
 	return nil
@@ -111,7 +111,7 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 	var zero T
 	tx, err := r.beginTx(ctx)
 	if err != nil {
-		return zero, errkit.Wrap(err, "failed to begin transaction")
+		return zero, errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
@@ -130,14 +130,14 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
 		if err != nil {
-			return zero, errkit.Wrap(err, "failed to call checker function", "entity_type", r.table)
+			return zero, errxtrace.Wrap("failed to call checker function", err, errx.Attrs("entity_type", r.table))
 		}
 	}
 
 	txreg := NewTxRegistry[T](tx, r.table)
 	err = txreg.Insert(ctx, entity)
 	if err != nil {
-		return zero, errkit.Wrap(err, "failed to insert entity")
+		return zero, errxtrace.Wrap("failed to insert entity", err)
 	}
 
 	return entity, nil
@@ -146,7 +146,7 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
@@ -164,20 +164,20 @@ func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn fu
 	var dbEntity T
 	err = NewTxRegistry[T](tx, r.table).ScanOneByField(ctx, field, &dbEntity)
 	if err != nil {
-		return errkit.Wrap(err, "failed to scan entity")
+		return errxtrace.Wrap("failed to scan entity", err)
 	}
 
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx, dbEntity)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call checker function", "entity_type", r.table)
+			return errxtrace.Wrap("failed to call checker function", err, errx.Attrs("entity_type", r.table))
 		}
 	}
 
 	txreg := NewTxRegistry[T](tx, r.table)
 	err = txreg.UpdateByField(ctx, field, entity)
 	if err != nil {
-		return errkit.Wrap(err, "failed to update entity")
+		return errxtrace.Wrap("failed to update entity", err)
 	}
 
 	return nil
@@ -186,7 +186,7 @@ func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn fu
 func (r *RLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
@@ -198,19 +198,19 @@ func (r *RLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn f
 	txreg := NewTxRegistry[T](tx, r.table)
 	err = txreg.ScanOneByField(ctx, field, &entity)
 	if err != nil {
-		return errkit.Wrap(err, "entity not found")
+		return errxtrace.Wrap("entity not found", err)
 	}
 
 	if checkerFn != nil {
 		err = checkerFn(ctx, tx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call checker function", "entity_type", r.table)
+			return errxtrace.Wrap("failed to call checker function", err, errx.Attrs("entity_type", r.table))
 		}
 	}
 
 	err = txreg.DeleteByField(ctx, field)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete entity")
+		return errxtrace.Wrap("failed to delete entity", err)
 	}
 
 	return nil
@@ -219,7 +219,7 @@ func (r *RLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn f
 func (r *RLSRepository[T, P]) DoWithEntity(ctx context.Context, entity T, operationFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
@@ -231,13 +231,13 @@ func (r *RLSRepository[T, P]) DoWithEntity(ctx context.Context, entity T, operat
 	var dbEntity T
 	err = NewTxRegistry[T](tx, r.table).ScanOneByField(ctx, field, &dbEntity)
 	if err != nil {
-		return errkit.Wrap(err, "failed to scan entity")
+		return errxtrace.Wrap("failed to scan entity", err)
 	}
 
 	if operationFn != nil {
 		err = operationFn(ctx, tx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call operationFn (RLSRepository.DoWithEntity)", "entity_type", r.table)
+			return errxtrace.Wrap("failed to call operationFn (RLSRepository.DoWithEntity)", err, errx.Attrs("entity_type", r.table))
 		}
 	}
 
@@ -247,7 +247,7 @@ func (r *RLSRepository[T, P]) DoWithEntity(ctx context.Context, entity T, operat
 func (r *RLSRepository[T, P]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
@@ -259,13 +259,13 @@ func (r *RLSRepository[T, P]) DoWithEntityID(ctx context.Context, entityID strin
 	var dbEntity T
 	err = NewTxRegistry[T](tx, r.table).ScanOneByField(ctx, field, &dbEntity)
 	if err != nil {
-		return errkit.Wrap(err, "failed to scan entity")
+		return errxtrace.Wrap("failed to scan entity", err)
 	}
 
 	if operationFn != nil {
 		err = operationFn(ctx, tx, dbEntity)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call operationFn (RLSRepository.DoWithEntityID)", "entity_type", r.table)
+			return errxtrace.Wrap("failed to call operationFn (RLSRepository.DoWithEntityID)", err, errx.Attrs("entity_type", r.table))
 		}
 	}
 
@@ -275,7 +275,7 @@ func (r *RLSRepository[T, P]) DoWithEntityID(ctx context.Context, entityID strin
 func (r *RLSRepository[T, P]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
-		return errkit.Wrap(err, "failed to begin transaction")
+		return errxtrace.Wrap("failed to begin transaction", err)
 	}
 	defer func() {
 		err = errors.Join(err, RollbackOrCommit(tx, err))
@@ -284,7 +284,7 @@ func (r *RLSRepository[T, P]) Do(ctx context.Context, operationFn func(context.C
 	if operationFn != nil {
 		err = operationFn(ctx, tx)
 		if err != nil {
-			return errkit.Wrap(err, "failed to call operationFn (RLSRepository.Do)", "entity_type", r.table)
+			return errxtrace.Wrap("failed to call operationFn (RLSRepository.Do)", err, errx.Attrs("entity_type", r.table))
 		}
 	}
 

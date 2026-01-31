@@ -6,10 +6,10 @@ import (
 	"strings"
 	"sync"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -50,7 +50,7 @@ func (f *LocationRegistryFactory) MustCreateUserRegistry(ctx context.Context) re
 func (f *LocationRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.LocationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user from context")
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set
@@ -87,16 +87,16 @@ func (f *LocationRegistryFactory) CreateServiceRegistry() registry.LocationRegis
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 	_, err := r.Registry.Get(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to get location")
+		return errxtrace.Wrap("failed to get location", err)
 	}
 
 	if len(must.Must(r.GetAreas(ctx, id))) > 0 {
-		return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
+		return errxtrace.Wrap("location has areas", registry.ErrCannotDelete)
 	}
 
 	err = r.Registry.Delete(ctx, id)
 	if err != nil {
-		return errkit.Wrap(err, "failed to delete location")
+		return errxtrace.Wrap("failed to delete location", err)
 	}
 
 	return nil
@@ -106,7 +106,7 @@ func (r *LocationRegistry) Update(ctx context.Context, location models.Location)
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedLocation, err := r.Registry.UpdateWithUser(ctx, location)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update location")
+		return nil, errxtrace.Wrap("failed to update location", err)
 	}
 
 	return updatedLocation, nil

@@ -3,10 +3,10 @@ package memory
 import (
 	"context"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -41,7 +41,7 @@ func (f *RestoreStepRegistryFactory) MustCreateUserRegistry(ctx context.Context)
 func (f *RestoreStepRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.RestoreStepRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user from context")
+		return nil, errxtrace.Wrap("failed to get user from context", err)
 	}
 
 	// Create a new registry with user context already set

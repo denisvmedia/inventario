@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"runtime"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
+	errxjson "github.com/go-extras/errx/json"
 )
 
 // BaseInfo contains debug information about the application configuration
@@ -39,7 +39,13 @@ func (inf *Info) MarshalJSON() ([]byte, error) {
 
 	// return json.Marshal(info)
 	if inf.Error != nil {
-		jsonData.Error = errkit.ForceMarshalError(inf.Error)
+		errorBytes, err := errxjson.Marshal(inf.Error)
+		if err != nil {
+			// If we can't marshal the error, use a simple error message
+			jsonData.Error = json.RawMessage(`"error marshaling failed"`)
+		} else {
+			jsonData.Error = errorBytes
+		}
 	}
 
 	return json.Marshal(jsonData)

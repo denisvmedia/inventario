@@ -3,11 +3,11 @@ package postgres
 import (
 	"context"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -51,7 +51,7 @@ func (f *ManualRegistryFactory) MustCreateUserRegistry(ctx context.Context) regi
 func (f *ManualRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ManualRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &ManualRegistry{
@@ -85,7 +85,7 @@ func (r *ManualRegistry) List(ctx context.Context) ([]*models.Manual, error) {
 	// Query the database for all manuals (atomic operation)
 	for manual, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list manuals")
+			return nil, errxtrace.Wrap("failed to list manuals", err)
 		}
 		manuals = append(manuals, &manual)
 	}
@@ -98,7 +98,7 @@ func (r *ManualRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count manuals")
+		return 0, errxtrace.Wrap("failed to count manuals", err)
 	}
 
 	return cnt, nil
@@ -115,12 +115,12 @@ func (r *ManualRegistry) Create(ctx context.Context, manual models.Manual) (*mod
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
 		err := commodityReg.ScanOneByField(ctx, store.Pair("id", manual.CommodityID), &commodity)
 		if err != nil {
-			return errkit.Wrap(err, "failed to get commodity")
+			return errxtrace.Wrap("failed to get commodity", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create manual")
+		return nil, errxtrace.Wrap("failed to create manual", err)
 	}
 
 	return &createdManual, nil
@@ -135,13 +135,13 @@ func (r *ManualRegistry) Update(ctx context.Context, manual models.Manual) (*mod
 		commodityReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
 		err := commodityReg.ScanOneByField(ctx, store.Pair("id", manual.CommodityID), &commodity)
 		if err != nil {
-			return errkit.Wrap(err, "failed to get commodity")
+			return errxtrace.Wrap("failed to get commodity", err)
 		}
 		// TODO: what if commodity has changed, allow or not? (currently allowed)
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update manual")
+		return nil, errxtrace.Wrap("failed to update manual", err)
 	}
 
 	return &manual, nil
@@ -166,7 +166,7 @@ func (r *ManualRegistry) get(ctx context.Context, id string) (*models.Manual, er
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &manual)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get manual")
+		return nil, errxtrace.Wrap("failed to get manual", err)
 	}
 
 	return &manual, nil

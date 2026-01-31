@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -54,7 +54,7 @@ func (f *ExportRegistryFactory) MustCreateUserRegistry(ctx context.Context) regi
 func (f *ExportRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ExportRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &ExportRegistry{
@@ -84,7 +84,7 @@ func (r *ExportRegistry) Create(ctx context.Context, export models.Export) (*mod
 
 	createdExport, err := reg.Create(ctx, export, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create export")
+		return nil, errxtrace.Wrap("failed to create export", err)
 	}
 
 	return &createdExport, nil
@@ -104,26 +104,26 @@ func (r *ExportRegistry) List(ctx context.Context) ([]*models.Export, error) {
 		query := fmt.Sprintf("SELECT * FROM %s WHERE deleted_at IS NULL ORDER BY created_date DESC", r.tableNames.Exports())
 		rows, err := tx.QueryxContext(ctx, query)
 		if err != nil {
-			return errkit.Wrap(err, "failed to query exports")
+			return errxtrace.Wrap("failed to query exports", err)
 		}
 		defer rows.Close()
 
 		for rows.Next() {
 			var export models.Export
 			if err := rows.StructScan(&export); err != nil {
-				return errkit.Wrap(err, "failed to scan export")
+				return errxtrace.Wrap("failed to scan export", err)
 			}
 			exports = append(exports, &export)
 		}
 
 		if err := rows.Err(); err != nil {
-			return errkit.Wrap(err, "failed to iterate exports")
+			return errxtrace.Wrap("failed to iterate exports", err)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list exports")
+		return nil, errxtrace.Wrap("failed to list exports", err)
 	}
 
 	return exports, nil
@@ -137,12 +137,12 @@ func (r *ExportRegistry) Count(ctx context.Context) (int, error) {
 		query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE deleted_at IS NULL", r.tableNames.Exports())
 		err := tx.GetContext(ctx, &cnt, query)
 		if err != nil {
-			return errkit.Wrap(err, "failed to count exports")
+			return errxtrace.Wrap("failed to count exports", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count exports")
+		return 0, errxtrace.Wrap("failed to count exports", err)
 	}
 
 	return cnt, nil
@@ -153,7 +153,7 @@ func (r *ExportRegistry) Update(ctx context.Context, export models.Export) (*mod
 
 	err := reg.Update(ctx, export, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update export")
+		return nil, errxtrace.Wrap("failed to update export", err)
 	}
 
 	return &export, nil
@@ -168,25 +168,25 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 		err := tx.GetContext(ctx, &export, query, id)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return errkit.Wrap(registry.ErrNotFound, "export not found or already deleted")
+				return errxtrace.Wrap("export not found or already deleted", registry.ErrNotFound)
 			}
-			return errkit.Wrap(err, "failed to get export")
+			return errxtrace.Wrap("failed to get export", err)
 		}
 
 		// Hard delete the export
 		deleteExportQuery := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Exports())
 		result, err := tx.ExecContext(ctx, deleteExportQuery, id)
 		if err != nil {
-			return errkit.Wrap(err, "failed to delete export")
+			return errxtrace.Wrap("failed to delete export", err)
 		}
 
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
-			return errkit.Wrap(err, "failed to get rows affected")
+			return errxtrace.Wrap("failed to get rows affected", err)
 		}
 
 		if rowsAffected == 0 {
-			return errkit.Wrap(registry.ErrNotFound, "export not found")
+			return errxtrace.Wrap("export not found", registry.ErrNotFound)
 		}
 
 		return nil
@@ -205,26 +205,26 @@ func (r *ExportRegistry) ListWithDeleted(ctx context.Context) ([]*models.Export,
 		query := fmt.Sprintf("SELECT * FROM %s ORDER BY created_date DESC", r.tableNames.Exports())
 		rows, err := tx.QueryxContext(ctx, query)
 		if err != nil {
-			return errkit.Wrap(err, "failed to query exports")
+			return errxtrace.Wrap("failed to query exports", err)
 		}
 		defer rows.Close()
 
 		for rows.Next() {
 			var export models.Export
 			if err := rows.StructScan(&export); err != nil {
-				return errkit.Wrap(err, "failed to scan export")
+				return errxtrace.Wrap("failed to scan export", err)
 			}
 			exports = append(exports, &export)
 		}
 
 		if err := rows.Err(); err != nil {
-			return errkit.Wrap(err, "failed to iterate exports")
+			return errxtrace.Wrap("failed to iterate exports", err)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list exports with deleted")
+		return nil, errxtrace.Wrap("failed to list exports with deleted", err)
 	}
 
 	return exports, nil
@@ -240,26 +240,26 @@ func (r *ExportRegistry) ListDeleted(ctx context.Context) ([]*models.Export, err
 		query := fmt.Sprintf("SELECT * FROM %s WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC", r.tableNames.Exports())
 		rows, err := tx.QueryxContext(ctx, query)
 		if err != nil {
-			return errkit.Wrap(err, "failed to query deleted exports")
+			return errxtrace.Wrap("failed to query deleted exports", err)
 		}
 		defer rows.Close()
 
 		for rows.Next() {
 			var export models.Export
 			if err := rows.StructScan(&export); err != nil {
-				return errkit.Wrap(err, "failed to scan export")
+				return errxtrace.Wrap("failed to scan export", err)
 			}
 			exports = append(exports, &export)
 		}
 
 		if err := rows.Err(); err != nil {
-			return errkit.Wrap(err, "failed to iterate deleted exports")
+			return errxtrace.Wrap("failed to iterate deleted exports", err)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list deleted exports")
+		return nil, errxtrace.Wrap("failed to list deleted exports", err)
 	}
 
 	return exports, nil
@@ -272,7 +272,7 @@ func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 		txreg := store.NewTxRegistry[models.Export](tx, r.tableNames.Exports())
 		err := txreg.DeleteByField(ctx, store.Pair("id", id))
 		if err != nil {
-			return errkit.Wrap(err, "failed to hard delete export")
+			return errxtrace.Wrap("failed to hard delete export", err)
 		}
 		return nil
 	})
@@ -293,7 +293,7 @@ func (r *ExportRegistry) get(ctx context.Context, id string) (*models.Export, er
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &export)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get export")
+		return nil, errxtrace.Wrap("failed to get export", err)
 	}
 
 	return &export, nil

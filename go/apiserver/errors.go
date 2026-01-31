@@ -6,29 +6,30 @@ import (
 	"net/http"
 
 	"github.com/go-chi/render"
+	"github.com/go-extras/errx"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
+	"github.com/denisvmedia/inventario/internal/errormarshal"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
 
 var (
-	ErrUnknownContentType     = errors.New("render: unable to automatically decode the request content type")
-	ErrInvalidContentType     = errors.New("invalid content type")
-	ErrNoFilesUploaded        = errors.New("no files uploaded")
-	ErrEntityNotFound         = errors.New("entity not found")
-	ErrTenantNotFound         = errors.New("tenant not found")
-	ErrUnknownThumbnailStatus = errors.New("unknown thumbnail generation status")
-	ErrMissingUploadSlot      = errors.New("missing X-Upload-Slot header")
-	ErrInvalidUploadSlot      = errors.New("invalid or expired upload slot")
-	ErrNotFound               = registry.ErrNotFound
+	ErrUnknownContentType     = errx.NewSentinel("render: unable to automatically decode the request content type")
+	ErrInvalidContentType     = errx.NewSentinel("invalid content type")
+	ErrNoFilesUploaded        = errx.NewSentinel("no files uploaded")
+	ErrEntityNotFound         = errx.NewSentinel("entity not found")
+	ErrTenantNotFound         = errx.NewSentinel("tenant not found")
+	ErrUnknownThumbnailStatus = errx.NewSentinel("unknown thumbnail generation status")
+	ErrMissingUploadSlot      = errx.NewSentinel("missing X-Upload-Slot header")
+	ErrInvalidUploadSlot      = errx.NewSentinel("invalid or expired upload slot")
+	ErrNotFound               = errx.NewSentinel("not found", registry.ErrNotFound)
 )
 
 func NewNotFoundError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      errormarshal.Marshal(err),
 		HTTPStatusCode: http.StatusNotFound,
 		StatusText:     "Not Found",
 	}
@@ -37,7 +38,7 @@ func NewNotFoundError(err error) jsonapi.Error {
 func NewUnprocessableEntityError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      errormarshal.Marshal(err),
 		HTTPStatusCode: http.StatusUnprocessableEntity,
 		StatusText:     "Unprocessable Entity",
 	}
@@ -62,7 +63,7 @@ func NewUnauthorizedError(err error) jsonapi.Error {
 func NewBadRequestError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      errormarshal.Marshal(err),
 		HTTPStatusCode: http.StatusBadRequest,
 		StatusText:     "Bad Request",
 	}
@@ -71,7 +72,7 @@ func NewBadRequestError(err error) jsonapi.Error {
 func NewTooManyRequestsError(err error) jsonapi.Error {
 	return jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      errormarshal.Marshal(err),
 		HTTPStatusCode: http.StatusTooManyRequests,
 		StatusText:     "Too Many Requests",
 	}
@@ -94,7 +95,7 @@ func toJSONAPIError(err error) jsonapi.Error {
 	switch {
 	case errors.Is(err, registry.ErrCannotDelete):
 		return NewUnprocessableEntityError(err)
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, registry.ErrNotFound):
 		return NewNotFoundError(err)
 	case errors.Is(err, registry.ErrMainCurrencyNotSet):
 		return NewBadRequestError(err)
@@ -123,7 +124,7 @@ func renderEntityError(w http.ResponseWriter, r *http.Request, err error) error 
 func badRequest(w http.ResponseWriter, r *http.Request, err error) error {
 	badRequestError := jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(err),
+		UserError:      errormarshal.Marshal(err),
 		HTTPStatusCode: http.StatusBadRequest,
 		StatusText:     "Bad Request",
 	}
@@ -133,7 +134,7 @@ func badRequest(w http.ResponseWriter, r *http.Request, err error) error {
 func notFound(w http.ResponseWriter, r *http.Request) error {
 	notFoundError := jsonapi.Error{
 		Err:            ErrEntityNotFound,
-		UserError:      errkit.ForceMarshalError(ErrEntityNotFound),
+		UserError:      errormarshal.Marshal(ErrEntityNotFound),
 		HTTPStatusCode: http.StatusNotFound,
 		StatusText:     "Not Found",
 	}
@@ -143,7 +144,7 @@ func notFound(w http.ResponseWriter, r *http.Request) error {
 func conflictError(w http.ResponseWriter, r *http.Request, err, userErr error) error {
 	conflictErr := jsonapi.Error{
 		Err:            err,
-		UserError:      errkit.ForceMarshalError(userErr),
+		UserError:      errormarshal.Marshal(userErr),
 		HTTPStatusCode: http.StatusConflict,
 		StatusText:     "Conflict",
 	}

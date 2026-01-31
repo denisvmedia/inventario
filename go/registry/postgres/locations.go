@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres/store"
@@ -53,7 +54,7 @@ func (f *LocationRegistryFactory) MustCreateUserRegistry(ctx context.Context) re
 func (f *LocationRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.LocationRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get user ID from context")
+		return nil, errxtrace.Wrap("failed to get user ID from context", err)
 	}
 
 	return &LocationRegistry{
@@ -87,7 +88,7 @@ func (r *LocationRegistry) List(ctx context.Context) ([]*models.Location, error)
 	// Query the database for all locations (atomic operation)
 	for location, err := range reg.Scan(ctx) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list locations")
+			return nil, errxtrace.Wrap("failed to list locations", err)
 		}
 		locations = append(locations, &location)
 	}
@@ -100,7 +101,7 @@ func (r *LocationRegistry) Count(ctx context.Context) (int, error) {
 
 	cnt, err := reg.Count(ctx)
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count locations")
+		return 0, errxtrace.Wrap("failed to count locations", err)
 	}
 
 	return cnt, nil
@@ -108,9 +109,7 @@ func (r *LocationRegistry) Count(ctx context.Context) (int, error) {
 
 func (r *LocationRegistry) Create(ctx context.Context, location models.Location) (*models.Location, error) {
 	if location.Name == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Name",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
 	}
 
 	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
@@ -119,7 +118,7 @@ func (r *LocationRegistry) Create(ctx context.Context, location models.Location)
 
 	createdLocation, err := reg.Create(ctx, location, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to create location")
+		return nil, errxtrace.Wrap("failed to create location", err)
 	}
 
 	return &createdLocation, nil
@@ -127,16 +126,14 @@ func (r *LocationRegistry) Create(ctx context.Context, location models.Location)
 
 func (r *LocationRegistry) Update(ctx context.Context, location models.Location) (*models.Location, error) {
 	if location.Name == "" {
-		return nil, errkit.WithStack(registry.ErrFieldRequired,
-			"field_name", "Name",
-		)
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
 	}
 
 	reg := r.newSQLRegistry()
 
 	err := reg.Update(ctx, location, nil)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to update location")
+		return nil, errxtrace.Wrap("failed to update location", err)
 	}
 
 	return &location, nil
@@ -151,7 +148,7 @@ func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 			return err
 		}
 		if len(areas) > 0 {
-			return errkit.Wrap(registry.ErrCannotDelete, "location has areas")
+			return errxtrace.Wrap("location has areas", registry.ErrCannotDelete)
 		}
 		return nil
 	})
@@ -169,7 +166,7 @@ func (r *LocationRegistry) GetAreas(ctx context.Context, locationID string) ([]s
 		return err
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to list areas")
+		return nil, errxtrace.Wrap("failed to list areas", err)
 	}
 
 	return areas, nil
@@ -188,7 +185,7 @@ func (r *LocationRegistry) get(ctx context.Context, id string) (*models.Location
 
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &location)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to get location")
+		return nil, errxtrace.Wrap("failed to get location", err)
 	}
 
 	return &location, nil
@@ -200,7 +197,7 @@ func (r *LocationRegistry) getAreas(ctx context.Context, tx *sqlx.Tx, locationID
 	areaReg := store.NewTxRegistry[models.Area](tx, r.tableNames.Areas())
 	for area, err := range areaReg.ScanByField(ctx, store.Pair("location_id", locationID)) {
 		if err != nil {
-			return nil, errkit.Wrap(err, "failed to list areas")
+			return nil, errxtrace.Wrap("failed to list areas", err)
 		}
 		areas = append(areas, area.GetID())
 	}
@@ -233,12 +230,12 @@ func (r *LocationRegistry) GetTotalCommodityCount(ctx context.Context, locationI
 
 		err := tx.GetContext(ctx, &totalCount, sql, locationID)
 		if err != nil {
-			return errkit.Wrap(err, "failed to count commodities in location")
+			return errxtrace.Wrap("failed to count commodities in location", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return 0, errkit.Wrap(err, "failed to count commodities")
+		return 0, errxtrace.Wrap("failed to count commodities", err)
 	}
 
 	return totalCount, nil
@@ -258,12 +255,12 @@ func (r *LocationRegistry) SearchByName(ctx context.Context, query string) ([]*m
 		`, r.tableNames.Locations())
 		err := tx.SelectContext(ctx, &locations, sql, "%"+query+"%")
 		if err != nil {
-			return errkit.Wrap(err, "failed to search locations by name")
+			return errxtrace.Wrap("failed to search locations by name", err)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to search locations")
+		return nil, errxtrace.Wrap("failed to search locations", err)
 	}
 
 	return locations, nil

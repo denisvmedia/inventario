@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"sync"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
 	"github.com/wk8/go-ordered-map/v2"
 
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -184,7 +184,7 @@ func (r *Registry[T, P]) CreateWithUser(ctx context.Context, item T) (P, error) 
 	if userID == "" {
 		userID = registry.UserIDFromContext(ctx)
 		if userID == "" {
-			return nil, errkit.WithStack(registry.ErrUserContextRequired)
+			return nil, errxtrace.Classify(registry.ErrUserContextRequired)
 		}
 	}
 
@@ -212,7 +212,7 @@ func (r *Registry[_, P]) GetWithUser(ctx context.Context, id string) (P, error) 
 	if userID == "" {
 		userID = registry.UserIDFromContext(ctx)
 		if userID == "" {
-			return nil, errkit.WithStack(registry.ErrUserContextRequired)
+			return nil, errxtrace.Classify(registry.ErrUserContextRequired)
 		}
 	}
 
@@ -241,7 +241,7 @@ func (r *Registry[_, P]) ListWithUser(ctx context.Context) ([]P, error) {
 	if userID == "" {
 		userID = registry.UserIDFromContext(ctx)
 		if userID == "" {
-			return nil, errkit.WithStack(registry.ErrUserContextRequired)
+			return nil, errxtrace.Classify(registry.ErrUserContextRequired)
 		}
 	}
 
@@ -275,7 +275,7 @@ func (r *Registry[T, P]) UpdateWithUser(ctx context.Context, item T) (P, error) 
 	if userID == "" {
 		userID = registry.UserIDFromContext(ctx)
 		if userID == "" {
-			return nil, errkit.WithStack(registry.ErrUserContextRequired)
+			return nil, errxtrace.Classify(registry.ErrUserContextRequired)
 		}
 	}
 
@@ -311,7 +311,7 @@ func (r *Registry[_, _]) DeleteWithUser(ctx context.Context, id string) error {
 	if userID == "" {
 		userID = registry.UserIDFromContext(ctx)
 		if userID == "" {
-			return errkit.WithStack(registry.ErrUserContextRequired)
+			return errxtrace.Classify(registry.ErrUserContextRequired)
 		}
 	}
 
@@ -334,7 +334,7 @@ func (r *Registry[_, _]) CountWithUser(ctx context.Context) (int, error) {
 	if userID == "" {
 		userID = registry.UserIDFromContext(ctx)
 		if userID == "" {
-			return 0, errkit.WithStack(registry.ErrUserContextRequired)
+			return 0, errxtrace.Classify(registry.ErrUserContextRequired)
 		}
 	}
 

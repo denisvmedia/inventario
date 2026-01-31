@@ -9,12 +9,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/export"
-	"github.com/denisvmedia/inventario/internal/errkit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/services"
@@ -284,14 +284,14 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	// Open and stream the file
 	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
 	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to open bucket"))
+		internalServerError(w, r, errxtrace.Wrap("failed to open bucket", err))
 		return
 	}
 	defer b.Close()
 
 	reader, err := b.NewReader(r.Context(), fileEntity.OriginalPath, nil)
 	if err != nil {
-		internalServerError(w, r, errkit.Wrap(err, "failed to open file"))
+		internalServerError(w, r, errxtrace.Wrap("failed to open file", err))
 		return
 	}
 	defer reader.Close()
@@ -362,7 +362,7 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 func (api *exportsAPI) getDownloadFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
-		return nil, errkit.Wrap(err, "failed to open bucket")
+		return nil, errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 

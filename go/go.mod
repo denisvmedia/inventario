@@ -1,6 +1,6 @@
 module github.com/denisvmedia/inventario
 
-go 1.24.7
+go 1.25.5
 
 require github.com/denisvmedia/inventario/frontend v0.0.0
 
@@ -12,6 +12,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.12
 	github.com/go-chi/chi/v5 v5.2.4
 	github.com/go-chi/render v1.0.3
+	github.com/go-extras/errx v1.2.1
 	github.com/go-extras/go-kit v1.2.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-cmp v0.7.0
