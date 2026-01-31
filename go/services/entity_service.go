@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -70,7 +69,7 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 		if err := s.DeleteCommodityRecursive(ctx, commodityID); err != nil {
 			// If the commodity is already deleted, that's fine - continue with others
 			if !errors.Is(err, registry.ErrNotFound) {
-				return errxtrace.Wrap(fmt.Sprintf("failed to delete commodity %s recursively", commodityID), err)
+				return errxtrace.Wrap("failed to delete commodity recursively", err, errx.Attrs("commodity_id", commodityID))
 			}
 		}
 	}

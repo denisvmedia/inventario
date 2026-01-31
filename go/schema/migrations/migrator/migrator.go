@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	_ "github.com/lib/pq" // PostgreSQL driver for database/sql
@@ -283,7 +284,7 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 	dropSQL := fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName)
 	_, err = db.ExecContext(ctx, dropSQL)
 	if err != nil {
-		return errxtrace.Wrap(fmt.Sprintf("failed to drop database %s", dbName), err)
+		return errxtrace.Wrap("failed to drop database", err, errx.Attrs("db_name", dbName))
 	}
 
 	fmt.Println("✅ Database dropped successfully!")
@@ -358,7 +359,7 @@ func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []strin
 		dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", table)
 		_, err := db.ExecContext(ctx, dropSQL)
 		if err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to drop table %s", table), err)
+			return errxtrace.Wrap("failed to drop table", err, errx.Attrs("table", table))
 		}
 	}
 

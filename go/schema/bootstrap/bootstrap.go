@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jackc/pgx/v5"
 )
@@ -91,7 +92,7 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 	// Apply each migration file
 	for _, filename := range files {
 		if err := m.applyMigrationFile(ctx, conn, filename, args.Template); err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to apply migration file %s", filename), err)
+			return errxtrace.Wrap("failed to apply migration file", err, errx.Attrs("filename", filename))
 		}
 	}
 
@@ -130,7 +131,7 @@ func (m *Migrator) dryRun(files []string, templateData TemplateData) error {
 		// Read and process the file content
 		content, err := m.readAndProcessFile(filename, templateData)
 		if err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to process file %s", filename), err)
+			return errxtrace.Wrap("failed to process file", err, errx.Attrs("filename", filename))
 		}
 
 		// Show a preview of the processed content (first few lines)
@@ -239,7 +240,7 @@ func (m *Migrator) Print(templateData TemplateData) error {
 		// Read and process the file content
 		content, err := m.readAndProcessFile(filename, templateData)
 		if err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to process file %s", filename), err)
+			return errxtrace.Wrap("failed to process file", err, errx.Attrs("filename", filename))
 		}
 
 		// Print the processed content
