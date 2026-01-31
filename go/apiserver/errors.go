@@ -60,16 +60,17 @@ func marshalError(err error) json.RawMessage {
 		return errxResult
 	}
 
-	// Try standard JSON marshaling (for types implementing json.Marshaler like validation.Errors)
-	// Note: json.Marshal() on standard errors without MarshalJSON produces `{}`, so we need to check for that
-	if data, e := json.Marshal(err); e == nil && len(data) > 2 {
-		// len(data) > 2 ensures we skip `{}` empty objects
-		wrapped := jsonError{
-			Error: data,
-			Type:  fmt.Sprintf("%T", err),
-		}
-		if result, e := json.Marshal(wrapped); e == nil {
-			return result
+	// Try standard JSON marshaling only if error implements json.Marshaler
+	// This avoids marshaling errors to `{}` for standard errors without MarshalJSON
+	if _, ok := err.(json.Marshaler); ok {
+		if data, e := json.Marshal(err); e == nil {
+			wrapped := jsonError{
+				Error: data,
+				Type:  fmt.Sprintf("%T", err),
+			}
+			if result, e := json.Marshal(wrapped); e == nil {
+				return result
+			}
 		}
 	}
 
