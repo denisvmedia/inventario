@@ -112,7 +112,7 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	}
 
 	if export.IsDeleted() {
-		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("export already deleted"))
+		return errxtrace.Classify(registry.ErrNotFound, errx.NewDisplayable("export already deleted"))
 	}
 
 	// Hard delete the export

@@ -160,15 +160,15 @@ var _ render.Binder = (*ImportExportRequest)(nil)
 
 func (cr *ImportExportRequest) Bind(r *http.Request) error {
 	if cr.Data == nil {
-		return errx.Wrap("missing required data field", nil)
+		return errx.NewDisplayable("missing required data field")
 	}
 
 	if cr.Data.Type != "exports" {
-		return errx.Wrap("invalid type, expected 'exports'", nil)
+		return errx.NewDisplayable("invalid type, expected 'exports'")
 	}
 
 	if cr.Data.Attributes == nil {
-		return errx.Wrap("missing required attributes field", nil)
+		return errx.NewDisplayable("missing required attributes field")
 	}
 
 	// Validate the data structure

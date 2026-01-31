@@ -76,15 +76,15 @@ type RestoreOperationCreateRequestData struct {
 
 func (a *RestoreOperationCreateRequest) Bind(r *http.Request) error {
 	if a.Data == nil {
-		return errx.Wrap("missing required data field", nil)
+		return errx.NewDisplayable("missing required data field")
 	}
 
 	if a.Data.Type != "restores" {
-		return errx.Wrap("invalid type, expected 'restores'", nil)
+		return errx.NewDisplayable("invalid type, expected 'restores'")
 	}
 
 	if a.Data.Attributes == nil {
-		return errx.Wrap("missing required attributes field", nil)
+		return errx.NewDisplayable("missing required attributes field")
 	}
 
 	return a.validateAttributesWithContext(r.Context())
@@ -113,15 +113,15 @@ type RestoreOperationUpdateRequestData struct {
 
 func (a *RestoreOperationUpdateRequest) Bind(r *http.Request) error {
 	if a.Data == nil {
-		return errx.Wrap("missing required data field", nil)
+		return errx.NewDisplayable("missing required data field")
 	}
 
 	if a.Data.Type != "restores" {
-		return errx.Wrap("invalid type, expected 'restores'", nil)
+		return errx.NewDisplayable("invalid type, expected 'restores'")
 	}
 
 	if a.Data.Attributes == nil {
-		return errx.Wrap("missing required attributes field", nil)
+		return errx.NewDisplayable("missing required attributes field")
 	}
 
 	return a.validateAttributesWithContext(r.Context())

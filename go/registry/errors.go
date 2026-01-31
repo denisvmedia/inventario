@@ -2,11 +2,12 @@ package registry
 
 import (
 	"errors"
-	"fmt"
+
+	"github.com/go-extras/errx"
 )
 
 var (
-	ErrNotFound           = errors.New("not found")
+	ErrNotFound           = errx.NewSentinel("not found")
 	ErrCannotDelete       = errors.New("cannot delete")
 	ErrInvalidConfig      = errors.New("invalid config")
 	ErrInvalidInput       = errors.New("invalid input")
@@ -15,7 +16,7 @@ var (
 	ErrEmailAlreadyExists = errors.New("email already exists")
 	ErrSlugAlreadyExists  = errors.New("slug already exists")
 	ErrBadDataStructure   = errors.New("bad data structure")
-	ErrDeleted            = fmt.Errorf("deleted: %w", ErrNotFound) // Wrap ErrNotFound for semantic equivalence
+	ErrDeleted            = errx.NewSentinel("deleted", ErrNotFound)
 
 	ErrMainCurrencyNotSet       = errors.New("main currency not set")
 	ErrMainCurrencyAlreadySet   = errors.New("main currency already set and cannot be changed")
