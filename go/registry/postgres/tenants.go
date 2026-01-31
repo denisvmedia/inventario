@@ -45,7 +45,8 @@ func (r *TenantRegistry) Get(ctx context.Context, id string) (*models.Tenant, er
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &tenant)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant",
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+				"entity_type", "Tenant",
 				"entity_id", id,
 			))
 		}
@@ -164,7 +165,8 @@ func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Te
 	err := reg.ScanOneByField(ctx, store.Pair("slug", slug), &tenant)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant",
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+				"entity_type", "Tenant",
 				"slug", slug,
 			))
 		}
@@ -186,7 +188,8 @@ func (r *TenantRegistry) GetByDomain(ctx context.Context, domain string) (*model
 	err := reg.ScanOneByField(ctx, store.Pair("domain", domain), &tenant)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant",
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+				"entity_type", "Tenant",
 				"domain", domain,
 			))
 		}

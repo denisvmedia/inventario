@@ -100,7 +100,8 @@ func (r *UserRegistry) Get(ctx context.Context, id string) (*models.User, error)
 	err := reg.ScanOneByField(ctx, store.Pair("id", id), &user)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User",
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+				"entity_type", "User",
 				"entity_id", id,
 			))
 		}
@@ -198,7 +199,8 @@ func (r *UserRegistry) GetByEmail(ctx context.Context, tenantID, email string) (
 		err := tx.GetContext(ctx, &user, query, tenantID, email)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User",
+				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+					"entity_type", "User",
 					"tenant_id", tenantID,
 					"email", email,
 				))
