@@ -24,7 +24,7 @@ var (
 	ErrUnknownThumbnailStatus = errx.NewSentinel("unknown thumbnail generation status")
 	ErrMissingUploadSlot      = errx.NewSentinel("missing X-Upload-Slot header")
 	ErrInvalidUploadSlot      = errx.NewSentinel("invalid or expired upload slot")
-	ErrNotFound               = registry.ErrNotFound
+	ErrNotFound               = errx.NewSentinel("not found", registry.ErrNotFound)
 )
 
 // marshalError marshals an error to JSON, ignoring any marshaling errors
