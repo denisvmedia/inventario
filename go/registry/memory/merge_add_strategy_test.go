@@ -166,32 +166,32 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	// Get the actual database IDs that were generated during the first restore
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(locations), qt.Equals, 1)
+	c.Assert(locations, qt.HasLen, 1)
 	locationID := locations[0].ID
 
 	areas, err := registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 1)
+	c.Assert(areas, qt.HasLen, 1)
 	areaID := areas[0].ID
 
 	commodities, err := registrySet.CommodityRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 1)
+	c.Assert(commodities, qt.HasLen, 1)
 	commodityID := commodities[0].ID
 
 	images, err := registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 1)
+	c.Assert(images, qt.HasLen, 1)
 	imageID := images[0].ID
 
 	invoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 1)
+	c.Assert(invoices, qt.HasLen, 1)
 	invoiceID := invoices[0].ID
 
 	manuals, err := registrySet.ManualRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(manuals), qt.Equals, 1)
+	c.Assert(manuals, qt.HasLen, 1)
 	manualID := manuals[0].ID
 
 	// Generate XML with real database IDs for the merge test
@@ -232,15 +232,15 @@ func TestRestoreService_MergeAddStrategy_NoDuplicateFiles(t *testing.T) {
 	// Verify database counts remain the same
 	finalImages, err := registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalImages), qt.Equals, initialImageCount, qt.Commentf("Image count should remain the same"))
+	c.Assert(finalImages, qt.HasLen, initialImageCount, qt.Commentf("Image count should remain the same"))
 
 	finalInvoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalInvoices), qt.Equals, initialInvoiceCount, qt.Commentf("Invoice count should remain the same"))
+	c.Assert(finalInvoices, qt.HasLen, initialInvoiceCount, qt.Commentf("Invoice count should remain the same"))
 
 	finalManuals, err := registrySet.ManualRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalManuals), qt.Equals, initialManualCount, qt.Commentf("Manual count should remain the same"))
+	c.Assert(finalManuals, qt.HasLen, initialManualCount, qt.Commentf("Manual count should remain the same"))
 }
 
 func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
@@ -308,27 +308,27 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	// Extract real database IDs from the first restore
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(locations), qt.Equals, 1)
+	c.Assert(locations, qt.HasLen, 1)
 	locationID := locations[0].ID
 
 	areas, err := registrySet.AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 1)
+	c.Assert(areas, qt.HasLen, 1)
 	areaID := areas[0].ID
 
 	commodities, err := registrySet.CommodityRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 1)
+	c.Assert(commodities, qt.HasLen, 1)
 	commodityID := commodities[0].ID
 
 	images, err := registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(images), qt.Equals, 1)
+	c.Assert(images, qt.HasLen, 1)
 	imageID := images[0].ID
 
 	invoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 1)
+	c.Assert(invoices, qt.HasLen, 1)
 	invoiceID := invoices[0].ID
 
 	// Generate XML with real database IDs + new files using template
@@ -363,18 +363,18 @@ func TestRestoreService_MergeAddStrategy_AddNewFilesOnly(t *testing.T) {
 	// Verify final counts in database - with template using real database IDs, duplicates are detected correctly
 	finalImages, err := registrySet.ImageRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalImages), qt.Equals, 2, qt.Commentf("Should have 2 images total (1 existing + 1 new from second restore)"))
+	c.Assert(finalImages, qt.HasLen, 2, qt.Commentf("Should have 2 images total (1 existing + 1 new from second restore)"))
 
 	finalInvoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalInvoices), qt.Equals, 1, qt.Commentf("Should have 1 invoice total (existing one, no duplicates)"))
+	c.Assert(finalInvoices, qt.HasLen, 1, qt.Commentf("Should have 1 invoice total (existing one, no duplicates)"))
 
 	// Verify that we have the expected unique image IDs (1 existing + 1 new)
 	imageIDs := make(map[string]bool)
 	for _, img := range finalImages {
 		imageIDs[img.ID] = true
 	}
-	c.Assert(len(imageIDs), qt.Equals, 2, qt.Commentf("Should have 2 unique image IDs (1 existing + 1 new)"))
+	c.Assert(imageIDs, qt.HasLen, 2, qt.Commentf("Should have 2 unique image IDs (1 existing + 1 new)"))
 }
 
 // TestRestoreService_SecurityValidation_CrossUserAccess tests that users cannot link files to other users' entities
@@ -458,7 +458,7 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	// Get user 1's created commodity ID
 	commodities1, err := registrySet1.CommodityRegistry.List(user1Ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities1), qt.Equals, 1)
+	c.Assert(commodities1, qt.HasLen, 1)
 	user1CommodityID := commodities1[0].ID
 
 	// Create registry set for user 2 using the same shared data
@@ -506,7 +506,7 @@ func TestRestoreService_SecurityValidation_CrossUserAccess(t *testing.T) {
 	// Verify user 1's data is unchanged
 	finalCommodities1, err := registrySet1.CommodityRegistry.List(user1Ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalCommodities1), qt.Equals, 1, qt.Commentf("User 1's commodities should be unchanged"))
+	c.Assert(finalCommodities1, qt.HasLen, 1, qt.Commentf("User 1's commodities should be unchanged"))
 
 	// Verify user 2 cannot access user 1's commodity
 	user2Commodities, err := registrySet2.CommodityRegistry.List(user2Ctx)
@@ -604,7 +604,7 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	// Get tenant 1's commodity ID
 	tenant1Commodities, err := registrySetTenant1.CommodityRegistry.List(tenant1Ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(tenant1Commodities), qt.Equals, 1)
+	c.Assert(tenant1Commodities, qt.HasLen, 1)
 	tenant1CommodityID := tenant1Commodities[0].ID
 
 	// Tenant 2 user attempts to access tenant 1's data (CROSS-TENANT ATTACK!)
@@ -647,7 +647,7 @@ func TestRestoreService_SecurityValidation_CrossTenantAccess(t *testing.T) {
 	// Verify tenant 1's data is unchanged
 	finalTenant1Commodities, err := registrySetTenant1.CommodityRegistry.List(tenant1Ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalTenant1Commodities), qt.Equals, 1, qt.Commentf("Tenant 1's data should be unchanged"))
+	c.Assert(finalTenant1Commodities, qt.HasLen, 1, qt.Commentf("Tenant 1's data should be unchanged"))
 }
 
 // TestRestoreService_SecurityValidation_ValidUserManipulations tests that users can freely manipulate their own data
@@ -714,17 +714,17 @@ func TestRestoreService_SecurityValidation_ValidUserManipulations(t *testing.T) 
 	// Get the created entity IDs
 	locations, err := registrySet.LocationRegistry.List(userCtx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(locations), qt.Equals, 1)
+	c.Assert(locations, qt.HasLen, 1)
 	locationID := locations[0].ID
 
 	areas, err := registrySet.AreaRegistry.List(userCtx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(areas), qt.Equals, 1)
+	c.Assert(areas, qt.HasLen, 1)
 	areaID := areas[0].ID
 
 	commodities, err := registrySet.CommodityRegistry.List(userCtx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities), qt.Equals, 1)
+	c.Assert(commodities, qt.HasLen, 1)
 	commodityID := commodities[0].ID
 
 	// User performs various valid manipulations within their own context:
@@ -758,7 +758,7 @@ func TestRestoreService_SecurityValidation_ValidUserManipulations(t *testing.T) 
 	// Verify user now has 2 commodities
 	finalCommodities, err := registrySet.CommodityRegistry.List(userCtx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalCommodities), qt.Equals, 2, qt.Commentf("User should have 2 commodities"))
+	c.Assert(finalCommodities, qt.HasLen, 2, qt.Commentf("User should have 2 commodities"))
 
 	// Verify all commodities belong to the user
 	for _, commodity := range finalCommodities {
@@ -876,7 +876,7 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 	// Get user 1's commodity ID
 	user1Commodities, err := registrySet1.CommodityRegistry.List(user1Ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(user1Commodities), qt.Equals, 1)
+	c.Assert(user1Commodities, qt.HasLen, 1)
 	user1CommodityID := user1Commodities[0].ID
 
 	// TODO: Set up log capture mechanism to verify security logging
@@ -981,7 +981,7 @@ func TestRestoreService_SecurityValidation_LoggingUnauthorizedAttempts(t *testin
 	// Verify that user 1's data remains unchanged after all attack attempts
 	finalUser1Commodities, err := registrySet1.CommodityRegistry.List(user1Ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(finalUser1Commodities), qt.Equals, 1, qt.Commentf("User 1's data should be unchanged after attacks"))
+	c.Assert(finalUser1Commodities, qt.HasLen, 1, qt.Commentf("User 1's data should be unchanged after attacks"))
 
 	// Verify that user 2 has no unauthorized access
 	user2Commodities, err := registrySet2.CommodityRegistry.List(user2Ctx)

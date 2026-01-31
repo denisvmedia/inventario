@@ -52,7 +52,7 @@ func TestManualRegistry_Create(t *testing.T) {
 	// Create a new manual in the registry
 	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdManual, qt.Not(qt.IsNil))
+	c.Assert(createdManual, qt.IsNotNil)
 
 	// Verify the count of manuals in the registry
 	count, err := registrySet.ManualRegistry.Count(ctx)
@@ -140,7 +140,7 @@ func TestManualRegistry_Create_Validation(t *testing.T) {
 	manual := models.Manual{}
 	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdManual, qt.Not(qt.IsNil))
+	c.Assert(createdManual, qt.IsNotNil)
 
 	manual = models.Manual{
 		File: &models.File{
@@ -154,7 +154,7 @@ func TestManualRegistry_Create_Validation(t *testing.T) {
 	// Create the manual - should succeed (no validation in memory registry)
 	createdManual2, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdManual2, qt.Not(qt.IsNil))
+	c.Assert(createdManual2, qt.IsNotNil)
 }
 
 func TestManualRegistry_Create_CommodityNotFound(t *testing.T) {
@@ -193,5 +193,5 @@ func TestManualRegistry_Create_CommodityNotFound(t *testing.T) {
 	// Create the manual - should succeed (no validation in memory registry)
 	createdManual, err := registrySet.ManualRegistry.Create(ctx, manual)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdManual, qt.Not(qt.IsNil))
+	c.Assert(createdManual, qt.IsNotNil)
 }

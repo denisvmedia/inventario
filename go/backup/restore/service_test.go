@@ -107,17 +107,17 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Verify data was created
 		locations, err = testRegistrySet.LocationRegistry.List(ctx)
 		c.Assert(err, qt.IsNil)
-		c.Assert(len(locations), qt.Equals, 1)
+		c.Assert(locations, qt.HasLen, 1)
 		c.Assert(locations[0].Name, qt.Equals, "Test Location")
 
 		areas, err := testRegistrySet.AreaRegistry.List(ctx)
 		c.Assert(err, qt.IsNil)
-		c.Assert(len(areas), qt.Equals, 1)
+		c.Assert(areas, qt.HasLen, 1)
 		c.Assert(areas[0].Name, qt.Equals, "Test Area")
 
 		commodities, err := testRegistrySet.CommodityRegistry.List(ctx)
 		c.Assert(err, qt.IsNil)
-		c.Assert(len(commodities), qt.Equals, 1)
+		c.Assert(commodities, qt.HasLen, 1)
 		c.Assert(commodities[0].Name, qt.Equals, "Test Commodity")
 	})
 
@@ -174,7 +174,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Verify data - should have 2 locations total
 		locations, err := testRegistrySet.LocationRegistry.List(ctx)
 		c.Assert(err, qt.IsNil)
-		c.Assert(len(locations), qt.Equals, 2)
+		c.Assert(locations, qt.HasLen, 2)
 
 		// Verify existing location was not modified
 		existingLoc, err := testRegistrySet.LocationRegistry.Get(ctx, createdLocation.ID)
@@ -239,7 +239,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Verify data - should have 2 locations total
 		locations, err := testRegistrySet.LocationRegistry.List(ctx)
 		c.Assert(err, qt.IsNil)
-		c.Assert(len(locations), qt.Equals, 2)
+		c.Assert(locations, qt.HasLen, 2)
 
 		// Verify existing location was updated
 		updatedLoc, err := testRegistrySet.LocationRegistry.Get(ctx, createdLocation.ID)
@@ -286,7 +286,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		// Verify no data was actually created (dry run)
 		locations, err := testRegistrySet.LocationRegistry.List(ctx)
 		c.Assert(err, qt.IsNil)
-		c.Assert(len(locations), qt.Equals, 0) // Should be empty in dry run
+		c.Assert(locations, qt.HasLen, 0) // Should be empty in dry run
 	})
 
 	t.Run("invalid strategy", func(t *testing.T) {

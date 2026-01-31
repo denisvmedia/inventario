@@ -79,7 +79,7 @@ func TestThumbnailGenerationWorker_ProcessesJobsCorrectly(t *testing.T) {
 	// Get pending jobs (this is what the worker does)
 	pendingJobs, err := thumbnailService.GetPendingJobs(context.Background(), 10)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(pendingJobs), qt.Equals, 1)
+	c.Assert(pendingJobs, qt.HasLen, 1)
 	c.Assert(pendingJobs[0].ID, qt.Equals, job.ID)
 
 	// Test that the job processing logic works
@@ -156,5 +156,5 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 	// Verify only one job exists
 	pendingJobs, err := thumbnailService.GetPendingJobs(context.Background(), 10)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(pendingJobs), qt.Equals, 1)
+	c.Assert(pendingJobs, qt.HasLen, 1)
 }

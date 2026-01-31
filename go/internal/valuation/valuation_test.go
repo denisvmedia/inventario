@@ -241,7 +241,7 @@ func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
 		}
 
 		// Check that we have the expected number of totals
-		c.Assert(len(locationTotals), qt.Equals, len(expectedTotals), qt.Commentf("Expected %d location totals, got %d", len(expectedTotals), len(locationTotals)))
+		c.Assert(locationTotals, qt.HasLen, len(expectedTotals), qt.Commentf("Expected %d location totals, got %d", len(expectedTotals), len(locationTotals)))
 
 		// Check values by location ID
 		for locationName, expectedValue := range expectedTotals {
@@ -293,7 +293,7 @@ func TestValuator_CalculateTotalValueByArea(t *testing.T) {
 		}
 
 		// Check that we have the expected number of totals
-		c.Assert(len(areaTotals), qt.Equals, len(expectedTotals), qt.Commentf("Expected %d area totals, got %d", len(expectedTotals), len(areaTotals)))
+		c.Assert(areaTotals, qt.HasLen, len(expectedTotals), qt.Commentf("Expected %d area totals, got %d", len(expectedTotals), len(areaTotals)))
 
 		// Check values by area ID
 		for areaID, expectedValue := range expectedTotals {

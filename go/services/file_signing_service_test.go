@@ -456,7 +456,7 @@ func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
 
 			// Verify thumbnails
 			if tt.expectThumbnails {
-				c.Assert(len(thumbnails), qt.Equals, tt.expectedThumbnailCount)
+				c.Assert(thumbnails, qt.HasLen, tt.expectedThumbnailCount)
 				c.Assert(thumbnails["small"], qt.Not(qt.Equals), "")
 				c.Assert(thumbnails["medium"], qt.Not(qt.Equals), "")
 
@@ -466,7 +466,7 @@ func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
 				c.Assert(thumbnails["medium"], qt.Contains, "/thumbnails/")
 				c.Assert(thumbnails["medium"], qt.Contains, "/medium")
 			} else {
-				c.Assert(len(thumbnails), qt.Equals, tt.expectedThumbnailCount)
+				c.Assert(thumbnails, qt.HasLen, tt.expectedThumbnailCount)
 			}
 		})
 	}

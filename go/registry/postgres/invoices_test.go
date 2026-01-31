@@ -207,7 +207,7 @@ func TestInvoiceRegistry_List_HappyPath(t *testing.T) {
 	// Initially should be empty
 	invoices, err := registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 0)
+	c.Assert(invoices, qt.HasLen, 0)
 
 	// Create test hierarchy and invoices
 	location := createTestLocation(c, registrySet)
@@ -219,7 +219,7 @@ func TestInvoiceRegistry_List_HappyPath(t *testing.T) {
 	// List should now contain both invoices
 	invoices, err = registrySet.InvoiceRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(invoices), qt.Equals, 2)
+	c.Assert(invoices, qt.HasLen, 2)
 
 	// Verify the invoices are correct
 	invoiceIDs := make(map[string]bool)

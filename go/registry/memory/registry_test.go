@@ -36,7 +36,7 @@ func TestRegistry_Create(t *testing.T) {
 	// Create a new item in the registry
 	createdItem, err := r.Create(ctx, *item)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdItem, qt.Not(qt.IsNil))
+	c.Assert(createdItem, qt.IsNotNil)
 
 	// Verify the item is created with a valid ID
 	c.Assert(createdItem.GetID(), qt.Not(qt.Equals), "")
@@ -88,7 +88,7 @@ func TestRegistry_Update(t *testing.T) {
 	// Update the item in the registry
 	updatedItem, err := r.Update(ctx, testItem{ID: createdItem.GetID(), Data: "updated"})
 	c.Assert(err, qt.IsNil)
-	c.Assert(updatedItem, qt.Not(qt.IsNil))
+	c.Assert(updatedItem, qt.IsNotNil)
 
 	// Verify the updated item's data
 	c.Assert(updatedItem.Data, qt.Equals, "updated")
@@ -175,7 +175,7 @@ func TestRegistry_List(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify the length and contents of the list
-	c.Assert(len(items), qt.Equals, 3)
+	c.Assert(items, qt.HasLen, 3)
 	c.Assert(items[0].Data, qt.Equals, "item1")
 	c.Assert(items[1].Data, qt.Equals, "item2")
 	c.Assert(items[2].Data, qt.Equals, "item3")

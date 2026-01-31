@@ -125,7 +125,7 @@ func TestSignedFileUrlResponse_Consistency(t *testing.T) {
 		// Should have the same structure as other JSON:API responses
 		c.Assert(response.ID, qt.Not(qt.Equals), "")
 		c.Assert(response.Type, qt.Not(qt.Equals), "")
-		c.Assert(response.Attributes, qt.Not(qt.IsNil))
+		c.Assert(response.Attributes, qt.IsNotNil)
 
 		// Should implement the same methods
 		responseWithStatus := response.WithStatusCode(http.StatusAccepted)

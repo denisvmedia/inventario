@@ -107,7 +107,7 @@ func TestGet_RuntimeValues(t *testing.T) {
 
 	// Verify platform format
 	parts := strings.Split(got.Platform, "/")
-	c.Assert(len(parts), qt.Equals, 2)
+	c.Assert(parts, qt.HasLen, 2)
 	c.Assert(parts[0], qt.Equals, runtime.GOOS)
 	c.Assert(parts[1], qt.Equals, runtime.GOARCH)
 }

@@ -52,7 +52,7 @@ func TestInvoiceRegistry_Create(t *testing.T) {
 	// Create a new invoice in the registry
 	createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdInvoice, qt.Not(qt.IsNil))
+	c.Assert(createdInvoice, qt.IsNotNil)
 
 	// Verify the count of invoices in the registry
 	count, err := registrySet.InvoiceRegistry.Count(ctx)
@@ -140,7 +140,7 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 	invoice := models.Invoice{}
 	createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdInvoice, qt.Not(qt.IsNil))
+	c.Assert(createdInvoice, qt.IsNotNil)
 
 	invoice = models.Invoice{
 		File: &models.File{
@@ -154,7 +154,7 @@ func TestInvoiceRegistry_Create_Validation(t *testing.T) {
 	// Create the invoice - should succeed (no validation in memory registry)
 	createdInvoice2, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdInvoice2, qt.Not(qt.IsNil))
+	c.Assert(createdInvoice2, qt.IsNotNil)
 }
 
 func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
@@ -193,5 +193,5 @@ func TestInvoiceRegistry_Create_CommodityNotFound(t *testing.T) {
 	// Create the invoice - should succeed (no validation in memory registry)
 	createdInvoice, err := registrySet.InvoiceRegistry.Create(ctx, invoice)
 	c.Assert(err, qt.IsNil)
-	c.Assert(createdInvoice, qt.Not(qt.IsNil))
+	c.Assert(createdInvoice, qt.IsNotNil)
 }

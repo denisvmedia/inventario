@@ -156,12 +156,12 @@ func TestUserIsolation_Commodities(t *testing.T) {
 	// Test: User2 cannot see User1's commodity in list
 	commodities2, err := userAwareCommodityRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities2), qt.Equals, 0)
+	c.Assert(commodities2, qt.HasLen, 0)
 
 	// Test: User1 can see their own commodity
 	commodities1, err := userAwareCommodityRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(commodities1), qt.Equals, 1)
+	c.Assert(commodities1, qt.HasLen, 1)
 	c.Assert(commodities1[0].ID, qt.Equals, created1.ID)
 }
 
@@ -203,12 +203,12 @@ func TestUserIsolation_Locations(t *testing.T) {
 	// Test: User2 cannot see User1's location in list
 	locations2, err := userAwareLocationRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(locations2), qt.Equals, 0)
+	c.Assert(locations2, qt.HasLen, 0)
 
 	// Test: User1 can see their own location
 	locations1, err := userAwareLocationRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(locations1), qt.Equals, 1)
+	c.Assert(locations1, qt.HasLen, 1)
 	c.Assert(locations1[0].ID, qt.Equals, created1.ID)
 }
 
@@ -258,12 +258,12 @@ func TestUserIsolation_Files(t *testing.T) {
 	// Test: User2 cannot see User1's file in list
 	files2, err := userAwareFileRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(files2), qt.Equals, 0)
+	c.Assert(files2, qt.HasLen, 0)
 
 	// Test: User1 can see their own file
 	files1, err := userAwareFileRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(files1), qt.Equals, 1)
+	c.Assert(files1, qt.HasLen, 1)
 	c.Assert(files1[0].ID, qt.Equals, created1.ID)
 }
 
@@ -307,11 +307,11 @@ func TestUserIsolation_Exports(t *testing.T) {
 	// Test: User2 cannot see User1's export in list
 	exports2, err := userAwareExportRegistry2.List(ctx2)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(exports2), qt.Equals, 0)
+	c.Assert(exports2, qt.HasLen, 0)
 
 	// Test: User1 can see their own export
 	exports1, err := userAwareExportRegistry1.List(ctx1)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(exports1), qt.Equals, 1)
+	c.Assert(exports1, qt.HasLen, 1)
 	c.Assert(exports1[0].ID, qt.Equals, created1.ID)
 }
