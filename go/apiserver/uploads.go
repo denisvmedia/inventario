@@ -523,7 +523,7 @@ func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http
 				fileCount++
 				// Only allow single file uploads
 				if fileCount > 1 {
-					unprocessableEntityError(w, r, errxtrace.Classify(errors.New("only single file uploads are allowed")))
+					unprocessableEntityError(w, r, errxtrace.Classify(errx.NewDisplayable("only single file uploads are allowed")))
 					return
 				}
 
