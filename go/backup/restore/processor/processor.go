@@ -440,7 +440,7 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	}
 	for _, location := range locations {
 		if err := l.entityService.DeleteLocationRecursive(ctx, location.ID); err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to delete location %s recursively", location.ID), err)
+			return errxtrace.Wrap("failed to delete location recursively", err, errx.Attrs("location_id", location.ID))
 		}
 	}
 
@@ -1257,7 +1257,7 @@ func (l *RestoreOperationProcessor) processLocation(
 	if err := location.ValidateWithContext(ctx); err != nil {
 		l.updateRestoreStep(ctx,
 			fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-		return errxtrace.Wrap(fmt.Sprintf("invalid location %s", location.ID), err)
+		return errxtrace.Wrap("invalid location", err, errx.Attrs("location_id", location.ID))
 	}
 
 	// Store the original XML ID for mapping
@@ -1355,7 +1355,7 @@ func (l *RestoreOperationProcessor) handleLocationFullReplace(
 		if err != nil {
 			l.updateRestoreStep(ctx,
 				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-			return errxtrace.Wrap(fmt.Sprintf("failed to create location %s", originalXMLID), err)
+			return errxtrace.Wrap("failed to create location", err, errx.Attrs("xml_id", originalXMLID))
 		}
 		existing.Locations[originalXMLID] = createdLocation
 		idMapping.Locations[originalXMLID] = createdLocation.ID
@@ -1392,7 +1392,7 @@ func (l *RestoreOperationProcessor) handleLocationMergeAdd(
 		if err != nil {
 			l.updateRestoreStep(ctx,
 				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-			return errxtrace.Wrap(fmt.Sprintf("failed to create location %s", originalXMLID), err)
+			return errxtrace.Wrap("failed to create location", err, errx.Attrs("xml_id", originalXMLID))
 		}
 		existing.Locations[originalXMLID] = createdLocation
 		idMapping.Locations[originalXMLID] = createdLocation.ID
@@ -1426,7 +1426,7 @@ func (l *RestoreOperationProcessor) handleLocationMergeUpdate(
 			if err != nil {
 				l.updateRestoreStep(ctx,
 					fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-				return errxtrace.Wrap(fmt.Sprintf("failed to create location %s", originalXMLID), err)
+				return errxtrace.Wrap("failed to create location", err, errx.Attrs("xml_id", originalXMLID))
 			}
 			existing.Locations[originalXMLID] = createdLocation
 			idMapping.Locations[originalXMLID] = createdLocation.ID
@@ -1448,7 +1448,7 @@ func (l *RestoreOperationProcessor) handleLocationMergeUpdate(
 		if err != nil {
 			l.updateRestoreStep(ctx,
 				fmt.Sprintf("%s Location: %s", emoji, xmlLocation.LocationName), models.RestoreStepResultError, err.Error())
-			return errxtrace.Wrap(fmt.Sprintf("failed to update location %s", originalXMLID), err)
+			return errxtrace.Wrap("failed to update location", err, errx.Attrs("xml_id", originalXMLID))
 		}
 		existing.Locations[originalXMLID] = updatedLocation
 	}
@@ -1529,7 +1529,7 @@ func (l *RestoreOperationProcessor) createAreaIfNotDryRun(
 		}
 		createdArea, err := areaReg.Create(ctx, *area)
 		if err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to create area %s", originalXMLID), err)
+			return errxtrace.Wrap("failed to create area", err, errx.Attrs("xml_id", originalXMLID))
 		}
 		existing.Areas[originalXMLID] = createdArea
 		idMapping.Areas[originalXMLID] = createdArea.ID
@@ -1563,7 +1563,7 @@ func (l *RestoreOperationProcessor) handleAreaMergeUpdate(
 		}
 		updatedArea, err := areaReg.Update(ctx, *area)
 		if err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to update area %s", originalXMLID), err)
+			return errxtrace.Wrap("failed to update area", err, errx.Attrs("xml_id", originalXMLID))
 		}
 		existing.Areas[originalXMLID] = updatedArea
 	}
@@ -1623,7 +1623,7 @@ func (l *RestoreOperationProcessor) processArea(
 	if err := area.ValidateWithContext(ctx); err != nil {
 		l.updateRestoreStep(ctx,
 			fmt.Sprintf("%s Area: %s", emoji, xmlArea.AreaName), models.RestoreStepResultError, err.Error())
-		return errxtrace.Wrap(fmt.Sprintf("invalid area %s", originalXMLID), err)
+		return errxtrace.Wrap("invalid area", err, errx.Attrs("xml_id", originalXMLID))
 	}
 
 	// Apply strategy
@@ -1992,7 +1992,7 @@ func (l *RestoreOperationProcessor) createCommodityIfNotDryRun(
 		}
 		createdCommodity, err := comReg.Create(ctx, *commodity)
 		if err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to create commodity %s", originalXMLID), err)
+			return errxtrace.Wrap("failed to create commodity", err, errx.Attrs("xml_id", originalXMLID))
 		}
 		existing.Commodities[originalXMLID] = createdCommodity
 		idMapping.Commodities[originalXMLID] = createdCommodity.ID
@@ -2050,7 +2050,7 @@ func (l *RestoreOperationProcessor) updateExistingCommodity(
 		}
 		updatedCommodity, err := comReg.Update(ctx, *commodity)
 		if err != nil {
-			return errxtrace.Wrap(fmt.Sprintf("failed to update commodity %s", originalXMLID), err)
+			return errxtrace.Wrap("failed to update commodity", err, errx.Attrs("xml_id", originalXMLID))
 		}
 		existing.Commodities[originalXMLID] = updatedCommodity
 	}
