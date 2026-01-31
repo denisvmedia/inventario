@@ -1,8 +1,8 @@
 package errormarshal
 
 import (
+	"encoding"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	errxjson "github.com/go-extras/errx/json"
@@ -18,82 +18,108 @@ type jsonMinimalError struct {
 	Type string `json:"type,omitempty"`
 }
 
-// Marshal marshals an error to JSON, replicating the errkit.ForceMarshalError structure.
-// It wraps the error in {"error": {...}, "type": "..."} to match the previous JSON API format.
+// MarshalError marshals an error to JSON using a type-switch approach similar to errkit.
+// It returns the marshaled bytes and an error if marshaling fails.
 //
-// The function attempts multiple strategies in order:
-//  1. errx JSON marshaling (for errx-wrapped errors with attributes)
-//  2. Standard JSON marshaling (only if error implements json.Marshaler)
-//  3. Minimal error structure fallback (always succeeds)
+// The function handles errors in this priority order:
+//  1. json.Marshaler - errors implementing MarshalJSON (e.g., validation.Errors)
+//  2. encoding.TextMarshaler - errors implementing MarshalText
+//  3. fmt.Stringer - errors implementing String()
+//  4. nil errors
+//  5. errx errors - using errxjson.Marshal (for errx-wrapped errors with attributes)
+//  6. Default fallback - uses Error() method
 //
-// The function handles edge cases:
-//   - Panics from errxjson.Marshal (e.g., validation.Errors with unhashable map types)
-//   - Errors without MarshalJSON that would serialize to `{}`
-//   - Unexpected marshaling failures of minimal structures (panics to surface issues)
-func Marshal(err error) json.RawMessage {
-	if err == nil {
-		return json.RawMessage(`{"error":null,"type":"<nil>"}`)
-	}
+// Note: errxjson.Marshal can panic when used with validation.Errors wrapped by errx
+// (due to unhashable map types in validation rules). We catch this panic and return
+// an error to allow fallback to the minimal representation.
+func MarshalError(aerr error) ([]byte, error) {
+	switch v := aerr.(type) {
+	case json.Marshaler:
+		// Use standard JSON marshaling for errors implementing json.Marshaler
+		// (e.g., validation.Errors) - do NOT use errxjson as it may panic
+		data, err := v.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		jsonErr := jsonError{
+			Error: data,
+			Type:  fmt.Sprintf("%T", aerr),
+		}
+		return json.Marshal(&jsonErr)
 
-	// Try errx JSON marshaling first, but catch panics (e.g., from validation.Errors with unhashable types)
-	var errxResult json.RawMessage
-	func() {
-		defer func() {
-			recover() // Silently catch panic from errxjson.Marshal
+	case encoding.TextMarshaler:
+		data, err := v.MarshalText()
+		if err != nil {
+			return nil, err
+		}
+		jsonErr := jsonMinimalError{
+			Msg:  string(data),
+			Type: fmt.Sprintf("%T", aerr),
+		}
+		return json.Marshal(&jsonErr)
+
+	case fmt.Stringer:
+		jsonErr := jsonMinimalError{
+			Msg:  v.String(),
+			Type: fmt.Sprintf("%T", aerr),
+		}
+		return json.Marshal(&jsonErr)
+
+	case nil:
+		return json.Marshal(nil)
+
+	default:
+		// Try errxjson for errx errors (which don't implement json.Marshaler)
+		// Catch panics from errxjson (e.g., validation.Errors wrapped by errx)
+		var result []byte
+		var errxErr error
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// errxjson panicked (likely validation.Errors with unhashable types)
+					errxErr = fmt.Errorf("errxjson.Marshal panicked: %v", r)
+				}
+			}()
+			if data, err := errxjson.Marshal(aerr); err == nil {
+				jsonErr := jsonError{
+					Error: data,
+					Type:  fmt.Sprintf("%T", aerr),
+				}
+				result, errxErr = json.Marshal(&jsonErr)
+			} else {
+				errxErr = err
+			}
 		}()
-		if data, e := errxjson.Marshal(err); e == nil {
-			wrapped := jsonError{
-				Error: data,
-				Type:  fmt.Sprintf("%T", err),
-			}
-			if result, e := json.Marshal(wrapped); e == nil {
-				errxResult = result
-			}
-		}
-	}()
-	if errxResult != nil {
-		return errxResult
-	}
 
-	// Try standard JSON marshaling only if error implements json.Marshaler
-	// This avoids marshaling errors to `{}` for standard errors without MarshalJSON
-	if _, ok := err.(json.Marshaler); ok {
-		if data, e := json.Marshal(err); e == nil {
-			wrapped := jsonError{
-				Error: data,
-				Type:  fmt.Sprintf("%T", err),
-			}
-			if result, e := json.Marshal(wrapped); e == nil {
-				return result
-			}
+		if errxErr == nil && result != nil {
+			return result, nil
 		}
-	}
 
-	// Final fallback: minimal error structure (this should always succeed)
-	minimal := jsonMinimalError{
-		Msg:  err.Error(),
-		Type: fmt.Sprintf("%T", err),
+		// Final fallback: minimal error structure
+		jsonErr := jsonMinimalError{
+			Msg:  aerr.Error(),
+			Type: fmt.Sprintf("%T", v),
+		}
+		return json.Marshal(&jsonErr)
 	}
-	data, e := json.Marshal(minimal)
+}
+
+// Marshal marshals an error to JSON, replicating the errkit.ForceMarshalError behavior.
+// It always succeeds by falling back to a minimal error representation if marshaling fails.
+func Marshal(err error) json.RawMessage {
+	data, e := MarshalError(err)
 	if e != nil {
-		// This is an unexpected situation - marshaling a simple struct failed
-		// Panic to surface the issue rather than silently returning invalid JSON
-		panic(fmt.Sprintf("failed to marshal minimal error structure: %v", e))
+		// Fallback: create minimal error structure
+		minimal := &jsonMinimalError{
+			Msg:  err.Error(),
+			Type: fmt.Sprintf("%T", err),
+		}
+		data, _ = json.Marshal(minimal)
 	}
 	return data
 }
 
-// MustMarshal is like Marshal but panics if marshaling fails.
-// This should never happen in practice as Marshal has a final fallback.
+// MustMarshal is like Marshal but never fails - it always returns a valid JSON representation.
 func MustMarshal(err error) json.RawMessage {
-	result := Marshal(err)
-	if result == nil {
-		panic("errormarshal.Marshal returned nil")
-	}
-	return result
+	return Marshal(err)
 }
-
-var (
-	// ErrMarshalFailed is returned when marshaling fails unexpectedly
-	ErrMarshalFailed = errors.New("failed to marshal error")
-)
