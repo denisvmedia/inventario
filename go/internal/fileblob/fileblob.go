@@ -57,7 +57,7 @@ package fileblob // import "gocloud.dev/blob/fileblob"
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/md5" //nolint:gosec // this is a hard requirement by the parent library
+	"crypto/md5" //#nosec G501 -- this is a hard requirement by the parent library
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -741,7 +741,7 @@ func (b *bucket) NewTypedWriter(ctx context.Context, key, contentType string, op
 		path:       path,
 		attrs:      attrs,
 		contentMD5: opts.ContentMD5,
-		md5hash:    md5.New(), //nolint:gosec // this is a hard requirement by the parent library
+		md5hash:    md5.New(), //#nosec G401 -- this is a hard requirement by the parent library
 		opts:       b.opts,
 	}
 	return w, nil

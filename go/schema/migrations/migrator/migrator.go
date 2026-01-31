@@ -142,7 +142,8 @@ func (m *Migrator) ResetDatabase(ctx context.Context, args Args, confirm bool) e
 }
 
 // DropTables drops all tables, indexes, and constraints
-func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) error { //nolint:revive // CLI flags are appropriate
+//revive:disable-next-line:flag-parameter CLI flags are appropriate
+func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) error {
 	if dryRun {
 		fmt.Println("=== DRY RUN MODE ===")
 		fmt.Println("No actual changes will be made to the database")
@@ -210,7 +211,8 @@ func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) er
 	return nil
 }
 
-func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) error { //nolint:revive // CLI flags are appropriate
+//revive:disable-next-line:flag-parameter CLI flags are appropriate
+func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) error {
 	if dryRun {
 		fmt.Println("=== DRY RUN MODE ===")
 		fmt.Println("No actual changes will be made to the database")
