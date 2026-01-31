@@ -2074,13 +2074,13 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 
 	// Validate that the area exists (either in existing data or was just created)
 	if existing.Areas[originalAreaXMLID] == nil {
-		return stacktrace.Wrap("original_commodity_id", errors.New("commodity references non-existent area"), errx.Attrs(originalXMLID, "original_area_id", originalAreaXMLID))
+		return stacktrace.Wrap("commodity references non-existent area", errors.New("commodity references non-existent area"), errx.Attrs("original_commodity_id", originalXMLID, "original_area_id", originalAreaXMLID))
 	}
 
 	// Get the actual database area ID
 	actualAreaID := idMapping.Areas[originalAreaXMLID]
 	if actualAreaID == "" {
-		return stacktrace.Wrap("original_area_id", errors.New("no ID mapping found for area"), errx.Attrs(originalAreaXMLID))
+		return stacktrace.Wrap("no ID mapping found for area", errors.New("no ID mapping found for area"), errx.Attrs("original_area_id", originalAreaXMLID))
 	}
 
 	commodity, err := xmlCommodity.ConvertToCommodity()

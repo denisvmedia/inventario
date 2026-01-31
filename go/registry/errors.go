@@ -2,6 +2,7 @@ package registry
 
 import (
 	"errors"
+	"fmt"
 )
 
 var (
@@ -14,7 +15,7 @@ var (
 	ErrEmailAlreadyExists = errors.New("email already exists")
 	ErrSlugAlreadyExists  = errors.New("slug already exists")
 	ErrBadDataStructure   = errors.New("bad data structure")
-	ErrDeleted            = errors.New("deleted")
+	ErrDeleted            = fmt.Errorf("deleted: %w", ErrNotFound) // Wrap ErrNotFound for semantic equivalence
 
 	ErrMainCurrencyNotSet       = errors.New("main currency not set")
 	ErrMainCurrencyAlreadySet   = errors.New("main currency already set and cannot be changed")
