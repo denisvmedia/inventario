@@ -31,15 +31,30 @@ var (
 func marshalError(err error) (result json.RawMessage) {
 	defer func() {
 		if r := recover(); r != nil {
-			// If marshaling panics, return a simple error message
+			// If marshaling panics, try standard JSON as fallback
+			slog.Warn("panic in marshalError, trying standard JSON", "panic", r)
+			if data, e := json.Marshal(err); e == nil {
+				result = data
+				return
+			}
+			// If that also fails, return simple error message
 			result = json.RawMessage(`"error marshaling failed"`)
 		}
 	}()
 
+	// Try errx JSON marshaling first
 	if data, e := errxjson.Marshal(err); e == nil {
 		return data
 	}
-	// Fallback to simple error message if marshaling fails
+
+	// Fallback to standard JSON marshaling for errors that errx can't handle
+	// (like validation errors)
+	if data, e := json.Marshal(err); e == nil {
+		return data
+	}
+
+	// Final fallback to simple error message
+	slog.Error("failed to marshal error", "error", err)
 	return json.RawMessage(`"error marshaling failed"`)
 }
 
@@ -112,7 +127,7 @@ func toJSONAPIError(err error) jsonapi.Error {
 	switch {
 	case errors.Is(err, registry.ErrCannotDelete):
 		return NewUnprocessableEntityError(err)
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, registry.ErrNotFound):
 		return NewNotFoundError(err)
 	case errors.Is(err, registry.ErrMainCurrencyNotSet):
 		return NewBadRequestError(err)
