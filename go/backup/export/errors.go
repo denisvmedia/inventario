@@ -1,9 +1,9 @@
 package export
 
 import (
-	"errors"
+	"github.com/go-extras/errx"
 )
 
 var (
-	ErrUnsupportedExportType = errors.New("unsupported export type")
+	ErrUnsupportedExportType = errx.NewSentinel("unsupported export type")
 )

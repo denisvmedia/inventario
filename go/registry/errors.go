@@ -1,27 +1,25 @@
 package registry
 
 import (
-	"errors"
-
 	"github.com/go-extras/errx"
 )
 
 var (
 	ErrNotFound           = errx.NewSentinel("not found")
-	ErrCannotDelete       = errors.New("cannot delete")
-	ErrInvalidConfig      = errors.New("invalid config")
-	ErrInvalidInput       = errors.New("invalid input")
-	ErrFieldRequired      = errors.New("field required")
-	ErrAlreadyExists      = errors.New("already exists")
-	ErrEmailAlreadyExists = errors.New("email already exists")
-	ErrSlugAlreadyExists  = errors.New("slug already exists")
-	ErrBadDataStructure   = errors.New("bad data structure")
+	ErrCannotDelete       = errx.NewSentinel("cannot delete")
+	ErrInvalidConfig      = errx.NewSentinel("invalid config")
+	ErrInvalidInput       = errx.NewSentinel("invalid input")
+	ErrFieldRequired      = errx.NewSentinel("field required")
+	ErrAlreadyExists      = errx.NewSentinel("already exists")
+	ErrEmailAlreadyExists = errx.NewSentinel("email already exists")
+	ErrSlugAlreadyExists  = errx.NewSentinel("slug already exists")
+	ErrBadDataStructure   = errx.NewSentinel("bad data structure")
 	ErrDeleted            = errx.NewSentinel("deleted", ErrNotFound)
 
-	ErrMainCurrencyNotSet       = errors.New("main currency not set")
-	ErrMainCurrencyAlreadySet   = errors.New("main currency already set and cannot be changed")
-	ErrUserContextRequired      = errors.New("user context required")
-	ErrResourceLimitExceeded    = errors.New("resource limit exceeded")
-	ErrConcurrencyLimitExceeded = errors.New("concurrency limit exceeded")
-	ErrTooManyRequests          = errors.New("too many requests")
+	ErrMainCurrencyNotSet       = errx.NewSentinel("main currency not set")
+	ErrMainCurrencyAlreadySet   = errx.NewSentinel("main currency already set and cannot be changed")
+	ErrUserContextRequired      = errx.NewSentinel("user context required")
+	ErrResourceLimitExceeded    = errx.NewSentinel("resource limit exceeded")
+	ErrConcurrencyLimitExceeded = errx.NewSentinel("concurrency limit exceeded")
+	ErrTooManyRequests          = errx.NewSentinel("too many requests")
 )

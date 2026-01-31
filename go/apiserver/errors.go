@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/render"
+	"github.com/go-extras/errx"
 	errxjson "github.com/go-extras/errx/json"
 
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -15,14 +16,14 @@ import (
 )
 
 var (
-	ErrUnknownContentType     = errors.New("render: unable to automatically decode the request content type")
-	ErrInvalidContentType     = errors.New("invalid content type")
-	ErrNoFilesUploaded        = errors.New("no files uploaded")
-	ErrEntityNotFound         = errors.New("entity not found")
-	ErrTenantNotFound         = errors.New("tenant not found")
-	ErrUnknownThumbnailStatus = errors.New("unknown thumbnail generation status")
-	ErrMissingUploadSlot      = errors.New("missing X-Upload-Slot header")
-	ErrInvalidUploadSlot      = errors.New("invalid or expired upload slot")
+	ErrUnknownContentType     = errx.NewSentinel("render: unable to automatically decode the request content type")
+	ErrInvalidContentType     = errx.NewSentinel("invalid content type")
+	ErrNoFilesUploaded        = errx.NewSentinel("no files uploaded")
+	ErrEntityNotFound         = errx.NewSentinel("entity not found")
+	ErrTenantNotFound         = errx.NewSentinel("tenant not found")
+	ErrUnknownThumbnailStatus = errx.NewSentinel("unknown thumbnail generation status")
+	ErrMissingUploadSlot      = errx.NewSentinel("missing X-Upload-Slot header")
+	ErrInvalidUploadSlot      = errx.NewSentinel("invalid or expired upload slot")
 	ErrNotFound               = registry.ErrNotFound
 )
 
