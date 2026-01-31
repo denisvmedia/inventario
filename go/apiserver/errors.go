@@ -61,7 +61,9 @@ func marshalError(err error) json.RawMessage {
 	}
 
 	// Try standard JSON marshaling (for types implementing json.Marshaler like validation.Errors)
-	if data, e := json.Marshal(err); e == nil {
+	// Note: json.Marshal() on standard errors without MarshalJSON produces `{}`, so we need to check for that
+	if data, e := json.Marshal(err); e == nil && len(data) > 2 {
+		// len(data) > 2 ensures we skip `{}` empty objects
 		wrapped := jsonError{
 			Error: data,
 			Type:  fmt.Sprintf("%T", err),
