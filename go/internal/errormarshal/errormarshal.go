@@ -28,15 +28,11 @@ type jsonMinimalError struct {
 //  4. nil errors
 //  5. errx errors - using errxjson.Marshal (for errx-wrapped errors with attributes)
 //  6. Default fallback - uses Error() method
-//
-// Note: errxjson.Marshal can panic when used with validation.Errors wrapped by errx
-// (due to unhashable map types in validation rules). We catch this panic and return
-// an error to allow fallback to the minimal representation.
 func MarshalError(aerr error) ([]byte, error) {
 	switch v := aerr.(type) {
 	case json.Marshaler:
 		// Use standard JSON marshaling for errors implementing json.Marshaler
-		// (e.g., validation.Errors) - do NOT use errxjson as it may panic
+		// (e.g., validation.Errors)
 		data, err := v.MarshalJSON()
 		if err != nil {
 			return nil, err
@@ -70,32 +66,15 @@ func MarshalError(aerr error) ([]byte, error) {
 
 	default:
 		// Try errxjson for errx errors (which don't implement json.Marshaler)
-		// Catch panics from errxjson (e.g., validation.Errors wrapped by errx)
-		var result []byte
-		var errxErr error
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					// errxjson panicked (likely validation.Errors with unhashable types)
-					errxErr = fmt.Errorf("errxjson.Marshal panicked: %v", r)
-				}
-			}()
-			if data, err := errxjson.Marshal(aerr); err == nil {
-				jsonErr := jsonError{
-					Error: data,
-					Type:  fmt.Sprintf("%T", aerr),
-				}
-				result, errxErr = json.Marshal(&jsonErr)
-			} else {
-				errxErr = err
+		if data, err := errxjson.Marshal(aerr); err == nil {
+			jsonErr := jsonError{
+				Error: data,
+				Type:  fmt.Sprintf("%T", aerr),
 			}
-		}()
-
-		if errxErr == nil && result != nil {
-			return result, nil
+			return json.Marshal(&jsonErr)
 		}
 
-		// Final fallback: minimal error structure
+		// Fallback: minimal error structure
 		jsonErr := jsonMinimalError{
 			Msg:  aerr.Error(),
 			Type: fmt.Sprintf("%T", v),
