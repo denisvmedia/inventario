@@ -3,6 +3,7 @@ package apiserver
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -31,31 +32,30 @@ var (
 func marshalError(err error) (result json.RawMessage) {
 	defer func() {
 		if r := recover(); r != nil {
-			// If marshaling panics, try standard JSON as fallback
-			slog.Warn("panic in marshalError, trying standard JSON", "panic", r)
+			// If errx marshaling panics, try standard JSON marshaling
+			// This handles cases like validation.Errors which have MarshalJSON
 			if data, e := json.Marshal(err); e == nil {
 				result = data
 				return
 			}
-			// If that also fails, return simple error message
-			result = json.RawMessage(`"error marshaling failed"`)
+			// If that also fails, return error string as JSON
+			result = json.RawMessage(fmt.Sprintf(`"%s"`, err.Error()))
 		}
 	}()
 
-	// Try errx JSON marshaling first
+	// Try errx JSON marshaling first for errx errors
 	if data, e := errxjson.Marshal(err); e == nil {
 		return data
 	}
 
-	// Fallback to standard JSON marshaling for errors that errx can't handle
-	// (like validation errors)
+	// Fallback: if error implements json.Marshaler or has a MarshalJSON method,
+	// standard JSON marshaling will work (e.g., validation.Errors)
 	if data, e := json.Marshal(err); e == nil {
 		return data
 	}
 
-	// Final fallback to simple error message
-	slog.Error("failed to marshal error", "error", err)
-	return json.RawMessage(`"error marshaling failed"`)
+	// Final fallback: return error string as JSON
+	return json.RawMessage(fmt.Sprintf(`"%s"`, err.Error()))
 }
 
 func NewNotFoundError(err error) jsonapi.Error {
