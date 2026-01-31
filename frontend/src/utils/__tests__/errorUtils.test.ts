@@ -3,40 +3,6 @@ import { extractErrorMessage, createUserFriendlyMessage, getErrorMessage, useErr
 
 describe('errorUtils', () => {
   describe('extractErrorMessage', () => {
-    it('should extract message from nested error structure with msg (old errkit format)', () => {
-      const err = {
-        response: {
-          status: 422,
-          data: {
-            errors: [
-              {
-                status: 'Unprocessable Entity',
-                error: {
-                  msg: 'area has commodities',
-                  error: {
-                    error: {
-                      error: {
-                        msg: 'cannot delete',
-                        type: '*errors.errorString'
-                      },
-                      stackTrace: {
-                        funcName: 'github.com/denisvmedia/inventario/internal/errkit.WithStack',
-                        filePos: 'stacktracederr.go:30'
-                      }
-                    },
-                    type: '*errkit.stackTracedError'
-                  }
-                }
-              }
-            ]
-          }
-        }
-      }
-
-      const result = extractErrorMessage(err, 'fallback')
-      expect(result).toBe('area has commodities')
-    })
-
     it('should extract message from nested errx error structure with message field', () => {
       const err = {
         response: {

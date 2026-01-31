@@ -77,11 +77,6 @@ function extractNestedErrorMessage(errorObj: any): string | null {
     return errorObj.message.trim();
   }
 
-  // Fallback to msg field (for backward compatibility with old errkit errors)
-  if (typeof errorObj.msg === 'string' && errorObj.msg.trim()) {
-    return errorObj.msg.trim();
-  }
-
   // If this level has an error property, recurse into it
   if (errorObj.error) {
     const nestedMessage = extractNestedErrorMessage(errorObj.error);
