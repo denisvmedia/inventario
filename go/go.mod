@@ -10,7 +10,7 @@ require (
 	github.com/bojanz/currency v1.4.2
 	github.com/frankban/quicktest v1.14.6
 	github.com/gabriel-vasile/mimetype v1.4.13
-	github.com/go-chi/chi/v5 v5.2.4
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/render v1.0.3
 	github.com/go-extras/errx v1.2.1
 	github.com/go-extras/go-kit v1.2.0
