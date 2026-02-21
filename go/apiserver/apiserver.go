@@ -95,6 +95,7 @@ type Params struct {
 	FileURLExpiration time.Duration                      // File URL expiration duration
 	ThumbnailConfig   services.ThumbnailGenerationConfig // Thumbnail generation configuration
 	TokenBlacklister  services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
+	AuthRateLimiter   services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
 }
 
 func (p *Params) Validate() error {
@@ -163,12 +164,20 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		blacklist = services.NewInMemoryTokenBlacklister()
 	}
 
+	// Resolve auth rate limiter: default to in-memory if not provided.
+	rateLimiter := params.AuthRateLimiter
+	if rateLimiter == nil {
+		slog.Warn("AuthRateLimiter not provided; falling back to in-memory implementation. This configuration is not suitable for production use.")
+		rateLimiter = services.NewInMemoryAuthRateLimiter()
+	}
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(AuthParams{
 			UserRegistry:         params.FactorySet.UserRegistry,
 			RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
 			BlacklistService:     blacklist,
+			RateLimiter:          rateLimiter,
 			JWTSecret:            params.JWTSecret,
 		}))
 		r.Route("/currencies", Currencies())
