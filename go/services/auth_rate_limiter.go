@@ -342,20 +342,17 @@ func NewInMemoryAuthRateLimiter() *InMemoryAuthRateLimiter {
 	}
 }
 
-func (l *InMemoryAuthRateLimiter) CheckLoginAttempt(ctx context.Context, ip string) (RateLimitResult, error) {
-	_ = ctx
+func (l *InMemoryAuthRateLimiter) CheckLoginAttempt(_ context.Context, ip string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:auth:login:ip:%s", hashKeyPart(ip))
 	return l.checkRate(key, loginAttemptsLimit, loginAttemptsWindow), nil
 }
 
-func (l *InMemoryAuthRateLimiter) CheckRegistrationAttempt(ctx context.Context, ip string) (RateLimitResult, error) {
-	_ = ctx
+func (l *InMemoryAuthRateLimiter) CheckRegistrationAttempt(_ context.Context, ip string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:auth:register:ip:%s", hashKeyPart(ip))
 	return l.checkRate(key, registrationAttemptsLimit, registrationAttemptsWindow), nil
 }
 
-func (l *InMemoryAuthRateLimiter) CheckPasswordResetAttempt(ctx context.Context, email string) (RateLimitResult, error) {
-	_ = ctx
+func (l *InMemoryAuthRateLimiter) CheckPasswordResetAttempt(_ context.Context, email string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:auth:reset:email:%s", hashKeyPart(email))
 	return l.checkRate(key, passwordResetAttemptsLimit, passwordResetAttemptsWindow), nil
 }
@@ -389,10 +386,6 @@ func (l *InMemoryAuthRateLimiter) checkRate(key string, limit int, window time.D
 	}
 
 	ts = append(ts, now)
-	if len(ts) == 0 {
-		// should never happen, but keep resetAt meaningful
-		ts = []time.Time{now}
-	}
 	l.windows[key] = ts
 
 	remaining := limit - len(ts)
@@ -408,8 +401,7 @@ func (l *InMemoryAuthRateLimiter) checkRate(key string, limit int, window time.D
 	}
 }
 
-func (l *InMemoryAuthRateLimiter) IsAccountLocked(ctx context.Context, email string) (bool, time.Time, error) {
-	_ = ctx
+func (l *InMemoryAuthRateLimiter) IsAccountLocked(_ context.Context, email string) (bool, time.Time, error) {
 	key := fmt.Sprintf("auth:lockout:%s", hashKeyPart(email))
 
 	now := l.now()
@@ -426,8 +418,7 @@ func (l *InMemoryAuthRateLimiter) IsAccountLocked(ctx context.Context, email str
 	return false, time.Time{}, nil
 }
 
-func (l *InMemoryAuthRateLimiter) RecordFailedLogin(ctx context.Context, email string) (bool, time.Time, error) {
-	_ = ctx
+func (l *InMemoryAuthRateLimiter) RecordFailedLogin(_ context.Context, email string) (bool, time.Time, error) {
 	key := fmt.Sprintf("auth:lockout:%s", hashKeyPart(email))
 
 	now := l.now()
@@ -461,8 +452,7 @@ func (l *InMemoryAuthRateLimiter) RecordFailedLogin(ctx context.Context, email s
 	return false, entry.expiresAt, nil
 }
 
-func (l *InMemoryAuthRateLimiter) ClearFailedLogins(ctx context.Context, email string) error {
-	_ = ctx
+func (l *InMemoryAuthRateLimiter) ClearFailedLogins(_ context.Context, email string) error {
 	key := fmt.Sprintf("auth:lockout:%s", hashKeyPart(email))
 	l.mu.Lock()
 	delete(l.failed, key)
