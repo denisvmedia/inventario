@@ -35,6 +35,12 @@ func NewRefreshTokenRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableN
 	}
 }
 
+// newSQLRegistry returns a NonRLSRepository for the refresh_tokens table.
+// This registry operates on a DB connection that either has BYPASSRLS or
+// uses the superuser role, intentionally skipping the row-level security
+// policies that filter by tenant_id/user_id. This is required for auth
+// flows (e.g. /auth/refresh, /auth/login) where no user context has been
+// established yet in the database session.
 func (r *RefreshTokenRegistry) newSQLRegistry() *store.NonRLSRepository[models.RefreshToken, *models.RefreshToken] {
 	return store.NewSQLRegistry[models.RefreshToken](r.dbx, r.tableNames.RefreshTokens())
 }

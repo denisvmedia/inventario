@@ -54,16 +54,16 @@ func GenerateRefreshToken() (token string, hash string, err error) {
 	if _, err = rand.Read(b); err != nil {
 		return "", "", err
 	}
-	token = base64.URLEncoding.EncodeToString(b)
+	token = base64.RawURLEncoding.EncodeToString(b)
 	h := sha256.Sum256([]byte(token))
-	hash = base64.URLEncoding.EncodeToString(h[:])
+	hash = base64.RawURLEncoding.EncodeToString(h[:])
 	return token, hash, nil
 }
 
 // HashRefreshToken computes the SHA-256 hash of a raw token string.
 func HashRefreshToken(token string) string {
 	h := sha256.Sum256([]byte(token))
-	return base64.URLEncoding.EncodeToString(h[:])
+	return base64.RawURLEncoding.EncodeToString(h[:])
 }
 
 // IsValid reports whether the refresh token is not expired and not revoked.

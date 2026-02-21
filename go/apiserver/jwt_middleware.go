@@ -76,11 +76,18 @@ func validateJWTToken(ctx context.Context, tokenString string, jwtSecret []byte,
 }
 
 // checkTokenBlacklist checks whether the token JTI or the user has been blacklisted.
-// Blacklist-check errors are logged but do not block the request (graceful degradation).
+//
+// Design: errors from the blacklist backend (e.g. Redis unavailability) are
+// logged but do NOT block the request (fail-open). This is an intentional
+// trade-off: a Redis outage causes recently-revoked tokens to be accepted
+// temporarily rather than taking the entire API offline. Operators should
+// monitor blacklist errors and ensure Redis availability. For environments
+// where fail-closed is required, replace the error-branch with a 401 return.
 func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist services.TokenBlacklister) error {
 	if jti, ok := claims["jti"].(string); ok && jti != "" {
 		blacklisted, err := blacklist.IsBlacklisted(ctx, jti)
 		if err != nil {
+			// Fail-open: log the error but allow the request through.
 			slog.Error("Failed to check token blacklist", "error", err)
 		} else if blacklisted {
 			return fmt.Errorf("token has been revoked")
@@ -90,6 +97,7 @@ func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist se
 	if userID, ok := claims["user_id"].(string); ok && userID != "" {
 		blacklisted, err := blacklist.IsUserBlacklisted(ctx, userID)
 		if err != nil {
+			// Fail-open: log the error but allow the request through.
 			slog.Error("Failed to check user blacklist", "error", err)
 		} else if blacklisted {
 			return fmt.Errorf("user session has been revoked")

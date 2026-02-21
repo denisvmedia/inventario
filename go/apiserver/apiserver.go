@@ -159,6 +159,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	// Resolve blacklister: default to in-memory if not provided.
 	blacklist := params.TokenBlacklister
 	if blacklist == nil {
+		slog.Warn("TokenBlacklister not provided; falling back to in-memory implementation. This configuration is not suitable for production use.")
 		blacklist = services.NewInMemoryTokenBlacklister()
 	}
 

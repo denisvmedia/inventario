@@ -3,7 +3,10 @@ package apiserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -181,11 +184,21 @@ func (api *AuthAPI) blacklistAccessToken(ctx context.Context, authHeader string)
 	if tokenString == authHeader {
 		return
 	}
-	// Parse without validation to extract claims even for near-expired tokens.
-	token, _ := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+	// Parse with signature verification. We allow tokens that are already expired
+	// (e.g. near-expiry tokens sent during logout) but reject any token with an
+	// invalid signature to prevent a client from blacklisting arbitrary JTIs.
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
 		return api.jwtSecret, nil
 	})
 	if token == nil {
+		return
+	}
+	// Skip blacklisting if there is any error other than token expiry
+	// (e.g. invalid signature, unsupported algorithm).
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
 		return
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
@@ -200,7 +213,14 @@ func (api *AuthAPI) blacklistAccessToken(ctx context.Context, authHeader string)
 	if !ok {
 		return
 	}
-	if err := api.blacklistService.BlacklistToken(ctx, jti, time.Unix(int64(exp), 0)); err != nil {
+	// Cap the expiry to 2× accessTokenExpiration as a defence-in-depth measure
+	// against artificially large exp values.
+	expiresAt := time.Unix(int64(exp), 0)
+	maxExpiry := time.Now().Add(2 * accessTokenExpiration)
+	if expiresAt.After(maxExpiry) {
+		expiresAt = maxExpiry
+	}
+	if err := api.blacklistService.BlacklistToken(ctx, jti, expiresAt); err != nil {
 		slog.Error("Failed to blacklist access token", "error", err)
 	}
 }
@@ -235,13 +255,14 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clear the refresh token cookie.
+	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshTokenCookieName,
 		Value:    "",
 		Path:     refreshTokenCookiePath,
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secureCookie,
 		SameSite: http.SameSiteStrictMode,
 	})
 
@@ -343,13 +364,17 @@ func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 
+	// Set Secure flag only when the connection is already over HTTPS to allow
+	// local development over plain HTTP.
+	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshTokenCookieName,
 		Value:    rawToken,
 		Path:     refreshTokenCookiePath,
 		MaxAge:   int(refreshTokenExpiration.Seconds()),
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secureCookie,
 		SameSite: http.SameSiteStrictMode,
 	})
 	return nil
@@ -380,10 +405,10 @@ func getClientIP(r *http.Request) string {
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
-	// Fall back to RemoteAddr (strips port if present).
-	addr := r.RemoteAddr
-	if idx := strings.LastIndex(addr, ":"); idx != -1 {
-		return addr[:idx]
+	// Fall back to RemoteAddr. Use net.SplitHostPort to correctly handle
+	// both IPv4 ("1.2.3.4:port") and IPv6 ("[::1]:port") addresses.
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
-	return addr
+	return r.RemoteAddr
 }

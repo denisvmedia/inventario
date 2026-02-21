@@ -69,6 +69,11 @@ func (s *RedisTokenBlacklister) IsBlacklisted(ctx context.Context, tokenID strin
 }
 
 func (s *RedisTokenBlacklister) BlacklistUserTokens(ctx context.Context, userID string, duration time.Duration) error {
+	if duration <= 0 {
+		// A zero or negative duration would create a Redis entry with no TTL,
+		// permanently blacklisting the user. Treat this as a no-op instead.
+		return nil
+	}
 	key := fmt.Sprintf("blacklist:user:%s", userID)
 	return s.client.Set(ctx, key, "1", duration).Err()
 }

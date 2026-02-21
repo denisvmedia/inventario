@@ -34,7 +34,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     volumes:
-      - ./.docker/redis:/data
+      - redis-data:/data
     ports:
       - "${REDIS_PORT:-6379}:6379"
     networks:

@@ -1,5 +1,13 @@
 import axios from 'axios'
 
+// Extend AxiosRequestConfig to support retry tracking without mutating the
+// typed config object via a plain property assignment.
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _retry?: boolean
+  }
+}
+
 // Navigation function that can be mocked in tests
 // eslint-disable-next-line no-unused-vars
 export let navigateToLogin: (currentPath: string) => void = (currentPath: string) => {
@@ -62,10 +70,18 @@ api.interceptors.request.use(
 // Track whether a token refresh is already in progress to avoid loops
 let isRefreshing = false
 let refreshSubscribers: Array<(_token: string) => void> = []
+let refreshSubscriberRejects: Array<(_reason: unknown) => void> = []
 
 function onRefreshed(token: string) {
   refreshSubscribers.forEach(cb => cb(token))
   refreshSubscribers = []
+  refreshSubscriberRejects = []
+}
+
+function onRefreshFailed(error: unknown) {
+  refreshSubscriberRejects.forEach(cb => cb(error))
+  refreshSubscribers = []
+  refreshSubscriberRejects = []
 }
 
 // Add response interceptor for authentication and debugging
@@ -100,12 +116,17 @@ api.interceptors.response.use(
 
       if (!isAuthEndpoint && !originalRequest?._retry) {
         if (isRefreshing) {
-          // Queue this request to retry after refresh completes
-          return new Promise(resolve => {
+          // Queue this request to retry after refresh completes.
+          // Both resolve and reject are tracked so that queued promises are
+          // always settled when the refresh either succeeds or fails.
+          return new Promise((resolve, reject) => {
             refreshSubscribers.push((token: string) => {
-              originalRequest.headers.Authorization = `Bearer ${token}`
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${token}`
+              }
               resolve(api(originalRequest))
             })
+            refreshSubscriberRejects.push(reject)
           })
         }
 
@@ -121,15 +142,20 @@ api.interceptors.response.use(
           if (newToken) {
             localStorage.setItem('inventario_token', newToken)
             api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
-            originalRequest.headers.Authorization = `Bearer ${newToken}`
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${newToken}`
+            }
             onRefreshed(newToken)
-            isRefreshing = false
             return api(originalRequest)
           }
+          // No token returned — treat as failed refresh
+          onRefreshFailed(error)
         } catch (refreshError) {
           console.warn('Token refresh failed:', refreshError)
+          onRefreshFailed(refreshError)
+        } finally {
+          isRefreshing = false
         }
-        isRefreshing = false
       }
 
       console.warn('401 on user request - clearing auth and redirecting to login')
