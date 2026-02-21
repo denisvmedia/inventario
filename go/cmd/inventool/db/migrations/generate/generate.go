@@ -3,6 +3,7 @@ package generate
 import (
 	"context"
 	"fmt"
+	"os"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
@@ -34,7 +35,8 @@ Examples:
   inventario migrate generate                    # Generate migration files from schema differences
   inventario migrate generate add_user_table     # Generate migration with custom name
   inventario migrate generate --preview          # Generate complete schema SQL and print on screen for preview
-`,
+  inventario migrate generate --check            # Exit 1 if pending schema changes exist (CI lint gate)
+`
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.migrateGenerate(&c.config, dbConfig, args)
 		},
@@ -50,6 +52,7 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().StringVar(&c.config.GoEntitiesDir, "go-entities-dir", c.config.GoEntitiesDir, "Directory containing Go entity files")
 	c.Cmd().Flags().StringVar(&c.config.MigrationsDir, "migrations-dir", c.config.MigrationsDir, "Directory containing migration files")
 	c.Cmd().Flags().BoolVar(&c.config.Preview, "preview", c.config.Preview, "Generate complete schema SQL (preview only, no files created)")
+	c.Cmd().Flags().BoolVar(&c.config.Check, "check", c.config.Check, "Check for pending schema changes and exit 1 if any are found (no files created)")
 }
 
 // migrateGenerate handles the migrate generate subcommand
@@ -64,6 +67,21 @@ func (c *Command) migrateGenerate(cfg *Config, dbConfig *shared.DatabaseConfig, 
 	gen, err := generator.New(dsn, cfg.GoEntitiesDir)
 	if err != nil {
 		return err
+	}
+
+	// Handle check mode: detect pending schema changes without writing any files.
+	if cfg.Check {
+		hasChanges, checkErr := gen.CheckPendingChanges(context.Background())
+		if checkErr != nil {
+			return errxtrace.Wrap("failed to check pending schema changes", checkErr)
+		}
+		if hasChanges {
+			fmt.Println("❌ Pending schema changes detected.")
+			fmt.Println("   Run 'inventool db migrations generate' to create the migration files.")
+			os.Exit(1) //nolint:revive // intentional non-zero exit for CI lint gate
+		}
+		fmt.Println("✅ Schema is in sync — no pending migrations.")
+		return nil
 	}
 
 	// Handle schema preview mode (no files created)

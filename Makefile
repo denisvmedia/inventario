@@ -203,6 +203,20 @@ lint-go-fix:
 lint-frontend:
 	$(CD) $(FRONTEND_DIR) && npm run lint
 
+# Check that all Go entity schema changes have a corresponding migration.
+# Requires POSTGRES_TEST_DSN to point to a PostgreSQL instance that has all migrations applied.
+.PHONY: lint-migrations
+lint-migrations: build-inventool
+	@if [ -z "$(POSTGRES_TEST_DSN)" ]; then \
+		echo "❌ POSTGRES_TEST_DSN is not set — skipping migration check"; \
+		exit 1; \
+	fi
+	@echo "Applying all migrations..."
+	$(INVENTOOL_PATH) db migrations up --db-dsn "$(POSTGRES_TEST_DSN)"
+	@echo ""
+	@echo "Checking for pending schema changes..."
+	$(INVENTOOL_PATH) db migrations generate --check --db-dsn "$(POSTGRES_TEST_DSN)"
+
 # Run all linters
 .PHONY: lint
 lint: lint-go lint-frontend

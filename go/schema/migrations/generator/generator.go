@@ -80,6 +80,29 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 	return files, nil
 }
 
+// CheckPendingChanges checks whether there are any pending schema changes without writing
+// any migration files. It runs the same diff logic as GenerateMigrationFiles but discards
+// the output. Returns true if there are pending changes, false if the schema is in sync.
+func (m *Generator) CheckPendingChanges(_ context.Context) (bool, error) {
+	// Use a temporary directory so we never touch the project's migrations folder.
+	tmpDir, err := os.MkdirTemp("", "inventool-check-*")
+	if err != nil {
+		return false, errxtrace.Wrap("failed to create temp dir", err)
+	}
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			m.logger.Warn("Failed to remove temp dir", "path", tmpDir, "error", removeErr)
+		}
+	}()
+
+	files, err := m.GenerateMigrationFiles(context.Background(), "check", tmpDir)
+	if err != nil {
+		return false, err
+	}
+
+	return files != nil, nil
+}
+
 // GenerateSchemaSQL generates complete schema SQL from Go annotations (for preview)
 // TODO: implement
 func (m *Generator) GenerateSchemaSQL(ctx context.Context) ([]string, error) {
