@@ -234,6 +234,11 @@ func (c *Command) runCommand() error {
 	thumbnailWorker.Start(ctx)
 	defer thumbnailWorker.Stop()
 
+	// Start refresh token cleanup worker (deletes expired tokens every hour)
+	refreshTokenCleanupWorker := services.NewRefreshTokenCleanupWorker(factorySet.RefreshTokenRegistry)
+	refreshTokenCleanupWorker.Start(ctx)
+	defer refreshTokenCleanupWorker.Stop()
+
 	errCh := srv.Run(bindAddr, apiserver.APIServer(params, restoreWorker))
 
 	// Wait for an interrupt signal (e.g., Ctrl+C)

@@ -81,22 +81,19 @@ func (r *RefreshTokenRegistry) GetByUserID(ctx context.Context, userID string) (
 }
 
 // RevokeByUserID marks all refresh tokens for a user as revoked.
-func (r *RefreshTokenRegistry) RevokeByUserID(ctx context.Context, userID string) error {
-	tokens, err := r.GetByUserID(ctx, userID)
-	if err != nil {
-		return err
-	}
-
+// A single write lock is held for the entire operation to avoid a TOCTOU
+// race between listing tokens and updating them individually.
+func (r *RefreshTokenRegistry) RevokeByUserID(_ context.Context, userID string) error {
 	now := time.Now()
-	for _, t := range tokens {
-		if t.RevokedAt == nil {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		t := pair.Value
+		if t.UserID == userID && t.RevokedAt == nil {
 			t.RevokedAt = &now
-			r.lock.Lock()
 			r.items.Set(t.ID, t)
-			r.lock.Unlock()
 		}
 	}
-
 	return nil
 }
 

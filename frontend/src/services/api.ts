@@ -111,7 +111,7 @@ api.interceptors.response.use(
       }
 
       // Skip refresh retry for auth endpoints to avoid loops
-      const isAuthEndpoint = error.config?.url?.includes('/auth/')
+      const isAuthEndpoint = error.config?.url?.startsWith('/api/v1/auth/')
       const originalRequest = error.config
 
       if (!isAuthEndpoint && !originalRequest?._retry) {
@@ -151,7 +151,7 @@ api.interceptors.response.use(
             return api(originalRequest)
           }
           // No token returned — treat as failed refresh
-          onRefreshFailed(error)
+          onRefreshFailed(new Error('Refresh returned no token'))
         } catch (refreshError) {
           console.warn('Token refresh failed:', refreshError)
           onRefreshFailed(refreshError)
