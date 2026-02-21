@@ -124,7 +124,8 @@ export default [
       'no-debugger': 'off',
       'max-len': 'off',
       'no-prototype-builtins': 'off',
-      'no-self-assign': 'off'
+      'no-self-assign': 'off',
+      'no-useless-assignment': 'warn'
     }
   }
 ];

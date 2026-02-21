@@ -45,7 +45,13 @@ const uploadSlotService = {
       // Handle 429 Too Many Requests
       if (error.response?.status === 429) {
         const errorData = error.response.data
-        throw new Error(`Too many concurrent uploads. ${errorData.retry_after_seconds ? `Retry after ${errorData.retry_after_seconds} seconds.` : 'Try again later.'}`)
+        const msg = `Too many concurrent uploads. ${
+          errorData.retry_after_seconds
+            ? `Retry after ${errorData.retry_after_seconds} seconds.`
+            : 'Try again later.'
+        }`
+
+        throw new Error(msg, { cause: error })
       }
 
       throw error
