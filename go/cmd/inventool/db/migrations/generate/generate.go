@@ -36,7 +36,7 @@ Examples:
   inventario migrate generate add_user_table     # Generate migration with custom name
   inventario migrate generate --preview          # Generate complete schema SQL and print on screen for preview
   inventario migrate generate --check            # Exit 1 if pending schema changes exist (CI lint gate)
-`
+`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.migrateGenerate(&c.config, dbConfig, args)
 		},
@@ -78,7 +78,8 @@ func (c *Command) migrateGenerate(cfg *Config, dbConfig *shared.DatabaseConfig, 
 		if hasChanges {
 			fmt.Println("❌ Pending schema changes detected.")
 			fmt.Println("   Run 'inventool db migrations generate' to create the migration files.")
-			os.Exit(1) //nolint:revive // intentional non-zero exit for CI lint gate
+			// Exit with a non-zero code so CI/make targets treat this as a failure.
+			os.Exit(1) //revive:disable-line:deep-exit
 		}
 		fmt.Println("✅ Schema is in sync — no pending migrations.")
 		return nil
