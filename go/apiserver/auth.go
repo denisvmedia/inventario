@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -31,7 +32,7 @@ const (
 	// refreshTokenCookieName is the name of the httpOnly cookie carrying the refresh token.
 	refreshTokenCookieName = "refresh_token"
 	// refreshTokenCookiePath limits the cookie to the auth endpoints only.
-	refreshTokenCookiePath = "/api/v1/auth"
+	refreshTokenCookiePath = "/api/v1/auth" //nolint:gosec // this is a URL path, not a credential
 )
 
 // AuthAPI handles authentication endpoints.
@@ -171,46 +172,66 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	writeLoginResponse(w, accessTokenString, user)
 }
 
+// blacklistAccessToken extracts claims from a Bearer token header and blacklists its JTI.
+func (api *AuthAPI) blacklistAccessToken(ctx context.Context, authHeader string) {
+	if api.blacklistService == nil {
+		return
+	}
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader {
+		return
+	}
+	// Parse without validation to extract claims even for near-expired tokens.
+	token, _ := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		return api.jwtSecret, nil
+	})
+	if token == nil {
+		return
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return
+	}
+	jti, ok := claims["jti"].(string)
+	if !ok {
+		return
+	}
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		return
+	}
+	if err := api.blacklistService.BlacklistToken(ctx, jti, time.Unix(int64(exp), 0)); err != nil {
+		slog.Error("Failed to blacklist access token", "error", err)
+	}
+}
+
+// revokeRefreshToken looks up a refresh token by raw value and marks it revoked.
+func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
+	if api.refreshTokenRegistry == nil {
+		return
+	}
+	tokenHash := models.HashRefreshToken(rawToken)
+	rt, err := api.refreshTokenRegistry.GetByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	rt.RevokedAt = &now
+	if _, err := api.refreshTokenRegistry.Update(ctx, *rt); err != nil {
+		slog.Error("Failed to revoke refresh token", "token_id", rt.ID, "error", err)
+	}
+}
+
 // logout revokes the current access token and refresh token.
 func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	// Blacklist the current access token so it cannot be reused within its remaining TTL.
-	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" {
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString != authHeader {
-			// Parse without validation to extract claims even for near-expired tokens.
-			token, _ := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
-				return api.jwtSecret, nil
-			})
-			if token != nil {
-				if claims, ok := token.Claims.(jwt.MapClaims); ok {
-					if jti, ok := claims["jti"].(string); ok {
-					if exp, ok := claims["exp"].(float64); ok {
-						if api.blacklistService != nil {
-							expiresAt := time.Unix(int64(exp), 0)
-							if err := api.blacklistService.BlacklistToken(r.Context(), jti, expiresAt); err != nil {
-								slog.Error("Failed to blacklist access token", "error", err)
-							}
-						}
-					}
-					}
-				}
-			}
-		}
+	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+		api.blacklistAccessToken(r.Context(), authHeader)
 	}
 
 	// Revoke the refresh token from the database.
-	if api.refreshTokenRegistry != nil {
-		if cookie, err := r.Cookie(refreshTokenCookieName); err == nil {
-			tokenHash := models.HashRefreshToken(cookie.Value)
-			if rt, err := api.refreshTokenRegistry.GetByTokenHash(r.Context(), tokenHash); err == nil {
-				now := time.Now()
-				rt.RevokedAt = &now
-				if _, err := api.refreshTokenRegistry.Update(r.Context(), *rt); err != nil {
-					slog.Error("Failed to revoke refresh token", "token_id", rt.ID, "error", err)
-				}
-			}
-		}
+	if cookie, err := r.Cookie(refreshTokenCookieName); err == nil {
+		api.revokeRefreshToken(r.Context(), cookie.Value)
 	}
 
 	// Clear the refresh token cookie.
@@ -281,8 +302,8 @@ func Auth(params AuthParams) func(r chi.Router) {
 
 // issueAccessToken creates and signs a short-lived JWT with a unique JTI.
 // Returns the signed token string, its expiry time, and any error.
-func (api *AuthAPI) issueAccessToken(user *models.User) (tokenString string, expiresAt time.Time, err error) {
-	expiresAt = time.Now().Add(accessTokenExpiration)
+func (api *AuthAPI) issueAccessToken(user *models.User) (string, time.Time, error) {
+	expiresAt := time.Now().Add(accessTokenExpiration)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"jti":     uuid.New().String(),
 		"user_id": user.ID,
@@ -290,8 +311,8 @@ func (api *AuthAPI) issueAccessToken(user *models.User) (tokenString string, exp
 		"exp":     expiresAt.Unix(),
 		"iat":     time.Now().Unix(),
 	})
-	tokenString, err = token.SignedString(api.jwtSecret)
-	return
+	tokenString, err := token.SignedString(api.jwtSecret)
+	return tokenString, expiresAt, err
 }
 
 // issueRefreshTokenCookie generates a refresh token, stores it in the database, and

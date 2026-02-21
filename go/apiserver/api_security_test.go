@@ -300,8 +300,8 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 
 			// Setup API server with RLS middleware
 			r := chi.NewRouter()
-	userMiddlewares := createUserAwareMiddlewares(jwtSecret, factorySet, nil)
-	r.With(userMiddlewares...).Get("/test", func(w http.ResponseWriter, r *http.Request) {
+			userMiddlewares := createUserAwareMiddlewares(jwtSecret, factorySet, nil)
+			r.With(userMiddlewares...).Get("/test", func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			})
 

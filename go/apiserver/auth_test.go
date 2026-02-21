@@ -110,17 +110,17 @@ func TestAuthAPI_Login(t *testing.T) {
 				"password": "password123",
 			},
 			expectedStatus: http.StatusOK,
-				checkResponse: func(t *testing.T, resp *httptest.ResponseRecorder) {
-					c := qt.New(t)
-					var response apiserver.LoginResponse
-					err := json.Unmarshal(resp.Body.Bytes(), &response)
-					c.Assert(err, qt.IsNil)
-					c.Assert(response.AccessToken, qt.Not(qt.Equals), "")
-					c.Assert(response.User.Email, qt.Equals, "test@example.com")
-					c.Assert(response.ExpiresIn > 0, qt.IsTrue)
+			checkResponse: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				c := qt.New(t)
+				var response apiserver.LoginResponse
+				err := json.Unmarshal(resp.Body.Bytes(), &response)
+				c.Assert(err, qt.IsNil)
+				c.Assert(response.AccessToken, qt.Not(qt.Equals), "")
+				c.Assert(response.User.Email, qt.Equals, "test@example.com")
+				c.Assert(response.ExpiresIn > 0, qt.IsTrue)
 
-					// Verify JWT token
-					token, err := jwt.Parse(response.AccessToken, func(token *jwt.Token) (any, error) {
+				// Verify JWT token
+				token, err := jwt.Parse(response.AccessToken, func(token *jwt.Token) (any, error) {
 					return jwtSecret, nil
 				})
 				c.Assert(err, qt.IsNil)

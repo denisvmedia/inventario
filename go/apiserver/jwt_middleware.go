@@ -67,27 +67,36 @@ func validateJWTToken(ctx context.Context, tokenString string, jwtSecret []byte,
 
 	// Check blacklist when a blacklister is configured.
 	if blacklist != nil {
-		if jti, ok := claims["jti"].(string); ok && jti != "" {
-			blacklisted, err := blacklist.IsBlacklisted(ctx, jti)
-			if err != nil {
-				slog.Error("Failed to check token blacklist", "error", err)
-				// Don't fail the request on blacklist-check errors – degrade gracefully.
-			} else if blacklisted {
-				return nil, fmt.Errorf("token has been revoked")
-			}
-		}
-
-		if userID, ok := claims["user_id"].(string); ok && userID != "" {
-			blacklisted, err := blacklist.IsUserBlacklisted(ctx, userID)
-			if err != nil {
-				slog.Error("Failed to check user blacklist", "error", err)
-			} else if blacklisted {
-				return nil, fmt.Errorf("user session has been revoked")
-			}
+		if err := checkTokenBlacklist(ctx, claims, blacklist); err != nil {
+			return nil, err
 		}
 	}
 
 	return claims, nil
+}
+
+// checkTokenBlacklist checks whether the token JTI or the user has been blacklisted.
+// Blacklist-check errors are logged but do not block the request (graceful degradation).
+func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist services.TokenBlacklister) error {
+	if jti, ok := claims["jti"].(string); ok && jti != "" {
+		blacklisted, err := blacklist.IsBlacklisted(ctx, jti)
+		if err != nil {
+			slog.Error("Failed to check token blacklist", "error", err)
+		} else if blacklisted {
+			return fmt.Errorf("token has been revoked")
+		}
+	}
+
+	if userID, ok := claims["user_id"].(string); ok && userID != "" {
+		blacklisted, err := blacklist.IsUserBlacklisted(ctx, userID)
+		if err != nil {
+			slog.Error("Failed to check user blacklist", "error", err)
+		} else if blacklisted {
+			return fmt.Errorf("user session has been revoked")
+		}
+	}
+
+	return nil
 }
 
 // extractUserIDFromClaims extracts user ID from JWT claims
