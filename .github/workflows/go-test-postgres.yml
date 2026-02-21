@@ -107,7 +107,7 @@ jobs:
         run: |
           echo "Running database migrations..."
           go run ./cmd/inventario db bootstrap apply --db-dsn="$POSTGRES_TEST_DSN" --username="inventario" --username-for-migrations="inventario_migrator"
-          go run ./cmd/inventario db migrations up --db-dsn="$POSTGRES_TEST_DSN"
+          go run ./cmd/inventario db migrate up --db-dsn="$POSTGRES_TEST_DSN"
         working-directory: go
 
       - name: Run PostgreSQL registry tests
