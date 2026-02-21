@@ -83,7 +83,7 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 // CheckPendingChanges checks whether there are any pending schema changes without writing
 // any migration files. It runs the same diff logic as GenerateMigrationFiles but discards
 // the output. Returns true if there are pending changes, false if the schema is in sync.
-func (m *Generator) CheckPendingChanges(_ context.Context) (bool, error) {
+func (m *Generator) CheckPendingChanges(ctx context.Context) (bool, error) {
 	// Use a temporary directory so we never touch the project's migrations folder.
 	tmpDir, err := os.MkdirTemp("", "inventool-check-*")
 	if err != nil {
@@ -95,7 +95,7 @@ func (m *Generator) CheckPendingChanges(_ context.Context) (bool, error) {
 		}
 	}()
 
-	files, err := m.GenerateMigrationFiles(context.Background(), "check", tmpDir)
+	files, err := m.GenerateMigrationFiles(ctx, "check", tmpDir)
 	if err != nil {
 		return false, err
 	}

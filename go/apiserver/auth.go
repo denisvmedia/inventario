@@ -132,6 +132,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	cookie, err := r.Cookie(refreshTokenCookieName)
 	if err != nil {
+		// Cookie missing: nothing to clear — do not set MaxAge=-1 for a non-existent cookie.
 		http.Error(w, "Refresh token required", http.StatusUnauthorized)
 		return
 	}
@@ -141,12 +142,14 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	refreshToken, err := api.refreshTokenRegistry.GetByTokenHash(r.Context(), tokenHash)
 	if err != nil {
 		slog.Warn("Refresh token not found", "error", err)
+		clearRefreshCookie(w, r)
 		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 		return
 	}
 
 	if !refreshToken.IsValid() {
 		slog.Warn("Expired or revoked refresh token", "token_id", refreshToken.ID)
+		clearRefreshCookie(w, r)
 		http.Error(w, "Refresh token expired or revoked", http.StatusUnauthorized)
 		return
 	}
@@ -154,6 +157,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	user, err := api.userRegistry.Get(r.Context(), refreshToken.UserID)
 	if err != nil || !user.IsActive {
 		slog.Warn("Refresh token for invalid/inactive user", "user_id", refreshToken.UserID)
+		clearRefreshCookie(w, r)
 		http.Error(w, "User not found or inactive", http.StatusUnauthorized)
 		return
 	}
@@ -162,12 +166,13 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	if api.blacklistService != nil {
 		blacklisted, blErr := api.blacklistService.IsUserBlacklisted(r.Context(), user.ID)
 		if blErr != nil {
+			// Fail-open: consistent with checkTokenBlacklist in jwt_middleware.go.
+			// A Redis outage should not lock users out of the refresh flow.
 			slog.Error("Failed to check user blacklist on refresh", "user_id", user.ID, "error", blErr)
-			http.Error(w, "Failed to validate user", http.StatusInternalServerError)
-			return
 		}
 		if blacklisted {
 			slog.Warn("Blacklisted user attempted token refresh", "user_id", user.ID)
+			clearRefreshCookie(w, r)
 			http.Error(w, "User not found or inactive", http.StatusUnauthorized)
 			return
 		}
@@ -407,6 +412,23 @@ func writeLoginResponse(w http.ResponseWriter, accessToken string, user *models.
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// clearRefreshCookie instructs the browser to delete the refresh token cookie
+// by setting MaxAge=-1. This should be called on all failure paths in refresh()
+// where the cookie is present but invalid/expired/revoked, so that the browser
+// does not keep sending a stale token and causing repeated 401 loops.
+func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
+	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshTokenCookieName,
+		Value:    "",
+		Path:     refreshTokenCookiePath,
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secureCookie,
+		SameSite: http.SameSiteStrictMode,
+	})
 }
 
 // getClientIP extracts the real client IP from the request, respecting

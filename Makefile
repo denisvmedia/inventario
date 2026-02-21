@@ -208,7 +208,7 @@ lint-frontend:
 .PHONY: lint-migrations
 lint-migrations: build-inventool
 	@if [ -z "$(POSTGRES_TEST_DSN)" ]; then \
-		echo "❌ POSTGRES_TEST_DSN is not set — skipping migration check"; \
+		echo "❌ POSTGRES_TEST_DSN is not set — cannot run migration lint. Please set POSTGRES_TEST_DSN to a PostgreSQL test database DSN."; \
 		exit 1; \
 	fi
 	@echo "Applying all migrations..."

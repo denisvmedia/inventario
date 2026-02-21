@@ -35,17 +35,18 @@ func NewRefreshTokenRegistryWithTableNames(dbx *sqlx.DB, tableNames store.TableN
 	}
 }
 
-// newSQLRegistry returns a NonRLSRepository for the refresh_tokens table.
-// This registry operates on a DB connection that either has BYPASSRLS or
-// uses the superuser role, intentionally skipping the row-level security
-// policies that filter by tenant_id/user_id. This is required for auth
-// flows (e.g. /auth/refresh, /auth/login) where no user context has been
-// established yet in the database session.
-func (r *RefreshTokenRegistry) newSQLRegistry() *store.NonRLSRepository[models.RefreshToken, *models.RefreshToken] {
-	return store.NewSQLRegistry[models.RefreshToken](r.dbx, r.tableNames.RefreshTokens())
+// newSQLRegistry returns an RLSRepository in service mode for the refresh_tokens table.
+// It uses beginServiceTx under the hood, which explicitly sets the
+// inventario_background_worker role before executing queries. This role is
+// covered by the refresh_token_background_worker_access RLS policy, giving
+// full cross-tenant access without requiring BYPASSRLS on the app user.
+// This is required for auth flows (e.g. /auth/refresh, /auth/login) where
+// no user/tenant context has been established in the database session yet.
+func (r *RefreshTokenRegistry) newSQLRegistry() *store.RLSRepository[models.RefreshToken, *models.RefreshToken] {
+	return store.NewServiceSQLRegistry[models.RefreshToken, *models.RefreshToken](r.dbx, r.tableNames.RefreshTokens())
 }
 
-func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshToken) (_ *models.RefreshToken, err error) {
+func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshToken) (*models.RefreshToken, error) {
 	if token.TokenHash == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TokenHash"))
 	}
@@ -57,18 +58,13 @@ func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshT
 	}
 
 	token.CreatedAt = time.Now()
-
-	tx, txErr := r.dbx.Beginx()
-	if txErr != nil {
-		return nil, errxtrace.Wrap("failed to begin transaction", txErr)
-	}
-	defer func() {
-		err = errors.Join(err, store.RollbackOrCommit(tx, err))
-	}()
-
-	txReg := store.NewTxRegistry[models.RefreshToken](tx, r.tableNames.RefreshTokens())
 	token.ID = uuid.New().String()
-	if err = txReg.Insert(ctx, token); err != nil {
+
+	reg := r.newSQLRegistry()
+	if err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		txReg := store.NewTxRegistry[models.RefreshToken](tx, r.tableNames.RefreshTokens())
+		return txReg.Insert(ctx, token)
+	}); err != nil {
 		return nil, errxtrace.Wrap("failed to insert refresh token", err)
 	}
 
