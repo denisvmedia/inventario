@@ -78,8 +78,7 @@ func (c *Command) migrateGenerate(cfg *Config, dbConfig *shared.DatabaseConfig, 
 		if hasChanges {
 			fmt.Println("❌ Pending schema changes detected.")
 			fmt.Println("   Run 'inventool db migrations generate' to create the migration files.")
-			// Exit with a non-zero code so CI/make targets treat this as a failure.
-			os.Exit(1) //revive:disable-line:deep-exit
+			os.Exit(1) //revive:disable-line:deep-exit -- intentional non-zero exit so CI/make treat this as a lint failure
 		}
 		fmt.Println("✅ Schema is in sync — no pending migrations.")
 		return nil
