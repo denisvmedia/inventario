@@ -43,6 +43,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Prepare host directories
+        # The inventario-init-data container runs as a non-root user (UID 1001).
+        # Docker auto-creates bind-mount directories as root, so we must pre-create
+        # them with world-writable permissions before starting the stack.
+        run: mkdir -p .docker/init-state && chmod 777 .docker/init-state
+
       - name: Build and start full stack
         # --wait blocks until every service is healthy / every one-shot container
         # exits 0. --wait-timeout gives 5 min for the Docker build + DB init.
