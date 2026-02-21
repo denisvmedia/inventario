@@ -32,7 +32,7 @@ const (
 	// refreshTokenCookieName is the name of the httpOnly cookie carrying the refresh token.
 	refreshTokenCookieName = "refresh_token"
 	// refreshTokenCookiePath limits the cookie to the auth endpoints only.
-	refreshTokenCookiePath = "/api/v1/auth" //nolint:gosec // this is a URL path, not a credential
+	refreshTokenCookiePath = "/api/v1/auth" // #nosec G101 -- this is a URL path, not a credential
 )
 
 // AuthAPI handles authentication endpoints.
