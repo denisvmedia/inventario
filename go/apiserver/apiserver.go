@@ -42,19 +42,19 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 }
 
 // createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
-func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
-		JWTMiddleware(jwtSecret, factorySet.UserRegistry),
+		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
 		RLSContextMiddleware(factorySet),
 		RegistrySetMiddleware(factorySet),
 	)
 }
 
 // createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
-func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister) []func(http.Handler) http.Handler {
 	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
-		JWTMiddleware(jwtSecret, userRegistry),
+		JWTMiddleware(jwtSecret, userRegistry, blacklist),
 		RLSContextMiddleware(factorySet),
 		RegistrySetMiddleware(factorySet),
 	}
@@ -94,6 +94,7 @@ type Params struct {
 	FileSigningKey    []byte                             // File signing key for secure file URLs
 	FileURLExpiration time.Duration                      // File URL expiration duration
 	ThumbnailConfig   services.ThumbnailGenerationConfig // Thumbnail generation configuration
+	TokenBlacklister  services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
 }
 
 func (p *Params) Validate() error {
@@ -155,17 +156,29 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		swagger.URL("/swagger/doc.json"),
 	))
 
+	// Resolve blacklister: default to in-memory if not provided.
+	blacklist := params.TokenBlacklister
+	if blacklist == nil {
+		slog.Warn("TokenBlacklister not provided; falling back to in-memory implementation. This configuration is not suitable for production use.")
+		blacklist = services.NewInMemoryTokenBlacklister()
+	}
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes (no authentication required)
-		r.Route("/auth", Auth(params.FactorySet.UserRegistry, params.JWTSecret))
+		r.Route("/auth", Auth(AuthParams{
+			UserRegistry:         params.FactorySet.UserRegistry,
+			RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
+			BlacklistService:     blacklist,
+			JWTSecret:            params.JWTSecret,
+		}))
 		r.Route("/currencies", Currencies())
 		// Seed endpoint is public for e2e testing and development
 		// Seed uses a service registry set since it's a privileged operation in dev/test
 		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet))
 
 		// Create user aware middlewares for protected routes
-		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet)
-		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet)
+		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist)
+		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist)
 
 		// Protected routes (authentication required)
 		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context

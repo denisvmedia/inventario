@@ -335,13 +335,13 @@ func getAuthToken(serverURL, email, password string) (string, error) {
 	}
 
 	var loginResp struct {
-		Token string `json:"token"`
+		AccessToken string `json:"access_token"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
 		return "", fmt.Errorf("failed to decode login response: %w", err)
 	}
 
-	return loginResp.Token, nil
+	return loginResp.AccessToken, nil
 }
 
 // getSystemInfo accesses the system info API with the given token

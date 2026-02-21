@@ -238,7 +238,7 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 
 ### Prerequisites
 
-- **Go**: Version 1.24 or higher
+- **Go**: Version 1.26 or higher
 - **Node.js**: Version 22.15 or higher (managed via Volta)
 - **Git**: For cloning the repository
 

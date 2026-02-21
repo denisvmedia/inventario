@@ -2,7 +2,7 @@ version: "2"
 
 run:
   concurrency: 8
-  go: "1.24.7"
+  go: "1.26.0"
 
 linters:
   default: none
@@ -260,6 +260,27 @@ linters:
         linters:
           - forbidigo
       - text: 'var-naming: avoid meaningless package names'
+        linters:
+          - revive
+      # G117: false positive – exported struct field names that happen to match secret patterns
+      # are not actual credentials (e.g. JWTSecret in a config struct, AccessToken in a response struct).
+      - text: 'G117:'
+        linters:
+          - gosec
+      # G706: false positive – structured slog logging is not vulnerable to log injection;
+      # key-value pairs are formatted by the handler, not interpolated into a format string.
+      - text: 'G706:'
+        linters:
+          - gosec
+      # G705/G704/G101: acceptable in test code (XSS, SSRF, and hardcoded test DSNs).
+      - path: '_test\.go$'
+        text: 'G705:'
+      - path: '_test\.go$'
+        text: 'G704:'
+      - path: '_test\.go$'
+        text: 'G101:'
+      # revive: package names that shadow stdlib are intentional in this project.
+      - text: 'var-naming: avoid package names that conflict with Go standard library package names'
         linters:
           - revive
     paths:

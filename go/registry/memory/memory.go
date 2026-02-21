@@ -52,6 +52,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.OperationSlotRegistryFactory = operationSlotFactory
 	fs.TenantRegistry = NewTenantRegistry()
 	fs.UserRegistry = NewUserRegistry()
+	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
 
 	return fs
 }

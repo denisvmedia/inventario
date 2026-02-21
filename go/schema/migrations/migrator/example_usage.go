@@ -9,7 +9,7 @@ import (
 // ExampleDropDatabase demonstrates how to use the DropDatabase method
 func ExampleDropDatabase() {
 	// Create a migrator instance with a PostgreSQL DSN
-	dbURL := "postgres://user:password@localhost:5432/testdb?sslmode=disable"
+	dbURL := "postgres://user:password@localhost:5432/testdb?sslmode=disable" // #nosec G101 -- example URL only
 	migrator := New(dbURL, nil)
 
 	ctx := context.Background()

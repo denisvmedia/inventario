@@ -15,7 +15,7 @@ The Inventario system is composed of three main components:
 
 ### Technology Stack
 
-- **Backend**: Go 1.24+, Chi router, Swagger documentation
+- **Backend**: Go 1.26+, Chi router, Swagger documentation
 - **Frontend**: Vue.js 3, TypeScript, PrimeVue UI components, Pinia state management
 - **Databases**: PostgreSQL (recommended), In-memory
 - **File Storage**: Go Cloud Development Kit (supports local, S3, Azure, GCS)

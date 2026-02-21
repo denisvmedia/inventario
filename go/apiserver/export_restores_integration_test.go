@@ -62,7 +62,7 @@ func TestRestoreConcurrencyControl_NoRunningRestore(t *testing.T) {
 
 	// Set up router with authentication
 	r := chi.NewRouter()
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
@@ -124,7 +124,7 @@ func TestRestoreConcurrencyControl_RestoreAlreadyRunning(t *testing.T) {
 
 	// Set up router with authentication
 	r := chi.NewRouter()
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
@@ -230,7 +230,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 
 	// Set up router with authentication
 	r := chi.NewRouter()
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
@@ -239,7 +239,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 		JWTSecret:      testJWTSecret,
 	}
 
-	// Use real restore worker (not mock) to test actual logic
+	// Use real restore worker
 	entityService := services.NewEntityService(factorySet, "memory://")
 	restoreService := restore.NewRestoreService(factorySet, entityService, "memory://")
 	// Create user registry set for RestoreWorker
@@ -324,7 +324,7 @@ func TestRestoreOperationCreatedWithPendingStatus(t *testing.T) {
 
 	// Set up router with authentication
 	r := chi.NewRouter()
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{

@@ -33,7 +33,7 @@ func UploadFileName(fileName string) string {
 
 	buf.WriteString(textutils.CleanFilename(originalFileName))
 	buf.WriteRune('-')
-	buf.WriteString(fmt.Sprintf("%v", now.Unix()))
+	fmt.Fprintf(&buf, "%v", now.Unix())
 	buf.WriteString(fileExt)
 
 	return buf.String()

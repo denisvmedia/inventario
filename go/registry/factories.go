@@ -110,8 +110,9 @@ type FactorySet struct {
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
-	TenantRegistry                        TenantRegistry // TenantRegistry doesn't need factory as it's not user-aware
-	UserRegistry                          UserRegistry   // UserRegistry doesn't need factory as it's not user-aware
+	TenantRegistry                        TenantRegistry       // TenantRegistry doesn't need factory as it's not user-aware
+	UserRegistry                          UserRegistry         // UserRegistry doesn't need factory as it's not user-aware
+	RefreshTokenRegistry                  RefreshTokenRegistry // RefreshTokenRegistry doesn't need factory as it's not user-aware
 }
 
 // CreateUserRegistrySet creates a complete set of user-aware registries from factories
@@ -203,6 +204,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		OperationSlotRegistry:          operationSlotRegistry,
 		TenantRegistry:                 fs.TenantRegistry,
 		UserRegistry:                   fs.UserRegistry,
+		RefreshTokenRegistry:           fs.RefreshTokenRegistry,
 	}, nil
 }
 
@@ -225,5 +227,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),
 		TenantRegistry:                 fs.TenantRegistry,
 		UserRegistry:                   fs.UserRegistry,
+		RefreshTokenRegistry:           fs.RefreshTokenRegistry,
 	}
 }

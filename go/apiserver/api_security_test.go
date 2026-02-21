@@ -90,7 +90,7 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 	}
 
 	r := chi.NewRouter()
-	userMiddlewares := createUserAwareMiddlewaresForUploads(jwtSecret, registrySet.UserRegistry, factorySet)
+	userMiddlewares := createUserAwareMiddlewaresForUploads(jwtSecret, registrySet.UserRegistry, factorySet, nil)
 	r.With(userMiddlewares...).Route("/uploads", Uploads(params))
 
 	// User 2 attempts to upload file to User 1's commodity (SECURITY VIOLATION)
@@ -189,7 +189,7 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 	}
 
 	r := chi.NewRouter()
-	userMiddlewares := createUserAwareMiddlewares(jwtSecret, factorySet)
+	userMiddlewares := createUserAwareMiddlewares(jwtSecret, factorySet, nil)
 	r.With(userMiddlewares...).Route("/exports", Exports(params, nil))
 
 	// Tenant 2 user attempts to access Tenant 1's export (SECURITY VIOLATION)
@@ -300,7 +300,7 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 
 			// Setup API server with RLS middleware
 			r := chi.NewRouter()
-			userMiddlewares := createUserAwareMiddlewares(jwtSecret, factorySet)
+			userMiddlewares := createUserAwareMiddlewares(jwtSecret, factorySet, nil)
 			r.With(userMiddlewares...).Get("/test", func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			})

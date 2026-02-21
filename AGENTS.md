@@ -8,7 +8,7 @@ Inventario is a comprehensive personal inventory management system built with Go
 
 ## Technology Stack
 
-- **Backend**: Go 1.24+ with Chi router, PostgreSQL primary database with multi-database support
+- **Backend**: Go 1.26+ with Chi router, PostgreSQL primary database with multi-database support
 - **Frontend**: Vue.js 3, TypeScript, PrimeVue UI components, Pinia state management
 - **Databases**: PostgreSQL (recommended), In-memory (testing)
 - **File Storage**: Go Cloud Development Kit (local, S3, Azure Blob, Google Cloud)
