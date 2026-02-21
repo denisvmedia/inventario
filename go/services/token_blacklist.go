@@ -45,12 +45,19 @@ func NewRedisTokenBlacklister(client *redis.Client) *RedisTokenBlacklister {
 }
 
 // NewRedisTokenBlacklisterFromURL creates a new Redis-backed token blacklist from a URL.
+// A connectivity check (PING) is performed at construction time. If Redis is unreachable
+// the error is logged as a warning but the blacklister is still returned — consistent with
+// the fail-open design where a Redis outage must not take the API offline.
 func NewRedisTokenBlacklisterFromURL(redisURL string) (*RedisTokenBlacklister, error) {
 	opts, err := redis.ParseURL(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redis URL: %w", err)
 	}
-	return NewRedisTokenBlacklister(redis.NewClient(opts)), nil
+	client := redis.NewClient(opts)
+	if pingErr := client.Ping(context.Background()).Err(); pingErr != nil {
+		slog.Warn("Redis token blacklist unreachable at startup; blacklisting will fail open until Redis becomes available", "error", pingErr)
+	}
+	return NewRedisTokenBlacklister(client), nil
 }
 
 func (s *RedisTokenBlacklister) BlacklistToken(ctx context.Context, tokenID string, expiresAt time.Time) error {
