@@ -210,13 +210,16 @@ The blacklist supports two granularities:
 | `BlacklistToken(jti, exp)` | Revoke a single access token (used on logout) |
 | `BlacklistUserTokens(userID, duration)` | Force-logout all sessions (e.g., password change) |
 
-Two implementations are provided:
+Three implementations are provided:
 
-- **In-memory** — uses a guarded map with a background cleanup goroutine. Thread-safe,
-  but state is lost on process restart. Suitable for single-instance deployments.
-  This is the default used by the server.
-- **No-op** (development only) — never blocks any token. Suitable when 15-minute
-  TTLs are an acceptable trade-off and revocation is not needed.
+- **Redis** (recommended for production / multi-instance) — uses `SET key 1 EX <ttl>`;
+  entries auto-expire, no manual cleanup needed. Configure via `--token-blacklist-redis-url`
+  (or `INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL` env var).
+- **In-memory** (single-instance, default) — uses a guarded map with a background
+  cleanup goroutine. State is lost on process restart. A warning is logged at startup
+  when this fallback is active.
+- **No-op** (development only) — never blocks any token. Useful when 15-minute TTLs
+  are an acceptable trade-off and revocation is not needed.
 
 ---
 
@@ -305,11 +308,10 @@ logout.
 
 ### Multi-Instance Deployments
 
-The current in-memory blacklist does not share state between server instances. In a
-multi-instance deployment, a token blacklisted by instance A would still be accepted
-by instance B until the access token naturally expires (≤ 15 minutes). For now this
-is an acceptable trade-off given the short TTL; a distributed blacklist (e.g. Redis)
-can be wired in later without changing the `TokenBlacklister` interface.
+The in-memory blacklist does not share state between server instances. For deployments
+with more than one backend process, set `--token-blacklist-redis-url` so that a token
+blacklisted by instance A is also rejected by instance B. The server logs a warning
+at startup when the in-memory fallback is active.
 
 ---
 
@@ -318,6 +320,6 @@ can be wired in later without changing the `TokenBlacklister` interface.
 | Setting | Description |
 |---|---|
 | `--jwt-secret` | Required. HMAC signing key for access tokens. |
+| `--token-blacklist-redis-url` | Optional. Redis URL (e.g. `redis://localhost:6379/0`). If omitted, in-memory blacklist is used with a startup warning. Also settable via `INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL`. |
 | Access token TTL | 15 minutes (hard-coded; adjust `accessTokenExpiration` in `auth.go`). |
 | Refresh token TTL | 30 days (hard-coded; adjust `refreshTokenExpiration` in `auth.go`). |
-| Blacklist backend | In-memory (default). Swap `TokenBlacklister` in `apiserver.Params` to change. |
