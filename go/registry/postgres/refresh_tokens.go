@@ -45,7 +45,7 @@ func (r *RefreshTokenRegistry) newSQLRegistry() *store.NonRLSRepository[models.R
 	return store.NewSQLRegistry[models.RefreshToken](r.dbx, r.tableNames.RefreshTokens())
 }
 
-func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshToken) (*models.RefreshToken, error) {
+func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshToken) (_ *models.RefreshToken, err error) {
 	if token.TokenHash == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TokenHash"))
 	}
@@ -55,9 +55,9 @@ func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshT
 
 	token.CreatedAt = time.Now()
 
-	tx, err := r.dbx.Beginx()
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to begin transaction", err)
+	tx, txErr := r.dbx.Beginx()
+	if txErr != nil {
+		return nil, errxtrace.Wrap("failed to begin transaction", txErr)
 	}
 	defer func() {
 		err = errors.Join(err, store.RollbackOrCommit(tx, err))
@@ -65,8 +65,7 @@ func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshT
 
 	txReg := store.NewTxRegistry[models.RefreshToken](tx, r.tableNames.RefreshTokens())
 	token.ID = uuid.New().String()
-	err = txReg.Insert(ctx, token)
-	if err != nil {
+	if err = txReg.Insert(ctx, token); err != nil {
 		return nil, errxtrace.Wrap("failed to insert refresh token", err)
 	}
 
