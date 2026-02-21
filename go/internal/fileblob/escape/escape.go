@@ -183,7 +183,7 @@ func makeASCIIString(start, end int) string {
 		if i >= '0' && i <= '9' {
 			continue
 		}
-		s = append(s, byte(i))
+		s = append(s, byte(i)) // #nosec G115 -- i is bounded to ASCII range (0-127), safe narrowing
 	}
 	return string(s)
 }

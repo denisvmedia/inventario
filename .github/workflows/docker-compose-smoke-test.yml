@@ -1,0 +1,109 @@
+name: Docker Compose Smoke Test
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'docker-compose.yaml'
+      - 'Dockerfile'
+      - 'go/**'
+      - 'frontend/**'
+      - 'scripts/**'
+      - 'init-scripts/**'
+      - '.github/workflows/docker-compose-smoke-test.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.yaml'
+      - 'Dockerfile'
+      - 'go/**'
+      - 'frontend/**'
+      - 'scripts/**'
+      - 'init-scripts/**'
+      - '.github/workflows/docker-compose-smoke-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Use deterministic secrets so both init-data and the app agree on the JWT key.
+      JWT_SECRET: "smoke-test-jwt-secret-exactly-32-chars!!"
+      FILE_SIGNING_KEY: "smoke-test-file-signing-key-32chars!!"
+      ADMIN_EMAIL: "admin@smoketest.example"
+      ADMIN_PASSWORD: "SmokeTestPass1!"
+      # Skip seeding — we only need the admin user created by `db migrate data`.
+      SEED_DATABASE: "false"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Build and start full stack
+        # --wait blocks until every service is healthy / every one-shot container
+        # exits 0. --wait-timeout gives 5 min for the Docker build + DB init.
+        run: docker compose up --build --wait --wait-timeout 300
+
+      - name: Verify Redis token blacklist is active
+        run: |
+          docker compose logs inventario | grep "Using Redis token blacklist"
+          echo "Redis token blacklist confirmed in startup logs"
+
+      - name: Smoke test — login, protected endpoint, logout, blacklist
+        run: |
+          BASE="http://localhost:3333/api/v1"
+          COOKIE_JAR=$(mktemp)
+
+          echo "--- Login ---"
+          RESP=$(curl -fsS -c "$COOKIE_JAR" \
+            -X POST "$BASE/auth/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
+
+          TOKEN=$(echo "$RESP" | jq -r '.access_token')
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] \
+            || { echo "ERROR: no access_token in login response"; echo "$RESP"; exit 1; }
+          echo "access_token obtained"
+
+          echo "--- GET /locations with valid token (expect 200) ---"
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
+            "$BASE/locations" \
+            -H "Authorization: Bearer $TOKEN")
+          [ "$STATUS" = "200" ] \
+            || { echo "ERROR: expected 200, got $STATUS"; exit 1; }
+          echo "Got $STATUS — token is accepted"
+
+          echo "--- GET /locations without token (expect 401) ---"
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$BASE/locations")
+          [ "$STATUS" = "401" ] \
+            || { echo "ERROR: expected 401, got $STATUS"; exit 1; }
+          echo "Got $STATUS — unauthenticated request is correctly rejected"
+
+          echo "--- Logout (blacklists the access token in Redis) ---"
+          curl -fsS -b "$COOKIE_JAR" \
+            -X POST "$BASE/auth/logout" \
+            -H "Authorization: Bearer $TOKEN" > /dev/null
+          echo "Logout OK"
+
+          echo "--- GET /locations with the now-blacklisted token (expect 401) ---"
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
+            "$BASE/locations" \
+            -H "Authorization: Bearer $TOKEN")
+          [ "$STATUS" = "401" ] \
+            || { echo "ERROR: expected 401 after logout, got $STATUS"; exit 1; }
+          echo "Got $STATUS — blacklisted token is correctly rejected"
+
+          rm -f "$COOKIE_JAR"
+          echo "=== All smoke tests passed ==="
+
+      - name: Print service logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

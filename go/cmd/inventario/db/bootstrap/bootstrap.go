@@ -10,7 +10,7 @@ import (
 
 // New creates the bootstrap command group
 func New(dbConfig *shared.DatabaseConfig) *cobra.Command {
-	cmd := &cobra.Command{
+	cmd := &cobra.Command{ // #nosec G101 -- URLs in Long description are usage examples, not real credentials
 		Use:   "bootstrap",
 		Short: "Manage bootstrap database migrations",
 		Long: `Bootstrap migrations are special SQL migrations that must be run under privileged

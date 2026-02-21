@@ -61,7 +61,7 @@ func (r *Reader) readPasswordFromStdin(prompt string) (string, error) {
 	// Try to get file descriptor for terminal input
 	var fd int
 	if f, ok := r.input.(*os.File); ok {
-		fd = int(f.Fd())
+		fd = int(f.Fd()) // #nosec G115 -- Fd() returns a valid uintptr that always fits in int on supported platforms
 	} else {
 		fd = int(syscall.Stdin)
 	}

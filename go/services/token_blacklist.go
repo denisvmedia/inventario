@@ -227,4 +227,3 @@ func newInMemoryWithWarning() *InMemoryTokenBlacklister {
 	slog.Warn("Using in-memory token blacklist — not suitable for multi-instance deployments; set --token-blacklist-redis-url for production")
 	return NewInMemoryTokenBlacklister()
 }
-
