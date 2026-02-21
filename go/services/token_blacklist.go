@@ -2,12 +2,8 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 // TokenBlacklister defines the interface for token blacklisting operations.
@@ -29,56 +25,6 @@ type TokenBlacklister interface {
 }
 
 // -----------------------------------------------------------------------
-// Redis implementation
-// -----------------------------------------------------------------------
-
-// RedisTokenBlacklister implements TokenBlacklister using Redis.
-// Entries automatically expire via Redis TTL, so no manual cleanup is needed.
-type RedisTokenBlacklister struct {
-	client *redis.Client
-}
-
-// NewRedisTokenBlacklister creates a new Redis-backed token blacklist.
-func NewRedisTokenBlacklister(client *redis.Client) *RedisTokenBlacklister {
-	return &RedisTokenBlacklister{client: client}
-}
-
-// NewRedisTokenBlacklisterFromURL creates a new Redis-backed token blacklist from a URL.
-func NewRedisTokenBlacklisterFromURL(redisURL string) (*RedisTokenBlacklister, error) {
-	opts, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid redis URL: %w", err)
-	}
-	return NewRedisTokenBlacklister(redis.NewClient(opts)), nil
-}
-
-func (s *RedisTokenBlacklister) BlacklistToken(ctx context.Context, tokenID string, expiresAt time.Time) error {
-	ttl := time.Until(expiresAt)
-	if ttl <= 0 {
-		return nil // already expired, nothing to do
-	}
-	key := fmt.Sprintf("blacklist:token:%s", tokenID)
-	return s.client.Set(ctx, key, "1", ttl).Err()
-}
-
-func (s *RedisTokenBlacklister) IsBlacklisted(ctx context.Context, tokenID string) (bool, error) {
-	key := fmt.Sprintf("blacklist:token:%s", tokenID)
-	n, err := s.client.Exists(ctx, key).Result()
-	return n > 0, err
-}
-
-func (s *RedisTokenBlacklister) BlacklistUserTokens(ctx context.Context, userID string, duration time.Duration) error {
-	key := fmt.Sprintf("blacklist:user:%s", userID)
-	return s.client.Set(ctx, key, "1", duration).Err()
-}
-
-func (s *RedisTokenBlacklister) IsUserBlacklisted(ctx context.Context, userID string) (bool, error) {
-	key := fmt.Sprintf("blacklist:user:%s", userID)
-	n, err := s.client.Exists(ctx, key).Result()
-	return n > 0, err
-}
-
-// -----------------------------------------------------------------------
 // In-memory implementation (for development / single-instance deployments)
 // -----------------------------------------------------------------------
 
@@ -88,8 +34,7 @@ type blacklistEntry struct {
 
 // InMemoryTokenBlacklister implements TokenBlacklister using an in-process map with TTL.
 // It is thread-safe but does NOT persist across process restarts and does NOT share
-// state between multiple server instances. Use RedisTokenBlacklister in production
-// multi-instance deployments.
+// state between multiple server instances.
 type InMemoryTokenBlacklister struct {
 	mu     sync.RWMutex
 	tokens map[string]blacklistEntry // keyed by JTI
@@ -202,21 +147,3 @@ func (NoOpTokenBlacklister) IsUserBlacklisted(_ context.Context, _ string) (bool
 	return false, nil
 }
 
-// -----------------------------------------------------------------------
-// Constructor helpers
-// -----------------------------------------------------------------------
-
-// NewTokenBlacklister creates the appropriate TokenBlacklister based on configuration.
-// If redisURL is empty, falls back to InMemoryTokenBlacklister with a warning.
-func NewTokenBlacklister(redisURL string) TokenBlacklister {
-	if redisURL == "" {
-		slog.Warn("No Redis URL configured for token blacklist; using in-memory blacklist (not suitable for multi-instance deployments)")
-		return NewInMemoryTokenBlacklister()
-	}
-	bl, err := NewRedisTokenBlacklisterFromURL(redisURL)
-	if err != nil {
-		slog.Error("Failed to create Redis token blacklister, falling back to in-memory", "error", err)
-		return NewInMemoryTokenBlacklister()
-	}
-	return bl
-}
