@@ -61,7 +61,7 @@ api.interceptors.request.use(
 
 // Track whether a token refresh is already in progress to avoid loops
 let isRefreshing = false
-let refreshSubscribers: Array<(token: string) => void> = []
+let refreshSubscribers: Array<(_token: string) => void> = []
 
 function onRefreshed(token: string) {
   refreshSubscribers.forEach(cb => cb(token))
