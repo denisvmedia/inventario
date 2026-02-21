@@ -110,7 +110,7 @@ func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 	}
 
 	// Create auth handler
-	authHandler := apiserver.Auth(userRegistry, jwtSecret)
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 	r := chi.NewRouter()
 	r.Route("/auth", authHandler)
 
@@ -284,7 +284,7 @@ func TestAuthSecurity_JWTTokenSecurity(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			// Create middleware
-			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry)
+			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry, nil)
 
 			// Create test handler
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -380,7 +380,7 @@ func TestAuthSecurity_UserStatusValidation(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			// Create middleware
-			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry)
+			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry, nil)
 
 			// Create test handler
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -443,7 +443,7 @@ func TestAuthSecurity_MaliciousTokens(t *testing.T) {
 			c := qt.New(t)
 
 			// Create middleware
-			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry)
+			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry, nil)
 
 			// Create test handler
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

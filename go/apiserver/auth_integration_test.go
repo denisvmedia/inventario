@@ -72,7 +72,7 @@ func TestAuthIntegration_FullAuthenticationFlow(t *testing.T) {
 	c.Assert(createdUser, qt.IsNotNil)
 
 	// Create auth handler
-	authHandler := apiserver.Auth(registrySet.UserRegistry, jwtSecret)
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: registrySet.UserRegistry, JWTSecret: jwtSecret})
 	r := chi.NewRouter()
 	r.Route("/auth", authHandler)
 
@@ -96,17 +96,17 @@ func TestAuthIntegration_FullAuthenticationFlow(t *testing.T) {
 
 		// Parse response
 		var loginResp struct {
-			Token     string       `json:"token"`
-			User      *models.User `json:"user"`
-			ExpiresAt time.Time    `json:"expires_at"`
+			AccessToken string       `json:"access_token"`
+			User        *models.User `json:"user"`
+			ExpiresIn   int          `json:"expires_in"`
 		}
 		err := json.NewDecoder(w.Body).Decode(&loginResp)
 		c.Assert(err, qt.IsNil)
-		c.Assert(loginResp.Token, qt.Not(qt.Equals), "")
+		c.Assert(loginResp.AccessToken, qt.Not(qt.Equals), "")
 		c.Assert(loginResp.User.Email, qt.Equals, "integration@example.com")
 
 		// Step 2: Use token to access protected endpoint
-		middleware := apiserver.JWTMiddleware(jwtSecret, registrySet.UserRegistry)
+		middleware := apiserver.JWTMiddleware(jwtSecret, registrySet.UserRegistry, nil)
 		protectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user := apiserver.UserFromContext(r.Context())
 			c.Assert(user, qt.IsNotNil)
@@ -115,7 +115,7 @@ func TestAuthIntegration_FullAuthenticationFlow(t *testing.T) {
 		})
 
 		protectedReq := httptest.NewRequest("GET", "/protected", nil)
-		protectedReq.Header.Set("Authorization", "Bearer "+loginResp.Token)
+		protectedReq.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
 		protectedW := httptest.NewRecorder()
 
 		middleware(protectedHandler).ServeHTTP(protectedW, protectedReq)
@@ -207,7 +207,7 @@ func TestAuthIntegration_UserStatusChanges(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Login to get token
-	authHandler := apiserver.Auth(registrySet.UserRegistry, jwtSecret)
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: registrySet.UserRegistry, JWTSecret: jwtSecret})
 	r := chi.NewRouter()
 	r.Route("/auth", authHandler)
 
@@ -225,19 +225,19 @@ func TestAuthIntegration_UserStatusChanges(t *testing.T) {
 	c.Assert(w.Code, qt.Equals, http.StatusOK)
 
 	var loginResp struct {
-		Token string `json:"token"`
+		AccessToken string `json:"access_token"`
 	}
 	err = json.NewDecoder(w.Body).Decode(&loginResp)
 	c.Assert(err, qt.IsNil)
 
 	// Test access with active user
-	middleware := apiserver.JWTMiddleware(jwtSecret, registrySet.UserRegistry)
+	middleware := apiserver.JWTMiddleware(jwtSecret, registrySet.UserRegistry, nil)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
 	protectedReq := httptest.NewRequest("GET", "/protected", nil)
-	protectedReq.Header.Set("Authorization", "Bearer "+loginResp.Token)
+	protectedReq.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
 	protectedW := httptest.NewRecorder()
 
 	middleware(handler).ServeHTTP(protectedW, protectedReq)
@@ -250,7 +250,7 @@ func TestAuthIntegration_UserStatusChanges(t *testing.T) {
 
 	// Test access with deactivated user - should be denied
 	protectedReq2 := httptest.NewRequest("GET", "/protected", nil)
-	protectedReq2.Header.Set("Authorization", "Bearer "+loginResp.Token)
+	protectedReq2.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
 	protectedW2 := httptest.NewRecorder()
 
 	middleware(handler).ServeHTTP(protectedW2, protectedReq2)
@@ -333,7 +333,7 @@ func TestAuthIntegration_ConcurrentUserOperations(t *testing.T) {
 	c.Assert(len(createdUsers), qt.Equals, numUsers)
 
 	// Test concurrent authentication
-	authHandler := apiserver.Auth(registrySet.UserRegistry, jwtSecret)
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: registrySet.UserRegistry, JWTSecret: jwtSecret})
 	r := chi.NewRouter()
 	r.Route("/auth", authHandler)
 
@@ -360,7 +360,7 @@ func TestAuthIntegration_ConcurrentUserOperations(t *testing.T) {
 			}
 
 			var loginResp struct {
-				Token string `json:"token"`
+				AccessToken string `json:"access_token"`
 			}
 			err := json.NewDecoder(w.Body).Decode(&loginResp)
 			if err != nil {
@@ -368,7 +368,7 @@ func TestAuthIntegration_ConcurrentUserOperations(t *testing.T) {
 				return
 			}
 
-			tokenChan <- loginResp.Token
+			tokenChan <- loginResp.AccessToken
 		}(i, user)
 	}
 

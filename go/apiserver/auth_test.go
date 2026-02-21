@@ -95,7 +95,7 @@ func TestAuthAPI_Login(t *testing.T) {
 	}
 
 	// Create auth handler
-	authHandler := apiserver.Auth(userRegistry, jwtSecret)
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
 	tests := []struct {
 		name           string
@@ -110,17 +110,17 @@ func TestAuthAPI_Login(t *testing.T) {
 				"password": "password123",
 			},
 			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, resp *httptest.ResponseRecorder) {
-				c := qt.New(t)
-				var response apiserver.LoginResponse
-				err := json.Unmarshal(resp.Body.Bytes(), &response)
-				c.Assert(err, qt.IsNil)
-				c.Assert(response.Token, qt.Not(qt.Equals), "")
-				c.Assert(response.User.Email, qt.Equals, "test@example.com")
-				c.Assert(response.ExpiresAt.After(time.Now()), qt.IsTrue)
+				checkResponse: func(t *testing.T, resp *httptest.ResponseRecorder) {
+					c := qt.New(t)
+					var response apiserver.LoginResponse
+					err := json.Unmarshal(resp.Body.Bytes(), &response)
+					c.Assert(err, qt.IsNil)
+					c.Assert(response.AccessToken, qt.Not(qt.Equals), "")
+					c.Assert(response.User.Email, qt.Equals, "test@example.com")
+					c.Assert(response.ExpiresIn > 0, qt.IsTrue)
 
-				// Verify JWT token
-				token, err := jwt.Parse(response.Token, func(token *jwt.Token) (any, error) {
+					// Verify JWT token
+					token, err := jwt.Parse(response.AccessToken, func(token *jwt.Token) (any, error) {
 					return jwtSecret, nil
 				})
 				c.Assert(err, qt.IsNil)
@@ -203,7 +203,7 @@ func TestAuthAPI_Logout(t *testing.T) {
 	userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{}}
 
 	// Create auth handler
-	authHandler := apiserver.Auth(userRegistry, jwtSecret)
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
 	t.Run("successful logout", func(t *testing.T) {
 		c := qt.New(t)
@@ -249,7 +249,7 @@ func TestAuthAPI_GetCurrentUser(t *testing.T) {
 	}
 
 	// Create auth handler
-	authHandler := apiserver.Auth(userRegistry, jwtSecret)
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
 	t.Run("successful get current user", func(t *testing.T) {
 		c := qt.New(t)

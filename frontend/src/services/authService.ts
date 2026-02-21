@@ -6,7 +6,9 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  token: string
+  access_token: string
+  token_type: string
+  expires_in: number
   user: {
     id: string
     email: string
@@ -40,7 +42,7 @@ class AuthService {
     const data = response.data
 
     // Store token and user data immediately and synchronously
-    this.setToken(data.token)
+    this.setToken(data.access_token)
     this.setUser(data.user)
 
     // Verify token was stored correctly
@@ -97,6 +99,29 @@ class AuthService {
 
     console.log('getCurrentUser - Mapped user data:', user)
     return user
+  }
+
+  /**
+   * Refresh the access token using the httpOnly refresh token cookie.
+   * Returns the new access token on success, or null on failure.
+   */
+  async refreshAccessToken(): Promise<string | null> {
+    try {
+      const response = await api.post('/api/v1/auth/refresh', {}, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      })
+      const data = response.data
+      if (data.access_token) {
+        this.setToken(data.access_token)
+        return data.access_token
+      }
+      return null
+    } catch {
+      return null
+    }
   }
 
   /**

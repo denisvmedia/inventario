@@ -59,6 +59,15 @@ api.interceptors.request.use(
   }
 )
 
+// Track whether a token refresh is already in progress to avoid loops
+let isRefreshing = false
+let refreshSubscribers: Array<(token: string) => void> = []
+
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach(cb => cb(token))
+  refreshSubscribers = []
+}
+
 // Add response interceptor for authentication and debugging
 api.interceptors.response.use(
   response => {
@@ -67,7 +76,7 @@ api.interceptors.response.use(
     console.log('API Response Data:', JSON.stringify(response.data, null, 2))
     return response
   },
-  error => {
+  async error => {
     console.error('API Response Error Status:', error.response?.status)
     console.error('API Response Error Data:', JSON.stringify(error.response?.data, null, 2))
 
@@ -82,8 +91,45 @@ api.interceptors.response.use(
 
       if (isInitializationRequest) {
         console.warn('401 during background auth verification - not clearing stored auth')
-        // Let the auth store handle this gracefully
         return Promise.reject(error)
+      }
+
+      // Skip refresh retry for auth endpoints to avoid loops
+      const isAuthEndpoint = error.config?.url?.includes('/auth/')
+      const originalRequest = error.config
+
+      if (!isAuthEndpoint && !originalRequest?._retry) {
+        if (isRefreshing) {
+          // Queue this request to retry after refresh completes
+          return new Promise(resolve => {
+            refreshSubscribers.push((token: string) => {
+              originalRequest.headers.Authorization = `Bearer ${token}`
+              resolve(api(originalRequest))
+            })
+          })
+        }
+
+        originalRequest._retry = true
+        isRefreshing = true
+
+        try {
+          // Attempt token refresh using httpOnly cookie
+          const refreshResponse = await api.post('/api/v1/auth/refresh', {}, {
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+          })
+          const newToken = refreshResponse.data?.access_token
+          if (newToken) {
+            localStorage.setItem('inventario_token', newToken)
+            api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
+            originalRequest.headers.Authorization = `Bearer ${newToken}`
+            onRefreshed(newToken)
+            isRefreshing = false
+            return api(originalRequest)
+          }
+        } catch (refreshError) {
+          console.warn('Token refresh failed:', refreshError)
+        }
+        isRefreshing = false
       }
 
       console.warn('401 on user request - clearing auth and redirecting to login')
@@ -94,7 +140,6 @@ api.interceptors.response.use(
 
       // Clear auth store state if available
       try {
-        // Use dynamic import without await since we're not in an async function
         import('@/stores/authStore').then(({ useAuthStore }) => {
           const authStore = useAuthStore()
           authStore.user = null

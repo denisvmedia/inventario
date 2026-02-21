@@ -183,7 +183,7 @@ func TestJWTMiddleware(t *testing.T) {
 			c := qt.New(t)
 
 			// Create middleware
-			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry)
+			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry, nil)
 
 			// Create test handler that captures the request
 			var capturedRequest *http.Request
@@ -217,7 +217,7 @@ func TestJWTMiddleware(t *testing.T) {
 			c := qt.New(t)
 
 			// Create middleware
-			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry)
+			middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry, nil)
 
 			// Create test handler
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -249,8 +249,8 @@ func TestRequireAuth(t *testing.T) {
 		c := qt.New(t)
 
 		// Create both middlewares
-		jwtMiddleware := apiserver.JWTMiddleware(jwtSecret, userRegistry)
-		requireAuthMiddleware := apiserver.RequireAuth(jwtSecret, userRegistry)
+		jwtMiddleware := apiserver.JWTMiddleware(jwtSecret, userRegistry, nil)
+		requireAuthMiddleware := apiserver.RequireAuth(jwtSecret, userRegistry, nil)
 
 		// They should behave the same way (we can't directly compare functions,
 		// but we can test that they both reject unauthorized requests)

@@ -1,7 +1,9 @@
 package apiserver
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 // extractTokenFromRequest extracts JWT token from Authorization header or query parameter
@@ -33,8 +36,10 @@ func extractTokenFromRequest(r *http.Request) (string, error) {
 	return tokenString, nil
 }
 
-// validateJWTToken validates the JWT token and returns the claims
-func validateJWTToken(tokenString string, jwtSecret []byte) (jwt.MapClaims, error) {
+// validateJWTToken validates the JWT token and returns the claims.
+// If blacklist is non-nil, it additionally checks whether the token's JTI or
+// the user have been revoked.
+func validateJWTToken(ctx context.Context, tokenString string, jwtSecret []byte, blacklist services.TokenBlacklister) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -58,6 +63,28 @@ func validateJWTToken(tokenString string, jwtSecret []byte) (jwt.MapClaims, erro
 		return nil, fmt.Errorf("invalid expiration claim format")
 	} else if int64(expFloat) <= time.Now().Unix() {
 		return nil, fmt.Errorf("token expired")
+	}
+
+	// Check blacklist when a blacklister is configured.
+	if blacklist != nil {
+		if jti, ok := claims["jti"].(string); ok && jti != "" {
+			blacklisted, err := blacklist.IsBlacklisted(ctx, jti)
+			if err != nil {
+				slog.Error("Failed to check token blacklist", "error", err)
+				// Don't fail the request on blacklist-check errors – degrade gracefully.
+			} else if blacklisted {
+				return nil, fmt.Errorf("token has been revoked")
+			}
+		}
+
+		if userID, ok := claims["user_id"].(string); ok && userID != "" {
+			blacklisted, err := blacklist.IsUserBlacklisted(ctx, userID)
+			if err != nil {
+				slog.Error("Failed to check user blacklist", "error", err)
+			} else if blacklisted {
+				return nil, fmt.Errorf("user session has been revoked")
+			}
+		}
 	}
 
 	return claims, nil
@@ -86,8 +113,9 @@ func validateUser(r *http.Request, userID string, userRegistry registry.UserRegi
 	return user, nil
 }
 
-// JWTMiddleware creates middleware that validates JWT tokens and extracts user context
-func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
+// JWTMiddleware creates middleware that validates JWT tokens and extracts user context.
+// Pass a non-nil blacklist to enable token/user revocation checks.
+func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry, blacklist services.TokenBlacklister) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Extract token from request
@@ -97,8 +125,8 @@ func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(ht
 				return
 			}
 
-			// Validate JWT token
-			claims, err := validateJWTToken(tokenString, jwtSecret)
+			// Validate JWT token (and check blacklist if configured)
+			claims, err := validateJWTToken(r.Context(), tokenString, jwtSecret, blacklist)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
@@ -129,15 +157,15 @@ func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(ht
 	}
 }
 
-// RequireAuth is an alias for JWTMiddleware for backward compatibility
-func RequireAuth(jwtSecret []byte, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
-	return JWTMiddleware(jwtSecret, userRegistry)
+// RequireAuth is an alias for JWTMiddleware.
+func RequireAuth(jwtSecret []byte, userRegistry registry.UserRegistry, blacklist services.TokenBlacklister) func(http.Handler) http.Handler {
+	return JWTMiddleware(jwtSecret, userRegistry, blacklist)
 }
 
 // FileAccessMiddleware creates middleware specifically for file access that supports both
-// Authorization header and query parameter authentication for direct browser access
-func FileAccessMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry) func(http.Handler) http.Handler {
-	return JWTMiddleware(jwtSecret, userRegistry) // Use the updated JWTMiddleware that supports both methods
+// Authorization header and query parameter authentication for direct browser access.
+func FileAccessMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry, blacklist services.TokenBlacklister) func(http.Handler) http.Handler {
+	return JWTMiddleware(jwtSecret, userRegistry, blacklist)
 }
 
 // RequireRole middleware ensures that the authenticated user has the specified role
