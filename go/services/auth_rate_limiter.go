@@ -266,9 +266,15 @@ if count >= limit then
   return {0, count, reset_at}
 end
 
-redis.call('ZADD', key, now, tostring(now))
+local seq_key = key .. ':seq'
+local seq = redis.call('INCR', seq_key)
+local member = tostring(now) .. ':' .. tostring(seq)
+
+redis.call('ZADD', key, now, member)
 -- We only need to retain data for up to the window.
-redis.call('PEXPIRE', key, math.ceil(window / 1000000))
+local ttl_ms = math.ceil(window / 1000000)
+redis.call('PEXPIRE', key, ttl_ms)
+redis.call('PEXPIRE', seq_key, ttl_ms)
 
 count = count + 1
 if oldest == nil then
@@ -374,6 +380,12 @@ func (l *InMemoryAuthRateLimiter) checkRate(key string, limit int, window time.D
 	}
 	ts = keep
 
+	// Evict the key when all timestamps have fallen outside the window to prevent
+	// unbounded map growth under many distinct client IPs.
+	if len(ts) == 0 {
+		delete(l.windows, key)
+	}
+
 	if len(ts) >= limit {
 		oldest := ts[0]
 		l.windows[key] = ts
@@ -412,9 +424,23 @@ func (l *InMemoryAuthRateLimiter) IsAccountLocked(_ context.Context, email strin
 	if entry == nil {
 		return false, time.Time{}, nil
 	}
+
+	// Active lockout.
 	if !entry.lockedUntil.IsZero() && now.Before(entry.lockedUntil) {
 		return true, entry.lockedUntil, nil
 	}
+
+	// Lockout expired: evict to prevent unbounded growth.
+	if !entry.lockedUntil.IsZero() {
+		delete(l.failed, key)
+		return false, time.Time{}, nil
+	}
+
+	// No lockout recorded. If the failure window has also expired, evict.
+	if !entry.expiresAt.IsZero() && now.After(entry.expiresAt) {
+		delete(l.failed, key)
+	}
+
 	return false, time.Time{}, nil
 }
 

@@ -3,6 +3,7 @@ package apiserver
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -19,7 +20,10 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 				return
 			}
 
-			ip := getClientIP(r)
+			// Use RemoteAddr only — never trust X-Forwarded-For/X-Real-IP for rate
+			// limiting, since those headers can be spoofed by any client that is
+			// not behind a verified trusted proxy.
+			ip := remoteAddrIP(r)
 			res, err := limiter.CheckLoginAttempt(r.Context(), ip)
 			if err != nil {
 				// Fail-open: do not make auth unavailable due to limiter backend outages.
@@ -45,4 +49,15 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// remoteAddrIP extracts the host from r.RemoteAddr, ignoring all proxy headers.
+// This is intentional for rate limiting: proxy headers like X-Forwarded-For can be
+// forged by the client and must not be used to determine the key to rate-limit on.
+func remoteAddrIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
