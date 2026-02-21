@@ -58,6 +58,14 @@ jobs:
         working-directory: ./go
         run: go build -o ../bin/inventool ./cmd/inventool
 
+      - name: Apply bootstrap (creates roles and extensions)
+        working-directory: ./go
+        env:
+          POSTGRES_TEST_DSN: "postgres://postgres:postgres@localhost:5432/inventario_migration_check?sslmode=disable"
+        run: |
+          echo "Applying bootstrap (roles, extensions)..."
+          ../bin/inventool db bootstrap apply --db-dsn "$POSTGRES_TEST_DSN"
+
       - name: Apply all migrations
         working-directory: ./go
         env:
