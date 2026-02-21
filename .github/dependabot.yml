@@ -30,6 +30,7 @@ updates:
       openapi:
         patterns:
           - "github.com/go-openapi/*"
+
   - package-ecosystem: "npm" # See documentation for possible values
     directory: "/frontend" # Location of package manifests
     schedule:
@@ -39,6 +40,7 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+
   - package-ecosystem: "npm" # See documentation for possible values
     directory: "/e2e" # Location of package manifests
     schedule:
@@ -52,3 +54,43 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # Docker
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "denisvmedia"
+    assignees:
+      - "denisvmedia"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # Docker Example
+  - package-ecosystem: "docker"
+    directory: "/example"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "denisvmedia"
+    assignees:
+      - "denisvmedia"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"

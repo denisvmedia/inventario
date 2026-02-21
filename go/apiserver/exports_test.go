@@ -61,7 +61,7 @@ func TestExportHardDelete(t *testing.T) {
 	// Create router with export routes and authentication
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{
@@ -148,7 +148,7 @@ func TestExportListExcludesDeleted(t *testing.T) {
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint
 	req := httptest.NewRequest("GET", "/exports", nil)
@@ -211,7 +211,7 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 		UploadLocation: "memory://",
 	}
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
-	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/exports", apiserver.Exports(params, mockRestoreWorker))
 
 	// Test list endpoint with include_deleted=true
 	req := httptest.NewRequest("GET", "/exports?include_deleted=true", nil)
@@ -258,7 +258,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 	// Create router with export routes and authentication
 	r := chi.NewRouter()
 	r.Use(render.SetContentType(render.ContentTypeJSON))
-	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
 
 	params := apiserver.Params{

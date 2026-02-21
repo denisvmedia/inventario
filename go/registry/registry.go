@@ -239,6 +239,22 @@ type UserRegistry interface {
 	ListByRole(ctx context.Context, tenantID string, role models.UserRole) ([]*models.User, error)
 }
 
+type RefreshTokenRegistry interface {
+	Registry[models.RefreshToken]
+
+	// GetByTokenHash returns a refresh token by its SHA-256 hash
+	GetByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error)
+
+	// GetByUserID returns all refresh tokens for a user
+	GetByUserID(ctx context.Context, userID string) ([]*models.RefreshToken, error)
+
+	// RevokeByUserID marks all refresh tokens for a user as revoked
+	RevokeByUserID(ctx context.Context, userID string) error
+
+	// DeleteExpired removes all expired refresh tokens from the store
+	DeleteExpired(ctx context.Context) error
+}
+
 // Set contains ready-to-use registries that have been created with proper user or service context.
 // This is the result of calling CreateUserRegistrySet() or CreateServiceRegistrySet() on a FactorySet.
 type Set struct {
@@ -258,6 +274,7 @@ type Set struct {
 	OperationSlotRegistry          OperationSlotRegistry
 	TenantRegistry                 TenantRegistry
 	UserRegistry                   UserRegistry
+	RefreshTokenRegistry           RefreshTokenRegistry
 }
 
 // Search-related types and functions

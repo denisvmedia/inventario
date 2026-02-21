@@ -20,7 +20,7 @@ e2e/
 
 - Node.js (v18 or later)
 - npm (v8 or later)
-- Go (v1.24 or later)
+- Go (v1.26 or later)
 
 ### Installation
 

@@ -79,7 +79,7 @@ func TestValuesAPI_GetValues(t *testing.T) {
 
 	// Create a router with the values endpoint and required middleware
 	r := chi.NewRouter()
-	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/values", apiserver.Values())
+	r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/values", apiserver.Values())
 
 	// Test GET /values
 	req := httptest.NewRequest("GET", "/values", nil)

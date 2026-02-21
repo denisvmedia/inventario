@@ -28,6 +28,9 @@ This command provides database management capabilities including:
 IMPORTANT: These commands ONLY support PostgreSQL databases.
 Other database types are no longer supported in this version.`,
 		Args: cobra.NoArgs, // Disallow unknown subcommands
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cmd.Help()
+		},
 	}
 
 	shared.RegisterDatabaseFlags(cmd, &cfg)

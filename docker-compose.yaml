@@ -29,6 +29,23 @@ services:
       retries: 20
       start_period: 60s
 
+  # Redis (Token Blacklist Cache)
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
   # Database Bootstrap Service (runs on every startup - idempotent)
   inventario-bootstrap:
     build:
@@ -111,6 +128,8 @@ services:
     depends_on:
       inventario-init-data:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
       # Database configuration
       INVENTARIO_DB_DSN: "postgres://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
@@ -134,6 +153,9 @@ services:
       INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER: ${THUMBNAIL_MAX_CONCURRENT_PER_USER:-5}
       INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE: ${THUMBNAIL_RATE_LIMIT_PER_MINUTE:-50}
       INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: ${THUMBNAIL_SLOT_DURATION:-30m}
+
+      # Token blacklist configuration
+      INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL: "${TOKEN_BLACKLIST_REDIS_URL:-redis://redis:6379}"
 
       # System configuration
       TZ: ${TZ:-UTC}
@@ -372,6 +394,7 @@ volumes:
   postgres-data:
   inventario-uploads:
   inventario-data:
+  redis-data:
 
   # Test volumes (optional, using tmpfs above)
   postgres-test-data:
