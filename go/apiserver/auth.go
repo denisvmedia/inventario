@@ -158,6 +158,21 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reject refresh if the user has been force-blacklisted (e.g. after a password change).
+	if api.blacklistService != nil {
+		blacklisted, blErr := api.blacklistService.IsUserBlacklisted(r.Context(), user.ID)
+		if blErr != nil {
+			slog.Error("Failed to check user blacklist on refresh", "user_id", user.ID, "error", blErr)
+			http.Error(w, "Failed to validate user", http.StatusInternalServerError)
+			return
+		}
+		if blacklisted {
+			slog.Warn("Blacklisted user attempted token refresh", "user_id", user.ID)
+			http.Error(w, "User not found or inactive", http.StatusUnauthorized)
+			return
+		}
+	}
+
 	accessTokenString, _, err := api.issueAccessToken(user)
 	if err != nil {
 		slog.Error("Failed to generate access token on refresh", "user_id", user.ID, "error", err)

@@ -33,6 +33,9 @@ func (r *RefreshTokenRegistry) Create(ctx context.Context, token models.RefreshT
 	if token.UserID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
 	}
+	if token.TenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
 
 	token.ID = uuid.New().String()
 	token.CreatedAt = time.Now()

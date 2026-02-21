@@ -96,9 +96,11 @@ type blacklistEntry struct {
 // It is thread-safe but does NOT persist across process restarts and does NOT share
 // state between multiple server instances.
 type InMemoryTokenBlacklister struct {
-	mu     sync.RWMutex
-	tokens map[string]blacklistEntry // keyed by JTI
-	users  map[string]blacklistEntry // keyed by userID
+	mu       sync.RWMutex
+	tokens   map[string]blacklistEntry // keyed by JTI
+	users    map[string]blacklistEntry // keyed by userID
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // NewInMemoryTokenBlacklister creates a new in-memory token blacklist.
@@ -106,9 +108,15 @@ func NewInMemoryTokenBlacklister() *InMemoryTokenBlacklister {
 	bl := &InMemoryTokenBlacklister{
 		tokens: make(map[string]blacklistEntry),
 		users:  make(map[string]blacklistEntry),
+		stopCh: make(chan struct{}),
 	}
 	go bl.cleanupLoop()
 	return bl
+}
+
+// Stop terminates the background cleanup goroutine. It is safe to call multiple times.
+func (s *InMemoryTokenBlacklister) Stop() {
+	s.stopOnce.Do(func() { close(s.stopCh) })
 }
 
 func (s *InMemoryTokenBlacklister) BlacklistToken(ctx context.Context, tokenID string, expiresAt time.Time) error {
@@ -162,23 +170,29 @@ func (s *InMemoryTokenBlacklister) IsUserBlacklisted(ctx context.Context, userID
 }
 
 // cleanupLoop periodically removes expired entries to prevent unbounded memory growth.
+// It exits when Stop() is called, preventing goroutine leaks in test environments.
 func (s *InMemoryTokenBlacklister) cleanupLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		now := time.Now()
-		s.mu.Lock()
-		for k, v := range s.tokens {
-			if now.After(v.expiresAt) {
-				delete(s.tokens, k)
+	for {
+		select {
+		case <-ticker.C:
+			now := time.Now()
+			s.mu.Lock()
+			for k, v := range s.tokens {
+				if now.After(v.expiresAt) {
+					delete(s.tokens, k)
+				}
 			}
-		}
-		for k, v := range s.users {
-			if now.After(v.expiresAt) {
-				delete(s.users, k)
+			for k, v := range s.users {
+				if now.After(v.expiresAt) {
+					delete(s.users, k)
+				}
 			}
+			s.mu.Unlock()
+		case <-s.stopCh:
+			return
 		}
-		s.mu.Unlock()
 	}
 }
 

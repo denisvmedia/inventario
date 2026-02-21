@@ -124,6 +124,8 @@ api.interceptors.response.use(
               if (originalRequest.headers) {
                 originalRequest.headers.Authorization = `Bearer ${token}`
               }
+              // Mark as retried so a subsequent 401 does not trigger another refresh.
+              originalRequest._retry = true
               resolve(api(originalRequest))
             })
             refreshSubscriberRejects.push(reject)
