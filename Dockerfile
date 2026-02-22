@@ -2,7 +2,7 @@
 # Supports both production and testing builds
 
 # Stage 1: Build frontend
-FROM node:24.13.0-alpine AS frontend-builder
+FROM node:25.6.1-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
