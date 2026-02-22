@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 // mockUserRegistryForSecurityTests implements registry.UserRegistry for security testing
@@ -109,8 +111,10 @@ func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 		},
 	}
 
+	limiter := services.NewInMemoryAuthRateLimiter()
+
 	// Create auth handler
-	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, RateLimiter: limiter, JWTSecret: jwtSecret})
 	r := chi.NewRouter()
 	r.Route("/auth", authHandler)
 
@@ -188,6 +192,105 @@ func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthSecurity_LoginRateLimitHeadersAndBlocking(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+
+	// Create test user
+	testUser := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "user-rl"},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "ratelimit@example.com",
+		Name:     "Rate Limit User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	testUser.SetPassword("ValidPassword123")
+
+	userRegistry := &mockUserRegistryForSecurityTests{users: map[string]*models.User{"user-rl": testUser}}
+	limiter := services.NewInMemoryAuthRateLimiter()
+
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, RateLimiter: limiter, JWTSecret: jwtSecret})
+	r := chi.NewRouter()
+	r.Route("/auth", authHandler)
+
+	makeReq := func(ip string) *httptest.ResponseRecorder {
+		loginReq := map[string]string{"email": testUser.Email, "password": "ValidPassword123"}
+		reqBody, _ := json.Marshal(loginReq)
+		req := httptest.NewRequest("POST", "/auth/login", bytes.NewBuffer(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = ip + ":1234"
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	// First 5 should succeed.
+	for i := 0; i < 5; i++ {
+		w := makeReq("10.0.0.1")
+		qt.New(t).Assert(w.Code, qt.Equals, http.StatusOK)
+		qt.New(t).Assert(w.Header().Get("X-RateLimit-Limit"), qt.Equals, "5")
+		qt.New(t).Assert(w.Header().Get("X-RateLimit-Remaining"), qt.Not(qt.Equals), "")
+		qt.New(t).Assert(w.Header().Get("X-RateLimit-Reset"), qt.Not(qt.Equals), "")
+	}
+
+	// 6th should be blocked.
+	w := makeReq("10.0.0.1")
+	c := qt.New(t)
+	c.Assert(w.Code, qt.Equals, http.StatusTooManyRequests)
+	c.Assert(w.Header().Get("X-RateLimit-Limit"), qt.Equals, "5")
+	c.Assert(w.Header().Get("X-RateLimit-Remaining"), qt.Equals, "0")
+	c.Assert(w.Header().Get("Retry-After"), qt.Not(qt.Equals), "")
+}
+
+func TestAuthSecurity_AccountLockoutAfterFailedLogins(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+
+	// Create test user
+	testUser := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "user-lockout"},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "lockout@example.com",
+		Name:     "Lockout User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	testUser.SetPassword("ValidPassword123")
+
+	userRegistry := &mockUserRegistryForSecurityTests{users: map[string]*models.User{"user-lockout": testUser}}
+	limiter := services.NewInMemoryAuthRateLimiter()
+
+	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, RateLimiter: limiter, JWTSecret: jwtSecret})
+	r := chi.NewRouter()
+	r.Route("/auth", authHandler)
+
+	makeReq := func(ip string) *httptest.ResponseRecorder {
+		loginReq := map[string]string{"email": testUser.Email, "password": "wrongpassword"}
+		reqBody, _ := json.Marshal(loginReq)
+		req := httptest.NewRequest("POST", "/auth/login", bytes.NewBuffer(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = ip + ":1234"
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	// 5 failed attempts from different IPs should still lead to lockout.
+	for i := 0; i < 5; i++ {
+		w := makeReq("10.0.0." + strconv.Itoa(i+1))
+		qt.New(t).Assert(w.Code, qt.Equals, http.StatusUnauthorized)
+	}
+
+	// Next attempt from a new IP should be locked out (not IP rate limited).
+	w := makeReq("10.0.0.200")
+	c := qt.New(t)
+	c.Assert(w.Code, qt.Equals, http.StatusTooManyRequests)
+	c.Assert(w.Header().Get("Retry-After"), qt.Not(qt.Equals), "")
 }
 
 func TestAuthSecurity_JWTTokenSecurity(t *testing.T) {

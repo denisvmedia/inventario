@@ -43,6 +43,7 @@ type AuthAPI struct {
 	userRegistry         registry.UserRegistry
 	refreshTokenRegistry registry.RefreshTokenRegistry
 	blacklistService     services.TokenBlacklister
+	rateLimiter          services.AuthRateLimiter
 	jwtSecret            []byte
 }
 
@@ -78,15 +79,42 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Account lockout is enforced per email to mitigate distributed brute force.
+	if api.rateLimiter != nil {
+		locked, resetAt, err := api.rateLimiter.IsAccountLocked(r.Context(), req.Email)
+		if err != nil {
+			// Fail-open: do not make auth unavailable due to limiter backend outages.
+			slog.Error("Failed to check account lockout", "error", err)
+		} else if locked {
+			retryAfter := int(time.Until(resetAt).Seconds())
+			if retryAfter < 0 {
+				retryAfter = 0
+			}
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+			http.Error(w, "Too many failed login attempts. Please try again later.", http.StatusTooManyRequests)
+			return
+		}
+	}
+
 	user, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email)
 	if err != nil {
 		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
+		if api.rateLimiter != nil {
+			if _, _, rlErr := api.rateLimiter.RecordFailedLogin(r.Context(), req.Email); rlErr != nil {
+				slog.Error("Failed to record failed login", "error", rlErr)
+			}
+		}
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
 	if !user.CheckPassword(req.Password) {
 		slog.Warn("Failed login attempt: invalid password", "email", req.Email, "user_id", user.ID)
+		if api.rateLimiter != nil {
+			if _, _, rlErr := api.rateLimiter.RecordFailedLogin(r.Context(), req.Email); rlErr != nil {
+				slog.Error("Failed to record failed login", "error", rlErr)
+			}
+		}
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -95,6 +123,13 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("Failed login attempt: user account disabled", "email", req.Email, "user_id", user.ID)
 		http.Error(w, "User account disabled", http.StatusForbidden)
 		return
+	}
+
+	// Successful authentication: clear any prior failed-login counters.
+	if api.rateLimiter != nil {
+		if err := api.rateLimiter.ClearFailedLogins(r.Context(), req.Email); err != nil {
+			slog.Error("Failed to clear failed login counters", "error", err)
+		}
 	}
 
 	// Issue short-lived access token with a unique JTI for revocation support.
@@ -316,6 +351,7 @@ type AuthParams struct {
 	UserRegistry         registry.UserRegistry
 	RefreshTokenRegistry registry.RefreshTokenRegistry
 	BlacklistService     services.TokenBlacklister
+	RateLimiter          services.AuthRateLimiter
 	JWTSecret            []byte
 }
 
@@ -325,11 +361,12 @@ func Auth(params AuthParams) func(r chi.Router) {
 		userRegistry:         params.UserRegistry,
 		refreshTokenRegistry: params.RefreshTokenRegistry,
 		blacklistService:     params.BlacklistService,
+		rateLimiter:          params.RateLimiter,
 		jwtSecret:            params.JWTSecret,
 	}
 
 	return func(r chi.Router) {
-		r.Post("/login", api.login)
+		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login", api.login)
 		r.Post("/refresh", api.refresh)
 		r.Post("/logout", api.logout)
 		// /me requires authentication

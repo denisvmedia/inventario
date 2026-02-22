@@ -33,6 +33,7 @@ jobs:
     env:
       INVENTARIO_DB_DSN: postgres://postgres:postgres@localhost:5432/inventario_test?sslmode=disable
       INVENTARIO_LOG_FORMAT: json
+      INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
 
     steps:
       - name: Checkout code
@@ -117,6 +118,7 @@ jobs:
     env:
       INVENTARIO_DB_DSN: postgres://postgres@localhost:5432/inventario_test?sslmode=disable
       INVENTARIO_LOG_FORMAT: json
+      INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
 
     steps:
       - name: Checkout code
