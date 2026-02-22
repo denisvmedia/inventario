@@ -116,6 +116,7 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.FileURLExpiration, "file-url-expiration", c.config.FileURLExpiration, "File URL expiration duration (e.g., 15m, 1h, 30s)")
 	flags.StringVar(&c.config.TokenBlacklistRedisURL, "token-blacklist-redis-url", c.config.TokenBlacklistRedisURL, "Redis URL for token blacklist (e.g., redis://localhost:6379/0); omit to use in-memory blacklist")
 	flags.StringVar(&c.config.AuthRateLimitRedisURL, "auth-rate-limit-redis-url", c.config.AuthRateLimitRedisURL, "Redis URL for auth rate limiting/lockout (e.g., redis://localhost:6379/0); omit to use in-memory limiter")
+	flags.BoolVar(&c.config.AuthRateLimitDisabled, "no-auth-rate-limit", c.config.AuthRateLimitDisabled, "Disable auth rate limiting entirely (for testing only — do not use in production)")
 }
 
 func (c *Command) runCommand() error {
@@ -198,7 +199,12 @@ func (c *Command) runCommand() error {
 	params.FileURLExpiration = fileURLExpiration
 	params.ThumbnailConfig = thumbnailConfig
 	params.TokenBlacklister = services.NewTokenBlacklister(c.config.TokenBlacklistRedisURL)
-	params.AuthRateLimiter = services.NewAuthRateLimiter(c.config.AuthRateLimitRedisURL)
+	if c.config.AuthRateLimitDisabled {
+		slog.Warn("Auth rate limiting is disabled via configuration — do not use this in production")
+		params.AuthRateLimiter = services.NewNoOpAuthRateLimiter()
+	} else {
+		params.AuthRateLimiter = services.NewAuthRateLimiter(c.config.AuthRateLimitRedisURL)
+	}
 
 	err = validation.Validate(params)
 	if err != nil {

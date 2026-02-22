@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -281,7 +282,7 @@ func TestAuthSecurity_AccountLockoutAfterFailedLogins(t *testing.T) {
 
 	// 5 failed attempts from different IPs should still lead to lockout.
 	for i := 0; i < 5; i++ {
-		w := makeReq("10.0.0." + string(rune('1'+i)))
+		w := makeReq("10.0.0." + strconv.Itoa(i+1))
 		qt.New(t).Assert(w.Code, qt.Equals, http.StatusUnauthorized)
 	}
 
