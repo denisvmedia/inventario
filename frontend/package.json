@@ -59,10 +59,10 @@
     "vue-eslint-parser": "10.4.0"
   },
   "engines": {
-    "node": "24.13.0"
+    "node": "24.13.1"
   },
   "volta": {
-    "node": "24.13.0",
+    "node": "24.13.1",
     "npm": "11.8.0"
   },
   "overrides": {
