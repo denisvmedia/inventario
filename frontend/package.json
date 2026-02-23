@@ -63,7 +63,7 @@
   },
   "volta": {
     "node": "24.13.1",
-    "npm": "11.8.0"
+    "npm": "11.10.1"
   },
   "overrides": {
     "minimatch": "10.2.2"
