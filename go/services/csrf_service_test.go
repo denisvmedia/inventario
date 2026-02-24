@@ -239,4 +239,3 @@ func TestInMemoryCSRFService_ConcurrentAccess(t *testing.T) {
 
 	c.Assert(true, qt.IsTrue) // If we got here, no race conditions occurred
 }
-
