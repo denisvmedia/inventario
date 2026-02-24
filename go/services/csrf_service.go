@@ -18,12 +18,12 @@ const (
 	csrfTokenTTL = time.Hour
 )
 
-// CSRFService manages per-session CSRF tokens.
+// CSRFService manages per-user CSRF tokens.
 //
-// Tokens are generated on login and must be included in the X-CSRF-Token
-// header of all state-changing HTTP requests (POST/PUT/PATCH/DELETE).
-// A new token is issued on every token refresh so the CSRF token stays
-// in sync with the access-token lifetime.
+// Each user has at most one active CSRF token at a time, which is replaced
+// whenever a new token is generated (e.g. on login or token refresh).
+// Tokens must be included in the X-CSRF-Token header of all state-changing
+// HTTP requests (POST/PUT/PATCH/DELETE).
 type CSRFService interface {
 	// GenerateToken creates a new CSRF token for the given user, replacing any
 	// existing token. Returns the new token value.

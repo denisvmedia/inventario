@@ -2,8 +2,9 @@ package services_test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
-	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -212,11 +213,14 @@ func TestInMemoryCSRFService_ConcurrentAccess(t *testing.T) {
 	svc := services.NewInMemoryCSRFService()
 	defer svc.Stop()
 
-	// Test concurrent token generation and retrieval
-	done := make(chan bool)
+	// Test concurrent token generation and retrieval using WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
+		wg.Add(1)
 		go func(id int) {
-			userID := time.Now().Format("user-2006-01-02-15-04-05.000000000")
+			defer wg.Done()
+			// Use id in userID to avoid collisions across goroutines
+			userID := fmt.Sprintf("user-%d", id)
 			token, err := svc.GenerateToken(ctx, userID)
 			if err != nil {
 				t.Errorf("Failed to generate token: %v", err)
@@ -228,14 +232,11 @@ func TestInMemoryCSRFService_ConcurrentAccess(t *testing.T) {
 			if retrieved != token {
 				t.Errorf("Token mismatch: expected %s, got %s", token, retrieved)
 			}
-			done <- true
 		}(i)
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < 10; i++ {
-		<-done
-	}
+	wg.Wait()
 
 	c.Assert(true, qt.IsTrue) // If we got here, no race conditions occurred
 }

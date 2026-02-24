@@ -141,7 +141,7 @@ func configureCORS(allowedOrigins []string) *cors.Cors {
 			http.MethodPatch, http.MethodDelete, http.MethodOptions,
 		},
 		AllowedHeaders: []string{
-			"Accept", "Authorization", "Content-Type", "X-CSRF-Token",
+			"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Auth-Check",
 		},
 		ExposedHeaders: []string{
 			"X-CSRF-Token",
