@@ -36,10 +36,32 @@ const api = axios.create({
   }
 })
 
+// -----------------------------------------------------------------------
+// CSRF token management
+// In-memory storage: survives navigation but is lost on page reload.
+// The token is recovered automatically via GET /auth/me on startup.
+// -----------------------------------------------------------------------
+let csrfToken: string | null = null
+
+export function setCsrfToken(token: string): void {
+  csrfToken = token
+}
+
+export function getCsrfToken(): string | null {
+  return csrfToken
+}
+
+export function clearCsrfToken(): void {
+  csrfToken = null
+}
+
 // Function to get token from localStorage
 function getAuthToken(): string | null {
   return localStorage.getItem('inventario_token')
 }
+
+// State-changing methods that require a CSRF token.
+const mutatingMethods = new Set(['post', 'put', 'patch', 'delete'])
 
 // Add request interceptor for authentication and debugging
 api.interceptors.request.use(
@@ -53,6 +75,11 @@ api.interceptors.request.use(
       console.log('✅ Authorization header added')
     } else {
       console.log('❌ No token available for request')
+    }
+
+    // Add CSRF token to state-changing requests.
+    if (config.method && mutatingMethods.has(config.method.toLowerCase()) && csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken
     }
 
     console.log('API Request URL:', config.url)
@@ -146,6 +173,11 @@ api.interceptors.response.use(
             api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
             if (originalRequest.headers) {
               originalRequest.headers.Authorization = `Bearer ${newToken}`
+            }
+            // Update the in-memory CSRF token from the refresh response.
+            const newCsrfToken = refreshResponse.data?.csrf_token
+            if (newCsrfToken) {
+              csrfToken = newCsrfToken
             }
             onRefreshed(newToken)
             return api(originalRequest)

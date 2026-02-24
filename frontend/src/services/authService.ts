@@ -1,4 +1,4 @@
-import api from './api'
+import api, { setCsrfToken, clearCsrfToken } from './api'
 
 export interface LoginRequest {
   email: string
@@ -9,6 +9,7 @@ export interface LoginResponse {
   access_token: string
   token_type: string
   expires_in: number
+  csrf_token: string
   user: {
     id: string
     email: string
@@ -45,6 +46,11 @@ class AuthService {
     this.setToken(data.access_token)
     this.setUser(data.user)
 
+    // Store the CSRF token for subsequent state-changing requests.
+    if (data.csrf_token) {
+      setCsrfToken(data.csrf_token)
+    }
+
     // Verify token was stored correctly
     const storedToken = this.getToken()
     console.log('Token stored successfully:', !!storedToken)
@@ -72,8 +78,9 @@ class AuthService {
     } catch (error) {
       console.warn('Logout API call failed:', error)
     } finally {
-      // Always clear local storage
+      // Always clear local storage and the in-memory CSRF token.
       this.clearAuth()
+      clearCsrfToken()
     }
   }
 
@@ -84,6 +91,13 @@ class AuthService {
     // Use regular api for protected endpoints (they support vnd.api+json)
     const config = isBackgroundCheck ? {} : { headers: { 'X-Auth-Check': 'user-initiated' } }
     const response = await api.get('/api/v1/auth/me', config)
+
+    // Recover the CSRF token from the response header (populated by the server
+    // to allow the frontend to restore it after a page reload).
+    const responseCsrfToken = response.headers['x-csrf-token']
+    if (responseCsrfToken) {
+      setCsrfToken(responseCsrfToken)
+    }
 
     // The API returns user data directly, not wrapped in a .user property
     const userData = response.data
