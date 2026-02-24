@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { TestRecorder, log, warn, error } from '../../utils/test-recorder.js';
+import { setCsrfToken } from './csrf.js';
 
 /**
  * Test credentials for e2e tests
@@ -77,9 +78,9 @@ export async function isAuthenticated(page: Page, recorder?: TestRecorder): Prom
 }
 
 /**
- * Perform login with test credentials
+ * Perform login with test credentials and extract CSRF token
  */
-export async function login(page: Page, recorder?: TestRecorder): Promise<void> {
+export async function login(page: Page, recorder?: TestRecorder): Promise<string | null> {
   log(recorder, '🔐 Performing login with test credentials...');
 
   // Wait for login form to be visible
@@ -88,6 +89,26 @@ export async function login(page: Page, recorder?: TestRecorder): Promise<void> 
   // Fill in credentials
   await page.fill('input[type="email"]', TEST_CREDENTIALS.email);
   await page.fill('input[type="password"]', TEST_CREDENTIALS.password);
+
+  // Intercept the login response to extract CSRF token
+  let csrfToken: string | null = null;
+
+  const responseHandler = async (response: any) => {
+    if (response.url().includes('/api/v1/auth/login') && response.status() === 200) {
+      try {
+        const data = await response.json();
+        if (data.csrf_token) {
+          csrfToken = data.csrf_token;
+          setCsrfToken(csrfToken);
+          log(recorder, '🔑 CSRF token extracted from login response');
+        }
+      } catch (err) {
+        // Ignore JSON parse errors
+      }
+    }
+  };
+
+  page.on('response', responseHandler);
 
   // Submit the form
   await page.click('button[type="submit"]');
@@ -102,6 +123,12 @@ export async function login(page: Page, recorder?: TestRecorder): Promise<void> 
     { timeout: 10000 }
   );
 
+  // Wait a moment for the response handler to capture the token
+  await page.waitForTimeout(500);
+
+  // Remove the response handler
+  page.off('response', responseHandler);
+
   // If we're still on login page but see authenticated content, manually navigate to home
   const currentUrl = page.url();
   if (currentUrl.includes('/login') && await page.locator('h1:has-text("Welcome to Inventario")').isVisible()) {
@@ -110,40 +137,45 @@ export async function login(page: Page, recorder?: TestRecorder): Promise<void> 
   }
 
   log(recorder, '✅ Login completed successfully');
+
+  return csrfToken;
 }
 
 /**
  * Ensure the user is authenticated, login if necessary
+ * Returns the CSRF token if login was performed
  */
-export async function ensureAuthenticated(page: Page, recorder?: TestRecorder): Promise<void> {
+export async function ensureAuthenticated(page: Page, recorder?: TestRecorder): Promise<string | null> {
   // Wait for any ongoing authentication initialization
   await page.waitForTimeout(500);
 
   // First check if we're already authenticated
   if (await isAuthenticated(page, recorder)) {
     log(recorder, '✅ Already authenticated');
-    return;
+    return null;
   }
 
   // Check if we're on the login page
   if (await isLoginPage(page)) {
     log(recorder, '🔐 On login page, performing login...');
-    await login(page, recorder);
-    return;
+    return await login(page, recorder);
   }
 
   // If we're neither authenticated nor on login page, navigate to login
   log(recorder, '🔄 Navigating to login page...');
   await page.goto('/login');
-  await login(page, recorder);
+  return await login(page, recorder);
 }
 
 /**
  * Login if needed before accessing a protected page
  * This function handles the common case where navigating to a protected page
  * redirects to login, and we need to authenticate first
+ * Returns the CSRF token if login was performed
  */
-export async function loginIfNeeded(page: Page, targetUrl?: string, recorder?: TestRecorder): Promise<void> {
+export async function loginIfNeeded(page: Page, targetUrl?: string, recorder?: TestRecorder): Promise<string | null> {
+  let csrfToken: string | null = null;
+
   // If we have a target URL, try to navigate there first
   if (targetUrl) {
     await page.goto(targetUrl);
@@ -155,7 +187,7 @@ export async function loginIfNeeded(page: Page, targetUrl?: string, recorder?: T
   // Check if we ended up on the login page (due to redirect)
   if (await isLoginPage(page)) {
     log(recorder, '🔄 Redirected to login, authenticating...');
-    await login(page, recorder);
+    csrfToken = await login(page, recorder);
 
     // After login, navigate to target URL if specified
     if (targetUrl && targetUrl !== '/') {
@@ -179,6 +211,8 @@ export async function loginIfNeeded(page: Page, targetUrl?: string, recorder?: T
     error(recorder, `Page title: ${await page.title()}`);
     throw new Error('Failed to authenticate - login did not complete successfully');
   }
+
+  return csrfToken;
 }
 
 /**
@@ -214,11 +248,12 @@ export async function logout(page: Page, recorder?: TestRecorder): Promise<void>
 /**
  * Navigate to a URL with authentication handling
  * This is a replacement for page.goto() that handles authentication
+ * Returns the CSRF token if login was performed
  */
-export async function navigateWithAuth(page: Page, url: string, recorder?: TestRecorder): Promise<void> {
+export async function navigateWithAuth(page: Page, url: string, recorder?: TestRecorder): Promise<string | null> {
   log(recorder, `🔄 Navigating to ${url} with authentication handling...`);
 
-  await loginIfNeeded(page, url, recorder);
+  const csrfToken = await loginIfNeeded(page, url, recorder);
 
   // Ensure we're on the correct page
   const currentUrl = page.url();
@@ -227,4 +262,23 @@ export async function navigateWithAuth(page: Page, url: string, recorder?: TestR
   }
 
   log(recorder, `✅ Successfully navigated to ${url}`);
+
+  return csrfToken;
+}
+
+/**
+ * Get the CSRF token from the page context
+ * This retrieves the token stored in the frontend's memory
+ */
+export async function getCsrfToken(page: Page): Promise<string | null> {
+  try {
+    const token = await page.evaluate(() => {
+      // Access the CSRF token from the frontend's api.ts module
+      // This assumes the token is stored in a global or accessible location
+      return (window as any).__csrfToken || null;
+    });
+    return token;
+  } catch (err) {
+    return null;
+  }
 }

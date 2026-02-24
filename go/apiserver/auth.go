@@ -44,6 +44,7 @@ type AuthAPI struct {
 	refreshTokenRegistry registry.RefreshTokenRegistry
 	blacklistService     services.TokenBlacklister
 	rateLimiter          services.AuthRateLimiter
+	csrfService          services.CSRFService
 	jwtSecret            []byte
 }
 
@@ -58,6 +59,7 @@ type LoginResponse struct {
 	AccessToken string       `json:"access_token"`
 	TokenType   string       `json:"token_type"`
 	ExpiresIn   int          `json:"expires_in"` // seconds until access token expiry
+	CSRFToken   string       `json:"csrf_token"` // CSRF token for protecting state-changing requests
 	User        *models.User `json:"user"`
 }
 
@@ -156,7 +158,10 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("Successful user login", "email", user.Email, "user_id", user.ID, "role", user.Role)
 
-	writeLoginResponse(w, accessTokenString, user)
+	// Generate a CSRF token for this session.
+	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
+
+	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
 // refresh issues a new access token using a valid refresh token cookie.
@@ -227,7 +232,10 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Failed to update refresh token last_used_at", "token_id", refreshToken.ID, "error", err)
 	}
 
-	writeLoginResponse(w, accessTokenString, user)
+	// Re-generate the CSRF token so it stays in sync with the new access token.
+	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
+
+	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
 // blacklistAccessToken extracts claims from a Bearer token header and blacklists its JTI.
@@ -309,6 +317,13 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 		api.revokeRefreshToken(r.Context(), cookie.Value)
 	}
 
+	// Delete CSRF token for this user.
+	if user := appctx.UserFromContext(r.Context()); user != nil && api.csrfService != nil {
+		if err := api.csrfService.DeleteToken(r.Context(), user.ID); err != nil {
+			slog.Error("Failed to delete CSRF token on logout", "user_id", user.ID, "error", err)
+		}
+	}
+
 	// Clear the refresh token cookie.
 	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 	http.SetCookie(w, &http.Cookie{
@@ -328,6 +343,8 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetCurrentUser returns the current authenticated user.
+// It also refreshes and exposes the CSRF token in the X-CSRF-Token response
+// header so the frontend can recover its CSRF token after a page reload.
 func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	user := appctx.UserFromContext(r.Context())
 	if user == nil {
@@ -335,10 +352,52 @@ func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Ensure the CSRF token is in the response header (generate if missing, e.g.
+	// after a page reload where the in-memory token was lost).
+	api.writeCSRFHeader(w, r.Context(), user.ID)
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
+	}
+}
+
+// generateCSRFTokenForUser issues a new CSRF token for the given user.
+// Returns "" when csrfService is nil or on error (errors are logged).
+func (api *AuthAPI) generateCSRFTokenForUser(ctx context.Context, userID string) string {
+	if api.csrfService == nil {
+		return ""
+	}
+	token, err := api.csrfService.GenerateToken(ctx, userID)
+	if err != nil {
+		slog.Error("Failed to generate CSRF token", "user_id", userID, "error", err)
+		// Non-fatal: the middleware fails-open on storage errors.
+	}
+	return token
+}
+
+// writeCSRFHeader retrieves (or regenerates) the CSRF token for the user and
+// sets the X-CSRF-Token response header. No-op when csrfService is nil.
+func (api *AuthAPI) writeCSRFHeader(w http.ResponseWriter, ctx context.Context, userID string) {
+	if api.csrfService == nil {
+		return
+	}
+	token, err := api.csrfService.GetToken(ctx, userID)
+	if err != nil {
+		slog.Error("Failed to get CSRF token for /auth/me", "user_id", userID, "error", err)
+		return
+	}
+	if token == "" {
+		// Token has expired or was lost — regenerate it.
+		token, err = api.csrfService.GenerateToken(ctx, userID)
+		if err != nil {
+			slog.Error("Failed to regenerate CSRF token for /auth/me", "user_id", userID, "error", err)
+			return
+		}
+	}
+	if token != "" {
+		w.Header().Set(csrfHeaderName, token)
 	}
 }
 
@@ -352,6 +411,7 @@ type AuthParams struct {
 	RefreshTokenRegistry registry.RefreshTokenRegistry
 	BlacklistService     services.TokenBlacklister
 	RateLimiter          services.AuthRateLimiter
+	CSRFService          services.CSRFService
 	JWTSecret            []byte
 }
 
@@ -362,6 +422,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		refreshTokenRegistry: params.RefreshTokenRegistry,
 		blacklistService:     params.BlacklistService,
 		rateLimiter:          params.RateLimiter,
+		csrfService:          params.CSRFService,
 		jwtSecret:            params.JWTSecret,
 	}
 
@@ -438,12 +499,13 @@ func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Reque
 }
 
 // writeLoginResponse encodes and writes a LoginResponse to w.
-func writeLoginResponse(w http.ResponseWriter, accessToken string, user *models.User) {
+func writeLoginResponse(w http.ResponseWriter, accessToken, csrfToken string, user *models.User) {
 	w.Header().Set("Content-Type", "application/json")
 	resp := LoginResponse{
 		AccessToken: accessToken,
 		TokenType:   "Bearer",
 		ExpiresIn:   int(accessTokenExpiration.Seconds()),
+		CSRFToken:   csrfToken,
 		User:        user,
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {

@@ -42,21 +42,23 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 }
 
 // createUserAwareMiddlewares creates middleware stack with user authentication and RLS context
-func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService services.CSRFService) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
 		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
 		RLSContextMiddleware(factorySet),
 		RegistrySetMiddleware(factorySet),
+		CSRFMiddleware(csrfService),
 	)
 }
 
 // createUserAwareMiddlewaresForUploads creates middleware stack for uploads (without content type restrictions)
-func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister) []func(http.Handler) http.Handler {
+func createUserAwareMiddlewaresForUploads(jwtSecret []byte, userRegistry registry.UserRegistry, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService services.CSRFService) []func(http.Handler) http.Handler {
 	// Only add user authentication and RLS context, no content type restrictions for uploads
 	return []func(http.Handler) http.Handler{
 		JWTMiddleware(jwtSecret, userRegistry, blacklist),
 		RLSContextMiddleware(factorySet),
 		RegistrySetMiddleware(factorySet),
+		CSRFMiddleware(csrfService),
 	}
 }
 
@@ -96,6 +98,8 @@ type Params struct {
 	ThumbnailConfig   services.ThumbnailGenerationConfig // Thumbnail generation configuration
 	TokenBlacklister  services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
 	AuthRateLimiter   services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
+	CSRFService       services.CSRFService               // CSRF token service (Redis or in-memory)
+	AllowedOrigins    []string                           // Allowed CORS origins; empty = allow all (dev mode)
 }
 
 func (p *Params) Validate() error {
@@ -121,20 +125,40 @@ func (p *Params) Validate() error {
 	return validation.ValidateStruct(p, fields...)
 }
 
+// configureCORS returns a CORS handler based on the allowed origins list.
+// If allowedOrigins is empty, cors.AllowAll() is used (development mode).
+// When origins are specified, a strict configuration is applied that supports
+// credentials (required for the httpOnly refresh-token cookie).
+func configureCORS(allowedOrigins []string) *cors.Cors {
+	if len(allowedOrigins) == 0 {
+		slog.Warn("CORS: no allowed origins configured — using AllowAll (development mode). Set --allowed-origins for production.")
+		return cors.AllowAll()
+	}
+	return cors.New(cors.Options{
+		AllowedOrigins: allowedOrigins,
+		AllowedMethods: []string{
+			http.MethodGet, http.MethodPost, http.MethodPut,
+			http.MethodPatch, http.MethodDelete, http.MethodOptions,
+		},
+		AllowedHeaders: []string{
+			"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Auth-Check",
+		},
+		ExposedHeaders: []string{
+			"X-CSRF-Token",
+			"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset",
+		},
+		AllowCredentials: true,
+		MaxAge:           300, // 5 minutes
+	})
+}
+
 func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler {
 	render.Decode = JSONAPIAwareDecoder
 
 	r := chi.NewRouter()
 
-	// c := cors.New(cors.Options{
-	//	AllowedOrigins: []string{"http://foo.com", "http://foo.com:8080"},
-	//	AllowCredentials: true,
-	//	// Enable Debugging for testing, consider disabling in production
-	//	Debug: true,
-	// })
-
-	// CORS middleware
-	r.Use(cors.AllowAll().Handler)
+	// CORS middleware — strict when AllowedOrigins is set, permissive in dev mode.
+	r.Use(configureCORS(params.AllowedOrigins).Handler)
 
 	// SECURITY: Add tenant ID validation middleware FIRST (before any other processing)
 	r.Use(ValidateNoUserProvidedTenantID())
@@ -171,6 +195,10 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		rateLimiter = services.NewInMemoryAuthRateLimiter()
 	}
 
+	// Use CSRF service from params (nil disables CSRF validation — see CSRFMiddleware).
+	// In production, run.go always provides a concrete implementation.
+	csrfSvc := params.CSRFService
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(AuthParams{
@@ -178,6 +206,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
 			BlacklistService:     blacklist,
 			RateLimiter:          rateLimiter,
+			CSRFService:          csrfSvc,
 			JWTSecret:            params.JWTSecret,
 		}))
 		r.Route("/currencies", Currencies())
@@ -186,8 +215,8 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet))
 
 		// Create user aware middlewares for protected routes
-		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist)
-		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist)
+		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc)
+		userUploadMiddlewares := createUserAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc)
 
 		// Protected routes (authentication required)
 		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context

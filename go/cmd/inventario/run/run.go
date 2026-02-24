@@ -117,6 +117,8 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.TokenBlacklistRedisURL, "token-blacklist-redis-url", c.config.TokenBlacklistRedisURL, "Redis URL for token blacklist (e.g., redis://localhost:6379/0); omit to use in-memory blacklist")
 	flags.StringVar(&c.config.AuthRateLimitRedisURL, "auth-rate-limit-redis-url", c.config.AuthRateLimitRedisURL, "Redis URL for auth rate limiting/lockout (e.g., redis://localhost:6379/0); omit to use in-memory limiter")
 	flags.BoolVar(&c.config.AuthRateLimitDisabled, "no-auth-rate-limit", c.config.AuthRateLimitDisabled, "Disable auth rate limiting entirely (for testing only — do not use in production)")
+	flags.StringVar(&c.config.CSRFRedisURL, "csrf-redis-url", c.config.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
+	flags.StringVar(&c.config.AllowedOrigins, "allowed-origins", c.config.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com); leave empty in development for AllowAll")
 }
 
 func (c *Command) runCommand() error {
@@ -204,6 +206,18 @@ func (c *Command) runCommand() error {
 		params.AuthRateLimiter = services.NewNoOpAuthRateLimiter()
 	} else {
 		params.AuthRateLimiter = services.NewAuthRateLimiter(c.config.AuthRateLimitRedisURL)
+	}
+
+	params.CSRFService = services.NewCSRFService(c.config.CSRFRedisURL)
+
+	// Parse allowed origins (comma-separated). An empty value means AllowAll (dev mode).
+	if c.config.AllowedOrigins != "" {
+		for _, origin := range strings.Split(c.config.AllowedOrigins, ",") {
+			origin = strings.TrimSpace(origin)
+			if origin != "" {
+				params.AllowedOrigins = append(params.AllowedOrigins, origin)
+			}
+		}
 	}
 
 	err = validation.Validate(params)

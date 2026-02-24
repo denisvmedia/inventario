@@ -57,11 +57,22 @@ export const downloadFile = async (page: Page, recorder: TestRecorder, selector:
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token'));
 
     // Step 1: Generate signed URL by calling the signing API
+    // Import CSRF helper
+    const { getCsrfToken } = await import('./csrf.js');
+    const csrfToken = getCsrfToken();
+
+    const headers: Record<string, string> = {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+    };
+
+    // Add CSRF token for state-changing requests
+    if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+    }
+
     const signedUrlResponse = await page.request.post(`/api/v1/files/${fileId}/signed-url`, {
-        headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-        }
+        headers
     });
 
     expect(signedUrlResponse.status()).toBe(200);
