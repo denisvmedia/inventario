@@ -84,4 +84,3 @@ func clientIPFromRequest(r *http.Request) string {
 	}
 	return host
 }
-

@@ -105,4 +105,3 @@ func (r *AuditLogRegistry) DeleteOlderThan(_ context.Context, cutoff time.Time) 
 	}
 	return nil
 }
-
