@@ -113,6 +113,7 @@ type FactorySet struct {
 	TenantRegistry                        TenantRegistry       // TenantRegistry doesn't need factory as it's not user-aware
 	UserRegistry                          UserRegistry         // UserRegistry doesn't need factory as it's not user-aware
 	RefreshTokenRegistry                  RefreshTokenRegistry // RefreshTokenRegistry doesn't need factory as it's not user-aware
+	AuditLogRegistry                      AuditLogRegistry     // AuditLogRegistry doesn't need factory as it's not user-aware
 }
 
 // CreateUserRegistrySet creates a complete set of user-aware registries from factories
@@ -205,6 +206,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		TenantRegistry:                 fs.TenantRegistry,
 		UserRegistry:                   fs.UserRegistry,
 		RefreshTokenRegistry:           fs.RefreshTokenRegistry,
+		AuditLogRegistry:               fs.AuditLogRegistry,
 	}, nil
 }
 
@@ -228,5 +230,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		TenantRegistry:                 fs.TenantRegistry,
 		UserRegistry:                   fs.UserRegistry,
 		RefreshTokenRegistry:           fs.RefreshTokenRegistry,
+		AuditLogRegistry:               fs.AuditLogRegistry,
 	}
 }

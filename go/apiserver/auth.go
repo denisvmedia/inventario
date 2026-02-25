@@ -45,6 +45,7 @@ type AuthAPI struct {
 	blacklistService     services.TokenBlacklister
 	rateLimiter          services.AuthRateLimiter
 	csrfService          services.CSRFService
+	auditService         services.AuditLogger
 	jwtSecret            []byte
 }
 
@@ -52,6 +53,12 @@ type AuthAPI struct {
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+// ChangePasswordRequest is the body for POST /auth/change-password.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
 }
 
 // LoginResponse is returned on successful login or token refresh.
@@ -106,6 +113,8 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 				slog.Error("Failed to record failed login", "error", rlErr)
 			}
 		}
+		errMsg := "user not found"
+		api.logAuth(r.Context(), "login", nil, nil, false, r, &errMsg)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -117,12 +126,16 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 				slog.Error("Failed to record failed login", "error", rlErr)
 			}
 		}
+		errMsg := "invalid password"
+		api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
 	if !user.IsActive {
 		slog.Warn("Failed login attempt: user account disabled", "email", req.Email, "user_id", user.ID)
+		errMsg := "account disabled"
+		api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "User account disabled", http.StatusForbidden)
 		return
 	}
@@ -157,6 +170,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("Successful user login", "email", user.Email, "user_id", user.ID, "role", user.Role)
+	api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, true, r, nil)
 
 	// Generate a CSRF token for this session.
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
@@ -318,10 +332,16 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete CSRF token for this user.
-	if user := appctx.UserFromContext(r.Context()); user != nil && api.csrfService != nil {
-		if err := api.csrfService.DeleteToken(r.Context(), user.ID); err != nil {
-			slog.Error("Failed to delete CSRF token on logout", "user_id", user.ID, "error", err)
+	currentUser := appctx.UserFromContext(r.Context())
+	if currentUser != nil && api.csrfService != nil {
+		if err := api.csrfService.DeleteToken(r.Context(), currentUser.ID); err != nil {
+			slog.Error("Failed to delete CSRF token on logout", "user_id", currentUser.ID, "error", err)
 		}
+	}
+
+	// Audit the logout event.
+	if currentUser != nil {
+		api.logAuth(r.Context(), "logout", &currentUser.ID, &currentUser.TenantID, true, r, nil)
 	}
 
 	// Clear the refresh token cookie.
@@ -412,6 +432,7 @@ type AuthParams struct {
 	BlacklistService     services.TokenBlacklister
 	RateLimiter          services.AuthRateLimiter
 	CSRFService          services.CSRFService
+	AuditService         services.AuditLogger
 	JWTSecret            []byte
 }
 
@@ -423,6 +444,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		blacklistService:     params.BlacklistService,
 		rateLimiter:          params.RateLimiter,
 		csrfService:          params.CSRFService,
+		auditService:         params.AuditService,
 		jwtSecret:            params.JWTSecret,
 	}
 
@@ -430,9 +452,95 @@ func Auth(params AuthParams) func(r chi.Router) {
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login", api.login)
 		r.Post("/refresh", api.refresh)
 		r.Post("/logout", api.logout)
-		// /me requires authentication
+		// Routes requiring authentication
 		r.With(RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)).Get("/me", api.handleGetCurrentUser)
+		r.With(RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)).Post("/change-password", api.handleChangePassword)
 	}
+}
+
+// handleChangePassword allows an authenticated user to change their own password.
+// On success it revokes all existing refresh tokens and blacklists existing access
+// tokens so that all active sessions are invalidated and the user must re-login.
+func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	user := appctx.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		http.Error(w, "Current and new passwords are required", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the current password before allowing the change.
+	if !user.CheckPassword(req.CurrentPassword) {
+		slog.Warn("Password change failed: incorrect current password", "user_id", user.ID, "email", user.Email)
+		errMsg := "incorrect current password"
+		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
+		http.Error(w, "Current password is incorrect", http.StatusUnauthorized)
+		return
+	}
+
+	// Validate the new password meets complexity requirements.
+	if err := models.ValidatePassword(req.NewPassword); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Apply the new password hash.
+	if err := user.SetPassword(req.NewPassword); err != nil {
+		slog.Error("Failed to hash new password", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to process new password", http.StatusInternalServerError)
+		return
+	}
+	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
+		slog.Error("Failed to update user password", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	// Revoke all refresh tokens for the user so existing sessions are invalidated.
+	if api.refreshTokenRegistry != nil {
+		if err := api.refreshTokenRegistry.RevokeByUserID(r.Context(), user.ID); err != nil {
+			slog.Error("Failed to revoke refresh tokens after password change", "user_id", user.ID, "error", err)
+		}
+	}
+
+	// Blacklist the current access token and all user tokens so they cannot be reused.
+	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+		api.blacklistAccessToken(r.Context(), authHeader)
+	}
+	if api.blacklistService != nil {
+		if err := api.blacklistService.BlacklistUserTokens(r.Context(), user.ID, 24*time.Hour); err != nil {
+			slog.Error("Failed to blacklist user tokens after password change", "user_id", user.ID, "error", err)
+		}
+	}
+
+	slog.Info("Password changed successfully", "user_id", user.ID, "email", user.Email)
+	api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, true, r, nil)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]string{
+		"message": "Password changed successfully. Please login again.",
+	}); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// logAuth is a nil-safe wrapper around auditService.LogAuth.
+// It is a no-op when auditService has not been configured.
+func (api *AuthAPI) logAuth(ctx context.Context, action string, userID, tenantID *string, success bool, r *http.Request, errMsg *string) {
+	if api.auditService == nil {
+		return
+	}
+	api.auditService.LogAuth(ctx, action, userID, tenantID, success, r, errMsg)
 }
 
 // -----------------------------------------------------------------------

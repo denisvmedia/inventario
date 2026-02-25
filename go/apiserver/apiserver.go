@@ -207,6 +207,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			BlacklistService:     blacklist,
 			RateLimiter:          rateLimiter,
 			CSRFService:          csrfSvc,
+			AuditService:         services.NewAuditService(params.FactorySet.AuditLogRegistry),
 			JWTSecret:            params.JWTSecret,
 		}))
 		r.Route("/currencies", Currencies())

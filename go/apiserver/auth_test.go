@@ -299,3 +299,156 @@ func TestAuthAPI_GetCurrentUser(t *testing.T) {
 		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
 	})
 }
+
+func TestAuthAPI_ChangePassword(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+
+	setupUser := func() *models.User {
+		user := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "user-123"},
+				TenantID: "test-tenant-id",
+			},
+			Email:    "test@example.com",
+			Name:     "Test User",
+			Role:     models.UserRoleUser,
+			IsActive: true,
+		}
+		_ = user.SetPassword("OldPassword123")
+		return user
+	}
+
+	makeToken := func() string {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"user_id": "user-123",
+			"role":    "user",
+			"exp":     time.Now().Add(24 * time.Hour).Unix(),
+			"jti":     "test-change-pw-jti",
+		})
+		tokenString, _ := token.SignedString(jwtSecret)
+		return tokenString
+	}
+
+	makeRequest := func(tokenString string, body any) (*http.Request, *httptest.ResponseRecorder) {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest("POST", "/change-password", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		if tokenString != "" {
+			req.Header.Set("Authorization", "Bearer "+tokenString)
+		}
+		return req, httptest.NewRecorder()
+	}
+
+	// Happy path
+	t.Run("successful password change", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser()
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+			CurrentPassword: "OldPassword123",
+			NewPassword:     "NewPassword456",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+		// Verify the password was actually updated in the registry.
+		updated, err := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(err, qt.IsNil)
+		c.Assert(updated.CheckPassword("NewPassword456"), qt.IsTrue)
+		c.Assert(updated.CheckPassword("OldPassword123"), qt.IsFalse)
+	})
+
+	// Unhappy paths
+	t.Run("wrong current password", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser()
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+			CurrentPassword: "WrongPassword999",
+			NewPassword:     "NewPassword456",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	})
+
+	t.Run("new password fails complexity requirements", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser()
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+			CurrentPassword: "OldPassword123",
+			NewPassword:     "alllowercase", // no uppercase, no digit
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+	})
+
+	t.Run("missing current password", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser()
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+			NewPassword: "NewPassword456",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+	})
+
+	t.Run("missing new password", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser()
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+			CurrentPassword: "OldPassword123",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+	})
+
+	t.Run("unauthenticated request", func(t *testing.T) {
+		c := qt.New(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest("", apiserver.ChangePasswordRequest{
+			CurrentPassword: "OldPassword123",
+			NewPassword:     "NewPassword456",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	})
+}
