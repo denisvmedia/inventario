@@ -53,6 +53,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.TenantRegistry = NewTenantRegistry()
 	fs.UserRegistry = NewUserRegistry()
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
+	fs.AuditLogRegistry = NewAuditLogRegistry()
 
 	return fs
 }
