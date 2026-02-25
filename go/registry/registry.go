@@ -226,6 +226,23 @@ type TenantRegistry interface {
 	GetByDomain(ctx context.Context, domain string) (*models.Tenant, error)
 }
 
+// AuditLogRegistry manages security-relevant event records for compliance and debugging.
+type AuditLogRegistry interface {
+	Registry[models.AuditLog]
+
+	// ListByUser returns all audit logs for a specific user.
+	ListByUser(ctx context.Context, userID string) ([]*models.AuditLog, error)
+
+	// ListByTenant returns all audit logs for a specific tenant.
+	ListByTenant(ctx context.Context, tenantID string) ([]*models.AuditLog, error)
+
+	// ListByAction returns all audit logs matching the given action string.
+	ListByAction(ctx context.Context, action string) ([]*models.AuditLog, error)
+
+	// DeleteOlderThan removes all audit log entries with a timestamp before cutoff.
+	DeleteOlderThan(ctx context.Context, cutoff time.Time) error
+}
+
 type UserRegistry interface {
 	Registry[models.User]
 
@@ -275,6 +292,7 @@ type Set struct {
 	TenantRegistry                 TenantRegistry
 	UserRegistry                   UserRegistry
 	RefreshTokenRegistry           RefreshTokenRegistry
+	AuditLogRegistry               AuditLogRegistry // AuditLogRegistry doesn't need factory as it's not user-aware
 }
 
 // Search-related types and functions
