@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -40,7 +38,6 @@ func (s *AuditService) LogAuth(ctx context.Context, action string, userID, tenan
 	}
 
 	entry := models.AuditLog{
-		ID:           uuid.New().String(),
 		Action:       action,
 		UserID:       userID,
 		TenantID:     tenantID,
