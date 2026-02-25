@@ -47,6 +47,10 @@ func (r *AuditLogRegistry) Create(ctx context.Context, entry models.AuditLog) (*
 
 // ListByUser returns all audit log entries for the given user.
 func (r *AuditLogRegistry) ListByUser(ctx context.Context, userID string) ([]*models.AuditLog, error) {
+	if userID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, err
@@ -63,6 +67,10 @@ func (r *AuditLogRegistry) ListByUser(ctx context.Context, userID string) ([]*mo
 
 // ListByTenant returns all audit log entries for the given tenant.
 func (r *AuditLogRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*models.AuditLog, error) {
+	if tenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, err
@@ -79,6 +87,10 @@ func (r *AuditLogRegistry) ListByTenant(ctx context.Context, tenantID string) ([
 
 // ListByAction returns all audit log entries matching the given action.
 func (r *AuditLogRegistry) ListByAction(ctx context.Context, action string) ([]*models.AuditLog, error) {
+	if action == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Action"))
+	}
+
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, err

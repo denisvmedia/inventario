@@ -490,6 +490,8 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 
 	// Validate the new password meets complexity requirements.
 	if err := models.ValidatePassword(req.NewPassword); err != nil {
+		errMsg := "new password does not meet complexity requirements"
+		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -518,7 +520,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		api.blacklistAccessToken(r.Context(), authHeader)
 	}
 	if api.blacklistService != nil {
-		if err := api.blacklistService.BlacklistUserTokens(r.Context(), user.ID, 24*time.Hour); err != nil {
+		if err := api.blacklistService.BlacklistUserTokens(r.Context(), user.ID, 2*accessTokenExpiration); err != nil {
 			slog.Error("Failed to blacklist user tokens after password change", "user_id", user.ID, "error", err)
 		}
 	}

@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -13,7 +15,7 @@ import (
 
 // AuditLogger is the interface for logging security-relevant events.
 type AuditLogger interface {
-	// LogAuth records an authentication or authorisation event (login, logout, password change, etc.).
+	// LogAuth records an authentication or authorization event (login, logout, password change, etc.).
 	// The call is best-effort: errors are logged but do not propagate to callers.
 	LogAuth(ctx context.Context, action string, userID, tenantID *string, success bool, r *http.Request, errMsg *string)
 }
@@ -60,27 +62,17 @@ func (s *AuditService) LogAuth(ctx context.Context, action string, userID, tenan
 // common proxy headers. Duplicated here to keep the services package self-contained.
 func clientIPFromRequest(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first (original client) IP from the comma-separated list.
-		for i, c := range xff {
-			if c == ',' {
-				return xff[:i]
-			}
-		}
-		return xff
+		// Take the first (original client) IP from the comma-separated list and trim whitespace.
+		parts := strings.SplitN(xff, ",", 2)
+		return strings.TrimSpace(parts[0])
 	}
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
-	// Fall back to RemoteAddr.
-	host := r.RemoteAddr
-	if i := len(host) - 1; i >= 0 && host[i] != ']' {
-		// Strip port: find last colon outside of IPv6 brackets.
-		for j := i; j >= 0; j-- {
-			if host[j] == ':' {
-				host = host[:j]
-				break
-			}
-		}
+	// Fall back to RemoteAddr; strip the port using net.SplitHostPort so that
+	// IPv6 addresses (with brackets) and host:port pairs are both handled correctly.
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
-	return host
+	return r.RemoteAddr
 }

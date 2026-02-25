@@ -18,6 +18,82 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+// mockRefreshTokenRegistryForAuth implements registry.RefreshTokenRegistry for testing.
+// It records calls to RevokeByUserID so tests can assert it was invoked.
+type mockRefreshTokenRegistryForAuth struct {
+	revokeByUserIDCalled bool
+	revokeByUserIDArg    string
+}
+
+func (m *mockRefreshTokenRegistryForAuth) Create(_ context.Context, _ models.RefreshToken) (*models.RefreshToken, error) {
+	return nil, nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) Get(_ context.Context, _ string) (*models.RefreshToken, error) {
+	return nil, registry.ErrNotFound
+}
+
+func (m *mockRefreshTokenRegistryForAuth) List(_ context.Context) ([]*models.RefreshToken, error) {
+	return nil, nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) Update(_ context.Context, _ models.RefreshToken) (*models.RefreshToken, error) {
+	return nil, nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) Delete(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) Count(_ context.Context) (int, error) {
+	return 0, nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) GetByTokenHash(_ context.Context, _ string) (*models.RefreshToken, error) {
+	return nil, registry.ErrNotFound
+}
+
+func (m *mockRefreshTokenRegistryForAuth) GetByUserID(_ context.Context, _ string) ([]*models.RefreshToken, error) {
+	return nil, nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) RevokeByUserID(_ context.Context, userID string) error {
+	m.revokeByUserIDCalled = true
+	m.revokeByUserIDArg = userID
+	return nil
+}
+
+func (m *mockRefreshTokenRegistryForAuth) DeleteExpired(_ context.Context) error {
+	return nil
+}
+
+// mockTokenBlacklisterForAuth implements services.TokenBlacklister for testing.
+// It records calls to BlacklistUserTokens so tests can assert it was invoked.
+type mockTokenBlacklisterForAuth struct {
+	blacklistUserTokensCalled   bool
+	blacklistUserTokensUserID   string
+	blacklistUserTokensDuration time.Duration
+}
+
+func (m *mockTokenBlacklisterForAuth) BlacklistToken(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
+
+func (m *mockTokenBlacklisterForAuth) IsBlacklisted(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockTokenBlacklisterForAuth) BlacklistUserTokens(_ context.Context, userID string, duration time.Duration) error {
+	m.blacklistUserTokensCalled = true
+	m.blacklistUserTokensUserID = userID
+	m.blacklistUserTokensDuration = duration
+	return nil
+}
+
+func (m *mockTokenBlacklisterForAuth) IsUserBlacklisted(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
 // mockUserRegistryForAuth implements registry.UserRegistry for testing
 type mockUserRegistryForAuth struct {
 	users map[string]*models.User
@@ -303,7 +379,9 @@ func TestAuthAPI_GetCurrentUser(t *testing.T) {
 func TestAuthAPI_ChangePassword(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
-	setupUser := func() *models.User {
+	setupUser := func(t *testing.T) *models.User {
+		t.Helper()
+		c := qt.New(t)
 		user := &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: "user-123"},
@@ -314,23 +392,30 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 			Role:     models.UserRoleUser,
 			IsActive: true,
 		}
-		_ = user.SetPassword("OldPassword123")
+		err := user.SetPassword("OldPassword123")
+		c.Assert(err, qt.IsNil)
 		return user
 	}
 
-	makeToken := func() string {
+	makeToken := func(t *testing.T) string {
+		t.Helper()
+		c := qt.New(t)
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 			"user_id": "user-123",
 			"role":    "user",
 			"exp":     time.Now().Add(24 * time.Hour).Unix(),
 			"jti":     "test-change-pw-jti",
 		})
-		tokenString, _ := token.SignedString(jwtSecret)
+		tokenString, err := token.SignedString(jwtSecret)
+		c.Assert(err, qt.IsNil)
 		return tokenString
 	}
 
-	makeRequest := func(tokenString string, body any) (*http.Request, *httptest.ResponseRecorder) {
-		b, _ := json.Marshal(body)
+	makeRequest := func(t *testing.T, tokenString string, body any) (*http.Request, *httptest.ResponseRecorder) {
+		t.Helper()
+		c := qt.New(t)
+		b, err := json.Marshal(body)
+		c.Assert(err, qt.IsNil)
 		req := httptest.NewRequest("POST", "/change-password", bytes.NewReader(b))
 		req.Header.Set("Content-Type", "application/json")
 		if tokenString != "" {
@@ -342,11 +427,11 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 	// Happy path
 	t.Run("successful password change", func(t *testing.T) {
 		c := qt.New(t)
-		testUser := setupUser()
+		testUser := setupUser(t)
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
 		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
-		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+		req, resp := makeRequest(t, makeToken(t), apiserver.ChangePasswordRequest{
 			CurrentPassword: "OldPassword123",
 			NewPassword:     "NewPassword456",
 		})
@@ -367,11 +452,11 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 	// Unhappy paths
 	t.Run("wrong current password", func(t *testing.T) {
 		c := qt.New(t)
-		testUser := setupUser()
+		testUser := setupUser(t)
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
 		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
-		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+		req, resp := makeRequest(t, makeToken(t), apiserver.ChangePasswordRequest{
 			CurrentPassword: "WrongPassword999",
 			NewPassword:     "NewPassword456",
 		})
@@ -385,11 +470,11 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 
 	t.Run("new password fails complexity requirements", func(t *testing.T) {
 		c := qt.New(t)
-		testUser := setupUser()
+		testUser := setupUser(t)
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
 		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
-		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+		req, resp := makeRequest(t, makeToken(t), apiserver.ChangePasswordRequest{
 			CurrentPassword: "OldPassword123",
 			NewPassword:     "alllowercase", // no uppercase, no digit
 		})
@@ -403,11 +488,11 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 
 	t.Run("missing current password", func(t *testing.T) {
 		c := qt.New(t)
-		testUser := setupUser()
+		testUser := setupUser(t)
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
 		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
-		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+		req, resp := makeRequest(t, makeToken(t), apiserver.ChangePasswordRequest{
 			NewPassword: "NewPassword456",
 		})
 
@@ -420,11 +505,11 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 
 	t.Run("missing new password", func(t *testing.T) {
 		c := qt.New(t)
-		testUser := setupUser()
+		testUser := setupUser(t)
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
 		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
-		req, resp := makeRequest(makeToken(), apiserver.ChangePasswordRequest{
+		req, resp := makeRequest(t, makeToken(t), apiserver.ChangePasswordRequest{
 			CurrentPassword: "OldPassword123",
 		})
 
@@ -440,7 +525,7 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{}}
 		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
 
-		req, resp := makeRequest("", apiserver.ChangePasswordRequest{
+		req, resp := makeRequest(t, "", apiserver.ChangePasswordRequest{
 			CurrentPassword: "OldPassword123",
 			NewPassword:     "NewPassword456",
 		})
@@ -450,5 +535,34 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 		router.ServeHTTP(resp, req)
 
 		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	})
+
+	t.Run("revokes tokens and blacklists user on success", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		refreshRegistry := &mockRefreshTokenRegistryForAuth{}
+		blacklister := &mockTokenBlacklisterForAuth{}
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:         userRegistry,
+			RefreshTokenRegistry: refreshRegistry,
+			BlacklistService:     blacklister,
+			JWTSecret:            jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), apiserver.ChangePasswordRequest{
+			CurrentPassword: "OldPassword123",
+			NewPassword:     "NewPassword456",
+		})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		c.Assert(refreshRegistry.revokeByUserIDCalled, qt.IsTrue)
+		c.Assert(refreshRegistry.revokeByUserIDArg, qt.Equals, "user-123")
+		c.Assert(blacklister.blacklistUserTokensCalled, qt.IsTrue)
+		c.Assert(blacklister.blacklistUserTokensUserID, qt.Equals, "user-123")
 	})
 }
