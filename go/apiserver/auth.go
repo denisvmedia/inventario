@@ -499,11 +499,15 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	// Apply the new password hash.
 	if err := user.SetPassword(req.NewPassword); err != nil {
 		slog.Error("Failed to hash new password", "user_id", user.ID, "error", err)
+		errMsg := "failed to hash new password"
+		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Failed to process new password", http.StatusInternalServerError)
 		return
 	}
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
 		slog.Error("Failed to update user password", "user_id", user.ID, "error", err)
+		errMsg := "failed to update user password"
+		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
