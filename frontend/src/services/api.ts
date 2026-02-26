@@ -38,21 +38,28 @@ const api = axios.create({
 
 // -----------------------------------------------------------------------
 // CSRF token management
-// In-memory storage: survives navigation but is lost on page reload.
-// The token is recovered automatically via GET /auth/me on startup.
+// The token is kept in both memory (for fast access) and sessionStorage
+// (so it survives a page reload while being automatically cleared when
+// the tab or browser window is closed).
 // -----------------------------------------------------------------------
+const CSRF_SESSION_KEY = 'inventario_csrf_token'
 let csrfToken: string | null = null
 
 export function setCsrfToken(token: string): void {
   csrfToken = token
+  sessionStorage.setItem(CSRF_SESSION_KEY, token)
 }
 
 export function getCsrfToken(): string | null {
+  if (!csrfToken) {
+    csrfToken = sessionStorage.getItem(CSRF_SESSION_KEY)
+  }
   return csrfToken
 }
 
 export function clearCsrfToken(): void {
   csrfToken = null
+  sessionStorage.removeItem(CSRF_SESSION_KEY)
 }
 
 // Function to get token from localStorage
@@ -77,9 +84,10 @@ api.interceptors.request.use(
       console.log('❌ No token available for request')
     }
 
-    // Add CSRF token to state-changing requests.
-    if (config.method && mutatingMethods.has(config.method.toLowerCase()) && csrfToken) {
-      config.headers['X-CSRF-Token'] = csrfToken
+    // Add CSRF token to state-changing requests (also checks sessionStorage after a reload).
+    const currentCsrfToken = getCsrfToken()
+    if (config.method && mutatingMethods.has(config.method.toLowerCase()) && currentCsrfToken) {
+      config.headers['X-CSRF-Token'] = currentCsrfToken
     }
 
     console.log('API Request URL:', config.url)
@@ -174,10 +182,10 @@ api.interceptors.response.use(
             if (originalRequest.headers) {
               originalRequest.headers.Authorization = `Bearer ${newToken}`
             }
-            // Update the in-memory CSRF token from the refresh response.
+            // Update the CSRF token from the refresh response (persisted to sessionStorage).
             const newCsrfToken = refreshResponse.data?.csrf_token
             if (newCsrfToken) {
-              csrfToken = newCsrfToken
+              setCsrfToken(newCsrfToken)
             }
             onRefreshed(newToken)
             return api(originalRequest)
