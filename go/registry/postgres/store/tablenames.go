@@ -22,6 +22,7 @@ type TableNames struct {
 	RefreshTokens           func() TableName
 	AuditLogs               func() TableName
 	EmailVerifications      func() TableName
+	PasswordResets          func() TableName
 }
 
 var DefaultTableNames = TableNames{
@@ -44,6 +45,7 @@ var DefaultTableNames = TableNames{
 	RefreshTokens:           func() TableName { return "refresh_tokens" },
 	AuditLogs:               func() TableName { return "audit_logs" },
 	EmailVerifications:      func() TableName { return "email_verifications" },
+	PasswordResets:          func() TableName { return "password_resets" },
 }
 
 // NewTableNames returns the default table names
