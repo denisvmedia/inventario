@@ -26,6 +26,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/internal/httpserver"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -119,6 +120,7 @@ func (c *Command) registerFlags() {
 	flags.BoolVar(&c.config.AuthRateLimitDisabled, "no-auth-rate-limit", c.config.AuthRateLimitDisabled, "Disable auth rate limiting entirely (for testing only — do not use in production)")
 	flags.StringVar(&c.config.CSRFRedisURL, "csrf-redis-url", c.config.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
 	flags.StringVar(&c.config.AllowedOrigins, "allowed-origins", c.config.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com); leave empty in development for AllowAll")
+	flags.StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode: open (anyone can register), approval (admin must approve), or closed (registration disabled)")
 }
 
 func (c *Command) runCommand() error {
@@ -219,6 +221,9 @@ func (c *Command) runCommand() error {
 			}
 		}
 	}
+
+	// Set registration mode from config (defaults to "open" when unset).
+	params.RegistrationMode = models.RegistrationMode(c.config.RegistrationMode)
 
 	err = validation.Validate(params)
 	if err != nil {

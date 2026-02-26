@@ -23,6 +23,7 @@ import (
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -100,6 +101,7 @@ type Params struct {
 	AuthRateLimiter   services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
 	CSRFService       services.CSRFService               // CSRF token service (Redis or in-memory)
 	AllowedOrigins    []string                           // Allowed CORS origins; empty = allow all (dev mode)
+	RegistrationMode  models.RegistrationMode            // Registration mode: open, approval, or closed
 }
 
 func (p *Params) Validate() error {
@@ -219,6 +221,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			EmailService:         services.NewStubEmailService(),
 			AuditService:         auditSvc,
 			RateLimiter:          rateLimiter,
+			RegistrationMode:     params.RegistrationMode,
 		}))
 		r.Route("/currencies", Currencies())
 		// Seed endpoint is public for e2e testing and development

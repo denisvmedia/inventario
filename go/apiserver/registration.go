@@ -23,6 +23,7 @@ type RegistrationAPI struct {
 	emailService         services.EmailService
 	auditService         services.AuditLogger
 	rateLimiter          services.AuthRateLimiter
+	registrationMode     models.RegistrationMode
 }
 
 // RegistrationParams holds all dependencies needed by the registration API.
@@ -32,6 +33,9 @@ type RegistrationParams struct {
 	EmailService         services.EmailService
 	AuditService         services.AuditLogger
 	RateLimiter          services.AuthRateLimiter
+	// RegistrationMode controls how new registrations are processed.
+	// Defaults to RegistrationModeOpen when zero value.
+	RegistrationMode models.RegistrationMode
 }
 
 // RegisterRequest is the body for POST /register.
@@ -43,12 +47,17 @@ type RegisterRequest struct {
 
 // Registration sets up the registration API routes.
 func Registration(params RegistrationParams) func(r chi.Router) {
+	mode := params.RegistrationMode
+	if mode == "" {
+		mode = models.RegistrationModeOpen
+	}
 	api := &RegistrationAPI{
 		userRegistry:         params.UserRegistry,
 		verificationRegistry: params.VerificationRegistry,
 		emailService:         params.EmailService,
 		auditService:         params.AuditService,
 		rateLimiter:          params.RateLimiter,
+		registrationMode:     mode,
 	}
 	return func(r chi.Router) {
 		r.With(RegistrationRateLimitMiddleware(params.RateLimiter)).Post("/register", api.handleRegister)
@@ -57,8 +66,24 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 	}
 }
 
-// handleRegister creates a new inactive user account and sends a verification email.
+// handleRegister creates a new inactive user account.
+// Behaviour depends on the configured RegistrationMode:
+//   - closed    → 403 Forbidden; registration is disabled.
+//   - approval  → account created (inactive); admin must activate; no verification email sent.
+//   - open      → account created (inactive); verification email sent; activates on token click.
 func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Request) {
+	// Enforce registration mode before processing anything.
+	switch api.registrationMode {
+	case models.RegistrationModeClosed:
+		http.Error(w, "Registrations are currently closed", http.StatusForbidden)
+		return
+	case models.RegistrationModeOpen, models.RegistrationModeApproval:
+		// proceed
+	default:
+		// treat unknown modes as open to avoid accidental lock-out
+		slog.Warn("Unknown registration mode, treating as open", "mode", api.registrationMode)
+	}
+
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -77,7 +102,12 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Always respond with success to prevent user enumeration.
-	successMsg := "Registration successful. Please check your email to verify your account."
+	var successMsg string
+	if api.registrationMode == models.RegistrationModeApproval {
+		successMsg = "Registration successful. Your account is pending administrator approval."
+	} else {
+		successMsg = "Registration successful. Please check your email to verify your account."
+	}
 
 	// Silently ignore duplicate registrations.
 	if existing, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email); err == nil && existing != nil {
@@ -110,13 +140,18 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	api.sendVerification(r, created)
+	if api.registrationMode == models.RegistrationModeOpen {
+		// Send email verification only in open mode.
+		api.sendVerification(r, created)
+	} else {
+		// Approval mode: log that the account is pending admin approval.
+		slog.Info("User registered, pending admin approval", "user_id", created.ID, "email", created.Email)
+	}
+
 	api.logAuth(r, "register", &created.ID, true, "")
-	slog.Info("User registered", "user_id", created.ID, "email", created.Email)
+	slog.Info("User registered", "user_id", created.ID, "email", created.Email, "mode", api.registrationMode)
 	writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
 }
-
-
 
 // handleVerifyEmail activates a user account when a valid token is presented.
 func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
