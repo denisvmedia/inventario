@@ -34,7 +34,7 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 
 	// Create test users
 	users := make([]*models.User, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		user := models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: fmt.Sprintf("bench-user-%d", i)},
@@ -123,7 +123,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 	// Create multiple users
 	numUsers := 50
 	users := make([]*models.User, numUsers)
-	for i := 0; i < numUsers; i++ {
+	for i := range numUsers {
 		user := models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: fmt.Sprintf("load-user-%d", i)},
@@ -202,7 +202,7 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 			}
 
 			// Create multiple commodities per user
-			for j := 0; j < 10; j++ {
+			for j := range 10 {
 				commodity := models.Commodity{
 					TenantAwareEntityID: models.TenantAwareEntityID{
 						EntityID: models.EntityID{ID: fmt.Sprintf("load-commodity-%d-%d", userIndex, j)},
@@ -438,7 +438,7 @@ func TestUserIsolation_PerformanceRegression(t *testing.T) {
 	userAwareCommodityRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
 
-	for i := 0; i < numCommodities; i++ {
+	for i := range numCommodities {
 		commodity := models.Commodity{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				EntityID: models.EntityID{ID: fmt.Sprintf("perf-commodity-%d", i)},

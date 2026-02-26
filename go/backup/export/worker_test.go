@@ -51,8 +51,7 @@ func TestExportWorkerStartStop(t *testing.T) {
 	exportService := NewExportService(factorySet, uploadLocation)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Test initial state
 	c.Assert(worker.IsRunning(), qt.IsFalse, qt.Commentf("Worker should not be running initially"))
@@ -235,32 +234,27 @@ func TestExportWorkerConcurrentAccess(t *testing.T) {
 	exportService := NewExportService(factorySet, uploadLocation)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	var wg sync.WaitGroup
 	const numGoroutines = 10
 
 	// Test concurrent IsRunning calls
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 100; j++ {
+	for range numGoroutines {
+		wg.Go(func() {
+			for range 100 {
 				_ = worker.IsRunning()
 			}
-		}()
+		})
 	}
 
 	// Test concurrent Start/Stop calls
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 5 {
+		wg.Go(func() {
 			worker.Start(ctx)
 			time.Sleep(10 * time.Millisecond)
 			worker.Stop()
-		}()
+		})
 	}
 
 	wg.Wait()

@@ -11,7 +11,7 @@ func ZeroOfType[T any](t T) (zero T) {
 	val := reflect.ValueOf(t)
 
 	// If it's a nil pointer, we need to create a new instance
-	if val.Kind() == reflect.Ptr && val.IsNil() {
+	if val.Kind() == reflect.Pointer && val.IsNil() {
 		// Create a new instance of the pointed-to type
 		newVal := reflect.New(val.Type().Elem())
 		result, _ := newVal.Interface().(T)
@@ -26,7 +26,7 @@ func ZeroOfType[T any](t T) (zero T) {
 // ptr must be a non-nil pointer to a struct, and the function returns an error if the field is not settable or not found.
 func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 	v := reflect.ValueOf(ptr)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return errors.New("ptr must be a non-nil pointer to struct")
 	}
 	v = v.Elem()
@@ -44,11 +44,11 @@ func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 			}
 			val := reflect.ValueOf(value)
 			switch {
-			case field.Type.Kind() == reflect.Ptr && val.Kind() != reflect.Ptr:
+			case field.Type.Kind() == reflect.Pointer && val.Kind() != reflect.Pointer:
 				valPtr := reflect.New(field.Type.Elem())
 				valPtr.Elem().Set(val.Convert(field.Type.Elem()))
 				fieldValue.Set(valPtr)
-			case field.Type.Kind() != reflect.Ptr && val.Kind() == reflect.Ptr:
+			case field.Type.Kind() != reflect.Pointer && val.Kind() == reflect.Pointer:
 				fieldValue.Set(val.Elem().Convert(field.Type))
 			default:
 				fieldValue.Set(val.Convert(field.Type))
@@ -61,7 +61,7 @@ func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 
 func GetFieldByConfigfieldTag[T any](ptr T, tag string) (any, error) {
 	v := reflect.ValueOf(ptr)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return nil, errors.New("ptr must be a non-nil pointer to struct")
 	}
 	v = v.Elem()
@@ -89,7 +89,7 @@ func GetFieldByConfigfieldTag[T any](ptr T, tag string) (any, error) {
 func StructToMap[T any](ptr T) (map[string]any, error) {
 	v := reflect.ValueOf(ptr)
 	switch v.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v.IsNil() {
 			return nil, errors.New("ptr must be a non-nil pointer to struct")
 		}
@@ -124,7 +124,7 @@ func StructToMap[T any](ptr T) (map[string]any, error) {
 // and returns the dereferenced value if it's a pointer.
 func validateAndDereferenceStruct(v reflect.Value) (reflect.Value, error) {
 	switch v.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v.IsNil() {
 			return reflect.Value{}, errors.New("ptr must be a non-nil pointer to struct")
 		}
@@ -148,7 +148,7 @@ func handleEmbeddedStruct(field reflect.StructField, fieldValue reflect.Value, f
 	}
 
 	// Handle pointer to embedded structs
-	if field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct && !fieldValue.IsNil() {
+	if field.Type.Kind() == reflect.Pointer && field.Type.Elem().Kind() == reflect.Struct && !fieldValue.IsNil() {
 		return extractDBFields(field.Type.Elem(), fieldValue.Elem(), fields, placeholders, params)
 	}
 

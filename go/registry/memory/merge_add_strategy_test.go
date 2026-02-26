@@ -1230,7 +1230,7 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 
 	factorySet := NewFactorySet()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testUser := models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				TenantID: fmt.Sprintf("test-tenant-%d", i+1),
@@ -1378,7 +1378,7 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 			// Verify security: at least one attack should fail or have errors
 			totalErrors := 0
 			securityViolations := 0
-			for i := 0; i < 2; i++ {
+			for i := range 2 {
 				if errors[i] != nil {
 					totalErrors++
 					c.Logf("User %d got error: %v", i+1, errors[i])
@@ -1409,7 +1409,7 @@ func TestRestoreService_SecurityValidation_ConcurrentAttacks(t *testing.T) {
 
 				// Check if any files were actually linked to the target commodity
 				totalFilesProcessed := 0
-				for i := 0; i < 2; i++ {
+				for i := range 2 {
 					if results[i] != nil {
 						// Count total files processed (images, invoices, manuals)
 						filesProcessed := results[i].ImageCount + results[i].InvoiceCount + results[i].ManualCount

@@ -148,15 +148,9 @@ func (s *Service) ListTenants(ctx context.Context, req TenantListRequest) (*Tena
 
 	// Apply pagination
 	totalCount := len(filteredTenants)
-	start := req.Offset
-	if start > len(filteredTenants) {
-		start = len(filteredTenants)
-	}
+	start := min(req.Offset, len(filteredTenants))
 
-	end := start + req.Limit
-	if end > len(filteredTenants) {
-		end = len(filteredTenants)
-	}
+	end := min(start+req.Limit, len(filteredTenants))
 
 	paginatedTenants := filteredTenants[start:end]
 
@@ -353,15 +347,9 @@ func (s *Service) ListUsers(ctx context.Context, req UserListRequest) (*UserList
 
 	// Apply pagination
 	totalCount := len(filteredUsers)
-	start := req.Offset
-	if start > len(filteredUsers) {
-		start = len(filteredUsers)
-	}
+	start := min(req.Offset, len(filteredUsers))
 
-	end := start + req.Limit
-	if end > len(filteredUsers) {
-		end = len(filteredUsers)
-	}
+	end := min(start+req.Limit, len(filteredUsers))
 
 	paginatedUsers := filteredUsers[start:end]
 

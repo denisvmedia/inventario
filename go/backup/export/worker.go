@@ -51,17 +51,15 @@ func (w *ExportWorker) Start(ctx context.Context) {
 	}
 
 	w.isRunning = true
-	w.wg.Add(1)
 
-	go func() {
-		defer w.wg.Done()
+	w.wg.Go(func() {
 		defer func() {
 			w.mu.Lock()
 			w.isRunning = false
 			w.mu.Unlock()
 		}()
 		w.run(ctx)
-	}()
+	})
 
 	slog.Info("Export worker started")
 }

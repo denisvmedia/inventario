@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -129,10 +130,8 @@ func (v *RestoreSecurityValidator) ValidateRelationshipIntegrity(ctx context.Con
 		return fmt.Errorf("unknown file type: %s", fileType)
 	}
 
-	for _, allowedParent := range allowedParents {
-		if allowedParent == parentEntityType {
-			return nil // Valid relationship
-		}
+	if slices.Contains(allowedParents, parentEntityType) {
+		return nil // Valid relationship
 	}
 
 	return fmt.Errorf("invalid relationship: %s files cannot be linked to %s entities", fileType, parentEntityType)

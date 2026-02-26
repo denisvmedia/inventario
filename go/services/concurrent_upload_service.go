@@ -106,10 +106,7 @@ func (s *MemoryConcurrentUploadService) GetUploadStatus(ctx context.Context, use
 
 	opConfig := s.GetOperationConfig(operationName)
 	activeUploads := s.getCurrentCount(userID, operationName)
-	availableUploads := opConfig.MaxSlotsPerUser - activeUploads
-	if availableUploads < 0 {
-		availableUploads = 0
-	}
+	availableUploads := max(opConfig.MaxSlotsPerUser-activeUploads, 0)
 
 	var retryAfter *int
 	if activeUploads >= opConfig.MaxSlotsPerUser {

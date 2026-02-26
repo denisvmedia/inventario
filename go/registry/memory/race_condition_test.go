@@ -94,10 +94,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 		c.Assert(retrievedCommodity.Name, qt.Equals, "Updated Commodity")
 
 		// Step 3: Test concurrent access with different users
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			// User2 should not be able to access user1's commodity
 			// Create a fresh registry set for user2 to simulate concurrent access
 			freshRegistrySet2 := must.Must(factorySet.CreateUserRegistrySet(ctx2))
@@ -108,14 +105,11 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 				errors <- err
 				return
 			}
-		}()
+		})
 
 		// Step 4: Multiple concurrent accesses by user1 should all work
-		for i := 0; i < 5; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+		for range 5 {
+			wg.Go(func() {
 				// Create a fresh registry set for each concurrent access
 				concurrentRegistrySet1 := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
@@ -126,7 +120,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 				}
 
 				results <- retrievedCommodity.Name
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -188,11 +182,8 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 		var wg sync.WaitGroup
 		errors := make(chan error, 10)
 
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+		for range 10 {
+			wg.Go(func() {
 				// Each goroutine gets its own user-aware registry set
 				concurrentRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
@@ -211,7 +202,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 					errors <- err
 					return
 				}
-			}()
+			})
 		}
 
 		wg.Wait()

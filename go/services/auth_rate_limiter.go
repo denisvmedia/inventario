@@ -153,10 +153,7 @@ func (l *RedisAuthRateLimiter) checkRate(ctx context.Context, key string, limit 
 	count := int(asInt64(slice[1]))
 	resetAtNs := asInt64(slice[2])
 
-	remaining := limit - count
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(limit-count, 0)
 
 	resetAt := now.Add(window)
 	if resetAtNs > 0 {
@@ -400,10 +397,7 @@ func (l *InMemoryAuthRateLimiter) checkRate(key string, limit int, window time.D
 	ts = append(ts, now)
 	l.windows[key] = ts
 
-	remaining := limit - len(ts)
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(limit-len(ts), 0)
 
 	return RateLimitResult{
 		Allowed:   true,

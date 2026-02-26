@@ -95,10 +95,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 			// Fail-open: do not make auth unavailable due to limiter backend outages.
 			slog.Error("Failed to check account lockout", "error", err)
 		} else if locked {
-			retryAfter := int(time.Until(resetAt).Seconds())
-			if retryAfter < 0 {
-				retryAfter = 0
-			}
+			retryAfter := max(int(time.Until(resetAt).Seconds()), 0)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 			http.Error(w, "Too many failed login attempts. Please try again later.", http.StatusTooManyRequests)
 			return

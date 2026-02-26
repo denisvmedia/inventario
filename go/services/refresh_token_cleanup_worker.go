@@ -37,11 +37,9 @@ func (w *RefreshTokenCleanupWorker) Start(ctx context.Context) {
 		slog.Warn("RefreshTokenCleanupWorker: no registry configured, skipping startup")
 		return
 	}
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
+	w.wg.Go(func() {
 		w.runCleanup(ctx)
-	}()
+	})
 	slog.Info("Refresh token cleanup worker started", "interval", w.cleanupInterval)
 }
 

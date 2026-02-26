@@ -215,7 +215,7 @@ func TestInMemoryCSRFService_ConcurrentAccess(t *testing.T) {
 
 	// Test concurrent token generation and retrieval using WaitGroup
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()

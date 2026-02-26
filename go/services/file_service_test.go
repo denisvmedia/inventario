@@ -400,8 +400,8 @@ func TestFileService_ExportFileDeletion_Integration(t *testing.T) {
 // createTestImage creates a test image with the given dimensions and color
 func createTestImage(width, height int, c color.Color) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
+	for y := range height {
+		for x := range width {
 			img.Set(x, y, c)
 		}
 	}

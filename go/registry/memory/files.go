@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -161,15 +162,9 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 	total := len(allFiles)
 
 	// Apply pagination
-	start := offset
-	if start > total {
-		start = total
-	}
+	start := min(offset, total)
 
-	end := start + limit
-	if end > total {
-		end = total
-	}
+	end := min(start+limit, total)
 
 	paginatedFiles := allFiles[start:end]
 	return paginatedFiles, total, nil
@@ -244,11 +239,8 @@ func (r *FileRegistry) FindByMimeType(ctx context.Context, mimeTypes []string) (
 
 	var filtered []*models.FileEntity
 	for _, file := range allFiles {
-		for _, mimeType := range mimeTypes {
-			if file.MIMEType == mimeType {
-				filtered = append(filtered, file)
-				break
-			}
+		if slices.Contains(mimeTypes, file.MIMEType) {
+			filtered = append(filtered, file)
 		}
 	}
 

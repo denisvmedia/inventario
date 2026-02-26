@@ -136,10 +136,7 @@ func (m *Migrator) dryRun(files []string, templateData TemplateData) error {
 
 		// Show a preview of the processed content (first few lines)
 		lines := strings.Split(content, "\n")
-		previewLines := 5
-		if len(lines) < previewLines {
-			previewLines = len(lines)
-		}
+		previewLines := min(len(lines), 5)
 
 		fmt.Fprintln(m.w, "📝 Preview (first few lines):")
 		for j := 0; j < previewLines; j++ {

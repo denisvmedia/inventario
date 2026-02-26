@@ -186,7 +186,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 
 	// Create default system configuration with CZK as main currency for the first test user
 	systemConfig := models.SettingsObject{
-		MainCurrency: ptr.To("CZK"),
+		MainCurrency: new("CZK"),
 	}
 
 	// Set user context for settings (settings are per-user)
@@ -215,7 +215,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) error { //nolin
 
 		// User 2 gets EUR as main currency (different from user 1)
 		systemConfig2 := models.SettingsObject{
-			MainCurrency: ptr.To("EUR"),
+			MainCurrency: new("EUR"),
 		}
 
 		err = userRegistrySet2.SettingsRegistry.Save(userCtx2, systemConfig2)

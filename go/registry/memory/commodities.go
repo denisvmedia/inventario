@@ -377,19 +377,13 @@ func (r *CommodityRegistry) calculateSimpleSimilarity(s1, s2 string) float64 {
 
 	commonWords := 0
 	for _, word1 := range words1 {
-		for _, word2 := range words2 {
-			if word1 == word2 {
-				commonWords++
-				break
-			}
+		if slices.Contains(words2, word1) {
+			commonWords++
 		}
 	}
 
 	// Simple similarity score: common words / max words
-	maxWords := len(words1)
-	if len(words2) > maxWords {
-		maxWords = len(words2)
-	}
+	maxWords := max(len(words2), len(words1))
 
 	return float64(commonWords) / float64(maxWords)
 }
@@ -572,20 +566,14 @@ func (r *CommodityRegistry) FindBySerialNumbers(ctx context.Context, serialNumbe
 	var filtered []*models.Commodity
 	for _, commodity := range commodities {
 		// Check main serial number
-		for _, searchSerial := range serialNumbers {
-			if commodity.SerialNumber == searchSerial {
-				filtered = append(filtered, commodity)
-				break
-			}
+		if slices.Contains(serialNumbers, commodity.SerialNumber) {
+			filtered = append(filtered, commodity)
 		}
 
 		// Check extra serial numbers
 		for _, extraSerial := range commodity.ExtraSerialNumbers {
-			for _, searchSerial := range serialNumbers {
-				if extraSerial == searchSerial {
-					filtered = append(filtered, commodity)
-					break
-				}
+			if slices.Contains(serialNumbers, extraSerial) {
+				filtered = append(filtered, commodity)
 			}
 		}
 	}
