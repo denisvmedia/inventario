@@ -83,8 +83,11 @@ const isSystemActive = computed(() => {
 
 // Initialize global settings when the app starts
 onMounted(async () => {
-  // Fetch main currency
-  await settingsStore.fetchMainCurrency()
+  // Fetch main currency only when the user is authenticated to avoid
+  // triggering a 401 redirect when visiting public pages like /register.
+  if (authStore.isAuthenticated) {
+    await settingsStore.fetchMainCurrency()
+  }
 })
 </script>
 
