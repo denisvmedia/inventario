@@ -1,3 +1,4 @@
+//nolint:dupl // PasswordReset and EmailVerification are structurally similar but semantically distinct domain models.
 package models
 
 import (
