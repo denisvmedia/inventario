@@ -148,6 +148,13 @@ const routes = [
     name: 'file-edit',
     component: () => import('../views/files/FileEditView.vue')
   },
+  // Admin
+  {
+    path: '/admin/users',
+    name: 'admin-users',
+    component: () => import('../views/admin/UserListView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
   // System (formerly Settings)
   {
     path: '/system',
@@ -222,6 +229,12 @@ router.beforeEach(async (to, from) => {
   if (requiresAuth && !authStore.isAuthenticated) {
     console.log('Authentication required, redirecting to login')
     return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  // If route requires admin and user is not an admin, redirect to home
+  if (to.meta.requiresAdmin && authStore.userRole !== 'admin') {
+    console.log('Admin access required, redirecting to home')
+    return { path: '/' }
   }
 
   // If user is authenticated and trying to access login page, redirect to home

@@ -128,6 +128,56 @@ export interface RestoreStep {
   updated_date: string;
 }
 
+// -----------------------------------------------------------------------
+// Admin User Management
+// -----------------------------------------------------------------------
+
+export type UserRole = 'admin' | 'user'
+
+export interface AdminUser {
+  id: string
+  email: string
+  name: string
+  role: UserRole
+  is_active: boolean
+  tenant_id: string
+  created_date?: string
+  updated_date?: string
+  last_login_at?: string
+}
+
+export interface AdminUserCreateRequest {
+  email: string
+  password: string
+  name: string
+  role: UserRole
+  is_active: boolean
+}
+
+export interface AdminUserUpdateRequest {
+  email?: string
+  name?: string
+  role?: UserRole
+  is_active?: boolean
+  password?: string
+}
+
+export interface AdminUserListResponse {
+  users: AdminUser[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+export interface AdminUserListParams {
+  role?: UserRole | ''
+  active?: boolean | null
+  search?: string
+  page?: number
+  per_page?: number
+}
+
 export interface RestoreOperation {
   id: string;
   export_id: string;
