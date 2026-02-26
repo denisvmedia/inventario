@@ -85,15 +85,14 @@ watch(
 
 function submit() {
   if (props.user) {
-    // Build update payload with only provided fields.
-    const data: AdminUserUpdateRequest = {
-      name: form.name,
-      email: form.email,
-      role: form.role,
-      is_active: form.is_active,
-    }
+    // Build update payload with only fields that differ from the original user.
+    const data: Partial<AdminUserUpdateRequest> = {}
+    if (form.name !== props.user.name) data.name = form.name
+    if (form.email !== props.user.email) data.email = form.email
+    if (form.role !== props.user.role) data.role = form.role
+    if (form.is_active !== props.user.is_active) data.is_active = form.is_active
     if (form.password) data.password = form.password
-    emit('save', data)
+    emit('save', data as AdminUserUpdateRequest)
   } else {
     const data: AdminUserCreateRequest = {
       name: form.name,

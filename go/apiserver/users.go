@@ -28,7 +28,7 @@ type AdminUserCreateRequest struct {
 	Password string          `json:"password"`
 	Name     string          `json:"name"`
 	Role     models.UserRole `json:"role"`
-	IsActive bool            `json:"is_active"`
+	IsActive *bool           `json:"is_active,omitempty"`
 }
 
 // AdminUserUpdateRequest is the body for PUT /users/:id.
@@ -223,12 +223,16 @@ func (api *UsersAPI) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
 	user := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: currentUser.TenantID},
 		Email:               req.Email,
 		Name:                req.Name,
 		Role:                req.Role,
-		IsActive:            req.IsActive,
+		IsActive:            isActive,
 	}
 	if err := user.SetPassword(req.Password); err != nil {
 		slog.Error("Failed to hash password", "error", err)
