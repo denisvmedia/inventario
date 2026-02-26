@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -149,6 +150,13 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	}
 	created, err := api.userRegistry.Create(r.Context(), user)
 	if err != nil {
+		// Handle race condition: two concurrent requests with the same email may both pass
+		// the duplicate check above. Return the same success response to prevent enumeration.
+		if errors.Is(err, registry.ErrEmailAlreadyExists) {
+			api.logAuth(r, "register_duplicate", nil, false, "email already registered")
+			writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
+			return
+		}
 		slog.Error("Failed to create user during registration", "email", req.Email, "error", err)
 		http.Error(w, "Failed to create account", http.StatusInternalServerError)
 		return
@@ -248,7 +256,8 @@ func (api *RegistrationAPI) handleResendVerification(w http.ResponseWriter, r *h
 		return
 	}
 	if user.IsActive {
-		writeJSON(w, http.StatusOK, map[string]string{"message": "Email already verified."})
+		// Return the same generic message to prevent email enumeration.
+		writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
 		return
 	}
 
@@ -257,7 +266,18 @@ func (api *RegistrationAPI) handleResendVerification(w http.ResponseWriter, r *h
 }
 
 // sendVerification generates a token, stores it, and delegates sending to the email service.
+// Any previously issued (unverified) tokens for the user are invalidated before the new one is created
+// so that only one valid verification link is active at a time.
 func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User) {
+	// Invalidate all existing tokens for this user before issuing a new one.
+	if existing, err := api.verificationRegistry.GetByUserID(r.Context(), user.ID); err == nil {
+		for _, old := range existing {
+			if err := api.verificationRegistry.Delete(r.Context(), old.ID); err != nil {
+				slog.Warn("Failed to delete old verification token", "id", old.ID, "user_id", user.ID, "error", err)
+			}
+		}
+	}
+
 	token, err := models.GenerateVerificationToken()
 	if err != nil {
 		slog.Error("Failed to generate verification token", "user_id", user.ID, "error", err)
@@ -274,7 +294,17 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		slog.Error("Failed to store verification record", "user_id", user.ID, "error", err)
 		return
 	}
-	verificationURL := fmt.Sprintf("/verify-email?token=%s", token)
+
+	// Build an absolute URL so the link works when embedded in a real email.
+	// X-Forwarded-Proto is respected for deployments behind a reverse proxy.
+	scheme := "http"
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	} else if r.TLS != nil {
+		scheme = "https"
+	}
+	verificationURL := fmt.Sprintf("%s://%s/verify-email?token=%s", scheme, r.Host, token)
+
 	go func() {
 		if err := api.emailService.SendVerificationEmail(user.Email, user.Name, verificationURL); err != nil {
 			slog.Error("Failed to send verification email", "user_id", user.ID, "error", err)

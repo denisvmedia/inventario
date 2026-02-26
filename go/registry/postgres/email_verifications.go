@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -36,6 +37,9 @@ func (r *EmailVerificationRegistry) newRepo() *store.NonRLSRepository[models.Ema
 func (r *EmailVerificationRegistry) Create(ctx context.Context, ev models.EmailVerification) (*models.EmailVerification, error) {
 	if ev.UserID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+	if ev.TenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 	if ev.Token == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Token"))
@@ -139,10 +143,8 @@ func (r *EmailVerificationRegistry) GetByUserID(ctx context.Context, userID stri
 // DeleteExpired removes all records whose ExpiresAt timestamp is in the past.
 func (r *EmailVerificationRegistry) DeleteExpired(ctx context.Context) error {
 	return r.newRepo().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		_, err := tx.ExecContext(ctx,
-			`DELETE FROM `+string(r.tableNames.EmailVerifications())+` WHERE expires_at < $1`,
-			time.Now(),
-		)
+		query := fmt.Sprintf(`DELETE FROM %s WHERE expires_at < $1`, r.tableNames.EmailVerifications())
+		_, err := tx.ExecContext(ctx, query, time.Now())
 		return err
 	})
 }
