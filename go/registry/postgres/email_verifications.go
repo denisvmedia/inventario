@@ -146,4 +146,3 @@ func (r *EmailVerificationRegistry) DeleteExpired(ctx context.Context) error {
 		return err
 	})
 }
-

@@ -42,4 +42,3 @@ func (s *StubEmailService) SendPasswordResetEmail(to, name, resetURL string) err
 	)
 	return nil
 }
-

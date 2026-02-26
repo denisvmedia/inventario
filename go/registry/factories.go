@@ -110,11 +110,11 @@ type FactorySet struct {
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
-	TenantRegistry                        TenantRegistry              // TenantRegistry doesn't need factory as it's not user-aware
-	UserRegistry                          UserRegistry                // UserRegistry doesn't need factory as it's not user-aware
-	RefreshTokenRegistry                  RefreshTokenRegistry        // RefreshTokenRegistry doesn't need factory as it's not user-aware
-	AuditLogRegistry                      AuditLogRegistry            // AuditLogRegistry doesn't need factory as it's not user-aware
-	EmailVerificationRegistry             EmailVerificationRegistry   // EmailVerificationRegistry doesn't need factory as it's not user-aware
+	TenantRegistry                        TenantRegistry            // TenantRegistry doesn't need factory as it's not user-aware
+	UserRegistry                          UserRegistry              // UserRegistry doesn't need factory as it's not user-aware
+	RefreshTokenRegistry                  RefreshTokenRegistry      // RefreshTokenRegistry doesn't need factory as it's not user-aware
+	AuditLogRegistry                      AuditLogRegistry          // AuditLogRegistry doesn't need factory as it's not user-aware
+	EmailVerificationRegistry             EmailVerificationRegistry // EmailVerificationRegistry doesn't need factory as it's not user-aware
 }
 
 // CreateUserRegistrySet creates a complete set of user-aware registries from factories

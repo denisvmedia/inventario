@@ -306,8 +306,8 @@ type Set struct {
 	TenantRegistry                 TenantRegistry
 	UserRegistry                   UserRegistry
 	RefreshTokenRegistry           RefreshTokenRegistry
-	AuditLogRegistry               AuditLogRegistry            // AuditLogRegistry doesn't need factory as it's not user-aware
-	EmailVerificationRegistry      EmailVerificationRegistry   // EmailVerificationRegistry doesn't need factory as it's not user-aware
+	AuditLogRegistry               AuditLogRegistry          // AuditLogRegistry doesn't need factory as it's not user-aware
+	EmailVerificationRegistry      EmailVerificationRegistry // EmailVerificationRegistry doesn't need factory as it's not user-aware
 }
 
 // Search-related types and functions

@@ -95,4 +95,3 @@ func (r *EmailVerificationRegistry) DeleteExpired(ctx context.Context) error {
 	r.lock.Unlock()
 	return nil
 }
-
