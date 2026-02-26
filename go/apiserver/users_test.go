@@ -126,8 +126,6 @@ func TestUsersAPI_GetUser_CrossTenantReturns404(t *testing.T) {
 	c.Assert(w.Code, qt.Equals, http.StatusNotFound)
 }
 
-
-
 // -----------------------------------------------------------------------
 // Create user – duplicate email
 // -----------------------------------------------------------------------
