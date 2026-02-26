@@ -142,6 +142,9 @@ func (r *PasswordResetRegistry) GetByUserID(ctx context.Context, userID string) 
 
 // DeleteByUserID removes all password-reset records for the given user.
 func (r *PasswordResetRegistry) DeleteByUserID(ctx context.Context, userID string) error {
+	if userID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
 	return r.newRepo().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`DELETE FROM %s WHERE user_id = $1`, r.tableNames.PasswordResets())
 		_, err := tx.ExecContext(ctx, query, userID)

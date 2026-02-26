@@ -93,6 +93,9 @@ func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(htt
 				return
 			}
 
+			// Limit body size before reading to prevent DoS via large payloads.
+			const maxBodyBytes = 4096
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 			// Read the body so we can extract the email, then restore it.
 			bodyBytes, err := io.ReadAll(r.Body)
 			_ = r.Body.Close()

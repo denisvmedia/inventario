@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import authService from '../services/authService'
 
@@ -87,7 +87,7 @@ const isFormValid = computed(() =>
   password.value.length >= 8 && password.value === confirmPassword.value
 )
 
-onMounted(() => {
+watchEffect(() => {
   token.value = (route.query.token as string) || ''
 })
 

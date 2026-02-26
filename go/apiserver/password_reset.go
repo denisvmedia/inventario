@@ -98,8 +98,20 @@ func (api *PasswordResetAPI) handleForgotPassword(w http.ResponseWriter, r *http
 	successMsg := "If that email address is registered you will receive a password reset link shortly."
 
 	user, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email)
-	if err != nil || user == nil {
-		// Don't reveal whether the email exists.
+	if err != nil {
+		if !errors.Is(err, registry.ErrNotFound) {
+			// Real DB error — log it, but still return a generic response to prevent enumeration.
+			slog.ErrorContext(r.Context(), "failed to look up user by email for password reset",
+				"email", req.Email, "error", err)
+			api.logAuth(r, "forgot_password_error", nil, false, "user lookup error")
+		} else {
+			api.logAuth(r, "forgot_password_unknown", nil, false, "email not found")
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
+		return
+	}
+	if user == nil {
+		// Defensive: GetByEmail should return ErrNotFound, not nil.
 		api.logAuth(r, "forgot_password_unknown", nil, false, "email not found")
 		writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
 		return
@@ -176,14 +188,9 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Mark the token as used.
-	now := time.Now()
-	pr.UsedAt = &now
-	if _, err := api.passwordResetRegistry.Update(r.Context(), *pr); err != nil {
-		slog.Warn("Failed to mark password-reset token as used", "id", pr.ID, "error", err)
-	}
-
-	// Invalidate all other pending reset tokens for this user.
+	// Consume the token by deleting all reset tokens for this user.
+	// The token is considered used-on-delete: once gone, GetByToken returns ErrNotFound.
+	// The audit log below records the successful use.
 	if err := api.passwordResetRegistry.DeleteByUserID(r.Context(), pr.UserID); err != nil {
 		slog.Warn("Failed to clean up password-reset tokens", "user_id", pr.UserID, "error", err)
 	}
