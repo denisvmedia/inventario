@@ -246,17 +246,23 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 
 // invalidateUserSessions revokes all refresh tokens for the user and blacklists active access tokens.
 func (api *PasswordResetAPI) invalidateUserSessions(ctx context.Context, userID string) {
-	if api.refreshTokenRegistry == nil {
-		return
+	if api.refreshTokenRegistry != nil {
+		tokens, err := api.refreshTokenRegistry.GetByUserID(ctx, userID)
+		if err != nil {
+			slog.Warn("Failed to list refresh tokens for session invalidation", "user_id", userID, "error", err)
+		} else {
+			for _, rt := range tokens {
+				if err := api.refreshTokenRegistry.Delete(ctx, rt.ID); err != nil {
+					slog.Warn("Failed to delete refresh token", "id", rt.ID, "user_id", userID, "error", err)
+				}
+			}
+		}
 	}
-	tokens, err := api.refreshTokenRegistry.GetByUserID(ctx, userID)
-	if err != nil {
-		slog.Warn("Failed to list refresh tokens for session invalidation", "user_id", userID, "error", err)
-		return
-	}
-	for _, rt := range tokens {
-		if err := api.refreshTokenRegistry.Delete(ctx, rt.ID); err != nil {
-			slog.Warn("Failed to delete refresh token", "id", rt.ID, "user_id", userID, "error", err)
+
+	// Blacklist all active access tokens for the user to ensure immediate session invalidation.
+	if api.blacklistService != nil {
+		if err := api.blacklistService.BlacklistUserTokens(ctx, userID, 2*accessTokenExpiration); err != nil {
+			slog.Warn("Failed to blacklist user tokens for session invalidation", "user_id", userID, "error", err)
 		}
 	}
 }
