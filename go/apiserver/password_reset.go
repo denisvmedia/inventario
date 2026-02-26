@@ -170,7 +170,12 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 
 	user, err := api.userRegistry.Get(r.Context(), pr.UserID)
 	if err != nil {
-		http.Error(w, "User not found", http.StatusBadRequest)
+		if errors.Is(err, registry.ErrNotFound) {
+			http.Error(w, "User not found", http.StatusBadRequest)
+			return
+		}
+		slog.Error("Failed to look up user for password reset", "user_id", pr.UserID, "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	if err := user.SetPassword(req.NewPassword); err != nil {

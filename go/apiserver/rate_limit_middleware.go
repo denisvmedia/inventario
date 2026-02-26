@@ -3,7 +3,6 @@ package apiserver
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -95,23 +94,21 @@ func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(htt
 			}
 
 			// Limit body size before reading to prevent DoS via large payloads.
+			// io.LimitReader is used instead of http.MaxBytesReader so the middleware
+			// has sole control over the response: LimitReader never writes to the
+			// ResponseWriter, eliminating any risk of a double-write on oversized payloads.
 			const maxBodyBytes = 4096
-			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
-			// Read the body so we can extract the email, then restore it.
-			bodyBytes, err := io.ReadAll(r.Body)
+			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
 			_ = r.Body.Close()
 			if err != nil {
-				// If the body exceeded the size limit, return 413 immediately.
-				// Without this check, the downstream handler would be called with a
-				// truncated body, potentially causing a double-write to the response.
-				var maxBytesErr *http.MaxBytesError
-				if errors.As(err, &maxBytesErr) {
-					http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
-					return
-				}
-				// Other read errors: pass the (possibly partial) body to the handler.
+				// Read error: let the handler deal with it.
 				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 				next.ServeHTTP(w, r)
+				return
+			}
+			if int64(len(bodyBytes)) > maxBodyBytes {
+				// Body exceeded the limit; we control the 413 here exclusively.
+				http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
 				return
 			}
 			if len(bodyBytes) == 0 {
