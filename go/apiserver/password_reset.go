@@ -273,4 +273,3 @@ func (api *PasswordResetAPI) logAuth(r *http.Request, action string, userID *str
 	tenantID := DefaultTenantID
 	api.auditService.LogAuth(r.Context(), action, userID, &tenantID, success, r, ep)
 }
-

@@ -229,7 +229,7 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			RefreshTokenRegistry:  params.FactorySet.RefreshTokenRegistry,
 			BlacklistService:      blacklist,
 			EmailService:          services.NewStubEmailService(),
-			AuditService:         auditSvc,
+			AuditService:          auditSvc,
 			RateLimiter:           rateLimiter,
 		}))
 		r.Route("/currencies", Currencies())

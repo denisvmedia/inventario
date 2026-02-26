@@ -115,4 +115,3 @@ func (r *PasswordResetRegistry) DeleteExpired(ctx context.Context) error {
 	r.lock.Unlock()
 	return nil
 }
-
