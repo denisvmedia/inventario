@@ -20,6 +20,7 @@ type Config struct {
 	AuthRateLimitDisabled         bool   `yaml:"auth_rate_limit_disabled" env:"AUTH_RATE_LIMIT_DISABLED" env-default:"false"`
 	CSRFRedisURL                  string `yaml:"csrf_redis_url" env:"CSRF_REDIS_URL" env-default:""`
 	AllowedOrigins                string `yaml:"allowed_origins" env:"ALLOWED_ORIGINS" env-default:""`
+	RegistrationMode              string `yaml:"registration_mode" env:"REGISTRATION_MODE" env-default:"open"`
 }
 
 func (c *Config) setDefaults() {

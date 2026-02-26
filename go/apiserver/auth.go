@@ -76,6 +76,18 @@ type LogoutResponse struct {
 }
 
 // login handles user authentication and issues both an access token and a refresh token.
+// @Summary Login
+// @Description Authenticate a user with email and password. Issues an access token in the response body and sets a refresh token as an httpOnly cookie.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param data body LoginRequest true "Login credentials"
+// @Success 200 {object} LoginResponse "OK"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized - invalid credentials"
+// @Failure 403 {string} string "Forbidden - account disabled"
+// @Failure 429 {string} string "Too Many Requests - account locked"
+// @Router /auth/login [post]
 func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -176,6 +188,14 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 }
 
 // refresh issues a new access token using a valid refresh token cookie.
+// @Summary Refresh access token
+// @Description Issue a new short-lived access token using the refresh token stored in the httpOnly cookie.
+// @Tags auth
+// @Produce json
+// @Success 200 {object} LoginResponse "OK"
+// @Failure 401 {string} string "Unauthorized - missing, invalid, or expired refresh token"
+// @Failure 501 {string} string "Not Implemented - refresh tokens not supported"
+// @Router /auth/refresh [post]
 func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	if api.refreshTokenRegistry == nil {
 		http.Error(w, "Refresh tokens not supported", http.StatusNotImplemented)
@@ -317,6 +337,12 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 }
 
 // logout revokes the current access token and refresh token.
+// @Summary Logout
+// @Description Revoke the current session's access token and clear the refresh token cookie.
+// @Tags auth
+// @Produce json
+// @Success 200 {object} LogoutResponse "OK"
+// @Router /auth/logout [post]
 func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	// Blacklist the current access token so it cannot be reused within its remaining TTL.
 	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
@@ -362,6 +388,13 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 // handleGetCurrentUser returns the current authenticated user.
 // It also refreshes and exposes the CSRF token in the X-CSRF-Token response
 // header so the frontend can recover its CSRF token after a page reload.
+// @Summary Get current user
+// @Description Return the currently authenticated user's profile. Also refreshes the CSRF token in the X-CSRF-Token response header.
+// @Tags auth
+// @Produce json
+// @Success 200 {object} models.User "OK"
+// @Failure 401 {string} string "Unauthorized"
+// @Router /auth/me [get]
 func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	user := appctx.UserFromContext(r.Context())
 	if user == nil {
@@ -458,6 +491,16 @@ func Auth(params AuthParams) func(r chi.Router) {
 // handleChangePassword allows an authenticated user to change their own password.
 // On success it revokes all existing refresh tokens and blacklists existing access
 // tokens so that all active sessions are invalidated and the user must re-login.
+// @Summary Change password
+// @Description Change the authenticated user's password. All existing sessions are invalidated on success.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param data body ChangePasswordRequest true "Change password request"
+// @Success 200 {object} map[string]string "OK"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized"
+// @Router /auth/change-password [post]
 func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	user := appctx.UserFromContext(r.Context())
 	if user == nil {

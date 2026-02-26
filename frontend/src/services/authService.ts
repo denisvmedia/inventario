@@ -5,6 +5,20 @@ export interface LoginRequest {
   password: string
 }
 
+export interface RegisterRequest {
+  email: string
+  password: string
+  name: string
+}
+
+export interface RegisterResponse {
+  message: string
+}
+
+export interface VerifyEmailResponse {
+  message: string
+}
+
 export interface LoginResponse {
   access_token: string
   token_type: string
@@ -113,6 +127,44 @@ class AuthService {
 
     console.log('getCurrentUser - Mapped user data:', user)
     return user
+  }
+
+  /**
+   * Register a new user account.
+   * The server always returns success to prevent user enumeration.
+   */
+  async register(req: RegisterRequest): Promise<RegisterResponse> {
+    const response = await api.post('/api/v1/register', req, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
+    return response.data
+  }
+
+  /**
+   * Verify an email address using the token from the verification link.
+   */
+  async verifyEmail(token: string): Promise<VerifyEmailResponse> {
+    const response = await api.get('/api/v1/verify-email', {
+      params: { token },
+      headers: { 'Accept': 'application/json' }
+    })
+    return response.data
+  }
+
+  /**
+   * Request a new verification email for an unverified account.
+   */
+  async resendVerification(email: string): Promise<RegisterResponse> {
+    const response = await api.post('/api/v1/resend-verification', { email }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
+    return response.data
   }
 
   /**

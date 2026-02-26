@@ -71,6 +71,18 @@ type uploadsAPI struct {
 	thumbnailConfig    services.ThumbnailGenerationConfig
 }
 
+// handleImageUpload handles image file upload for a commodity.
+// @Summary Upload commodity image
+// @Description Upload a single image file and associate it with the specified commodity.
+// @Tags uploads
+// @Accept multipart/form-data
+// @Produce json-api
+// @Param commodityID path string true "Commodity ID"
+// @Param file formData file true "Image file to upload"
+// @Success 201 {object} jsonapi.FileResponse "Created"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /uploads/commodities/{commodityID}/image [post]
 func (api *uploadsAPI) handleImageUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -170,6 +182,18 @@ func (api *uploadsAPI) handleImageUpload(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// handleManualUpload handles manual/document file upload for a commodity.
+// @Summary Upload commodity manual
+// @Description Upload a single document file as a manual and associate it with the specified commodity.
+// @Tags uploads
+// @Accept multipart/form-data
+// @Produce json-api
+// @Param commodityID path string true "Commodity ID"
+// @Param file formData file true "Document file to upload"
+// @Success 201 {object} jsonapi.FileResponse "Created"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /uploads/commodities/{commodityID}/manual [post]
 func (api *uploadsAPI) handleManualUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -272,6 +296,18 @@ func (api *uploadsAPI) handleManualUpload(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// handleInvoiceUpload handles invoice file upload for a commodity.
+// @Summary Upload commodity invoice
+// @Description Upload a single document file as an invoice and associate it with the specified commodity.
+// @Tags uploads
+// @Accept multipart/form-data
+// @Produce json-api
+// @Param commodityID path string true "Commodity ID"
+// @Param file formData file true "Document file to upload"
+// @Success 201 {object} jsonapi.FileResponse "Created"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /uploads/commodities/{commodityID}/invoice [post]
 func (api *uploadsAPI) handleInvoiceUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -374,6 +410,17 @@ func (api *uploadsAPI) handleInvoiceUpload(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// handleFileUpload handles generic file upload (not linked to any entity).
+// @Summary Upload a file
+// @Description Upload a single file of any type. The file is stored and a file entity is created without a linked entity.
+// @Tags uploads
+// @Accept multipart/form-data
+// @Produce json-api
+// @Param file formData file true "File to upload"
+// @Success 201 {object} jsonapi.FileResponse "Created"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /uploads/file [post]
 func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// Get user-aware settings registry from context
 	registrySet := RegistrySetFromContext(r.Context())
@@ -467,6 +514,17 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// handleRestoreUpload handles XML backup file upload for restore operations.
+// @Summary Upload restore file
+// @Description Upload an XML backup file to be used for a restore operation.
+// @Tags uploads
+// @Accept multipart/form-data
+// @Produce json-api
+// @Param file formData file true "XML backup file to upload"
+// @Success 200 {object} jsonapi.UploadResponse "OK"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /uploads/restores [post]
 func (api *uploadsAPI) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
 	uploadedFiles := uploadedFilesFromContext(r.Context())
 	if len(uploadedFiles) == 0 {

@@ -243,6 +243,20 @@ type AuditLogRegistry interface {
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) error
 }
 
+// EmailVerificationRegistry manages email address verification tokens.
+type EmailVerificationRegistry interface {
+	Registry[models.EmailVerification]
+
+	// GetByToken returns an email verification record by its token value.
+	GetByToken(ctx context.Context, token string) (*models.EmailVerification, error)
+
+	// GetByUserID returns all email verification records for a user.
+	GetByUserID(ctx context.Context, userID string) ([]*models.EmailVerification, error)
+
+	// DeleteExpired removes all records whose expiry time has passed.
+	DeleteExpired(ctx context.Context) error
+}
+
 type UserRegistry interface {
 	Registry[models.User]
 
@@ -292,7 +306,8 @@ type Set struct {
 	TenantRegistry                 TenantRegistry
 	UserRegistry                   UserRegistry
 	RefreshTokenRegistry           RefreshTokenRegistry
-	AuditLogRegistry               AuditLogRegistry // AuditLogRegistry doesn't need factory as it's not user-aware
+	AuditLogRegistry               AuditLogRegistry          // AuditLogRegistry doesn't need factory as it's not user-aware
+	EmailVerificationRegistry      EmailVerificationRegistry // EmailVerificationRegistry doesn't need factory as it's not user-aware
 }
 
 // Search-related types and functions
