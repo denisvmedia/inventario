@@ -7,6 +7,11 @@ definitions:
       new_password:
         type: string
     type: object
+  apiserver.ForgotPasswordRequest:
+    properties:
+      email:
+        type: string
+    type: object
   apiserver.LoginRequest:
     properties:
       email:
@@ -46,6 +51,13 @@ definitions:
   apiserver.ResendVerificationRequest:
     properties:
       email:
+        type: string
+    type: object
+  apiserver.ResetPasswordRequest:
+    properties:
+      new_password:
+        type: string
+      token:
         type: string
     type: object
   apiserver.SeedRequest:
@@ -2613,6 +2625,39 @@ paths:
       summary: Download file thumbnail
       tags:
       - files
+  /forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Send a password-reset link to the given email address. Always returns
+        200 to prevent email enumeration.
+      parameters:
+      - description: Email address
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
+      summary: Request a password reset
+      tags:
+      - auth
   /locations:
     get:
       consumes:
@@ -2801,6 +2846,39 @@ paths:
       summary: Resend verification email
       tags:
       - registration
+  /reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Validate a password-reset token and update the user's password.
+        Invalidates all existing sessions.
+      parameters:
+      - description: Reset token and new password
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request - missing, invalid, or expired token
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Reset password using a token
+      tags:
+      - auth
   /search:
     get:
       consumes:

@@ -168,6 +168,33 @@ class AuthService {
   }
 
   /**
+   * Request a password-reset link for the given email address.
+   * Always resolves with a message (email enumeration prevention is done server-side).
+   */
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const response = await api.post('/api/v1/forgot-password', { email }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
+    return response.data
+  }
+
+  /**
+   * Reset the user's password using a one-time token from the reset link.
+   */
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    const response = await api.post('/api/v1/reset-password', { token, new_password: newPassword }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
+    return response.data
+  }
+
+  /**
    * Refresh the access token using the httpOnly refresh token cookie.
    * Returns the new access token on success, or null on failure.
    */

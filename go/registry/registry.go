@@ -243,6 +243,23 @@ type AuditLogRegistry interface {
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) error
 }
 
+// PasswordResetRegistry manages password-reset tokens.
+type PasswordResetRegistry interface {
+	Registry[models.PasswordReset]
+
+	// GetByToken returns a password-reset record by its token value.
+	GetByToken(ctx context.Context, token string) (*models.PasswordReset, error)
+
+	// GetByUserID returns all password-reset records belonging to the given user.
+	GetByUserID(ctx context.Context, userID string) ([]*models.PasswordReset, error)
+
+	// DeleteByUserID removes all password-reset records for the given user.
+	DeleteByUserID(ctx context.Context, userID string) error
+
+	// DeleteExpired removes all records whose ExpiresAt timestamp is in the past.
+	DeleteExpired(ctx context.Context) error
+}
+
 // EmailVerificationRegistry manages email address verification tokens.
 type EmailVerificationRegistry interface {
 	Registry[models.EmailVerification]
@@ -308,6 +325,7 @@ type Set struct {
 	RefreshTokenRegistry           RefreshTokenRegistry
 	AuditLogRegistry               AuditLogRegistry          // AuditLogRegistry doesn't need factory as it's not user-aware
 	EmailVerificationRegistry      EmailVerificationRegistry // EmailVerificationRegistry doesn't need factory as it's not user-aware
+	PasswordResetRegistry          PasswordResetRegistry     // PasswordResetRegistry doesn't need factory as it's not user-aware
 }
 
 // Search-related types and functions

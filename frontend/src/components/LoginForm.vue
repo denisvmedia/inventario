@@ -47,6 +47,10 @@
           <span v-else>Sign In</span>
         </button>
 
+        <p class="forgot-password-link">
+          <RouterLink to="/forgot-password">Forgot password?</RouterLink>
+        </p>
+
         <p class="register-link">
           Don't have an account?
           <RouterLink to="/register">Create one</RouterLink>
@@ -214,6 +218,13 @@ defineExpose({
 
 .login-button:hover:not(:disabled) {
   opacity: 0.9;
+}
+
+.forgot-password-link {
+  text-align: right;
+  color: #666;
+  font-size: 0.85rem;
+  margin: -0.5rem 0 0;
 }
 
 .register-link {

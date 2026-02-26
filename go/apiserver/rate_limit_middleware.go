@@ -1,10 +1,14 @@
 package apiserver
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/denisvmedia/inventario/services"
@@ -60,6 +64,78 @@ func RegistrationRateLimitMiddleware(limiter services.AuthRateLimiter) func(http
 			res, err := limiter.CheckRegistrationAttempt(r.Context(), ip)
 			if err != nil {
 				slog.Error("Registration rate limiter error", "error", err, "ip", ip)
+				next.ServeHTTP(w, r)
+				return
+			}
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", res.Limit))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", res.ResetAt.Unix()))
+			if !res.Allowed {
+				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// PasswordResetRateLimitMiddleware enforces per-email rate limiting on the forgot-password endpoint.
+// The email is extracted from the request body and used as the rate-limit key.
+// Because we must read the body to extract the email, this middleware reconstructs
+// r.Body so the downstream handler can still decode it.
+func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Limit body size before reading to prevent DoS via large payloads.
+			// io.LimitReader is used instead of http.MaxBytesReader so the middleware
+			// has sole control over the response: LimitReader never writes to the
+			// ResponseWriter, eliminating any risk of a double-write on oversized payloads.
+			const maxBodyBytes = 4096
+			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
+			_ = r.Body.Close()
+			if err != nil {
+				// Read error: let the handler deal with it.
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				next.ServeHTTP(w, r)
+				return
+			}
+			if int64(len(bodyBytes)) > maxBodyBytes {
+				// Body exceeded the limit; we control the 413 here exclusively.
+				http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			if len(bodyBytes) == 0 {
+				// Empty body: let the handler return 400.
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Restore body for the downstream handler.
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+			// Extract the email without consuming the body permanently.
+			var peek struct {
+				Email string `json:"email"`
+			}
+			_ = json.Unmarshal(bodyBytes, &peek)
+
+			email := strings.ToLower(strings.TrimSpace(peek.Email))
+			if email == "" {
+				// Let the handler return 400.
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			res, err := limiter.CheckPasswordResetAttempt(r.Context(), email)
+			if err != nil {
+				slog.Error("Password-reset rate limiter error", "error", err, "email", email)
 				next.ServeHTTP(w, r)
 				return
 			}
