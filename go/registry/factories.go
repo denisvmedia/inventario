@@ -115,6 +115,7 @@ type FactorySet struct {
 	RefreshTokenRegistry                  RefreshTokenRegistry      // RefreshTokenRegistry doesn't need factory as it's not user-aware
 	AuditLogRegistry                      AuditLogRegistry          // AuditLogRegistry doesn't need factory as it's not user-aware
 	EmailVerificationRegistry             EmailVerificationRegistry // EmailVerificationRegistry doesn't need factory as it's not user-aware
+	PasswordResetRegistry                 PasswordResetRegistry     // PasswordResetRegistry doesn't need factory as it's not user-aware
 }
 
 // CreateUserRegistrySet creates a complete set of user-aware registries from factories
@@ -209,6 +210,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		RefreshTokenRegistry:           fs.RefreshTokenRegistry,
 		AuditLogRegistry:               fs.AuditLogRegistry,
 		EmailVerificationRegistry:      fs.EmailVerificationRegistry,
+		PasswordResetRegistry:          fs.PasswordResetRegistry,
 	}, nil
 }
 
@@ -234,5 +236,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		RefreshTokenRegistry:           fs.RefreshTokenRegistry,
 		AuditLogRegistry:               fs.AuditLogRegistry,
 		EmailVerificationRegistry:      fs.EmailVerificationRegistry,
+		PasswordResetRegistry:          fs.PasswordResetRegistry,
 	}
 }

@@ -223,6 +223,15 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			RateLimiter:          rateLimiter,
 			RegistrationMode:     params.RegistrationMode,
 		}))
+		r.Group(PasswordReset(PasswordResetParams{
+			UserRegistry:          params.FactorySet.UserRegistry,
+			PasswordResetRegistry: params.FactorySet.PasswordResetRegistry,
+			RefreshTokenRegistry:  params.FactorySet.RefreshTokenRegistry,
+			BlacklistService:      blacklist,
+			EmailService:          services.NewStubEmailService(),
+			AuditService:         auditSvc,
+			RateLimiter:           rateLimiter,
+		}))
 		r.Route("/currencies", Currencies())
 		// Seed endpoint is public for e2e testing and development
 		// Seed uses a service registry set since it's a privileged operation in dev/test
