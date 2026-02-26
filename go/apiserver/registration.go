@@ -199,7 +199,12 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 
 	ev, err := api.verificationRegistry.GetByToken(r.Context(), token)
 	if err != nil {
-		http.Error(w, "Invalid or expired verification token", http.StatusBadRequest)
+		if errors.Is(err, registry.ErrNotFound) || errors.Is(err, registry.ErrFieldRequired) {
+			http.Error(w, "Invalid or expired verification token", http.StatusBadRequest)
+			return
+		}
+		slog.Error("Failed to look up verification token", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	if ev.IsVerified() {
@@ -320,11 +325,12 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 	}).String()
 
 	go func() {
-		// TODO: replace context.TODO() with a proper background context carrying a
-		// timeout once the real SMTP backend is implemented in Phase 3. Do NOT use
-		// r.Context() here — the request may already be cancelled by the time the
-		// email transport dials the server.
-		if err := api.emailService.SendVerificationEmail(context.TODO(), user.Email, user.Name, verificationURL); err != nil {
+		// Do NOT use r.Context() here — the request may already be cancelled by the
+		// time the email transport dials the server.
+		// TODO(Phase 3): revisit timeout value once the real SMTP transport is implemented.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := api.emailService.SendVerificationEmail(ctx, user.Email, user.Name, verificationURL); err != nil {
 			slog.Error("Failed to send verification email", "user_id", user.ID, "error", err)
 		}
 	}()

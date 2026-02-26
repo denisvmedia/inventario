@@ -12,7 +12,7 @@
 # Prerequisites: docker, go
 #
 # The script:
-#   1. Spins up a fresh postgres container on a random high port
+#   1. Spins up a fresh postgres container on a fixed high port (15432; see issue #1006 to make it dynamic)
 #   2. Builds inventool from source
 #   3. Runs bootstrap to create required roles and extensions
 #   4. Applies all existing migrations (so the generator can diff)
