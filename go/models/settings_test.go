@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/go-extras/go-kit/ptr"
 
 	"github.com/denisvmedia/inventario/models"
 )
@@ -21,31 +20,31 @@ func TestSettingsObject_Set_HappyPath(t *testing.T) {
 			name:        "set main currency",
 			field:       "system.main_currency",
 			value:       "USD",
-			expectedGet: ptr.To("USD"),
+			expectedGet: new("USD"),
 		},
 		{
 			name:        "set theme",
 			field:       "uiconfig.theme",
 			value:       "dark",
-			expectedGet: ptr.To("dark"),
+			expectedGet: new("dark"),
 		},
 		{
 			name:        "set show debug info",
 			field:       "uiconfig.show_debug_info",
 			value:       true,
-			expectedGet: ptr.To(true),
+			expectedGet: new(true),
 		},
 		{
 			name:        "set default date format",
 			field:       "uiconfig.default_date_format",
 			value:       "YYYY-MM-DD",
-			expectedGet: ptr.To("YYYY-MM-DD"),
+			expectedGet: new("YYYY-MM-DD"),
 		},
 		{
 			name:        "set show debug info false",
 			field:       "uiconfig.show_debug_info",
 			value:       false,
-			expectedGet: ptr.To(false),
+			expectedGet: new(false),
 		},
 	}
 
@@ -109,42 +108,42 @@ func TestSettingsObject_Get_HappyPath(t *testing.T) {
 		{
 			name: "get main currency",
 			settings: models.SettingsObject{
-				MainCurrency: ptr.To("EUR"),
+				MainCurrency: new("EUR"),
 			},
 			field:    "system.main_currency",
-			expected: ptr.To("EUR"),
+			expected: new("EUR"),
 		},
 		{
 			name: "get theme",
 			settings: models.SettingsObject{
-				Theme: ptr.To("light"),
+				Theme: new("light"),
 			},
 			field:    "uiconfig.theme",
-			expected: ptr.To("light"),
+			expected: new("light"),
 		},
 		{
 			name: "get show debug info true",
 			settings: models.SettingsObject{
-				ShowDebugInfo: ptr.To(true),
+				ShowDebugInfo: new(true),
 			},
 			field:    "uiconfig.show_debug_info",
-			expected: ptr.To(true),
+			expected: new(true),
 		},
 		{
 			name: "get show debug info false",
 			settings: models.SettingsObject{
-				ShowDebugInfo: ptr.To(false),
+				ShowDebugInfo: new(false),
 			},
 			field:    "uiconfig.show_debug_info",
-			expected: ptr.To(false),
+			expected: new(false),
 		},
 		{
 			name: "get default date format",
 			settings: models.SettingsObject{
-				DefaultDateFormat: ptr.To("DD/MM/YYYY"),
+				DefaultDateFormat: new("DD/MM/YYYY"),
 			},
 			field:    "uiconfig.default_date_format",
-			expected: ptr.To("DD/MM/YYYY"),
+			expected: new("DD/MM/YYYY"),
 		},
 		{
 			name:     "get nil main currency",
@@ -236,25 +235,25 @@ func TestSettingsObject_SetAndGet_Integration(t *testing.T) {
 	// Verify all values
 	mainCurrency, err := settings.Get("system.main_currency")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mainCurrency, qt.DeepEquals, ptr.To("GBP"))
+	c.Assert(mainCurrency, qt.DeepEquals, new("GBP"))
 
 	theme, err := settings.Get("uiconfig.theme")
 	c.Assert(err, qt.IsNil)
-	c.Assert(theme, qt.DeepEquals, ptr.To("dark"))
+	c.Assert(theme, qt.DeepEquals, new("dark"))
 
 	showDebugInfo, err := settings.Get("uiconfig.show_debug_info")
 	c.Assert(err, qt.IsNil)
-	c.Assert(showDebugInfo, qt.DeepEquals, ptr.To(true))
+	c.Assert(showDebugInfo, qt.DeepEquals, new(true))
 
 	dateFormat, err := settings.Get("uiconfig.default_date_format")
 	c.Assert(err, qt.IsNil)
-	c.Assert(dateFormat, qt.DeepEquals, ptr.To("MM/DD/YYYY"))
+	c.Assert(dateFormat, qt.DeepEquals, new("MM/DD/YYYY"))
 
 	// Verify the struct fields directly
-	c.Assert(settings.MainCurrency, qt.DeepEquals, ptr.To("GBP"))
-	c.Assert(settings.Theme, qt.DeepEquals, ptr.To("dark"))
-	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, ptr.To(true))
-	c.Assert(settings.DefaultDateFormat, qt.DeepEquals, ptr.To("MM/DD/YYYY"))
+	c.Assert(settings.MainCurrency, qt.DeepEquals, new("GBP"))
+	c.Assert(settings.Theme, qt.DeepEquals, new("dark"))
+	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, new(true))
+	c.Assert(settings.DefaultDateFormat, qt.DeepEquals, new("MM/DD/YYYY"))
 }
 
 // TestSettingsObject_OverwriteValues tests overwriting existing values.
@@ -262,10 +261,10 @@ func TestSettingsObject_OverwriteValues(t *testing.T) {
 	c := qt.New(t)
 
 	settings := &models.SettingsObject{
-		MainCurrency:      ptr.To("USD"),
-		Theme:             ptr.To("light"),
-		ShowDebugInfo:     ptr.To(false),
-		DefaultDateFormat: ptr.To("YYYY-MM-DD"),
+		MainCurrency:      new("USD"),
+		Theme:             new("light"),
+		ShowDebugInfo:     new(false),
+		DefaultDateFormat: new("YYYY-MM-DD"),
 	}
 
 	// Overwrite values
@@ -282,10 +281,10 @@ func TestSettingsObject_OverwriteValues(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify new values
-	c.Assert(settings.MainCurrency, qt.DeepEquals, ptr.To("EUR"))
-	c.Assert(settings.Theme, qt.DeepEquals, ptr.To("dark"))
-	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, ptr.To(true))
-	c.Assert(settings.DefaultDateFormat, qt.DeepEquals, ptr.To("DD-MM-YYYY"))
+	c.Assert(settings.MainCurrency, qt.DeepEquals, new("EUR"))
+	c.Assert(settings.Theme, qt.DeepEquals, new("dark"))
+	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, new(true))
+	c.Assert(settings.DefaultDateFormat, qt.DeepEquals, new("DD-MM-YYYY"))
 }
 
 // TestSettingsObject_TypeConversion tests type conversion scenarios.
@@ -300,25 +299,25 @@ func TestSettingsObject_TypeConversion(t *testing.T) {
 			name:     "string to pointer string",
 			field:    "system.main_currency",
 			setValue: "USD",
-			expected: ptr.To("USD"),
+			expected: new("USD"),
 		},
 		{
 			name:     "bool to pointer bool",
 			field:    "uiconfig.show_debug_info",
 			setValue: true,
-			expected: ptr.To(true),
+			expected: new(true),
 		},
 		{
 			name:     "pointer string to pointer string",
 			field:    "uiconfig.theme",
-			setValue: ptr.To("dark"),
-			expected: ptr.To("dark"),
+			setValue: new("dark"),
+			expected: new("dark"),
 		},
 		{
 			name:     "pointer bool to pointer bool",
 			field:    "uiconfig.show_debug_info",
-			setValue: ptr.To(false),
-			expected: ptr.To(false),
+			setValue: new(false),
+			expected: new(false),
 		},
 	}
 
@@ -346,19 +345,19 @@ func TestSettingsObject_EmptyValues(t *testing.T) {
 	// Set empty string
 	err := settings.Set("system.main_currency", "")
 	c.Assert(err, qt.IsNil)
-	c.Assert(settings.MainCurrency, qt.DeepEquals, ptr.To(""))
+	c.Assert(settings.MainCurrency, qt.DeepEquals, new(""))
 
 	// Set false boolean
 	err = settings.Set("uiconfig.show_debug_info", false)
 	c.Assert(err, qt.IsNil)
-	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, ptr.To(false))
+	c.Assert(settings.ShowDebugInfo, qt.DeepEquals, new(false))
 
 	// Verify via Get method
 	currency, err := settings.Get("system.main_currency")
 	c.Assert(err, qt.IsNil)
-	c.Assert(currency, qt.DeepEquals, ptr.To(""))
+	c.Assert(currency, qt.DeepEquals, new(""))
 
 	debugInfo, err := settings.Get("uiconfig.show_debug_info")
 	c.Assert(err, qt.IsNil)
-	c.Assert(debugInfo, qt.DeepEquals, ptr.To(false))
+	c.Assert(debugInfo, qt.DeepEquals, new(false))
 }

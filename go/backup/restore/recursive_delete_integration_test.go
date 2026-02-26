@@ -154,7 +154,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	// Create multiple locations with areas and commodities
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		location := models.Location{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				TenantID: "test-tenant-id",
@@ -165,7 +165,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 		createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
 		c.Assert(err, qt.IsNil)
 
-		for j := 0; j < 2; j++ {
+		for j := range 2 {
 			area := models.Area{
 				TenantAwareEntityID: models.TenantAwareEntityID{
 					TenantID: "test-tenant-id",

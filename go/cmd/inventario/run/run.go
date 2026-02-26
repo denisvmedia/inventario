@@ -212,7 +212,7 @@ func (c *Command) runCommand() error {
 
 	// Parse allowed origins (comma-separated). An empty value means AllowAll (dev mode).
 	if c.config.AllowedOrigins != "" {
-		for _, origin := range strings.Split(c.config.AllowedOrigins, ",") {
+		for origin := range strings.SplitSeq(c.config.AllowedOrigins, ",") {
 			origin = strings.TrimSpace(origin)
 			if origin != "" {
 				params.AllowedOrigins = append(params.AllowedOrigins, origin)

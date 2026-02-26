@@ -274,7 +274,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 
 		// Each user creates multiple entities
 		for userIndex, registrySet := range registrySets {
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				commodity := models.Commodity{
 					TenantAwareEntityID: models.TenantAwareEntityID{
 						EntityID: models.EntityID{ID: fmt.Sprintf("bulk-commodity-user%d-%d", userIndex+1, i)},

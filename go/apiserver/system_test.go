@@ -116,8 +116,8 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 
 	// Add some test settings
 	testSettings := models.SettingsObject{
-		MainCurrency: ptr("USD"),
-		Theme:        ptr("dark"),
+		MainCurrency: new("USD"),
+		Theme:        new("dark"),
 	}
 
 	userCtx := appctx.WithUser(c.Context(), createdUser)
@@ -169,6 +169,8 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 }
 
 // Helper function for pointer creation
+//
+//go:fix inline
 func ptr[T any](v T) *T {
-	return &v
+	return new(v)
 }

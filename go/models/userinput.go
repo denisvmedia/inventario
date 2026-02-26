@@ -90,7 +90,7 @@ func handleEmbeddedStructForUserInput(field reflect.StructField, fieldValue refl
 	}
 
 	// Handle pointer to embedded structs
-	if field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct && !fieldValue.IsNil() {
+	if field.Type.Kind() == reflect.Pointer && field.Type.Elem().Kind() == reflect.Struct && !fieldValue.IsNil() {
 		sanitizeUserInputRecursive(field.Type.Elem(), fieldValue.Elem())
 		return nil
 	}
@@ -107,7 +107,7 @@ func handleChildStructForUserInput(field reflect.StructField, fieldValue reflect
 	}
 
 	// Handle pointer to child structs
-	if field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct && !fieldValue.IsNil() {
+	if field.Type.Kind() == reflect.Pointer && field.Type.Elem().Kind() == reflect.Struct && !fieldValue.IsNil() {
 		sanitizeUserInputRecursive(field.Type.Elem(), fieldValue.Elem())
 		return nil
 	}

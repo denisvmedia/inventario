@@ -20,7 +20,7 @@ func TestInMemoryAuthRateLimiter_SlidingWindow(t *testing.T) {
 	ctx := context.Background()
 	ip := "1.2.3.4"
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		res, err := lim.CheckLoginAttempt(ctx, ip)
 		c.Assert(err, qt.IsNil)
 		c.Assert(res.Allowed, qt.IsTrue)
@@ -55,7 +55,7 @@ func TestInMemoryAuthRateLimiter_AccountLockout(t *testing.T) {
 	ctx := context.Background()
 	email := "test@example.com"
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		locked, _, err := lim.RecordFailedLogin(ctx, email)
 		c.Assert(err, qt.IsNil)
 		c.Assert(locked, qt.IsFalse)

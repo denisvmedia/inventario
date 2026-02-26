@@ -229,7 +229,7 @@ func TestAuthSecurity_LoginRateLimitHeadersAndBlocking(t *testing.T) {
 	}
 
 	// First 5 should succeed.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		w := makeReq("10.0.0.1")
 		qt.New(t).Assert(w.Code, qt.Equals, http.StatusOK)
 		qt.New(t).Assert(w.Header().Get("X-RateLimit-Limit"), qt.Equals, "5")
@@ -281,7 +281,7 @@ func TestAuthSecurity_AccountLockoutAfterFailedLogins(t *testing.T) {
 	}
 
 	// 5 failed attempts from different IPs should still lead to lockout.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		w := makeReq("10.0.0." + strconv.Itoa(i+1))
 		qt.New(t).Assert(w.Code, qt.Equals, http.StatusUnauthorized)
 	}

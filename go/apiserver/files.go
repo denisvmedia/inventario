@@ -111,14 +111,8 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		total = len(files)
 
 		// Apply pagination manually for search results
-		start := offset
-		if start > total {
-			start = total
-		}
-		end := start + limit
-		if end > total {
-			end = total
-		}
+		start := min(offset, total)
+		end := min(start+limit, total)
 		files = files[start:end]
 	} else {
 		// Use paginated list for simple queries
