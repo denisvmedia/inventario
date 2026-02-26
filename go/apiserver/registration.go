@@ -45,6 +45,11 @@ type RegisterRequest struct {
 	Name     string `json:"name"`
 }
 
+// ResendVerificationRequest is the body for POST /resend-verification.
+type ResendVerificationRequest struct {
+	Email string `json:"email"`
+}
+
 // Registration sets up the registration API routes.
 func Registration(params RegistrationParams) func(r chi.Router) {
 	mode := params.RegistrationMode
@@ -71,6 +76,18 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 //   - closed    → 403 Forbidden; registration is disabled.
 //   - approval  → account created (inactive); admin must activate; no verification email sent.
 //   - open      → account created (inactive); verification email sent; activates on token click.
+//
+// @Summary Register a new user
+// @Description Create a new user account. Behaviour depends on the server's registration mode: open (email verification sent), approval (pending admin activation), or closed (403 returned).
+// @Tags registration
+// @Accept json
+// @Produce json
+// @Param data body RegisterRequest true "Registration data"
+// @Success 200 {object} map[string]string "OK - registration accepted"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 403 {string} string "Forbidden - registrations are closed"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /register [post]
 func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Enforce registration mode before processing anything.
 	switch api.registrationMode {
@@ -154,6 +171,16 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 }
 
 // handleVerifyEmail activates a user account when a valid token is presented.
+// @Summary Verify email address
+// @Description Activate a user account using the verification token sent by email.
+// @Tags registration
+// @Produce json
+// @Param token query string true "Email verification token"
+// @Success 200 {object} map[string]string "OK"
+// @Failure 400 {string} string "Bad Request - missing, invalid, or expired token"
+// @Failure 404 {string} string "Not Found"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /verify-email [get]
 func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
@@ -200,10 +227,17 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 }
 
 // handleResendVerification issues a fresh verification token for an unverified account.
+// @Summary Resend verification email
+// @Description Issue a new email verification link for an unverified account. Always responds with success to prevent email enumeration.
+// @Tags registration
+// @Accept json
+// @Produce json
+// @Param data body ResendVerificationRequest true "Email to resend verification to"
+// @Success 200 {object} map[string]string "OK"
+// @Failure 400 {string} string "Bad Request"
+// @Router /resend-verification [post]
 func (api *RegistrationAPI) handleResendVerification(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email string `json:"email"`
-	}
+	var req ResendVerificationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
