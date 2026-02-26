@@ -1,5 +1,46 @@
 basePath: /api/v1
 definitions:
+  apiserver.AdminUserCreateRequest:
+    properties:
+      email:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      password:
+        type: string
+      role:
+        $ref: '#/definitions/models.UserRole'
+    type: object
+  apiserver.AdminUserListResponse:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+      users:
+        items:
+          $ref: '#/definitions/models.User'
+        type: array
+    type: object
+  apiserver.AdminUserUpdateRequest:
+    properties:
+      email:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      password:
+        type: string
+      role:
+        $ref: '#/definitions/models.UserRole'
+    type: object
   apiserver.ChangePasswordRequest:
     properties:
       current_password:
@@ -3261,6 +3302,195 @@ paths:
       summary: Upload restore file
       tags:
       - uploads
+  /users:
+    get:
+      description: List all users within the admin's tenant. Supports filtering by
+        role, active status, and search.
+      parameters:
+      - description: Filter by role (admin|user)
+        in: query
+        name: role
+        type: string
+      - description: Filter by active status (true|false)
+        in: query
+        name: active
+        type: string
+      - description: Search by email or name
+        in: query
+        name: search
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 20, max 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.AdminUserListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+      summary: List users (admin only)
+      tags:
+      - admin
+      - users
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User data
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminUserCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "409":
+          description: Conflict - email already exists
+          schema:
+            type: string
+      summary: Create a user (admin only)
+      tags:
+      - admin
+      - users
+  /users/{id}:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: Deactivate a user (admin only)
+      tags:
+      - admin
+      - users
+    get:
+      description: Retrieve a user by ID within the admin's tenant.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: Get a user (admin only)
+      tags:
+      - admin
+      - users
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminUserUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: Update a user (admin only)
+      tags:
+      - admin
+      - users
   /verify-email:
     get:
       description: Activate a user account using the verification token sent by email.
