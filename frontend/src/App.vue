@@ -18,6 +18,9 @@
           <router-link to="/files" :class="{ 'custom-active': isFilesActive }">Files</router-link> |
           <router-link to="/exports" :class="{ 'custom-active': isExportsActive }">Exports</router-link> |
           <router-link to="/system" :class="{ 'custom-active': isSystemActive }">System</router-link>
+          <template v-if="authStore.userRole === 'admin'"> |
+            <router-link to="/admin/users" :class="{ 'custom-active': isAdminActive }">Users</router-link>
+          </template>
         </nav>
         <div v-if="authStore.isAuthenticated" class="user-info">
           <span class="user-display" data-testid="current-user">{{ authStore.userName || authStore.userEmail }}</span>
@@ -79,6 +82,10 @@ const isExportsActive = computed(() => {
 
 const isSystemActive = computed(() => {
   return route.path.startsWith('/system')
+})
+
+const isAdminActive = computed(() => {
+  return route.path.startsWith('/admin')
 })
 
 // Initialize global settings when the app starts

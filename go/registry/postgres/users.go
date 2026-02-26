@@ -71,10 +71,13 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 		user.UserID = generatedID
 	}
 
-	// Check if a user with the same email already exists
+	// Check if a user with the same email already exists (within the same tenant)
 	var existingUser models.User
 	txReg := store.NewTxRegistry[models.User](tx, r.tableNames.Users())
-	err = txReg.ScanOneByField(ctx, store.Pair("email", user.Email), &existingUser)
+	err = txReg.ScanOneByFields(ctx, []store.FieldValue{
+		store.Pair("tenant_id", user.TenantID),
+		store.Pair("email", user.Email),
+	}, &existingUser)
 	if err == nil {
 		return nil, errxtrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("email", user.Email))
 	} else if !errors.Is(err, store.ErrNotFound) {

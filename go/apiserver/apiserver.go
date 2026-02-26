@@ -254,6 +254,10 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		r.With(userMiddlewares...).Route("/search", Search(params.EntityService))
 		r.With(userMiddlewares...).Route("/commodities/values", Values())
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
+		r.With(userMiddlewares...).Route("/users", Users(UsersParams{
+			UserRegistry: params.FactorySet.UserRegistry,
+			AuditService: auditSvc,
+		}))
 		r.With(userMiddlewares...).Route("/upload-slots", UploadSlots(params.FactorySet))
 
 		// Uploads need special middleware without content type restrictions
