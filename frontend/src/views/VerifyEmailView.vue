@@ -85,17 +85,63 @@ onMounted(async () => {
   max-width: 400px;
 }
 
-.verify-header { text-align: center; margin-bottom: 2rem; }
-.verify-header h1 { color: #333; margin: 0 0 0.5rem; font-size: 2rem; font-weight: 600; }
-.verify-header p { color: #666; margin: 0; font-size: 1rem; }
+.verify-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
 
-.status-message { padding: 1rem; border-radius: 4px; text-align: center; font-size: 0.95rem; }
-.status-message.loading { background-color: #f0f4ff; color: #445; border: 1px solid #c8d8ff; }
-.status-message.success { background-color: #efe; color: #363; border: 1px solid #cfc; }
-.status-message.error { background-color: #fee; color: #c33; border: 1px solid #fcc; }
-.status-message.missing { background-color: #fff8e1; color: #7a5c00; border: 1px solid #ffe082; }
+.verify-header h1 {
+  color: #333;
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  font-weight: 600;
+}
 
-.action-link { color: #667eea; font-weight: 500; text-decoration: none; }
-.action-link:hover { text-decoration: underline; }
+.verify-header p {
+  color: #666;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.status-message {
+  padding: 1rem;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.status-message.loading {
+  background-color: #f0f4ff;
+  color: #445;
+  border: 1px solid #c8d8ff;
+}
+
+.status-message.success {
+  background-color: #efe;
+  color: #363;
+  border: 1px solid #cfc;
+}
+
+.status-message.error {
+  background-color: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
+.status-message.missing {
+  background-color: #fff8e1;
+  color: #7a5c00;
+  border: 1px solid #ffe082;
+}
+
+.action-link {
+  color: #667eea;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.action-link:hover {
+  text-decoration: underline;
+}
 </style>
 
