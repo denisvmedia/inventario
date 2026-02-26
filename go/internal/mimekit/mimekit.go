@@ -2,6 +2,7 @@ package mimekit
 
 import (
 	"mime"
+	"slices"
 
 	"github.com/gabriel-vasile/mimetype"
 )
@@ -50,21 +51,11 @@ var allContentTypes = append(append(append(
 )
 
 func IsImage(contentType string) bool {
-	for _, v := range imageContentTypes {
-		if v == contentType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(imageContentTypes, contentType)
 }
 
 func IsDoc(contentType string) bool {
-	for _, v := range docContentTypes {
-		if v == contentType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(docContentTypes, contentType)
 }
 
 func ImageContentTypes() []string {

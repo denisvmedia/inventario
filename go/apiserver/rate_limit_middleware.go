@@ -37,10 +37,7 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", res.ResetAt.Unix()))
 
 			if !res.Allowed {
-				retryAfter := int(time.Until(res.ResetAt).Seconds())
-				if retryAfter < 0 {
-					retryAfter = 0
-				}
+				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return

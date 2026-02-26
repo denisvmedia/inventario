@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -420,7 +419,7 @@ func testList(t *testing.T, newHarness HarnessMaker) {
 		b := blob.NewBucket(drv)
 		iter := b.List(&blob.ListOptions{Prefix: keyPrefix})
 		found := iterToSetOfKeys(ctx, t, iter)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			key := keyForIndex(i)
 			if !found[key] {
 				if err := b.WriteAll(ctx, key, content, nil); err != nil {
@@ -2086,9 +2085,9 @@ func testConcurrentWriteAndRead(t *testing.T, newHarness HarnessMaker) {
 	const numKeys = 20
 	const dataSize = 4 * 1024
 	keyData := make(map[int][]byte)
-	for k := 0; k < numKeys; k++ {
+	for k := range numKeys {
 		data := make([]byte, dataSize)
-		for i := 0; i < dataSize; i++ {
+		for i := range dataSize {
 			data[i] = byte(k)
 		}
 		keyData[k] = data
@@ -2101,7 +2100,7 @@ func testConcurrentWriteAndRead(t *testing.T, newHarness HarnessMaker) {
 	var wg sync.WaitGroup
 
 	// Write all blobs concurrently.
-	for k := 0; k < numKeys; k++ {
+	for k := range numKeys {
 		wg.Add(1)
 		go func(key int) {
 			if err := b.WriteAll(ctx, blobName(key), keyData[key], nil); err != nil {
@@ -2114,7 +2113,7 @@ func testConcurrentWriteAndRead(t *testing.T, newHarness HarnessMaker) {
 	wg.Wait()
 
 	// Read all blobs concurrently and verify that they contain the expected data.
-	for k := 0; k < numKeys; k++ {
+	for k := range numKeys {
 		wg.Add(1)
 		go func(key int) {
 			buf, err := b.ReadAll(ctx, blobName(key))
@@ -2252,7 +2251,7 @@ func testKeys(t *testing.T, newHarness HarnessMaker) {
 				if resp.StatusCode != 200 {
 					t.Errorf("got status code %d, want 200", resp.StatusCode)
 				}
-				got, err := ioutil.ReadAll(resp.Body)
+				got, err := io.ReadAll(resp.Body)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2417,7 +2416,7 @@ func testSignedURL(t *testing.T, newHarness HarnessMaker) {
 			success := resp.StatusCode >= 200 && resp.StatusCode < 300
 			if success != test.wantSuccess {
 				t.Errorf("PUT to %q with ContentType %q got status code %d, wanted 2xx? %v", test.urlDescription, test.contentType, resp.StatusCode, test.wantSuccess)
-				gotBody, _ := ioutil.ReadAll(resp.Body)
+				gotBody, _ := io.ReadAll(resp.Body)
 				t.Error(string(gotBody))
 			}
 		}
@@ -2441,10 +2440,10 @@ func testSignedURL(t *testing.T, newHarness HarnessMaker) {
 			success := resp.StatusCode >= 200 && resp.StatusCode < 300
 			if success != test.wantSuccess {
 				t.Errorf("GET to %q got status code %d, want 2xx? %v", test.urlDescription, resp.StatusCode, test.wantSuccess)
-				gotBody, _ := ioutil.ReadAll(resp.Body)
+				gotBody, _ := io.ReadAll(resp.Body)
 				t.Error(string(gotBody))
 			} else if success {
-				gotBody, err := ioutil.ReadAll(resp.Body)
+				gotBody, err := io.ReadAll(resp.Body)
 				if err != nil {
 					t.Errorf("GET to %q failed to read response body: %v", test.urlDescription, err)
 				} else if gotBodyStr := string(gotBody); gotBodyStr != contents {
@@ -2473,7 +2472,7 @@ func testSignedURL(t *testing.T, newHarness HarnessMaker) {
 			defer resp.Body.Close()
 			success := resp.StatusCode >= 200 && resp.StatusCode < 300
 			if success != test.wantSuccess {
-				gotBody, _ := ioutil.ReadAll(resp.Body)
+				gotBody, _ := io.ReadAll(resp.Body)
 				t.Error(string(gotBody))
 				t.Fatalf("DELETE to %q got status code %d, want 2xx? %v", test.urlDescription, resp.StatusCode, test.wantSuccess)
 			}
@@ -2488,7 +2487,7 @@ func testSignedURL(t *testing.T, newHarness HarnessMaker) {
 			defer resp.Body.Close()
 			if resp.StatusCode != 404 {
 				t.Errorf("GET after DELETE got status code %d, want 404", resp.StatusCode)
-				gotBody, _ := ioutil.ReadAll(resp.Body)
+				gotBody, _ := io.ReadAll(resp.Body)
 				t.Error(string(gotBody))
 			}
 		}

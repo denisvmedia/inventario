@@ -43,23 +43,23 @@ func TestSettingsRegistry_Save_HappyPath(t *testing.T) {
 		{
 			name: "save all settings",
 			settings: models.SettingsObject{
-				MainCurrency:      stringPtr("USD"),
-				Theme:             stringPtr("dark"),
-				ShowDebugInfo:     boolPtr(true),
-				DefaultDateFormat: stringPtr("2006-01-02"),
+				MainCurrency:      new("USD"),
+				Theme:             new("dark"),
+				ShowDebugInfo:     new(true),
+				DefaultDateFormat: new("2006-01-02"),
 			},
 		},
 		{
 			name: "save partial settings",
 			settings: models.SettingsObject{
-				MainCurrency: stringPtr("EUR"),
-				Theme:        stringPtr("light"),
+				MainCurrency: new("EUR"),
+				Theme:        new("light"),
 			},
 		},
 		{
 			name: "save single setting",
 			settings: models.SettingsObject{
-				ShowDebugInfo: boolPtr(false),
+				ShowDebugInfo: new(false),
 			},
 		},
 	}
@@ -118,20 +118,20 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 
 	// Save initial settings
 	initialSettings := models.SettingsObject{
-		MainCurrency:      stringPtr("USD"),
-		Theme:             stringPtr("dark"),
-		ShowDebugInfo:     boolPtr(true),
-		DefaultDateFormat: stringPtr("2006-01-02"),
+		MainCurrency:      new("USD"),
+		Theme:             new("dark"),
+		ShowDebugInfo:     new(true),
+		DefaultDateFormat: new("2006-01-02"),
 	}
 	err := registrySet.SettingsRegistry.Save(ctx, initialSettings)
 	c.Assert(err, qt.IsNil)
 
 	// Update settings
 	updatedSettings := models.SettingsObject{
-		MainCurrency:      stringPtr("EUR"),
-		Theme:             stringPtr("light"),
-		ShowDebugInfo:     boolPtr(false),
-		DefaultDateFormat: stringPtr("02/01/2006"),
+		MainCurrency:      new("EUR"),
+		Theme:             new("light"),
+		ShowDebugInfo:     new(false),
+		DefaultDateFormat: new("02/01/2006"),
 	}
 	err = registrySet.SettingsRegistry.Save(ctx, updatedSettings)
 	c.Assert(err, qt.IsNil)
@@ -293,10 +293,10 @@ func TestSettingsRegistry_MixedOperations_HappyPath(t *testing.T) {
 
 	// Save complete settings object (should update existing)
 	newSettings := models.SettingsObject{
-		MainCurrency:      stringPtr("EUR"),
-		Theme:             stringPtr("light"),
-		ShowDebugInfo:     boolPtr(true),
-		DefaultDateFormat: stringPtr("2006-01-02"),
+		MainCurrency:      new("EUR"),
+		Theme:             new("light"),
+		ShowDebugInfo:     new(true),
+		DefaultDateFormat: new("2006-01-02"),
 	}
 	err = registrySet.SettingsRegistry.Save(ctx, newSettings)
 	c.Assert(err, qt.IsNil)
@@ -405,13 +405,4 @@ func TestSettingsRegistry_Patch_ComplexValues_HappyPath(t *testing.T) {
 			tc.verifyFunc(c, retrievedSettings)
 		})
 	}
-}
-
-// Helper functions
-func stringPtr(s string) *string {
-	return &s
-}
-
-func boolPtr(b bool) *bool {
-	return &b
 }

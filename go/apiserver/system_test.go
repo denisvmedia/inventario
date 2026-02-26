@@ -116,8 +116,8 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 
 	// Add some test settings
 	testSettings := models.SettingsObject{
-		MainCurrency: ptr("USD"),
-		Theme:        ptr("dark"),
+		MainCurrency: new("USD"),
+		Theme:        new("dark"),
 	}
 
 	userCtx := appctx.WithUser(c.Context(), createdUser)
@@ -166,9 +166,4 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	c.Assert(*systemInfo.Settings.MainCurrency, qt.Equals, "USD")
 	c.Assert(systemInfo.Settings.Theme, qt.IsNotNil)
 	c.Assert(*systemInfo.Settings.Theme, qt.Equals, "dark")
-}
-
-// Helper function for pointer creation
-func ptr[T any](v T) *T {
-	return &v
 }

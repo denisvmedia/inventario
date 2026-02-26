@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -172,13 +173,7 @@ func (c *Command) validateFilters(cfg *Config) error {
 	// Validate role filter
 	if cfg.Role != "" {
 		validRoles := []string{"admin", "user"}
-		valid := false
-		for _, role := range validRoles {
-			if cfg.Role == role {
-				valid = true
-				break
-			}
-		}
+		valid := slices.Contains(validRoles, cfg.Role)
 		if !valid {
 			return fmt.Errorf("invalid role '%s'. Valid roles: %s", cfg.Role, strings.Join(validRoles, ", "))
 		}

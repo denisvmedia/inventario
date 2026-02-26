@@ -14,7 +14,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
-	"github.com/go-extras/go-kit/ptr"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/shopspring/decimal"
 
@@ -173,7 +172,7 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	// This avoids the RLS issues with settings
 
 	err := registrySet.SettingsRegistry.Save(context.Background(), models.SettingsObject{
-		MainCurrency: ptr.To("USD"),
+		MainCurrency: new("USD"),
 	})
 	if err != nil {
 		t.Fatalf("Failed to save settings: %v", err)

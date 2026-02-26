@@ -176,14 +176,8 @@ func (api *searchAPI) searchWithBasicFallback(w http.ResponseWriter, r *http.Req
 		}
 
 		// Apply pagination
-		start := offset
-		if start > len(filtered) {
-			start = len(filtered)
-		}
-		end := start + limit
-		if end > len(filtered) {
-			end = len(filtered)
-		}
+		start := min(offset, len(filtered))
+		end := min(start+limit, len(filtered))
 		filtered = filtered[start:end]
 
 		response := jsonapi.NewSearchResponse("commodities", filtered, len(filtered))
@@ -199,14 +193,8 @@ func (api *searchAPI) searchWithBasicFallback(w http.ResponseWriter, r *http.Req
 		}
 
 		// Apply pagination
-		start := offset
-		if start > len(files) {
-			start = len(files)
-		}
-		end := start + limit
-		if end > len(files) {
-			end = len(files)
-		}
+		start := min(offset, len(files))
+		end := min(start+limit, len(files))
 		files = files[start:end]
 
 		response := jsonapi.NewSearchResponse("files", files, len(files))

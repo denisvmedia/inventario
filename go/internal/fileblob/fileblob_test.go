@@ -498,8 +498,7 @@ func TestSkipMetadata(t *testing.T) {
 		{"file://" + dirpath + "?metadata=", true}, // … and explicitly.
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			b, err := blob.OpenBucket(ctx, test.URL)

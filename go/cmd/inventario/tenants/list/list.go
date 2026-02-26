@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -114,13 +115,7 @@ func (c *Command) listTenants(cfg *Config, dbConfig *shared.DatabaseConfig) erro
 	// Validate status filter
 	if cfg.Status != "" {
 		validStatuses := []string{"active", "suspended", "inactive"}
-		valid := false
-		for _, status := range validStatuses {
-			if cfg.Status == status {
-				valid = true
-				break
-			}
-		}
+		valid := slices.Contains(validStatuses, cfg.Status)
 		if !valid {
 			return fmt.Errorf("invalid status '%s'. Valid statuses: %s", cfg.Status, strings.Join(validStatuses, ", "))
 		}
