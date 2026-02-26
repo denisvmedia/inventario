@@ -155,7 +155,7 @@ func (r *TxExecutor[T]) ScanOneByFields(ctx context.Context, field []FieldValue,
 		if i > 0 {
 			whereClause.WriteString(" AND ")
 		}
-		whereClause.WriteString(fmt.Sprintf("%s = $%d", f.Field, i+1))
+		fmt.Fprintf(&whereClause, "%s = $%d", f.Field, i+1)
 		args[i] = f.Value
 	}
 

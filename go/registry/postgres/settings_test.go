@@ -406,15 +406,3 @@ func TestSettingsRegistry_Patch_ComplexValues_HappyPath(t *testing.T) {
 		})
 	}
 }
-
-// Helper functions
-//
-//go:fix inline
-func stringPtr(s string) *string {
-	return new(s)
-}
-
-//go:fix inline
-func boolPtr(b bool) *bool {
-	return new(b)
-}

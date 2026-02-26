@@ -167,10 +167,3 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	c.Assert(systemInfo.Settings.Theme, qt.IsNotNil)
 	c.Assert(*systemInfo.Settings.Theme, qt.Equals, "dark")
 }
-
-// Helper function for pointer creation
-//
-//go:fix inline
-func ptr[T any](v T) *T {
-	return new(v)
-}

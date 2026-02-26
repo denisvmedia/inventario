@@ -95,7 +95,6 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 
 		// Step 3: Test concurrent access with different users
 		wg.Go(func() {
-
 			// User2 should not be able to access user1's commodity
 			// Create a fresh registry set for user2 to simulate concurrent access
 			freshRegistrySet2 := must.Must(factorySet.CreateUserRegistrySet(ctx2))
@@ -111,7 +110,6 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 		// Step 4: Multiple concurrent accesses by user1 should all work
 		for range 5 {
 			wg.Go(func() {
-
 				// Create a fresh registry set for each concurrent access
 				concurrentRegistrySet1 := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
@@ -186,7 +184,6 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 
 		for range 10 {
 			wg.Go(func() {
-
 				// Each goroutine gets its own user-aware registry set
 				concurrentRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx1))
 
