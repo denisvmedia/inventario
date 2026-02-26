@@ -199,6 +199,9 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	// In production, run.go always provides a concrete implementation.
 	csrfSvc := params.CSRFService
 
+	// Create a shared audit service for use across multiple routes.
+	auditSvc := services.NewAuditService(params.FactorySet.AuditLogRegistry)
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(AuthParams{
@@ -207,8 +210,15 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			BlacklistService:     blacklist,
 			RateLimiter:          rateLimiter,
 			CSRFService:          csrfSvc,
-			AuditService:         services.NewAuditService(params.FactorySet.AuditLogRegistry),
+			AuditService:         auditSvc,
 			JWTSecret:            params.JWTSecret,
+		}))
+		r.Group(Registration(RegistrationParams{
+			UserRegistry:         params.FactorySet.UserRegistry,
+			VerificationRegistry: params.FactorySet.EmailVerificationRegistry,
+			EmailService:         services.NewStubEmailService(),
+			AuditService:         auditSvc,
+			RateLimiter:          rateLimiter,
 		}))
 		r.Route("/currencies", Currencies())
 		// Seed endpoint is public for e2e testing and development

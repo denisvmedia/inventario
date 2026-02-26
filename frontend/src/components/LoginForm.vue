@@ -46,6 +46,11 @@
           <span v-if="isLoading">Signing in...</span>
           <span v-else>Sign In</span>
         </button>
+
+        <p class="register-link">
+          Don't have an account?
+          <RouterLink to="/register">Create one</RouterLink>
+        </p>
       </form>
     </div>
   </div>
@@ -53,7 +58,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
@@ -209,5 +214,12 @@ defineExpose({
 
 .login-button:hover:not(:disabled) {
   opacity: 0.9;
+}
+
+.register-link {
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0;
 }
 </style>

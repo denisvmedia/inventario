@@ -48,6 +48,35 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 	}
 }
 
+// RegistrationRateLimitMiddleware enforces per-IP rate limiting on registration endpoints.
+func RegistrationRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			ip := remoteAddrIP(r)
+			res, err := limiter.CheckRegistrationAttempt(r.Context(), ip)
+			if err != nil {
+				slog.Error("Registration rate limiter error", "error", err, "ip", ip)
+				next.ServeHTTP(w, r)
+				return
+			}
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", res.Limit))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", res.ResetAt.Unix()))
+			if !res.Allowed {
+				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // remoteAddrIP extracts the host from r.RemoteAddr, ignoring all proxy headers.
 // This is intentional for rate limiting: proxy headers like X-Forwarded-For can be
 // forged by the client and must not be used to determine the key to rate-limit on.
