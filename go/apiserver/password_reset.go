@@ -163,10 +163,6 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	if pr.IsUsed() {
-		http.Error(w, "Reset token has already been used", http.StatusBadRequest)
-		return
-	}
 	if pr.IsExpired() {
 		http.Error(w, "Reset token has expired. Please request a new one.", http.StatusBadRequest)
 		return
@@ -254,15 +250,8 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 // invalidateUserSessions revokes all refresh tokens for the user and blacklists active access tokens.
 func (api *PasswordResetAPI) invalidateUserSessions(ctx context.Context, userID string) {
 	if api.refreshTokenRegistry != nil {
-		tokens, err := api.refreshTokenRegistry.GetByUserID(ctx, userID)
-		if err != nil {
-			slog.Warn("Failed to list refresh tokens for session invalidation", "user_id", userID, "error", err)
-		} else {
-			for _, rt := range tokens {
-				if err := api.refreshTokenRegistry.Delete(ctx, rt.ID); err != nil {
-					slog.Warn("Failed to delete refresh token", "id", rt.ID, "user_id", userID, "error", err)
-				}
-			}
+		if err := api.refreshTokenRegistry.RevokeByUserID(ctx, userID); err != nil {
+			slog.Warn("Failed to revoke refresh tokens for session invalidation", "user_id", userID, "error", err)
 		}
 	}
 

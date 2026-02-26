@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect } from 'vue'
+import { ref, computed, watchEffect, onBeforeUnmount } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import authService from '../services/authService'
 
@@ -82,6 +82,11 @@ const isLoading = ref(false)
 const error = ref<string | null>(null)
 const submitted = ref(false)
 const successMessage = ref('')
+
+let redirectTimer: ReturnType<typeof setTimeout> | null = null
+onBeforeUnmount(() => {
+  if (redirectTimer !== null) clearTimeout(redirectTimer)
+})
 
 const isFormValid = computed(() =>
   password.value.length >= 8 && password.value === confirmPassword.value
@@ -103,8 +108,8 @@ async function handleSubmit() {
     const res = await authService.resetPassword(token.value, password.value)
     successMessage.value = res.message
     submitted.value = true
-    // Redirect to login after a short delay
-    setTimeout(() => router.replace('/login'), 3000)
+    // Redirect to login after a short delay; handle is cleared on unmount.
+    redirectTimer = setTimeout(() => router.replace('/login'), 3000)
   } catch (err: unknown) {
     const e = err as { response?: { data?: string | { error?: string } } }
     const data = e.response?.data
