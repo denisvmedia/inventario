@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -306,7 +307,11 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 	verificationURL := fmt.Sprintf("%s://%s/verify-email?token=%s", scheme, r.Host, token)
 
 	go func() {
-		if err := api.emailService.SendVerificationEmail(user.Email, user.Name, verificationURL); err != nil {
+		// TODO: replace context.TODO() with a proper background context carrying a
+		// timeout once the real SMTP backend is implemented in Phase 3. Do NOT use
+		// r.Context() here — the request may already be cancelled by the time the
+		// email transport dials the server.
+		if err := api.emailService.SendVerificationEmail(context.TODO(), user.Email, user.Name, verificationURL); err != nil {
 			slog.Error("Failed to send verification email", "user_id", user.ID, "error", err)
 		}
 	}()

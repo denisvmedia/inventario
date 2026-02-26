@@ -1,6 +1,9 @@
 package services
 
-import "log/slog"
+import (
+	"context"
+	"log/slog"
+)
 
 // EmailService defines the interface for sending transactional emails.
 // A real implementation will be provided in Phase 3; this package ships a
@@ -8,10 +11,12 @@ import "log/slog"
 // without an actual mail server.
 type EmailService interface {
 	// SendVerificationEmail sends an account-activation link to the given address.
-	SendVerificationEmail(to, name, verificationURL string) error
+	// ctx is reserved for future use (e.g. SMTP dial timeouts in Phase 3).
+	SendVerificationEmail(ctx context.Context, to, name, verificationURL string) error
 
 	// SendPasswordResetEmail sends a password-reset link to the given address.
-	SendPasswordResetEmail(to, name, resetURL string) error
+	// ctx is reserved for future use (e.g. SMTP dial timeouts in Phase 3).
+	SendPasswordResetEmail(ctx context.Context, to, name, resetURL string) error
 }
 
 // StubEmailService is a no-op EmailService that logs every call.
@@ -24,7 +29,7 @@ func NewStubEmailService() *StubEmailService {
 }
 
 // SendVerificationEmail logs the verification URL instead of sending an email.
-func (s *StubEmailService) SendVerificationEmail(to, name, verificationURL string) error {
+func (s *StubEmailService) SendVerificationEmail(_ context.Context, to, name, verificationURL string) error {
 	slog.Info("STUB email: verification link",
 		"to", to,
 		"name", name,
@@ -34,7 +39,7 @@ func (s *StubEmailService) SendVerificationEmail(to, name, verificationURL strin
 }
 
 // SendPasswordResetEmail logs the reset URL instead of sending an email.
-func (s *StubEmailService) SendPasswordResetEmail(to, name, resetURL string) error {
+func (s *StubEmailService) SendPasswordResetEmail(_ context.Context, to, name, resetURL string) error {
 	slog.Info("STUB email: password-reset link",
 		"to", to,
 		"name", name,
