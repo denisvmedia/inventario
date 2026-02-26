@@ -118,8 +118,6 @@ func TestHandleForgotPassword_RateLimit(t *testing.T) {
 	c.Assert(makeReq(), qt.Equals, http.StatusTooManyRequests)
 }
 
-
-
 func TestHandleResetPassword(t *testing.T) {
 	makeRouter := func(prReg *memory.PasswordResetRegistry, userReg *mockUserRegistryForAuth) chi.Router {
 		return newPasswordResetRouter(apiserver.PasswordResetParams{
