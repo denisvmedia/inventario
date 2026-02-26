@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -99,8 +99,11 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	case models.RegistrationModeOpen, models.RegistrationModeApproval:
 		// proceed
 	default:
-		// treat unknown modes as open to avoid accidental lock-out
-		slog.Warn("Unknown registration mode, treating as open", "mode", api.registrationMode)
+		// Fail closed on unknown modes — a misconfigured flag should not
+		// accidentally open self-registration.
+		slog.Error("Unknown registration mode, rejecting registration", "mode", api.registrationMode)
+		http.Error(w, "Registrations are currently unavailable", http.StatusServiceUnavailable)
+		return
 	}
 
 	var req RegisterRequest
@@ -298,13 +301,23 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 
 	// Build an absolute URL so the link works when embedded in a real email.
 	// X-Forwarded-Proto is respected for deployments behind a reverse proxy.
+	//
+	// TODO(Phase 3): r.Host is taken directly from the (unauthenticated) request.
+	// A forged Host header can inject an attacker-controlled domain into the email
+	// link (host-header phishing). When a real SMTP backend is added, replace
+	// r.Host with a trusted configured public base URL (e.g. --public-url flag).
 	scheme := "http"
 	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
 		scheme = proto
 	} else if r.TLS != nil {
 		scheme = "https"
 	}
-	verificationURL := fmt.Sprintf("%s://%s/verify-email?token=%s", scheme, r.Host, token)
+	verificationURL := (&url.URL{
+		Scheme:   scheme,
+		Host:     r.Host,
+		Path:     "/verify-email",
+		RawQuery: url.Values{"token": {token}}.Encode(),
+	}).String()
 
 	go func() {
 		// TODO: replace context.TODO() with a proper background context carrying a

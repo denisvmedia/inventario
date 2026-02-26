@@ -52,6 +52,9 @@ func (r *EmailVerificationRegistry) Create(_ context.Context, ev models.EmailVer
 
 // GetByToken returns the verification record matching the given token value.
 func (r *EmailVerificationRegistry) GetByToken(ctx context.Context, token string) (*models.EmailVerification, error) {
+	if token == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Token"))
+	}
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, err
@@ -66,6 +69,9 @@ func (r *EmailVerificationRegistry) GetByToken(ctx context.Context, token string
 
 // GetByUserID returns all verification records belonging to the given user.
 func (r *EmailVerificationRegistry) GetByUserID(ctx context.Context, userID string) ([]*models.EmailVerification, error) {
+	if userID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, err
