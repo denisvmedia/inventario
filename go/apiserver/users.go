@@ -298,107 +298,24 @@ func (api *UsersAPI) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req AdminUserUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, decodeErr := decodeAdminUserUpdateRequest(r)
+	if decodeErr != nil {
 		errMsg := "invalid request body"
 		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if userID == currentUser.ID {
-		if req.IsActive != nil && !*req.IsActive {
-			errMsg := "cannot deactivate own account"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, "Cannot deactivate your own account", http.StatusBadRequest)
-			return
-		}
-		if req.Role != nil && *req.Role != models.UserRoleAdmin {
-			errMsg := "cannot change own role"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, "Cannot change your own role", http.StatusBadRequest)
-			return
-		}
-	}
-
-	if req.Email != nil {
-		normalizedEmail := strings.ToLower(strings.TrimSpace(*req.Email))
-		if normalizedEmail == "" {
-			errMsg := "email cannot be empty"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, "Email cannot be empty", http.StatusBadRequest)
-			return
-		}
-
-		// Pre-check to return 409 instead of a generic 500 on unique-index violations.
-		// (Also ensures the email uniqueness rule remains tenant-scoped.)
-		existing, err := api.userRegistry.GetByEmail(r.Context(), currentUser.TenantID, normalizedEmail)
-		if err == nil && existing != nil && existing.ID != user.ID {
-			errMsg := "email already exists"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, "User with this email already exists", http.StatusConflict)
-			return
-		}
-		if err != nil && !errors.Is(err, registry.ErrNotFound) {
-			slog.Error("Failed to check email uniqueness", "email", normalizedEmail, "error", err)
-			errMsg := "failed to check email uniqueness"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, "Failed to update user", http.StatusInternalServerError)
-			return
-		}
-
-		user.Email = normalizedEmail
-	}
-	if req.Name != nil {
-		user.Name = strings.TrimSpace(*req.Name)
-	}
-	if req.Role != nil {
-		if err := req.Role.Validate(); err != nil {
-			errMsg := "invalid role"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, "Invalid role", http.StatusBadRequest)
-			return
-		}
-		user.Role = *req.Role
-	}
-	if req.IsActive != nil {
-		user.IsActive = *req.IsActive
-	}
-	if req.Password != nil {
-		if err := models.ValidatePassword(*req.Password); err != nil {
-			errMsg := "invalid password"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err := user.SetPassword(*req.Password); err != nil {
-			slog.Error("Failed to hash password", "error", err)
-			errMsg := "failed to process password"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, "Failed to process password", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if err := user.ValidateWithContext(r.Context()); err != nil {
-		errMsg := "validation failed"
-		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if selfErr := validateAdminSelfUpdate(userID, currentUser.ID, req); selfErr != nil {
+		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &selfErr.auditMsg)
+		http.Error(w, selfErr.clientMsg, selfErr.status)
 		return
 	}
 
-	updated, err := api.userRegistry.Update(r.Context(), *user)
-	if err != nil {
-		slog.Error("Failed to update user", "error", err)
-		if errors.Is(err, registry.ErrEmailAlreadyExists) {
-			errMsg := "email already exists"
-			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-			http.Error(w, "User with this email already exists", http.StatusConflict)
-			return
-		}
-		errMsg := "failed to update user"
-		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
-		http.Error(w, "Failed to update user", http.StatusInternalServerError)
+	updated, updErr := api.applyAdminUserUpdate(r, currentUser, user, req)
+	if updErr != nil {
+		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &updErr.auditMsg)
+		http.Error(w, updErr.clientMsg, updErr.status)
 		return
 	}
 
@@ -409,6 +326,140 @@ func (api *UsersAPI) updateUser(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(updated); err != nil {
 		slog.Error("Failed to encode response", "error", err)
 	}
+}
+
+// adminUpdateError is a small transport for user-friendly HTTP errors.
+type adminUpdateError struct {
+	status    int
+	clientMsg string
+	auditMsg  string
+}
+
+func decodeAdminUserUpdateRequest(r *http.Request) (AdminUserUpdateRequest, error) {
+	var req AdminUserUpdateRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	return req, err
+}
+
+func validateAdminSelfUpdate(targetUserID, currentUserID string, req AdminUserUpdateRequest) *adminUpdateError {
+	if targetUserID != currentUserID {
+		return nil
+	}
+	if req.IsActive != nil && !*req.IsActive {
+		return &adminUpdateError{
+			status:    http.StatusBadRequest,
+			clientMsg: "Cannot deactivate your own account",
+			auditMsg:  "cannot deactivate own account",
+		}
+	}
+	if req.Role != nil && *req.Role != models.UserRoleAdmin {
+		return &adminUpdateError{
+			status:    http.StatusBadRequest,
+			clientMsg: "Cannot change your own role",
+			auditMsg:  "cannot change own role",
+		}
+	}
+	return nil
+}
+
+func (api *UsersAPI) applyAdminUserUpdate(r *http.Request, currentUser, user *models.User, req AdminUserUpdateRequest) (*models.User, *adminUpdateError) {
+	ctx := r.Context()
+
+	if req.Email != nil {
+		normalizedEmail := strings.ToLower(strings.TrimSpace(*req.Email))
+		if normalizedEmail == "" {
+			return nil, &adminUpdateError{
+				status:    http.StatusBadRequest,
+				clientMsg: "Email cannot be empty",
+				auditMsg:  "email cannot be empty",
+			}
+		}
+
+		// Pre-check to return 409 instead of a generic 500 on unique-index violations.
+		// (Also ensures the email uniqueness rule remains tenant-scoped.)
+		existing, err := api.userRegistry.GetByEmail(ctx, currentUser.TenantID, normalizedEmail)
+		if err == nil && existing != nil && existing.ID != user.ID {
+			return nil, &adminUpdateError{
+				status:    http.StatusConflict,
+				clientMsg: "User with this email already exists",
+				auditMsg:  "email already exists",
+			}
+		}
+		if err != nil && !errors.Is(err, registry.ErrNotFound) {
+			slog.Error("Failed to check email uniqueness", "email", normalizedEmail, "error", err)
+			return nil, &adminUpdateError{
+				status:    http.StatusInternalServerError,
+				clientMsg: "Failed to update user",
+				auditMsg:  "failed to check email uniqueness",
+			}
+		}
+
+		user.Email = normalizedEmail
+	}
+
+	if req.Name != nil {
+		user.Name = strings.TrimSpace(*req.Name)
+	}
+
+	if req.Role != nil {
+		if err := req.Role.Validate(); err != nil {
+			return nil, &adminUpdateError{
+				status:    http.StatusBadRequest,
+				clientMsg: "Invalid role",
+				auditMsg:  "invalid role",
+			}
+		}
+		user.Role = *req.Role
+	}
+
+	if req.IsActive != nil {
+		user.IsActive = *req.IsActive
+	}
+
+	if req.Password != nil {
+		if err := models.ValidatePassword(*req.Password); err != nil {
+			return nil, &adminUpdateError{
+				status:    http.StatusBadRequest,
+				clientMsg: err.Error(),
+				auditMsg:  "invalid password",
+			}
+		}
+		if err := user.SetPassword(*req.Password); err != nil {
+			slog.Error("Failed to hash password", "error", err)
+			return nil, &adminUpdateError{
+				status:    http.StatusInternalServerError,
+				clientMsg: "Failed to process password",
+				auditMsg:  "failed to process password",
+			}
+		}
+	}
+
+	if err := user.ValidateWithContext(ctx); err != nil {
+		return nil, &adminUpdateError{
+			status:    http.StatusBadRequest,
+			clientMsg: err.Error(),
+			auditMsg:  "validation failed",
+		}
+	}
+
+	updated, err := api.userRegistry.Update(ctx, *user)
+	if err != nil {
+		slog.Error("Failed to update user", "error", err)
+		if errors.Is(err, registry.ErrEmailAlreadyExists) {
+			return nil, &adminUpdateError{
+				status:    http.StatusConflict,
+				clientMsg: "User with this email already exists",
+				auditMsg:  "email already exists",
+			}
+		}
+		return nil, &adminUpdateError{
+			status:    http.StatusInternalServerError,
+			clientMsg: "Failed to update user",
+			auditMsg:  "failed to update user",
+		}
+	}
+
+	return updated, nil
 }
 
 // deactivateUser sets a user's is_active flag to false.

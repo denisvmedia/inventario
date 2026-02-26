@@ -50,8 +50,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'save', data: AdminUserCreateRequest | AdminUserUpdateRequest): void
-  (e: 'cancel'): void
+  (_e: 'save', _data: AdminUserCreateRequest | AdminUserUpdateRequest): void
+  (_e: 'cancel'): void
 }>()
 
 const form = reactive({
@@ -113,23 +113,28 @@ function submit() {
   flex-direction: column;
   gap: 1rem;
 }
+
 .field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
+
 .field-inline {
   flex-direction: row;
   align-items: center;
   gap: 0.5rem;
 }
+
 label {
   font-weight: 500;
   font-size: 0.9rem;
 }
+
 .required {
   color: #e53e3e;
 }
+
 input[type='text'],
 input[type='email'],
 input[type='password'],
@@ -141,6 +146,7 @@ select {
   background: var(--p-surface-0, #fff);
   color: var(--p-text-color, inherit);
 }
+
 input[type='text']:focus,
 input[type='email']:focus,
 input[type='password']:focus,
@@ -148,6 +154,7 @@ select:focus {
   outline: 2px solid var(--p-primary-color, #6366f1);
   outline-offset: 1px;
 }
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
