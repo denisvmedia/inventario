@@ -147,9 +147,6 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Failed to process registration", http.StatusInternalServerError)
 		return
 	}
-	// Self-reference: UserID = the user's own ID.
-	user.UserID = user.ID
-
 	created, err := api.userRegistry.Create(r.Context(), user)
 	if err != nil {
 		slog.Error("Failed to create user during registration", "email", req.Email, "error", err)
