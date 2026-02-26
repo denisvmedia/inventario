@@ -130,6 +130,69 @@ test.describe('Verify email page', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Registration modes
+//
+// The server mode is a CLI flag so we cannot change it at runtime. Instead,
+// we mock the POST /api/v1/register response with page.route() to exercise
+// the frontend's handling of each mode's API response.
+// ---------------------------------------------------------------------------
+
+test.describe('Registration mode — open', () => {
+  test('shows "check your email" success message', async ({ page }) => {
+    await page.route('**/api/v1/register', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Registration successful. Please check your email to verify your account.' }),
+      }),
+    );
+
+    await goToRegister(page);
+    await fillAndSubmitRegister(page, 'Open User', `open-${Date.now()}@example.com`, 'Password123!');
+
+    await expect(page.locator('.success-message')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.success-message')).toContainText('check your email');
+  });
+});
+
+test.describe('Registration mode — approval', () => {
+  test('shows "pending administrator approval" success message', async ({ page }) => {
+    await page.route('**/api/v1/register', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Registration successful. Your account is pending administrator approval.' }),
+      }),
+    );
+
+    await goToRegister(page);
+    await fillAndSubmitRegister(page, 'Approval User', `approval-${Date.now()}@example.com`, 'Password123!');
+
+    await expect(page.locator('.success-message')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.success-message')).toContainText('pending administrator approval');
+  });
+});
+
+test.describe('Registration mode — closed', () => {
+  test('shows an error message when registration is disabled', async ({ page }) => {
+    await page.route('**/api/v1/register', (route) =>
+      route.fulfill({
+        status: 403,
+        contentType: 'text/plain',
+        body: 'Registrations are currently closed',
+      }),
+    );
+
+    await goToRegister(page);
+    await fillAndSubmitRegister(page, 'Closed User', `closed-${Date.now()}@example.com`, 'Password123!');
+
+    await expect(page.locator('.error-message')).toBeVisible({ timeout: 10000 });
+    // The form should remain visible (not switch to the success state).
+    await expect(page.locator('form.register-form-content')).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Login page — register link
 // ---------------------------------------------------------------------------
 
