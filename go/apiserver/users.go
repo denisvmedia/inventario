@@ -91,8 +91,17 @@ func (api *UsersAPI) listUsers(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 	roleFilter := q.Get("role")
-	activeFilter := q.Get("active")
+	activeFilter := strings.ToLower(q.Get("active"))
 	searchFilter := strings.ToLower(q.Get("search"))
+
+	if roleFilter != "" && roleFilter != string(models.UserRoleAdmin) && roleFilter != string(models.UserRoleUser) {
+		http.Error(w, "Invalid role filter", http.StatusBadRequest)
+		return
+	}
+	if activeFilter != "" && activeFilter != "true" && activeFilter != "false" {
+		http.Error(w, "Invalid active filter", http.StatusBadRequest)
+		return
+	}
 
 	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
 
@@ -130,8 +139,6 @@ func (api *UsersAPI) listUsers(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Failed to encode response", "error", err)
 	}
 }
-
-
 
 // getUser returns a single user by ID, enforcing tenant isolation.
 //
@@ -185,11 +192,18 @@ func (api *UsersAPI) createUser(w http.ResponseWriter, r *http.Request) {
 
 	var req AdminUserCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		errMsg := "invalid request body"
+		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Name = strings.TrimSpace(req.Name)
+
 	if req.Email == "" || req.Password == "" || req.Name == "" {
+		errMsg := "missing required fields"
+		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Email, password, and name are required", http.StatusBadRequest)
 		return
 	}
@@ -197,10 +211,14 @@ func (api *UsersAPI) createUser(w http.ResponseWriter, r *http.Request) {
 		req.Role = models.UserRoleUser
 	}
 	if err := req.Role.Validate(); err != nil {
+		errMsg := "invalid role"
+		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Invalid role", http.StatusBadRequest)
 		return
 	}
 	if err := models.ValidatePassword(req.Password); err != nil {
+		errMsg := "invalid password"
+		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -214,10 +232,14 @@ func (api *UsersAPI) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := user.SetPassword(req.Password); err != nil {
 		slog.Error("Failed to hash password", "error", err)
+		errMsg := "failed to process password"
+		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Failed to process password", http.StatusInternalServerError)
 		return
 	}
 	if err := user.ValidateWithContext(r.Context()); err != nil {
+		errMsg := "validation failed"
+		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -225,10 +247,14 @@ func (api *UsersAPI) createUser(w http.ResponseWriter, r *http.Request) {
 	created, err := api.userRegistry.Create(r.Context(), *user)
 	if err != nil {
 		if errors.Is(err, registry.ErrEmailAlreadyExists) {
+			errMsg := "email already exists"
+			api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 			http.Error(w, "User with this email already exists", http.StatusConflict)
 			return
 		}
 		slog.Error("Failed to create user", "error", err)
+		errMsg := "failed to create user"
+		api.logAdminAction(r, "admin_create_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
@@ -264,25 +290,72 @@ func (api *UsersAPI) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := api.fetchUserInTenant(w, r, chi.URLParam(r, "id"), currentUser.TenantID)
+	userID := chi.URLParam(r, "id")
+	user, ok := api.fetchUserInTenant(w, r, userID, currentUser.TenantID)
 	if !ok {
+		errMsg := "user not found"
+		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		return
 	}
 
 	var req AdminUserUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		errMsg := "invalid request body"
+		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	if userID == currentUser.ID {
+		if req.IsActive != nil && !*req.IsActive {
+			errMsg := "cannot deactivate own account"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
+			http.Error(w, "Cannot deactivate your own account", http.StatusBadRequest)
+			return
+		}
+		if req.Role != nil && *req.Role != models.UserRoleAdmin {
+			errMsg := "cannot change own role"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
+			http.Error(w, "Cannot change your own role", http.StatusBadRequest)
+			return
+		}
+	}
+
 	if req.Email != nil {
-		user.Email = *req.Email
+		normalizedEmail := strings.ToLower(strings.TrimSpace(*req.Email))
+		if normalizedEmail == "" {
+			errMsg := "email cannot be empty"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
+			http.Error(w, "Email cannot be empty", http.StatusBadRequest)
+			return
+		}
+
+		// Pre-check to return 409 instead of a generic 500 on unique-index violations.
+		// (Also ensures the email uniqueness rule remains tenant-scoped.)
+		existing, err := api.userRegistry.GetByEmail(r.Context(), currentUser.TenantID, normalizedEmail)
+		if err == nil && existing != nil && existing.ID != user.ID {
+			errMsg := "email already exists"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
+			http.Error(w, "User with this email already exists", http.StatusConflict)
+			return
+		}
+		if err != nil && !errors.Is(err, registry.ErrNotFound) {
+			slog.Error("Failed to check email uniqueness", "email", normalizedEmail, "error", err)
+			errMsg := "failed to check email uniqueness"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
+			http.Error(w, "Failed to update user", http.StatusInternalServerError)
+			return
+		}
+
+		user.Email = normalizedEmail
 	}
 	if req.Name != nil {
-		user.Name = *req.Name
+		user.Name = strings.TrimSpace(*req.Name)
 	}
 	if req.Role != nil {
 		if err := req.Role.Validate(); err != nil {
+			errMsg := "invalid role"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 			http.Error(w, "Invalid role", http.StatusBadRequest)
 			return
 		}
@@ -293,17 +366,23 @@ func (api *UsersAPI) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password != nil {
 		if err := models.ValidatePassword(*req.Password); err != nil {
+			errMsg := "invalid password"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		if err := user.SetPassword(*req.Password); err != nil {
 			slog.Error("Failed to hash password", "error", err)
+			errMsg := "failed to process password"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 			http.Error(w, "Failed to process password", http.StatusInternalServerError)
 			return
 		}
 	}
 
 	if err := user.ValidateWithContext(r.Context()); err != nil {
+		errMsg := "validation failed"
+		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -311,6 +390,14 @@ func (api *UsersAPI) updateUser(w http.ResponseWriter, r *http.Request) {
 	updated, err := api.userRegistry.Update(r.Context(), *user)
 	if err != nil {
 		slog.Error("Failed to update user", "error", err)
+		if errors.Is(err, registry.ErrEmailAlreadyExists) {
+			errMsg := "email already exists"
+			api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
+			http.Error(w, "User with this email already exists", http.StatusConflict)
+			return
+		}
+		errMsg := "failed to update user"
+		api.logAdminAction(r, "admin_update_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Failed to update user", http.StatusInternalServerError)
 		return
 	}
@@ -345,18 +432,24 @@ func (api *UsersAPI) deactivateUser(w http.ResponseWriter, r *http.Request) {
 
 	userID := chi.URLParam(r, "id")
 	if userID == currentUser.ID {
+		errMsg := "cannot deactivate own account"
+		api.logAdminAction(r, "admin_deactivate_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Cannot deactivate your own account", http.StatusBadRequest)
 		return
 	}
 
 	user, ok := api.fetchUserInTenant(w, r, userID, currentUser.TenantID)
 	if !ok {
+		errMsg := "user not found"
+		api.logAdminAction(r, "admin_deactivate_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		return
 	}
 
 	user.IsActive = false
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
 		slog.Error("Failed to deactivate user", "error", err)
+		errMsg := "failed to deactivate user"
+		api.logAdminAction(r, "admin_deactivate_user", &currentUser.ID, &currentUser.TenantID, false, &errMsg)
 		http.Error(w, "Failed to deactivate user", http.StatusInternalServerError)
 		return
 	}

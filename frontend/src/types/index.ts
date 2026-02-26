@@ -140,7 +140,10 @@ export interface AdminUser {
   name: string
   role: UserRole
   is_active: boolean
-  tenant_id: string
+
+  // Not currently exposed by the backend user JSON (TenantAwareEntityID has json:"-" for tenant_id).
+  tenant_id?: string
+
   created_date?: string
   updated_date?: string
   last_login_at?: string

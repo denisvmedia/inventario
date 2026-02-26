@@ -128,7 +128,7 @@
 
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import userService from '@/services/userService'
 import { useErrorState } from '@/utils/errorUtils'
@@ -140,7 +140,7 @@ import type { AdminUser } from '@/types'
 const authStore = useAuthStore()
 const { errors, handleError, removeError } = useErrorState()
 
-const currentUserId = ref(authStore.user?.id ?? '')
+const currentUserId = computed(() => authStore.user?.id ?? '')
 
 const users = ref<AdminUser[]>([])
 const loading = ref(false)
