@@ -15,11 +15,11 @@ type EmailVerification struct {
 	ID string `json:"id" db:"id"`
 
 	// UserID is the ID of the user being verified.
-	//migrator:schema:field name="user_id" type="TEXT" not_null="true"
+	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_email_verification_user"
 	UserID string `json:"user_id" db:"user_id"`
 
 	// TenantID is the tenant this verification belongs to.
-	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true"
+	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_email_verification_tenant"
 	TenantID string `json:"tenant_id" db:"tenant_id"`
 
 	// Email is the address being verified.

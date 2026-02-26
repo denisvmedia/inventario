@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2026-02-26T12:30:50+01:00
+-- Generated on: 2026-02-26T15:20:26+01:00
 -- Direction: UP
 
 -- POSTGRES TABLE: email_verifications --
