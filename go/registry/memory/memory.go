@@ -51,6 +51,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.UserConcurrencySlotRegistryFactory = userConcurrencySlotFactory
 	fs.OperationSlotRegistryFactory = operationSlotFactory
 	fs.TenantRegistry = NewTenantRegistry()
+	fs.EmailVerificationRegistry = NewEmailVerificationRegistry()
 	fs.UserRegistry = NewUserRegistry()
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()

@@ -1,12 +1,32 @@
 <template>
-  <div class="login-form">
-    <div class="login-card">
-      <div class="login-header">
+  <div class="register-form">
+    <div class="register-card">
+      <div class="register-header">
         <h1>Inventario</h1>
-        <p>Sign in to your account</p>
+        <p>Create a new account</p>
       </div>
 
-      <form class="login-form-content" @submit.prevent="handleSubmit">
+      <div v-if="submitted" class="success-message">
+        <p>{{ successMessage }}</p>
+        <p>
+          <RouterLink to="/login">Back to sign in</RouterLink>
+        </p>
+      </div>
+
+      <form v-else class="register-form-content" @submit.prevent="handleSubmit">
+        <div class="form-group">
+          <label for="name">Full Name</label>
+          <input
+            id="name"
+            v-model="form.name"
+            type="text"
+            required
+            :disabled="isLoading"
+            data-testid="name"
+            placeholder="Enter your full name"
+          />
+        </div>
+
         <div class="form-group">
           <label for="email">Email</label>
           <input
@@ -29,7 +49,7 @@
             required
             :disabled="isLoading"
             data-testid="password"
-            placeholder="Enter your password"
+            placeholder="At least 8 characters"
           />
         </div>
 
@@ -40,16 +60,16 @@
         <button
           type="submit"
           :disabled="isLoading || !isFormValid"
-          data-testid="login-button"
-          class="login-button"
+          data-testid="register-button"
+          class="register-button"
         >
-          <span v-if="isLoading">Signing in...</span>
-          <span v-else>Sign In</span>
+          <span v-if="isLoading">Creating account...</span>
+          <span v-else>Create Account</span>
         </button>
 
-        <p class="register-link">
-          Don't have an account?
-          <RouterLink to="/register">Create one</RouterLink>
+        <p class="login-link">
+          Already have an account?
+          <RouterLink to="/login">Sign in</RouterLink>
         </p>
       </form>
     </div>
@@ -58,62 +78,49 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { RouterLink, useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '../stores/authStore'
+import { RouterLink } from 'vue-router'
+import authService from '../services/authService'
 
-const router = useRouter()
-const route = useRoute()
-const authStore = useAuthStore()
+const form = ref({ name: '', email: '', password: '' })
+const isLoading = ref(false)
+const error = ref<string | null>(null)
+const submitted = ref(false)
+const successMessage = ref('')
 
-// Form data
-const form = ref({
-  email: '',
-  password: ''
-})
+const isFormValid = computed(() =>
+  form.value.name.trim() !== '' &&
+  form.value.email.trim() !== '' &&
+  form.value.password.trim() !== ''
+)
 
-// Computed properties
-const isLoading = computed(() => authStore.isLoading)
-const error = computed(() => authStore.error)
-const isFormValid = computed(() => {
-  return form.value.email.trim() !== '' && form.value.password.trim() !== ''
-})
-
-// Methods
 async function handleSubmit() {
   if (!isFormValid.value) return
-
+  isLoading.value = true
+  error.value = null
   try {
-    await authStore.login({
+    const res = await authService.register({
+      name: form.value.name.trim(),
       email: form.value.email.trim(),
       password: form.value.password
     })
-
-    // Handle redirect query parameter or default to home
-    const redirectTo = route.query.redirect as string || '/'
-    console.log('Login successful, redirecting to:', redirectTo)
-
-    // Use replace instead of push to avoid login page in history
-    await router.replace(redirectTo)
-  } catch (error) {
-    // Error is handled by the store
-    console.error('Login failed:', error)
+    successMessage.value = res.message
+    submitted.value = true
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: string | { error?: string } } }
+    const data = e.response?.data
+    if (typeof data === 'string') {
+      error.value = data.trim() || 'Registration failed. Please try again.'
+    } else {
+      error.value = 'Registration failed. Please try again.'
+    }
+  } finally {
+    isLoading.value = false
   }
 }
-
-// Auto-fill for development/testing
-function fillTestCredentials() {
-  form.value.email = 'admin@example.com'
-  form.value.password = 'admin123'
-}
-
-// Expose for testing
-defineExpose({
-  fillTestCredentials
-})
 </script>
 
 <style scoped>
-.login-form {
+.register-form {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -122,7 +129,7 @@ defineExpose({
   padding: 1rem;
 }
 
-.login-card {
+.register-card {
   background: white;
   border-radius: 8px;
   box-shadow: 0 10px 25px rgb(0 0 0 / 10%);
@@ -131,25 +138,25 @@ defineExpose({
   max-width: 400px;
 }
 
-.login-header {
+.register-header {
   text-align: center;
   margin-bottom: 2rem;
 }
 
-.login-header h1 {
+.register-header h1 {
   color: #333;
   margin: 0 0 0.5rem;
   font-size: 2rem;
   font-weight: 600;
 }
 
-.login-header p {
+.register-header p {
   color: #666;
   margin: 0;
   font-size: 1rem;
 }
 
-.login-form-content {
+.register-form-content {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -195,7 +202,17 @@ defineExpose({
   font-size: 0.9rem;
 }
 
-.login-button {
+.success-message {
+  background-color: #efe;
+  color: #363;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #cfc;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.register-button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
@@ -207,16 +224,16 @@ defineExpose({
   transition: opacity 0.2s;
 }
 
-.login-button:disabled {
+.register-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.login-button:hover:not(:disabled) {
+.register-button:hover:not(:disabled) {
   opacity: 0.9;
 }
 
-.register-link {
+.login-link {
   text-align: center;
   color: #666;
   font-size: 0.9rem;

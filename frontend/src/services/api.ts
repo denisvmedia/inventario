@@ -219,8 +219,9 @@ api.interceptors.response.use(
         console.warn('Could not import auth store:', e)
       }
 
-      // Redirect to login page if not already there
-      if (window.location.pathname !== '/login') {
+      // Redirect to login page if not already on a public page
+      const publicPaths = ['/login', '/register', '/verify-email']
+      if (!publicPaths.some(p => window.location.pathname.startsWith(p))) {
         const currentPath = window.location.pathname + window.location.search
         navigateToLogin(currentPath)
       }

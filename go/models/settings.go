@@ -44,6 +44,18 @@ type JSONBValue struct {
 	Data any
 }
 
+// RegistrationMode controls how new user registrations are handled.
+type RegistrationMode string
+
+const (
+	// RegistrationModeOpen allows anyone to register; account is activated after email verification.
+	RegistrationModeOpen RegistrationMode = "open"
+	// RegistrationModeApproval allows anyone to register but an admin must approve the account.
+	RegistrationModeApproval RegistrationMode = "approval"
+	// RegistrationModeClosed disables self-service registration entirely.
+	RegistrationModeClosed RegistrationMode = "closed"
+)
+
 type SettingName string
 
 var _ = must.Must(typekit.StructToMap(&SettingsObject{}))

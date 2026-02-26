@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 import LoginView from '../views/LoginView.vue'
+import RegisterView from '../views/RegisterView.vue'
+import VerifyEmailView from '../views/VerifyEmailView.vue'
 import settingsCheckService from '../services/settingsCheckService'
 import { useAuthStore } from '../stores/authStore'
 
@@ -12,6 +14,18 @@ const routes = [
     path: '/login',
     name: 'login',
     component: LoginView,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: RegisterView,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/verify-email',
+    name: 'verify-email',
+    component: VerifyEmailView,
     meta: { requiresAuth: false }
   },
   // Protected routes
@@ -202,8 +216,9 @@ router.beforeEach(async (to, from) => {
     return { path: '/' }
   }
 
-  // Skip settings check for login, system pages and print pages
+  // Skip settings check for login, register, verify-email, system pages and print pages
   const isLoginPage = to.path === '/login'
+  const isRegisterPage = to.path === '/register' || to.path === '/verify-email'
   const isSystemPage = to.path.startsWith('/system')
   const isPrintPage = to.path.includes('/print')
 
@@ -213,7 +228,7 @@ router.beforeEach(async (to, from) => {
     return true
   }
 
-  if (!isLoginPage && !isSystemPage && !isPrintPage) {
+  if (!isLoginPage && !isRegisterPage && !isSystemPage && !isPrintPage) {
     // Check if settings exist
     const hasSettings = await settingsCheckService.hasSettings()
 

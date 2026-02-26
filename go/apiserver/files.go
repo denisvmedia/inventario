@@ -455,6 +455,15 @@ func Files(params Params) func(r chi.Router) {
 }
 
 // downloadOriginalFile downloads an original file using the file entity's stored metadata
+// @Summary Download original file
+// @Description Download the original file content by file ID. Requires a valid signed URL token.
+// @Tags files
+// @Produce application/octet-stream
+// @Param fileID path string true "File ID"
+// @Success 200 {file} binary "File content"
+// @Failure 404 {object} jsonapi.Errors "Not Found"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /files/download/files/{fileID} [get]
 func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
 	if fileID == "" {
@@ -491,6 +500,16 @@ func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request
 }
 
 // downloadThumbnail downloads a thumbnail file (always JPEG) with deferred generation support
+// @Summary Download file thumbnail
+// @Description Download a JPEG thumbnail for the specified file. Returns a placeholder image while the thumbnail is being generated.
+// @Tags files
+// @Produce image/jpeg
+// @Param fileID path string true "File ID"
+// @Param size path string true "Thumbnail size" Enums(small, medium)
+// @Success 200 {file} binary "Thumbnail image"
+// @Failure 404 {object} jsonapi.Errors "Not Found"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /files/download/thumbnails/{fileID}/{size} [get]
 func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
 	size := chi.URLParam(r, "size")
