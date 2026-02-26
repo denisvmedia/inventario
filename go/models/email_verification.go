@@ -47,7 +47,7 @@ type EmailVerification struct {
 type EmailVerificationIndexes struct {
 	//migrator:schema:index name="email_verifications_user_id_idx" fields="user_id" table="email_verifications"
 	_ int
-	//migrator:schema:index name="email_verifications_token_idx" fields="token" table="email_verifications"
+	//migrator:schema:index name="email_verifications_token_idx" fields="token" unique="true" table="email_verifications"
 	_ int
 	//migrator:schema:index name="email_verifications_email_idx" fields="email" table="email_verifications"
 	_ int
