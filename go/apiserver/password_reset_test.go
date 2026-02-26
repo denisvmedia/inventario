@@ -36,7 +36,9 @@ func makePasswordResetUser() *models.User {
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
-	_ = u.SetPassword("OldPassword123")
+	if err := u.SetPassword("OldPassword123"); err != nil {
+		panic(err)
+	}
 	return u
 }
 
@@ -133,8 +135,9 @@ func TestHandleResetPassword(t *testing.T) {
 		user := makePasswordResetUser()
 		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{user.ID: user}}
 		prReg := memory.NewPasswordResetRegistry()
-		token, _ := models.GeneratePasswordResetToken()
-		_, err := prReg.Create(t.Context(), models.PasswordReset{
+		token, err := models.GeneratePasswordResetToken()
+		c.Assert(err, qt.IsNil)
+		_, err = prReg.Create(t.Context(), models.PasswordReset{
 			UserID:    user.ID,
 			TenantID:  apiserver.DefaultTenantID,
 			Email:     user.Email,
@@ -177,8 +180,9 @@ func TestHandleResetPassword(t *testing.T) {
 		user := makePasswordResetUser()
 		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{user.ID: user}}
 		prReg := memory.NewPasswordResetRegistry()
-		token, _ := models.GeneratePasswordResetToken()
-		_, err := prReg.Create(t.Context(), models.PasswordReset{
+		token, err := models.GeneratePasswordResetToken()
+		c.Assert(err, qt.IsNil)
+		_, err = prReg.Create(t.Context(), models.PasswordReset{
 			UserID:    user.ID,
 			TenantID:  apiserver.DefaultTenantID,
 			Email:     user.Email,
@@ -212,14 +216,16 @@ func TestHandleResetPassword(t *testing.T) {
 		user := makePasswordResetUser()
 		userReg := &mockUserRegistryForAuth{users: map[string]*models.User{user.ID: user}}
 		prReg := memory.NewPasswordResetRegistry()
-		token, _ := models.GeneratePasswordResetToken()
-		_, _ = prReg.Create(t.Context(), models.PasswordReset{
+		token, err := models.GeneratePasswordResetToken()
+		c.Assert(err, qt.IsNil)
+		_, err = prReg.Create(t.Context(), models.PasswordReset{
 			UserID:    user.ID,
 			TenantID:  apiserver.DefaultTenantID,
 			Email:     user.Email,
 			Token:     token,
 			ExpiresAt: time.Now().Add(time.Hour),
 		})
+		c.Assert(err, qt.IsNil)
 
 		r := makeRouter(prReg, userReg)
 		body, _ := json.Marshal(map[string]string{"token": token, "new_password": "weak"})

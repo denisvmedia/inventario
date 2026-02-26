@@ -3,6 +3,7 @@ package apiserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -99,8 +100,22 @@ func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(htt
 			// Read the body so we can extract the email, then restore it.
 			bodyBytes, err := io.ReadAll(r.Body)
 			_ = r.Body.Close()
-			if err != nil || len(bodyBytes) == 0 {
-				// Let the handler deal with the malformed body.
+			if err != nil {
+				// If the body exceeded the size limit, return 413 immediately.
+				// Without this check, the downstream handler would be called with a
+				// truncated body, potentially causing a double-write to the response.
+				var maxBytesErr *http.MaxBytesError
+				if errors.As(err, &maxBytesErr) {
+					http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+					return
+				}
+				// Other read errors: pass the (possibly partial) body to the handler.
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				next.ServeHTTP(w, r)
+				return
+			}
+			if len(bodyBytes) == 0 {
+				// Empty body: let the handler return 400.
 				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 				next.ServeHTTP(w, r)
 				return
