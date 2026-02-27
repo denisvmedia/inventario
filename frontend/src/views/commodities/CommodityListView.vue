@@ -114,15 +114,22 @@ const hasLocationsAndAreas = computed(() => {
   return locations.value.length > 0 && areas.value.length > 0
 })
 
-// Filtered commodities based on toggle state
+// Filtered commodities based on toggle state, sorted by purchase date (descending)
 const filteredCommodities = computed(() => {
-  if (showInactiveItems.value) {
-    return commodities.value
+  let result = commodities.value
+
+  if (!showInactiveItems.value) {
+    result = result.filter(commodity => {
+      // Show only non-draft items with status 'in_use'
+      return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
+    })
   }
 
-  return commodities.value.filter(commodity => {
-    // Show only non-draft items with status 'in_use'
-    return !commodity.attributes.draft && commodity.attributes.status === COMMODITY_STATUS_IN_USE
+  // Sort by purchase date in descending order (most recent first)
+  return result.sort((a, b) => {
+    const dateA = a.attributes.purchase_date ? new Date(a.attributes.purchase_date) : new Date(0)
+    const dateB = b.attributes.purchase_date ? new Date(b.attributes.purchase_date) : new Date(0)
+    return dateB.getTime() - dateA.getTime()
   })
 })
 
