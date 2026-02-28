@@ -69,7 +69,7 @@ func (c *Config) setDefaults() {
 	if c.EmailQueueWorkers <= 0 {
 		c.EmailQueueWorkers = 5
 	}
-	if c.EmailQueueMaxRetries <= 0 {
+	if c.EmailQueueMaxRetries < 0 {
 		c.EmailQueueMaxRetries = 5
 	}
 	if c.SMTPPort == 0 {

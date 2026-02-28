@@ -313,7 +313,11 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		return
 	}
 
-	verificationURL := buildPublicURL(api.publicBaseURL, r, "/verify-email", url.Values{"token": {token}})
+	verificationURL, err := buildPublicURL(api.publicBaseURL, "/verify-email", url.Values{"token": {token}})
+	if err != nil {
+		slog.Error("Failed to build verification URL", "user_id", user.ID, "error", err)
+		return
+	}
 
 	go func() {
 		// Do NOT use r.Context() here — the request may already be cancelled by the

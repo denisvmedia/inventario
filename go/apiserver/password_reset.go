@@ -235,7 +235,11 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 		return
 	}
 
-	resetURL := buildPublicURL(api.publicBaseURL, r, "/reset-password", url.Values{"token": {token}})
+	resetURL, err := buildPublicURL(api.publicBaseURL, "/reset-password", url.Values{"token": {token}})
+	if err != nil {
+		slog.Error("Failed to build password reset URL", "user_id", user.ID, "error", err)
+		return
+	}
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

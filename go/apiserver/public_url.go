@@ -1,70 +1,50 @@
 package apiserver
 
 import (
+	"fmt"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"strings"
 )
 
-func buildPublicURL(publicBaseURL string, r *http.Request, path string, query url.Values) string {
+func buildPublicURL(publicBaseURL, path string, query url.Values) (string, error) {
 	base := strings.TrimSpace(publicBaseURL)
-	fallbackReason := "public_url_not_set"
-	if base != "" {
-		parsed, err := url.Parse(base)
-		switch {
-		case err != nil:
-			fallbackReason = "public_url_parse_error"
-			slog.Error("Invalid public URL configuration; falling back to request host",
-				"public_url", base,
-				"error", err,
-			)
-		case parsed.Scheme != "" && parsed.Host != "":
-			scheme := strings.ToLower(parsed.Scheme)
-			if !isAllowedPublicURLScheme(scheme) {
-				fallbackReason = "public_url_unsupported_scheme"
-				slog.Error("Invalid public URL configuration; only http/https schemes are allowed",
-					"public_url", base,
-					"scheme", parsed.Scheme,
-				)
-				break
-			}
-			parsed.Scheme = scheme
-			return parsed.ResolveReference(&url.URL{
-				Path:     path,
-				RawQuery: query.Encode(),
-			}).String()
-		default:
-			fallbackReason = "public_url_missing_scheme_or_host"
-			slog.Error("Invalid public URL configuration; scheme and host are required",
-				"public_url", base,
-			)
-		}
+	if base == "" {
+		return "", fmt.Errorf("public URL is required")
 	}
 
-	slog.Warn("Using request host to build public URL; configure --public-url to avoid host-header-derived links",
-		"reason", fallbackReason,
-		"host", r.Host,
-	)
-
-	scheme := "http"
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		first := strings.TrimSpace(strings.Split(proto, ",")[0])
-		first = strings.ToLower(first)
-		if isAllowedPublicURLScheme(first) {
-			scheme = first
-		} else {
-			slog.Warn("Ignoring unsupported X-Forwarded-Proto value", "value", proto)
-		}
-	} else if r.TLS != nil {
-		scheme = "https"
+	parsed, err := url.Parse(base)
+	switch {
+	case err != nil:
+		slog.Error("Invalid public URL configuration; cannot build transactional email link",
+			"public_url", base,
+			"error", err,
+		)
+		return "", fmt.Errorf("parse public URL: %w", err)
+	case parsed.Scheme == "" || parsed.Host == "":
+		err := fmt.Errorf("scheme and host are required")
+		slog.Error("Invalid public URL configuration; cannot build transactional email link",
+			"public_url", base,
+			"error", err,
+		)
+		return "", err
 	}
-	return (&url.URL{
-		Scheme:   scheme,
-		Host:     r.Host,
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if !isAllowedPublicURLScheme(scheme) {
+		err := fmt.Errorf("unsupported scheme %q", parsed.Scheme)
+		slog.Error("Invalid public URL configuration; only http/https schemes are allowed",
+			"public_url", base,
+			"error", err,
+		)
+		return "", err
+	}
+
+	parsed.Scheme = scheme
+	return parsed.ResolveReference(&url.URL{
 		Path:     path,
 		RawQuery: query.Encode(),
-	}).String()
+	}).String(), nil
 }
 
 func isAllowedPublicURLScheme(scheme string) bool {

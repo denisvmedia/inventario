@@ -1,8 +1,6 @@
 package apiserver
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -12,41 +10,35 @@ import (
 func TestBuildPublicURL_UsesConfiguredBaseWhenSchemeIsAllowed(t *testing.T) {
 	c := qt.New(t)
 
-	req := httptest.NewRequest(http.MethodGet, "http://internal.local/ignored", nil)
 	values := url.Values{"token": {"abc"}}
-
-	got := buildPublicURL("https://inventario.example.com", req, "/verify-email", values)
+	got, err := buildPublicURL("https://inventario.example.com", "/verify-email", values)
+	c.Assert(err, qt.IsNil)
 	c.Assert(got, qt.Equals, "https://inventario.example.com/verify-email?token=abc")
 }
 
-func TestBuildPublicURL_FallsBackWhenConfiguredBaseSchemeIsUnsupported(t *testing.T) {
+func TestBuildPublicURL_ReturnsErrorWhenConfiguredBaseSchemeIsUnsupported(t *testing.T) {
 	c := qt.New(t)
 
-	req := httptest.NewRequest(http.MethodGet, "http://app.local/ignored", nil)
 	values := url.Values{"token": {"abc"}}
-
-	got := buildPublicURL("ftp://inventario.example.com", req, "/verify-email", values)
-	c.Assert(got, qt.Equals, "http://app.local/verify-email?token=abc")
+	got, err := buildPublicURL("ftp://inventario.example.com", "/verify-email", values)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(got, qt.Equals, "")
 }
 
-func TestBuildPublicURL_IgnoresUnsupportedForwardedProto(t *testing.T) {
+func TestBuildPublicURL_ReturnsErrorWhenPublicBaseURLMissing(t *testing.T) {
 	c := qt.New(t)
 
-	req := httptest.NewRequest(http.MethodGet, "http://app.local/ignored", nil)
-	req.Header.Set("X-Forwarded-Proto", "javascript")
 	values := url.Values{"token": {"abc"}}
-
-	got := buildPublicURL("", req, "/verify-email", values)
-	c.Assert(got, qt.Equals, "http://app.local/verify-email?token=abc")
+	got, err := buildPublicURL("", "/verify-email", values)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(got, qt.Equals, "")
 }
 
-func TestBuildPublicURL_UsesFirstForwardedProtoValue(t *testing.T) {
+func TestBuildPublicURL_ReturnsErrorWhenPublicBaseURLMissingSchemeOrHost(t *testing.T) {
 	c := qt.New(t)
 
-	req := httptest.NewRequest(http.MethodGet, "http://app.local/ignored", nil)
-	req.Header.Set("X-Forwarded-Proto", "https, http")
 	values := url.Values{"token": {"abc"}}
-
-	got := buildPublicURL("", req, "/verify-email", values)
-	c.Assert(got, qt.Equals, "https://app.local/verify-email?token=abc")
+	got, err := buildPublicURL("inventario.example.com", "/verify-email", values)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(got, qt.Equals, "")
 }
