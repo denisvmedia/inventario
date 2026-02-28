@@ -90,6 +90,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'delete', 'download'])
 const fileUrl = ref('')
+let fileUrlRequestVersion = 0
 
 const isImageFile = computed(() => {
   if (!props.file) return false
@@ -132,16 +133,24 @@ const objectType = computed(() => {
 })
 
 const loadFileUrl = async () => {
+  const requestVersion = ++fileUrlRequestVersion
   if (!props.file || !isImageFile.value) {
-    fileUrl.value = ''
+    if (requestVersion === fileUrlRequestVersion) {
+      fileUrl.value = ''
+    }
     return
   }
 
   try {
-    fileUrl.value = await fileService.getDownloadUrl(props.file)
+    const url = await fileService.getDownloadUrl(props.file)
+    if (requestVersion === fileUrlRequestVersion) {
+      fileUrl.value = url
+    }
   } catch (error) {
     console.error('Failed to generate signed URL for file details preview:', error)
-    fileUrl.value = ''
+    if (requestVersion === fileUrlRequestVersion) {
+      fileUrl.value = ''
+    }
   }
 }
 
@@ -180,6 +189,7 @@ onMounted(() => {
 
 // Remove keyboard event listener when component is unmounted
 onBeforeUnmount(() => {
+  fileUrlRequestVersion++
   window.removeEventListener('keydown', handleKeyDown)
 })
 

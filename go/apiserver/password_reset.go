@@ -235,10 +235,16 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 		return
 	}
 
-	resetURL, err := buildPublicURL(api.publicBaseURL, "/reset-password", url.Values{"token": {token}})
-	if err != nil {
-		slog.Error("Failed to build password reset URL", "user_id", user.ID, "error", err)
-		return
+	resetQuery := url.Values{"token": {token}}
+	resetURL := "/reset-password?" + resetQuery.Encode()
+	if api.publicBaseURL == "" {
+		slog.Warn("Public base URL is not configured; using relative password reset URL", "user_id", user.ID)
+	} else {
+		resetURL, err = buildPublicURL(api.publicBaseURL, "/reset-password", resetQuery)
+		if err != nil {
+			slog.Error("Failed to build password reset URL", "user_id", user.ID, "error", err)
+			return
+		}
 	}
 
 	go func() {

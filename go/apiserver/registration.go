@@ -313,10 +313,16 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		return
 	}
 
-	verificationURL, err := buildPublicURL(api.publicBaseURL, "/verify-email", url.Values{"token": {token}})
-	if err != nil {
-		slog.Error("Failed to build verification URL", "user_id", user.ID, "error", err)
-		return
+	verificationQuery := url.Values{"token": {token}}
+	verificationURL := "/verify-email?" + verificationQuery.Encode()
+	if api.publicBaseURL == "" {
+		slog.Warn("Public base URL is not configured; using relative verification URL", "user_id", user.ID)
+	} else {
+		verificationURL, err = buildPublicURL(api.publicBaseURL, "/verify-email", verificationQuery)
+		if err != nil {
+			slog.Error("Failed to build verification URL", "user_id", user.ID, "error", err)
+			return
+		}
 	}
 
 	go func() {

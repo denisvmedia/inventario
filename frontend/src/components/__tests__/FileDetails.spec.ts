@@ -98,6 +98,13 @@ describe('FileDetails.vue', () => {
   }
 
   const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
+  const deferred = <T>() => {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((res) => {
+      resolve = res
+    })
+    return { promise, resolve }
+  }
 
   // Rendering tests
   describe('Rendering', () => {
@@ -188,6 +195,36 @@ describe('FileDetails.vue', () => {
       const wrapper = createWrapper({ file: mockPdfFile, fileType: 'manuals' })
       await flushPromises()
       expect(wrapper.vm.fileUrl).toBe('')
+    })
+
+    it('ignores stale signed URL responses when file changes quickly', async () => {
+      const first = deferred<string>()
+      const second = deferred<string>()
+      fileServiceMock.getDownloadUrl
+        .mockImplementationOnce(() => first.promise)
+        .mockImplementationOnce(() => second.promise)
+
+      const wrapper = createWrapper({ file: mockImageFile })
+      await wrapper.setProps({
+        file: {
+          ...mockImageFile,
+          id: 'file-2',
+          path: 'test-image-2',
+          ext: '.png',
+          original_path: 'original-test-image-2.png'
+        }
+      })
+
+      second.resolve('https://signed.example/file-2.png')
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+
+      first.resolve('https://signed.example/file-1.jpg')
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.fileUrl).toBe('https://signed.example/file-2.png')
+      expect(wrapper.find('.image-preview img').attributes('src')).toBe('https://signed.example/file-2.png')
     })
 
     it('identifies image files correctly by extension', () => {

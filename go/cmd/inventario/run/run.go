@@ -248,6 +248,13 @@ func (c *Command) runCommand() error {
 	params.RegistrationMode = models.RegistrationMode(c.config.RegistrationMode)
 	params.PublicURL = strings.TrimSpace(c.config.PublicURL)
 
+	normalizedEmailProvider := services.EmailProvider(strings.ToLower(strings.TrimSpace(c.config.EmailProvider)))
+	if normalizedEmailProvider != services.EmailProviderStub {
+		if err := validatePublicURLForTransactionalEmails(params.PublicURL); err != nil {
+			return fmt.Errorf("invalid --public-url for email provider %q: %w", normalizedEmailProvider, err)
+		}
+	}
+
 	emailService, err := services.NewAsyncEmailService(services.EmailConfig{
 		Provider:        services.EmailProvider(c.config.EmailProvider),
 		From:            c.config.EmailFrom,
@@ -335,6 +342,27 @@ func (c *Command) runCommand() error {
 	}
 
 	return err
+}
+
+func validatePublicURLForTransactionalEmails(publicURL string) error {
+	base := strings.TrimSpace(publicURL)
+	if base == "" {
+		return errors.New("public URL is required")
+	}
+
+	parsed, err := url.Parse(base)
+	if err != nil {
+		return fmt.Errorf("parse error: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return errors.New("scheme and host are required")
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("unsupported scheme %q", parsed.Scheme)
+	}
+	return nil
 }
 
 // getJWTSecret retrieves JWT secret from config/environment or generates a secure default
