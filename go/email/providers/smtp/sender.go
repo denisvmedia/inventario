@@ -65,12 +65,24 @@ func New(cfg Config) (*Sender, error) {
 //
 // Any transport or protocol error is returned to the caller for centralized
 // retry/backoff handling.
-func (s *Sender) Send(_ context.Context, message sender.Message) error {
+func (s *Sender) Send(ctx context.Context, message sender.Message) error {
 	addr := net.JoinHostPort(s.host, strconv.Itoa(s.port))
-
-	client, err := stdsmtp.Dial(addr)
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("smtp dial: %w", err)
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := conn.SetDeadline(deadline); err != nil {
+			_ = conn.Close()
+			return fmt.Errorf("smtp set deadline: %w", err)
+		}
+	}
+
+	client, err := stdsmtp.NewClient(conn, s.host)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("smtp new client: %w", err)
 	}
 	defer func() { _ = client.Close() }()
 

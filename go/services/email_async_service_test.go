@@ -102,7 +102,7 @@ func TestAsyncEmailService_ProcessJob_SchedulesRetryWithEncodedPayload(t *testin
 		Attempt:      0,
 	}
 	start := time.Now()
-	svc.processJob(job, 1)
+	svc.processJob(context.Background(), job, 1)
 
 	payloads, readyAt := queue.RetryPayloads()
 	c.Assert(payloads, qt.HasLen, 1)
@@ -283,7 +283,7 @@ func cloneBytes(in []byte) []byte {
 	return out
 }
 
-func TestAsyncEmailService_RetrysFailedDelivery(t *testing.T) {
+func TestAsyncEmailService_RetriesFailedDelivery(t *testing.T) {
 	c := qt.New(t)
 
 	renderer, err := newEmailTemplateRenderer()

@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	defaultReadyKey = "inventario:email:queue:ready"
-	defaultRetryKey = "inventario:email:queue:retry"
+	defaultReadyKey    = "inventario:email:queue:ready"
+	defaultRetryKey    = "inventario:email:queue:retry"
+	startupPingTimeout = 2 * time.Second
 )
 
 // Config configures the Redis queue backend.
@@ -40,7 +41,9 @@ func NewFromConfig(cfg Config) (*Queue, error) {
 		return nil, fmt.Errorf("invalid redis URL: %w", err)
 	}
 	client := redisv9.NewClient(opts)
-	if pingErr := client.Ping(context.Background()).Err(); pingErr != nil {
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), startupPingTimeout)
+	defer pingCancel()
+	if pingErr := client.Ping(pingCtx).Err(); pingErr != nil {
 		slog.Warn("Redis email queue unreachable at startup; queue operations may fail until Redis becomes available", "error", pingErr)
 	}
 

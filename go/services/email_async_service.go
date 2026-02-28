@@ -212,11 +212,11 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 			)
 			continue
 		}
-		s.processJob(job, workerID)
+		s.processJob(ctx, job, workerID)
 	}
 }
 
-func (s *AsyncEmailService) processJob(job emailJob, workerID int) {
+func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, workerID int) {
 	rendered, err := s.renderer.render(job)
 	if err != nil {
 		slog.Error("Email template rendering failed; dropping job",
@@ -228,7 +228,7 @@ func (s *AsyncEmailService) processJob(job emailJob, workerID int) {
 		return
 	}
 
-	sendCtx, cancel := context.WithTimeout(context.Background(), s.sendTimeout)
+	sendCtx, cancel := context.WithTimeout(ctx, s.sendTimeout)
 	defer cancel()
 
 	err = s.sender.Send(sendCtx, mailsender.Message{
@@ -279,7 +279,7 @@ func (s *AsyncEmailService) processJob(job emailJob, workerID int) {
 		return
 	}
 
-	if retryErr := s.queue.ScheduleRetry(context.Background(), retryPayload, readyAt); retryErr != nil {
+	if retryErr := s.queue.ScheduleRetry(ctx, retryPayload, readyAt); retryErr != nil {
 		slog.Error("Failed to schedule email retry; dropping job",
 			"worker_id", workerID,
 			"job_id", job.ID,

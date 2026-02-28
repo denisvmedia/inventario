@@ -18,6 +18,15 @@ func buildPublicURL(publicBaseURL string, r *http.Request, path string, query ur
 				"error", err,
 			)
 		case parsed.Scheme != "" && parsed.Host != "":
+			scheme := strings.ToLower(parsed.Scheme)
+			if !isAllowedPublicURLScheme(scheme) {
+				slog.Error("Invalid public URL configuration; only http/https schemes are allowed",
+					"public_url", base,
+					"scheme", parsed.Scheme,
+				)
+				break
+			}
+			parsed.Scheme = scheme
 			return parsed.ResolveReference(&url.URL{
 				Path:     path,
 				RawQuery: query.Encode(),
@@ -31,7 +40,13 @@ func buildPublicURL(publicBaseURL string, r *http.Request, path string, query ur
 
 	scheme := "http"
 	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
+		first := strings.TrimSpace(strings.Split(proto, ",")[0])
+		first = strings.ToLower(first)
+		if isAllowedPublicURLScheme(first) {
+			scheme = first
+		} else {
+			slog.Warn("Ignoring unsupported X-Forwarded-Proto value", "value", proto)
+		}
 	} else if r.TLS != nil {
 		scheme = "https"
 	}
@@ -41,4 +56,8 @@ func buildPublicURL(publicBaseURL string, r *http.Request, path string, query ur
 		Path:     path,
 		RawQuery: query.Encode(),
 	}).String()
+}
+
+func isAllowedPublicURLScheme(scheme string) bool {
+	return scheme == "http" || scheme == "https"
 }

@@ -43,7 +43,6 @@ const (
 
 const (
 	defaultEmailQueueWorkers      = 5
-	defaultEmailQueueMaxRetries   = 5
 	defaultEmailQueuePopTimeout   = 2 * time.Second
 	defaultEmailRetryPollInterval = 1 * time.Second
 	defaultEmailRetryBaseDelay    = 1 * time.Second
@@ -125,9 +124,6 @@ func (c *EmailConfig) normalize() {
 	if c.QueueMaxRetry < 0 {
 		c.QueueMaxRetry = 0
 	}
-	if c.QueueMaxRetry == 0 {
-		c.QueueMaxRetry = defaultEmailQueueMaxRetries
-	}
 	if c.QueuePopTimeout <= 0 {
 		c.QueuePopTimeout = defaultEmailQueuePopTimeout
 	}
@@ -153,10 +149,6 @@ func (c *EmailConfig) normalize() {
 	}
 	if c.MandrillBaseURL == "" {
 		c.MandrillBaseURL = defaultMandrillBaseURL
-	}
-
-	if c.From == "" {
-		c.From = "noreply@inventario.local"
 	}
 }
 
