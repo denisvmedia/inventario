@@ -68,3 +68,32 @@ func TestQueue_ScheduleRetryAndPromoteDueRetries(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(string(got), qt.Equals, "future")
 }
+
+func TestQueue_PromoteDueRetries_RespectsLimit(t *testing.T) {
+	c := qt.New(t)
+
+	q := New(8)
+	now := time.Unix(1700000000, 0)
+
+	c.Assert(q.ScheduleRetry(context.Background(), []byte("a"), now.Add(-time.Second)), qt.IsNil)
+	c.Assert(q.ScheduleRetry(context.Background(), []byte("b"), now.Add(-time.Second)), qt.IsNil)
+	c.Assert(q.ScheduleRetry(context.Background(), []byte("c"), now.Add(-time.Second)), qt.IsNil)
+
+	moved, err := q.PromoteDueRetries(context.Background(), now, 2)
+	c.Assert(err, qt.IsNil)
+	c.Assert(moved, qt.Equals, 2)
+
+	got1, err := q.Dequeue(context.Background(), 20*time.Millisecond)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got1, qt.IsNotNil)
+	got2, err := q.Dequeue(context.Background(), 20*time.Millisecond)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got2, qt.IsNotNil)
+	got3, err := q.Dequeue(context.Background(), 5*time.Millisecond)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got3, qt.IsNil)
+
+	moved, err = q.PromoteDueRetries(context.Background(), now, 2)
+	c.Assert(err, qt.IsNil)
+	c.Assert(moved, qt.Equals, 1)
+}

@@ -79,16 +79,21 @@ func (q *Queue) ScheduleRetry(ctx context.Context, payload []byte, readyAt time.
 }
 
 // PromoteDueRetries moves due payloads to ready queue.
-func (q *Queue) PromoteDueRetries(ctx context.Context, now time.Time, _ int) (int, error) {
+func (q *Queue) PromoteDueRetries(ctx context.Context, now time.Time, limit int) (int, error) {
+	if limit <= 0 {
+		limit = 100
+	}
 	q.mu.Lock()
 	due := make([][]byte, 0)
 	remaining := make([]scheduledPayload, 0, len(q.retries))
+	movedToDue := 0
 	for _, pending := range q.retries {
-		if pending.readyAt.After(now) {
+		if pending.readyAt.After(now) || movedToDue >= limit {
 			remaining = append(remaining, pending)
 			continue
 		}
 		due = append(due, pending.payload)
+		movedToDue++
 	}
 	q.retries = remaining
 	q.mu.Unlock()
@@ -101,7 +106,9 @@ func (q *Queue) PromoteDueRetries(ctx context.Context, now time.Time, _ int) (in
 		case q.ready <- clone(payload):
 			moved++
 		default:
-			_ = q.ScheduleRetry(context.Background(), payload, now.Add(time.Second))
+			if err := q.ScheduleRetry(ctx, payload, now.Add(time.Second)); err != nil {
+				return moved, err
+			}
 		}
 	}
 	return moved, nil

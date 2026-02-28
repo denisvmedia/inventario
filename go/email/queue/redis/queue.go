@@ -17,6 +17,25 @@ const (
 	startupPingTimeout = 2 * time.Second
 )
 
+const promoteDueRetriesLua = `
+local retryKey = KEYS[1]
+local readyKey = KEYS[2]
+local maxScore = ARGV[1]
+local limit = tonumber(ARGV[2])
+if not limit or limit <= 0 then
+  limit = 100
+end
+
+local due = redis.call('ZRANGEBYSCORE', retryKey, '-inf', maxScore, 'LIMIT', 0, limit)
+if #due == 0 then
+  return 0
+end
+
+redis.call('RPUSH', readyKey, unpack(due))
+redis.call('ZREM', retryKey, unpack(due))
+return #due
+`
+
 // Config configures the Redis queue backend.
 type Config struct {
 	// RedisURL is required and used to construct the Redis client.
@@ -96,33 +115,15 @@ func (q *Queue) ScheduleRetry(ctx context.Context, payload []byte, readyAt time.
 
 // PromoteDueRetries moves due delayed payloads into ready list.
 func (q *Queue) PromoteDueRetries(ctx context.Context, now time.Time, limit int) (int, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-
-	maxScore := fmt.Sprintf("%d", now.UnixMilli())
-	duePayloads, err := q.client.ZRangeArgs(ctx, redisv9.ZRangeArgs{
-		Key:     q.retryKey,
-		Start:   "-inf",
-		Stop:    maxScore,
-		ByScore: true,
-		Offset:  0,
-		Count:   int64(limit),
-	}).Result()
+	moved, err := q.client.Eval(
+		ctx,
+		promoteDueRetriesLua,
+		[]string{q.retryKey, q.readyKey},
+		fmt.Sprintf("%d", now.UnixMilli()),
+		limit,
+	).Int()
 	if err != nil {
 		return 0, err
 	}
-	if len(duePayloads) == 0 {
-		return 0, nil
-	}
-
-	pipe := q.client.TxPipeline()
-	for _, payload := range duePayloads {
-		pipe.RPush(ctx, q.readyKey, payload)
-		pipe.ZRem(ctx, q.retryKey, payload)
-	}
-	if _, err := pipe.Exec(ctx); err != nil {
-		return 0, err
-	}
-	return len(duePayloads), nil
+	return moved, nil
 }
