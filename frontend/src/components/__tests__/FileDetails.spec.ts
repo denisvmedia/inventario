@@ -99,7 +99,7 @@ describe('FileDetails.vue', () => {
 
   const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
   const deferred = <T>() => {
-    let resolve!: (value: T) => void
+    let resolve!: (_value: T) => void
     const promise = new Promise<T>((res) => {
       resolve = res
     })

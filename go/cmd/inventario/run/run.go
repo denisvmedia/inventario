@@ -248,11 +248,8 @@ func (c *Command) runCommand() error {
 	params.RegistrationMode = models.RegistrationMode(c.config.RegistrationMode)
 	params.PublicURL = strings.TrimSpace(c.config.PublicURL)
 
-	normalizedEmailProvider := services.EmailProvider(strings.ToLower(strings.TrimSpace(c.config.EmailProvider)))
-	if normalizedEmailProvider != services.EmailProviderStub {
-		if err := validatePublicURLForTransactionalEmails(params.PublicURL); err != nil {
-			return fmt.Errorf("invalid --public-url for email provider %q: %w", normalizedEmailProvider, err)
-		}
+	if err := validateEmailPublicURLConfig(c.config.EmailProvider, params.PublicURL); err != nil {
+		return err
 	}
 
 	emailService, err := services.NewAsyncEmailService(services.EmailConfig{
@@ -361,6 +358,17 @@ func validatePublicURLForTransactionalEmails(publicURL string) error {
 	scheme := strings.ToLower(parsed.Scheme)
 	if scheme != "http" && scheme != "https" {
 		return fmt.Errorf("unsupported scheme %q", parsed.Scheme)
+	}
+	return nil
+}
+
+func validateEmailPublicURLConfig(provider, publicURL string) error {
+	normalizedEmailProvider := services.EmailProvider(strings.ToLower(strings.TrimSpace(provider)))
+	if normalizedEmailProvider == services.EmailProviderStub {
+		return nil
+	}
+	if err := validatePublicURLForTransactionalEmails(publicURL); err != nil {
+		return fmt.Errorf("invalid --public-url for email provider %q: %w", normalizedEmailProvider, err)
 	}
 	return nil
 }
