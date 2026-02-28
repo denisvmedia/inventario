@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import FileUploader from '../FileUploader.vue'
+const uploadSlotServiceMock = vi.hoisted(() => ({
+  waitForCapacity: vi.fn()
+}))
+
+vi.mock('@/services/uploadSlotService', () => ({
+  default: uploadSlotServiceMock
+}))
 
 // Mock Vue's nextTick function to prevent focus errors
 vi.mock('vue', async () => {
@@ -30,6 +37,13 @@ describe('FileUploader.vue', () => {
   beforeEach(() => {
     console.error = vi.fn()
     vi.resetAllMocks()
+    uploadSlotServiceMock.waitForCapacity.mockResolvedValue({
+      data: {
+        attributes: {
+          can_start_upload: true
+        }
+      }
+    })
   })
 
   afterEach(() => {
@@ -70,6 +84,8 @@ describe('FileUploader.vue', () => {
     })
     return event
   }
+
+  const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
 
   // Rendering tests
   describe('Rendering', () => {
@@ -292,10 +308,13 @@ describe('FileUploader.vue', () => {
 
       // Click upload button
       await wrapper.find('.btn-primary').trigger('click')
+      await flushPromises()
+      await flushPromises()
 
       // Check if upload event was emitted with the file
       expect(wrapper.emitted('upload')).toBeTruthy()
       expect(wrapper.emitted('upload')![0][0]).toEqual([mockFile])
+      expect(uploadSlotServiceMock.waitForCapacity).toHaveBeenCalled()
     })
 
     it('clears selected files after upload', async () => {
@@ -331,6 +350,8 @@ describe('FileUploader.vue', () => {
 
       // Start upload
       await wrapper.find('.btn-primary').trigger('click')
+      await flushPromises()
+      await flushPromises()
 
       // Check that upload event was emitted
       expect(wrapper.emitted('upload')).toBeTruthy()

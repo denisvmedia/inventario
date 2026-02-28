@@ -3,6 +3,15 @@ import { mount } from '@vue/test-utils'
 import FileViewer from '../FileViewer.vue'
 import FileList from '../FileList.vue'
 import FileDetails from '../FileDetails.vue'
+const fileServiceMock = vi.hoisted(() => ({
+  generateSignedUrlWithThumbnails: vi.fn(),
+  getDownloadUrl: vi.fn(),
+  isImageFile: vi.fn()
+}))
+
+vi.mock('@/services/fileService', () => ({
+  default: fileServiceMock
+}))
 
 // Mock Vue's nextTick function to prevent focus errors
 vi.mock('vue', async () => {
@@ -21,7 +30,7 @@ vi.mock('../FileList.vue', () => ({
   default: {
     name: 'FileList',
     template: '<div class="mock-file-list"></div>',
-    props: ['files', 'fileType', 'commodityId', 'loading']
+    props: ['files', 'fileType', 'commodityId', 'loading', 'fileUrls']
   }
 }))
 
@@ -85,6 +94,19 @@ describe('FileViewer.vue', () => {
     document.addEventListener = vi.fn()
     document.removeEventListener = vi.fn()
     vi.resetAllMocks()
+    fileServiceMock.generateSignedUrlWithThumbnails.mockImplementation(async (file: { id: string; ext?: string; mime_type?: string }) => ({
+      url: `https://signed.example/${file.id}${file.ext || ''}`,
+      thumbnails: (file.mime_type || '').startsWith('image/')
+        ? { medium: `https://signed.example/${file.id}-thumb${file.ext || ''}` }
+        : undefined
+    }))
+    fileServiceMock.getDownloadUrl.mockImplementation(async (file: { id: string; ext?: string }) => {
+      return `https://signed.example/${file.id}${file.ext || ''}`
+    })
+    fileServiceMock.isImageFile.mockImplementation((file: { mime_type?: string; ext?: string }) => {
+      const ext = (file.ext || '').toLowerCase().replace('.', '')
+      return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext) || (file.mime_type || '').startsWith('image/')
+    })
   })
 
   afterEach(() => {
@@ -137,6 +159,8 @@ describe('FileViewer.vue', () => {
       }
     })
   }
+
+  const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
 
   // Rendering tests
   describe('Rendering', () => {
@@ -300,71 +324,39 @@ describe('FileViewer.vue', () => {
 
   // URL generation tests
   describe('URL Generation', () => {
-    it('generates correct URL for image files', () => {
+    it('uses provided signed URLs for preview list and current file', async () => {
+      const wrapper = createWrapper({
+        signedUrls: {
+          'file-1': {
+            url: 'https://signed.example/file-1.jpg',
+            thumbnails: { medium: 'https://signed.example/file-1-thumb.jpg' }
+          },
+          'file-2': {
+            url: 'https://signed.example/file-2.pdf'
+          }
+        }
+      })
+
+      await flushPromises()
+      expect(wrapper.vm.fileUrls).toEqual({
+        'file-1': 'https://signed.example/file-1-thumb.jpg',
+        'file-2': 'https://signed.example/file-2.pdf'
+      })
+      expect(wrapper.vm.currentFileUrl).toBe('https://signed.example/file-1.jpg')
+      expect(fileServiceMock.generateSignedUrlWithThumbnails).not.toHaveBeenCalled()
+    })
+
+    it('falls back to fileService signed URL generation when signedUrls are absent', async () => {
       const wrapper = createWrapper()
+      await flushPromises()
 
-      const expectedUrl = '/api/v1/files/file-1.jpg'
-      expect(wrapper.vm.getFileUrl(mockImageFile)).toBe(expectedUrl)
-    })
-
-    it('generates correct URL for PDF files', () => {
-      const wrapper = createWrapper({ fileType: 'manuals' })
-
-      const expectedUrl = '/api/v1/files/file-2.pdf'
-      expect(wrapper.vm.getFileUrl(mockPdfFile)).toBe(expectedUrl)
-    })
-
-    it('generates correct URL for invoice files', () => {
-      const wrapper = createWrapper({ fileType: 'invoices' })
-
-      const invoiceFile = {
-        id: 'file-3',
-        path: 'test-invoice',
-        ext: '.docx',
-        original_path: 'original-test-invoice.docx',
-        mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      }
-
-      const expectedUrl = '/api/v1/files/file-3.docx'
-      expect(wrapper.vm.getFileUrl(invoiceFile)).toBe(expectedUrl)
-    })
-
-    it('uses direct path if it starts with /api', () => {
-      const wrapper = createWrapper()
-
-      const fileWithDirectPath = {
-        id: 'file-4',
-        path: '/api/v1/direct/path/to/file.jpg'
-      }
-
-      expect(wrapper.vm.getFileUrl(fileWithDirectPath)).toBe('/api/v1/direct/path/to/file.jpg')
-    })
-
-    it('handles files with missing extension by inferring from mime type', () => {
-      const wrapper = createWrapper()
-
-      const fileWithoutExt = {
-        id: 'file-5',
-        path: 'test-file',
-        ext: '',
-        mime_type: 'image/png'
-      }
-
-      const expectedUrl = '/api/v1/files/file-5.png'
-      expect(wrapper.vm.getFileUrl(fileWithoutExt)).toBe(expectedUrl)
-    })
-
-    it('handles files with missing extension and mime type', () => {
-      const wrapper = createWrapper()
-
-      const fileWithoutExtAndMime = {
-        id: 'file-6',
-        path: 'test-file'
-      }
-
-      // Should default to .bin for unknown file types
-      const expectedUrl = '/api/v1/files/file-6.bin'
-      expect(wrapper.vm.getFileUrl(fileWithoutExtAndMime)).toBe(expectedUrl)
+      expect(fileServiceMock.generateSignedUrlWithThumbnails).toHaveBeenCalledTimes(mockFiles.length)
+      expect(wrapper.vm.fileUrls).toEqual({
+        'file-1': 'https://signed.example/file-1-thumb.jpg',
+        'file-2': 'https://signed.example/file-2.pdf'
+      })
+      expect(fileServiceMock.getDownloadUrl).toHaveBeenCalledWith(mockImageFile)
+      expect(wrapper.vm.currentFileUrl).toBe('https://signed.example/file-1.jpg')
     })
   })
 
@@ -952,7 +944,6 @@ describe('FileViewer.vue', () => {
       }
 
       // Should not throw errors
-      expect(() => wrapper.vm.getFileUrl(incompleteFile)).not.toThrow()
       expect(() => wrapper.vm.getFileName(incompleteFile)).not.toThrow()
       expect(() => wrapper.vm.isImageFile(incompleteFile)).not.toThrow()
       expect(() => wrapper.vm.isPdfFile(incompleteFile)).not.toThrow()
@@ -978,7 +969,6 @@ describe('FileViewer.vue', () => {
       // Should correctly process the file
       expect(wrapper.vm.getFileName(fileWithAttributes)).toBe('test-attr.png')
       expect(wrapper.vm.isImageFile(fileWithAttributes)).toBe(true)
-      expect(wrapper.vm.getFileUrl(fileWithAttributes)).toBe('/api/v1/files/file-attr.png')
     })
 
     it('does nothing when trying to confirm delete with no file', async () => {
@@ -987,14 +977,10 @@ describe('FileViewer.vue', () => {
       // Set fileToDelete to null
       wrapper.vm.fileToDelete = null
 
-      // Spy on emit
-      const emitSpy = vi.spyOn(wrapper.vm, 'emit')
-
       // Call confirmDelete
       await wrapper.vm.confirmDelete()
-
-      // Check that emit was not called
-      expect(emitSpy).not.toHaveBeenCalled()
+      // Check that delete event was not emitted
+      expect(wrapper.emitted('delete')).toBeFalsy()
     })
 
     it('does nothing when trying to download current file with no file', async () => {

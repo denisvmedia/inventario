@@ -304,7 +304,7 @@ func TestExportCreate_SetsCreatedDate(t *testing.T) {
 
 	// Verify the timestamp is in the correct RFC3339 format
 	createdDateStr := string(*response.Data.Attributes.CreatedDate)
-	c.Assert(strings.Contains(createdDateStr, "T"), qt.IsTrue, qt.Commentf("Expected RFC3339 format with 'T', got: %s", createdDateStr))
+	c.Assert(createdDateStr, qt.Contains, "T", qt.Commentf("Expected RFC3339 format with 'T', got: %s", createdDateStr))
 	// RFC3339 can end with 'Z' (UTC) or timezone offset like '+02:00'
 	hasValidTimezone := strings.HasSuffix(createdDateStr, "Z") || strings.Contains(createdDateStr, "+") || strings.Contains(createdDateStr, "-")
 	c.Assert(hasValidTimezone, qt.IsTrue, qt.Commentf("Expected RFC3339 format with timezone, got: %s", createdDateStr))

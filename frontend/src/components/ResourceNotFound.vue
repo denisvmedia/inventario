@@ -1,7 +1,7 @@
 <template>
   <div class="resource-not-found">
     <div class="error-icon">
-      <font-awesome-icon icon="exclamation-triangle" />
+      <FontAwesomeIcon icon="exclamation-triangle" />
     </div>
     <h3>{{ title }}</h3>
     <p>{{ message }}</p>
@@ -11,7 +11,7 @@
         class="btn btn-secondary" 
         @click="$emit('go-back')"
       >
-        <font-awesome-icon icon="arrow-left" />
+        <FontAwesomeIcon icon="arrow-left" />
         {{ goBackText }}
       </button>
       <button 
@@ -19,7 +19,7 @@
         class="btn btn-primary" 
         @click="$emit('try-again')"
       >
-        <font-awesome-icon icon="redo" />
+        <FontAwesomeIcon icon="redo" />
         {{ tryAgainText }}
       </button>
       <slot name="custom-actions"></slot>
@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 interface Props {
   resourceType?: string

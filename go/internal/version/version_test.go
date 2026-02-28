@@ -103,7 +103,7 @@ func TestGet_RuntimeValues(t *testing.T) {
 	c.Assert(strings.HasPrefix(got.GoVersion, "go"), qt.IsTrue)
 
 	c.Assert(got.Platform, qt.Not(qt.Equals), "")
-	c.Assert(strings.Contains(got.Platform, "/"), qt.IsTrue)
+	c.Assert(got.Platform, qt.Contains, "/")
 
 	// Verify platform format
 	parts := strings.Split(got.Platform, "/")
