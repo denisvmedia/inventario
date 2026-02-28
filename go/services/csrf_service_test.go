@@ -222,13 +222,9 @@ func TestInMemoryCSRFService_ConcurrentAccess(t *testing.T) {
 			// Use id in userID to avoid collisions across goroutines
 			userID := fmt.Sprintf("user-%d", id)
 			token, err := svc.GenerateToken(ctx, userID)
-			if err != nil {
-				t.Errorf("Failed to generate token: %v", err)
-			}
+			c.Check(err, qt.IsNil, qt.Commentf("Failed to generate token for %s", userID))
 			retrieved, err := svc.GetToken(ctx, userID)
-			if err != nil {
-				t.Errorf("Failed to get token: %v", err)
-			}
+			c.Check(err, qt.IsNil, qt.Commentf("Failed to get token for %s", userID))
 			if retrieved != token {
 				t.Errorf("Token mismatch: expected %s, got %s", token, retrieved)
 			}

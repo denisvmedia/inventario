@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import axios from 'axios'
 import areaService from '../areaService'
+import api from '../api'
 import { getErrorMessage } from '../../utils/errorUtils'
+vi.mock('../api', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn()
+  }
+}))
 
-// Mock axios
-vi.mock('axios')
-const mockedAxios = vi.mocked(axios)
+const mockedApi = vi.mocked(api)
 
 describe('areaService error handling', () => {
   beforeEach(() => {
@@ -24,6 +31,7 @@ describe('areaService error handling', () => {
                 status: 'Unprocessable Entity',
                 error: {
                   msg: 'area has commodities',
+                  message: 'area has commodities',
                   error: {
                     error: {
                       error: {
@@ -44,7 +52,7 @@ describe('areaService error handling', () => {
         }
       }
 
-      mockedAxios.delete.mockRejectedValue(mockErrorResponse)
+      mockedApi.delete.mockRejectedValue(mockErrorResponse)
 
       try {
         await areaService.deleteArea('test-area-id')
@@ -55,16 +63,12 @@ describe('areaService error handling', () => {
         expect(userFriendlyMessage).toBe('Cannot delete area because it contains commodities. Please remove all commodities first.')
       }
 
-      expect(mockedAxios.delete).toHaveBeenCalledWith('/api/v1/areas/test-area-id', {
-        headers: {
-          'Accept': 'application/vnd.api+json'
-        }
-      })
+      expect(mockedApi.delete).toHaveBeenCalledWith('/api/v1/areas/test-area-id')
     })
 
     it('should handle network errors gracefully', async () => {
       const networkError = new Error('Network Error')
-      mockedAxios.delete.mockRejectedValue(networkError)
+      mockedApi.delete.mockRejectedValue(networkError)
 
       try {
         await areaService.deleteArea('test-area-id')
@@ -89,7 +93,7 @@ describe('areaService error handling', () => {
         }
       }
 
-      mockedAxios.delete.mockRejectedValue(genericError)
+      mockedApi.delete.mockRejectedValue(genericError)
 
       try {
         await areaService.deleteArea('test-area-id')

@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"testing"
 	"time"
 
@@ -112,7 +111,7 @@ func TestAPISecurity_MaliciousFileUpload(t *testing.T) {
 	// Should fail with 404 (not found) as per project standards for RLS violations
 	// Note: The actual response might be 401 if user context validation fails first
 	expectedCodes := []int{http.StatusNotFound, http.StatusUnauthorized}
-	c.Assert(slices.Contains(expectedCodes, w.Code), qt.IsTrue,
+	c.Assert(expectedCodes, qt.Contains, w.Code,
 		qt.Commentf("User 2 should not be able to upload to User 1's commodity, got status %d", w.Code))
 }
 
@@ -202,7 +201,7 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 	// Should fail with 404 (not found) as per project standards for RLS violations
 	// Note: The actual response might be 401 if user context validation fails first
 	expectedCodes := []int{http.StatusNotFound, http.StatusUnauthorized}
-	c.Assert(slices.Contains(expectedCodes, w.Code), qt.IsTrue,
+	c.Assert(expectedCodes, qt.Contains, w.Code,
 		qt.Commentf("Tenant 2 user should not be able to access Tenant 1's export, got status %d", w.Code))
 }
 

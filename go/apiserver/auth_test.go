@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -92,6 +93,37 @@ func (m *mockTokenBlacklisterForAuth) BlacklistUserTokens(_ context.Context, use
 
 func (m *mockTokenBlacklisterForAuth) IsUserBlacklisted(_ context.Context, _ string) (bool, error) {
 	return false, nil
+}
+
+type mockEmailServiceForAuth struct {
+	mu                   sync.Mutex
+	passwordChangedCalls int
+	passwordChangedCh    chan struct{}
+}
+
+func (m *mockEmailServiceForAuth) SendVerificationEmail(_ context.Context, _ string, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockEmailServiceForAuth) SendPasswordResetEmail(_ context.Context, _ string, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockEmailServiceForAuth) SendPasswordChangedEmail(_ context.Context, _ string, _ string, _ time.Time) error {
+	m.mu.Lock()
+	m.passwordChangedCalls++
+	m.mu.Unlock()
+	if m.passwordChangedCh != nil {
+		select {
+		case m.passwordChangedCh <- struct{}{}:
+		default:
+		}
+	}
+	return nil
+}
+
+func (m *mockEmailServiceForAuth) SendWelcomeEmail(_ context.Context, _ string, _ string) error {
+	return nil
 }
 
 // mockUserRegistryForAuth implements registry.UserRegistry for testing
@@ -543,10 +575,12 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
 		refreshRegistry := &mockRefreshTokenRegistryForAuth{}
 		blacklister := &mockTokenBlacklisterForAuth{}
+		emailSvc := &mockEmailServiceForAuth{passwordChangedCh: make(chan struct{}, 1)}
 		authHandler := apiserver.Auth(apiserver.AuthParams{
 			UserRegistry:         userRegistry,
 			RefreshTokenRegistry: refreshRegistry,
 			BlacklistService:     blacklister,
+			EmailService:         emailSvc,
 			JWTSecret:            jwtSecret,
 		})
 
@@ -564,5 +598,11 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 		c.Assert(refreshRegistry.revokeByUserIDArg, qt.Equals, "user-123")
 		c.Assert(blacklister.blacklistUserTokensCalled, qt.IsTrue)
 		c.Assert(blacklister.blacklistUserTokensUserID, qt.Equals, "user-123")
+		select {
+		case <-emailSvc.passwordChangedCh:
+			// expected
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("expected password-changed email notification to be sent")
+		}
 	})
 }

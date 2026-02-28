@@ -68,9 +68,7 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		IsActive: true,
 	}
 	err = user1Model.SetPassword("testpassword123")
-	if err != nil {
-		t.Fatalf("Failed to set password: %v", err)
-	}
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password for user1"))
 
 	user2Model := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
@@ -82,26 +80,18 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		IsActive: true,
 	}
 	err = user2Model.SetPassword("testpassword123")
-	if err != nil {
-		t.Fatalf("Failed to set password: %v", err)
-	}
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password for user2"))
 
 	createdUser1, err := factorySet.UserRegistry.Create(context.Background(), user1Model)
-	if err != nil {
-		t.Fatalf("Failed to create user1: %v", err)
-	}
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user1"))
 
 	createdUser2, err := factorySet.UserRegistry.Create(context.Background(), user2Model)
-	if err != nil {
-		t.Fatalf("Failed to create user2: %v", err)
-	}
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user2"))
 
 	// Create user-aware registry set for user1 (for testing purposes)
 	ctx := appctx.WithUser(context.Background(), createdUser1)
 	registrySet, err = factorySet.CreateUserRegistrySet(ctx)
-	if err != nil {
-		t.Fatalf("Failed to create user registry set: %v", err)
-	}
+	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user registry set"))
 
 	// Create API server
 	params := apiserver.Params{

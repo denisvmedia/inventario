@@ -86,7 +86,12 @@ describe('FileList.vue', () => {
     files: [mockImageFile, mockPdfFile],
     fileType: 'images',
     commodityId: 'commodity-1',
-    loading: false
+    loading: false,
+    fileUrls: {
+      'file-1': 'https://signed.example/file-1.jpg',
+      'file-2': 'https://signed.example/file-2.pdf',
+      'file-4': 'https://signed.example/file-4.docx'
+    }
   }
 
   // Helper function to create a wrapper with custom props
@@ -132,7 +137,7 @@ describe('FileList.vue', () => {
 
       expect(wrapper.find('.image-preview').exists()).toBe(true)
       expect(wrapper.find('.preview-image').exists()).toBe(true)
-      expect(wrapper.find('.preview-image').attributes('src')).toBe('/api/v1/files/file-1.jpg')
+      expect(wrapper.find('.preview-image').attributes('src')).toBe('https://signed.example/file-1.jpg')
     })
 
     it('renders non-image files with icon preview', () => {
@@ -169,17 +174,22 @@ describe('FileList.vue', () => {
   describe('Methods', () => {
     it('getFileUrl returns correct URL for images', () => {
       const wrapper = createWrapper()
-      expect(wrapper.vm.getFileUrl(mockImageFile)).toBe('/api/v1/files/file-1.jpg')
+      expect(wrapper.vm.getFileUrl(mockImageFile)).toBe('https://signed.example/file-1.jpg')
     })
 
     it('getFileUrl returns correct URL for manuals', () => {
       const wrapper = createWrapper({ fileType: 'manuals' })
-      expect(wrapper.vm.getFileUrl(mockPdfFile)).toBe('/api/v1/files/file-2.pdf')
+      expect(wrapper.vm.getFileUrl(mockPdfFile)).toBe('https://signed.example/file-2.pdf')
     })
 
     it('getFileUrl returns correct URL for invoices', () => {
       const wrapper = createWrapper({ fileType: 'invoices' })
-      expect(wrapper.vm.getFileUrl(mockInvoiceFile)).toBe('/api/v1/files/file-4.docx')
+      expect(wrapper.vm.getFileUrl(mockInvoiceFile)).toBe('https://signed.example/file-4.docx')
+    })
+
+    it('getFileUrl returns empty string when URL is missing', () => {
+      const wrapper = createWrapper({ fileUrls: {} })
+      expect(wrapper.vm.getFileUrl(mockImageFile)).toBe('')
     })
 
     it('getFileName returns path + extension when path is available', () => {

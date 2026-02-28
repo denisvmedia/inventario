@@ -46,7 +46,25 @@ type AuthAPI struct {
 	rateLimiter          services.AuthRateLimiter
 	csrfService          services.CSRFService
 	auditService         services.AuditLogger
+	emailService         services.EmailService
 	jwtSecret            []byte
+}
+
+func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
+	if api.emailService == nil || user == nil {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := api.emailService.SendPasswordChangedEmail(ctx, user.Email, user.Name, time.Now()); err != nil {
+			slog.Error("Failed to send password-changed notification email",
+				"user_id", user.ID,
+				"error", err,
+			)
+		}
+	}()
 }
 
 // LoginRequest is the body for POST /auth/login.
@@ -463,6 +481,7 @@ type AuthParams struct {
 	RateLimiter          services.AuthRateLimiter
 	CSRFService          services.CSRFService
 	AuditService         services.AuditLogger
+	EmailService         services.EmailService
 	JWTSecret            []byte
 }
 
@@ -475,6 +494,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		rateLimiter:          params.RateLimiter,
 		csrfService:          params.CSRFService,
 		auditService:         params.AuditService,
+		emailService:         params.EmailService,
 		jwtSecret:            params.JWTSecret,
 	}
 
@@ -571,6 +591,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 
 	slog.Info("Password changed successfully", "user_id", user.ID, "email", user.Email)
 	api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, true, r, nil)
+	api.sendPasswordChangedNotification(user)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{

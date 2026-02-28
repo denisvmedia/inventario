@@ -102,6 +102,8 @@ type Params struct {
 	CSRFService       services.CSRFService               // CSRF token service (Redis or in-memory)
 	AllowedOrigins    []string                           // Allowed CORS origins; empty = allow all (dev mode)
 	RegistrationMode  models.RegistrationMode            // Registration mode: open, approval, or closed
+	EmailService      services.EmailService              // Transactional email service (queue + providers)
+	PublicURL         string                             // Public base URL used in transactional links
 }
 
 func (p *Params) Validate() error {
@@ -204,6 +206,12 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 	// Create a shared audit service for use across multiple routes.
 	auditSvc := services.NewAuditService(params.FactorySet.AuditLogRegistry)
 
+	emailSvc := params.EmailService
+	if emailSvc == nil {
+		slog.Warn("EmailService not provided; falling back to stub email service")
+		emailSvc = services.NewStubEmailService()
+	}
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(AuthParams{
@@ -214,23 +222,26 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 			CSRFService:          csrfSvc,
 			AuditService:         auditSvc,
 			JWTSecret:            params.JWTSecret,
+			EmailService:         emailSvc,
 		}))
 		r.Group(Registration(RegistrationParams{
 			UserRegistry:         params.FactorySet.UserRegistry,
 			VerificationRegistry: params.FactorySet.EmailVerificationRegistry,
-			EmailService:         services.NewStubEmailService(),
+			EmailService:         emailSvc,
 			AuditService:         auditSvc,
 			RateLimiter:          rateLimiter,
 			RegistrationMode:     params.RegistrationMode,
+			PublicBaseURL:        params.PublicURL,
 		}))
 		r.Group(PasswordReset(PasswordResetParams{
 			UserRegistry:          params.FactorySet.UserRegistry,
 			PasswordResetRegistry: params.FactorySet.PasswordResetRegistry,
 			RefreshTokenRegistry:  params.FactorySet.RefreshTokenRegistry,
 			BlacklistService:      blacklist,
-			EmailService:          services.NewStubEmailService(),
+			EmailService:          emailSvc,
 			AuditService:          auditSvc,
 			RateLimiter:           rateLimiter,
+			PublicBaseURL:         params.PublicURL,
 		}))
 		r.Route("/currencies", Currencies())
 		// Seed endpoint is public for e2e testing and development

@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ResourceNotFound from '../ResourceNotFound.vue'
+
+vi.mock('@fortawesome/vue-fontawesome', () => ({
+  FontAwesomeIcon: {
+    name: 'FontAwesomeIcon',
+    template: '<span class="icon" :data-icon="icon" />',
+    props: ['icon']
+  }
+}))
 
 describe('ResourceNotFound.vue', () => {
   it('renders with default props', () => {
