@@ -197,6 +197,9 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 
 		payload, err := s.queue.Dequeue(ctx, s.queuePopTimeout)
 		if err != nil {
+			if isContextShutdownError(err) {
+				return
+			}
 			slog.Error("Email worker dequeue failed", "worker_id", workerID, "error", err)
 			continue
 		}
@@ -214,6 +217,10 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 		}
 		s.processJob(ctx, job, workerID)
 	}
+}
+
+func isContextShutdownError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, workerID int) {
@@ -331,6 +338,9 @@ func (s *AsyncEmailService) runRetryPromoter(ctx context.Context) {
 		case now := <-ticker.C:
 			moved, err := s.queue.PromoteDueRetries(ctx, now, 200)
 			if err != nil {
+				if isContextShutdownError(err) {
+					return
+				}
 				slog.Error("Failed to promote due email retries", "error", err)
 				continue
 			}

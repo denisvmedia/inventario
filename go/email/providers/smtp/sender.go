@@ -34,7 +34,6 @@ type Config struct {
 //
 // It assembles a multipart/alternative MIME payload so text-only and HTML-capable
 // clients can consume the same message.
-// Sender delivers email through an SMTP server.
 type Sender struct {
 	host     string
 	port     int

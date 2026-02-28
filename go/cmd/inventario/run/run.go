@@ -364,13 +364,25 @@ func validatePublicURLForTransactionalEmails(publicURL string) error {
 
 func validateEmailPublicURLConfig(provider, publicURL string) error {
 	normalizedEmailProvider := services.EmailProvider(strings.ToLower(strings.TrimSpace(provider)))
-	if normalizedEmailProvider == services.EmailProviderStub {
+	if normalizedEmailProvider == "" {
+		normalizedEmailProvider = services.EmailProviderStub
+	}
+
+	switch normalizedEmailProvider {
+	case services.EmailProviderStub:
 		return nil
+	case services.EmailProviderSMTP,
+		services.EmailProviderSendGrid,
+		services.EmailProviderSES,
+		services.EmailProviderMandrill,
+		services.EmailProviderMailchimp:
+		if err := validatePublicURLForTransactionalEmails(publicURL); err != nil {
+			return fmt.Errorf("invalid --public-url for email provider %q: %w", normalizedEmailProvider, err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported email provider: %q", normalizedEmailProvider)
 	}
-	if err := validatePublicURLForTransactionalEmails(publicURL); err != nil {
-		return fmt.Errorf("invalid --public-url for email provider %q: %w", normalizedEmailProvider, err)
-	}
-	return nil
 }
 
 // getJWTSecret retrieves JWT secret from config/environment or generates a secure default

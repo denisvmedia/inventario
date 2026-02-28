@@ -21,6 +21,54 @@ type flakyEmailSender struct {
 	calls     int
 }
 
+type erroringQueue struct {
+	mu sync.Mutex
+
+	dequeueErr error
+	promoteErr error
+
+	dequeueCalls int
+	promoteCalls int
+}
+
+func (q *erroringQueue) Enqueue(context.Context, []byte) error {
+	return nil
+}
+
+func (q *erroringQueue) Dequeue(context.Context, time.Duration) ([]byte, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.dequeueCalls++
+	return nil, q.dequeueErr
+}
+
+func (q *erroringQueue) ScheduleRetry(context.Context, []byte, time.Time) error {
+	return nil
+}
+
+func (q *erroringQueue) PromoteDueRetries(context.Context, time.Time, int) (int, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.promoteCalls++
+	return 0, q.promoteErr
+}
+
+func (q *erroringQueue) DequeueCalls() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	return q.dequeueCalls
+}
+
+func (q *erroringQueue) PromoteCalls() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	return q.promoteCalls
+}
+
 func TestAsyncEmailService_SendWelcomeEmail_EnqueuesJSONPayload(t *testing.T) {
 	c := qt.New(t)
 
@@ -71,6 +119,50 @@ func TestAsyncEmailService_RunWorker_DropsMalformedPayload(t *testing.T) {
 	<-done
 
 	c.Assert(sender.CallCount(), qt.Equals, 0)
+}
+
+func TestAsyncEmailService_RunWorker_StopsOnCanceledDequeueError(t *testing.T) {
+	c := qt.New(t)
+
+	queue := &erroringQueue{
+		dequeueErr: context.Canceled,
+	}
+	svc := &AsyncEmailService{
+		queue:           queue,
+		queuePopTimeout: 5 * time.Millisecond,
+		stopCh:          make(chan struct{}),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		svc.runWorker(context.Background(), 1)
+	}()
+
+	c.Assert(waitForDone(done, 200*time.Millisecond), qt.IsTrue)
+	c.Assert(queue.DequeueCalls(), qt.Equals, 1)
+}
+
+func TestAsyncEmailService_RunRetryPromoter_StopsOnContextDeadlineError(t *testing.T) {
+	c := qt.New(t)
+
+	queue := &erroringQueue{
+		promoteErr: context.DeadlineExceeded,
+	}
+	svc := &AsyncEmailService{
+		queue:             queue,
+		retryPollInterval: 5 * time.Millisecond,
+		stopCh:            make(chan struct{}),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		svc.runRetryPromoter(context.Background())
+	}()
+
+	c.Assert(waitForDone(done, 200*time.Millisecond), qt.IsTrue)
+	c.Assert(queue.PromoteCalls(), qt.Equals, 1)
 }
 
 func TestAsyncEmailService_ProcessJob_SchedulesRetryWithEncodedPayload(t *testing.T) {
@@ -281,6 +373,15 @@ func cloneBytes(in []byte) []byte {
 	out := make([]byte, len(in))
 	copy(out, in)
 	return out
+}
+
+func waitForDone(done <-chan struct{}, timeout time.Duration) bool {
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 func TestAsyncEmailService_RetriesFailedDelivery(t *testing.T) {
