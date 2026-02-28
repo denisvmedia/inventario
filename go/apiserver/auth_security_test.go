@@ -183,11 +183,11 @@ func TestAuthSecurity_LoginBruteForceProtection(t *testing.T) {
 			// For unauthorized attempts, ensure no sensitive information is leaked
 			if tt.expectedStatus == http.StatusUnauthorized {
 				body := w.Body.String()
-				c.Assert(strings.Contains(body, "Invalid credentials"), qt.IsTrue,
+				c.Assert(body, qt.Contains, "Invalid credentials",
 					qt.Commentf("Should use generic error message"))
-				c.Assert(strings.Contains(body, "user not found"), qt.IsFalse,
+				c.Assert(body, qt.Not(qt.Contains), "user not found",
 					qt.Commentf("Should not reveal user existence"))
-				c.Assert(strings.Contains(body, "password"), qt.IsFalse,
+				c.Assert(body, qt.Not(qt.Contains), "password",
 					qt.Commentf("Should not mention password in error"))
 			}
 		})

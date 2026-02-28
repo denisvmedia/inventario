@@ -69,7 +69,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import fileService from '@/services/fileService'
 
 const props = defineProps({
   file: {
@@ -88,9 +89,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'delete', 'download'])
-
-// Note: fileUrl is no longer needed as we use signed URLs
-// File URLs are now generated on-demand through the file service
+const fileUrl = ref('')
 
 const isImageFile = computed(() => {
   if (!props.file) return false
@@ -131,6 +130,24 @@ const objectType = computed(() => {
   if (isPdfFile.value) return 'PDF'
   return 'File'
 })
+
+const loadFileUrl = async () => {
+  if (!props.file || !isImageFile.value) {
+    fileUrl.value = ''
+    return
+  }
+
+  try {
+    fileUrl.value = await fileService.getDownloadUrl(props.file)
+  } catch (error) {
+    console.error('Failed to generate signed URL for file details preview:', error)
+    fileUrl.value = ''
+  }
+}
+
+watch(() => props.file, () => {
+  void loadFileUrl()
+}, { immediate: true, deep: true })
 
 const getFileIcon = () => {
   if (isPdfFile.value) {

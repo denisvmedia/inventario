@@ -29,6 +29,7 @@ type PasswordResetAPI struct {
 	emailService          services.EmailService
 	auditService          services.AuditLogger
 	rateLimiter           services.AuthRateLimiter
+	publicBaseURL         string
 }
 
 // PasswordResetParams holds all dependencies needed by the password-reset API.
@@ -40,6 +41,7 @@ type PasswordResetParams struct {
 	EmailService          services.EmailService
 	AuditService          services.AuditLogger
 	RateLimiter           services.AuthRateLimiter
+	PublicBaseURL         string
 }
 
 // ForgotPasswordRequest is the body for POST /forgot-password.
@@ -63,6 +65,7 @@ func PasswordReset(params PasswordResetParams) func(r chi.Router) {
 		emailService:          params.EmailService,
 		auditService:          params.AuditService,
 		rateLimiter:           params.RateLimiter,
+		publicBaseURL:         strings.TrimSpace(params.PublicBaseURL),
 	}
 	return func(r chi.Router) {
 		r.With(PasswordResetRateLimitMiddleware(params.RateLimiter)).Post("/forgot-password", api.handleForgotPassword)
@@ -198,6 +201,7 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 
 	// Invalidate all active refresh tokens so existing sessions are terminated.
 	api.invalidateUserSessions(r.Context(), user.ID)
+	api.sendPasswordChangedNotification(user)
 
 	api.logAuth(r, "password_reset", &user.ID, true, "")
 	slog.Info("Password reset successful", "user_id", user.ID, "email", user.Email)
@@ -206,6 +210,9 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 
 // sendPasswordReset generates a token, stores it, and sends the reset email.
 func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.User) {
+	if api.emailService == nil {
+		return
+	}
 	// Invalidate all existing pending reset tokens before issuing a new one.
 	if err := api.passwordResetRegistry.DeleteByUserID(r.Context(), user.ID); err != nil {
 		slog.Warn("Failed to delete old password-reset tokens", "user_id", user.ID, "error", err)
@@ -228,26 +235,27 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 		return
 	}
 
-	// Build an absolute reset URL.
-	// TODO(Phase 3): replace r.Host with a trusted configured public base URL.
-	scheme := "http"
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	} else if r.TLS != nil {
-		scheme = "https"
-	}
-	resetURL := (&url.URL{
-		Scheme:   scheme,
-		Host:     r.Host,
-		Path:     "/reset-password",
-		RawQuery: url.Values{"token": {token}}.Encode(),
-	}).String()
+	resetURL := buildPublicURL(api.publicBaseURL, r, "/reset-password", url.Values{"token": {token}})
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := api.emailService.SendPasswordResetEmail(ctx, user.Email, user.Name, resetURL); err != nil {
 			slog.Error("Failed to send password-reset email", "user_id", user.ID, "error", err)
+		}
+	}()
+}
+
+func (api *PasswordResetAPI) sendPasswordChangedNotification(user *models.User) {
+	if api.emailService == nil || user == nil {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := api.emailService.SendPasswordChangedEmail(ctx, user.Email, user.Name, time.Now()); err != nil {
+			slog.Error("Failed to send password-changed notification email", "user_id", user.ID, "error", err)
 		}
 	}()
 }

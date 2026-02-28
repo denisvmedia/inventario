@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import exportService from '../exportService'
-
-// Mock axios
-vi.mock('axios', () => ({
+// Mock shared API client used by exportService
+vi.mock('../api', () => ({
   default: {
     get: vi.fn(),
     post: vi.fn(),
     patch: vi.fn(),
-    delete: vi.fn(),
+    delete: vi.fn()
   }
 }))
 

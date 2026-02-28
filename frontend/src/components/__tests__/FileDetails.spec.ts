@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import FileDetails from '../FileDetails.vue'
+const fileServiceMock = vi.hoisted(() => ({
+  getDownloadUrl: vi.fn()
+}))
+
+vi.mock('@/services/fileService', () => ({
+  default: fileServiceMock
+}))
 
 // Create mock for FontAwesomeIcon
 const mockFontAwesomeIcon = {
@@ -28,6 +35,9 @@ describe('FileDetails.vue', () => {
     window.addEventListener = vi.fn()
     window.removeEventListener = vi.fn()
     vi.resetAllMocks()
+    fileServiceMock.getDownloadUrl.mockImplementation(async (file: { id: string; ext?: string }) => {
+      return `https://signed.example/${file.id}${file.ext || ''}`
+    })
   })
 
   afterEach(() => {
@@ -87,16 +97,21 @@ describe('FileDetails.vue', () => {
     })
   }
 
+  const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
+
   // Rendering tests
   describe('Rendering', () => {
-    it('renders correctly with an image file', () => {
+    it('renders correctly with an image file', async () => {
       const wrapper = createWrapper()
+      await flushPromises()
+      await wrapper.vm.$nextTick()
 
       expect(wrapper.find('.file-details-modal').exists()).toBe(true)
       expect(wrapper.find('.file-details-header h3').text()).toBe('File Details')
       expect(wrapper.find('.image-preview').exists()).toBe(true)
-      expect(wrapper.find('.image-preview img').attributes('src')).toBe('/api/v1/files/file-1.jpg')
+      expect(wrapper.find('.image-preview img').attributes('src')).toBe('https://signed.example/file-1.jpg')
       expect(wrapper.find('.file-icon-preview').exists()).toBe(false)
+      expect(fileServiceMock.getDownloadUrl).toHaveBeenCalledWith(mockImageFile)
     })
 
     it('renders correctly with a PDF file', () => {
@@ -163,25 +178,16 @@ describe('FileDetails.vue', () => {
 
   // Computed properties tests
   describe('Computed Properties', () => {
-    it('computes fileUrl correctly for images', () => {
+    it('computes fileUrl via fileService for images', async () => {
       const wrapper = createWrapper()
-      expect(wrapper.vm.fileUrl).toBe('/api/v1/files/file-1.jpg')
+      await flushPromises()
+      expect(wrapper.vm.fileUrl).toBe('https://signed.example/file-1.jpg')
     })
 
-    it('computes fileUrl correctly for manuals', () => {
+    it('does not set fileUrl for non-image files', async () => {
       const wrapper = createWrapper({ file: mockPdfFile, fileType: 'manuals' })
-      expect(wrapper.vm.fileUrl).toBe('/api/v1/files/file-2.pdf')
-    })
-
-    it('computes fileUrl correctly for invoices', () => {
-      const wrapper = createWrapper({ file: mockInvoiceFile, fileType: 'invoices' })
-      expect(wrapper.vm.fileUrl).toBe('/api/v1/files/file-4.docx')
-    })
-
-    it('returns generic file URL regardless of fileType', () => {
-      // @ts-ignore - Testing invalid prop value
-      const wrapper = createWrapper({ fileType: 'invalid' })
-      expect(wrapper.vm.fileUrl).toBe('/api/v1/files/file-1.jpg')
+      await flushPromises()
+      expect(wrapper.vm.fileUrl).toBe('')
     })
 
     it('identifies image files correctly by extension', () => {

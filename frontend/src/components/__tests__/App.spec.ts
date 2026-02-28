@@ -9,8 +9,19 @@ const mockSettingsStore = {
   mainCurrency: { id: 'usd', code: 'USD', name: 'US Dollar' }
 }
 
+const mockAuthStore = {
+  isAuthenticated: false,
+  userRole: null,
+  userName: null,
+  userEmail: null
+}
+
 vi.mock('@/stores/settingsStore', () => ({
   useSettingsStore: () => mockSettingsStore
+}))
+
+vi.mock('@/stores/authStore', () => ({
+  useAuthStore: () => mockAuthStore
 }))
 
 describe('App.vue Navigation', () => {
@@ -25,10 +36,13 @@ describe('App.vue Navigation', () => {
         { path: '/commodities', component: { template: '<div>Commodities</div>' } },
         { path: '/commodities/new', component: { template: '<div>Commodity Create</div>' } },
         { path: '/commodities/:id', component: { template: '<div>Commodity Detail</div>' } },
+        { path: '/files', component: { template: '<div>Files</div>' } },
         { path: '/exports', component: { template: '<div>Exports</div>' } },
+        { path: '/exports/:id', component: { template: '<div>Export Detail</div>' } },
         { path: '/exports/new', component: { template: '<div>Export Create</div>' } },
         { path: '/system', component: { template: '<div>System</div>' } },
-        { path: '/system/settings/:id', component: { template: '<div>System Setting Detail</div>' } }
+        { path: '/system/settings/:id', component: { template: '<div>System Setting Detail</div>' } },
+        { path: '/admin/users', component: { template: '<div>Users</div>' } }
       ]
     })
   }

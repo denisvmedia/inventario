@@ -121,6 +121,28 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.CSRFRedisURL, "csrf-redis-url", c.config.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
 	flags.StringVar(&c.config.AllowedOrigins, "allowed-origins", c.config.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com); leave empty in development for AllowAll")
 	flags.StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode: open (anyone can register), approval (admin must approve), or closed (registration disabled)")
+	flags.StringVar(&c.config.PublicURL, "public-url", c.config.PublicURL, "Public base URL used in transactional email links (e.g., https://inventario.example.com)")
+
+	flags.StringVar(&c.config.EmailProvider, "email-provider", c.config.EmailProvider, "Email provider: stub, smtp, sendgrid, ses, mandrill, or mailchimp")
+	flags.StringVar(&c.config.EmailFrom, "email-from", c.config.EmailFrom, "From address for transactional emails")
+	flags.StringVar(&c.config.EmailReplyTo, "email-reply-to", c.config.EmailReplyTo, "Reply-To address for transactional emails")
+	flags.StringVar(&c.config.EmailQueueRedisURL, "email-queue-redis-url", c.config.EmailQueueRedisURL, "Redis URL for email queue (recommended for production); omit to use in-memory queue")
+	flags.IntVar(&c.config.EmailQueueWorkers, "email-queue-workers", c.config.EmailQueueWorkers, "Number of email queue workers")
+	flags.IntVar(&c.config.EmailQueueMaxRetries, "email-queue-max-retries", c.config.EmailQueueMaxRetries, "Maximum number of retries per failed email")
+
+	flags.StringVar(&c.config.SMTPHost, "smtp-host", c.config.SMTPHost, "SMTP host")
+	flags.IntVar(&c.config.SMTPPort, "smtp-port", c.config.SMTPPort, "SMTP port")
+	flags.StringVar(&c.config.SMTPUsername, "smtp-username", c.config.SMTPUsername, "SMTP username")
+	flags.StringVar(&c.config.SMTPPassword, "smtp-password", c.config.SMTPPassword, "SMTP password")
+	flags.BoolVar(&c.config.SMTPUseTLS, "smtp-use-tls", c.config.SMTPUseTLS, "Use STARTTLS for SMTP")
+
+	flags.StringVar(&c.config.SendGridAPIKey, "sendgrid-api-key", c.config.SendGridAPIKey, "SendGrid API key")
+	flags.StringVar(&c.config.SendGridBaseURL, "sendgrid-base-url", c.config.SendGridBaseURL, "SendGrid API base URL")
+
+	flags.StringVar(&c.config.AWSRegion, "aws-region", c.config.AWSRegion, "AWS region for SES (e.g., us-east-1)")
+
+	flags.StringVar(&c.config.MandrillAPIKey, "mandrill-api-key", c.config.MandrillAPIKey, "Mandrill/Mailchimp Transactional API key")
+	flags.StringVar(&c.config.MandrillBaseURL, "mandrill-base-url", c.config.MandrillBaseURL, "Mandrill API base URL")
 }
 
 func (c *Command) runCommand() error {
@@ -224,6 +246,31 @@ func (c *Command) runCommand() error {
 
 	// Set registration mode from config (defaults to "open" when unset).
 	params.RegistrationMode = models.RegistrationMode(c.config.RegistrationMode)
+	params.PublicURL = strings.TrimSpace(c.config.PublicURL)
+
+	emailService, err := services.NewAsyncEmailService(services.EmailConfig{
+		Provider:        services.EmailProvider(c.config.EmailProvider),
+		From:            c.config.EmailFrom,
+		ReplyTo:         c.config.EmailReplyTo,
+		QueueRedisURL:   c.config.EmailQueueRedisURL,
+		QueueWorkers:    c.config.EmailQueueWorkers,
+		QueueMaxRetry:   c.config.EmailQueueMaxRetries,
+		SMTPHost:        c.config.SMTPHost,
+		SMTPPort:        c.config.SMTPPort,
+		SMTPUsername:    c.config.SMTPUsername,
+		SMTPPassword:    c.config.SMTPPassword,
+		SMTPUseTLS:      c.config.SMTPUseTLS,
+		SendGridAPIKey:  c.config.SendGridAPIKey,
+		SendGridBaseURL: c.config.SendGridBaseURL,
+		AWSRegion:       c.config.AWSRegion,
+		MandrillAPIKey:  c.config.MandrillAPIKey,
+		MandrillBaseURL: c.config.MandrillBaseURL,
+	})
+	if err != nil {
+		slog.Error("Failed to initialize email service", "error", err)
+		return err
+	}
+	params.EmailService = emailService
 
 	err = validation.Validate(params)
 	if err != nil {
@@ -233,6 +280,9 @@ func (c *Command) runCommand() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	emailService.Start(ctx)
+	defer emailService.Stop()
 
 	// Start export worker
 	maxConcurrentExports := c.config.MaxConcurrentExports

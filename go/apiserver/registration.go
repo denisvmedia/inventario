@@ -26,6 +26,7 @@ type RegistrationAPI struct {
 	auditService         services.AuditLogger
 	rateLimiter          services.AuthRateLimiter
 	registrationMode     models.RegistrationMode
+	publicBaseURL        string
 }
 
 // RegistrationParams holds all dependencies needed by the registration API.
@@ -38,6 +39,9 @@ type RegistrationParams struct {
 	// RegistrationMode controls how new registrations are processed.
 	// Defaults to RegistrationModeOpen when zero value.
 	RegistrationMode models.RegistrationMode
+	// PublicBaseURL, when set, is used to build absolute verification links.
+	// Example: https://inventario.example.com
+	PublicBaseURL string
 }
 
 // RegisterRequest is the body for POST /register.
@@ -65,6 +69,7 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 		auditService:         params.AuditService,
 		rateLimiter:          params.RateLimiter,
 		registrationMode:     mode,
+		publicBaseURL:        strings.TrimSpace(params.PublicBaseURL),
 	}
 	return func(r chi.Router) {
 		r.With(RegistrationRateLimitMiddleware(params.RateLimiter)).Post("/register", api.handleRegister)
@@ -236,6 +241,7 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 	}
 
 	api.logAuth(r, "email_verified", &user.ID, true, "")
+	api.sendWelcome(user)
 	slog.Info("Email verified", "user_id", user.ID, "email", user.Email)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Email verified successfully. You can now log in."})
 }
@@ -278,6 +284,9 @@ func (api *RegistrationAPI) handleResendVerification(w http.ResponseWriter, r *h
 // Any previously issued (unverified) tokens for the user are invalidated before the new one is created
 // so that only one valid verification link is active at a time.
 func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User) {
+	if api.emailService == nil {
+		return
+	}
 	// Invalidate all existing tokens for this user before issuing a new one.
 	if existing, err := api.verificationRegistry.GetByUserID(r.Context(), user.ID); err == nil {
 		for _, old := range existing {
@@ -304,25 +313,7 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		return
 	}
 
-	// Build an absolute URL so the link works when embedded in a real email.
-	// X-Forwarded-Proto is respected for deployments behind a reverse proxy.
-	//
-	// TODO(Phase 3): r.Host is taken directly from the (unauthenticated) request.
-	// A forged Host header can inject an attacker-controlled domain into the email
-	// link (host-header phishing). When a real SMTP backend is added, replace
-	// r.Host with a trusted configured public base URL (e.g. --public-url flag).
-	scheme := "http"
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	} else if r.TLS != nil {
-		scheme = "https"
-	}
-	verificationURL := (&url.URL{
-		Scheme:   scheme,
-		Host:     r.Host,
-		Path:     "/verify-email",
-		RawQuery: url.Values{"token": {token}}.Encode(),
-	}).String()
+	verificationURL := buildPublicURL(api.publicBaseURL, r, "/verify-email", url.Values{"token": {token}})
 
 	go func() {
 		// Do NOT use r.Context() here — the request may already be cancelled by the
@@ -332,6 +323,20 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		defer cancel()
 		if err := api.emailService.SendVerificationEmail(ctx, user.Email, user.Name, verificationURL); err != nil {
 			slog.Error("Failed to send verification email", "user_id", user.ID, "error", err)
+		}
+	}()
+}
+
+func (api *RegistrationAPI) sendWelcome(user *models.User) {
+	if api.emailService == nil || user == nil {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := api.emailService.SendWelcomeEmail(ctx, user.Email, user.Name); err != nil {
+			slog.Error("Failed to send welcome email", "user_id", user.ID, "error", err)
 		}
 	}()
 }
