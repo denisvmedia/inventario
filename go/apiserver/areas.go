@@ -23,12 +23,14 @@ func areaFromContext(ctx context.Context) *models.Area {
 type areasAPI struct {
 }
 
-// listAreas lists all areas.
+// listAreas lists all areas with pagination.
 // @Summary List areas
 // @Description get areas
 // @Tags areas
 // @Accept json-api
 // @Produce json-api
+// @Param page query int false "Page number (default 1)"
+// @Param per_page query int false "Items per page (default 50, max 100)"
 // @Success 200 {object} jsonapi.AreasResponse "OK"
 // @Router /areas [get].
 func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
@@ -39,14 +41,20 @@ func (api *areasAPI) listAreas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	q := r.URL.Query()
+	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
+	offset := (page - 1) * perPage
+
 	areaRegistry := registrySet.AreaRegistry
-	areas, err := areaRegistry.List(r.Context())
+	areas, total, err := areaRegistry.ListPaginated(r.Context(), offset, perPage)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
-	if err := render.Render(w, r, jsonapi.NewAreasResponse(areas, len(areas))); err != nil {
+	setPaginationHeaders(w, page, perPage, total)
+
+	if err := render.Render(w, r, jsonapi.NewAreasResponse(areas, total, page, perPage)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}

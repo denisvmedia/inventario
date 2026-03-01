@@ -113,6 +113,16 @@
       </div>
     </div>
 
+    <!-- Pagination -->
+    <PaginationControls
+      v-if="!loading"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-size="pageSize"
+      :total-items="totalLocations"
+      item-label="locations"
+    />
+
     <!-- Location Delete Confirmation Dialog -->
     <Confirmation
       v-model:visible="showDeleteLocationDialog"
@@ -142,7 +152,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
+import { fetchAll } from '@/utils/paginationUtils'
 import { useRouter, useRoute } from 'vue-router'
 import locationService from '@/services/locationService'
 import areaService from '@/services/areaService'
@@ -153,6 +164,7 @@ import LocationForm from '@/components/LocationForm.vue'
 import AreaForm from '@/components/AreaForm.vue'
 import Confirmation from "@/components/Confirmation.vue"
 import ErrorNotificationStack from '@/components/ErrorNotificationStack.vue'
+import PaginationControls from "@/components/PaginationControls.vue"
 import { useErrorState } from '@/utils/errorUtils'
 
 const router = useRouter()
@@ -161,6 +173,12 @@ const settingsStore = useSettingsStore()
 const locations = ref<any[]>([])
 const areas = ref<any[]>([])
 const loading = ref<boolean>(true)
+
+// Pagination state
+const currentPage = ref(1)
+const pageSize = ref(50)
+const totalLocations = ref(0)
+const totalPages = computed(() => Math.ceil(totalLocations.value / pageSize.value))
 
 // Error state management
 const { errors, handleError, removeError, cleanup } = useErrorState()
@@ -293,20 +311,19 @@ const getLocationValue = (locationId: string): string => {
   return '0.00 ' + mainCurrency.value
 }
 
-onMounted(async () => {
+const loadLocations = async () => {
+  loading.value = true
   try {
-    // Make sure we have the main currency
-    await settingsStore.fetchMainCurrency()
-
-    // Load locations, areas, and values in parallel
-    const [locationsResponse, areasResponse] = await Promise.all([
-      locationService.getLocations(),
-      areaService.getAreas(),
-      loadValues() // Load values in parallel
+    // Load locations with pagination; fetch all areas for display under expanded locations
+    const [locationsResponse, allAreas] = await Promise.all([
+      locationService.getLocations({ page: currentPage.value, per_page: pageSize.value }),
+      fetchAll(params => areaService.getAreas(params)),
+      loadValues()
     ])
 
     locations.value = locationsResponse.data.data
-    areas.value = areasResponse.data.data
+    totalLocations.value = locationsResponse.data.meta.locations
+    areas.value = allAreas
     loading.value = false
 
     // Check for query parameters
@@ -333,6 +350,17 @@ onMounted(async () => {
     handleError(err, 'location', 'Failed to load locations')
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  await settingsStore.fetchMainCurrency()
+  currentPage.value = Number(route.query.page) || 1
+  await loadLocations()
+})
+
+watch(() => route.query.page, (newPage) => {
+  currentPage.value = Number(newPage) || 1
+  loadLocations()
 })
 
 // Toggle location expanded state
@@ -355,17 +383,19 @@ const getAreasForLocation = (locationId: string) => {
 }
 
 // Handle location creation
-const handleLocationCreated = (newLocation: any) => {
-  locations.value.push(newLocation)
+const handleLocationCreated = async (newLocation: any) => {
   showLocationForm.value = false
   // Expand the newly created location
   expandedLocations.value.push(newLocation.id)
+  // Reload to reflect the new item with accurate pagination
+  await loadLocations()
 }
 
 // Handle area creation
-const handleAreaCreated = (newArea: any) => {
-  areas.value.push(newArea)
+const handleAreaCreated = async (_newArea: any) => {
   showAreaFormForLocation.value = null
+  // Reload to reflect the new area under its location
+  await loadLocations()
 }
 
 // Location actions
@@ -397,12 +427,10 @@ const onCancelDeleteLocation = () => {
 const deleteLocation = async (id: string) => {
   try {
     await locationService.deleteLocation(id)
-    // Remove the deleted location from the list
-    locations.value = locations.value.filter(location => location.id !== id)
-    // Also remove any areas that belonged to this location
-    areas.value = areas.value.filter(area => area.attributes.location_id !== id)
     // Remove from expanded locations if present
     expandedLocations.value = expandedLocations.value.filter(locationId => locationId !== id)
+    // Reload the current page to reflect deletion with accurate pagination
+    await loadLocations()
   } catch (err: any) {
     handleError(err, 'location', 'Failed to delete location')
   }
@@ -459,8 +487,8 @@ const onCancelDeleteArea = () => {
 const deleteArea = async (id: string) => {
   try {
     await areaService.deleteArea(id)
-    // Remove the deleted area from the list
-    areas.value = areas.value.filter(area => area.id !== id)
+    // Reload to refresh area data under locations
+    await loadLocations()
   } catch (err: any) {
     handleError(err, 'area', 'Failed to delete area')
   }
@@ -702,6 +730,5 @@ onBeforeUnmount(() => {
   font-weight: bold;
   color: $primary-color;
 }
-
 
 </style>

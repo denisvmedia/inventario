@@ -207,6 +207,27 @@ func (r *AreaRegistry) DeleteCommodity(_ context.Context, areaID, commodityID st
 	return nil
 }
 
+// ListPaginated returns a paginated list of areas along with the total count.
+func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Area, int, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
+	total := len(all)
+	start := min(offset, total)
+	end := min(start+limit, total)
+
+	return all[start:end], total, nil
+}
+
 // Enhanced methods with simplified in-memory implementations
 
 // GetCommodityCount returns the number of commodities in an area (simplified)

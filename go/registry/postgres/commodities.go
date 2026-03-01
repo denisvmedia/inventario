@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -132,6 +133,54 @@ func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 	}
 
 	return cnt, nil
+}
+
+// ListPaginated returns a paginated list of commodities along with the total count.
+func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Commodity, int, error) {
+	// Normalize pagination parameters to prevent negative SQL OFFSET/LIMIT errors.
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
+	var commodities []*models.Commodity
+	var total int
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, r.tableNames.Commodities())
+		if err := tx.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+			return errxtrace.Wrap("failed to count commodities", err)
+		}
+
+		dataQuery := fmt.Sprintf(`
+			SELECT * FROM %s
+			ORDER BY name, id
+			LIMIT $1 OFFSET $2`, r.tableNames.Commodities())
+
+		rows, err := tx.QueryxContext(ctx, dataQuery, limit, offset)
+		if err != nil {
+			return errxtrace.Wrap("failed to list paginated commodities", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var commodity models.Commodity
+			if err := rows.StructScan(&commodity); err != nil {
+				return errxtrace.Wrap("failed to scan commodity", err)
+			}
+			commodities = append(commodities, &commodity)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, 0, errxtrace.Wrap("failed to list paginated commodities", err)
+	}
+
+	return commodities, total, nil
 }
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {

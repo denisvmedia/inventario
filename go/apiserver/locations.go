@@ -13,12 +13,14 @@ import (
 type locationsAPI struct {
 }
 
-// listLocations lists all locations.
+// listLocations lists all locations with pagination.
 // @Summary List locations
 // @Description get locations
 // @Tags locations
 // @Accept json-api
 // @Produce json-api
+// @Param page query int false "Page number (default 1)"
+// @Param per_page query int false "Items per page (default 50, max 100)"
 // @Success 200 {object} jsonapi.LocationsResponse "OK"
 // @Router /locations [get].
 func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
@@ -30,13 +32,19 @@ func (api *locationsAPI) listLocations(w http.ResponseWriter, r *http.Request) {
 	}
 	locReg := registrySet.LocationRegistry
 
-	locations, err := locReg.List(r.Context())
+	q := r.URL.Query()
+	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
+	offset := (page - 1) * perPage
+
+	locations, total, err := locReg.ListPaginated(r.Context(), offset, perPage)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
-	if err := render.Render(w, r, jsonapi.NewLocationsResponse(locations, len(locations))); err != nil {
+	setPaginationHeaders(w, page, perPage, total)
+
+	if err := render.Render(w, r, jsonapi.NewLocationsResponse(locations, total, page, perPage)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -535,19 +534,6 @@ func (api *UsersAPI) fetchUserInTenant(w http.ResponseWriter, r *http.Request, u
 		return nil, false
 	}
 	return user, true
-}
-
-// parsePagination parses page and per_page query strings and returns safe defaults.
-func parsePagination(pageStr, perPageStr string) (page, perPage int) {
-	page = 1
-	perPage = 20
-	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-		page = p
-	}
-	if pp, err := strconv.Atoi(perPageStr); err == nil && pp > 0 && pp <= 100 {
-		perPage = pp
-	}
-	return page, perPage
 }
 
 // filterUsers filters a slice of users by role, active status, and search string.

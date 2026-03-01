@@ -35,6 +35,20 @@ const docTemplate = `{
                     "areas"
                 ],
                 "summary": "List areas",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -403,6 +417,20 @@ const docTemplate = `{
                     "commodities"
                 ],
                 "summary": "List commodities",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -2097,6 +2125,20 @@ const docTemplate = `{
                     "locations"
                 ],
                 "summary": "List locations",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -3607,6 +3649,21 @@ const docTemplate = `{
                     "type": "integer",
                     "format": "int64",
                     "example": 1
+                },
+                "page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "per_page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 50
+                },
+                "total_pages": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
                 }
             }
         },
@@ -3628,6 +3685,21 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "commodities": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "per_page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 50
+                },
+                "total_pages": {
                     "type": "integer",
                     "format": "int64",
                     "example": 1
@@ -4231,6 +4303,21 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "locations": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "per_page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 50
+                },
+                "total_pages": {
                     "type": "integer",
                     "format": "int64",
                     "example": 1

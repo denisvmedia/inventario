@@ -42,18 +42,29 @@
       </div>
     </div>
 
-    <div v-else class="commodities-grid">
-      <CommodityListItem
-        v-for="commodity in filteredCommodities"
-        :key="commodity.id"
-        :commodity="commodity"
-        :highlight-commodity-id="highlightCommodityId"
-        :show-location="true"
-        :area-map="areaMap"
-        :location-map="locationMap"
-        @view-commodity="viewCommodity"
-        @edit-commodity="editCommodity"
-        @confirm-delete-commodity="confirmDelete"
+    <div v-else class="commodities-grid-container">
+      <div class="commodities-grid">
+        <CommodityListItem
+          v-for="commodity in filteredCommodities"
+          :key="commodity.id"
+          :commodity="commodity"
+          :highlight-commodity-id="highlightCommodityId"
+          :show-location="true"
+          :area-map="areaMap"
+          :location-map="locationMap"
+          @view-commodity="viewCommodity"
+          @edit-commodity="editCommodity"
+          @confirm-delete-commodity="confirmDelete"
+        />
+      </div>
+
+      <!-- Pagination -->
+      <PaginationControls
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-size="pageSize"
+        :total-items="totalCommodities"
+        item-label="commodities"
       />
     </div>
 
@@ -73,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, onMounted, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import commodityService from '@/services/commodityService'
 import areaService from '@/services/areaService'
@@ -84,6 +95,8 @@ import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice } from '@/services/currencyService'
 import Confirmation from "@/components/Confirmation.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
+import PaginationControls from "@/components/PaginationControls.vue"
+import { fetchAll } from '@/utils/paginationUtils'
 
 const router = useRouter()
 const route = useRoute()
@@ -93,6 +106,12 @@ const areas = ref<any[]>([])
 const locations = ref<any[]>([])
 const loading = ref<boolean>(true)
 const error = ref<string | null>(null)
+
+// Pagination state
+const currentPage = ref(1)
+const pageSize = ref(50)
+const totalCommodities = ref(0)
+const totalPages = computed(() => Math.ceil(totalCommodities.value / pageSize.value))
 
 // Values data
 const globalTotal = ref<number>(0)
@@ -151,38 +170,49 @@ async function loadValues() {
   }
 }
 
-onMounted(async () => {
-  try {
-    // Fetch main currency from the store
-    await settingsStore.fetchMainCurrency()
+// Monotonically increasing sequence number to detect and discard stale responses.
+let loadSeq = 0
 
-    // Load commodities, areas, locations, and values in parallel
-    const [commoditiesResponse, areasResponse, locationsResponse] = await Promise.all([
-      commodityService.getCommodities(),
-      areaService.getAreas(),
-      locationService.getLocations(),
-      loadValues() // Load values in parallel
-    ])
+/** Fetches all areas and locations for the lookup maps. Called once on mount and after create/delete. */
+const loadLookups = async () => {
+  const [allAreas, allLocations] = await Promise.all([
+    fetchAll((_params) => areaService.getAreas(_params)),
+    fetchAll((_params) => locationService.getLocations(_params)),
+  ])
+
+  areas.value = allAreas
+  locations.value = allLocations
+
+  areaMap.value = {}
+  areas.value.forEach(area => {
+    areaMap.value[area.id] = {
+      name: area.attributes.name,
+      locationId: area.attributes.location_id
+    }
+  })
+
+  locationMap.value = {}
+  locations.value.forEach(location => {
+    locationMap.value[location.id] = {
+      name: location.attributes.name,
+      address: location.attributes.address
+    }
+  })
+}
+
+/** Fetches the current page of commodities. Safe to call on every page change without refetching lookups. */
+const loadCommodities = async () => {
+  const seq = ++loadSeq
+  loading.value = true
+  error.value = null
+  try {
+    const commoditiesResponse = await commodityService.getCommodities({ page: currentPage.value, per_page: pageSize.value })
+
+    // Ignore stale responses from superseded requests (rapid page navigation).
+    if (seq !== loadSeq) return
 
     commodities.value = commoditiesResponse.data.data
-    areas.value = areasResponse.data.data
-    locations.value = locationsResponse.data.data
-
-    // Create maps for quick lookups
-    areas.value.forEach(area => {
-      areaMap.value[area.id] = {
-        name: area.attributes.name,
-        locationId: area.attributes.location_id
-      }
-    })
-
-    locations.value.forEach(location => {
-      locationMap.value[location.id] = {
-        name: location.attributes.name,
-        address: location.attributes.address
-      }
-    })
-
+    totalCommodities.value = commoditiesResponse.data.meta.commodities
     loading.value = false
 
     // Scroll to highlighted commodity if specified
@@ -200,9 +230,22 @@ onMounted(async () => {
       })
     }
   } catch (err: any) {
+    if (seq !== loadSeq) return
     error.value = 'Failed to load data: ' + (err.message || 'Unknown error')
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  await settingsStore.fetchMainCurrency()
+  currentPage.value = Number(route.query.page) || 1
+  await Promise.all([loadLookups(), loadCommodities(), loadValues()])
+})
+
+// On page change, only reload commodities — lookup data (areas/locations) is stable across pages.
+watch(() => route.query.page, (newPage) => {
+  currentPage.value = Number(newPage) || 1
+  loadCommodities()
 })
 
 // Clean up timeout when component is unmounted
@@ -256,8 +299,8 @@ const onCancelDelete = () => {
 const deleteCommodity = async (id: string) => {
   try {
     await commodityService.deleteCommodity(id)
-    // Remove the deleted commodity from the list
-    commodities.value = commodities.value.filter(commodity => commodity.id !== id)
+    // Reload the current page to reflect deletion with accurate pagination
+    await loadCommodities()
   } catch (err: any) {
     error.value = 'Failed to delete commodity: ' + (err.message || 'Unknown error')
   }
@@ -303,9 +346,16 @@ const deleteCommodity = async (id: string) => {
   margin-top: 0.5rem;
 }
 
+.commodities-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 .commodities-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
 }
+
 </style>

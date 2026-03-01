@@ -57,12 +57,14 @@ func (api *commoditiesAPI) generateSignedURLsForFiles(ctx context.Context, files
 	return signedUrls
 }
 
-// listCommodities lists all commodities.
+// listCommodities lists all commodities with pagination.
 // @Summary List commodities
 // @Description get commodities
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
+// @Param page query int false "Page number (default 1)"
+// @Param per_page query int false "Items per page (default 50, max 100)"
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Router /commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
@@ -74,9 +76,19 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 	}
 	commodityReg := regSet.CommodityRegistry
 
-	commodities, _ := commodityReg.List(r.Context())
+	q := r.URL.Query()
+	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
+	offset := (page - 1) * perPage
 
-	if err := render.Render(w, r, jsonapi.NewCommoditiesResponse(commodities, len(commodities))); err != nil {
+	commodities, total, err := commodityReg.ListPaginated(r.Context(), offset, perPage)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
+	setPaginationHeaders(w, page, perPage, total)
+
+	if err := render.Render(w, r, jsonapi.NewCommoditiesResponse(commodities, total, page, perPage)); err != nil {
 		internalServerError(w, r, err)
 		return
 	}

@@ -77,6 +77,9 @@ func (cr *CommodityResponse) Render(_w http.ResponseWriter, r *http.Request) err
 // CommoditiesMeta is a meta information for CommoditiesResponse.
 type CommoditiesMeta struct {
 	Commodities int `json:"commodities" example:"1" format:"int64"`
+	Page        int `json:"page" example:"1" format:"int64"`
+	PerPage     int `json:"per_page" example:"50" format:"int64"`
+	TotalPages  int `json:"total_pages" example:"1" format:"int64"`
 }
 
 // CommoditiesResponse is an object that holds a list of commodities information.
@@ -85,8 +88,8 @@ type CommoditiesResponse struct {
 	Meta CommoditiesMeta `json:"meta"`
 }
 
-// NewCommoditiesResponse creates a new CommoditiesResponse instance.
-func NewCommoditiesResponse(commodities []*models.Commodity, total int) *CommoditiesResponse {
+// NewCommoditiesResponse creates a new CommoditiesResponse instance with pagination metadata.
+func NewCommoditiesResponse(commodities []*models.Commodity, total, page, perPage int) *CommoditiesResponse {
 	commodityData := make([]CommodityData, 0) // must be an empty array instead of nil due to JSON serialization
 	for _, l := range commodities {
 		l := *l
@@ -99,7 +102,12 @@ func NewCommoditiesResponse(commodities []*models.Commodity, total int) *Commodi
 
 	return &CommoditiesResponse{
 		Data: commodityData,
-		Meta: CommoditiesMeta{Commodities: total},
+		Meta: CommoditiesMeta{
+			Commodities: total,
+			Page:        page,
+			PerPage:     perPage,
+			TotalPages:  ComputeTotalPages(total, perPage),
+		},
 	}
 }
 

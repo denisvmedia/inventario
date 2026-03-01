@@ -3,8 +3,8 @@ import api from './api'
 const API_URL = '/api/v1'
 
 const locationService = {
-  getLocations() {
-    return api.get(`${API_URL}/locations`)
+  getLocations(params?: { page?: number; per_page?: number }) {
+    return api.get(`${API_URL}/locations`, { params })
   },
 
   getLocation(id: string) {
