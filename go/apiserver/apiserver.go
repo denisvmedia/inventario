@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -78,14 +79,27 @@ func defaultRequestContentType(contentType string) func(next http.Handler) http.
 	}
 }
 
-// paginate is a stub, but very possible to implement middleware logic
-// to handle the request params for handling a paginated request.
+// paginate is a stub middleware for pagination.
+// Actual pagination is handled directly in each handler using parsePagination and setPaginationHeaders.
 func paginate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// just a stub... some ideas are to look at URL query params for something like
-		// the page number, or the limit, and send a query cursor down the chain
 		next.ServeHTTP(w, r)
 	})
+}
+
+// setPaginationHeaders sets standard pagination response headers.
+func setPaginationHeaders(w http.ResponseWriter, page, perPage, total int) {
+	totalPages := 1
+	if perPage > 0 {
+		totalPages = (total + perPage - 1) / perPage
+		if totalPages == 0 {
+			totalPages = 1
+		}
+	}
+	w.Header().Set("X-Page", strconv.Itoa(page))
+	w.Header().Set("X-Per-Page", strconv.Itoa(perPage))
+	w.Header().Set("X-Total", strconv.Itoa(total))
+	w.Header().Set("X-Total-Pages", strconv.Itoa(totalPages))
 }
 
 type Params struct {

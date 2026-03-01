@@ -281,6 +281,20 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	return updatedCommodity, nil
 }
 
+// ListPaginated returns a paginated list of commodities along with the total count.
+func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Commodity, int, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total := len(all)
+	start := min(offset, total)
+	end := min(start+limit, total)
+
+	return all[start:end], total, nil
+}
+
 // Enhanced methods with simplified in-memory implementations
 
 // SearchByTags searches commodities by tags using in-memory filtering

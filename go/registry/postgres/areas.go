@@ -107,6 +107,46 @@ func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 	return cnt, nil
 }
 
+// ListPaginated returns a paginated list of areas along with the total count.
+func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Area, int, error) {
+	var areas []*models.Area
+	var total int
+
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, r.tableNames.Areas())
+		if err := tx.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+			return errxtrace.Wrap("failed to count areas", err)
+		}
+
+		dataQuery := fmt.Sprintf(`
+			SELECT * FROM %s
+			ORDER BY name
+			LIMIT $1 OFFSET $2`, r.tableNames.Areas())
+
+		rows, err := tx.QueryxContext(ctx, dataQuery, limit, offset)
+		if err != nil {
+			return errxtrace.Wrap("failed to list paginated areas", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var area models.Area
+			if err := rows.StructScan(&area); err != nil {
+				return errxtrace.Wrap("failed to scan area", err)
+			}
+			areas = append(areas, &area)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, 0, errxtrace.Wrap("failed to list paginated areas", err)
+	}
+
+	return areas, total, nil
+}
+
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {
 	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 

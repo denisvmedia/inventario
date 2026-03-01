@@ -141,6 +141,20 @@ func (r *LocationRegistry) DeleteArea(_ context.Context, locationID, areaID stri
 	return nil
 }
 
+// ListPaginated returns a paginated list of locations along with the total count.
+func (r *LocationRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Location, int, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total := len(all)
+	start := min(offset, total)
+	end := min(start+limit, total)
+
+	return all[start:end], total, nil
+}
+
 // Enhanced methods with simplified in-memory implementations
 
 // GetAreaCount returns the number of areas in a location (simplified)

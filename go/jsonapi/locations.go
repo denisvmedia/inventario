@@ -50,7 +50,10 @@ func (rd *LocationResponse) Render(_w http.ResponseWriter, r *http.Request) erro
 
 // LocationsMeta is a meta information for LocationsResponse.
 type LocationsMeta struct {
-	Locations int `json:"locations" example:"1" format:"int64"`
+	Locations  int `json:"locations" example:"1" format:"int64"`
+	Page       int `json:"page" example:"1" format:"int64"`
+	PerPage    int `json:"per_page" example:"50" format:"int64"`
+	TotalPages int `json:"total_pages" example:"1" format:"int64"`
 }
 
 // LocationsResponse is an object that holds location list information.
@@ -59,7 +62,8 @@ type LocationsResponse struct {
 	Meta LocationsMeta  `json:"meta"`
 }
 
-func NewLocationsResponse(locations []*models.Location, total int) *LocationsResponse {
+// NewLocationsResponse creates a LocationsResponse with pagination metadata.
+func NewLocationsResponse(locations []*models.Location, total, page, perPage int) *LocationsResponse {
 	locationData := make([]LocationData, 0) // must be an empty array instead of nil due to JSON serialization
 	for _, l := range locations {
 		l := *l
@@ -70,10 +74,21 @@ func NewLocationsResponse(locations []*models.Location, total int) *LocationsRes
 		})
 	}
 
+	totalPages := 1
+	if perPage > 0 {
+		totalPages = (total + perPage - 1) / perPage
+		if totalPages == 0 {
+			totalPages = 1
+		}
+	}
+
 	return &LocationsResponse{
 		Data: locationData,
 		Meta: LocationsMeta{
-			Locations: total,
+			Locations:  total,
+			Page:       page,
+			PerPage:    perPage,
+			TotalPages: totalPages,
 		},
 	}
 }
