@@ -28,7 +28,13 @@ const (
 	// sessions (e.g. parallel browser tabs or integration-test workers) without
 	// invalidating each other's tokens. Oldest tokens are evicted once the
 	// window is full.
-	MaxTokensPerUser = 10
+	//
+	// 100 is chosen to accommodate end-to-end test suites that run many tests
+	// in parallel using the same user account (e.g. 5 Playwright workers × up
+	// to 20 re-logins per worker over the full suite duration). In production
+	// the typical number of concurrent sessions per user is far smaller (a few
+	// browser tabs / mobile apps), so the overhead is negligible.
+	MaxTokensPerUser = 100
 )
 
 // Service manages per-user CSRF tokens.
