@@ -25,7 +25,17 @@ type mockUserRegistryForUsersTests struct {
 
 func (m *mockUserRegistryForUsersTests) Create(ctx context.Context, user models.User) (*models.User, error) {
 	for _, u := range m.users {
-		if u.Email == user.Email && u.TenantID == user.TenantID {
+		if u.ID != user.ID && u.Email == user.Email && u.TenantID == user.TenantID {
+			return nil, registry.ErrEmailAlreadyExists
+		}
+	}
+	m.users[user.ID] = &user
+	return &user, nil
+}
+
+func (m *mockUserRegistryForUsersTests) Update(ctx context.Context, user models.User) (*models.User, error) {
+	for _, u := range m.users {
+		if u.ID != user.ID && u.Email == user.Email && u.TenantID == user.TenantID {
 			return nil, registry.ErrEmailAlreadyExists
 		}
 	}
@@ -87,6 +97,340 @@ func TestUsersAPI_RequireAdmin_NonAdminGets403(t *testing.T) {
 			c.Assert(w.Code, qt.Equals, http.StatusForbidden)
 		})
 	}
+}
+
+func TestUsersAPI_CrossTenantAccessReturns404(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   map[string]any
+	}{
+		{
+			name:   "update from another tenant",
+			method: http.MethodPut,
+			path:   "/users/other-user",
+			body: map[string]any{
+				"name": "Should not update",
+			},
+		},
+		{
+			name:   "deactivate from another tenant",
+			method: http.MethodDelete,
+			path:   "/users/other-user",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			otherTenantUser := &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "other-user"},
+					TenantID: "tenant-b",
+				},
+				Email:    "other@tenant-b.com",
+				Name:     "Other User",
+				Role:     models.UserRoleUser,
+				IsActive: true,
+			}
+			admin := &models.User{
+				TenantAwareEntityID: models.TenantAwareEntityID{
+					EntityID: models.EntityID{ID: "admin-id"},
+					TenantID: "tenant-a",
+				},
+				Role:     models.UserRoleAdmin,
+				IsActive: true,
+			}
+			reg := &mockUserRegistryForUsersTests{
+				mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+					users: map[string]*models.User{"other-user": otherTenantUser},
+				},
+			}
+			r := newUsersRouter(admin, reg)
+
+			var body []byte
+			if tt.body != nil {
+				body, _ = json.Marshal(tt.body)
+			}
+			req := httptest.NewRequest(tt.method, tt.path, bytes.NewReader(body))
+			if tt.body != nil {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			c.Assert(w.Code, qt.Equals, http.StatusNotFound)
+		})
+	}
+}
+
+func TestUsersAPI_UpdateUser_DuplicateEmailReturns409(t *testing.T) {
+	c := qt.New(t)
+
+	existing := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "existing-id"},
+			TenantID: "tenant-a",
+		},
+		Email:    "taken@example.com",
+		Name:     "Existing User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	target := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "target-id"},
+			TenantID: "tenant-a",
+		},
+		Email:    "target@example.com",
+		Name:     "Target User",
+		Role:     models.UserRoleUser,
+		IsActive: true,
+	}
+	admin := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "admin-id"},
+			TenantID: "tenant-a",
+		},
+		Role:     models.UserRoleAdmin,
+		IsActive: true,
+	}
+	reg := &mockUserRegistryForUsersTests{
+		mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+			users: map[string]*models.User{
+				"existing-id": existing,
+				"target-id":   target,
+			},
+		},
+	}
+	r := newUsersRouter(admin, reg)
+
+	body, _ := json.Marshal(map[string]any{
+		"email": "taken@example.com",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/users/target-id", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusConflict)
+}
+
+func TestUsersAPI_HappyPath_ListGetCreateUpdateDeactivate(t *testing.T) {
+	t.Run("list users", func(t *testing.T) {
+		c := qt.New(t)
+
+		admin := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "admin-id"},
+				TenantID: "tenant-a",
+			},
+			Email:    "admin@example.com",
+			Name:     "Admin User",
+			Role:     models.UserRoleAdmin,
+			IsActive: true,
+		}
+		other := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "other-id"},
+				TenantID: "tenant-a",
+			},
+			Email:    "other@example.com",
+			Name:     "Other User",
+			Role:     models.UserRoleUser,
+			IsActive: true,
+		}
+		reg := &mockUserRegistryForUsersTests{
+			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+				users: map[string]*models.User{
+					"admin-id": admin,
+					"other-id": other,
+				},
+			},
+		}
+		r := newUsersRouter(admin, reg)
+
+		req := httptest.NewRequest(http.MethodGet, "/users", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		var resp apiserver.AdminUserListResponse
+		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
+		c.Assert(resp.Total, qt.Equals, 2)
+		c.Assert(len(resp.Users), qt.Equals, 2)
+	})
+
+	t.Run("get user", func(t *testing.T) {
+		c := qt.New(t)
+
+		admin := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "admin-id"},
+				TenantID: "tenant-a",
+			},
+			Role:     models.UserRoleAdmin,
+			IsActive: true,
+		}
+		target := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "target-id"},
+				TenantID: "tenant-a",
+			},
+			Email:    "target@example.com",
+			Name:     "Target User",
+			Role:     models.UserRoleUser,
+			IsActive: true,
+		}
+		reg := &mockUserRegistryForUsersTests{
+			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+				users: map[string]*models.User{
+					"admin-id":  admin,
+					"target-id": target,
+				},
+			},
+		}
+		r := newUsersRouter(admin, reg)
+
+		req := httptest.NewRequest(http.MethodGet, "/users/target-id", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		var resp models.User
+		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
+		c.Assert(resp.ID, qt.Equals, "target-id")
+	})
+
+	t.Run("create user", func(t *testing.T) {
+		c := qt.New(t)
+
+		admin := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "admin-id"},
+				TenantID: "tenant-a",
+			},
+			Role:     models.UserRoleAdmin,
+			IsActive: true,
+		}
+		reg := &mockUserRegistryForUsersTests{
+			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+				users: map[string]*models.User{
+					"admin-id": admin,
+				},
+			},
+		}
+		r := newUsersRouter(admin, reg)
+
+		body, _ := json.Marshal(map[string]any{
+			"email":    "new-user@example.com",
+			"password": "ValidPass123!",
+			"name":     "New User",
+			"role":     "user",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		c.Assert(w.Code, qt.Equals, http.StatusCreated)
+		var resp models.User
+		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
+		c.Assert(resp.Email, qt.Equals, "new-user@example.com")
+		c.Assert(resp.Role, qt.Equals, models.UserRoleUser)
+	})
+
+	t.Run("update user", func(t *testing.T) {
+		c := qt.New(t)
+
+		admin := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "admin-id"},
+				TenantID: "tenant-a",
+			},
+			Role:     models.UserRoleAdmin,
+			IsActive: true,
+		}
+		target := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "target-id"},
+				TenantID: "tenant-a",
+			},
+			Email:    "target@example.com",
+			Name:     "Target User",
+			Role:     models.UserRoleUser,
+			IsActive: true,
+		}
+		reg := &mockUserRegistryForUsersTests{
+			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+				users: map[string]*models.User{
+					"admin-id":  admin,
+					"target-id": target,
+				},
+			},
+		}
+		r := newUsersRouter(admin, reg)
+
+		body, _ := json.Marshal(map[string]any{
+			"name": "Updated Target User",
+			"role": "admin",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/users/target-id", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		var resp models.User
+		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
+		c.Assert(resp.Name, qt.Equals, "Updated Target User")
+		c.Assert(resp.Role, qt.Equals, models.UserRoleAdmin)
+	})
+
+	t.Run("deactivate user", func(t *testing.T) {
+		c := qt.New(t)
+
+		admin := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "admin-id"},
+				TenantID: "tenant-a",
+			},
+			Role:     models.UserRoleAdmin,
+			IsActive: true,
+		}
+		target := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: "target-id"},
+				TenantID: "tenant-a",
+			},
+			Email:    "target@example.com",
+			Name:     "Target User",
+			Role:     models.UserRoleUser,
+			IsActive: true,
+		}
+		reg := &mockUserRegistryForUsersTests{
+			mockUserRegistryForSecurityTests: mockUserRegistryForSecurityTests{
+				users: map[string]*models.User{
+					"admin-id":  admin,
+					"target-id": target,
+				},
+			},
+		}
+		r := newUsersRouter(admin, reg)
+
+		req := httptest.NewRequest(http.MethodDelete, "/users/target-id", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		c.Assert(reg.users["target-id"].IsActive, qt.IsFalse)
+
+		var resp map[string]string
+		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
+		c.Assert(resp["message"], qt.Equals, "User deactivated successfully")
+	})
 }
 
 // -----------------------------------------------------------------------
