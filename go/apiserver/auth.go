@@ -22,12 +22,7 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-var (
-	// DefaultTenantID is retained for backward compatibility with registration and password-reset
-	// flows that have not yet been migrated to use the tenant from request context.
-	// TODO: remove once registration.go and password_reset.go read tenant from context.
-	DefaultTenantID = "test-tenant-id"
-)
+
 
 const (
 	// accessTokenExpiration defines how long access JWT tokens remain valid.

@@ -17,7 +17,7 @@ type InvoiceRegistryFactory struct {
 }
 
 // InvoiceRegistry is a context-aware registry that can only be created through the factory
-type InvoiceRegistry baseCommidityAndUserAwareRegistry[models.Invoice, *models.Invoice]
+type InvoiceRegistry baseCommodityAndUserAwareRegistry[models.Invoice, *models.Invoice]
 
 var _ registry.InvoiceRegistry = (*InvoiceRegistry)(nil)
 var _ registry.InvoiceRegistryFactory = (*InvoiceRegistryFactory)(nil)

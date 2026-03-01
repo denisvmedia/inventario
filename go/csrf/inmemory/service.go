@@ -62,30 +62,40 @@ func (s *Service) GenerateToken(_ context.Context, userID string) (string, error
 }
 
 // ValidateToken reports whether token is in the user's rolling window and not expired.
-// It does not update the LRU recency of the token.
+// It does not update the LRU recency of the token. Empty per-user caches are pruned
+// to prevent unbounded memory growth for one-time users.
 func (s *Service) ValidateToken(_ context.Context, userID, token string) (bool, error) {
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	cache, ok := s.users[userID]
-	s.mu.RUnlock()
 	if !ok {
 		return false, nil
 	}
 	// Contains does not update LRU order; expired entries are treated as absent.
-	return cache.Contains(token), nil
+	valid := cache.Contains(token)
+	// Prune the per-user entry when all tokens have expired to avoid accumulating
+	// empty caches for one-time users indefinitely.
+	if len(cache.Keys()) == 0 {
+		delete(s.users, userID)
+	}
+	return valid, nil
 }
 
 // GetToken returns the most recently generated valid token for userID.
 // Returns "" when no valid tokens exist (all expired or none generated).
+// Empty per-user caches are pruned to prevent unbounded memory growth.
 func (s *Service) GetToken(_ context.Context, userID string) (string, error) {
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	cache, ok := s.users[userID]
-	s.mu.RUnlock()
 	if !ok {
 		return "", nil
 	}
 	// Keys() returns from oldest to newest with expired entries filtered out.
 	keys := cache.Keys()
 	if len(keys) == 0 {
+		// All tokens expired: prune the empty cache entry.
+		delete(s.users, userID)
 		return "", nil
 	}
 	return keys[len(keys)-1], nil

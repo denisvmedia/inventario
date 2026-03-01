@@ -53,7 +53,7 @@ func key(userID string) string { return fmt.Sprintf("csrf:%s", userID) }
 
 // GenerateToken adds a new CSRF token to the user's ZSET (score = expiry unix
 // seconds), prunes expired entries and entries beyond the rolling window, then
-// resets the key TTL. All operations run in a single pipeline.
+// resets the key TTL.
 func (s *Service) GenerateToken(ctx context.Context, userID string) (string, error) {
 	token, err := csrf.GenerateToken()
 	if err != nil {
@@ -68,13 +68,21 @@ func (s *Service) GenerateToken(ctx context.Context, userID string) (string, err
 	pipe.ZAdd(ctx, k, redisv9.Z{Score: float64(expiry.Unix()), Member: token})
 	// Remove already-expired entries (score < now).
 	pipe.ZRemRangeByScore(ctx, k, "-inf", fmt.Sprintf("%d", now.Unix()-1))
-	// Keep only the newest MaxTokensPerUser entries (remove oldest from rank 0 up).
-	pipe.ZRemRangeByRank(ctx, k, 0, int64(-csrf.MaxTokensPerUser-1))
 	// Refresh the key-level TTL so it outlives all stored tokens.
 	pipe.Expire(ctx, k, csrf.TokenTTL)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return "", fmt.Errorf("failed to store CSRF token: %w", err)
 	}
+
+	// Prune to MaxTokensPerUser only when the window is actually full.
+	// We check ZCARD first to avoid ZRemRangeByRank's out-of-range rank
+	// behaviour which can silently drop entries when the set is small.
+	count, err := s.client.ZCard(ctx, k).Result()
+	if err == nil && count > int64(csrf.MaxTokensPerUser) {
+		// Remove the oldest (count - MaxTokensPerUser) entries.
+		_ = s.client.ZRemRangeByRank(ctx, k, 0, count-int64(csrf.MaxTokensPerUser)-1).Err()
+	}
+
 	return token, nil
 }
 

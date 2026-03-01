@@ -52,7 +52,9 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	loginSuccess := attemptLogin(t, server.URL, "nonexistent@example.com", "password123")
 	c.Assert(loginSuccess, qt.IsFalse, qt.Commentf("Login should fail for non-existent user"))
 
-	// Step 3: Create tenant and get the actual ID that was generated
+	// Step 3: Create tenant and get the actual ID that was generated.
+	// The tenant is marked as default (IsDefault: true) so that PublicTenantMiddleware
+	// resolves it via TenantRegistry.GetDefault() and login requests land in the right tenant.
 	t.Log("🏢 Creating tenant and getting generated ID...")
 	timestamp := fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
 	tenantSlug := "test-company-" + timestamp
@@ -61,11 +63,6 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 
 	// Debug: Check what tenant was actually created
 	t.Logf("Created tenant with ID: %s, slug: %s", tenantID, tenantSlug)
-
-	// Step 4: Update API server to use the actual tenant ID
-	t.Log("🔧 Setting API server tenant ID...")
-	apiserver.DefaultTenantID = tenantID
-	t.Logf("🔧 API server will now use tenant ID: %s", tenantID)
 
 	// Step 5: Create user via CLI
 	t.Log("👤 Creating user via CLI...")
@@ -129,9 +126,10 @@ func createTenantAndGetID(dsn, name, slug, domain string) (string, error) {
 
 	// Create tenant (let the system generate the ID)
 	tenant := models.Tenant{
-		Name:   name,
-		Slug:   slug,
-		Status: models.TenantStatusActive,
+		Name:      name,
+		Slug:      slug,
+		Status:    models.TenantStatusActive,
+		IsDefault: true, // Mark as default so PublicTenantMiddleware resolves this tenant.
 	}
 	if domain != "" {
 		tenant.Domain = &domain

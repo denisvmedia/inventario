@@ -542,8 +542,14 @@ func (l *RestoreOperationProcessor) createImageRecord(
 
 	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path.
 	// This key is reproducible from both loadExistingEntities and the incoming XML data.
-	// Empty commodityID means an orphaned file — no meaningful dedup key, always create.
-	fileKey := commodityID + "|" + file.Path
+	// For orphaned files (empty commodityID) use originalXMLID instead to avoid key
+	// collisions between unrelated orphaned uploads that share the same file path.
+	var fileKey string
+	if commodityID == "" {
+		fileKey = originalXMLID + "|" + file.Path
+	} else {
+		fileKey = commodityID + "|" + file.Path
+	}
 
 	// Apply strategy for images
 	existingImage := existing.Images[fileKey]
@@ -673,7 +679,13 @@ func (l *RestoreOperationProcessor) createInvoiceRecord(
 	commodityID = validatedCommodityID
 
 	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path (same rationale as images).
-	fileKey := commodityID + "|" + file.Path
+	// For orphaned files (empty commodityID) use originalXMLID to avoid key collisions.
+	var fileKey string
+	if commodityID == "" {
+		fileKey = originalXMLID + "|" + file.Path
+	} else {
+		fileKey = commodityID + "|" + file.Path
+	}
 
 	// Apply strategy for invoices
 	existingInvoice := existing.Invoices[fileKey]
@@ -803,7 +815,13 @@ func (l *RestoreOperationProcessor) createManualRecord(
 	commodityID = validatedCommodityID
 
 	// Composite dedup key: commodityID (DB UUID) + "|" + file.Path (same rationale as images).
-	fileKey := commodityID + "|" + file.Path
+	// For orphaned files (empty commodityID) use originalXMLID to avoid key collisions.
+	var fileKey string
+	if commodityID == "" {
+		fileKey = originalXMLID + "|" + file.Path
+	} else {
+		fileKey = commodityID + "|" + file.Path
+	}
 
 	// Apply strategy for manuals
 	existingManual := existing.Manuals[fileKey]

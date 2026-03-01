@@ -140,7 +140,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	c.Check(rr.Code, qt.Equals, http.StatusNoContent)
 
 	// Verify commodity is deleted
-	_, err = getRegistrySetFromParams(params, testUser).FileRegistry.Get(ctx, createdCommodity.ID)
+	_, err = getRegistrySetFromParams(params, testUser).CommodityRegistry.Get(ctx, createdCommodity.ID)
 	c.Assert(err, qt.IsNotNil) // Should be deleted
 
 	// Verify all linked files are deleted

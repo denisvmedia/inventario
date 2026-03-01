@@ -17,7 +17,7 @@ type ImageRegistryFactory struct {
 }
 
 // ImageRegistry is a context-aware registry that can only be created through the factory
-type ImageRegistry baseCommidityAndUserAwareRegistry[models.Image, *models.Image]
+type ImageRegistry baseCommodityAndUserAwareRegistry[models.Image, *models.Image]
 
 var _ registry.ImageRegistry = (*ImageRegistry)(nil)
 var _ registry.ImageRegistryFactory = (*ImageRegistryFactory)(nil)

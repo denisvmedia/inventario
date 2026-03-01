@@ -17,7 +17,7 @@ type ManualRegistryFactory struct {
 }
 
 // ManualRegistry is a context-aware registry that can only be created through the factory
-type ManualRegistry baseCommidityAndUserAwareRegistry[models.Manual, *models.Manual]
+type ManualRegistry baseCommodityAndUserAwareRegistry[models.Manual, *models.Manual]
 
 var _ registry.ManualRegistry = (*ManualRegistry)(nil)
 var _ registry.ManualRegistryFactory = (*ManualRegistryFactory)(nil)

@@ -186,6 +186,21 @@ func (c *Command) runCommand() error {
 		return err
 	}
 
+	// In memory-db mode, seed a default tenant so PublicTenantMiddleware can resolve it
+	// without requiring manual setup steps. This is skipped in all other modes where a
+	// real database should already have a tenant seeded via migrations or CLI commands.
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
+		defaultTenant := models.Tenant{
+			Name:      "Default Tenant",
+			Slug:      "default",
+			Status:    models.TenantStatusActive,
+			IsDefault: true,
+		}
+		if _, err := factorySet.TenantRegistry.Create(context.Background(), defaultTenant); err != nil {
+			slog.Warn("Failed to seed default tenant in memory-db mode", "error", err)
+		}
+	}
+
 	params.FactorySet = factorySet
 	params.UploadLocation = c.config.UploadLocation
 	params.EntityService = services.NewEntityService(factorySet, params.UploadLocation)
@@ -237,15 +252,15 @@ func (c *Command) runCommand() error {
 	} else {
 		params.AuthRateLimiter = services.NewAuthRateLimiter(c.config.AuthRateLimitRedisURL)
 	}
-	globalRateWindow, err := time.ParseDuration(c.config.GlobalRateWindow)
-	if err != nil {
-		slog.Error("Failed to parse global rate window duration", "error", err, "duration", c.config.GlobalRateWindow)
-		return err
-	}
 	if c.config.GlobalRateLimitDisabled {
 		slog.Warn("Global API rate limiting is disabled via configuration — do not use this in production")
 		params.GlobalRateLimiter = services.NewNoOpGlobalRateLimiter()
 	} else {
+		globalRateWindow, err := time.ParseDuration(c.config.GlobalRateWindow)
+		if err != nil {
+			slog.Error("Failed to parse global rate window duration", "error", err, "duration", c.config.GlobalRateWindow)
+			return err
+		}
 		params.GlobalRateLimiter = services.NewGlobalRateLimiter(c.config.GlobalRateLimitRedisURL, c.config.GlobalRateLimit, globalRateWindow)
 	}
 	params.GlobalRateTrustedProxyNets, err = apiserver.ParseTrustedProxyCIDRs(c.config.GlobalRateTrustedProxies)
