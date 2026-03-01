@@ -106,7 +106,7 @@ func NewCommoditiesResponse(commodities []*models.Commodity, total, page, perPag
 			Commodities: total,
 			Page:        page,
 			PerPage:     perPage,
-			TotalPages:  computeTotalPages(total, perPage),
+			TotalPages:  ComputeTotalPages(total, perPage),
 		},
 	}
 }

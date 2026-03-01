@@ -109,6 +109,14 @@ func (r *LocationRegistry) Count(ctx context.Context) (int, error) {
 
 // ListPaginated returns a paginated list of locations along with the total count.
 func (r *LocationRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Location, int, error) {
+	// Normalize pagination parameters to prevent negative SQL OFFSET/LIMIT errors.
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
 	var locations []*models.Location
 	var total int
 

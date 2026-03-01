@@ -80,7 +80,7 @@ func NewLocationsResponse(locations []*models.Location, total, page, perPage int
 			Locations:  total,
 			Page:       page,
 			PerPage:    perPage,
-			TotalPages: computeTotalPages(total, perPage),
+			TotalPages: ComputeTotalPages(total, perPage),
 		},
 	}
 }

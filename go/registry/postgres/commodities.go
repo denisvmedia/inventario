@@ -137,6 +137,14 @@ func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 
 // ListPaginated returns a paginated list of commodities along with the total count.
 func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int) ([]*models.Commodity, int, error) {
+	// Normalize pagination parameters to prevent negative SQL OFFSET/LIMIT errors.
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
 	var commodities []*models.Commodity
 	var total int
 

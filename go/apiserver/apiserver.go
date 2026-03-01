@@ -25,6 +25,7 @@ import (
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
+	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
@@ -87,24 +88,12 @@ func paginate(next http.Handler) http.Handler {
 	})
 }
 
-// computeTotalPages calculates the total number of pages for pagination.
-// Returns 0 when total is 0 (no items), 1 when perPage <= 0, otherwise uses ceiling division.
-func computeTotalPages(total, perPage int) int {
-	if total == 0 {
-		return 0
-	}
-	if perPage <= 0 {
-		return 1
-	}
-	return (total + perPage - 1) / perPage
-}
-
 // setPaginationHeaders sets standard pagination response headers.
 func setPaginationHeaders(w http.ResponseWriter, page, perPage, total int) {
 	w.Header().Set("X-Page", strconv.Itoa(page))
 	w.Header().Set("X-Per-Page", strconv.Itoa(perPage))
 	w.Header().Set("X-Total", strconv.Itoa(total))
-	w.Header().Set("X-Total-Pages", strconv.Itoa(computeTotalPages(total, perPage)))
+	w.Header().Set("X-Total-Pages", strconv.Itoa(jsonapi.ComputeTotalPages(total, perPage)))
 }
 
 // parsePagination parses page and per_page query strings and returns safe defaults.

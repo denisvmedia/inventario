@@ -59,50 +59,13 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="pagination-card">
-        <div class="pagination-info">
-          Showing {{ (currentPage - 1) * pageSize + 1 }} to {{ Math.min(currentPage * pageSize, totalCommodities) }} of {{ totalCommodities }} commodities
-        </div>
-        <div class="pagination-controls">
-          <router-link
-            v-if="currentPage > 1"
-            :to="getPaginationUrl(currentPage - 1)"
-            class="btn btn-secondary pagination-link"
-          >
-            <font-awesome-icon icon="chevron-left" />
-            Previous
-          </router-link>
-          <span v-else class="btn btn-secondary pagination-link disabled">
-            <font-awesome-icon icon="chevron-left" />
-            Previous
-          </span>
-
-          <div class="page-numbers">
-            <router-link
-              v-for="page in visiblePages"
-              :key="page"
-              :to="getPaginationUrl(page)"
-              class="btn pagination-link"
-              :class="{ 'btn-primary': page === currentPage, 'btn-secondary': page !== currentPage }"
-            >
-              {{ page }}
-            </router-link>
-          </div>
-
-          <router-link
-            v-if="currentPage < totalPages"
-            :to="getPaginationUrl(currentPage + 1)"
-            class="btn btn-secondary pagination-link"
-          >
-            Next
-            <font-awesome-icon icon="chevron-right" />
-          </router-link>
-          <span v-else class="btn btn-secondary pagination-link disabled">
-            Next
-            <font-awesome-icon icon="chevron-right" />
-          </span>
-        </div>
-      </div>
+      <PaginationControls
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-size="pageSize"
+        :total-items="totalCommodities"
+        item-label="commodities"
+      />
     </div>
 
     <!-- Commodity Delete Confirmation Dialog -->
@@ -132,6 +95,7 @@ import { COMMODITY_STATUS_IN_USE } from '@/constants/commodityStatuses'
 import { formatPrice } from '@/services/currencyService'
 import Confirmation from "@/components/Confirmation.vue"
 import CommodityListItem from "@/components/CommodityListItem.vue"
+import PaginationControls from "@/components/PaginationControls.vue"
 import { fetchAll } from '@/utils/paginationUtils'
 
 const router = useRouter()
@@ -148,23 +112,6 @@ const currentPage = ref(1)
 const pageSize = ref(50)
 const totalCommodities = ref(0)
 const totalPages = computed(() => Math.ceil(totalCommodities.value / pageSize.value))
-const visiblePages = computed(() => {
-  const pages: number[] = []
-  const start = Math.max(1, currentPage.value - 2)
-  const end = Math.min(totalPages.value, currentPage.value + 2)
-  for (let i = start; i <= end; i++) pages.push(i)
-  return pages
-})
-
-const getPaginationUrl = (page: number) => {
-  const query = { ...route.query }
-  if (page > 1) {
-    query.page = page.toString()
-  } else {
-    delete query.page
-  }
-  return { path: route.path, query }
-}
 
 // Values data
 const globalTotal = ref<number>(0)
@@ -223,39 +170,49 @@ async function loadValues() {
   }
 }
 
+// Monotonically increasing sequence number to detect and discard stale responses.
+let loadSeq = 0
+
+/** Fetches all areas and locations for the lookup maps. Called once on mount and after create/delete. */
+const loadLookups = async () => {
+  const [allAreas, allLocations] = await Promise.all([
+    fetchAll((_params) => areaService.getAreas(_params)),
+    fetchAll((_params) => locationService.getLocations(_params)),
+  ])
+
+  areas.value = allAreas
+  locations.value = allLocations
+
+  areaMap.value = {}
+  areas.value.forEach(area => {
+    areaMap.value[area.id] = {
+      name: area.attributes.name,
+      locationId: area.attributes.location_id
+    }
+  })
+
+  locationMap.value = {}
+  locations.value.forEach(location => {
+    locationMap.value[location.id] = {
+      name: location.attributes.name,
+      address: location.attributes.address
+    }
+  })
+}
+
+/** Fetches the current page of commodities. Safe to call on every page change without refetching lookups. */
 const loadCommodities = async () => {
+  const seq = ++loadSeq
   loading.value = true
   error.value = null
   try {
-    // Load commodities with pagination; fetch all areas/locations for complete lookup maps
-    const [commoditiesResponse, allAreas, allLocations] = await Promise.all([
-      commodityService.getCommodities({ page: currentPage.value, per_page: pageSize.value }),
-      fetchAll(params => areaService.getAreas(params)),
-      fetchAll(params => locationService.getLocations(params)),
-    ])
+    const commoditiesResponse = await commodityService.getCommodities({ page: currentPage.value, per_page: pageSize.value })
+
+    // Ignore stale responses from superseded requests (rapid page navigation).
+    if (seq !== loadSeq) return
 
     commodities.value = commoditiesResponse.data.data
     totalCommodities.value = commoditiesResponse.data.meta.commodities
-    areas.value = allAreas
-    locations.value = allLocations
-
-    // Create maps for quick lookups
-    areaMap.value = {}
-    areas.value.forEach(area => {
-      areaMap.value[area.id] = {
-        name: area.attributes.name,
-        locationId: area.attributes.location_id
-      }
-    })
-
-    locationMap.value = {}
-    locations.value.forEach(location => {
-      locationMap.value[location.id] = {
-        name: location.attributes.name,
-        address: location.attributes.address
-      }
-    })
-
     loading.value = false
 
     // Scroll to highlighted commodity if specified
@@ -273,6 +230,7 @@ const loadCommodities = async () => {
       })
     }
   } catch (err: any) {
+    if (seq !== loadSeq) return
     error.value = 'Failed to load data: ' + (err.message || 'Unknown error')
     loading.value = false
   }
@@ -281,9 +239,10 @@ const loadCommodities = async () => {
 onMounted(async () => {
   await settingsStore.fetchMainCurrency()
   currentPage.value = Number(route.query.page) || 1
-  await Promise.all([loadCommodities(), loadValues()])
+  await Promise.all([loadLookups(), loadCommodities(), loadValues()])
 })
 
+// On page change, only reload commodities — lookup data (areas/locations) is stable across pages.
 watch(() => route.query.page, (newPage) => {
   currentPage.value = Number(newPage) || 1
   loadCommodities()
@@ -399,42 +358,4 @@ const deleteCommodity = async (id: string) => {
   gap: 1.5rem;
 }
 
-.pagination-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: white;
-  border-radius: $default-radius;
-  box-shadow: $box-shadow;
-}
-
-.pagination-info {
-  font-size: 0.9rem;
-  color: $text-color;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.page-numbers {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.pagination-link {
-  min-width: 2.5rem;
-  text-align: center;
-
-  &.disabled {
-    opacity: 0.5;
-    pointer-events: none;
-  }
-}
 </style>

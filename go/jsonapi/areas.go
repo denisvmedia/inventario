@@ -75,7 +75,7 @@ func NewAreasResponse(areas []*models.Area, total, page, perPage int) *AreasResp
 			Areas:      total,
 			Page:       page,
 			PerPage:    perPage,
-			TotalPages: computeTotalPages(total, perPage),
+			TotalPages: ComputeTotalPages(total, perPage),
 		},
 	}
 }

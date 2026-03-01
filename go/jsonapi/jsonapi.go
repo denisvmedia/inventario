@@ -7,9 +7,9 @@ func statusCodeDef(origStatus, defaultStatus int) int {
 	return origStatus
 }
 
-// computeTotalPages calculates the total number of pages for pagination.
+// ComputeTotalPages calculates the total number of pages for pagination.
 // Returns 0 when total is 0 (no items), 1 when perPage <= 0, otherwise uses ceiling division.
-func computeTotalPages(total, perPage int) int {
+func ComputeTotalPages(total, perPage int) int {
 	if total == 0 {
 		return 0
 	}
