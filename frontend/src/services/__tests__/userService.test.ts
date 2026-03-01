@@ -30,8 +30,9 @@ describe('userService', () => {
       mockedApi.get.mockResolvedValue({ data: { users: [], total: 0, page: 1, per_page: 20, total_pages: 1 } })
 
       await userService.listUsers()
-
-      expect(mockedApi.get).toHaveBeenCalledWith('/api/v1/users', expect.any(Object))
+      expect(mockedApi.get).toHaveBeenCalledWith('/api/v1/users', {
+        headers: { Accept: 'application/json' },
+      })
     })
 
     it('appends role filter', async () => {
@@ -41,7 +42,7 @@ describe('userService', () => {
 
       expect(mockedApi.get).toHaveBeenCalledWith(
         expect.stringContaining('role=admin'),
-        expect.any(Object),
+        { headers: { Accept: 'application/json' } },
       )
     })
 
@@ -52,7 +53,7 @@ describe('userService', () => {
 
       expect(mockedApi.get).toHaveBeenCalledWith(
         expect.stringContaining('active=true'),
-        expect.any(Object),
+        { headers: { Accept: 'application/json' } },
       )
     })
 
@@ -63,7 +64,7 @@ describe('userService', () => {
 
       expect(mockedApi.get).toHaveBeenCalledWith(
         expect.stringContaining('active=false'),
-        expect.any(Object),
+        { headers: { Accept: 'application/json' } },
       )
     })
 
@@ -93,8 +94,28 @@ describe('userService', () => {
 
       expect(mockedApi.get).toHaveBeenCalledWith(
         expect.stringContaining('search=alice'),
-        expect.any(Object),
+        { headers: { Accept: 'application/json' } },
       )
+    })
+
+    it('constructs URL with role, active, search, page, and per_page', async () => {
+      mockedApi.get.mockResolvedValue({ data: { users: [], total: 0, page: 2, per_page: 10, total_pages: 1 } })
+
+      await userService.listUsers({
+        role: 'admin',
+        active: false,
+        search: 'alice',
+        page: 2,
+        per_page: 10,
+      })
+      const [calledUrl, calledOptions] = mockedApi.get.mock.lastCall!
+      expect(calledUrl).toContain('/api/v1/users?')
+      expect(calledUrl).toContain('role=admin')
+      expect(calledUrl).toContain('active=false')
+      expect(calledUrl).toContain('search=alice')
+      expect(calledUrl).toContain('page=2')
+      expect(calledUrl).toContain('per_page=10')
+      expect(calledOptions).toEqual({ headers: { Accept: 'application/json' } })
     })
   })
 
@@ -108,8 +129,9 @@ describe('userService', () => {
       mockedApi.get.mockResolvedValue({ data: mockUser })
 
       const result = await userService.getUser('user-1')
-
-      expect(mockedApi.get).toHaveBeenCalledWith('/api/v1/users/user-1', expect.any(Object))
+      expect(mockedApi.get).toHaveBeenCalledWith('/api/v1/users/user-1', {
+        headers: { Accept: 'application/json' },
+      })
       expect(result).toEqual(mockUser)
     })
   })
@@ -125,8 +147,12 @@ describe('userService', () => {
       mockedApi.post.mockResolvedValue({ data: created })
 
       const result = await userService.createUser(payload)
-
-      expect(mockedApi.post).toHaveBeenCalledWith('/api/v1/users', payload, expect.any(Object))
+      expect(mockedApi.post).toHaveBeenCalledWith('/api/v1/users', payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      })
       expect(result).toEqual(created)
     })
   })
@@ -142,8 +168,12 @@ describe('userService', () => {
       mockedApi.put.mockResolvedValue({ data: updated })
 
       const result = await userService.updateUser('user-1', patch)
-
-      expect(mockedApi.put).toHaveBeenCalledWith('/api/v1/users/user-1', patch, expect.any(Object))
+      expect(mockedApi.put).toHaveBeenCalledWith('/api/v1/users/user-1', patch, {
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      })
       expect(result).toEqual(updated)
     })
   })
@@ -157,8 +187,9 @@ describe('userService', () => {
       mockedApi.delete.mockResolvedValue({ data: { message: 'User deactivated successfully' } })
 
       const result = await userService.deactivateUser('user-1')
-
-      expect(mockedApi.delete).toHaveBeenCalledWith('/api/v1/users/user-1', expect.any(Object))
+      expect(mockedApi.delete).toHaveBeenCalledWith('/api/v1/users/user-1', {
+        headers: { Accept: 'application/json' },
+      })
       expect(result).toEqual({ message: 'User deactivated successfully' })
     })
   })
