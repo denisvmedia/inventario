@@ -2,12 +2,10 @@ package memory
 
 import (
 	"context"
-	"errors"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
-	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -19,12 +17,7 @@ type ImageRegistryFactory struct {
 }
 
 // ImageRegistry is a context-aware registry that can only be created through the factory
-type ImageRegistry struct {
-	*Registry[models.Image, *models.Image]
-
-	userID            string
-	commodityRegistry *CommodityRegistry // required dependency for relationship tracking
-}
+type ImageRegistry baseCommidityAndUserAwareRegistry[models.Image, *models.Image]
 
 var _ registry.ImageRegistry = (*ImageRegistry)(nil)
 var _ registry.ImageRegistryFactory = (*ImageRegistryFactory)(nil)
@@ -43,35 +36,18 @@ func (f *ImageRegistryFactory) MustCreateUserRegistry(ctx context.Context) regis
 }
 
 func (f *ImageRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.ImageRegistry, error) {
-	user, err := appctx.RequireUserFromContext(ctx)
+	result, err := createUserRegistry(ctx, func(userID string) *Registry[models.Image, *models.Image] {
+		return &Registry[models.Image, *models.Image]{
+			items:  f.baseImageRegistry.items, // Share the data map
+			lock:   f.baseImageRegistry.lock,  // Share the mutex pointer
+			userID: userID,                    // Set user-specific userID
+		}
+	}, f.commodityRegistry)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to get user from context", err)
+		return nil, err
 	}
-
-	// Create a new registry with user context already set
-	userRegistry := &Registry[models.Image, *models.Image]{
-		items:  f.baseImageRegistry.items, // Share the data map
-		lock:   f.baseImageRegistry.lock,  // Share the mutex pointer
-		userID: user.ID,                   // Set user-specific userID
-	}
-
-	// Create user-aware commodity registry
-	commodityRegistryInterface, err := f.commodityRegistry.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to create user commodity registry", err)
-	}
-
-	// Cast to concrete type for relationship management
-	commodityRegistry, ok := commodityRegistryInterface.(*CommodityRegistry)
-	if !ok {
-		return nil, errors.New("failed to cast commodity registry to concrete type")
-	}
-
-	return &ImageRegistry{
-		Registry:          userRegistry,
-		userID:            user.ID,
-		commodityRegistry: commodityRegistry,
-	}, nil
+	// Convert to *ImageRegistry so callers get Create/Update/Delete with commodity relationship tracking.
+	return (*ImageRegistry)(result), nil
 }
 
 func (f *ImageRegistryFactory) CreateServiceRegistry() registry.ImageRegistry {

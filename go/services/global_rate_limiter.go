@@ -19,7 +19,9 @@ type GlobalRateLimiter interface {
 
 // NewGlobalRateLimiter creates an API-wide per-IP limiter.
 // If redisURL is provided, Redis is used (recommended for production).
-// If Redis is unavailable or redisURL is empty, an in-memory fallback is used.
+// If redisURL is empty, an in-memory fallback is used.
+// If redisURL is set but Redis is temporarily unavailable at startup, a Redis
+// limiter is still returned and requests fail open until Redis is reachable.
 func NewGlobalRateLimiter(redisURL string, limit int, window time.Duration) GlobalRateLimiter {
 	if limit <= 0 || window <= 0 {
 		slog.Warn("Global rate limiter disabled due to non-positive limit/window")
@@ -135,21 +137,23 @@ func (l *RedisGlobalRateLimiter) RateLimitHits() uint64 {
 type InMemoryGlobalRateLimiter struct {
 	now func() time.Time
 
-	limit  int
-	window time.Duration
-
-	mu      sync.Mutex
-	windows map[string][]time.Time
-	hits    atomic.Uint64
+	limit        int
+	window       time.Duration
+	mu           sync.Mutex
+	windows      map[string][]time.Time
+	hits         atomic.Uint64
+	cleanupTimer *time.Timer
 }
 
 func NewInMemoryGlobalRateLimiter(limit int, window time.Duration) *InMemoryGlobalRateLimiter {
-	return &InMemoryGlobalRateLimiter{
+	lim := &InMemoryGlobalRateLimiter{
 		now:     time.Now,
 		limit:   limit,
 		window:  window,
 		windows: make(map[string][]time.Time),
 	}
+	lim.startCleanup()
+	return lim
 }
 
 func (l *InMemoryGlobalRateLimiter) Check(_ context.Context, ip string) (RateLimitResult, error) {
@@ -197,6 +201,25 @@ func (l *InMemoryGlobalRateLimiter) Check(_ context.Context, ip string) (RateLim
 
 func (l *InMemoryGlobalRateLimiter) RateLimitHits() uint64 {
 	return l.hits.Load()
+}
+
+func (l *InMemoryGlobalRateLimiter) startCleanup() {
+	l.cleanupTimer = time.AfterFunc(5*time.Minute, func() {
+		l.cleanup()
+		l.startCleanup()
+	})
+}
+
+func (l *InMemoryGlobalRateLimiter) cleanup() {
+	cutoff := l.now().Add(-l.window)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for key, ts := range l.windows {
+		if len(ts) == 0 || !ts[len(ts)-1].After(cutoff) {
+			delete(l.windows, key)
+		}
+	}
 }
 
 // -----------------------------------------------------------------------

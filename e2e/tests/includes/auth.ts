@@ -89,45 +89,54 @@ export async function login(page: Page, recorder?: TestRecorder): Promise<string
   // Fill in credentials
   await page.fill('input[type="email"]', TEST_CREDENTIALS.email);
   await page.fill('input[type="password"]', TEST_CREDENTIALS.password);
-
-  // Intercept the login response to extract CSRF token
-  let csrfToken: string | null = null;
-
-  const responseHandler = async (response: any) => {
-    if (response.url().includes('/api/v1/auth/login') && response.status() === 200) {
-      try {
-        const data = await response.json();
-        if (data.csrf_token) {
-          csrfToken = data.csrf_token;
-          setCsrfToken(csrfToken);
-          log(recorder, '🔑 CSRF token extracted from login response');
-        }
-      } catch (err) {
-        // Ignore JSON parse errors
-      }
-    }
-  };
-
-  page.on('response', responseHandler);
+  // Wait for login API response and fail fast on non-200 statuses.
+  const loginResponsePromise = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/auth/login'),
+    { timeout: 20000 }
+  );
 
   // Submit the form
   await page.click('button[type="submit"]');
+  const loginResponse = await loginResponsePromise;
+  if (loginResponse.status() !== 200) {
+    let responseText = '';
+    try {
+      responseText = await loginResponse.text();
+    } catch {
+      // no-op
+    }
+    error(
+      recorder,
+      `❌ Login failed: status=${loginResponse.status()} body=${responseText.slice(0, 500)}`
+    );
+    throw new Error(`Login failed with status ${loginResponse.status()}`);
+  }
+
+  // Extract CSRF token directly from successful login response.
+  let csrfToken: string | null = null;
+  try {
+    const data = await loginResponse.json();
+    if (data?.csrf_token) {
+      csrfToken = data.csrf_token;
+      setCsrfToken(csrfToken);
+      log(recorder, '🔑 CSRF token extracted from login response');
+    }
+  } catch {
+    warn(recorder, '⚠️ Login succeeded but CSRF token parsing failed');
+  }
 
   // Wait for login to complete and redirect
   await page.waitForFunction(
     () => {
-      // Check if we're no longer on login page (URL changed) or if we see authenticated content
-      return window.location.pathname !== '/login' ||
+      // Check if we're no longer on login page (URL changed) or if we see authenticated content.
+      return !window.location.pathname.startsWith('/login') ||
              (document.querySelector('h1')?.textContent?.includes('Welcome to Inventario') === true);
     },
-    { timeout: 10000 }
+    { timeout: 30000 }
   );
 
-  // Wait a moment for the response handler to capture the token
+  // Give UI a brief moment to settle after redirect/auth state propagation.
   await page.waitForTimeout(500);
-
-  // Remove the response handler
-  page.off('response', responseHandler);
 
   // If we're still on login page but see authenticated content, manually navigate to home
   const currentUrl = page.url();

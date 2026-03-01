@@ -24,20 +24,20 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	factorySet := memory.NewFactorySet()
 	c.Assert(factorySet, qt.IsNotNil)
 
+	createdTenant, err := factorySet.TenantRegistry.Create(c.Context(), models.Tenant{
+		Name:      "Test Tenant",
+		Status:    models.TenantStatusActive,
+		IsDefault: true,
+	})
+	c.Assert(err, qt.IsNil)
 	testUser, err := factorySet.UserRegistry.Create(c.Context(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: "test-tenant-id",
-			// ID will be generated server-side for security
+			TenantID: createdTenant.ID,
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
 		Role:     models.UserRoleUser,
 		IsActive: true,
-	})
-	c.Assert(err, qt.IsNil)
-	_, err = factorySet.TenantRegistry.Create(c.Context(), models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant-id"},
-		Name:     "Test Tenant",
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -93,25 +93,25 @@ func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {
 	factorySet := memory.NewFactorySet()
 	c.Assert(factorySet, qt.IsNotNil)
 
-	// Create test user
-	testUser := models.User{
+	// Create default tenant first, then user scoped to its generated ID.
+	createdTenant, err := factorySet.TenantRegistry.Create(c.Context(), models.Tenant{
+		Name:      "Test Tenant",
+		Status:    models.TenantStatusActive,
+		IsDefault: true,
+	})
+	c.Assert(err, qt.IsNil)
+	userTemplate := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			// ID will be generated server-side for security
-			TenantID: "test-tenant-id",
+			TenantID: createdTenant.ID,
 		},
 		Email:    "test@example.com",
 		Name:     "Test User",
 		Role:     models.UserRoleUser,
 		IsActive: true,
 	}
-	err := testUser.SetPassword("testpassword123")
+	err = userTemplate.SetPassword("testpassword123")
 	c.Assert(err, qt.IsNil)
-	createdUser, err := factorySet.UserRegistry.Create(c.Context(), testUser)
-	c.Assert(err, qt.IsNil)
-	_, err = factorySet.TenantRegistry.Create(c.Context(), models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant-id"},
-		Name:     "Test Tenant",
-	})
+	createdUser, err := factorySet.UserRegistry.Create(c.Context(), userTemplate)
 	c.Assert(err, qt.IsNil)
 
 	// Add some test settings

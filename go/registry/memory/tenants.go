@@ -21,6 +21,22 @@ func NewTenantRegistry() *TenantRegistry {
 	}
 }
 
+// GetDefault returns the tenant marked as default (IsDefault == true).
+func (r *TenantRegistry) GetDefault(ctx context.Context) (*models.Tenant, error) {
+	tenants, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, tenant := range tenants {
+		if tenant.IsDefault {
+			return tenant, nil
+		}
+	}
+
+	return nil, registry.ErrNotFound
+}
+
 // GetBySlug returns a tenant by its slug
 func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Tenant, error) {
 	tenants, err := r.List(ctx)

@@ -284,3 +284,39 @@ func (r *FileRegistry) FindLargeFiles(ctx context.Context, minSizeBytes int64) (
 	// In a full implementation, you would add a size field to the files table
 	return []*models.FileEntity{}, nil
 }
+
+type baseCommidityAndUserAwareRegistry[T any, P registry.PIDable[T]] struct {
+	*Registry[T, P]
+
+	userID            string
+	commodityRegistry *CommodityRegistry // required dependency for relationship tracking
+}
+
+// createUserRegistry creates a new registry with user context from the provided context
+func createUserRegistry[T any, P registry.PIDable[T]](ctx context.Context, userRegistryFactory func(userID string) *Registry[T, P], comRegFactory *CommodityRegistryFactory) (res *baseCommidityAndUserAwareRegistry[T, P], err error) {
+	user, err := appctx.RequireUserFromContext(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to get user from context", err)
+	}
+
+	// Create a new registry with user context already set
+	userRegistry := userRegistryFactory(user.ID)
+
+	// Create user-aware commodity registry
+	commodityRegistryInterface, err := comRegFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to create user commodity registry", err)
+	}
+
+	// Cast to concrete type for relationship management
+	commodityRegistry, ok := commodityRegistryInterface.(*CommodityRegistry)
+	if !ok {
+		return nil, errxtrace.ClassifyNew("failed to cast commodity registry to concrete type")
+	}
+
+	return &baseCommidityAndUserAwareRegistry[T, P]{
+		Registry:          userRegistry,
+		userID:            user.ID,
+		commodityRegistry: commodityRegistry,
+	}, nil
+}

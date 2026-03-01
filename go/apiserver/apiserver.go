@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -87,23 +88,25 @@ func paginate(next http.Handler) http.Handler {
 }
 
 type Params struct {
-	FactorySet        *registry.FactorySet
-	EntityService     *services.EntityService
-	UploadLocation    string
-	DebugInfo         *debug.Info
-	StartTime         time.Time
-	JWTSecret         []byte                             // JWT secret for user authentication
-	FileSigningKey    []byte                             // File signing key for secure file URLs
-	FileURLExpiration time.Duration                      // File URL expiration duration
-	ThumbnailConfig   services.ThumbnailGenerationConfig // Thumbnail generation configuration
-	TokenBlacklister  services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
-	AuthRateLimiter   services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
-	GlobalRateLimiter services.GlobalRateLimiter         // Global API rate limiter (Redis or in-memory)
-	CSRFService       services.CSRFService               // CSRF token service (Redis or in-memory)
-	CORSConfig        CORSConfig                         // CORS configuration for API routes
-	RegistrationMode  models.RegistrationMode            // Registration mode: open, approval, or closed
-	EmailService      services.EmailService              // Transactional email service (queue + providers)
-	PublicURL         string                             // Public base URL used in transactional links
+	FactorySet                 *registry.FactorySet
+	EntityService              *services.EntityService
+	UploadLocation             string
+	DebugInfo                  *debug.Info
+	StartTime                  time.Time
+	JWTSecret                  []byte                             // JWT secret for user authentication
+	FileSigningKey             []byte                             // File signing key for secure file URLs
+	FileURLExpiration          time.Duration                      // File URL expiration duration
+	ThumbnailConfig            services.ThumbnailGenerationConfig // Thumbnail generation configuration
+	TokenBlacklister           services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
+	AuthRateLimiter            services.AuthRateLimiter           // Auth rate limiter (Redis or in-memory)
+	GlobalRateLimiter          services.GlobalRateLimiter         // Global API rate limiter (Redis or in-memory)
+	GlobalRateTrustedProxyNets []*net.IPNet                       // Trusted proxies for extracting real client IP in global limiter
+	CSRFService                services.CSRFService               // CSRF token service (Redis or in-memory)
+	CORSConfig                 CORSConfig                         // CORS configuration for API routes
+	TenantResolver             TenantResolver                     // resolves host → tenant; nil = single-tenant (HostTenantResolver with no BaseDomain)
+	RegistrationMode           models.RegistrationMode            // Registration mode: open, approval, or closed
+	EmailService               services.EmailService              // Transactional email service (queue + providers)
+	PublicURL                  string                             // Public base URL used in transactional links
 }
 
 func (p *Params) Validate() error {
@@ -189,8 +192,17 @@ func APIServer(params Params, restoreWorker RestoreWorkerInterface) http.Handler
 		emailSvc = services.NewStubEmailService()
 	}
 
+	// Resolve tenant resolver: default to single-tenant mode if not provided.
+	tenantResolver := params.TenantResolver
+	if tenantResolver == nil {
+		tenantResolver = &HostTenantResolver{}
+	}
+
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(GlobalRateLimitMiddleware(globalRateLimiter))
+		r.Use(GlobalRateLimitMiddleware(globalRateLimiter, params.GlobalRateTrustedProxyNets))
+		// Resolve tenant from request host and place it in context for all handlers,
+		// including public ones (login, registration, password reset).
+		r.Use(PublicTenantMiddleware(tenantResolver, params.FactorySet.TenantRegistry))
 		// Public routes (no authentication required)
 		r.Route("/auth", Auth(AuthParams{
 			UserRegistry:         params.FactorySet.UserRegistry,

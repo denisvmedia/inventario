@@ -98,9 +98,13 @@ func TestExportListExcludesDeleted(t *testing.T) {
 	c := qt.New(t)
 
 	// Create factory set and test user
-	userRegistry, testUser := newUserRegistryWithUser()
 	factorySet := memory.NewFactorySet()
-	factorySet.UserRegistry = userRegistry
+	testUserTemplate := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
+		Email:               "test@example.com", Name: "Test User", Role: models.UserRoleUser, IsActive: true,
+	}
+	must.Assert(testUserTemplate.SetPassword("password123"))
+	testUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
 	// Create user context and get user-aware registry set
 	ctx := appctx.WithUser(context.Background(), testUser)
@@ -171,9 +175,13 @@ func TestExportListWithDeletedParameter(t *testing.T) {
 	c := qt.New(t)
 
 	// Create factory set and test user
-	userRegistry, testUser := newUserRegistryWithUser()
 	factorySet := memory.NewFactorySet()
-	factorySet.UserRegistry = userRegistry
+	testUserTemplate := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant-id"},
+		Email:               "test@example.com", Name: "Test User", Role: models.UserRoleUser, IsActive: true,
+	}
+	must.Assert(testUserTemplate.SetPassword("password123"))
+	testUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUserTemplate))
 
 	// Create user context and get user-aware registry set
 	ctx := appctx.WithUser(context.Background(), testUser)

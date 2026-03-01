@@ -162,8 +162,8 @@ func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, 
 	// Create default tenant
 	now := time.Now()
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tenants (id, name, slug, domain, status, settings, created_at, updated_at)
-		VALUES ($1, $2, $3, NULL, 'active', '{}', $4, $5)`,
+		INSERT INTO tenants (id, name, slug, domain, status, is_default, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, NULL, 'active', true, '{}', $4, $5)`,
 		opts.DefaultTenantID, opts.DefaultTenantName, opts.DefaultTenantSlug, now, now)
 	if err != nil {
 		return fmt.Errorf("failed to create default tenant: %w", err)

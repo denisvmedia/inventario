@@ -1,17 +1,12 @@
 package apiserver
 
 import (
+	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/rs/cors"
 )
-
-var defaultAllowedOrigins = []string{
-	"http://localhost:5173",
-	"http://localhost:3000",
-}
 
 var defaultAllowedMethods = []string{
 	http.MethodGet,
@@ -48,29 +43,37 @@ type CORSConfig struct {
 	AllowedMethods   []string
 	AllowedHeaders   []string
 	ExposedHeaders   []string
-	AllowCredentials bool
+	AllowCredentials *bool
 	MaxAge           int
 }
 
-// DefaultCORSConfig returns strict defaults suitable for local development
-// and production-safe behavior (no wildcard origins).
+// DefaultCORSConfig returns strict defaults suitable for production-safe behavior.
+// AllowedOrigins intentionally defaults to empty (fail-closed for cross-origin requests).
 func DefaultCORSConfig() CORSConfig {
+	allowCredentials := true
 	return CORSConfig{
-		AllowedOrigins:   slices.Clone(defaultAllowedOrigins),
-		AllowedMethods:   slices.Clone(defaultAllowedMethods),
-		AllowedHeaders:   slices.Clone(defaultAllowedHeaders),
-		ExposedHeaders:   slices.Clone(defaultExposedHeaders),
-		AllowCredentials: true,
+		AllowedMethods:   append([]string(nil), defaultAllowedMethods...),
+		AllowedHeaders:   append([]string(nil), defaultAllowedHeaders...),
+		ExposedHeaders:   append([]string(nil), defaultExposedHeaders...),
+		AllowCredentials: &allowCredentials,
 		MaxAge:           defaultCORSMaxAge,
 	}
 }
 
+// DefaultDevAllowedOrigins returns the local development CORS origin allowlist.
+func DefaultDevAllowedOrigins() []string {
+	return []string{
+		"http://localhost:5173",
+		"http://localhost:3000",
+	}
+}
+
 // ParseAllowedOrigins parses comma-separated origins.
-// Empty input falls back to development defaults.
-func ParseAllowedOrigins(originsRaw string) []string {
+// Empty input returns an empty list (fail-closed for cross-origin requests).
+func ParseAllowedOrigins(originsRaw string) ([]string, error) {
 	originsRaw = strings.TrimSpace(originsRaw)
 	if originsRaw == "" {
-		return slices.Clone(defaultAllowedOrigins)
+		return nil, nil
 	}
 
 	parts := strings.Split(originsRaw, ",")
@@ -81,6 +84,9 @@ func ParseAllowedOrigins(originsRaw string) []string {
 		if origin == "" {
 			continue
 		}
+		if origin == "*" || strings.EqualFold(origin, "null") {
+			return nil, fmt.Errorf("unsafe CORS origin %q is not allowed", origin)
+		}
 		if _, ok := seen[origin]; ok {
 			continue
 		}
@@ -88,19 +94,12 @@ func ParseAllowedOrigins(originsRaw string) []string {
 		origins = append(origins, origin)
 	}
 
-	if len(origins) == 0 {
-		return slices.Clone(defaultAllowedOrigins)
-	}
-
-	return origins
+	return origins, nil
 }
 
 func normalizeCORSConfig(cfg CORSConfig) CORSConfig {
 	def := DefaultCORSConfig()
 
-	if len(cfg.AllowedOrigins) == 0 {
-		cfg.AllowedOrigins = def.AllowedOrigins
-	}
 	if len(cfg.AllowedMethods) == 0 {
 		cfg.AllowedMethods = def.AllowedMethods
 	}
@@ -113,6 +112,9 @@ func normalizeCORSConfig(cfg CORSConfig) CORSConfig {
 	if cfg.MaxAge <= 0 {
 		cfg.MaxAge = def.MaxAge
 	}
+	if cfg.AllowCredentials == nil {
+		cfg.AllowCredentials = def.AllowCredentials
+	}
 
 	return cfg
 }
@@ -120,12 +122,16 @@ func normalizeCORSConfig(cfg CORSConfig) CORSConfig {
 // NewCORSMiddleware builds CORS middleware from config.
 func NewCORSMiddleware(config CORSConfig) *cors.Cors {
 	cfg := normalizeCORSConfig(config)
+	allowCredentials := false
+	if cfg.AllowCredentials != nil {
+		allowCredentials = *cfg.AllowCredentials
+	}
 	return cors.New(cors.Options{
 		AllowedOrigins:   cfg.AllowedOrigins,
 		AllowedMethods:   cfg.AllowedMethods,
 		AllowedHeaders:   cfg.AllowedHeaders,
 		ExposedHeaders:   cfg.ExposedHeaders,
-		AllowCredentials: cfg.AllowCredentials,
+		AllowCredentials: allowCredentials,
 		MaxAge:           cfg.MaxAge,
 	})
 }

@@ -28,7 +28,7 @@ func TestGlobalRateLimitMiddleware_BlocksAndSetsHeaders(t *testing.T) {
 	c := qt.New(t)
 
 	limiter := services.NewInMemoryGlobalRateLimiter(2, time.Hour)
-	handler := apiserver.GlobalRateLimitMiddleware(limiter)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := apiserver.GlobalRateLimitMiddleware(limiter, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -61,7 +61,7 @@ func TestGlobalRateLimitMiddleware_BlocksAndSetsHeaders(t *testing.T) {
 func TestGlobalRateLimitMiddleware_FailsOpenOnLimiterErrors(t *testing.T) {
 	c := qt.New(t)
 
-	handler := apiserver.GlobalRateLimitMiddleware(errGlobalLimiter{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := apiserver.GlobalRateLimitMiddleware(errGlobalLimiter{}, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -71,4 +71,55 @@ func TestGlobalRateLimitMiddleware_FailsOpenOnLimiterErrors(t *testing.T) {
 	handler.ServeHTTP(res, req)
 
 	c.Assert(res.Code, qt.Equals, http.StatusOK)
+}
+
+func TestGlobalRateLimitMiddleware_UsesXForwardedForOnlyForTrustedProxies(t *testing.T) {
+	c := qt.New(t)
+
+	trustedNets, err := apiserver.ParseTrustedProxyCIDRs("10.0.0.0/8")
+	c.Assert(err, qt.IsNil)
+
+	t.Run("trusted proxy honors X-Forwarded-For", func(t *testing.T) {
+		c := qt.New(t)
+		limiter := services.NewInMemoryGlobalRateLimiter(1, time.Hour)
+		handler := apiserver.GlobalRateLimitMiddleware(limiter, trustedNets)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req1 := httptest.NewRequest(http.MethodGet, "/api/v1/system", nil)
+		req1.RemoteAddr = "10.1.1.1:1234"
+		req1.Header.Set("X-Forwarded-For", "203.0.113.10")
+		res1 := httptest.NewRecorder()
+		handler.ServeHTTP(res1, req1)
+		c.Assert(res1.Code, qt.Equals, http.StatusOK)
+
+		req2 := httptest.NewRequest(http.MethodGet, "/api/v1/system", nil)
+		req2.RemoteAddr = "10.1.1.1:1235"
+		req2.Header.Set("X-Forwarded-For", "203.0.113.11")
+		res2 := httptest.NewRecorder()
+		handler.ServeHTTP(res2, req2)
+		c.Assert(res2.Code, qt.Equals, http.StatusOK)
+	})
+
+	t.Run("untrusted proxy ignores X-Forwarded-For", func(t *testing.T) {
+		c := qt.New(t)
+		limiter := services.NewInMemoryGlobalRateLimiter(1, time.Hour)
+		handler := apiserver.GlobalRateLimitMiddleware(limiter, trustedNets)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req1 := httptest.NewRequest(http.MethodGet, "/api/v1/system", nil)
+		req1.RemoteAddr = "198.51.100.10:1234"
+		req1.Header.Set("X-Forwarded-For", "203.0.113.10")
+		res1 := httptest.NewRecorder()
+		handler.ServeHTTP(res1, req1)
+		c.Assert(res1.Code, qt.Equals, http.StatusOK)
+
+		req2 := httptest.NewRequest(http.MethodGet, "/api/v1/system", nil)
+		req2.RemoteAddr = "198.51.100.10:1235"
+		req2.Header.Set("X-Forwarded-For", "203.0.113.99")
+		res2 := httptest.NewRecorder()
+		handler.ServeHTTP(res2, req2)
+		c.Assert(res2.Code, qt.Equals, http.StatusTooManyRequests)
+	})
 }

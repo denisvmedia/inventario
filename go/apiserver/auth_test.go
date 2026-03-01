@@ -155,7 +155,11 @@ func (m *mockUserRegistryForAuth) Delete(ctx context.Context, id string) error {
 }
 
 func (m *mockUserRegistryForAuth) List(ctx context.Context) ([]*models.User, error) {
-	return nil, nil
+	users := make([]*models.User, 0, len(m.users))
+	for _, user := range m.users {
+		users = append(users, user)
+	}
+	return users, nil
 }
 
 func (m *mockUserRegistryForAuth) Count(ctx context.Context) (int, error) {
@@ -204,6 +208,12 @@ func TestAuthAPI_Login(t *testing.T) {
 
 	// Create auth handler
 	authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+	// Tenant injected via middleware (normally done by PublicTenantMiddleware in APIServer).
+	loginTenant := &models.Tenant{
+		EntityID: models.EntityID{ID: "test-tenant-id"},
+		Status:   models.TenantStatusActive,
+	}
 
 	tests := []struct {
 		name           string
@@ -290,8 +300,14 @@ func TestAuthAPI_Login(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			resp := httptest.NewRecorder()
 
-			// Create router and add auth routes
+			// Create router and add auth routes, injecting tenant context.
 			router := chi.NewRouter()
+			router.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					ctx := apiserver.WithTenant(r.Context(), loginTenant)
+					next.ServeHTTP(w, r.WithContext(ctx))
+				})
+			})
 			authHandler(router)
 			router.ServeHTTP(resp, req)
 

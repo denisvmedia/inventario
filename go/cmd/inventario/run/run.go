@@ -118,8 +118,11 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.TokenBlacklistRedisURL, "token-blacklist-redis-url", c.config.TokenBlacklistRedisURL, "Redis URL for token blacklist (e.g., redis://localhost:6379/0); omit to use in-memory blacklist")
 	flags.StringVar(&c.config.AuthRateLimitRedisURL, "auth-rate-limit-redis-url", c.config.AuthRateLimitRedisURL, "Redis URL for auth rate limiting/lockout (e.g., redis://localhost:6379/0); omit to use in-memory limiter")
 	flags.BoolVar(&c.config.AuthRateLimitDisabled, "no-auth-rate-limit", c.config.AuthRateLimitDisabled, "Disable auth rate limiting entirely (for testing only — do not use in production)")
+	flags.StringVar(&c.config.GlobalRateLimitRedisURL, "global-rate-limit-redis-url", c.config.GlobalRateLimitRedisURL, "Redis URL for global API rate limiting (e.g., redis://localhost:6379/0); omit to use in-memory limiter")
 	flags.IntVar(&c.config.GlobalRateLimit, "global-rate-limit", c.config.GlobalRateLimit, "Global per-IP request limit for API endpoints")
 	flags.StringVar(&c.config.GlobalRateWindow, "global-rate-window", c.config.GlobalRateWindow, "Global API rate limit window duration (e.g., 1h, 30m)")
+	flags.BoolVar(&c.config.GlobalRateLimitDisabled, "no-global-rate-limit", c.config.GlobalRateLimitDisabled, "Disable global API rate limiting entirely (for testing only — do not use in production)")
+	flags.StringVar(&c.config.GlobalRateTrustedProxies, "global-rate-trusted-proxies", c.config.GlobalRateTrustedProxies, "Comma-separated trusted proxy CIDRs/IPs used when resolving client IP for global rate limiting")
 	flags.StringVar(&c.config.CSRFRedisURL, "csrf-redis-url", c.config.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
 	flags.StringVar(&c.config.AllowedOrigins, "allowed-origins", c.config.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com)")
 	flags.StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode: open (anyone can register), approval (admin must approve), or closed (registration disabled)")
@@ -147,6 +150,7 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.MandrillBaseURL, "mandrill-base-url", c.config.MandrillBaseURL, "Mandrill API base URL")
 }
 
+//nolint:gocyclo // command setup function with many independent config branches; complexity is structural, not accidental
 func (c *Command) runCommand() error {
 	srv := &httpserver.APIServer{}
 	bindAddr := c.config.Addr
@@ -238,15 +242,34 @@ func (c *Command) runCommand() error {
 		slog.Error("Failed to parse global rate window duration", "error", err, "duration", c.config.GlobalRateWindow)
 		return err
 	}
-	params.GlobalRateLimiter = services.NewGlobalRateLimiter(c.config.AuthRateLimitRedisURL, c.config.GlobalRateLimit, globalRateWindow)
+	if c.config.GlobalRateLimitDisabled {
+		slog.Warn("Global API rate limiting is disabled via configuration — do not use this in production")
+		params.GlobalRateLimiter = services.NewNoOpGlobalRateLimiter()
+	} else {
+		params.GlobalRateLimiter = services.NewGlobalRateLimiter(c.config.GlobalRateLimitRedisURL, c.config.GlobalRateLimit, globalRateWindow)
+	}
+	params.GlobalRateTrustedProxyNets, err = apiserver.ParseTrustedProxyCIDRs(c.config.GlobalRateTrustedProxies)
+	if err != nil {
+		slog.Error("Failed to parse global rate trusted proxies", "error", err)
+		return err
+	}
 
 	params.CSRFService = services.NewCSRFService(c.config.CSRFRedisURL)
 
-	// Parse allowed origins (comma-separated) with strict defaults.
+	// Parse allowed origins (comma-separated) with fail-closed default.
 	params.CORSConfig = apiserver.DefaultCORSConfig()
-	params.CORSConfig.AllowedOrigins = apiserver.ParseAllowedOrigins(c.config.AllowedOrigins)
-	if strings.TrimSpace(c.config.AllowedOrigins) == "" {
-		slog.Warn("No CORS origins explicitly configured; using local development defaults. Set --allowed-origins for staging/production.")
+	params.CORSConfig.AllowedOrigins, err = apiserver.ParseAllowedOrigins(c.config.AllowedOrigins)
+	if err != nil {
+		slog.Error("Failed to parse allowed CORS origins", "error", err)
+		return err
+	}
+	if len(params.CORSConfig.AllowedOrigins) == 0 {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
+			params.CORSConfig.AllowedOrigins = apiserver.DefaultDevAllowedOrigins()
+			slog.Warn("No CORS origins explicitly configured; using local development defaults in memory-db mode. Set --allowed-origins for custom values.")
+		} else {
+			slog.Warn("No CORS origins explicitly configured; cross-origin requests are denied. Set --allowed-origins to allow specific origins.")
+		}
 	}
 
 	// Set registration mode from config (defaults to "open" when unset).

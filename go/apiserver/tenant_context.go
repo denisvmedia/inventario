@@ -198,3 +198,80 @@ func TenantAwareMiddleware(resolver TenantResolver) func(http.Handler) http.Hand
 		})
 	}
 }
+
+// HostTenantResolver resolves the tenant from the HTTP request Host header.
+// In single-tenant mode (BaseDomain is empty), it returns an empty slug as a
+// signal that the single available tenant should be used.
+// In multi-tenant mode it extracts the subdomain and uses it as the tenant slug.
+type HostTenantResolver struct {
+	BaseDomain string // optional; e.g. "inventario.com"; empty = single-tenant mode
+}
+
+// ResolveTenant returns the tenant slug derived from the request host.
+// An empty string signals single-tenant mode (the caller should pick the one tenant).
+func (h *HostTenantResolver) ResolveTenant(r *http.Request) (string, error) {
+	if h.BaseDomain == "" {
+		return "", nil // single-tenant: middleware picks the one tenant from the registry
+	}
+
+	host := r.Host
+	if idx := strings.Index(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+
+	if !strings.HasSuffix(host, "."+h.BaseDomain) {
+		return "", nil // root domain or unrelated host → single-tenant fallback
+	}
+
+	subdomain := strings.TrimSuffix(host, "."+h.BaseDomain)
+	if subdomain == "" || subdomain == "www" {
+		return "", nil
+	}
+
+	return subdomain, nil
+}
+
+// PublicTenantMiddleware resolves the tenant from the request and stores it in
+// the context so that both public and authenticated handlers can call TenantIDFromContext.
+// It does not require a JWT and is safe to place before auth middleware.
+//
+// When the resolver returns an empty slug (single-tenant mode), the middleware
+// fetches the system-wide default tenant via GetDefault, which is enforced by a
+// partial unique index to guarantee only one tenant can be marked as default.
+func PublicTenantMiddleware(resolver TenantResolver, tenantRegistry registry.TenantRegistry) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slug, err := resolver.ResolveTenant(r)
+			if err != nil {
+				slog.Error("Tenant resolution failed", "error", err, "host", r.Host)
+				http.Error(w, "Tenant resolution failed", http.StatusServiceUnavailable)
+				return
+			}
+
+			var tenant *models.Tenant
+			if slug != "" {
+				tenant, err = tenantRegistry.GetBySlug(r.Context(), slug)
+				if err != nil {
+					http.Error(w, "Tenant not found", http.StatusNotFound)
+					return
+				}
+			} else {
+				// Single-tenant mode: use the tenant marked as default in the database.
+				tenant, err = tenantRegistry.GetDefault(r.Context())
+				if err != nil {
+					slog.Error("Failed to get default tenant", "error", err)
+					http.Error(w, "No default tenant configured", http.StatusServiceUnavailable)
+					return
+				}
+			}
+
+			if tenant.Status != models.TenantStatusActive {
+				http.Error(w, "Tenant suspended", http.StatusForbidden)
+				return
+			}
+
+			ctx := WithTenant(r.Context(), tenant)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}

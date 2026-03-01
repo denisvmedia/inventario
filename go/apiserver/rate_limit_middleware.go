@@ -14,9 +14,62 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
+// ParseTrustedProxyCIDRs parses a comma-separated list of trusted proxy CIDRs or IPs.
+// Bare IPs are converted to /32 or /128 prefixes.
+func ParseTrustedProxyCIDRs(raw string) ([]*net.IPNet, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	nets := make([]*net.IPNet, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value == "" {
+			continue
+		}
+		if strings.Contains(value, "/") {
+			_, ipNet, err := net.ParseCIDR(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid trusted proxy CIDR %q: %w", value, err)
+			}
+			key := ipNet.String()
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			nets = append(nets, ipNet)
+			continue
+		}
+
+		ip := net.ParseIP(value)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid trusted proxy IP %q", value)
+		}
+		var mask net.IPMask
+		if ip.To4() != nil {
+			ip = ip.To4()
+			mask = net.CIDRMask(32, 32)
+		} else {
+			mask = net.CIDRMask(128, 128)
+		}
+		ipNet := &net.IPNet{IP: ip, Mask: mask}
+		key := ipNet.String()
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		nets = append(nets, ipNet)
+	}
+
+	return nets, nil
+}
+
 // GlobalRateLimitMiddleware enforces API-wide per-IP rate limiting.
 // It sets X-RateLimit-* headers on all responses for observability.
-func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter) func(http.Handler) http.Handler {
+func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter, trustedProxyNets []*net.IPNet) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if limiter == nil {
@@ -24,10 +77,9 @@ func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter) func(http.Han
 				return
 			}
 
-			// Use RemoteAddr only — never trust X-Forwarded-For/X-Real-IP for rate
-			// limiting, since those headers can be spoofed by any client that is
-			// not behind a verified trusted proxy.
-			ip := remoteAddrIP(r)
+			// Prefer real client IP headers only when the request comes from a
+			// configured trusted proxy; otherwise fall back to RemoteAddr.
+			ip := clientIPForGlobalRateLimit(r, trustedProxyNets)
 			res, err := limiter.Check(r.Context(), ip)
 			if err != nil {
 				// Fail-open: do not make API unavailable due to limiter backend outages.
@@ -52,6 +104,51 @@ func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter) func(http.Han
 	}
 }
 
+func clientIPForGlobalRateLimit(r *http.Request, trustedProxyNets []*net.IPNet) string {
+	remoteIP := remoteAddrIP(r)
+	if !isTrustedProxyIP(remoteIP, trustedProxyNets) {
+		return remoteIP
+	}
+
+	// Trusted proxy: prefer first client IP from X-Forwarded-For.
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		for _, part := range strings.Split(xff, ",") {
+			candidate := strings.TrimSpace(part)
+			if candidate == "" {
+				continue
+			}
+			if ip := net.ParseIP(candidate); ip != nil {
+				return ip.String()
+			}
+		}
+	}
+
+	// Fallback to X-Real-IP when set by trusted proxy.
+	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		if ip := net.ParseIP(xri); ip != nil {
+			return ip.String()
+		}
+	}
+
+	return remoteIP
+}
+
+func isTrustedProxyIP(ipStr string, trustedProxyNets []*net.IPNet) bool {
+	if len(trustedProxyNets) == 0 {
+		return false
+	}
+	ip := net.ParseIP(strings.TrimSpace(ipStr))
+	if ip == nil {
+		return false
+	}
+	for _, ipNet := range trustedProxyNets {
+		if ipNet != nil && ipNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // AuthLoginRateLimitMiddleware enforces per-IP rate limiting on the login endpoint.
 // It sets X-RateLimit-* headers on all responses for observability.
 func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {
@@ -61,10 +158,6 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			// Use RemoteAddr only — never trust X-Forwarded-For/X-Real-IP for rate
-			// limiting, since those headers can be spoofed by any client that is
-			// not behind a verified trusted proxy.
 			ip := remoteAddrIP(r)
 			res, err := limiter.CheckLoginAttempt(r.Context(), ip)
 			if err != nil {

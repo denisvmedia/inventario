@@ -22,8 +22,9 @@ import (
 )
 
 var (
-	// DefaultTenantID is used as a fallback tenant ID during the transition to user-only authentication
-	// TODO: Remove this when user-only GetByEmail method is implemented
+	// DefaultTenantID is retained for backward compatibility with registration and password-reset
+	// flows that have not yet been migrated to use the tenant from request context.
+	// TODO: remove once registration.go and password_reset.go read tenant from context.
 	DefaultTenantID = "test-tenant-id"
 )
 
@@ -132,7 +133,13 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	user, err := api.userRegistry.GetByEmail(r.Context(), DefaultTenantID, req.Email)
+	tenantID := TenantIDFromContext(r.Context())
+	if tenantID == "" {
+		slog.Error("Login attempted without tenant context in request")
+		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
+		return
+	}
+	user, err := api.userRegistry.GetByEmail(r.Context(), tenantID, req.Email)
 	if err != nil {
 		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
 		if api.rateLimiter != nil {
