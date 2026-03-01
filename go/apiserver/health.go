@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 )
 
 const defaultHealthCheckTimeout = 5 * time.Second
+const readinessCheckErrorMessage = "dependency unavailable"
 
 // RedisPinger is an optional Redis dependency for readiness checks.
 type RedisPinger interface {
@@ -65,8 +67,9 @@ func (api *healthAPI) readyz(w http.ResponseWriter, r *http.Request) {
 		resp.Status = "not_ready"
 		resp.Checks["database"] = readinessCheck{
 			Status: "error",
-			Error:  err.Error(),
+			Error:  readinessCheckErrorMessage,
 		}
+		slog.Warn("Readiness check failed", "dependency", "database", "error", err)
 	} else {
 		resp.Checks["database"] = readinessCheck{
 			Status:  "ok",
@@ -83,8 +86,9 @@ func (api *healthAPI) readyz(w http.ResponseWriter, r *http.Request) {
 			resp.Status = "not_ready"
 			resp.Checks["redis"] = readinessCheck{
 				Status: "error",
-				Error:  err.Error(),
+				Error:  readinessCheckErrorMessage,
 			}
+			slog.Warn("Readiness check failed", "dependency", "redis", "error", err)
 		} else {
 			resp.Checks["redis"] = readinessCheck{
 				Status:  "ok",

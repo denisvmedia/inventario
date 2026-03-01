@@ -226,8 +226,8 @@ sudo systemctl status inventario
 Once the application is running, verify it's working:
 
 ```bash
-# Check health endpoint
-curl http://localhost:8080/healthz
+# Check readiness endpoint (DB/Redis dependencies reachable)
+curl http://localhost:8080/readyz
 
 # Check web interface
 curl http://localhost:8080/

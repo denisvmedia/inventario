@@ -283,7 +283,7 @@ docker-compose logs inventario-migrate
 
 # 7. Verify application is healthy
 docker-compose ps
-curl http://localhost:3333/healthz
+curl http://localhost:3333/readyz
 ```
 
 **What happens during startup:**
@@ -494,7 +494,7 @@ tar -xzf inventario-full-backup-YYYYMMDD.tar.gz
 docker-compose up -d
 
 # 8. Verify
-curl http://localhost:3333/healthz
+curl http://localhost:3333/readyz
 ```
 
 ## Security Notes

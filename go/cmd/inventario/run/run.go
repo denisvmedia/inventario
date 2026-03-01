@@ -90,7 +90,10 @@ SERVER ENDPOINTS:
   Once running, the server provides:
   • Web Interface: http://localhost:3333 (or your specified address)
   • API Documentation: http://localhost:3333/api/docs (Swagger UI)
-  • Health Check: http://localhost:3333/healthz
+  • Liveness Probe: http://localhost:3333/healthz
+  • Readiness Probe: http://localhost:3333/readyz
+
+Use /readyz for load balancer/orchestrator "can serve traffic" checks, and /healthz for basic process liveness.
 
 The server runs until interrupted (Ctrl+C) and gracefully shuts down active connections.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -152,7 +155,6 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.config.MandrillBaseURL, "mandrill-base-url", c.config.MandrillBaseURL, "Mandrill API base URL")
 }
 
-//nolint:gocyclo // command setup function with many independent config branches; complexity is structural, not accidental
 func (c *Command) runCommand() error {
 	srv := &httpserver.APIServer{}
 	bindAddr := c.config.Addr
@@ -171,8 +173,6 @@ func (c *Command) runCommand() error {
 	}
 
 	slog.Info("Starting server", "addr", bindAddr, "db-dsn", parsedDSN.String())
-
-	var params apiserver.Params
 
 	registrySetFn, ok := registry.GetRegistry(dsn)
 	if !ok {
@@ -202,114 +202,13 @@ func (c *Command) runCommand() error {
 			slog.Warn("Failed to seed default tenant in memory-db mode", "error", err)
 		}
 	}
-
-	params.FactorySet = factorySet
-	params.UploadLocation = c.config.UploadLocation
-	params.EntityService = services.NewEntityService(factorySet, params.UploadLocation)
-	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
-	params.StartTime = time.Now()
-
-	// Configure JWT secret from config/environment or generate a secure default
-	jwtSecret, err := getJWTSecret(c.config.JWTSecret)
+	serverSetup, err := c.buildServerParams(factorySet, dsn)
 	if err != nil {
-		slog.Error("Failed to configure JWT secret", "error", err)
 		return err
 	}
-
-	// Configure file signing key from config/environment or generate a secure default
-	fileSigningKey, err := getFileSigningKey(c.config.FileSigningKey)
-	if err != nil {
-		slog.Error("Failed to configure file signing key", "error", err)
-		return err
-	}
-
-	// Parse file URL expiration duration
-	fileURLExpiration, err := time.ParseDuration(c.config.FileURLExpiration)
-	if err != nil {
-		slog.Error("Failed to parse file URL expiration duration", "error", err, "duration", c.config.FileURLExpiration)
-		return err
-	}
-
-	// Parse thumbnail slot duration and create thumbnail config
-	thumbnailSlotDuration, err := time.ParseDuration(c.config.ThumbnailSlotDuration)
-	if err != nil {
-		slog.Error("Failed to parse thumbnail slot duration", "error", err, "duration", c.config.ThumbnailSlotDuration)
-		return err
-	}
-
-	thumbnailConfig := services.ThumbnailGenerationConfig{
-		MaxConcurrentPerUser: c.config.ThumbnailMaxConcurrentPerUser,
-		RateLimitPerMinute:   c.config.ThumbnailRateLimitPerMinute,
-		SlotDuration:         thumbnailSlotDuration,
-	}
-
-	params.JWTSecret = jwtSecret
-	params.FileSigningKey = fileSigningKey
-	params.FileURLExpiration = fileURLExpiration
-	params.ThumbnailConfig = thumbnailConfig
-	params.TokenBlacklister = services.NewTokenBlacklister(c.config.TokenBlacklistRedisURL)
-	if c.config.AuthRateLimitDisabled {
-		slog.Warn("Auth rate limiting is disabled via configuration — do not use this in production")
-		params.AuthRateLimiter = services.NewNoOpAuthRateLimiter()
-	} else {
-		params.AuthRateLimiter = services.NewAuthRateLimiter(c.config.AuthRateLimitRedisURL)
-	}
-	if c.config.GlobalRateLimitDisabled {
-		slog.Warn("Global API rate limiting is disabled via configuration — do not use this in production")
-		params.GlobalRateLimiter = services.NewNoOpGlobalRateLimiter()
-	} else {
-		globalRateWindow, err := time.ParseDuration(c.config.GlobalRateWindow)
-		if err != nil {
-			slog.Error("Failed to parse global rate window duration", "error", err, "duration", c.config.GlobalRateWindow)
-			return err
-		}
-		params.GlobalRateLimiter = services.NewGlobalRateLimiter(c.config.GlobalRateLimitRedisURL, c.config.GlobalRateLimit, globalRateWindow)
-	}
-	params.GlobalRateTrustedProxyNets, err = apiserver.ParseTrustedProxyCIDRs(c.config.GlobalRateTrustedProxies)
-	if err != nil {
-		slog.Error("Failed to parse global rate trusted proxies", "error", err)
-		return err
-	}
-
-	params.CSRFService = services.NewCSRFService(c.config.CSRFRedisURL)
-	params.RedisPinger = c.newReadinessRedisPinger()
-
-	// Parse allowed origins (comma-separated) with fail-closed default.
-	params.CORSConfig = apiserver.DefaultCORSConfig()
-	params.CORSConfig.AllowedOrigins, err = apiserver.ParseAllowedOrigins(c.config.AllowedOrigins)
-	if err != nil {
-		slog.Error("Failed to parse allowed CORS origins", "error", err)
-		return err
-	}
-	if len(params.CORSConfig.AllowedOrigins) == 0 {
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
-			params.CORSConfig.AllowedOrigins = apiserver.DefaultDevAllowedOrigins()
-			slog.Warn("No CORS origins explicitly configured; using local development defaults in memory-db mode. Set --allowed-origins for custom values.")
-		} else {
-			slog.Warn("No CORS origins explicitly configured; cross-origin requests are denied. Set --allowed-origins to allow specific origins.")
-		}
-	}
-
-	// Set registration mode from config (defaults to "open" when unset).
-	params.RegistrationMode = models.RegistrationMode(c.config.RegistrationMode)
-	params.PublicURL = strings.TrimSpace(c.config.PublicURL)
-
-	if err := validateEmailPublicURLConfig(c.config.EmailProvider, params.PublicURL); err != nil {
-		return err
-	}
-
-	emailLifecycle, err := c.buildEmailService()
-	if err != nil {
-		slog.Error("Failed to initialize email service", "error", err)
-		return err
-	}
-	params.EmailService = emailLifecycle.service
-
-	err = validation.Validate(params)
-	if err != nil {
-		slog.Error("Invalid server parameters", "error", err)
-		return err
-	}
+	params := serverSetup.params
+	emailLifecycle := serverSetup.emailLifecycle
+	defer serverSetup.closeReadinessRedisPinger()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -340,7 +239,7 @@ func (c *Command) runCommand() error {
 	defer importWorker.Stop()
 
 	// Start thumbnail generation worker
-	thumbnailWorker := services.NewThumbnailGenerationWorker(factorySet, params.UploadLocation, thumbnailConfig)
+	thumbnailWorker := services.NewThumbnailGenerationWorker(factorySet, params.UploadLocation, params.ThumbnailConfig)
 	thumbnailWorker.Start(ctx)
 	defer thumbnailWorker.Stop()
 
@@ -370,37 +269,227 @@ func (c *Command) runCommand() error {
 	return err
 }
 
-type readinessRedisPinger struct {
+type serverSetup struct {
+	params                    apiserver.Params
+	emailLifecycle            emailServiceLifecycle
+	closeReadinessRedisPinger func()
+}
+
+func (c *Command) buildServerParams(factorySet *registry.FactorySet, dsn string) (serverSetup, error) {
+	params := apiserver.Params{
+		FactorySet:     factorySet,
+		UploadLocation: c.config.UploadLocation,
+		StartTime:      time.Now(),
+	}
+	params.EntityService = services.NewEntityService(factorySet, params.UploadLocation)
+	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)
+
+	// Configure JWT secret from config/environment or generate a secure default.
+	jwtSecret, err := getJWTSecret(c.config.JWTSecret)
+	if err != nil {
+		slog.Error("Failed to configure JWT secret", "error", err)
+		return serverSetup{}, err
+	}
+
+	// Configure file signing key from config/environment or generate a secure default.
+	fileSigningKey, err := getFileSigningKey(c.config.FileSigningKey)
+	if err != nil {
+		slog.Error("Failed to configure file signing key", "error", err)
+		return serverSetup{}, err
+	}
+
+	// Parse file URL expiration duration.
+	fileURLExpiration, err := time.ParseDuration(c.config.FileURLExpiration)
+	if err != nil {
+		slog.Error("Failed to parse file URL expiration duration", "error", err, "duration", c.config.FileURLExpiration)
+		return serverSetup{}, err
+	}
+
+	// Parse thumbnail slot duration and create thumbnail config.
+	thumbnailSlotDuration, err := time.ParseDuration(c.config.ThumbnailSlotDuration)
+	if err != nil {
+		slog.Error("Failed to parse thumbnail slot duration", "error", err, "duration", c.config.ThumbnailSlotDuration)
+		return serverSetup{}, err
+	}
+
+	params.JWTSecret = jwtSecret
+	params.FileSigningKey = fileSigningKey
+	params.FileURLExpiration = fileURLExpiration
+	params.ThumbnailConfig = services.ThumbnailGenerationConfig{
+		MaxConcurrentPerUser: c.config.ThumbnailMaxConcurrentPerUser,
+		RateLimitPerMinute:   c.config.ThumbnailRateLimitPerMinute,
+		SlotDuration:         thumbnailSlotDuration,
+	}
+	params.TokenBlacklister = services.NewTokenBlacklister(c.config.TokenBlacklistRedisURL)
+	if c.config.AuthRateLimitDisabled {
+		slog.Warn("Auth rate limiting is disabled via configuration — do not use this in production")
+		params.AuthRateLimiter = services.NewNoOpAuthRateLimiter()
+	} else {
+		params.AuthRateLimiter = services.NewAuthRateLimiter(c.config.AuthRateLimitRedisURL)
+	}
+	if c.config.GlobalRateLimitDisabled {
+		slog.Warn("Global API rate limiting is disabled via configuration — do not use this in production")
+		params.GlobalRateLimiter = services.NewNoOpGlobalRateLimiter()
+	} else {
+		globalRateWindow, parseErr := time.ParseDuration(c.config.GlobalRateWindow)
+		if parseErr != nil {
+			slog.Error("Failed to parse global rate window duration", "error", parseErr, "duration", c.config.GlobalRateWindow)
+			return serverSetup{}, parseErr
+		}
+		params.GlobalRateLimiter = services.NewGlobalRateLimiter(c.config.GlobalRateLimitRedisURL, c.config.GlobalRateLimit, globalRateWindow)
+	}
+
+	params.GlobalRateTrustedProxyNets, err = apiserver.ParseTrustedProxyCIDRs(c.config.GlobalRateTrustedProxies)
+	if err != nil {
+		slog.Error("Failed to parse global rate trusted proxies", "error", err)
+		return serverSetup{}, err
+	}
+
+	params.CSRFService = services.NewCSRFService(c.config.CSRFRedisURL)
+	params.RedisPinger = c.newReadinessRedisPinger()
+	closeReadinessRedisPinger := func() {}
+	if closer, ok := params.RedisPinger.(interface{ Close() error }); ok {
+		closeReadinessRedisPinger = func() {
+			if closeErr := closer.Close(); closeErr != nil {
+				slog.Warn("Failed to close Redis readiness client(s)", "error", closeErr)
+			}
+		}
+	}
+
+	// Parse allowed origins (comma-separated) with fail-closed default.
+	params.CORSConfig = apiserver.DefaultCORSConfig()
+	params.CORSConfig.AllowedOrigins, err = apiserver.ParseAllowedOrigins(c.config.AllowedOrigins)
+	if err != nil {
+		slog.Error("Failed to parse allowed CORS origins", "error", err)
+		return serverSetup{}, err
+	}
+	if len(params.CORSConfig.AllowedOrigins) == 0 {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
+			params.CORSConfig.AllowedOrigins = apiserver.DefaultDevAllowedOrigins()
+			slog.Warn("No CORS origins explicitly configured; using local development defaults in memory-db mode. Set --allowed-origins for custom values.")
+		} else {
+			slog.Warn("No CORS origins explicitly configured; cross-origin requests are denied. Set --allowed-origins to allow specific origins.")
+		}
+	}
+
+	// Set registration mode from config (defaults to "open" when unset).
+	params.RegistrationMode = models.RegistrationMode(c.config.RegistrationMode)
+	params.PublicURL = strings.TrimSpace(c.config.PublicURL)
+	if err = validateEmailPublicURLConfig(c.config.EmailProvider, params.PublicURL); err != nil {
+		return serverSetup{}, err
+	}
+
+	emailLifecycle, err := c.buildEmailService()
+	if err != nil {
+		slog.Error("Failed to initialize email service", "error", err)
+		return serverSetup{}, err
+	}
+	params.EmailService = emailLifecycle.service
+
+	if err = validation.Validate(params); err != nil {
+		slog.Error("Invalid server parameters", "error", err)
+		return serverSetup{}, err
+	}
+
+	return serverSetup{
+		params:                    params,
+		emailLifecycle:            emailLifecycle,
+		closeReadinessRedisPinger: closeReadinessRedisPinger,
+	}, nil
+}
+
+type redisReadinessTarget struct {
+	name   string
 	client *redis.Client
 }
 
+type readinessRedisPinger struct {
+	targets []redisReadinessTarget
+}
+
 func (p *readinessRedisPinger) Ping(ctx context.Context) error {
-	return p.client.Ping(ctx).Err()
+	for _, target := range p.targets {
+		if err := target.client.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("%s dependency ping failed: %w", target.name, err)
+		}
+	}
+
+	return nil
+}
+
+func (p *readinessRedisPinger) Close() error {
+	closeErrs := make([]error, 0)
+	for _, target := range p.targets {
+		if err := target.client.Close(); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("%s dependency close failed: %w", target.name, err))
+		}
+	}
+	if len(closeErrs) == 0 {
+		return nil
+	}
+	return errors.Join(closeErrs...)
 }
 
 func (c *Command) newReadinessRedisPinger() apiserver.RedisPinger {
-	redisURL := strings.TrimSpace(c.config.TokenBlacklistRedisURL)
-	if redisURL == "" && !c.config.AuthRateLimitDisabled {
-		redisURL = strings.TrimSpace(c.config.AuthRateLimitRedisURL)
+	type redisDependency struct {
+		name string
+		url  string
 	}
-	if redisURL == "" && !c.config.GlobalRateLimitDisabled {
-		redisURL = strings.TrimSpace(c.config.GlobalRateLimitRedisURL)
+
+	deps := make([]redisDependency, 0, 4)
+	if redisURL := strings.TrimSpace(c.config.TokenBlacklistRedisURL); redisURL != "" {
+		deps = append(deps, redisDependency{name: "token_blacklist", url: redisURL})
 	}
-	if redisURL == "" {
-		redisURL = strings.TrimSpace(c.config.CSRFRedisURL)
+	if !c.config.AuthRateLimitDisabled {
+		if redisURL := strings.TrimSpace(c.config.AuthRateLimitRedisURL); redisURL != "" {
+			deps = append(deps, redisDependency{name: "auth_rate_limit", url: redisURL})
+		}
 	}
-	if redisURL == "" {
+	if !c.config.GlobalRateLimitDisabled {
+		if redisURL := strings.TrimSpace(c.config.GlobalRateLimitRedisURL); redisURL != "" {
+			deps = append(deps, redisDependency{name: "global_rate_limit", url: redisURL})
+		}
+	}
+	if redisURL := strings.TrimSpace(c.config.CSRFRedisURL); redisURL != "" {
+		deps = append(deps, redisDependency{name: "csrf", url: redisURL})
+	}
+	if len(deps) == 0 {
+		return nil
+	}
+	groupedNamesByURL := make(map[string][]string, len(deps))
+	orderedURLs := make([]string, 0, len(deps))
+	for _, dep := range deps {
+		if _, exists := groupedNamesByURL[dep.url]; !exists {
+			orderedURLs = append(orderedURLs, dep.url)
+		}
+		groupedNamesByURL[dep.url] = append(groupedNamesByURL[dep.url], dep.name)
+	}
+
+	targets := make([]redisReadinessTarget, 0, len(orderedURLs))
+	for _, redisURL := range orderedURLs {
+		dependencyNames := groupedNamesByURL[redisURL]
+		opts, err := redis.ParseURL(redisURL)
+		if err != nil {
+			slog.Warn(
+				"Invalid Redis URL for readiness check; Redis dependency checks will be skipped",
+				"dependencies",
+				strings.Join(dependencyNames, ","),
+				"error",
+				err,
+			)
+			continue
+		}
+		targets = append(targets, redisReadinessTarget{
+			name:   strings.Join(dependencyNames, ","),
+			client: redis.NewClient(opts),
+		})
+	}
+
+	if len(targets) == 0 {
 		return nil
 	}
 
-	opts, err := redis.ParseURL(redisURL)
-	if err != nil {
-		slog.Warn("Invalid Redis URL for readiness check; Redis readiness check will be skipped", "error", err)
-		return nil
-	}
-
-	client := redis.NewClient(opts)
-	return &readinessRedisPinger{client: client}
+	return &readinessRedisPinger{targets: targets}
 }
 
 type emailServiceLifecycle struct {

@@ -167,7 +167,7 @@ services:
     networks:
       - inventario-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3333/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:3333/readyz"]
       interval: 30s
       timeout: 10s
       retries: 3

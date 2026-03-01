@@ -96,7 +96,8 @@ func TestReadyz_DBFailure(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(body.Status, qt.Equals, "not_ready")
 	c.Assert(body.Checks["database"].Status, qt.Equals, "error")
-	c.Assert(body.Checks["database"].Error, qt.Contains, "database unavailable")
+	c.Assert(body.Checks["database"].Error, qt.Equals, "dependency unavailable")
+	c.Assert(body.Checks["database"].Error, qt.Not(qt.Contains), "database unavailable")
 }
 
 func TestReadyz_RedisFailureWhenConfigured(t *testing.T) {
@@ -118,5 +119,6 @@ func TestReadyz_RedisFailureWhenConfigured(t *testing.T) {
 	c.Assert(body.Status, qt.Equals, "not_ready")
 	c.Assert(body.Checks["database"].Status, qt.Equals, "ok")
 	c.Assert(body.Checks["redis"].Status, qt.Equals, "error")
-	c.Assert(body.Checks["redis"].Error, qt.Contains, "redis unavailable")
+	c.Assert(body.Checks["redis"].Error, qt.Equals, "dependency unavailable")
+	c.Assert(body.Checks["redis"].Error, qt.Not(qt.Contains), "redis unavailable")
 }

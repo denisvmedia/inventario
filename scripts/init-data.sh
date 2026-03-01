@@ -33,7 +33,7 @@ if [ ! -f /app/state/data-initialized ]; then
         # Wait for server to be ready
         echo "Waiting for server to be ready..."
         for j in $(seq 1 30); do
-          if curl -sf http://localhost:3333/healthz > /dev/null 2>&1; then
+          if curl -sf http://localhost:3333/readyz > /dev/null 2>&1; then
             echo "Server is ready"
             break
           fi
