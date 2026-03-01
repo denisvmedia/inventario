@@ -330,6 +330,65 @@ func TestCommodityRegistry_List_HappyPath(t *testing.T) {
 	c.Assert(commodityIDs[commodity2.ID], qt.IsTrue)
 }
 
+func TestCommodityRegistry_List_SortedByPurchaseDate(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	setupMainCurrency(c, registrySet.SettingsRegistry)
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
+
+	// Create commodities with different purchase dates (out of order)
+	makeCommodity := func(name, purchaseDate string) models.Commodity {
+		c := models.Commodity{
+			TenantAwareEntityID:    models.WithTenantUserAwareEntityID("", "test-tenant-id", "test-user-id"),
+			Name:                   name,
+			ShortName:              name,
+			Type:                   models.CommodityTypeElectronics,
+			AreaID:                 area.GetID(),
+			Count:                  1,
+			OriginalPrice:          decimal.NewFromFloat(10),
+			OriginalPriceCurrency:  "USD",
+			ConvertedOriginalPrice: decimal.Zero,
+			CurrentPrice:           decimal.NewFromFloat(10),
+			Status:                 models.CommodityStatusInUse,
+			Draft:                  false,
+		}
+		if purchaseDate != "" {
+			c.PurchaseDate = models.ToPDate(models.Date(purchaseDate))
+		}
+		return c
+	}
+
+	_, err := registrySet.CommodityRegistry.Create(ctx, makeCommodity("older", "2021-06-15"))
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.CommodityRegistry.Create(ctx, makeCommodity("newest", "2023-12-01"))
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.CommodityRegistry.Create(ctx, makeCommodity("middle", "2022-03-20"))
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.CommodityRegistry.Create(ctx, makeCommodity("no_date", ""))
+	c.Assert(err, qt.IsNil)
+
+	commodities, err := registrySet.CommodityRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(commodities, qt.HasLen, 4)
+
+	// Expect descending order: newest → middle → older → no_date (nil last)
+	c.Assert(commodities[0].Name, qt.Equals, "newest")
+	c.Assert(commodities[1].Name, qt.Equals, "middle")
+	c.Assert(commodities[2].Name, qt.Equals, "older")
+	c.Assert(commodities[3].Name, qt.Equals, "no_date")
+	c.Assert(commodities[3].PurchaseDate, qt.IsNil)
+}
+
 func TestCommodityRegistry_Update_HappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
