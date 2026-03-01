@@ -25,7 +25,7 @@ type mockUserRegistryForUsersTests struct {
 
 func (m *mockUserRegistryForUsersTests) Create(ctx context.Context, user models.User) (*models.User, error) {
 	for _, u := range m.users {
-		if u.ID != user.ID && u.Email == user.Email && u.TenantID == user.TenantID {
+		if u.Email == user.Email && u.TenantID == user.TenantID {
 			return nil, registry.ErrEmailAlreadyExists
 		}
 	}

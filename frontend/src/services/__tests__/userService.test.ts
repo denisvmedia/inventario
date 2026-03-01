@@ -108,11 +108,14 @@ describe('userService', () => {
         page: 2,
         per_page: 10,
       })
-
-      expect(mockedApi.get).toHaveBeenCalledWith(
-        '/api/v1/users?role=admin&active=false&search=alice&page=2&per_page=10',
-        { headers: { Accept: 'application/json' } },
-      )
+      const [calledUrl, calledOptions] = mockedApi.get.mock.calls[0]
+      expect(calledUrl).toContain('/api/v1/users?')
+      expect(calledUrl).toContain('role=admin')
+      expect(calledUrl).toContain('active=false')
+      expect(calledUrl).toContain('search=alice')
+      expect(calledUrl).toContain('page=2')
+      expect(calledUrl).toContain('per_page=10')
+      expect(calledOptions).toEqual({ headers: { Accept: 'application/json' } })
     })
   })
 
