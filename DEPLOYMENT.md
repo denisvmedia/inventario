@@ -227,7 +227,7 @@ Once the application is running, verify it's working:
 
 ```bash
 # Check health endpoint
-curl http://localhost:8080/api/health
+curl http://localhost:8080/healthz
 
 # Check web interface
 curl http://localhost:8080/

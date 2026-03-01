@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/apiserver"
@@ -89,7 +90,7 @@ SERVER ENDPOINTS:
   Once running, the server provides:
   • Web Interface: http://localhost:3333 (or your specified address)
   • API Documentation: http://localhost:3333/api/docs (Swagger UI)
-  • Health Check: http://localhost:3333/api/health
+  • Health Check: http://localhost:3333/healthz
 
 The server runs until interrupted (Ctrl+C) and gracefully shuts down active connections.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -271,6 +272,7 @@ func (c *Command) runCommand() error {
 	}
 
 	params.CSRFService = services.NewCSRFService(c.config.CSRFRedisURL)
+	params.RedisPinger = c.newReadinessRedisPinger()
 
 	// Parse allowed origins (comma-separated) with fail-closed default.
 	params.CORSConfig = apiserver.DefaultCORSConfig()
@@ -366,6 +368,39 @@ func (c *Command) runCommand() error {
 	}
 
 	return err
+}
+
+type readinessRedisPinger struct {
+	client *redis.Client
+}
+
+func (p *readinessRedisPinger) Ping(ctx context.Context) error {
+	return p.client.Ping(ctx).Err()
+}
+
+func (c *Command) newReadinessRedisPinger() apiserver.RedisPinger {
+	redisURL := strings.TrimSpace(c.config.TokenBlacklistRedisURL)
+	if redisURL == "" && !c.config.AuthRateLimitDisabled {
+		redisURL = strings.TrimSpace(c.config.AuthRateLimitRedisURL)
+	}
+	if redisURL == "" && !c.config.GlobalRateLimitDisabled {
+		redisURL = strings.TrimSpace(c.config.GlobalRateLimitRedisURL)
+	}
+	if redisURL == "" {
+		redisURL = strings.TrimSpace(c.config.CSRFRedisURL)
+	}
+	if redisURL == "" {
+		return nil
+	}
+
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		slog.Warn("Invalid Redis URL for readiness check; Redis readiness check will be skipped", "error", err)
+		return nil
+	}
+
+	client := redis.NewClient(opts)
+	return &readinessRedisPinger{client: client}
 }
 
 type emailServiceLifecycle struct {
